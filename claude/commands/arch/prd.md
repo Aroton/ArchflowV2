@@ -11,7 +11,14 @@ Create or revise a PRD for task **$ARGUMENTS**.
 
 1. Ensure `.archflow/tasks/$ARGUMENTS/` exists (create if not)
 2. If `.archflow/context/` exists, read the context docs for codebase awareness
-3. If `.archflow/tasks/$ARGUMENTS/prd.md` already exists, read it and ask: "A PRD already exists for this task. Revise it, or start fresh?"
+3. If `.archflow/tasks/$ARGUMENTS/prd.md` already exists, read it and ask:
+
+```
+╔══════════════════════════════════════════════════════════╗
+║  A PRD already exists for this task.                    ║
+║  Revise it, or start fresh?                             ║
+╚══════════════════════════════════════════════════════════╝
+```
 
 ## Process
 
@@ -19,7 +26,12 @@ Create or revise a PRD for task **$ARGUMENTS**.
 
 Ask the user:
 
-> "What is **$ARGUMENTS**? Describe the problem you're solving and who it's for."
+```
+╔══════════════════════════════════════════════════════════╗
+║  What is $ARGUMENTS?                                    ║
+║  Describe the problem you're solving and who it's for.  ║
+╚══════════════════════════════════════════════════════════╝
+```
 
 After the initial response, ask focused follow-up questions to cover:
 - Problem statement and motivation
@@ -137,8 +149,12 @@ Stage the PRD file and commit. Convert the task name to human-readable title cas
 
 ### Step 5: Present Completion
 
-> PRD written to `.archflow/tasks/$ARGUMENTS/prd.md`
->
-> Open it in your editor to review. When satisfied:
-> - Run `/arch:design $ARGUMENTS` to create the technical architecture
-> - Or tell me what to change
+```
+╔══════════════════════════════════════════════════════════╗
+║  PRD written to .archflow/tasks/$ARGUMENTS/prd.md       ║
+║                                                         ║
+║  Open it in your editor to review. When satisfied:      ║
+║  - Run /arch:design $ARGUMENTS to design architecture   ║
+║  - Or tell me what to change                            ║
+╚══════════════════════════════════════════════════════════╝
+```

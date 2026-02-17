@@ -13,8 +13,14 @@ Explore the codebase and produce reference documents in `.archflow/context/`. Th
 
 Create `.archflow/context/` if it doesn't exist.
 
-If context docs already exist, tell the user:
-> "Existing context docs found. Refreshing will overwrite them. Proceed?"
+If context docs already exist, ask the user:
+
+```
+╔══════════════════════════════════════════════════════════╗
+║  Existing context docs found.                           ║
+║  Refreshing will overwrite them. Proceed? (y/n)         ║
+╚══════════════════════════════════════════════════════════╝
+```
 
 ### Step 2: Parallel Exploration
 

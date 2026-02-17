@@ -53,9 +53,11 @@ Then spawn a **general-purpose sub-agent** (`subagent_type: "general-purpose"`) 
 - ALL prior phase design docs and implementation logs (decisions, patterns, interfaces, gotchas)
 - Context docs from `.archflow/context/` if available
 
-Ask it to create a detailed phase plan and write it directly to `.archflow/tasks/{task}/phases/phase-{N}-{slug}.md` (create the `phases/` directory if needed).
+Ask it to write a **concise** phase design doc (under 150 lines) to `.archflow/tasks/{task}/phases/phase-{N}-{slug}.md` (create the `phases/` directory if needed).
 
 Derive the slug from the phase name in architecture.md. Convert to lowercase, replace spaces with hyphens. For example: "Database Setup" becomes `phase-1-database-setup`.
+
+**IMPORTANT**: The design doc defines WHAT to build and WHERE, not HOW. No pseudocode, no function signatures, no line-by-line instructions. The implementation agents will figure out the HOW by reading the codebase. Keep it concise -- this doc will be loaded during implementation and must leave room for actual code context.
 
 The agent should use this template:
 
@@ -69,45 +71,36 @@ The agent should use this template:
 
 ## Context
 
-[What's been built so far. What this builds on. Key decisions that affect this phase.]
+[1-2 paragraphs. What's been built so far. Key decisions from prior phases that affect this one.]
 
-## Design
+## What We're Building
 
-### What We're Building
+[1-2 paragraphs. High-level description of the approach and how pieces fit together. No code.]
 
-[Detailed description. Explain the approach, technical decisions, how pieces fit together.]
+## Files
 
-### Files to Create
+| Action | File | Purpose |
+|--------|------|---------|
+| Create | [path] | [What it does] |
+| Modify | [path] | [What changes and why] |
 
-| File | Purpose |
-|------|---------|
-| [path] | [What it does] |
+## Work Breakdown
 
-### Files to Modify
+Group related work into 3-6 chunks. Each chunk becomes a sub-agent task during implementation.
 
-| File | Changes |
-|------|---------|
-| [path] | [What changes and why] |
-
-## Implementation Steps
-
-1. **[Step name]**: [Description. Mark as PARALLEL if independent of other steps.]
-2. **[Step name]**: [Description]
-3. **[Step name]**: [Description]
+1. **[Chunk name]**: [1-2 sentences. What to build, not how.]
+2. **[Chunk name]**: [1-2 sentences.]
+3. **[Chunk name]**: [1-2 sentences. Note if it depends on a prior chunk.]
 
 ## Success Criteria
 
-- [ ] [Observable behavior]
+- [ ] [Observable behavior from user perspective]
 - [ ] [Observable behavior]
 - [ ] [Tests pass / Build succeeds]
 
-## Testing
+## Verification Steps
 
-[What tests to write or run]
-
-## Notes
-
-[Anything discovered that affects future phases]
+[Specific commands to run, behaviors to check, edge cases to test. These are presented to the user after implementation.]
 
 ---
 *Designed: [date]*
@@ -119,9 +112,15 @@ The agent should return only the file path when done.
 
 Read the phase design doc to confirm it was written. Present the design to the user:
 
-> Phase design created at `.archflow/tasks/{task}/phases/phase-{N}-{slug}.md`
->
-> Review it in your editor. Say **"implement"** to proceed, or provide feedback.
+```
+╔══════════════════════════════════════════════════════════╗
+║  Phase design created at                                ║
+║  .archflow/tasks/{task}/phases/phase-{N}-{slug}.md      ║
+║                                                         ║
+║  Review it in your editor.                              ║
+║  Say "implement" to proceed, or provide feedback.       ║
+╚══════════════════════════════════════════════════════════╝
+```
 
 **STOP HERE AND WAIT FOR USER RESPONSE.**
 
@@ -129,27 +128,32 @@ Read the phase design doc to confirm it was written. Present the design to the u
 
 After user approves:
 
+**You are the orchestrator. Do NOT write code yourself. All code is written by sub-agents.**
+
 1. Update status to **IN PROGRESS** in the phase doc
-2. Read the implementation steps from the phase design doc
-3. Analyze which steps are independent (marked PARALLEL or clearly no dependencies between them) vs which depend on prior steps
-4. Fan out independent steps to parallel sub-agents (`subagent_type: "general-purpose"`). For each agent, include:
-   - The specific step(s) to implement
-   - Relevant context (architecture decisions, patterns from prior phases, file paths)
-   - Instruction to write code files directly and return a summary of what was created/modified (file paths only, not contents)
-5. Run dependent steps sequentially, each in its own sub-agent, waiting for prior steps to complete
-6. After all steps complete, run tests where specified
+2. Read the Work Breakdown from the phase design doc
+3. For each chunk, spawn a sub-agent (`subagent_type: "general-purpose"`). Include in its prompt:
+   - The chunk description (what to build)
+   - The relevant file paths from the Files table
+   - Key patterns and interfaces from prior phase logs
+   - Architecture decisions and conventions from context docs
+   - Instruction to write code files directly and return only a summary of what was created/modified (file paths, not contents)
+4. Launch independent chunks in parallel. For chunks that depend on prior chunks, wait for dependencies to complete first, then include their output summary in the dependent chunk's prompt.
+5. After all chunks complete, run the test suite if applicable
 
 ### Step 5: Verify
 
-After all implementation steps are done, present specific, actionable verification steps to the user:
+Present the Verification Steps from the phase design doc to the user:
 
-> Implementation complete. Please verify:
->
-> 1. [Specific command to run and expected output]
-> 2. [Specific behavior to check]
-> 3. [Specific edge case to test]
->
-> Report any issues, or say **"verified"** to proceed.
+```
+╔══════════════════════════════════════════════════════════╗
+║  Implementation complete. Please verify:                ║
+║                                                         ║
+║  [Verification steps from design doc]                   ║
+║                                                         ║
+║  Report any issues, or say "verified" to proceed.       ║
+╚══════════════════════════════════════════════════════════╝
+```
 
 **STOP AND WAIT FOR USER RESPONSE.**
 
@@ -209,9 +213,13 @@ Stage all changed files and create a git commit. Convert the task name to human-
 
 Update the phase doc: set status to **COMPLETE**, add implementation date.
 
-> Phase complete.
->
-> Next: Run `/arch:phase {task} [N+1]` to continue.
+```
+╔══════════════════════════════════════════════════════════╗
+║  Phase {N} complete!                                    ║
+║                                                         ║
+║  Next: Run /arch:phase {task} [N+1] to continue.       ║
+╚══════════════════════════════════════════════════════════╝
+```
 
 ### Resuming After Context Loss
 

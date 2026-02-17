@@ -131,10 +131,14 @@ Stage the architecture file and commit. Convert the task name to human-readable 
 
 ### Step 5: Present Completion
 
-> Architecture written to `.archflow/tasks/$ARGUMENTS/architecture.md`
->
-> Open it in your editor to review the design and phase plan.
->
-> When satisfied:
-> - Run `/arch:phase $ARGUMENTS 1` to begin implementation
-> - Or tell me what to change
+```
+╔══════════════════════════════════════════════════════════╗
+║  Architecture written to                                ║
+║  .archflow/tasks/$ARGUMENTS/architecture.md             ║
+║                                                         ║
+║  Open it in your editor to review the design and        ║
+║  phase plan. When satisfied:                            ║
+║  - Run /arch:phase $ARGUMENTS 1 to begin implementation ║
+║  - Or tell me what to change                            ║
+╚══════════════════════════════════════════════════════════╝
+```
