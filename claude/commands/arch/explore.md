@@ -46,7 +46,15 @@ Write the results to `.archflow/context/dependencies.md`. Return only the file p
 
 If $ARGUMENTS contains a focus area, adjust the agent prompts to dig deeper into that area.
 
-### Step 3: Present Results
+### Step 3: Commit
+
+Stage the `.archflow/context/` files and commit:
+
+```
+Archflow: Explore Codebase Context
+```
+
+### Step 4: Present Results
 
 Summarize what was found. Tell the user:
 

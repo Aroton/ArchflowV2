@@ -127,7 +127,15 @@ Ask it to design the PRD structure, assign REQ-IDs, and write the full document 
 
 Instruct the agent to write with genuine analysis, not boilerplate. The agent should return only the file path when done.
 
-### Step 4: Present Completion
+### Step 4: Commit
+
+Stage the PRD file and commit. Convert the task name to human-readable title case (e.g. `user_feedback` becomes `User Feedback`):
+
+```
+[Task Name]: Create PRD
+```
+
+### Step 5: Present Completion
 
 > PRD written to `.archflow/tasks/$ARGUMENTS/prd.md`
 >

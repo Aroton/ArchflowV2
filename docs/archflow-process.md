@@ -46,7 +46,7 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    subgraph ".archflow/ (gitignored)"
+    subgraph ".archflow/"
         subgraph "context/"
             A1[architecture.md]
             A2[patterns.md]
@@ -284,7 +284,8 @@ flowchart TD
 
     subgraph "Completion"
         PH_log[Write phase-N-slug-log.md<br/>decisions, patterns, gotchas] --> PH_parent[Update architecture.md<br/>+ prd.md if deviations]
-        PH_parent --> PH_update[Update status → COMPLETE]
+        PH_parent --> PH_commit[Git commit<br/>task phase N: name]
+        PH_commit --> PH_update[Update status → COMPLETE]
     end
 
     PH_update --> PH_next["/arch:phase my-feature N+1"]

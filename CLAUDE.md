@@ -18,7 +18,7 @@ This repo contains the ArchFlow command definitions. Source of truth is in `clau
 
 ## How It Works
 
-All working files live in `.archflow/` (gitignored). Each task gets its own directory:
+All working files live in `.archflow/`. Tracked in git during development to preserve progress across sessions. Remove before PR.
 
 ```
 .archflow/

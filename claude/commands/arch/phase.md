@@ -195,7 +195,17 @@ Review the implementation log for deviations, new patterns, or changed requireme
 
 Only update what actually changed -- don't rewrite sections that are still accurate.
 
-### Step 8: Complete
+### Step 8: Commit
+
+Stage all changed files and create a git commit. Convert the task name to human-readable title case (e.g. `user_feedback` becomes `User Feedback`):
+
+```
+[Task Name] Phase {N}: [Phase Name]
+
+{2-3 sentence summary of what was built, key decisions, and any deviations from plan}
+```
+
+### Step 9: Complete
 
 Update the phase doc: set status to **COMPLETE**, add implementation date.
 

@@ -121,7 +121,15 @@ Ask it to design the full architecture and write it to `.archflow/tasks/$ARGUMEN
 
 The agent should design the technology stack, system architecture, key decisions with alternatives considered, phase decomposition (3-8 phases, each independently testable), and testing strategy. Return only the file path when done.
 
-### Step 4: Present Completion
+### Step 4: Commit
+
+Stage the architecture file and commit. Convert the task name to human-readable title case (e.g. `user_feedback` becomes `User Feedback`):
+
+```
+[Task Name]: Design Architecture
+```
+
+### Step 5: Present Completion
 
 > Architecture written to `.archflow/tasks/$ARGUMENTS/architecture.md`
 >
