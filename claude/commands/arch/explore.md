@@ -17,8 +17,8 @@ If context docs already exist, ask the user:
 
 ```
 ╔══════════════════════════════════════════════════════════╗
-║  Existing context docs found.                           ║
-║  Refreshing will overwrite them. Proceed? (y/n)         ║
+║  Existing context docs found.                            ║
+║  Refreshing will overwrite them. Proceed? (y/n)          ║
 ╚══════════════════════════════════════════════════════════╝
 ```
 
@@ -52,15 +52,7 @@ Write the results to `.archflow/context/dependencies.md`. Return only the file p
 
 If $ARGUMENTS contains a focus area, adjust the agent prompts to dig deeper into that area.
 
-### Step 3: Commit
-
-Stage the `.archflow/context/` files and commit:
-
-```
-Archflow: Explore Codebase Context
-```
-
-### Step 4: Present Results
+### Step 3: Present for Review
 
 Summarize what was found. Tell the user:
 
@@ -71,4 +63,20 @@ Summarize what was found. Tell the user:
 > - `.archflow/context/patterns.md`
 > - `.archflow/context/dependencies.md`
 >
-> Run `/arch:explore [focus]` anytime to refresh or dive deeper into a specific area.
+> Review them in your editor. Tell me what to change, or say "looks good" to commit.
+
+**STOP HERE AND WAIT FOR USER RESPONSE.**
+
+If the user requests changes, make them and re-present. Repeat until the user confirms.
+
+### Step 4: Commit
+
+After user confirms, stage the `.archflow/context/` files and commit:
+
+```
+Archflow: Explore Codebase Context
+```
+
+### Step 5: Present Completion
+
+> Context committed. Run `/arch:explore [focus]` anytime to refresh or dive deeper into a specific area.

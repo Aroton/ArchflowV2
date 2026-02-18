@@ -15,8 +15,8 @@ Create or revise a PRD for task **$ARGUMENTS**.
 
 ```
 ╔══════════════════════════════════════════════════════════╗
-║  A PRD already exists for this task.                    ║
-║  Revise it, or start fresh?                             ║
+║  A PRD already exists for this task.                     ║
+║  Revise it, or start fresh?                              ║
 ╚══════════════════════════════════════════════════════════╝
 ```
 
@@ -28,8 +28,8 @@ Ask the user:
 
 ```
 ╔══════════════════════════════════════════════════════════╗
-║  What is $ARGUMENTS?                                    ║
-║  Describe the problem you're solving and who it's for.  ║
+║  What is $ARGUMENTS?                                     ║
+║  Describe the problem you're solving and who it's for.   ║
 ╚══════════════════════════════════════════════════════════╝
 ```
 
@@ -139,22 +139,36 @@ Ask it to design the PRD structure, assign REQ-IDs, and write the full document 
 
 Instruct the agent to write with genuine analysis, not boilerplate. The agent should return only the file path when done.
 
-### Step 4: Commit
+### Step 4: Present for Review
 
-Stage the PRD file and commit. Convert the task name to human-readable title case (e.g. `user_feedback` becomes `User Feedback`):
+```
+╔══════════════════════════════════════════════════════════╗
+║  PRD written to .archflow/tasks/$ARGUMENTS/prd.md        ║
+║                                                          ║
+║  Review it in your editor.                               ║
+║  Tell me what to change, or say "looks good" to commit.  ║
+╚══════════════════════════════════════════════════════════╝
+```
+
+**STOP HERE AND WAIT FOR USER RESPONSE.**
+
+If the user requests changes, make them and re-present. Repeat until the user confirms.
+
+### Step 5: Commit
+
+After user confirms, stage the PRD file and commit. Convert the task name to human-readable title case (e.g. `user_feedback` becomes `User Feedback`):
 
 ```
 [Task Name]: Create PRD
 ```
 
-### Step 5: Present Completion
+### Step 6: Present Completion
 
 ```
 ╔══════════════════════════════════════════════════════════╗
-║  PRD written to .archflow/tasks/$ARGUMENTS/prd.md       ║
-║                                                         ║
-║  Open it in your editor to review. When satisfied:      ║
-║  - Run /arch:design $ARGUMENTS to design architecture   ║
-║  - Or tell me what to change                            ║
+║  PRD committed.                                          ║
+║                                                          ║
+║  Next: Run /arch:design $ARGUMENTS to design             ║
+║  architecture.                                           ║
 ╚══════════════════════════════════════════════════════════╝
 ```

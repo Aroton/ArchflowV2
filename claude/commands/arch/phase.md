@@ -114,11 +114,11 @@ Read the phase design doc to confirm it was written. Present the design to the u
 
 ```
 ╔══════════════════════════════════════════════════════════╗
-║  Phase design created at                                ║
-║  .archflow/tasks/{task}/phases/phase-{N}-{slug}.md      ║
-║                                                         ║
-║  Review it in your editor.                              ║
-║  Say "implement" to proceed, or provide feedback.       ║
+║  Phase design created at                                 ║
+║  .archflow/tasks/{task}/phases/phase-{N}-{slug}.md       ║
+║                                                          ║
+║  Review it in your editor.                               ║
+║  Say "implement" to proceed, or provide feedback.        ║
 ╚══════════════════════════════════════════════════════════╝
 ```
 
@@ -147,11 +147,11 @@ Present the Verification Steps from the phase design doc to the user:
 
 ```
 ╔══════════════════════════════════════════════════════════╗
-║  Implementation complete. Please verify:                ║
-║                                                         ║
-║  [Verification steps from design doc]                   ║
-║                                                         ║
-║  Report any issues, or say "verified" to proceed.       ║
+║  Implementation complete. Please verify:                 ║
+║                                                          ║
+║  [Verification steps from design doc]                    ║
+║                                                          ║
+║  Report any issues, or say "verified" to proceed.        ║
 ╚══════════════════════════════════════════════════════════╝
 ```
 
@@ -199,9 +199,20 @@ Review the implementation log for deviations, new patterns, or changed requireme
 
 Only update what actually changed -- don't rewrite sections that are still accurate.
 
-### Step 8: Commit
+### Step 8: Confirm and Commit
 
-Stage all changed files and create a git commit. Convert the task name to human-readable title case (e.g. `user_feedback` becomes `User Feedback`):
+```
+╔══════════════════════════════════════════════════════════╗
+║  Phase {N} work is complete.                             ║
+║  Say "commit" to commit, or request changes.             ║
+╚══════════════════════════════════════════════════════════╝
+```
+
+**STOP HERE AND WAIT FOR USER RESPONSE.**
+
+If the user requests changes, make them. Repeat until the user confirms.
+
+After user confirms, stage all changed files and create a git commit. Convert the task name to human-readable title case (e.g. `user_feedback` becomes `User Feedback`):
 
 ```
 [Task Name] Phase {N}: [Phase Name]
@@ -215,9 +226,9 @@ Update the phase doc: set status to **COMPLETE**, add implementation date.
 
 ```
 ╔══════════════════════════════════════════════════════════╗
-║  Phase {N} complete!                                    ║
-║                                                         ║
-║  Next: Run /arch:phase {task} [N+1] to continue.       ║
+║  Phase {N} complete!                                     ║
+║                                                          ║
+║  Next: Run /arch:phase {task} [N+1] to continue.         ║
 ╚══════════════════════════════════════════════════════════╝
 ```
 
