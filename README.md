@@ -1,20 +1,20 @@
 # ArchFlow
 
-A lightweight, human-centered development workflow for Claude Code. Five commands that turn vague ideas into structured implementations with human review at every stage.
+A lightweight, human-centered development workflow for Claude Code and Codex. Five portable Agent Skills turn vague ideas into structured implementations with human review at every stage.
 
 ## What It Does
 
 ArchFlow guides you through a structured development process:
 
 ```
-/arch:explore           Understand an existing codebase
+/archflow-explore       Understand an existing codebase
        |
-/arch:prd my-feature    Define what you're building (PRD)
+/archflow-prd my-feature    Define what you're building (PRD)
        |
-/arch:design my-feature Design how to build it (architecture + phases)
+/archflow-design my-feature Design how to build it (architecture + phases)
        |
-/arch:phase my-feature 1   Implement phase 1
-/arch:phase my-feature 2   Implement phase 2
+/archflow-phase my-feature 1   Implement phase 1
+/archflow-phase my-feature 2   Implement phase 2
        ...                  ...until done
 ```
 
@@ -28,7 +28,12 @@ cd ArchflowV2
 ./install.sh
 ```
 
-This copies the commands to `~/.claude/commands/arch/` so they're available in any project.
+This installs both integrations:
+
+- Claude Code skills in `~/.claude/skills/`
+- Codex skills in `~/.agents/skills/`
+
+Install just one with `./install.sh --claude` or `./install.sh --codex`. Restart Codex after installing if the skills are not listed yet.
 
 ## Usage
 
@@ -37,16 +42,18 @@ This copies the commands to `~/.claude/commands/arch/` so they're available in a
 Map an existing codebase before starting work:
 
 ```
-/arch:explore
-/arch:explore authentication    # focus on a specific area
+/archflow-explore
+/archflow-explore authentication    # focus on a specific area
 ```
 
-Produces `.archflow/context/` reference docs that all other commands use.
+In Codex, replace the leading `/` with `$`; for example, `$archflow-explore`.
+
+Produces `.archflow/context/` reference docs that all other skills use.
 
 ### 2. Define Requirements
 
 ```
-/arch:prd my-feature
+/archflow-prd my-feature
 ```
 
 Interactive conversation to gather requirements, followed by automated research. Produces a PRD at `.archflow/tasks/my-feature/prd.md`. Review it, request changes, or approve.
@@ -54,7 +61,7 @@ Interactive conversation to gather requirements, followed by automated research.
 ### 3. Design Architecture
 
 ```
-/arch:design my-feature
+/archflow-design my-feature
 ```
 
 Explores the codebase, discusses key decisions with you, then designs the technical architecture with a phased implementation plan. Produces `.archflow/tasks/my-feature/architecture.md`.
@@ -62,7 +69,7 @@ Explores the codebase, discusses key decisions with you, then designs the techni
 ### 4. Implement Phase by Phase
 
 ```
-/arch:phase my-feature 1
+/archflow-phase my-feature 1
 ```
 
 Each phase goes through: **design** (you review) -> **implement** (parallel sub-agents) -> **verify** (you test) -> **log** (capture learnings) -> **commit**.
@@ -72,8 +79,8 @@ Later phases read logs from earlier phases so they don't repeat mistakes and bui
 ### 5. Check Status
 
 ```
-/arch:status
-/arch:status my-feature
+/archflow-status
+/archflow-status my-feature
 ```
 
 See where things stand and what to do next.
@@ -107,7 +114,7 @@ Planning docs are tracked in git during development to preserve progress across 
 - **Sub-agent powered**: Heavy work (exploration, research, planning, coding) runs in parallel sub-agents. The main agent orchestrates.
 - **Inter-phase learning**: Each phase writes a log of decisions, patterns, gotchas, and interfaces. Later phases read all prior logs.
 - **Plan stays accurate**: After each phase, the architecture doc and PRD are updated to reflect what actually happened, not just what was planned.
-- **Resumable**: If you lose context mid-phase, re-run the command and it picks up where you left off.
+- **Resumable**: If you lose context mid-phase, re-run the skill and it picks up where you left off.
 - **Task isolation**: Each task is independent. Deleting one has zero impact on others.
 
 ## Detailed Process Documentation
