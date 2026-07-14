@@ -72,9 +72,9 @@ Explores the codebase, discusses key decisions with you, then designs the techni
 /archflow-phase my-feature 1
 ```
 
-Each phase goes through: **design** (you review) -> **implement** (parallel sub-agents) -> **verify** (you test) -> **log** (capture learnings) -> **commit**.
+Each phase goes through: **design** (you review) -> **implement** (direct, or parallel sub-agents when it pays) -> **verify** (agent runs the checks, you review the evidence) -> **log** (capture learnings) -> **commit**.
 
-Later phases read logs from earlier phases so they don't repeat mistakes and build on established patterns.
+Later phases read the up-to-date architecture doc and the latest log so they don't repeat mistakes and build on established patterns.
 
 ### 5. Check Status
 
@@ -110,9 +110,9 @@ Planning docs are tracked in git during development to preserve progress across 
 
 ## Key Design Decisions
 
-- **Human-in-the-loop**: You review and approve at every stage
-- **Sub-agent powered**: Heavy work (exploration, research, planning, coding) runs in parallel sub-agents. The main agent orchestrates.
-- **Inter-phase learning**: Each phase writes a log of decisions, patterns, gotchas, and interfaces. Later phases read all prior logs.
+- **Human-in-the-loop**: You review and approve at every stage — the agent does the labor (including running verification), you exercise the judgment
+- **Sub-agents when they pay**: Heavy independent work (exploration, research) fans out to parallel sub-agents; implementation stays direct unless chunks are truly disjoint
+- **Inter-phase learning**: Each phase writes a log of decisions, patterns, gotchas, and interfaces. The architecture doc absorbs deviations so later phases read current truth, not a log pile; durable conventions get promoted to the project's CLAUDE.md.
 - **Plan stays accurate**: After each phase, the architecture doc and PRD are updated to reflect what actually happened, not just what was planned.
 - **Resumable**: If you lose context mid-phase, re-run the skill and it picks up where you left off.
 - **Task isolation**: Each task is independent. Deleting one has zero impact on others.

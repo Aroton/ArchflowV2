@@ -11,8 +11,8 @@ Treat the supplied arguments as `<task> <phase-number>`.
 
 1. Read `.archflow/tasks/<task>/architecture.md`; it is required. If missing, stop and direct the user to `archflow-design <task>`.
 2. Locate `<phase-number>` in the architecture’s Phases section. If absent, show available phases and stop.
-3. Read relevant `.archflow/context/` documents.
-4. For phase 2 or later, read **all** prior phase design documents and implementation logs in `.archflow/tasks/<task>/phases/`; they contain decisions, patterns, interfaces, and gotchas.
+3. Read relevant `.archflow/context/` documents. If they carry a commit stamp far behind the current HEAD, warn the user that context may be stale and suggest a refresh in the affected area.
+4. For phase 2 or later, read the immediately prior phase's design document and implementation log in `.archflow/tasks/<task>/phases/`. The architecture doc is kept accurate as phases complete, so it plus the latest log carries the durable state; consult older logs only when they cover ground this phase touches (glob `*-log.md` and judge by name and the architecture's phase list).
 5. Check for an existing `phase-<N>-*.md` design document.
 
 If no design exists, design the phase. If status is `DESIGNED`, show its summary and ask whether to implement or revise. If `IN PROGRESS`, inspect the repository, report completed and remaining work, and offer to continue. If `COMPLETE`, report it and suggest the next phase.
@@ -22,11 +22,11 @@ If no design exists, design the phase. If status is `DESIGNED`, show its summary
 Use an exploration agent and, where needed, a research agent when available; otherwise perform the same work directly. Investigate in parallel where possible:
 
 - **Codebase analysis**: use the phase goal, scope, requirements, prior-phase patterns and interfaces, and the summary of earlier work to identify current file state, reusable utilities and patterns, and integration points. Return paths and code snippets.
-- **Targeted research**, only for unfamiliar territory: use the PRD and architecture constraints to research the specific technical challenge; return at most 400 words.
+- **Targeted research**, only for unfamiliar territory: use the PRD and architecture constraints to research the specific technical challenge; return only the synthesized conclusions the design depends on.
 
-Delegate phase-design drafting to a writing agent when available; otherwise draft it directly. Give the writer the phase definition, PRD, exploration and research findings, all prior design/log documents, and context documents. Create `.archflow/tasks/<task>/phases/phase-<N>-<slug>.md`; create `phases/` if needed. Derive `<slug>` from the phase name: lowercase with spaces replaced by hyphens.
+Delegate phase-design drafting to a writing agent when available; otherwise draft it directly. Give the writer the phase definition, PRD, exploration and research findings, the relevant prior design/log documents, and context documents. Create `.archflow/tasks/<task>/phases/phase-<N>-<slug>.md`; create `phases/` if needed. Derive `<slug>` from the phase name: lowercase with spaces replaced by hyphens.
 
-The design must stay under 150 lines and define **what** and **where**, never pseudocode, function signatures, or line-by-line implementation. Use this exact structure:
+The design must be reviewable in one sitting and define **what** and **where**, not line-by-line implementation or pseudocode. Interface signatures at chunk boundaries are the exception: when chunks will be implemented separately, pin down the exact exports and types they share so the seams stay coherent. Use this structure:
 
 ```markdown
 # Phase N: [Name]
@@ -65,17 +65,19 @@ The design must stay under 150 lines and define **what** and **where**, never ps
 *Designed: [date]*
 ```
 
-The work breakdown must contain 3–6 related chunks, each suitable for an implementation agent. Confirm the document exists, present it, and stop for the user to say `implement` or provide feedback.
+The work breakdown should contain a handful of coherent chunks — typically 3–6, sized to the phase. Confirm the document exists, present it, and stop for the user to say `implement` or provide feedback.
 
 ## Implement
 
-After approval, set the phase status to `IN PROGRESS`. You are the orchestrator: delegate code changes to implementation agents rather than writing code yourself.
+After approval, set the phase status to `IN PROGRESS`. Implement directly by default — a single agent with full context produces more coherent code than several that cannot see each other's changes. Fan out to parallel implementation agents only when chunks touch disjoint files and the phase is large enough that parallelism pays for the coordination cost.
 
-For each work chunk, provide its objective, relevant Files-table paths, prior-log interfaces and patterns, and architecture/context conventions. Instruct agents to write files directly and return only a concise summary of modified or created paths. Run independent chunks in parallel; wait for dependencies and pass their summaries to dependent work. After all chunks finish, run the applicable test suite.
+When delegating a chunk, provide its objective, relevant Files-table paths, the pinned interface contracts, prior-log patterns, and architecture/context conventions. Instruct agents to write files directly and return only a concise summary of modified or created paths. Run independent chunks in parallel; wait for dependencies and pass their summaries to dependent work. After all chunks finish, run the applicable test suite.
 
 ## Verify
 
-Present the phase design’s Verification Steps and stop for user verification. If issues are reported, fix them and re-present. Do not proceed until the user confirms verification.
+Run every verification step you can execute yourself: tests, builds, linters, and actually driving the affected flow (run the command, hit the endpoint, exercise the behavior). Fix what fails and re-verify until your own checks pass.
+
+Then present the evidence — commands run, output observed, behaviors confirmed — alongside anything that genuinely requires human judgment or access you lack (visual/UX checks, production credentials, "does this match your intent"). Stop for the user's verdict. If issues are reported, fix them, re-verify the affected items, and re-present only what changed. Do not proceed until the user confirms.
 
 ## Log and update parents
 
@@ -105,9 +107,11 @@ Be concrete. Review the log and update only parent-doc content that implementati
 - In `architecture.md`, mark the phase complete; update system architecture, data model, decisions, and remaining phases when actual deviations require it, including adding, removing, or reordering phases.
 - In `prd.md`, update requirements made infeasible, split, or newly necessary; move confirmed exclusions to Out of Scope with a reason.
 
+Then check the log for rules that outlive this task: durable conventions every future session should follow regardless of ArchFlow (error-handling patterns, "always use X repo, never query directly", build/test gotchas). Propose adding those to the project's `CLAUDE.md` — `.archflow/` is removed before PR, so anything permanent must live outside it. Task-specific detail stays in the log.
+
 ## Confirm, commit, complete
 
-Ask the user for explicit confirmation to commit and stop. Apply requested changes and repeat until approval. Then stage all changed files and commit:
+Ask the user for explicit confirmation to commit and stop. Apply requested changes and repeat until approval. Then stage the files this phase created or modified — not unrelated working-tree changes — and commit:
 
 ```text
 <Task Title> Phase <N>: <Phase Name>

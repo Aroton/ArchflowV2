@@ -13,15 +13,17 @@ Create `.archflow/context/` if needed. If context documents already exist, expla
 
 ## Parallel exploration
 
-Run the following three independent investigations in parallel when subagents are available. Each writes its output directly and returns only its file path. If parallel agents are unavailable, perform the same investigations before proceeding. When the user supplied a focus area, each investigation must go deeper in that area.
+Decompose exploration into independent investigations sized to the repository. The default set below fits most single-package repos; add, merge, or split documents when the repo's shape demands it — for example, per-package documents in a monorepo, or a dedicated document for a dominant subsystem. Run investigations in parallel when subagents are available; each writes its output directly and returns only its file path. If parallel agents are unavailable, perform the same investigations before proceeding. When the user supplied a focus area, each investigation must go deeper in that area.
 
 1. **Structure and architecture**: map top-level directories, key entry points, application wiring/import and dependency flow, build system, and configuration. Write a clean, scannable document with paths and small code snippets to `.archflow/context/architecture.md`.
 2. **Patterns and conventions**: find naming conventions; error handling, state-management, and data-access patterns; testing framework, layout, and fixtures; formatting, import organization, and module conventions. Write concrete examples to `.archflow/context/patterns.md`.
 3. **Dependencies and integrations**: identify key dependencies and their uses; external APIs, databases, and auth providers; environment variables and config; linters, formatters, and CI/CD. Write findings to `.archflow/context/dependencies.md`.
 
+Stamp every context document's header with the date and current commit (`git rev-parse --short HEAD`) so later skills can detect staleness.
+
 ## Review and commit
 
-Summarize the findings and present these files for review:
+Summarize the findings and present the written context files for review (default set):
 
 - `.archflow/context/architecture.md`
 - `.archflow/context/patterns.md`

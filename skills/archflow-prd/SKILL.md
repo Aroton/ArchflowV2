@@ -11,7 +11,7 @@ Treat the task name supplied with this skill as `<task>` and work in `.archflow/
 
 Create the task directory if necessary. Read `.archflow/context/` when it exists. If `prd.md` already exists, read it and ask whether to revise it or start fresh.
 
-Ask what `<task>` is: the problem being solved and who it is for. Then, over 2–4 natural, focused rounds, establish:
+Ask what `<task>` is: the problem being solved and who it is for. Then, over a natural, focused conversation (typically a few rounds — stop as soon as requirements are sufficient), establish:
 
 - problem statement and motivation;
 - target users and needs;
@@ -23,17 +23,17 @@ Use structured choices when helpful. Do not research until requirements are suff
 
 ## Research
 
-Run the following independent research work in parallel when available; otherwise perform the same investigations directly. Give every researcher the user’s problem, requirements, constraints, and a summary of any context documents. Wait for all work to complete.
+Research only the dimensions that are load-bearing for this task — a user-facing product in a competitive space warrants all three below; an internal tool or refactor may warrant one or none. Skipping a dimension is a judgment call, not a failure. Run whatever you do research in parallel when subagents are available; otherwise perform the same investigations directly. Give every researcher the user's problem, requirements, constraints, and a summary of any context documents, and instruct each to return only the findings the PRD author needs to make decisions — synthesized conclusions, not raw survey material.
 
-1. **Domain research**: current best practices, table-stakes features, and common architecture patterns; return at most 500 words.
-2. **Competitive landscape**: existing solutions, what they do well, recurring complaints, and differentiators; return at most 400 words.
-3. **Technical research**, only when a specific technology is in scope: best practices, pitfalls, and recommended or avoided libraries; return at most 400 words.
+1. **Domain research**: current best practices, table-stakes features, and common architecture patterns.
+2. **Competitive landscape**: existing solutions, what they do well, recurring complaints, and differentiators.
+3. **Technical research**: best practices, pitfalls, and recommended or avoided libraries for technologies in scope.
 
-Use current web research for domain and competitive research; use it for technical research when a specific technology is in scope.
+Use current web research when the domain is fast-moving, competitive positioning matters, or you are uncertain — not as a ritual for every task.
 
 ## Write the PRD
 
-Delegate PRD drafting to a writing agent when available; otherwise draft it directly. Give the writer the complete user requirements, all research findings, and any context documents. Write `.archflow/tasks/<task>/prd.md` with genuine analysis rather than boilerplate and this structure:
+Delegate PRD drafting to a writing agent when available; otherwise draft it directly. Give the writer the complete user requirements, all research findings, and any context documents. Write `.archflow/tasks/<task>/prd.md` with genuine analysis rather than boilerplate, scaled to the task: a small internal change deserves a one-page PRD, not a filled-in ceremony. Use this structure, keeping only the sections that earn their place — omit any section that would hold boilerplate for this task:
 
 ```markdown
 # PRD: [Task Name]
@@ -93,7 +93,7 @@ Delegate PRD drafting to a writing agent when available; otherwise draft it dire
 
 ## Review and commit
 
-Present the PRD and stop for review. Revise and re-present until explicitly approved. Then commit only the PRD as:
+Present the PRD and stop for review. When re-presenting after revisions, summarize what changed since the last review rather than restating the full document. Repeat until explicitly approved. Then commit only the PRD as:
 
 ```text
 <Task Title>: Create PRD

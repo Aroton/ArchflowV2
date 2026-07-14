@@ -30,7 +30,7 @@ Optionally accept a task name. Inspect `.archflow/` without changing files.
    ```
 
    If several tasks exist, use a compact version for each.
-4. If context documents exist, report when they were last updated.
+4. If context documents exist, report when they were last updated. If they carry a commit stamp, compare it against the current HEAD (`git rev-list --count <stamp>..HEAD`) and flag significant drift with a suggestion to re-run `archflow-explore`, focused on the areas that changed most.
 5. Show the five most recent commit subjects using `git log --oneline -5`.
 6. Recommend exactly one next action for the requested or most active task: create a PRD, design architecture, run the next incomplete phase, or declare completion. If context does not exist, recommend exploration only when it is the most useful next action.
 

@@ -28,7 +28,8 @@ flowchart TD
 
     subgraph "Phase Loop (/archflow-phase)"
         Design2[Design phase] --> Impl[Implement]
-        Impl --> Verify{{Human Verifies}}
+        Impl --> AgentVerify[Agent verifies:<br/>tests, build, drive the flow]
+        AgentVerify --> Verify{{Human reviews evidence<br/>+ judgment checks}}
         Verify -->|Issues| Impl
         Verify -->|Verified| Log[Write impl log]
         Log --> More{More phases?}
@@ -107,7 +108,7 @@ No separate context-gathering step is needed. The main agent reads the files dir
 |---------|-----------|---------------------|
 | `/archflow-prd` | prd.md (check if exists), context/* | User requirements + codebase context summary |
 | `/archflow-design` | prd.md (required), architecture.md (if revising), context/* | PRD requirements/constraints + codebase context |
-| `/archflow-phase` | architecture.md (required), phase-N doc (check status), ALL prior phase docs + ALL prior log files, context/* | Phase definition + prior phase learnings (decisions, patterns, interfaces, gotchas) |
+| `/archflow-phase` | architecture.md (required, kept current), phase-N doc (check status), immediately prior phase doc + log (older logs on demand), context/* | Phase definition + prior phase learnings (decisions, patterns, interfaces, gotchas) |
 | `/archflow-status` | architecture.md, phase docs (for status) | N/A (no sub-agents) |
 
 ---
@@ -144,9 +145,9 @@ flowchart TD
     style E1a fill:#ffd700,stroke:#333,color:#000
 ```
 
-**Agents**: 3x general-purpose (parallel, explore + write)
-**Output**: `.archflow/context/{architecture,patterns,dependencies}.md`
-**When to run**: Before starting tasks on an existing codebase. Re-run after major refactors.
+**Agents**: 3x general-purpose (parallel, explore + write) by default — the document set scales to the repo's shape (e.g. per-package docs in a monorepo)
+**Output**: `.archflow/context/{architecture,patterns,dependencies}.md`, each stamped with the HEAD commit for staleness detection
+**When to run**: Before starting tasks on an existing codebase. Re-run when status/phase skills flag drift.
 
 ---
 
@@ -187,7 +188,7 @@ flowchart TD
     style P8 fill:#ffd700,stroke:#333,color:#000
 ```
 
-**Agents**: 2-3x general-purpose (parallel research) + 1x general-purpose (plan + write PRD)
+**Agents**: 0-3x general-purpose (parallel research — only load-bearing dimensions) + 1x general-purpose (plan + write PRD)
 **Output**: `.archflow/tasks/{task}/prd.md`
 **Context read**: `.archflow/context/*` (if available)
 
@@ -269,15 +270,16 @@ flowchart TD
     PH6 -->|Feedback| PH4
     PH6 -->|"implement"| PH_impl
 
-    subgraph "Parallel Implementation"
-        PH_impl[Analyze steps for independence] --> PH_parallel[Fan out to parallel<br/>sub-agents where possible]
+    subgraph "Implementation"
+        PH_impl[Implement directly by default] --> PH_parallel[Fan out to parallel sub-agents<br/>only when chunks touch disjoint<br/>files and parallelism pays]
         PH_parallel --> PH_sequential[Sequential steps<br/>that depend on prior output]
     end
 
     PH_sequential --> PH_verify
 
     subgraph "Verification"
-        PH_verify[Present testing steps<br/>to user] --> PH_human_test{{Human runs tests<br/>and verifies}}
+        PH_verify[Agent runs all automatable checks:<br/>tests, build, drive the flow] --> PH_evidence[Present evidence +<br/>judgment-only checks]
+        PH_evidence --> PH_human_test{{Human reviews evidence<br/>and confirms}}
         PH_human_test -->|Issues found| PH_fix[Fix issues] --> PH_verify
         PH_human_test -->|All verified| PH_log
     end
@@ -302,9 +304,9 @@ flowchart TD
     style PH_done fill:#4CAF50,stroke:#333,color:#fff
 ```
 
-**Agents**: 1x Explore + 0-1x general-purpose (research) + 1x general-purpose (plan + write phase doc) + Nx general-purpose (parallel implementation)
+**Agents**: 1x Explore + 0-1x general-purpose (research) + 1x general-purpose (plan + write phase doc) + 0-Nx general-purpose (parallel implementation, only when it pays — direct implementation is the default)
 **Output**: `.archflow/tasks/{task}/phases/phase-N-{slug}.md` + `phase-N-{slug}-log.md` + actual code
-**Context read**: architecture.md + prd.md + ALL prior phase docs + ALL prior log files + `.archflow/context/*`
+**Context read**: architecture.md (kept current) + prd.md + immediately prior phase doc/log + older logs on demand + `.archflow/context/*`
 
 ---
 
@@ -334,7 +336,7 @@ flowchart LR
     phase ---|1x design| EX
     phase ---|"0-1x research"| GP
     phase ---|"1x sequential<br/>(plan + write phase doc)"| GP
-    phase ---|"Nx parallel<br/>(implementation)"| GP
+    phase ---|"0-Nx parallel<br/>(implementation,<br/>when it pays)"| GP
 
     style EX fill:#e3f2fd,stroke:#1565c0
     style GP fill:#fff3e0,stroke:#e65100
@@ -374,8 +376,9 @@ sequenceDiagram
     U->>U: Review phase design
     U->>C: implement
     C->>C: Write code (parallel sub-agents)
-    C->>U: Present testing/verification steps
-    U->>C: Verification results
+    C->>C: Run tests, build, drive the flow
+    C->>U: Present evidence + judgment checks
+    U->>C: Confirm or report issues
     C->>FS: Write phase-1-setup-log.md
     C->>FS: Update architecture.md + prd.md (if deviations)
     C->>FS: Update phase-1 → COMPLETE
@@ -388,8 +391,9 @@ sequenceDiagram
     U->>U: Review phase design
     U->>C: implement
     C->>C: Write code (parallel sub-agents)
-    C->>U: Present testing/verification steps
-    U->>C: Verification results
+    C->>C: Run tests, build, drive the flow
+    C->>U: Present evidence + judgment checks
+    U->>C: Confirm or report issues
     C->>FS: Write phase-2-core-log.md
     C->>FS: Update phase-2 → COMPLETE
 ```
@@ -449,10 +453,10 @@ Each completed phase gets a companion **log file** at `phase-N-{slug}-log.md`. T
 ```
 
 **How it flows:**
-- Phase 1 completes → log written to `phase-1-setup-log.md` → architecture.md and prd.md updated if deviations occurred
-- Phase 2 starts → reads ALL prior phase docs AND their log files
+- Phase 1 completes → log written to `phase-1-setup-log.md` → architecture.md and prd.md updated if deviations occurred → durable, task-independent conventions proposed for the project's CLAUDE.md
+- Phase 2 starts → reads the architecture doc (kept current) plus the immediately prior phase doc and log; older logs are pulled in only when they cover ground the new phase touches. This keeps context linear instead of O(N²) as phases accumulate.
 - Phase 2's Plan Agent receives these learnings as input → avoids repeating mistakes, reuses established patterns, builds on actual interfaces (not just planned ones)
-- The architecture doc stays accurate because each phase updates it on completion — remaining phase definitions reflect reality, not the original guess
+- The architecture doc stays accurate because each phase updates it on completion — remaining phase definitions reflect reality, not the original guess. Because the architecture doc absorbs deviations, it (not the log pile) is the durable source of truth.
 
 Separate file keeps the design doc clean and the log focused. The naming convention (`-log.md` suffix) makes it easy to glob for all logs.
 
@@ -460,21 +464,22 @@ Separate file keeps the design doc clean and the log focused. The naming convent
 
 ## Verification Flow
 
-After implementation, before marking COMPLETE, the phase goes through verification:
+After implementation, before marking COMPLETE, the phase goes through verification. The agent runs everything automatable itself; the human gate is for judgment, not labor:
 
 ```mermaid
 flowchart TD
-    Impl[Implementation done] --> Present[Present testing steps<br/>to human]
-    Present --> Steps["Step-by-step verification:<br/>1. Run specific commands<br/>2. Check specific behaviors<br/>3. Verify edge cases"]
-    Steps --> Human{{Human executes<br/>and reports results}}
-    Human -->|"All pass"| Log[Write Implementation Log]
+    Impl[Implementation done] --> AgentRun["Agent executes verification:<br/>1. Run tests and build<br/>2. Drive the affected flow<br/>3. Check edge cases"]
+    AgentRun -->|"Failures"| SelfFix[Fix and re-verify] --> AgentRun
+    AgentRun -->|"Checks pass"| Present["Present evidence:<br/>commands run, output observed,<br/>behaviors confirmed<br/>+ judgment-only checks"]
+    Present --> Human{{Human reviews evidence,<br/>runs judgment checks}}
+    Human -->|"Confirmed"| Log[Write Implementation Log]
     Human -->|"Issues found"| Fix[Fix reported issues]
-    Fix --> Present
+    Fix --> AgentRun
 
     style Human fill:#ffd700,stroke:#333,color:#000
 ```
 
-Testing steps are **specific and actionable** -- not "verify it works" but concrete commands, URLs to check, behaviors to observe. The human acts as the verification layer, and any issues feed back into the implementation before the phase closes.
+Evidence is **specific and observable** -- not "it works" but the concrete commands run, output seen, and behaviors exercised. The human reviews that evidence and handles what only a human can judge: visual/UX checks, intent alignment, and anything requiring access the agent lacks. Issues feed back into implementation before the phase closes, and re-verification covers only what changed.
 
 ---
 

@@ -41,3 +41,23 @@ All working files live in `.archflow/`. Tracked in git during development to pre
 ```
 
 Installs the shared skills to `~/.claude/skills/` and `~/.agents/skills/` for global availability.
+
+## Design Principles
+
+ArchFlow is written for models that keep improving. Skills must encode *intent and trust boundaries*, not workarounds for model weaknesses — workarounds become ceilings as models get better. When writing or editing any skill, apply this litmus test to every rule: **is it here because the model used to be bad at something, or because the human needs it?** Only the second kind gets "never/must/exact" language.
+
+Hard rules — human trust boundaries, never soften:
+
+- Never commit or pass a review gate without explicit user approval.
+- Never write code before phase-design approval.
+- Phase state machine: no doc → DESIGNED → IN PROGRESS → COMPLETE.
+- Task isolation: tasks never read each other's files.
+- Parent docs (architecture.md, prd.md) are updated when implementation deviates — the plan must always reflect reality.
+- Every completed phase writes an implementation log; durable, task-independent conventions get proposed for the target project's CLAUDE.md (`.archflow/` is deleted before PR, so anything permanent must live outside it).
+
+Everything else is a default, not a rule:
+
+- State the intent and let the model choose the procedure: "return only what the next step needs to decide," not word caps; "sized to the task," not fixed counts.
+- Numbers (agent counts, phase counts, chunk counts, conversation rounds) are calibration hints — phrase as "typically" or "default," never "must."
+- Techniques that compensate for model limits (mandatory research, forced sub-agent delegation, fixed decomposition) must be conditional on the task actually needing them.
+- The human gate reviews evidence and exercises judgment; the agent performs all labor it is capable of, including running verification itself.
