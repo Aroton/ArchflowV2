@@ -1,20 +1,22 @@
 # ArchFlow
 
-A lightweight, human-centered development workflow for Claude Code.
+A lightweight, human-centered development workflow for Claude Code and Codex.
 
 ## Repository Structure
 
-This repo contains the ArchFlow command definitions. Source of truth is in `claude/commands/arch/`.
+This repo contains one portable Agent Skills source of truth in `skills/`. The installer copies it to each client's skill-discovery directory.
 
-## Commands
+## Skills
 
-| Command | Purpose |
+| Skill | Purpose |
 |---------|---------|
-| `/arch:explore` | Explore codebase, produce persistent context references |
-| `/arch:prd <task>` | Research + create PRD for a task |
-| `/arch:design <task>` | Design architecture + phases for a task |
-| `/arch:phase <task> N` | Design and implement phase N |
-| `/arch:status [task]` | Check status and next action |
+| `/archflow-explore` | Explore codebase, produce persistent context references |
+| `/archflow-prd <task>` | Research + create PRD for a task |
+| `/archflow-design <task>` | Design architecture + phases for a task |
+| `/archflow-phase <task> N` | Design and implement phase N |
+| `/archflow-status [task]` | Check status and next action |
+
+In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-explore`, `$archflow-prd`, `$archflow-design`, `$archflow-phase`, and `$archflow-status`.
 
 ## How It Works
 
@@ -38,4 +40,4 @@ All working files live in `.archflow/`. Tracked in git during development to pre
 ./install.sh
 ```
 
-Copies commands to `~/.claude/commands/arch/` for global availability.
+Installs the shared skills to `~/.claude/skills/` and `~/.agents/skills/` for global availability.

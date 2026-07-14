@@ -4,29 +4,29 @@
 
 ```mermaid
 flowchart LR
-    Start([Start]) --> Explore["/arch:explore"]
-    Explore --> PRD["/arch:prd"]
-    PRD --> Design["/arch:design"]
-    Design --> Phase["/arch:phase 1..N"]
+    Start([Start]) --> Explore["/archflow-explore"]
+    Explore --> PRD["/archflow-prd"]
+    PRD --> Design["/archflow-design"]
+    Design --> Phase["/archflow-phase 1..N"]
     Phase --> Done([Done])
 
     style Start fill:#4CAF50,stroke:#333,color:#fff
     style Done fill:#4CAF50,stroke:#333,color:#fff
 ```
 
-Each command has a human review gate -- nothing proceeds without your approval. See command details below for full flows.
+Each skill has a human review gate -- nothing proceeds without your approval. See skill details below for full flows.
 
 ```mermaid
 flowchart TD
-    subgraph "Each Command Internally"
+    subgraph "Each Skill Internally"
         Read[Read .archflow/ context] --> Agents[Sub-agents<br/>explore, research, plan]
         Agents --> Output[Write .archflow/ doc]
         Output --> Review{{Human Review}}
         Review -->|Feedback| Agents
-        Review -->|Approved| Next[Next command]
+        Review -->|Approved| Next[Next skill]
     end
 
-    subgraph "Phase Loop (/arch:phase)"
+    subgraph "Phase Loop (/archflow-phase)"
         Design2[Design phase] --> Impl[Implement]
         Impl --> Verify{{Human Verifies}}
         Verify -->|Issues| Impl
@@ -94,31 +94,31 @@ flowchart LR
 
 ## Context Passing
 
-Every command (except `/arch:explore`, which creates context) follows this pattern:
+Every skill (except `/archflow-explore`, which creates context) follows this pattern:
 
 1. **Main agent reads key `.archflow/` files** -- for control flow decisions (does the PRD exist? what's the phase status?) and to gather context
 2. **Passes relevant context to sub-agents** -- when spawning Explore, Research, or Plan agents, the main agent includes the necessary context in each agent's prompt
 
 No separate context-gathering step is needed. The main agent reads the files directly and includes the relevant parts when spawning downstream agents.
 
-**What each command reads:**
+**What each skill reads:**
 
-| Command | Files Read | Passed to Sub-Agents |
+| Skill | Files Read | Passed to Sub-Agents |
 |---------|-----------|---------------------|
-| `/arch:prd` | prd.md (check if exists), context/* | User requirements + codebase context summary |
-| `/arch:design` | prd.md (required), architecture.md (if revising), context/* | PRD requirements/constraints + codebase context |
-| `/arch:phase` | architecture.md (required), phase-N doc (check status), ALL prior phase docs + ALL prior log files, context/* | Phase definition + prior phase learnings (decisions, patterns, interfaces, gotchas) |
-| `/arch:status` | architecture.md, phase docs (for status) | N/A (no sub-agents) |
+| `/archflow-prd` | prd.md (check if exists), context/* | User requirements + codebase context summary |
+| `/archflow-design` | prd.md (required), architecture.md (if revising), context/* | PRD requirements/constraints + codebase context |
+| `/archflow-phase` | architecture.md (required), phase-N doc (check status), ALL prior phase docs + ALL prior log files, context/* | Phase definition + prior phase learnings (decisions, patterns, interfaces, gotchas) |
+| `/archflow-status` | architecture.md, phase docs (for status) | N/A (no sub-agents) |
 
 ---
 
-## Command Details
+## Skill Details
 
-### `/arch:explore`
+### `/archflow-explore`
 
 ```mermaid
 flowchart TD
-    E0["/arch:explore"] --> E1{Context docs<br/>exist?}
+    E0["/archflow-explore"] --> E1{Context docs<br/>exist?}
     E1 -->|Yes| E1a{{Ask: Refresh?}}
     E1a -->|No| E_done
     E1a -->|Yes| E2
@@ -150,11 +150,11 @@ flowchart TD
 
 ---
 
-### `/arch:prd <task-name>`
+### `/archflow-prd <task-name>`
 
 ```mermaid
 flowchart TD
-    P0["/arch:prd my-feature"] --> P_read[Read prd.md + context/*<br/>if they exist]
+    P0["/archflow-prd my-feature"] --> P_read[Read prd.md + context/*<br/>if they exist]
     P_read --> P1{PRD exists?}
     P1 -->|Yes| P1a{{Revise or<br/>start fresh?}}
     P1a --> P2
@@ -176,7 +176,7 @@ flowchart TD
     P6[Plan Agent<br/>Design PRD structure] --> P7[Write prd.md]
     P7 --> P8{{Human reviews<br/>PRD in editor}}
     P8 -->|Changes| P2
-    P8 -->|Approved| P9["/arch:design my-feature"]
+    P8 -->|Approved| P9["/archflow-design my-feature"]
 
     style P3 fill:#fff3e0,stroke:#e65100
     style P4 fill:#fff3e0,stroke:#e65100
@@ -193,13 +193,13 @@ flowchart TD
 
 ---
 
-### `/arch:design <task-name>`
+### `/archflow-design <task-name>`
 
 ```mermaid
 flowchart TD
-    D0["/arch:design my-feature"] --> D_read[Read prd.md + architecture.md<br/>+ context/*]
+    D0["/archflow-design my-feature"] --> D_read[Read prd.md + architecture.md<br/>+ context/*]
     D_read --> D_check{PRD exists?}
-    D_check -->|No| D_stop([Stop: run /arch:prd first])
+    D_check -->|No| D_stop([Stop: run /archflow-prd first])
     D_check -->|Yes| D1
 
     subgraph "Parallel Exploration"
@@ -216,7 +216,7 @@ flowchart TD
 
     D5 --> D6{{Human reviews<br/>architecture in editor}}
     D6 -->|Changes| D3
-    D6 -->|Approved| D7["/arch:phase my-feature 1"]
+    D6 -->|Approved| D7["/archflow-phase my-feature 1"]
 
     style D1 fill:#e3f2fd,stroke:#1565c0
     style D2 fill:#fff3e0,stroke:#e65100
@@ -232,13 +232,13 @@ flowchart TD
 
 ---
 
-### `/arch:phase <task-name> N`
+### `/archflow-phase <task-name> N`
 
 ```mermaid
 flowchart TD
-    PH0["/arch:phase my-feature 2"] --> PH_read[Read architecture.md +<br/>phase-N doc + prior phases<br/>+ prior logs + context/*]
+    PH0["/archflow-phase my-feature 2"] --> PH_read[Read architecture.md +<br/>phase-N doc + prior phases<br/>+ prior logs + context/*]
     PH_read --> PH_check{Architecture<br/>exists?}
-    PH_check -->|No| PH_stop([Stop: run /arch:design first])
+    PH_check -->|No| PH_stop([Stop: run /archflow-design first])
     PH_check -->|Yes| PH1{Phase doc<br/>exists?}
 
     PH1 -->|"Status: COMPLETE"| PH_done([Already done.<br/>Suggest next phase.])
@@ -288,7 +288,7 @@ flowchart TD
         PH_commit --> PH_update[Update status → COMPLETE]
     end
 
-    PH_update --> PH_next["/arch:phase my-feature N+1"]
+    PH_update --> PH_next["/archflow-phase my-feature N+1"]
 
     style PH2 fill:#e3f2fd,stroke:#1565c0
     style PH3 fill:#fff3e0,stroke:#e65100
@@ -317,12 +317,12 @@ flowchart LR
         GP["general-purpose<br/>(research, writing,<br/>implementation)"]
     end
 
-    subgraph "Commands"
-        explore["/arch:explore"]
-        prd["/arch:prd"]
-        design["/arch:design"]
-        phase["/arch:phase"]
-        status["/arch:status"]
+    subgraph "Skills"
+        explore["/archflow-explore"]
+        prd["/archflow-prd"]
+        design["/archflow-design"]
+        phase["/archflow-phase"]
+        status["/archflow-status"]
     end
 
     explore ---|"3x parallel<br/>(explore + write files)"| GP
@@ -347,28 +347,28 @@ flowchart LR
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant C as Claude Code
+    participant C as Coding Agent
     participant FS as .archflow/
 
     Note over U,FS: Session 1: Explore + PRD
-    U->>C: /arch:explore
+    U->>C: /archflow-explore
     C->>FS: Write context/*.md
 
-    U->>C: /arch:prd my-feature
+    U->>C: /archflow-prd my-feature
     C->>FS: Read context/*.md
     C->>U: Gather requirements (2-4 rounds)
     C->>FS: Write tasks/my-feature/prd.md
     U->>U: Review PRD in editor
 
     Note over U,FS: Session 2: Architecture
-    U->>C: /arch:design my-feature
+    U->>C: /archflow-design my-feature
     C->>FS: Read context/* + prd.md
     C->>U: Discuss key decisions
     C->>FS: Write tasks/my-feature/architecture.md
     U->>U: Review architecture in editor
 
     Note over U,FS: Session 3: Phase 1
-    U->>C: /arch:phase my-feature 1
+    U->>C: /archflow-phase my-feature 1
     C->>FS: Read context/* + prd + arch
     C->>FS: Write tasks/my-feature/phases/phase-1-setup.md
     U->>U: Review phase design
@@ -381,7 +381,7 @@ sequenceDiagram
     C->>FS: Update phase-1 → COMPLETE
 
     Note over U,FS: Session 4: Phase 2
-    U->>C: /arch:phase my-feature 2
+    U->>C: /archflow-phase my-feature 2
     C->>FS: Read context/* + prd + arch + phase-1 + phase-1-log
     Note right of C: Phase 1 learnings → avoids repeating mistakes
     C->>FS: Write phases/phase-2-core.md
@@ -402,7 +402,7 @@ Each session only reads what it needs. The `.archflow/` docs **are** the context
 
 ```mermaid
 stateDiagram-v2
-    [*] --> NO_DOC: /arch:phase task N
+    [*] --> NO_DOC: /archflow-phase task N
 
     NO_DOC --> DESIGNED: Explore + Plan agents → write phase doc
     DESIGNED --> DESIGNED: User requests revisions
