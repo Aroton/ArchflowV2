@@ -91,9 +91,34 @@ Delegate PRD drafting to a writing agent when available; otherwise draft it dire
 *Created: [date]*
 ```
 
+## Sub-agent review
+
+Before the user sees the draft, have it critiqued. Spawn one or more fresh-context reviewer agents — one is usually enough — giving each the draft, the user's stated requirements, and the research findings. Instruct them to find problems, not to affirm: incomplete, inconsistent, or untestable requirements; scope creep; missing constraints or out-of-scope entries; boilerplate posing as analysis.
+
+Triage each finding, revise the draft, and repeat until a round surfaces nothing that changes the document — typically one or two rounds; diminishing returns, not a round count, is the stop signal. Tell the user what review caught and changed.
+
 ## Review and commit
 
-Present the PRD and stop for review. When re-presenting after revisions, summarize what changed since the last review rather than restating the full document. Repeat until explicitly approved. Then commit only the PRD as:
+Present the PRD, noting what the sub-agent review changed, and stop for review. Alongside it, offer a **counter-review by the other client**: emit a copy/paste-ready prompt addressed to the client you are not running in (in Claude Code, write it for Codex; in Codex, for Claude Code) so a different model reviews the PRD with fresh eyes. Whether to run it is the user's call. The prompt must be self-contained, along these lines:
+
+```text
+Counter-review the PRD at .archflow/tasks/<task>/prd.md.
+
+Read .archflow/context/ first if present.
+
+A different model drafted this PRD and already revised it once — your job is to
+find what it missed. Challenge requirement completeness, consistency, and
+testability; scope boundaries; unstated constraints; and risks the research
+overlooked. Do not rewrite the document or change any files outside the review.
+
+Write your findings to .archflow/tasks/<task>/reviews/prd-counter-review.md
+as a list, each with a severity (blocker / major / minor) and a suggested
+resolution. If you find nothing substantive, say so explicitly in that file.
+```
+
+When the user returns and the review file exists without a `## Triage` section, read it and triage every finding: accept it and revise the PRD, or reject it with a stated reason. Append the dispositions as a `## Triage` section to the review file and re-present only what changed.
+
+When re-presenting after revisions, summarize what changed since the last review rather than restating the full document. Repeat until explicitly approved. Then commit only the PRD as:
 
 ```text
 <Task Title>: Create PRD

@@ -1,0 +1,108 @@
+---
+name: archflow-phase-impl
+description: Implement, verify, review, log, and commit one designed ArchFlow phase. Use when the user asks to implement, resume, or complete a task phase.
+---
+
+# Implement Phase
+
+Treat the supplied arguments as `<task> <phase-number>`. This skill implements a phase that was designed and approved via `archflow-phase-design`; it is meant to run in a fresh session so the whole phase fits in a clean context.
+
+## Setup and state
+
+1. Read `.archflow/tasks/<task>/architecture.md`; it is required. If missing, stop and direct the user to `archflow-design <task>`.
+2. Read the phase design document `phase-<N>-*.md` in `.archflow/tasks/<task>/phases/`; it is required. If missing, stop and direct the user to `archflow-phase-design <task> <N>`.
+3. Read relevant `.archflow/context/` documents, and for phase 2 or later the immediately prior phase's implementation log (older logs only when they cover ground this phase touches).
+4. Check `.archflow/tasks/<task>/reviews/` for this phase's review files.
+
+Then act on state:
+
+- **`DESIGNED`**: if `phase-<N>-design-counter-review.md` exists without a `## Triage` section, stop and recommend triaging it first via `archflow-phase-design <task> <N>` — implementing against a design with unaddressed findings wastes the work. Otherwise, the user invoking this skill on an approved design is the instruction to implement: summarize the goal and work breakdown in a few sentences and begin.
+- **`IN PROGRESS`**: resume — read the full design, analyze the codebase to determine completed and remaining work, report the result, and continue from that point. If an untriaged `phase-<N>-impl-counter-review.md` exists, triage it (see Implementation counter-review).
+- **`COMPLETE`**: report it and suggest the next phase.
+
+## Implement
+
+Set the phase status to `IN PROGRESS`. **Delegate chunks to implementation sub-agents by default.** The orchestrator's context must last the entire phase — implementation, verification, and review — and a delegated chunk costs it only ~2–5k tokens (instructions out, summary back) where a directly-implemented chunk costs ~15–30k in file reads, edits, and test output. Implement directly only when the phase is small enough (a few chunks touching few files) that delegation overhead buys nothing; the numbers are today's calibration for a ~200k window, the rule is finishing without compaction.
+
+When delegating a chunk, provide its objective, relevant Files-table paths, the pinned interface contracts, prior-log patterns, and architecture/context conventions. Instruct agents to write files directly and return only a concise summary of modified or created paths. Run independent chunks in parallel; wait for dependencies and pass their summaries to dependent work. After all chunks finish, run the applicable test suite.
+
+## Verify
+
+Run every verification step you can execute yourself: tests, builds, linters, and actually driving the affected flow (run the command, hit the endpoint, exercise the behavior). Fix what fails and re-verify until your own checks pass.
+
+Then present the evidence — commands run, output observed, behaviors confirmed — alongside anything that genuinely requires human judgment or access you lack (visual/UX checks, production credentials, "does this match your intent"). Stop for the user's verdict. If issues are reported, fix them, re-verify the affected items, and re-present only what changed. Do not proceed until the user confirms.
+
+## Implementation counter-review
+
+Alongside the verification evidence, offer a **counter-review of the implementation by the other client**: emit a copy/paste-ready prompt addressed to the client you are not running in (in Claude Code, write it for Codex; in Codex, for Claude Code). Whether to run it is the user's call. The prompt must be self-contained, along these lines:
+
+```text
+Counter-review the implementation of phase <N> of task <task>.
+
+Read first: the design at .archflow/tasks/<task>/phases/phase-<N>-<slug>.md,
+.archflow/tasks/<task>/architecture.md, and .archflow/context/ if present.
+The changed code is uncommitted — inspect it with git status / git diff, scoped
+to the files in the design's Files table.
+
+A different model implemented and already verified this — your job is to find
+what it missed: bugs, unhandled edge cases, silent deviations from the design,
+unmet success criteria, and violations of the project's established patterns.
+Do not change any files.
+
+Write your findings to
+.archflow/tasks/<task>/reviews/phase-<N>-impl-counter-review.md
+as a list, each with a severity (blocker / major / minor) and a suggested
+resolution. If you find nothing substantive, say so explicitly in that file.
+```
+
+When the user returns and the review file exists without a `## Triage` section, read it and triage every finding: accept it and fix the code, or reject it with a stated reason. Append the dispositions as a `## Triage` section to the review file, re-verify what the fixes touched, and re-present only what changed.
+
+## Log and update parents
+
+Create `phase-<N>-<slug>-log.md` with this structure:
+
+```markdown
+## Implementation Log: Phase N - [Name]
+
+### Decisions Made
+[Key technical decisions and why]
+
+### Deviations from Plan
+[What changed and why]
+
+### Patterns Established
+[Patterns future phases should follow]
+
+### Gotchas
+[Unexpected issues and workarounds]
+
+### Key Interfaces
+[Exact paths, exports, and function signatures future phases depend on]
+```
+
+Be concrete. Review the log and update only parent-doc content that implementation made inaccurate:
+
+- In `architecture.md`, mark the phase complete; update system architecture, data model, decisions, and remaining phases when actual deviations require it, including adding, removing, or reordering phases.
+- In `prd.md`, update requirements made infeasible, split, or newly necessary; move confirmed exclusions to Out of Scope with a reason.
+
+Then check the log for rules that outlive this task: durable conventions every future session should follow regardless of ArchFlow (error-handling patterns, "always use X repo, never query directly", build/test gotchas). Propose adding those to the project's `CLAUDE.md` — `.archflow/` is removed before PR, so anything permanent must live outside it. Task-specific detail stays in the log.
+
+## Confirm, commit, complete
+
+Ask the user for explicit confirmation to commit and stop. Apply requested changes and repeat until approval. Then stage the files this phase created or modified — not unrelated working-tree changes — and commit:
+
+```text
+<Task Title> Phase <N>: <Phase Name>
+
+<2–3 sentence summary of delivered work, key decisions, and deviations>
+```
+
+After committing, set the phase design status to `COMPLETE`, add the implementation date, and present the next phase with copy/paste-ready commands:
+
+```text
+Phase <N> complete. Design phase <N+1> next:
+Claude Code: /archflow-phase-design <task> <N+1>
+Codex: $archflow-phase-design <task> <N+1>
+```
+
+Never pass a review or commit gate without confirmation.

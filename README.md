@@ -1,6 +1,6 @@
 # ArchFlow
 
-A lightweight, human-centered development workflow for Claude Code and Codex. Five portable Agent Skills turn vague ideas into structured implementations with human review at every stage.
+A lightweight, human-centered development workflow for Claude Code and Codex. Six portable Agent Skills turn vague ideas into structured implementations with human review at every stage.
 
 ## What It Does
 
@@ -13,12 +13,12 @@ ArchFlow guides you through a structured development process:
        |
 /archflow-design my-feature Design how to build it (architecture + phases)
        |
-/archflow-phase my-feature 1   Implement phase 1
-/archflow-phase my-feature 2   Implement phase 2
-       ...                  ...until done
+/archflow-phase-design my-feature 1   Design phase 1 (review, approve)
+/archflow-phase-impl my-feature 1     Implement phase 1 (fresh session)
+/archflow-phase-design my-feature 2   ...until done
 ```
 
-Every step produces a markdown document you review and approve before moving on. Nothing happens without your sign-off.
+Every step produces a markdown document you review and approve before moving on. Nothing happens without your sign-off. Before each document reaches you, sub-agent reviewers have already critiqued and improved it — and at every gate you get a ready-to-paste prompt to have the *other* client (Claude Code ↔ Codex) counter-review the work.
 
 ## Install
 
@@ -66,17 +66,27 @@ Interactive conversation to gather requirements, followed by automated research.
 
 Explores the codebase, discusses key decisions with you, then designs the technical architecture with a phased implementation plan. Produces `.archflow/tasks/my-feature/architecture.md`.
 
-### 4. Implement Phase by Phase
+### 4. Design Each Phase
 
 ```
-/archflow-phase my-feature 1
+/archflow-phase-design my-feature 1
 ```
 
-Each phase goes through: **design** (you review) -> **implement** (direct, or parallel sub-agents when it pays) -> **verify** (agent runs the checks, you review the evidence) -> **log** (capture learnings) -> **commit**.
+Explores the codebase, drafts the phase design, runs a sub-agent review loop on it, then presents it with a ready-to-paste counter-review prompt for the other client. Findings land in `.archflow/tasks/my-feature/reviews/` and get triaged into the design. You approve when it's right.
+
+Phases are sized to the implementation budget: each must fit one implementation session — orchestrated through sub-agents — without context compaction. If a design reveals more work than fits, the phase gets split and the architecture updated.
+
+### 5. Implement Each Phase
+
+```
+/archflow-phase-impl my-feature 1
+```
+
+Run this in a **fresh session** so the whole phase gets a clean context. It reads only the approved design and its inputs, then: **implement** (sub-agent delegation by default) -> **verify** (agent runs the checks, you review the evidence) -> **counter-review** (optional cross-client review of the diff) -> **log** (capture learnings) -> **commit**.
 
 Later phases read the up-to-date architecture doc and the latest log so they don't repeat mistakes and build on established patterns.
 
-### 5. Check Status
+### 6. Check Status
 
 ```
 /archflow-status
@@ -99,6 +109,10 @@ All planning artifacts live in `.archflow/` within your project:
     my-feature/                     # One directory per task
       prd.md                        # Product requirements
       architecture.md               # Technical design + phase plan
+      reviews/                      # Cross-client counter-reviews + triage
+        prd-counter-review.md
+        phase-1-design-counter-review.md
+        phase-1-impl-counter-review.md
       phases/
         phase-1-setup.md            # Phase design doc
         phase-1-setup-log.md        # Implementation learnings
@@ -111,7 +125,9 @@ Planning docs are tracked in git during development to preserve progress across 
 ## Key Design Decisions
 
 - **Human-in-the-loop**: You review and approve at every stage — the agent does the labor (including running verification), you exercise the judgment
-- **Sub-agents when they pay**: Heavy independent work (exploration, research) fans out to parallel sub-agents; implementation stays direct unless chunks are truly disjoint
+- **Reviewed before you see it**: Every document (PRD, architecture, phase design) goes through a sub-agent review loop before reaching your gate — fresh-context critics find gaps, the author triages and revises
+- **Cross-client counter-review**: Every gate emits a ready-to-paste prompt so the other client (Claude Code ↔ Codex) can review the document or diff with a different model; findings land in `reviews/` and get triaged explicitly
+- **Sized to the context budget**: A phase must finish — implementation plus verification — inside one session's context window without compaction. Implementation delegates chunks to sub-agents by default, which keeps the orchestrator's window lean (a delegated chunk costs it a few thousand tokens instead of tens of thousands)
 - **Inter-phase learning**: Each phase writes a log of decisions, patterns, gotchas, and interfaces. The architecture doc absorbs deviations so later phases read current truth, not a log pile; durable conventions get promoted to the project's CLAUDE.md.
 - **Plan stays accurate**: After each phase, the architecture doc and PRD are updated to reflect what actually happened, not just what was planned.
 - **Resumable**: If you lose context mid-phase, re-run the skill and it picks up where you left off.

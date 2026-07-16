@@ -7,30 +7,36 @@ flowchart LR
     Start([Start]) --> Explore["/archflow-explore"]
     Explore --> PRD["/archflow-prd"]
     PRD --> Design["/archflow-design"]
-    Design --> Phase["/archflow-phase 1..N"]
-    Phase --> Done([Done])
+    Design --> PhaseDesign["/archflow-phase-design N"]
+    PhaseDesign --> PhaseImpl["/archflow-phase-impl N<br/>fresh session"]
+    PhaseImpl -->|next phase| PhaseDesign
+    PhaseImpl --> Done([Done])
 
     style Start fill:#4CAF50,stroke:#333,color:#fff
     style Done fill:#4CAF50,stroke:#333,color:#fff
 ```
 
-Each skill has a human review gate -- nothing proceeds without your approval. See skill details below for full flows.
+Each skill has a human review gate -- nothing proceeds without your approval. Before a document reaches that gate, a sub-agent review loop has already critiqued and revised it; at the gate, the skill also emits a ready-to-paste **counter-review prompt** for the other client (Claude Code ↔ Codex), whose findings land in `reviews/` and are triaged explicitly. See skill details below for full flows.
 
 ```mermaid
 flowchart TD
-    subgraph "Each Skill Internally"
+    subgraph "Each Document Skill Internally"
         Read[Read .archflow/ context] --> Agents[Sub-agents<br/>explore, research, plan]
         Agents --> Output[Write .archflow/ doc]
-        Output --> Review{{Human Review}}
+        Output --> SelfReview[Sub-agent review loop:<br/>critique, triage, revise]
+        SelfReview --> Review{{Human Review<br/>+ counter-review prompt offered}}
         Review -->|Feedback| Agents
+        Review -->|Counter-review findings<br/>in reviews/| Triage[Triage: accept & revise<br/>or reject with reason]
+        Triage --> Review
         Review -->|Approved| Next[Next skill]
     end
 
-    subgraph "Phase Loop (/archflow-phase)"
-        Design2[Design phase] --> Impl[Implement]
+    subgraph "Phase Loop (two skills, two sessions)"
+        Design2["/archflow-phase-design:<br/>design + review loops"] --> Gate{{Design approved}}
+        Gate --> Impl["/archflow-phase-impl (fresh session):<br/>implement via sub-agent delegation"]
         Impl --> AgentVerify[Agent verifies:<br/>tests, build, drive the flow]
-        AgentVerify --> Verify{{Human reviews evidence<br/>+ judgment checks}}
-        Verify -->|Issues| Impl
+        AgentVerify --> Verify{{Human reviews evidence<br/>+ impl counter-review offered}}
+        Verify -->|Issues or findings| Impl
         Verify -->|Verified| Log[Write impl log]
         Log --> More{More phases?}
         More -->|Yes| Design2
@@ -38,6 +44,7 @@ flowchart TD
     end
 
     style Review fill:#ffd700,stroke:#333,color:#000
+    style Gate fill:#ffd700,stroke:#333,color:#000
     style Verify fill:#ffd700,stroke:#333,color:#000
 ```
 
@@ -56,6 +63,11 @@ flowchart LR
         subgraph "tasks/my-feature/"
             B1[prd.md]
             B2[architecture.md]
+            subgraph "reviews/"
+                R1[prd-counter-review.md]
+                R2[phase-1-design-counter-review.md]
+                R3[phase-1-impl-counter-review.md]
+            end
             subgraph "phases/"
                 C1[phase-1-setup.md]
                 C1L[phase-1-setup-log.md]
@@ -81,6 +93,9 @@ flowchart LR
     style C2 fill:#fff3e0,stroke:#e65100
     style C2L fill:#ffe0b2,stroke:#e65100
     style C3 fill:#fff3e0,stroke:#e65100
+    style R1 fill:#fce4ec,stroke:#ad1457
+    style R2 fill:#fce4ec,stroke:#ad1457
+    style R3 fill:#fce4ec,stroke:#ad1457
     style D1 fill:#f3e5f5,stroke:#6a1b9a
     style D2 fill:#f3e5f5,stroke:#6a1b9a
     style D3 fill:#f3e5f5,stroke:#6a1b9a
@@ -88,6 +103,7 @@ flowchart LR
 
 - **Blue**: Shared context (reused across all tasks)
 - **Green**: Task-level docs (PRD, architecture)
+- **Pink**: Counter-review findings from the other client, each triaged in place (a `## Triage` section records every accept/reject)
 - **Orange**: Phase design docs + companion log files (log written on phase completion, read by subsequent phases)
 - **Purple**: Independent tasks (fully isolated from each other)
 
@@ -106,10 +122,11 @@ No separate context-gathering step is needed. The main agent reads the files dir
 
 | Skill | Files Read | Passed to Sub-Agents |
 |---------|-----------|---------------------|
-| `/archflow-prd` | prd.md (check if exists), context/* | User requirements + codebase context summary |
-| `/archflow-design` | prd.md (required), architecture.md (if revising), context/* | PRD requirements/constraints + codebase context |
-| `/archflow-phase` | architecture.md (required, kept current), phase-N doc (check status), immediately prior phase doc + log (older logs on demand), context/* | Phase definition + prior phase learnings (decisions, patterns, interfaces, gotchas) |
-| `/archflow-status` | architecture.md, phase docs (for status) | N/A (no sub-agents) |
+| `/archflow-prd` | prd.md (check if exists), reviews/prd-counter-review.md (if untriaged), context/* | User requirements + codebase context summary; draft + requirements to reviewer agents |
+| `/archflow-design` | prd.md (required), architecture.md (if revising), reviews/architecture-counter-review.md (if untriaged), context/* | PRD requirements/constraints + codebase context; draft + PRD to reviewer agents |
+| `/archflow-phase-design` | architecture.md (required, kept current), phase-N doc (check status), immediately prior phase doc + log (older logs on demand), reviews/phase-N-design-counter-review.md (if untriaged), context/* | Phase definition + prior phase learnings (decisions, patterns, interfaces, gotchas); draft to reviewer agents |
+| `/archflow-phase-impl` | phase-N doc (required, DESIGNED), architecture.md, prior log, reviews/phase-N-impl-counter-review.md (if untriaged), context/* | Chunk objective + Files-table paths + pinned interface contracts + conventions to implementation agents |
+| `/archflow-status` | architecture.md, phase docs, reviews/* (triage state) | N/A (no sub-agents) |
 
 ---
 
@@ -175,21 +192,25 @@ flowchart TD
     P5 --> P6
 
     P6[Plan Agent<br/>Design PRD structure] --> P7[Write prd.md]
-    P7 --> P8{{Human reviews<br/>PRD in editor}}
+    P7 --> P7a[Sub-agent review loop:<br/>critique, triage, revise<br/>until a round changes nothing]
+    P7a --> P8{{Human reviews PRD<br/>+ counter-review prompt offered}}
     P8 -->|Changes| P2
+    P8 -->|Counter-review findings| P8a[Triage findings:<br/>accept & revise / reject with reason]
+    P8a --> P8
     P8 -->|Approved| P9["/archflow-design my-feature"]
 
     style P3 fill:#fff3e0,stroke:#e65100
     style P4 fill:#fff3e0,stroke:#e65100
     style P5 fill:#fff3e0,stroke:#e65100
     style P6 fill:#e8eaf6,stroke:#283593
+    style P7a fill:#fce4ec,stroke:#ad1457
     style P2a fill:#ffd700,stroke:#333,color:#000
     style P1a fill:#ffd700,stroke:#333,color:#000
     style P8 fill:#ffd700,stroke:#333,color:#000
 ```
 
-**Agents**: 0-3x general-purpose (parallel research — only load-bearing dimensions) + 1x general-purpose (plan + write PRD)
-**Output**: `.archflow/tasks/{task}/prd.md`
+**Agents**: 0-3x general-purpose (parallel research — only load-bearing dimensions) + 1x general-purpose (plan + write PRD) + 1x+ general-purpose (fresh-context review loop, typically 1-2 rounds)
+**Output**: `.archflow/tasks/{task}/prd.md` (+ triaged `reviews/prd-counter-review.md` when the user runs the counter-review)
 **Context read**: `.archflow/context/*` (if available)
 
 ---
@@ -213,100 +234,138 @@ flowchart TD
 
     D3{{Discuss key decisions<br/>with user}} --> D4
 
-    D4[Plan Agent<br/>Design full architecture] --> D5[Write architecture.md]
+    D4[Plan Agent<br/>Design full architecture<br/>phases sized to impl budget] --> D5[Write architecture.md]
 
-    D5 --> D6{{Human reviews<br/>architecture in editor}}
+    D5 --> D5a[Sub-agent review loop:<br/>coverage, phase sizing,<br/>independence, decisions]
+    D5a --> D6{{Human reviews architecture<br/>+ counter-review prompt offered}}
     D6 -->|Changes| D3
-    D6 -->|Approved| D7["/archflow-phase my-feature 1"]
+    D6 -->|Counter-review findings| D6a[Triage findings:<br/>accept & revise / reject with reason]
+    D6a --> D6
+    D6 -->|Approved| D7["/archflow-phase-design my-feature 1"]
 
     style D1 fill:#e3f2fd,stroke:#1565c0
     style D2 fill:#fff3e0,stroke:#e65100
     style D4 fill:#e8eaf6,stroke:#283593
+    style D5a fill:#fce4ec,stroke:#ad1457
     style D3 fill:#ffd700,stroke:#333,color:#000
     style D6 fill:#ffd700,stroke:#333,color:#000
     style D_stop fill:#ef5350,stroke:#333,color:#fff
 ```
 
-**Agents**: 1x Explore + 0-1x general-purpose (research) + 1x general-purpose (plan + write architecture)
-**Output**: `.archflow/tasks/{task}/architecture.md`
+**Agents**: 1x Explore + 0-1x general-purpose (research) + 1x general-purpose (plan + write architecture) + 1x+ general-purpose (fresh-context review loop, typically 1-2 rounds)
+**Output**: `.archflow/tasks/{task}/architecture.md` (+ triaged `reviews/architecture-counter-review.md` when the user runs the counter-review)
 **Context read**: `.archflow/tasks/{task}/prd.md` + `.archflow/context/*`
 
 ---
 
-### `/archflow-phase <task-name> N`
+### `/archflow-phase-design <task-name> N`
 
 ```mermaid
 flowchart TD
-    PH0["/archflow-phase my-feature 2"] --> PH_read[Read architecture.md +<br/>phase-N doc + prior phases<br/>+ prior logs + context/*]
-    PH_read --> PH_check{Architecture<br/>exists?}
-    PH_check -->|No| PH_stop([Stop: run /archflow-design first])
-    PH_check -->|Yes| PH1{Phase doc<br/>exists?}
+    PD0["/archflow-phase-design my-feature 2"] --> PD_read[Read architecture.md +<br/>phase-N doc + prior phase doc/log<br/>+ reviews/ + context/*]
+    PD_read --> PD_check{Architecture<br/>exists?}
+    PD_check -->|No| PD_stop([Stop: run /archflow-design first])
+    PD_check -->|Yes| PD1{Phase doc<br/>exists?}
 
-    PH1 -->|"Status: COMPLETE"| PH_done([Already done.<br/>Suggest next phase.])
-    PH1 -->|"Status: IN PROGRESS"| PH_resume
-
-    subgraph "Resume Flow"
-        PH_resume[Explore Agent<br/>Check implementation progress] --> PH_report{{Report progress.<br/>Continue?}}
-        PH_report --> PH_impl
-    end
-
-    PH1 -->|"Status: DESIGNED"| PH_ask{{Implement or<br/>revise?}}
-    PH_ask -->|Revise| PH2
-    PH_ask -->|Implement| PH_impl
-
-    PH1 -->|No doc| PH2
+    PD1 -->|"Status: COMPLETE"| PD_done([Already done.<br/>Suggest next phase.])
+    PD1 -->|"Status: IN PROGRESS"| PD_redirect([Direct to /archflow-phase-impl<br/>to resume])
+    PD1 -->|"Status: DESIGNED<br/>untriaged counter-review"| PD_triage
+    PD1 -->|"Status: DESIGNED"| PD_ask{{Revise, or proceed to<br/>impl in fresh session?}}
+    PD_ask -->|Revise| PD2
+    PD1 -->|No doc| PD2
 
     subgraph "Parallel Explore + Research"
-        PH2[Explore Agent<br/>Current codebase state]
-        PH3[Research Agent<br/>Technical best practices]
+        PD2[Explore Agent<br/>Current codebase state]
+        PD3[Research Agent<br/>Technical best practices]
     end
 
-    PH2 --> PH4
-    PH3 --> PH4
+    PD2 --> PD4
+    PD3 --> PD4
 
-    PH4[Plan Agent<br/>Detailed phase plan] --> PH5[Write phase-N-name.md<br/>Status: DESIGNED]
+    PD4[Plan Agent<br/>Detailed phase plan<br/>sized to impl budget] --> PD_size{Fits one impl<br/>session?}
+    PD_size -->|No| PD_split{{Propose splitting phase,<br/>update architecture.md}}
+    PD_split --> PD4
+    PD_size -->|Yes| PD5[Write phase-N-name.md<br/>Status: DESIGNED]
 
-    PH5 --> PH6{{Human reviews<br/>phase design in editor}}
-    PH6 -->|Feedback| PH4
-    PH6 -->|"implement"| PH_impl
+    PD5 --> PD5a[Sub-agent review loop:<br/>coverage, seams, sizing,<br/>integration risks]
+    PD5a --> PD6{{Human reviews design<br/>+ counter-review prompt offered}}
+    PD6 -->|Feedback| PD4
+    PD6 -->|Counter-review findings| PD_triage[Triage findings:<br/>accept & revise / reject with reason<br/>append ## Triage to review file]
+    PD_triage --> PD6
+    PD6 -->|Approved| PD_next["Fresh session:<br/>/archflow-phase-impl my-feature 2"]
 
-    subgraph "Implementation"
-        PH_impl[Implement directly by default] --> PH_parallel[Fan out to parallel sub-agents<br/>only when chunks touch disjoint<br/>files and parallelism pays]
-        PH_parallel --> PH_sequential[Sequential steps<br/>that depend on prior output]
+    style PD2 fill:#e3f2fd,stroke:#1565c0
+    style PD3 fill:#fff3e0,stroke:#e65100
+    style PD4 fill:#e8eaf6,stroke:#283593
+    style PD5a fill:#fce4ec,stroke:#ad1457
+    style PD6 fill:#ffd700,stroke:#333,color:#000
+    style PD_ask fill:#ffd700,stroke:#333,color:#000
+    style PD_split fill:#ffd700,stroke:#333,color:#000
+    style PD_stop fill:#ef5350,stroke:#333,color:#fff
+    style PD_done fill:#4CAF50,stroke:#333,color:#fff
+```
+
+**Agents**: 1x Explore + 0-1x general-purpose (research) + 1x general-purpose (plan + write phase doc) + 1x+ general-purpose (fresh-context review loop, typically 1-2 rounds)
+**Output**: `.archflow/tasks/{task}/phases/phase-N-{slug}.md` at `DESIGNED` (+ triaged `reviews/phase-N-design-counter-review.md`)
+**Context read**: architecture.md (kept current) + prd.md + immediately prior phase doc/log + older logs on demand + `.archflow/context/*`
+**No code is written in this skill.** Implementation happens in a fresh session so the whole phase gets a clean context window.
+
+---
+
+### `/archflow-phase-impl <task-name> N`
+
+```mermaid
+flowchart TD
+    PI0["/archflow-phase-impl my-feature 2<br/>(fresh session)"] --> PI_read[Read phase-N doc +<br/>architecture.md + prior log<br/>+ reviews/ + context/*]
+    PI_read --> PI_check{Phase doc exists<br/>and DESIGNED?}
+    PI_check -->|No doc| PI_stop([Stop: run /archflow-phase-design first])
+    PI_check -->|"COMPLETE"| PI_done([Already done.<br/>Suggest next phase.])
+    PI_check -->|"Untriaged design<br/>counter-review"| PI_stop2([Stop: triage it in<br/>/archflow-phase-design first])
+    PI_check -->|"IN PROGRESS"| PI_resume
+
+    subgraph "Resume Flow"
+        PI_resume[Analyze codebase for<br/>completed vs remaining work] --> PI_report{{Report progress.<br/>Continue?}}
+        PI_report --> PI_impl
     end
 
-    PH_sequential --> PH_verify
+    PI_check -->|"DESIGNED"| PI_impl
+
+    subgraph "Implementation (sub-agent delegation by default)"
+        PI_impl[Set IN PROGRESS.<br/>Delegate chunks to sub-agents:<br/>objective + Files paths + pinned<br/>interfaces + conventions] --> PI_parallel[Independent chunks in parallel;<br/>dependent chunks wait and<br/>receive predecessor summaries]
+        PI_parallel --> PI_tests[Run test suite]
+    end
+
+    PI_tests --> PI_verify
 
     subgraph "Verification"
-        PH_verify[Agent runs all automatable checks:<br/>tests, build, drive the flow] --> PH_evidence[Present evidence +<br/>judgment-only checks]
-        PH_evidence --> PH_human_test{{Human reviews evidence<br/>and confirms}}
-        PH_human_test -->|Issues found| PH_fix[Fix issues] --> PH_verify
-        PH_human_test -->|All verified| PH_log
+        PI_verify[Agent runs all automatable checks:<br/>tests, build, drive the flow] --> PI_evidence[Present evidence + judgment checks<br/>+ impl counter-review prompt offered]
+        PI_evidence --> PI_human{{Human reviews evidence<br/>and confirms}}
+        PI_human -->|Issues found| PI_fix[Fix issues] --> PI_verify
+        PI_human -->|Counter-review findings| PI_triage[Triage: accept & fix<br/>or reject with reason] --> PI_verify
+        PI_human -->|All verified| PI_log
     end
 
     subgraph "Completion"
-        PH_log[Write phase-N-slug-log.md<br/>decisions, patterns, gotchas] --> PH_parent[Update architecture.md<br/>+ prd.md if deviations]
-        PH_parent --> PH_commit[Git commit<br/>task phase N: name]
-        PH_commit --> PH_update[Update status → COMPLETE]
+        PI_log[Write phase-N-slug-log.md<br/>decisions, patterns, gotchas] --> PI_parent[Update architecture.md<br/>+ prd.md if deviations<br/>+ propose CLAUDE.md conventions]
+        PI_parent --> PI_commit[Git commit<br/>task phase N: name]
+        PI_commit --> PI_update[Update status → COMPLETE]
     end
 
-    PH_update --> PH_next["/archflow-phase my-feature N+1"]
+    PI_update --> PI_next["/archflow-phase-design my-feature N+1"]
 
-    style PH2 fill:#e3f2fd,stroke:#1565c0
-    style PH3 fill:#fff3e0,stroke:#e65100
-    style PH4 fill:#e8eaf6,stroke:#283593
-    style PH_resume fill:#e3f2fd,stroke:#1565c0
-    style PH6 fill:#ffd700,stroke:#333,color:#000
-    style PH_ask fill:#ffd700,stroke:#333,color:#000
-    style PH_report fill:#ffd700,stroke:#333,color:#000
-    style PH_human_test fill:#ffd700,stroke:#333,color:#000
-    style PH_stop fill:#ef5350,stroke:#333,color:#fff
-    style PH_done fill:#4CAF50,stroke:#333,color:#fff
+    style PI_resume fill:#e3f2fd,stroke:#1565c0
+    style PI_report fill:#ffd700,stroke:#333,color:#000
+    style PI_human fill:#ffd700,stroke:#333,color:#000
+    style PI_stop fill:#ef5350,stroke:#333,color:#fff
+    style PI_stop2 fill:#ef5350,stroke:#333,color:#fff
+    style PI_done fill:#4CAF50,stroke:#333,color:#fff
 ```
 
-**Agents**: 1x Explore + 0-1x general-purpose (research) + 1x general-purpose (plan + write phase doc) + 0-Nx general-purpose (parallel implementation, only when it pays — direct implementation is the default)
-**Output**: `.archflow/tasks/{task}/phases/phase-N-{slug}.md` + `phase-N-{slug}-log.md` + actual code
-**Context read**: architecture.md (kept current) + prd.md + immediately prior phase doc/log + older logs on demand + `.archflow/context/*`
+**Agents**: 0-Nx general-purpose (implementation chunks — delegation is the default to keep the orchestrator's context lean; direct implementation only for small phases)
+**Output**: actual code + `phase-N-{slug}-log.md` + updated parent docs (+ triaged `reviews/phase-N-impl-counter-review.md`)
+**Context read**: phase-N doc (required) + architecture.md + immediately prior log + `.archflow/context/*`
+
+**Why delegation is the default**: the orchestrator's ~200k window loses ~40–50k to overhead and inputs and must also hold verification (~10–30k). A directly-implemented chunk costs it ~15–30k; a delegated chunk ~2–5k. Delegating keeps a full phase — typically 8–12 chunks — inside one session without compaction.
 
 ---
 
@@ -323,20 +382,24 @@ flowchart LR
         explore["/archflow-explore"]
         prd["/archflow-prd"]
         design["/archflow-design"]
-        phase["/archflow-phase"]
+        phasedesign["/archflow-phase-design"]
+        phaseimpl["/archflow-phase-impl"]
         status["/archflow-status"]
     end
 
     explore ---|"3x parallel<br/>(explore + write files)"| GP
     prd ---|"2-3x parallel<br/>(research)"| GP
     prd ---|"1x sequential<br/>(plan + write PRD)"| GP
+    prd ---|"1x+ review loop<br/>(fresh-context critique)"| GP
     design ---|1x| EX
     design ---|"0-1x research"| GP
     design ---|"1x sequential<br/>(plan + write arch)"| GP
-    phase ---|1x design| EX
-    phase ---|"0-1x research"| GP
-    phase ---|"1x sequential<br/>(plan + write phase doc)"| GP
-    phase ---|"0-Nx parallel<br/>(implementation,<br/>when it pays)"| GP
+    design ---|"1x+ review loop<br/>(fresh-context critique)"| GP
+    phasedesign ---|1x| EX
+    phasedesign ---|"0-1x research"| GP
+    phasedesign ---|"1x sequential<br/>(plan + write phase doc)"| GP
+    phasedesign ---|"1x+ review loop<br/>(fresh-context critique)"| GP
+    phaseimpl ---|"0-Nx parallel<br/>(implementation chunks,<br/>delegation by default)"| GP
 
     style EX fill:#e3f2fd,stroke:#1565c0
     style GP fill:#fff3e0,stroke:#e65100
@@ -369,33 +432,35 @@ sequenceDiagram
     C->>FS: Write tasks/my-feature/architecture.md
     U->>U: Review architecture in editor
 
-    Note over U,FS: Session 3: Phase 1
-    U->>C: /archflow-phase my-feature 1
+    Note over U,FS: Session 3: Phase 1 design
+    U->>C: /archflow-phase-design my-feature 1
     C->>FS: Read context/* + prd + arch
     C->>FS: Write tasks/my-feature/phases/phase-1-setup.md
-    U->>U: Review phase design
-    U->>C: implement
-    C->>C: Write code (parallel sub-agents)
+    C->>C: Sub-agent review loop (critique → revise)
+    C->>U: Present design + counter-review prompt
+    U->>U: Optionally run prompt in the other client
+    Note right of FS: Other client writes reviews/phase-1-design-counter-review.md
+    U->>C: continue
+    C->>FS: Triage findings, revise design
+    U->>C: approve
+
+    Note over U,FS: Session 4: Phase 1 implementation (fresh context)
+    U->>C: /archflow-phase-impl my-feature 1
+    C->>FS: Read phase-1 design + arch + context/*
+    C->>C: Delegate chunks to sub-agents
     C->>C: Run tests, build, drive the flow
-    C->>U: Present evidence + judgment checks
-    U->>C: Confirm or report issues
+    C->>U: Present evidence + impl counter-review prompt
+    U->>C: Confirm (or triage counter-review findings)
     C->>FS: Write phase-1-setup-log.md
     C->>FS: Update architecture.md + prd.md (if deviations)
     C->>FS: Update phase-1 → COMPLETE
 
-    Note over U,FS: Session 4: Phase 2
-    U->>C: /archflow-phase my-feature 2
+    Note over U,FS: Sessions 5+: Phase 2 (design, then impl)
+    U->>C: /archflow-phase-design my-feature 2
     C->>FS: Read context/* + prd + arch + phase-1 + phase-1-log
     Note right of C: Phase 1 learnings → avoids repeating mistakes
     C->>FS: Write phases/phase-2-core.md
-    U->>U: Review phase design
-    U->>C: implement
-    C->>C: Write code (parallel sub-agents)
-    C->>C: Run tests, build, drive the flow
-    C->>U: Present evidence + judgment checks
-    U->>C: Confirm or report issues
-    C->>FS: Write phase-2-core-log.md
-    C->>FS: Update phase-2 → COMPLETE
+    U->>C: approve → fresh session → /archflow-phase-impl my-feature 2
 ```
 
 Each session only reads what it needs. The `.archflow/` docs **are** the context -- no separate state files.
@@ -406,19 +471,20 @@ Each session only reads what it needs. The `.archflow/` docs **are** the context
 
 ```mermaid
 stateDiagram-v2
-    [*] --> NO_DOC: /archflow-phase task N
+    [*] --> NO_DOC: /archflow-phase-design task N
 
-    NO_DOC --> DESIGNED: Explore + Plan agents → write phase doc
+    NO_DOC --> DESIGNED: Explore + Plan agents → write phase doc → sub-agent review loop
     DESIGNED --> DESIGNED: User requests revisions
-    DESIGNED --> IN_PROGRESS: User says "implement"
+    DESIGNED --> DESIGNED: Counter-review triaged (accept/reject each finding)
+    DESIGNED --> IN_PROGRESS: User runs /archflow-phase-impl in a fresh session
     IN_PROGRESS --> IN_PROGRESS: Context lost → resume from doc
-    IN_PROGRESS --> IN_PROGRESS: Issues found during verification → fix
+    IN_PROGRESS --> IN_PROGRESS: Issues or counter-review findings → fix, re-verify
     IN_PROGRESS --> COMPLETE: Human verifies → impl log written
     COMPLETE --> [*]: Suggest next phase
 
     note right of NO_DOC: First time running this phase
-    note right of DESIGNED: Human reviews in editor
-    note right of IN_PROGRESS: Code being written + human verification
+    note right of DESIGNED: Owned by /archflow-phase-design — human reviews, optional cross-client counter-review
+    note right of IN_PROGRESS: Owned by /archflow-phase-impl — code written + human verification
     note right of COMPLETE: Impl log written + parent docs updated
 ```
 
@@ -470,16 +536,18 @@ After implementation, before marking COMPLETE, the phase goes through verificati
 flowchart TD
     Impl[Implementation done] --> AgentRun["Agent executes verification:<br/>1. Run tests and build<br/>2. Drive the affected flow<br/>3. Check edge cases"]
     AgentRun -->|"Failures"| SelfFix[Fix and re-verify] --> AgentRun
-    AgentRun -->|"Checks pass"| Present["Present evidence:<br/>commands run, output observed,<br/>behaviors confirmed<br/>+ judgment-only checks"]
-    Present --> Human{{Human reviews evidence,<br/>runs judgment checks}}
+    AgentRun -->|"Checks pass"| Present["Present evidence:<br/>commands run, output observed,<br/>behaviors confirmed<br/>+ judgment-only checks<br/>+ impl counter-review prompt"]
+    Present --> Human{{Human reviews evidence,<br/>runs judgment checks,<br/>optionally runs counter-review}}
     Human -->|"Confirmed"| Log[Write Implementation Log]
     Human -->|"Issues found"| Fix[Fix reported issues]
+    Human -->|"Counter-review findings"| Triage[Triage: accept & fix<br/>or reject with reason]
+    Triage --> AgentRun
     Fix --> AgentRun
 
     style Human fill:#ffd700,stroke:#333,color:#000
 ```
 
-Evidence is **specific and observable** -- not "it works" but the concrete commands run, output seen, and behaviors exercised. The human reviews that evidence and handles what only a human can judge: visual/UX checks, intent alignment, and anything requiring access the agent lacks. Issues feed back into implementation before the phase closes, and re-verification covers only what changed.
+Evidence is **specific and observable** -- not "it works" but the concrete commands run, output seen, and behaviors exercised. The human reviews that evidence and handles what only a human can judge: visual/UX checks, intent alignment, and anything requiring access the agent lacks. Alongside the evidence the agent offers a ready-to-paste counter-review prompt so the other client can review the uncommitted diff against the design; its findings are triaged explicitly (each accepted and fixed, or rejected with a reason, recorded in a `## Triage` section of the review file). Issues feed back into implementation before the phase closes, and re-verification covers only what changed.
 
 ---
 

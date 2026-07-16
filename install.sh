@@ -26,23 +26,32 @@ case "${1:-}" in
     ;;
 esac
 
+# Skills renamed or removed upstream must not linger in the targets.
+STALE_SKILLS=("archflow-phase")
+
 if [ "$install_claude" = true ]; then
   mkdir -p "$CLAUDE_TARGET_DIR"
+  for stale in "${STALE_SKILLS[@]}"; do
+    rm -rf "${CLAUDE_TARGET_DIR:?}/$stale"
+  done
   cp -R "$SKILLS_SOURCE_DIR/." "$CLAUDE_TARGET_DIR/"
   echo "ArchFlow Claude Code skills installed to $CLAUDE_TARGET_DIR/"
 fi
 
 if [ "$install_codex" = true ]; then
   mkdir -p "$CODEX_TARGET_DIR"
+  for stale in "${STALE_SKILLS[@]}"; do
+    rm -rf "${CODEX_TARGET_DIR:?}/$stale"
+  done
   cp -R "$SKILLS_SOURCE_DIR/." "$CODEX_TARGET_DIR/"
   echo "ArchFlow Codex skills installed to $CODEX_TARGET_DIR/"
 fi
 
 echo ""
 if [ "$install_claude" = true ]; then
-  echo "Claude Code: /archflow-explore, /archflow-prd, /archflow-design, /archflow-phase, /archflow-status"
+  echo "Claude Code: /archflow-explore, /archflow-prd, /archflow-design, /archflow-phase-design, /archflow-phase-impl, /archflow-status"
 fi
 if [ "$install_codex" = true ]; then
-  echo 'Codex: $archflow-explore, $archflow-prd, $archflow-design, $archflow-phase, $archflow-status'
+  echo 'Codex: $archflow-explore, $archflow-prd, $archflow-design, $archflow-phase-design, $archflow-phase-impl, $archflow-status'
   echo "Restart Codex if the skills do not appear immediately."
 fi

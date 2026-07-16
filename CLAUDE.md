@@ -13,10 +13,11 @@ This repo contains one portable Agent Skills source of truth in `skills/`. The i
 | `/archflow-explore` | Explore codebase, produce persistent context references |
 | `/archflow-prd <task>` | Research + create PRD for a task |
 | `/archflow-design <task>` | Design architecture + phases for a task |
-| `/archflow-phase <task> N` | Design and implement phase N |
+| `/archflow-phase-design <task> N` | Design phase N, sub-agent review, counter-review prompt |
+| `/archflow-phase-impl <task> N` | Implement, verify, review, and commit phase N (fresh session) |
 | `/archflow-status [task]` | Check status and next action |
 
-In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-explore`, `$archflow-prd`, `$archflow-design`, `$archflow-phase`, and `$archflow-status`.
+In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-explore`, `$archflow-prd`, `$archflow-design`, `$archflow-phase-design`, `$archflow-phase-impl`, and `$archflow-status`.
 
 ## How It Works
 
@@ -29,6 +30,9 @@ All working files live in `.archflow/`. Tracked in git during development to pre
     my-feature/
       prd.md                  # Product Requirements Document
       architecture.md         # Technical design + phase breakdown
+      reviews/                # Cross-client counter-review findings + triage
+        prd-counter-review.md
+        phase-1-design-counter-review.md
       phases/
         phase-1-setup.md      # Phase design + implementation notes
         phase-2-core.md
@@ -50,6 +54,7 @@ Hard rules — human trust boundaries, never soften:
 
 - Never commit or pass a review gate without explicit user approval.
 - Never write code before phase-design approval.
+- Every human review gate offers a ready-to-run counter-review prompt for the other client; whether to run it is the human's decision, never the agent's to skip offering or to fake.
 - Phase state machine: no doc → DESIGNED → IN PROGRESS → COMPLETE.
 - Task isolation: tasks never read each other's files.
 - Parent docs (architecture.md, prd.md) are updated when implementation deviates — the plan must always reflect reality.
