@@ -22,6 +22,8 @@ Before designing, present and resolve consequential decisions with the user:
 - rough phase count and order;
 - constraints discovered in exploration.
 
+Verify candidate technology choices are current via web research before presenting them — the user should not be asked to approve an option the dependency review below would later overturn as stale.
+
 ## Write architecture
 
 Delegate architecture drafting to a writing agent when available; otherwise draft it directly. Provide the full PRD, exploration and research results, resolved user decisions, and context documents. Write `.archflow/tasks/<task>/architecture.md` with this structure:
@@ -92,6 +94,12 @@ Keep only the sections that earn their place; omit any that would hold boilerpla
 
 Before the user sees the draft, have it critiqued. Spawn one or more fresh-context reviewer agents — one is usually enough — giving each the draft, the PRD, and the exploration findings. Instruct them to find problems, not to affirm: requirements with no phase covering them; phases that are not independently testable; phases oversized against the implementation budget above; and decisions whose rationale does not survive scrutiny.
 
+Alongside the design critique, spawn a dedicated **dependency currency reviewer** with web access whenever the draft names any external dependency — a library, framework, model, service, or pinned version — which is nearly every architecture; skip it only when the design genuinely has no dependency surface. Give it the Technology Stack and Key Decisions, and require its findings to come from live web research, never training knowledge — a model's sense of "current best" is stale by construction. Its mandate:
+
+- **Currency**: for each chosen library, framework, model, or version, verify online that it is still the current recommended option — not deprecated, superseded, unmaintained, or major versions behind — citing enough evidence (latest version, release date, source) for the user to judge.
+- **Build vs. buy**: for anything the design implements by hand, check whether a ubiquitous, well-maintained library already solves it. Prefer that library over rolling our own — but only when its license permits: permissive licenses (MIT, Apache-2.0, BSD, ISC) are acceptable; copyleft of any strength (GPL, AGPL, LGPL, MPL) is flagged for the user to decide, never silently adopted.
+- **Licenses**: flag any already-chosen dependency whose license conflicts with the project.
+
 Triage each finding, revise the draft, and repeat until a round surfaces nothing that changes the document — typically one or two rounds; diminishing returns, not a round count, is the stop signal. Tell the user what review caught and changed.
 
 ## Review and commit
@@ -105,9 +113,10 @@ Read first: .archflow/tasks/<task>/prd.md and .archflow/context/ if present.
 
 A different model drafted this architecture and already revised it once — your
 job is to find what it missed. Challenge requirement-to-phase coverage, phase
-independence and sizing, technology choices against the actual codebase, and
-integration risks. Do not rewrite the document or change any files outside the
-review.
+independence and sizing, technology choices against the actual codebase and the
+current ecosystem (stale versions, superseded models, deprecated APIs, newer
+standard options), and integration risks. Do not rewrite the document or change
+any files outside the review.
 
 Write your findings to
 .archflow/tasks/<task>/reviews/architecture-counter-review.md

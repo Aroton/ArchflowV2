@@ -77,6 +77,8 @@ The design must be reviewable in one sitting and define **what** and **where**, 
 
 Before the user sees the draft, have it critiqued. Spawn one or more fresh-context reviewer agents — sized to the phase, one is usually enough — giving each the draft, the phase definition from the architecture, the relevant PRD requirements, and prior-phase interfaces. Instruct them to find problems, not to affirm: requirement coverage gaps, incoherent chunk seams or missing interface contracts, oversized scope against the budget above, integration risks, and conflicts with established patterns.
 
+Whenever the phase design introduces or pins any external dependency — a library, framework, model, service, or version, including an architecture-level choice this phase is the first to actually install or use — also spawn a dedicated **dependency currency reviewer** with web access; skip it only when the phase genuinely has no dependency surface. Require its findings to come from live web research, never training knowledge — a model's sense of "current best" is stale by construction. It verifies each dependency is still the current recommended option (not deprecated, superseded, unmaintained, or major versions behind), citing enough evidence (latest version, release date, source) for the user to judge; and it checks the work breakdown for anything built by hand that a ubiquitous, well-maintained library already solves — prefer that library over rolling our own, but only when its license permits: permissive licenses (MIT, Apache-2.0, BSD, ISC) are acceptable; copyleft of any strength (GPL, AGPL, LGPL, MPL) is flagged for the user to decide, never silently adopted.
+
 Triage each finding, revise the draft, and repeat until a round surfaces nothing that changes the document — typically one or two rounds; diminishing returns, not a round count, is the stop signal. Tell the user what review caught and changed.
 
 ## Present and counter-review
@@ -91,7 +93,8 @@ and .archflow/context/ if present.
 
 A different model drafted this design and already revised it once — your job is to
 find what it missed. Challenge requirement coverage, chunk seams and interface
-contracts, phase sizing, integration risks, and anything inconsistent with the
+contracts, phase sizing, integration risks, dependency currency (stale versions,
+superseded models, deprecated APIs), and anything inconsistent with the
 architecture or the actual codebase. Do not rewrite the document or change any files
 outside the review.
 
