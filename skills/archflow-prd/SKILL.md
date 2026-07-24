@@ -7,6 +7,8 @@ description: Research a domain and create or revise an ArchFlow product requirem
 
 Treat the task name supplied with this skill as `<task>` and work in `.archflow/tasks/<task>/`.
 
+Run this session as the workflow orchestrator: the requirements conversation, decisions, review gates, and triage stay here because they need the full history, while bulk work — research, drafting, fresh-context review — runs in sub-agents that write to disk and return only conclusions. Treat sub-agents as available — both Claude Code and Codex provide them natively; work inline only when spawning actually fails or a piece of work is too small to justify the hand-off.
+
 ## Setup and requirements
 
 Create the task directory if necessary. Read `.archflow/context/` when it exists. If `prd.md` already exists, read it and ask whether to revise it or start fresh.
@@ -23,7 +25,7 @@ Use structured choices when helpful. Do not research until requirements are suff
 
 ## Research
 
-Research only the dimensions that are load-bearing for this task — a user-facing product in a competitive space warrants all three below; an internal tool or refactor may warrant one or none. Skipping a dimension is a judgment call, not a failure. Run whatever you do research in parallel when subagents are available; otherwise perform the same investigations directly. Give every researcher the user's problem, requirements, constraints, and a summary of any context documents, and instruct each to return only the findings the PRD author needs to make decisions — synthesized conclusions, not raw survey material.
+Research only the dimensions that are load-bearing for this task — a user-facing product in a competitive space warrants all three below; an internal tool or refactor may warrant one or none. Skipping a dimension is a judgment call, not a failure. Spawn one research agent per dimension you pursue, run them in parallel, and wait for all of them — survey material is exactly what should never enter the orchestrator's context. A researcher sees nothing of this conversation, so give each a complete brief: the user's problem, requirements, constraints, and a summary of any context documents. Instruct each to return only the findings the PRD author needs to make decisions — synthesized conclusions, not raw survey material.
 
 1. **Domain research**: current best practices, table-stakes features, and common architecture patterns.
 2. **Competitive landscape**: existing solutions, what they do well, recurring complaints, and differentiators.
@@ -33,7 +35,7 @@ Use current web research when the domain is fast-moving, competitive positioning
 
 ## Write the PRD
 
-Delegate PRD drafting to a writing agent when available; otherwise draft it directly. Give the writer the complete user requirements, all research findings, and any context documents. Write `.archflow/tasks/<task>/prd.md` with genuine analysis rather than boilerplate, scaled to the task: a small internal change deserves a one-page PRD, not a filled-in ceremony. Use this structure, keeping only the sections that earn their place — omit any section that would hold boilerplate for this task:
+Spawn a writer agent to draft the PRD; it sees none of this conversation, so give it the complete user requirements as established above, all research findings, and any context documents. Draft inline only when the task is small enough that its PRD is about a page and the hand-off would cost more than the drafting. Write `.archflow/tasks/<task>/prd.md` with genuine analysis rather than boilerplate, scaled to the task: a small internal change deserves a one-page PRD, not a filled-in ceremony. Use this structure, keeping only the sections that earn their place — omit any section that would hold boilerplate for this task:
 
 ```markdown
 # PRD: [Task Name]

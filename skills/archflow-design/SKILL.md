@@ -7,11 +7,13 @@ description: Design an ArchFlow technical architecture and phased implementation
 
 Treat the supplied task name as `<task>` and work in `.archflow/tasks/<task>/`.
 
+Run this session as the workflow orchestrator: the decision gate, review gates, and triage stay here because they need the full history, while bulk work — codebase exploration, web research, drafting, fresh-context review — runs in sub-agents that write to disk and return only conclusions. Treat sub-agents as available — both Claude Code and Codex provide them natively; work inline only when spawning actually fails or a piece of work is too small to justify the hand-off.
+
 ## Setup and exploration
 
 Read `prd.md`; it is required. If it is absent, stop and direct the user to `archflow-prd <task>`. Read context documents and any existing `architecture.md`.
 
-Use an exploration agent when available, otherwise investigate directly. Explore the current codebase for the requirements and constraints in the PRD: relevant files, functions, and patterns; the correct location for new code; reusable utilities; and conflicts or integration points. When a specific technical challenge needs research, use current web research for architecture patterns and current framework practices; return only the synthesized conclusions the design depends on, not raw survey material.
+Spawn an exploration agent — several in parallel when the PRD spans distinct areas — to explore the current codebase for the requirements and constraints in the PRD: relevant files, functions, and patterns; the correct location for new code; reusable utilities; and conflicts or integration points. When a specific technical challenge needs research, spawn a research agent with web access alongside it for architecture patterns and current framework practices. An agent sees nothing of this conversation, so brief each completely, and have each return only the paths, snippets, and synthesized conclusions the design depends on, not raw survey material.
 
 ## Decision gate
 
@@ -22,11 +24,11 @@ Before designing, present and resolve consequential decisions with the user:
 - rough phase count and order;
 - constraints discovered in exploration.
 
-Verify candidate technology choices are current via web research before presenting them — the user should not be asked to approve an option the dependency review below would later overturn as stale.
+Verify candidate technology choices are current before presenting them — a web-capable research agent returns the verdicts without the search material entering this context — so the user is not asked to approve an option the dependency review below would later overturn as stale.
 
 ## Write architecture
 
-Delegate architecture drafting to a writing agent when available; otherwise draft it directly. Provide the full PRD, exploration and research results, resolved user decisions, and context documents. Write `.archflow/tasks/<task>/architecture.md` with this structure:
+Spawn a writer agent to draft the architecture; it sees none of this conversation, so provide the full PRD, exploration and research results, resolved user decisions, and context documents. Draft inline only when the task is small enough that the hand-off would cost more than the drafting. Write `.archflow/tasks/<task>/architecture.md` with this structure:
 
 ```markdown
 # Architecture: [Task Name]

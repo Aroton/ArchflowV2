@@ -7,6 +7,8 @@ description: Design one planned ArchFlow phase, run sub-agent and cross-client r
 
 Treat the supplied arguments as `<task> <phase-number>`. This skill only designs — implementation happens in a fresh session via `archflow-phase-impl`, so the implementing agent starts with a clean context that reads nothing but the approved design and its inputs.
 
+Run this session as the workflow orchestrator: state handling, review gates, and triage stay here because they need the full history, while bulk work — exploration, research, drafting, fresh-context review — runs in sub-agents that write to disk and return only conclusions. Treat sub-agents as available — both Claude Code and Codex provide them natively; work inline only when spawning actually fails or a piece of work is too small to justify the hand-off.
+
 ## Setup and state
 
 1. Read `.archflow/tasks/<task>/architecture.md`; it is required. If missing, stop and direct the user to `archflow-design <task>`.
@@ -25,12 +27,12 @@ Then act on state:
 
 ## Explore and design
 
-Use an exploration agent and, where needed, a research agent when available; otherwise perform the same work directly. Investigate in parallel where possible:
+Spawn an exploration agent and — only when the phase enters unfamiliar territory — a research agent alongside it; run them in parallel and wait for both. An agent sees nothing of this conversation, so brief each completely:
 
 - **Codebase analysis**: use the phase goal, scope, requirements, prior-phase patterns and interfaces, and the summary of earlier work to identify current file state, reusable utilities and patterns, and integration points. Return paths and code snippets.
 - **Targeted research**, only for unfamiliar territory: use the PRD and architecture constraints to research the specific technical challenge; return only the synthesized conclusions the design depends on.
 
-Delegate phase-design drafting to a writing agent when available; otherwise draft it directly. Give the writer the phase definition, PRD, exploration and research findings, the relevant prior design/log documents, and context documents. Create `.archflow/tasks/<task>/phases/phase-<N>-<slug>.md`; create `phases/` if needed. Derive `<slug>` from the phase name: lowercase with spaces replaced by hyphens.
+Spawn a writer agent to draft the phase design; it sees none of this conversation, so give it the phase definition, PRD, exploration and research findings, the relevant prior design/log documents, and context documents. Draft inline only when the phase is small enough that the hand-off would cost more than the drafting. Create `.archflow/tasks/<task>/phases/phase-<N>-<slug>.md`; create `phases/` if needed. Derive `<slug>` from the phase name: lowercase with spaces replaced by hyphens.
 
 The design must be reviewable in one sitting and define **what** and **where**, not line-by-line implementation or pseudocode. Interface signatures at chunk boundaries are the exception: when chunks will be implemented separately, pin down the exact exports and types they share so the seams stay coherent. Use this structure:
 

@@ -62,6 +62,7 @@ Hard rules — human trust boundaries, never soften:
 
 Everything else is a default, not a rule:
 
+- The session running a skill is the workflow orchestrator, and its context is the workflow's scarcest resource. Conversation, decisions, gates, triage, and synthesis stay in the orchestrator; bulk work (exploration, research, drafting, fresh-context review, implementation chunks) is delegated to sub-agents by default — spawned with complete briefs (they see nothing of the conversation), writing outputs to disk, returning only conclusions. Inline work is the exception for pieces too small to justify a hand-off — never a client preference. Phrase delegation as explicit imperatives ("spawn one agent per X, run in parallel, wait for all"), not availability conditionals ("when subagents are available") — Codex delegates only when told explicitly, and both clients now provide native sub-agents.
 - State the intent and let the model choose the procedure: "return only what the next step needs to decide," not word caps; "sized to the task," not fixed counts.
 - Numbers (agent counts, phase counts, chunk counts, conversation rounds) are calibration hints — phrase as "typically" or "default," never "must."
 - Techniques that compensate for model limits (mandatory research, forced sub-agent delegation, fixed decomposition) must be conditional on the task actually needing them.

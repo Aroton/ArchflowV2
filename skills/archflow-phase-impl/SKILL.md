@@ -22,13 +22,13 @@ Then act on state:
 
 ## Implement
 
-Set the phase status to `IN PROGRESS`. **Delegate chunks to implementation sub-agents by default.** The orchestrator's context must last the entire phase — implementation, verification, and review — and a delegated chunk costs it only ~2–5k tokens (instructions out, summary back) where a directly-implemented chunk costs ~15–30k in file reads, edits, and test output. Implement directly only when the phase is small enough (a few chunks touching few files) that delegation overhead buys nothing; the numbers are today's calibration for a ~200k window, the rule is finishing without compaction.
+Set the phase status to `IN PROGRESS`. **Delegate chunks to implementation sub-agents by default.** The orchestrator's context must last the entire phase — implementation, verification, and review — and a delegated chunk costs it only ~2–5k tokens (instructions out, summary back) where a directly-implemented chunk costs ~15–30k in file reads, edits, and test output. Treat sub-agents as available — both Claude Code and Codex provide them natively. Implement directly only when the phase is small enough (a few chunks touching few files) that delegation overhead buys nothing; the numbers are today's calibration for a ~200k window, the rule is finishing without compaction.
 
-When delegating a chunk, provide its objective, relevant Files-table paths, the pinned interface contracts, prior-log patterns, and architecture/context conventions. Instruct agents to write files directly and return only a concise summary of modified or created paths. Run independent chunks in parallel; wait for dependencies and pass their summaries to dependent work. After all chunks finish, run the applicable test suite.
+Spawn one implementation agent per chunk. A sub-agent sees nothing of this session, so its brief must be complete: the chunk objective, relevant Files-table paths, the pinned interface contracts, prior-log patterns, and architecture/context conventions. Instruct agents to write files directly and return only a concise summary of modified or created paths. Run chunks in parallel only when their file sets are disjoint — parallel edits to the same file conflict; sequence dependent or overlapping chunks, passing forward the summaries and interfaces they need. After all chunks finish, run the applicable test suite.
 
 ## Verify
 
-Run every verification step you can execute yourself: tests, builds, linters, and actually driving the affected flow (run the command, hit the endpoint, exercise the behavior). Fix what fails and re-verify until your own checks pass.
+Run every verification step you can execute yourself: tests, builds, linters, and actually driving the affected flow (run the command, hit the endpoint, exercise the behavior). Fix what fails — routing non-trivial fixes through implementation sub-agents the same way chunks were delegated — and re-verify until your own checks pass.
 
 Then present the evidence — commands run, output observed, behaviors confirmed — alongside anything that genuinely requires human judgment or access you lack (visual/UX checks, production credentials, "does this match your intent"). Stop for the user's verdict. If issues are reported, fix them, re-verify the affected items, and re-present only what changed. Do not proceed until the user confirms.
 
