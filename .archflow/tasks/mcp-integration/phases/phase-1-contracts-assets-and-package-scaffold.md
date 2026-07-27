@@ -1,6 +1,7 @@
 # Phase 1: Contracts, Assets, and Package Scaffold
 
-**Status**: DESIGNED
+**Status**: COMPLETE
+**Implemented**: 2026-07-27
 **Task**: mcp-integration
 **Goal**: Establish the buildable package foundation and foundational repository contracts.
 **Requirements**: REQ-02, REQ-03, REQ-04, REQ-05, REQ-06, REQ-10, REQ-15, REQ-17
@@ -82,13 +83,13 @@ Boundary parsers accept `unknown`; only validated codecs mint phase brands. A ph
 
 ## Success Criteria
 
-- [ ] The source design receives only a resolving lineage/supersession banner above an otherwise byte-preserved originating body, and the implementation log records that it was first.
-- [ ] Clean exact-lock install, `tsc --noEmit`, foundational tests, and temporary Node-24 ESM bundle pass on exact Node `24.15.0` and `24.18.0`; the current Node `24.11.1` shell is not acceptance evidence.
-- [ ] All nine direct pins are exact and current at implementation time. Direct `vite@7.3.6` constrains Vitest's graph; the lock excludes `lightningcss`, copyleft, missing/unreviewed licenses, later-phase dependencies, and stale notices.
-- [ ] Plain-JSON preflight and strict non-mutating Ajv/Zod agreement reject non-plain/inherited objects, cycles/non-JSON values, dangerous keys, unknown properties, invalid formats, and contradictory validator acceptance.
-- [ ] Workflow/config share the safe one-document YAML path. Exact graph topology, role/phase/model/effort config, rubric kind/mode, constitution frontmatter, cross-file rule uniqueness, and append-only rule evolution pass; malformed/unknown/duplicate/reused/reactivated/unversioned cases fail with located diagnostics.
-- [ ] Only codecs/validators mint positive-safe phase numbers and canonical phase IDs; compile-time assertions and runtime aliases reject invalid forms, and Explore remains graph-only pre-task vocabulary.
-- [ ] No review/triage/adjudication schema or renderer, error/gate/tool contract, MCP dependency/server/fixture, tracked bundle, durable state/artifact schema, persistence, dispatch, or installer work enters Phase 1.
+- [x] The source design receives only a resolving lineage/supersession banner above an otherwise byte-preserved originating body, and the implementation log records that it was first.
+- [x] Clean exact-lock install, `tsc --noEmit`, foundational tests, and temporary Node-24 ESM bundle pass on exact Node `24.15.0` and `24.18.0`; the current Node `24.11.1` shell is not acceptance evidence.
+- [x] All nine direct pins are exact and current at implementation time. Direct `vite@7.3.6` constrains Vitest's graph; the lock excludes `lightningcss`, copyleft, missing/unreviewed licenses, later-phase dependencies, and stale notices.
+- [x] Plain-JSON preflight and strict non-mutating Ajv/Zod agreement reject non-plain/inherited objects, cycles/non-JSON values, dangerous keys, unknown properties, invalid formats, and contradictory validator acceptance.
+- [x] Workflow/config share the safe one-document YAML path. Exact graph topology, role/phase/model/effort config, rubric kind/mode, constitution frontmatter, cross-file rule uniqueness, and append-only rule evolution pass; malformed/unknown/duplicate/reused/reactivated/unversioned cases fail with located diagnostics.
+- [x] Only codecs/validators mint positive-safe phase numbers and canonical phase IDs; compile-time assertions and runtime aliases reject invalid forms, and Explore remains graph-only pre-task vocabulary.
+- [x] No review/triage/adjudication schema or renderer, error/gate/tool contract, MCP dependency/server/fixture, tracked bundle, durable state/artifact schema, persistence, dispatch, or installer work enters Phase 1.
 
 ## Verification Steps
 

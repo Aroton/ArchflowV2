@@ -1,0 +1,30 @@
+{
+  "name": "archflow-mcp-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:contracts": "vitest run test/contracts",
+    "build:temp": "node scripts/build-temp.mjs && node scripts/smoke-temp-bundle.mjs",
+    "check:dependencies": "node scripts/check-dependency-policy.mjs",
+    "check:notices": "node scripts/check-notices.mjs",
+    "test:notices-policy": "node scripts/test-notices-policy.mjs",
+    "check": "npm run typecheck && npm test && npm run test:contracts && npm run build:temp && npm run check:dependencies && npm run check:notices && npm run test:notices-policy"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "yaml": "2.9.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "esbuild": "0.28.1",
+    "typescript": "7.0.2",
+    "vite": "7.3.6",
+    "vitest": "4.1.10"
+  }
+}

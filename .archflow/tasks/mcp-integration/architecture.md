@@ -394,6 +394,8 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 
 ### Phase 1: Contracts, Assets, and Package Scaffold
 
+**Status**: COMPLETE (2026-07-27)
+
 **Goal**: Establish the buildable package foundation and foundational repository contracts.
 
 **Requirements**: REQ-02, REQ-03, REQ-04, REQ-05, REQ-06, REQ-10, REQ-15, REQ-17
@@ -402,12 +404,12 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 
 **Success Criteria**:
 
-- [ ] Clean exact-lock install, strict typecheck, foundational tests, and temporary esbuild output pass on Node `24.15.0` and `24.18.0`; TypeScript is CLI-only with explicit `rootDir` and Node types.
-- [ ] The exact lock includes direct `vite@7.3.6`, excludes `lightningcss`, and passes complete permissive-only license/NOTICE proof; copyleft, unreviewed licenses, ranged direct pins, and later-phase dependencies fail policy.
-- [ ] Recursive plain-JSON/Ajv/Zod agreement fixtures reject mutation, non-plain prototypes, dangerous keys, unknown structure, bad formats, and YAML ambiguity with stable located validation results.
-- [ ] Exact workflow/config/rubric/constitution assets and schemas round-trip; graph mutations, authoritative family config, invalid rubric modes, duplicate/invalid rules, and illegal append/deprecate/version evolution fail.
-- [ ] Branded positive-safe phase numbers and phase-instance IDs are minted only by codecs/validators; compile-time assertions and runtime aliases reject non-canonical values, while Explore remains disposable pre-task vocabulary rather than a phase instance.
-- [ ] Phase 1's first change adds the source design's visible lineage/supersession banner, links the approved PRD/architecture, preserves its originating-design status, and precedes all server implementation.
+- [x] Clean exact-lock install, strict typecheck, foundational tests, and temporary esbuild output pass on Node `24.15.0` and `24.18.0`; TypeScript is CLI-only with explicit `rootDir` and Node types.
+- [x] The exact lock includes direct `vite@7.3.6`, excludes `lightningcss`, and passes complete permissive-only license/NOTICE proof; copyleft, unreviewed licenses, ranged direct pins, and later-phase dependencies fail policy.
+- [x] Recursive plain-JSON/Ajv/Zod agreement fixtures reject mutation, non-plain prototypes, dangerous keys, unknown structure, bad formats, and YAML ambiguity with stable located validation results.
+- [x] Exact workflow/config/rubric/constitution assets and schemas round-trip; graph mutations, authoritative family config, invalid rubric modes, duplicate/invalid rules, and illegal append/deprecate/version evolution fail.
+- [x] Branded positive-safe phase numbers and phase-instance IDs are minted only by codecs/validators; compile-time assertions and runtime aliases reject non-canonical values, while Explore remains disposable pre-task vocabulary rather than a phase instance.
+- [x] Phase 1's first change adds the source design's visible lineage/supersession banner, links the approved PRD/architecture, preserves its originating-design status, and precedes all server implementation.
 
 ### Phase 2: Review Evidence and Inert MCP Boundary
 

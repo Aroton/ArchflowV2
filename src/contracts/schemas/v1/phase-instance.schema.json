@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:phase-instance",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": { "kind": { "const": "prd" } },
+      "required": ["kind"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": { "kind": { "const": "design" } },
+      "required": ["kind"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": { "const": "phase-design" },
+        "phase": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber" }
+      },
+      "required": ["kind", "phase"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": { "const": "phase-impl" },
+        "phase": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber" }
+      },
+      "required": ["kind", "phase"],
+      "additionalProperties": false
+    }
+  ]
+}

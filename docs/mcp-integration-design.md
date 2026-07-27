@@ -1,3 +1,5 @@
+> **Design lineage:** This is the preserved originating design for the MCP integration. The approved [product requirements](../.archflow/tasks/mcp-integration/prd.md) and [architecture](../.archflow/tasks/mcp-integration/architecture.md) are normative wherever they differ from this document.
+
 # Archflow — Detailed Design
 
 **Scope:** what changes in the skills, what the constitution looks like, and what the bundled MCP server does.
