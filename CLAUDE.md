@@ -46,6 +46,30 @@ All working files live in `.archflow/`. Tracked in git during development to pre
 
 Installs the shared skills to `~/.claude/skills/` and `~/.agents/skills/` for global availability.
 
+## Engineering Priorities
+
+ArchFlow is an open-source prototype. Optimize for a useful, working, maintainable implementation—not hypothetical production, commercial, monetization, or release requirements.
+
+Use this priority order when making tradeoffs:
+
+1. Make the current user workflow work.
+2. Choose the simplest design that meets the current requirement.
+3. Keep the code readable, maintainable, and easy to change.
+4. Add tests and safeguards proportional to the real risk.
+5. Pursue exhaustive correctness, generality, or release polish only when the user explicitly asks for it or a demonstrated blocker requires it.
+
+Default guidance:
+
+- Prefer direct code and existing patterns over new abstractions, frameworks, layers, registries, or generalized machinery.
+- Do not build for speculative future requirements. Avoid compatibility layers, migration systems, extension points, exhaustive matrices, and release infrastructure until they are actually needed.
+- Validate important boundaries and representative failure cases, but do not attempt to prove every theoretical permutation. Tests should buy confidence, not completeness for its own sake.
+- Treat licensing proportionally. Respect licenses and obvious attribution obligations, but default to package metadata and ordinary notices. Do not audit every file, build forensic license validators, or create release-grade legal inventories unless distribution makes them necessary, the user requests them, or a concrete legal issue blocks the prototype.
+- A documented limitation or TODO is often better than a large subsystem. Prefer a reversible simple decision over an elaborate attempt to eliminate all uncertainty.
+- Existing plans are revisable. If a planned phase is disproportionate to prototype goals, propose a simpler scope at the next design/review gate instead of implementing complexity merely because an older document mentions it.
+- Before adding substantial complexity, explain the concrete current problem it solves and ask the user when the tradeoff materially expands scope.
+
+Working and maintainable beats perfect. Simplicity does not override the human trust boundaries below, but those boundaries should be implemented with the least machinery that reliably preserves them.
+
 ## Design Principles
 
 ArchFlow is written for models that keep improving. Skills must encode *intent and trust boundaries*, not workarounds for model weaknesses — workarounds become ceilings as models get better. When writing or editing any skill, apply this litmus test to every rule: **is it here because the model used to be bad at something, or because the human needs it?** Only the second kind gets "never/must/exact" language.
