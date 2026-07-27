@@ -1,0 +1,257 @@
+# PRD: MCP Integration
+
+> Revise ArchFlow from a set of prompt-heavy, manually handed-off skills into a durable terminal workflow: thin phase skills execute a published workflow graph through a bundled local MCP server, persist every consequential step and decision, obtain genuinely fresh cross-family review, and recover safely from interruptions without ever inventing human approval. ArchFlow remains fully usable with only a coding agent and a terminal; Archforge may drive the same contracts later but is never required.
+
+## Problem Statement
+
+ArchFlow's current six skills carry most workflow control in prompts and conversation. They infer progress from the presence and contents of Markdown artifacts, rely on the active agent session to remember intermediate decisions, and ask the user to copy a prompt into the other client at every counter-review gate. This keeps the implementation lightweight, but makes retries, interrupted sessions, concurrent hosts, and independent review difficult to reason about. The workflow can appear resumable while lacking a single durable account of what artifact was reviewed, which decision applies to it, or whether a partial step may safely be repeated.
+
+The current process also spends human attention uniformly: every document and implementation phase stops for review even when no policy, drift, or quality trigger warrants it. At the same time, the manual cross-client handoff can be skipped or accidentally replaced by a same-family review that looks independent but is not.
+
+This revision moves control that requires durable state or host capabilities into explicit contracts:
+
+- a machine-readable phase graph says what runs next;
+- a repository constitution supplies stable, auditable constraints;
+- phase skills marshal one shared production/review/adjudication/gate pipeline;
+- a local MCP server persists truthful state, dispatches fresh cross-family reviewers, and waits on explicit human decisions; and
+- every review, approval, waiver, and drift verdict is bound to the exact artifact and declared inputs it evaluated.
+
+The goal is not a general workflow engine. It is a focused revision of ArchFlow's existing PRD-to-implementation process that automates safe mechanics while preserving human authority at every trust boundary.
+
+## Target Users
+
+### Primary users
+
+- **Developers using Claude Code or Codex in a terminal.** They need one consistent ArchFlow process across both hosts, reliable status after a session ends, fewer manual review handoffs, and clear recovery instructions when automation is unavailable.
+- **Developers working manually without Archforge.** They must be able to initialize a repository, inspect the workflow and constitution, resolve gates or waivers through local files, and resume every phase without a UI or hosted control plane.
+
+### Future consumers
+
+- **Archforge-driven users.** Archforge may inspect the published graph, write task configuration and explicit decision artifacts, and drive the same MCP tools. It receives no privileged workflow path and cannot become a dependency for terminal use.
+
+## Core Value Proposition
+
+ArchFlow must make a terminal-driven agent workflow recoverable and independently reviewed while keeping advancement, waiver, and commit authority explicitly human.
+
+## Product Definitions
+
+| Term | Meaning in this product |
+|------|-------------------------|
+| Declared inputs | The versioned workflow/configuration, pinned constitution, artifact and upstream versions, rubric, phase instance, and other explicitly permitted material used by a step. |
+| Artifact binding | A review, adjudication, triage, gate, waiver, or approval identifies the exact subject and inputs by path/identity and digest; a mutable filename alone is insufficient. |
+| Fresh counter-review | A new, non-resumed process/session with no producer conversation, triage, prior findings, discovered repo/global instructions, or repository access. It receives only an inspectable, hashed envelope containing the artifact, rubric, fixed output contract, and minimal phase/identity metadata. Upstream documents and constitution content are reserved for adjudication. |
+| Deterministic rerun | Given the same declared inputs, a rerun selects the same canonical targets, restores/reuses the exact previously validated authoritative phase outputs rather than generating or merging from partial prose, and leaves unrelated dirty changes untouched. Operational attempt metadata may change; authoritative result bytes do not. A changed input fingerprint creates a new generation and authoritative result. |
+| Explicit decision | A schema-valid human or Archforge-authored decision tied to the exact pending gate and subject digest. Conversation, timeout, cancellation, file absence, and agent inference are not decisions. Manual files provide traceability, not cryptographic proof of approver identity. |
+| Degraded evidence | A documented fallback result with lower assurance than the normal pipeline. It is labeled as degraded and can never silently manufacture a pass or approval. |
+
+## Functional Requirements
+
+### Must Have (v1)
+
+#### Published workflow and repository contracts
+
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| REQ-01 | Repository initialization | A new `archflow-init` skill scaffolds the repository-owned workflow, constitution templates, shared globals, and host registration needed for terminal operation, including `.mcp.json` for Claude Code and `~/.codex/config.toml` for Codex. Initialization is idempotent, preserves unrelated Claude/Codex configuration, and reports unsupported or untrusted host configuration rather than claiming success. |
+| REQ-02 | Repository layout | Initialization establishes `.archflow/workflow.yaml`, `.archflow/constitution/{README.md,00-process.md,10-architecture.md,20-data.md,30-product.md}`, existing global documents, and per-task `config.yaml`, `state.json`, active `gate.json`/`gate.decision`, canonical PRD/design/phase artifacts, implementation notes, and review/decision evidence. Canonical v1 paths include `design.md`, `phases/<n>/design.md`, `phases/<n>/impl-notes.md`, `reviews/<phase-instance>.{self,counter,triage,adjudication}.md`, optional `reviews/<phase-instance>.gate-counter.<gate-id>.md`, and retained `decisions/<gate-id>/{request,decision}.json`. `<phase-instance>` is reversibly encoded as `prd`, `design`, `phase-design-<n>`, or `phase-impl-<n>`, so iterated phases never overwrite one another's evidence. |
+| REQ-03 | Published phase graph | `.archflow/workflow.yaml` is the source of truth for the shipped ArchFlow phase ordering, dependencies, per-phase pipelines, optionality, iteration, and gate policy. A human or Archforge can determine the next legal action from the graph and task state without hardcoding that graph outside ArchFlow. In v1 the published file is an inspectable contract over a fixed phase/step vocabulary, not a user extension API. |
+| REQ-04 | Versioned and pinned execution inputs | Every machine-readable workflow/configuration/state/gate/decision/review format is versioned and strictly validated. At task start, the task records stable task/repository identity, an immutable base commit, and workflow, constitution, and configuration versions or digests. In-flight behavior cannot silently change when repository files change. V1 keeps those inputs pinned for the task; adopting changed workflow or policy requires a new task unless the future REQ-50 migration flow is implemented. |
+| REQ-05 | Workflow validation | Before agent work begins, the shipped ArchFlow graph, recognized phase/step vocabulary, and task configuration are validated. Malformed schemas, altered/unknown structure, duplicate IDs, invalid dependencies or iteration, unsatisfied prerequisites, and unknown models/families fail closed with an actionable error. Supporting arbitrary phases, steps, or plugins is not required. |
+| REQ-06 | Fixed v1 graph | The shipped workflow exposes the phase behavior below. `on_trigger` review/advancement gates open when a constitution trigger fires, drift is material, adjudication fails or is uncertain, attempts are exhausted, or a task-branch constitution edit is present. This policy does not replace the separate mandatory human authorization before any commit. |
+
+| Phase | Skill | Requires | Pipeline | Gate |
+|-------|-------|----------|----------|------|
+| Explore | `archflow-explore` | — | produce | never; optional |
+| PRD | `archflow-prd` | — | produce → self-review → counter-review → triage → adjudicate | always |
+| Design | `archflow-design` | PRD | produce → self-review → counter-review → triage → adjudicate | always |
+| Phase design | `archflow-phase-design` | design | same shared pipeline, iterated per phase | on trigger |
+| Phase implementation | `archflow-phase-impl` | phase design | same shared pipeline, iterated per phase | on trigger |
+
+#### Thin skill behavior and shared pipeline
+
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| REQ-07 | Skills as phase marshallers | Phase skills express phase-specific artifact production and rubrics but delegate durable state, model routing, counter-review dispatch, adjudication, and blocking gates to the MCP contracts. No skill branches on Claude Code versus Codex or asks a model to self-identify its host. |
+| REQ-08 | Persisted step boundaries | In normal MCP operation, each pipeline step calls `archflow_state` to record a validated `running`/entry state before work and a validated outcome on exit. Every step writes its declared artifact or decision record; information required to resume, review, or advance is never held only in conversation. When the state tool/server is unavailable, REQ-38–REQ-40 define the complete artifact-based manual contract. |
+| REQ-09 | Phase-specific production | Explore produces disposable context without review or gate. PRD and design run the complete pipeline and always require explicit human approval. Phase design checks drift against the approved `design.md` and becomes workflow-approved/`DESIGNED` only after the current-digest pipeline succeeds with no trigger gate, or after every opened gate is explicitly resolved. Code cannot begin from an incomplete, failed, or pending-gate phase design. Phase implementation checks drift against both the approved phase design and task design, preserves the `no document → DESIGNED → IN PROGRESS → COMPLETE` lifecycle, updates parent PRD/design when implementation changes reality, writes durable implementation notes/logs, and proposes task-independent conventions outside `.archflow/`. Regardless of `on_trigger` review-gate outcome, the skill stops before commit and obtains a distinct explicit human commit authorization bound to the final implementation diff and current artifact digests; phase completion/commit cannot precede that decision. |
+| REQ-10 | Phase-specific rubrics | PRD, design, and phase-design rubrics evaluate completeness, consistency, assumptions, requirement testability, and fitness to the brief. Implementation rubrics evaluate simplicity, duplication, design conformance, dead code, error handling, and whether abstractions are justified. Counter-review uses the declared rubric adversarially; it does not optimize for raw finding count. |
+| REQ-11 | Structured review artifacts | Self-review, counter-review, triage, and adjudication outputs conform to versioned schemas, canonical Markdown rendering, and the non-colliding `<phase-instance>` paths in REQ-02. Headers identify at least the task/phase instance, step, subject/input digests, verdict, blocking count, trigger/rule IDs, assurance source, model/effort when known, and execution identity. Server-dispatched counter-review/adjudication provenance is server-attested. In-session self-review model/effort metadata is agent-declared or `unknown`, never presented as server-attested; `archflow_state` still binds its input/result digests. Findings have stable IDs, severity, evidence, and suggested resolution; triage dispositions each applicable finding exactly once. |
+| REQ-12 | Review verdict semantics | A raw review `fail` contains one or more blocking findings and permits the required transition into triage, but it cannot authorize advancement. `pass` contains no blocking findings. `advisory` carries only non-blocking findings. Contradictory counts/verdicts, malformed output, and unsupported fields fail closed and cannot replace a prior valid artifact. Triage either rejects a finding with evidence or accepts it and sends the artifact back to production for revision. |
+| REQ-13 | Review fixed point and evidence freshness | Required reviews, triage, adjudication, and gate/approval evidence bind to the exact artifact and declared-input digests. If triage accepts any finding, the producer rewrites the artifact; that new digest invalidates the old self-review, counter-review, triage, and adjudication for advancement and reruns self-review → counter-review → triage. The loop closes only when the current digest has current self/counter evidence, every finding is dispositioned, and no blocker remains; adjudication then evaluates that same digest. Attempts are bounded by configuration, and exhaustion opens a human gate. Changing an approved upstream invalidates affected downstream evidence. Stale evidence may be retained for diagnosis but never authorizes advancement. |
+| REQ-14 | Status from durable truth | In normal MCP operation, `archflow-status` reads validated `state.json` and reports the exact task, phase instance, step, attempt/status, blocking reason, and one safe next action. In manual degraded operation it reconstructs only milestones proven by the canonical artifact/decision contract in REQ-38–REQ-40, labels the result degraded, and never infers an approval or waiver from absence, conversation, or ambiguous artifacts. Missing/corrupt inputs remain unknown with repair guidance. |
+
+#### Constitution, waivers, and drift
+
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| REQ-15 | Repository constitution | One version-controlled constitution applies to every task in a repository. Rules have stable unique IDs, status, human-readable text, and optional `review_trigger`/`enforced_by` declarations. IDs are appended or deprecated, never renumbered or reused. Adjudication evaluates each trigger against the declared current artifact/diff/evidence and returns matched and uncertain rule IDs with evidence; either outcome opens an `on_trigger` gate. Mechanically enforced rules remain in the constitution, and their evidence must bind to the current subject digest; missing, stale, unknown, or failed evidence is not compliance. |
+| REQ-16 | Tasks consume policy | Tasks may cite, comply with, fail, or request a scoped waiver against a rule; they cannot amend the governing constitution. Amendments use normal base-branch code review. Any task-branch diff touching `.archflow/constitution/` opens an unconditional human gate and does not alter pinned adjudication rules. That gate cannot approve or waive the task-local amendment: advancement requires removing/reverting the edit, or completing normal base-branch amendment review and then starting a new task (or using future REQ-50 migration). |
+| REQ-17 | Immutable policy basis | The governing constitution is resolved from the task's immutable starting commit, not a moving branch name or mutable worktree file. Its digest/version is pinned in task state. Applicable rules are supplied to production as constraints, while adjudication checks the complete pinned policy basis as a backstop. Missing/unresolvable policy or current `enforced_by` evidence cannot be treated as compliance. |
+| REQ-18 | Scoped waivers | `archflow_waiver` creates a durable, explicit human decision request tied to the exact rule version, task, narrow scope, rationale, subject/evidence digests, and gate identity. Grant or denial is explicit; a grant records provenance and expires at the stated task boundary. A waiver never amends policy or applies to another rule, task, or changed subject implicitly. |
+| REQ-19 | Independent adjudication results | Adjudication emits separate constitution-compliance and upstream-drift results plus matched/uncertain trigger IDs and supporting evidence. Drift is `aligned`, `incidental`, or `material`: incidental clarifications are recorded and may proceed; material changes that would surprise a reader of the approved document open a gate and normally require amendment/reapproval of the affected upstream artifact. Approved upstream versions remain identifiable even when canonical parent documents are later updated to reflect reality. |
+| REQ-20 | Triggered human authority | Constitution review triggers or uncertainty, material drift, failed/uncertain adjudication, exhausted attempts, waivers, and task-branch constitution edits require explicit human decisions. PRD and design approvals always require a human, and commit authorization follows REQ-09. No agent, model result, timeout, or fallback may invent approval or waive a gate. A constitution-edit gate can request revert/abort or direct normal base-branch amendment work; an approval-shaped decision cannot authorize the task-local edit. |
+
+#### Durable task state, reruns, and isolation
+
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| REQ-21 | Truthful state machine | In normal MCP operation, `state.json` is the validated source of truth for phase instance, step, status, attempts, declared-input fingerprint, current authoritative artifacts, approvals, open gates, and waivers. A step cannot be succeeded unless its required artifact exists, validates, and matches the recorded digest. Terminal task states and waiver expiration are explicit. When the server is unavailable, the canonical artifact/decision contract in REQ-38–REQ-40 is the conservative manual authority instead of a fabricated `state.json` update. |
+| REQ-22 | Crash-safe recovery | State, gate, decision, and server-authored review writes are replacement-based and crash-safe from a reader's perspective. Killing a host/server before, during, or after dispatch/write leaves either the prior or next complete valid revision. On restart the workflow can resume, reconcile, safely retry, or provide a precise repair action; it never skips validation or converts interruption into approval. |
+| REQ-23 | Idempotent transition intent | Every mutating tool call carries a stable `intent_id`, caller-observed `expected_revision`, and `input_fingerprint`. Repeating the same intent with the same inputs is safe and does not duplicate authoritative artifacts, reviews, gates, or waivers. Reusing an identity with different inputs is rejected as `INTENT_MISMATCH`; a stale expected revision is `STATE_CONFLICT`. Retries are bounded, classified, and never silently change model family, model, policy, or inputs. |
+| REQ-24 | Conflict-aware concurrent sessions | Multiple Claude/Codex/Archforge sessions cannot silently overwrite one task's state. State carries a monotonic revision; exactly one competing transition wins and stale writers receive `STATE_CONFLICT`. Independent tasks may proceed concurrently. Architecture may choose locking, compare-and-swap, or an equivalent cross-process mechanism. |
+| REQ-25 | Deterministic overwrite contract | Rerunning a phase with an unchanged input fingerprint restores/reuses the exact previously validated authoritative output bytes and canonical targets; it never re-generates from or appends/merges partial worktree prose. A changed input fingerprint creates a new authoritative result. Result reuse changes only the phase's declared outputs and never resets, cleans, or stashes the worktree, consumes another task's state, or modifies unrelated tracked/untracked changes. The architecture may choose cache/snapshot storage, but v1 must retain enough validated result data to satisfy this contract in normal and manual modes. |
+| REQ-26 | Repository and task isolation | Every tool resolves a canonical Git repository/worktree root and limits reads/writes to the active task and declared artifact classes. Constitution and approved upstream artifacts are narrow declared exceptions. Traversal, absolute/symlink escape, cross-task access, and mismatched repository identity are rejected before any read or child dispatch; supported worktrees and paths with spaces/Unicode work correctly. |
+
+#### Bundled local MCP server
+
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| REQ-27 | Exactly five workflow tools | The bundled server exposes the five logical tools in the source design: `archflow_state`, `archflow_counter_review`, `archflow_adjudicate`, `archflow_gate`, and `archflow_waiver`. Git and ordinary file operations that a skill can perform do not become additional MCP tools. |
+| REQ-28 | Local stdio service | The server is implemented in Node/TypeScript, spawned locally by the host, and communicates only over MCP stdio; it opens no network listener. Stdout contains only valid MCP protocol traffic. Installation leaves a version-pinned, offline-runnable server command rather than fetching an unpinned package at host startup. |
+| REQ-29 | Host detection | After MCP initialization, the server uses the connection's immutable `clientInfo`/protocol metadata and supported real-host fixtures to identify Claude Code or Codex. Unknown, missing, ambiguous, or unsupported identities produce an actionable `UNSUPPORTED_HOST` result and launch no model process. Skills contain no host-specific routing logic. |
+| REQ-30 | Configuration-driven routing | Server defaults bind Claude producers to Codex-family counter-review/adjudication and Codex producers to Claude-family counter-review/adjudication; self-review remains an in-session same-host subagent. Counter-review and adjudication default to higher reasoning effort than production because they are short, high-consequence calls. Versioned per-task `config.yaml`, written by a human or Archforge, may override models/effort by role and phase. Model names are configuration, not skill/server constants, and are validated before dispatch. |
+| REQ-31 | Cross-family counter-review | Producer and counter-reviewer families are derived from trusted runtime/configuration metadata. Same-family counter-review is a hard `FAMILY_MISMATCH`, including degraded mode. Rate-limit or availability failure is distinguishable, leaves the step pending/failed, and never launches the producer family as a substitute. |
+| REQ-32 | Inspectable fresh context | Counter-review and adjudication use short-lived, non-resumed CLI processes with no inherited producer session, prior findings/triage, repo/global agent instructions, or repository access. Counter-review receives exactly the artifact, rubric, fixed output contract, and minimal phase/identity metadata—no upstream document, constitution, repository, or other file content. Adjudication separately receives its artifact, fixed contract, pinned constitution, and declared approved upstream inputs. Both envelopes are versioned, size-bounded, inspectable, and hashed. |
+| REQ-33 | Validated model results | CLI adapters request versioned structured output, validate it in the server, and only then render canonical review/adjudication files. The server records actual adapter, CLI version, canonical model/family, configured effort, input digest, and derived verdict/count; model-authored prose cannot forge trusted provenance or advancement fields. |
+| REQ-34 | Subscription-authenticated dispatch | Counter-review/adjudication dispatch uses the user's existing first-party Claude/Codex subscription-authenticated CLI sessions and never requires or falls back to API keys, metered API billing, gateways, or cloud-provider routes. Authentication is preflighted; ambiguous, logged-out, API-key, or unsupported-provider states fail before invocation. Child environments exclude provider keys/routing variables and unrelated secrets while preserving only what is required for the supported CLI login. |
+| REQ-35 | Child-process lifecycle | Child CLIs are launched without a shell and have explicit working directory, input/output bounds, timeout/cancellation handling, and stable failure classes for missing CLI, auth, unsupported model, rate limit, timeout, cancellation, malformed output, output overflow, nonzero exit, and I/O failure. Cancellation/timeout/server shutdown terminates descendants, leaves workflow evidence truthful, and never becomes a successful review or approval. |
+
+The v1 MCP surface is normative. Every request/result uses a versioned schema and the active repository/task identity established by validated session or request metadata. Every mutating request also carries `intent_id`, `expected_revision`, and `input_fingerprint`; a success result reports the resulting revision. Failures expose a stable code, retryability, and safe diagnostic without producing the success side effect. An idempotent replay returns the recorded result, reuse with changed inputs returns `INTENT_MISMATCH`, and a stale revision returns `STATE_CONFLICT`.
+
+| Tool | Required request shape | Required success result | Required effect |
+|------|------------------------|-------------------------|-----------------|
+| `archflow_state` | `(phase_instance, step, status, artifact?)` plus common mutation fields | `{path, revision, status}` | Validate the transition and atomically replace the active task's `state.json`; an idempotent replay returns the same authoritative revision. |
+| `archflow_counter_review` | `(artifact_path, rubric)` plus common mutation fields | `{path, verdict, blocking_count, revision}` | Dispatch a fresh opposite-family reviewer and write the current phase-instance counter-review artifact only after structured-result validation. |
+| `archflow_adjudicate` | `(artifact_path, upstream_paths[])` plus common mutation fields | `{path, constitution, drift, triggers[], revision}` | Dispatch the configured adjudicator against the pinned constitution/declared upstreams and write the phase-instance adjudication artifact. |
+| `archflow_gate` | `(phase_instance, summary, context)` plus common mutation fields | `{decision, notes, revision}` | Publish/resume the digest-bound gate, block as required by REQ-37, validate its decision, and return it exactly once. |
+| `archflow_waiver` | `(rule_id, rationale, scope)` plus common mutation fields | `{granted, notes, revision}` | Use the same durable blocking decision mechanism and, on grant, record the exact scoped waiver in task state/manual evidence. |
+
+#### Durable gates and degraded terminal operation
+
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| REQ-36 | Durable gate lifecycle | `archflow_gate`/`archflow_waiver` durably publish active `gate.json` and an awaiting-human state before blocking. A gate has a unique ID, task/phase/kind, subject/context digests, allowed decisions, and creation metadata. Only a valid atomic `gate.decision` for that exact ID/subject resolves it; stale, partial, malformed, duplicated, or mismatched decisions cannot advance. Each opened/resolved request and decision is retained at `decisions/<gate-id>/{request,decision}.json`; the singular gate files are active-gate interfaces, not the historical record. Supported-host installation documents/configures a human-decision tool-timeout window, but the server has no internal approval timeout. |
+| REQ-37 | Genuinely blocking and resumable | While connected, a gate/waiver call remains pending until a valid decision or an explicit external cancellation/failure; it never poll-and-returns a pending value as success. Host timeout, MCP cancellation, client/server exit, or session death leaves the gate pending and resumable. A later invocation observes the same gate and valid decision rather than creating a duplicate. Approval/grant advances once; revise/reject/deny/cancel remain explicit non-advancing outcomes. |
+| REQ-38 | Complete documented fallback per tool | Every skill documents one exact file/prompt fallback and resume path for each unavailable tool. If state is unavailable, the write is skipped and status uses only canonical artifacts. Counter-review emits a self-contained other-client prompt and stops until a schema-valid cross-family artifact exists. Adjudication may run as explicitly lower-assurance same-family review against pinned inputs; failure or uncertainty opens a manual human gate. Gate/waiver fallbacks publish the pending request and stop; after the user gives an explicit decision, the skill records the schema-valid decision file before advancing. No fallback outcome exists only in conversation. |
+| REQ-39 | Complete manual source of truth | With the entire MCP server unavailable, declared production/review/triage/adjudication artifacts plus the full retained `decisions/<gate-id>/` chain form the conservative manual milestone record; active `gate.json`/`gate.decision` represent only the currently pending interaction. A skill advances only when files required for the milestone validate and all required explicit decisions exist; absence or ambiguity remains non-advancing. This mode retains the validated authoritative result needed by REQ-25 and can reach task completion even if MCP never recovers. If it does recover, the server reconciles/imports the same evidence without discarding it, repeating a resolved decision, or inferring missing state. |
+| REQ-40 | Terminal-only completion | A developer can initialize, configure, inspect, run, gate, waive, interrupt, resume, and complete the full workflow using only a supported terminal, Git worktree, Claude Code or Codex, and local files—including documented manual operation when the MCP server remains unavailable. Archforge is not installed or required for any v1 acceptance path. |
+| REQ-41 | Counter-review prompt at every human gate | Every human review/approval gate presents a self-contained ready-to-run prompt for the other client as an optional additional counter-review, even when the automated counter-review already ran. The user alone decides whether to run it. If run, its digest-bound supplemental result is written to `reviews/<phase-instance>.gate-counter.<gate-id>.md`, triaged before the gate resolves, and any accepted change re-enters the REQ-13 fixed-point loop. Declining the optional check does not fabricate a review and does not prevent an otherwise valid explicit gate decision. |
+
+### Should Have (v1+)
+
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| REQ-50 | Explicit task migration | Provide a guided, human-approved re-pin/migration flow for tasks that intentionally adopt a newer workflow or constitution, with dependency-aware invalidation of prior evidence. V1 may instead keep tasks pinned and require a new task/run. |
+| REQ-52 | Durable audit export | If post-PR audit retention becomes a product need, export a compact approval/waiver/evidence summary to a deliberately retained location before `.archflow/` is removed. This is separate from v1 development-lifecycle traceability. |
+
+### Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Archforge implementation or dependency | This task publishes contracts Archforge can consume; it does not build the driver or require it for terminal use. |
+| General-purpose workflow/plugin engine or custom graph vocabulary | The repository copy of the shipped v1 graph is inspectable and driveable, but arbitrary user-defined phases, steps, skills, or plugins are not supported. Unsupported structural edits fail clearly. |
+| Web UI, hosted service, callback server, or network MCP transport | V1 is a local terminal product over stdio. Model CLIs may use their normal provider network path. |
+| Additional MCP tools | The five-tool boundary is deliberate; Git and file reads remain in skills/server internals where applicable. |
+| API-key or custom-provider dispatch | The target contract is first-party subscription-authenticated CLI dispatch with no metered API-key fallback. |
+| Cross-platform/native Windows expansion | V1 supports environments already supported by ArchFlow's Bash installer unless architecture explicitly validates an expansion. Robust paths and worktrees within those environments are in scope. |
+| Cryptographic approver identity or malicious-local-user protection | Manual decision files provide local traceability, not strong identity, signatures, or protection from an attacker who controls the filesystem. Tampering that affects workflow evidence must still be detected and fail closed where specified. |
+| Seeded deterministic LLM generation | Supported CLIs do not promise seeded deterministic text. V1 satisfies identical reruns by retaining and reusing the previously validated authoritative output for an unchanged input fingerprint. |
+| Per-task constitution amendments | Tasks consume the pinned repository constitution and may request narrow waivers; amendments happen on the base branch through normal review. |
+| Permanent external audit storage | `.archflow/` remains development-lifecycle state for v1. Retention before PR is an explicit architecture/product documentation decision, not an implied permanent guarantee. |
+
+## Non-Functional Requirements
+
+| Category | Requirement |
+|----------|-------------|
+| Human authority | There are zero advancement, commit, approval, gate, or waiver outcomes inferred from agent prose, model verdict alone, timeout, cancellation, missing files, or fallback. Every required human action—including clean-path commit authorization—is explicit and artifact-bound. |
+| Durability | At every state/artifact/gate write boundary, interruption leaves a valid authoritative normal-mode state, a valid manual-mode milestone record, or a precise non-advancing recovery condition. No open gate becomes approved and no completed evidence is silently lost. |
+| Concurrency | Cross-process concurrent transitions on one task serialize or return `STATE_CONFLICT`; no waiver, gate, approval, or step update is lost. |
+| Integrity | Machine-readable inputs and outputs are schema-versioned and validated on read. Stale/mismatched digests, invalid transitions, contradictory verdicts, and partially written files fail closed. Server-attested and agent-declared provenance are distinguishable. |
+| Review independence | Counter-review is always a fresh opposite-family process with an observable artifact-and-rubric-only content envelope. An unavailable opposite family is visible failure, never a same-family substitution. |
+| Security and privacy | The server is local stdio-only, tool paths are task-scoped, reviewer children cannot write the repo, shell interpolation is not used, and provider credentials/routing variables or unrelated developer secrets are not forwarded or logged. |
+| Protocol correctness | Initialization precedes tool calls, unsupported hosts fail without dispatch, stdout remains valid MCP traffic, and minimum supported MCP/Node/CLI/host versions are documented and contract-tested. Dependencies and protocol/SDK versions are pinned. Gate calls remain genuinely blocking under the documented supported-host timeout configuration and degrade durably on external cancellation. |
+| Distribution | After installation, the supported Node/CLI environment can start the bundled server without downloading an unpinned runtime package. Init/registration is repeatable and preserves unrelated settings. |
+| Error quality | Host, configuration, authentication, rate limit, child lifecycle, schema, state conflict, path, and gate errors remain distinguishable and offer a safe next action. Unknown failures are never classified as pass or approval. |
+| Review quality | Release evaluation uses a curated corpus with seeded requirement defects, policy violations, drift cases, and clean controls. It measures expected blocker detection, false blockers, triage completeness, and defects found after pass; it does not reward the number of findings. Thresholds are set from the corpus before release rather than invented in this PRD. |
+| Supported-environment portability | Repository relocation, linked worktrees, and paths with spaces/Unicode behave correctly in the Bash-installer environments claimed by the release. Machine-specific executable paths are not written into portable task state. |
+
+## Research Summary
+
+### Domain Context
+
+Research focused on durable workflow execution and human oversight; competitive research was intentionally skipped because this is an internal workflow revision with an authoritative design, not a market-positioning exercise.
+
+The main conclusion is that ArchFlow is becoming a small durable workflow coordinator, even though its work products remain files and agent sessions. Durable execution guidance supports explicit idempotency identities, persisted intent/results, and rejection of retries whose parameters changed. Provenance practice supports binding evidence to exact outputs and declared inputs rather than mutable paths. Human-oversight guidance supports explicit gates, exception/waiver records, adjudication, and go/no-go outcomes rather than conversational approval.
+
+Those conclusions produced three requirements beyond the happy-path design: immutable task inputs, digest-bound evidence with stale-evidence invalidation, and durable gates that survive the request/session that opened them. They also expose the current pre-PR deletion of `.archflow/` as a conscious retention boundary: v1 can promise lifecycle traceability, but not permanent audit history unless an export is later added.
+
+### Technology Landscape
+
+The MCP design is feasible as a local Node/TypeScript stdio server, but correctness depends on the host and child-process boundaries. Current MCP lifecycle metadata provides `clientInfo`, but host names are vendor-defined, so supported Claude Code/Codex handshake fixtures and fail-closed handling are required. Stdio requires protocol-only stdout. Blocking calls are cancellable and host tool timeouts differ, so the gate must be durable independently of a live request.
+
+Both Claude and Codex CLIs can run short-lived non-interactive model processes with explicit model/effort and structured output, but their exact flags and authentication behavior are version-sensitive. CLI adapters therefore need minimum-version contract tests, environment isolation, structured-output validation, and stable failure classification. Neither CLI promises seeded deterministic text, so v1 must retain/reuse the previously validated result when an unchanged input fingerprint requires an identical rerun.
+
+### Primary Research Sources
+
+- [MCP lifecycle and `clientInfo`](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle), [stdio transport](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports), and [cancellation](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/cancellation)
+- [Claude Code CLI/programmatic operation](https://code.claude.com/docs/en/headless) and [credential-use terms](https://code.claude.com/docs/en/legal-and-compliance)
+- [Codex non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode) and [MCP timeout configuration](https://learn.chatgpt.com/docs/extend/mcp)
+- [AWS guidance on safe, idempotent retries](https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/)
+
+### Key Risks
+
+| Risk | Product response |
+|------|------------------|
+| Anthropic credential-use terms may prohibit a third-party tool from routing Free/Pro/Max subscription credentials through `claude -p`. | Release remains blocked absent written Anthropic clarification or a qualified legal determination that the local integration is permitted. An internal risk acceptance does not itself establish permission; allowing that disposition requires an explicit owner change to this release criterion. API-key/custom-provider fallback is not an implicit resolution. |
+| Review or approval refers to a path whose contents later changed. | Every evidence item binds to subject/input digests; mutation invalidates stale dependent evidence. |
+| A long human gate outlives MCP/host timeout or cancellation. | Gate state and decision are durable; disconnection leaves it pending and a later call resumes it. |
+| Two hosts or Archforge race on one task. | One revision wins; stale writers receive a conflict and cannot overwrite the winner. |
+| A fresh process still inherits producer instructions, repository access, or the wrong family. | The input envelope is explicit/hashed, repo/global instruction discovery is disabled, repository writes are disabled, and family is validated from trusted routing metadata. |
+| Trigger rules are too broad or too narrow. | Use a drift/policy fixture corpus and review false gates/misses before reducing mandatory human gates; adjudication uncertainty opens a gate. |
+| Same-family fallback creates review theater. | Counter-review never falls back to same-family. Same-family adjudication is labeled degraded, and failure/uncertainty gates. |
+| State appears durable but crashes between output/state writes create ambiguity. | Artifact-state digest agreement, complete revisions, crash testing, and explicit reconcile/retry outcomes are release criteria. |
+| `.archflow/` deletion removes the only record of decisions and waivers. | Architecture must explicitly document which evidence is intentionally ephemeral and whether a pre-PR summary/export is needed; v1 does not promise permanent audit storage. |
+| Subscription/auth changes or CLI releases break dispatch silently. | Authentication and version preflights fail before model invocation; adapters are covered by supported-version fixtures. |
+
+## Constraints
+
+| Constraint | Details |
+|------------|---------|
+| Terminal-first | Full functionality must require only a supported terminal, Git repository/worktree, coding agent, and local files. Archforge is an optimization only. |
+| Fixed server boundary | V1 uses a bundled Node/TypeScript MCP server over local stdio and exposes exactly five workflow tools. |
+| Host scope | Claude Code and Codex are the producer hosts and review families in scope. Skills remain host-neutral; routing stays in the server/adapters. |
+| Authentication | Target dispatch uses existing first-party subscription-authenticated CLIs, never API keys or metered fallback. Written Anthropic clarification or a qualified legal determination for the local Claude dispatch model is a release blocker unless the owner explicitly revises this PRD. |
+| Human trust boundaries | Never commit or pass a required review gate without explicit approval; never implement before approved phase design; tasks stay isolated; parent documents stay current; completed phases keep implementation notes and propose durable conventions outside `.archflow/`. |
+| Policy scope | One constitution applies repository-wide and is pinned per task from an immutable commit. Task branches cannot redefine their governing policy. |
+| Platform scope | V1 support follows the current Bash installer unless architecture proves and documents a wider matrix. Native Windows expansion is not assumed. |
+| Audit lifecycle | `.archflow/` is tracked during development and currently removed before PR. The architecture must decide/document retention or export semantics without claiming tamper-proof or permanent audit storage. |
+| Model nondeterminism | New generations for changed inputs may vary. Unchanged-input reruns do not rely on model determinism; they restore/reuse the exact previously validated authoritative output. |
+| Timeline | No delivery date is assumed by this PRD. Archforge work must not begin until the terminal validation criteria pass. |
+
+## Success Metrics and Release Validation
+
+The first six scenarios preserve the authoritative design's terminal definition of done. The additional guardrails make those scenarios credible under failures and concurrent use.
+
+| ID | Success condition |
+|----|-------------------|
+| VAL-01 | Using only a terminal, a representative feature goes from PRD through every design/implementation phase to merged implementation in both producer directions. Every required approval and implementation note is present, and a clean no-trigger implementation demonstrably refuses to commit until a human authorizes the exact final diff/artifact digests. |
+| VAL-02 | On a curated artifact corpus, opposite-family counter-review catches seeded substantive defects that require producer action while clean controls expose false blockers; results demonstrate useful independent review rather than restatements/nitpicks. A fixture with accepted findings and two artifact rewrites proves that each new digest reruns self/counter review, all current findings are triaged, only the final digest is adjudicated, and exhaustion gates. Release thresholds are explicitly approved from observed benchmark data. |
+| VAL-03 | A constitution violation is detected against the pinned constitution, blocks advancement, and a correctly scoped explicit waiver grant resumes the task; stale, mismatched, denied, or malformed waiver decisions do not. |
+| VAL-04 | A material implementation drift from approved phase/task design is detected and escalated; aligned/incidental fixtures behave as specified, and accepted material drift reopens the affected upstream approval/evidence chain. |
+| VAL-05 | After a clean run records a validated authoritative result, rerunning the phase from the same declared-input fingerprint on a dirty worktree restores byte-identical authoritative phase outputs at the same canonical paths without consuming partial prose. Unrelated tracked/untracked files remain byte-for-byte unchanged, operational attempt metadata is distinguishable from the result, and no duplicate authoritative result remains. |
+| VAL-06 | `state.json` truthfully reflects every phase/step boundary. Killing a producer or server before/during/after state/artifact writes and child dispatch yields valid state that resumes, safely retries, or stops with precise repair guidance; no approval or required review is skipped. |
+| VAL-07 | Claude-producer→Codex-reviewer and Codex-producer→Claude-reviewer tests prove a fresh PID/session and opposite family. The counter child receives only artifact, rubric, fixed result contract, and minimal identity metadata—no upstream/constitution/repository content, producer/triage/previous-review context, repo/global instructions, child persistence, or repository access. |
+| VAL-08 | MCP `tools/list` exposes exactly the five names and versioned schemas in the normative table, including common intent/revision/fingerprint fields, and valid/invalid calls exhibit those effects without a sixth workflow tool. Idempotent replay returns the recorded result; changed-input reuse returns `INTENT_MISMATCH`; stale revision returns `STATE_CONFLICT`. Missing/ambiguous host identity, API-key or unsupported auth, rate exhaustion, missing CLI, bad model, timeout, cancellation, output overflow, invalid structured output, and nonzero child exit remain distinguishable; none writes a pass artifact, advances state, or launches same-family fallback. |
+| VAL-09 | Under documented Claude/Codex timeout configuration, a connected gate call stays pending until a valid decision or explicit external cancellation/failure—it never returns a pending result as success. Killing/restarting or cancelling leaves one durable pending gate. Partial, malformed, wrong-task, wrong-digest, wrong-ID, stale, and replayed decisions cannot resolve it; one valid explicit decision resolves it exactly once after resume and remains in its gate-ID archive. Every human gate also presents the optional REQ-41 prompt; a produced supplemental review is triaged, while an explicit decline does not fabricate one. |
+| VAL-10 | Two server processes racing from the same `expected_revision` on one task produce one winner plus `STATE_CONFLICT`, with no lost gate/waiver/update; an exact same-intent replay returns its recorded result. Different tasks proceed independently and never read each other's artifacts. |
+| VAL-11 | Path tests reject traversal, absolute/symlink escape, and cross-task access before read/spawn while supported linked worktrees, relocation, and space/Unicode paths succeed. Init is idempotent, preserves unrelated host config, and reports unsupported runtime/CLI or untrusted Codex project config. |
+| VAL-12 | With each MCP capability unavailable in turn—and with the entire server never returning—a terminal-only run uses canonical manual artifacts, retained authoritative results, and multiple non-colliding gate-ID decision records to pause, advance, resume, and reach completion without manufacturing pass/approval/completion. The scenario includes PRD/design approval, at least two phase decisions, one waiver, and commit authorization. A separate recovery run imports/reconciles the complete chain without repeating resolved decisions. |
+| VAL-13 | Provider key/routing sentinels placed in the parent environment are absent from reviewer children and persisted diagnostics. The server opens no listener and emits only MCP protocol traffic on stdout. |
+| VAL-14 | Before release, written Anthropic clarification or a qualified legal determination establishes that the local subscription-authenticated Claude dispatch is permitted. An internal risk acceptance alone does not satisfy this condition; accepting unresolved terms risk requires explicit owner authorization to revise the criterion. API-key/custom-provider fallback requires an explicit PRD scope change. |
+| VAL-15 | Constitution fixtures cover positive, negative, and uncertain `review_trigger` evaluation plus current, missing, stale, and failed `enforced_by` evidence. Matched/uncertain triggers gate; missing/stale/failed evidence never passes. A task-branch constitution edit cannot advance on an approval-shaped decision and must be reverted/removed or handled through base-branch amendment plus a new/migrated task. |
+| VAL-16 | A task with at least two implementation phases proves that `phase-design-<n>` and `phase-impl-<n>` review, supplemental gate-counter, retained decision, rerun, and status evidence use reversible non-colliding paths and that later phases never overwrite earlier evidence. It also proves code cannot start until phase design is workflow-approved as defined in REQ-09. |
+
+Archforge implementation must not begin until VAL-01 through VAL-06 pass in a terminal. VAL-02 is the decisive product validation: if independent review does not reliably improve substantive quality, the architecture's central automation premise must be revisited rather than hidden by more mechanics.
+
+---
+*Created: 2026-07-26*
