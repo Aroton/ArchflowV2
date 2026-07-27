@@ -86,11 +86,15 @@ package-lock.json
 tsconfig.json
 vitest.config.ts
 src/
-  main.ts                         # stdio entry; protocol-only stdout
+  main.ts                         # thin real-process binding; protocol-only stdout
   mcp/
-    server.ts                     # MCP v2 lifecycle and connection context
+    server.ts                     # SDK-free authenticated tool boundary
     tools.ts                      # exactly five registrations
-    sdk-adapter.ts                # beta SDK isolation seam
+    framing.ts                    # strict bounded SDK-free JSONL byte framer
+    session.ts                    # SDK-free lifecycle, routing, IDs, and request records
+    send-queue.ts                 # bounded FIFO and caller-stream write ownership
+    sdk-adapter.ts                # sole beta SDK import; Server/Transport isolation
+    process-runner.ts             # SDK-free termination, diagnostics, and exit arbitration
   local/
     cli.ts                        # archflow-local command surface
     operations.ts                 # shared validation/reconcile/manual operations
@@ -458,20 +462,20 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 
 **Depends on**: Phase 3
 
-**Requirements**: REQ-04, REQ-05, REQ-11, REQ-27, REQ-28, REQ-33
+**Requirements**: REQ-04, REQ-05, REQ-11, REQ-27, REQ-28
 
-**Scope**: Isolate the deprecated low-level SDK `Server` as a documented advanced-use exception wholly inside `src/mcp/sdk-adapter.ts`, starting with a stop-on-failure public-hook compatibility gate. Intercept ingress before SDK validation or identity mutation with method-aware lifecycle and request maps, singleton `2025-11-25` negotiation, alternate-version counter-offer, initialize-cancellation suppression, repeated/concurrent initialization rejection, and exact client-metadata projection/context-mint ordering through direct imports of Phase 3's `connectionContextFactory` and `createInvocationContext` seams. Own external/internal request-ID mapping, normalize numeric `-0` to `0`, treat concurrent `-0`/`0` as duplicate reuse, and route cancellation without fabricated success. Pin pre-SDK `tools/call` precedence for malformed outer calls, unknown names, known malformed arguments, and the three protocol/project/SDK error domains; absent or empty `tools/list` params return the fixed catalogue without `nextCursor`, while any present cursor returns fixed bounded `-32602 Invalid params`. Own stdio through an adapter-owned cancellable `Writable` bridge with scoped close guarantees: after `CLOSING` no new destination write occurs, already accepted caller-stream bytes may flush, SDK-facing listeners are removed without destroying the caller stream, and never-settling or late handlers cannot emit post-close frames. Add `src/main.ts`, process/signal ownership, stdout/stderr purity, and adversarial live fixtures. Stop for architecture review if public hooks cannot prove the contract.
+**Scope**: Isolate the deprecated low-level SDK `Server` as a documented advanced-use exception wholly inside `src/mcp/sdk-adapter.ts`, beginning and ending with live currency/public-hook gates. Repair the SDK-free `src/mcp/server.ts` seam so known-tool arguments are classified before handler availability while unknown-name precedence remains fixed. Split raw strict/bounded JSONL framing, session lifecycle/routing, session-lifetime seen-ID and monotonic internal-ID ownership, universal bounded output FIFO, and process termination into SDK-free modules. Construct the exact low-level server identity/capability/handler/connect sequence behind a public `Transport` facade; make SDK initialize validation transactional, pin singleton `2025-11-25` counter-offer behavior, context-mint ordering, cancellation tombstones, and a closed request/notification/response routing table. Normalize numeric `-0` to `0` and reject every previously seen request ID for the entire session—response/cancellation/rejection “reuse” fixtures prove rejection, never legal reuse. Reject unknown top-level request members and unknown method-parameter keys before SDK stripping. For list/call, preserve permitted `_meta` and legacy `task` only for SDK validation/lifting and exclude them from ArchFlow boundary input. Missing call arguments are SDK-valid and pass unchanged; use the exact surrogate only for a present non-object argument, while unchanged objects reach the boundary as sole semantic authority. Retain authentic boundary outcomes across SDK projection so the facade restores exact ArchFlow protocol codes, and keep protocol/project/SDK domains byte-stable. Bound ingress/output/ID state, pause input under backpressure, expose runtime termination to an SDK-free process runner, and add a thin inert `src/main.ts`. Phase 4 only preserves/projects already-authenticated outcomes; model-result validation remains later. Stop for architecture review on dependency/API drift or any failed public-hook invariant.
 
 **Success Criteria**:
 
-- [ ] A public-hook compatibility gate proves outer validation interception, initialize cancellation, repeated/concurrent guard-before-SDK precedence, `-0`/`0` identity behavior, stream interception, and permanently backpressured teardown; inability to prove any required invariant stops implementation rather than adding a private-SDK patch.
-- [ ] The deprecated low-level `Server` import and every SDK/transport-owned type remain isolated inside the adapter. The adapter consumes Phase 3's frozen SDK-free seam without weakening it, and initialization guards run before any SDK identity or lifecycle mutation.
-- [ ] Unsupported versions receive the alternate-version counter-offer; repeated or concurrent initialization cannot mutate SDK identity; cancellation targeting active `initialize` is ignored without releasing its mapping; startup capture, initialize response, one `initialized` connection mint, and per-call invocation creation occur in the pinned order with exact `{name, version}` projection.
-- [ ] External/internal ID mapping preserves legal string/numeric identities except that numeric `-0` normalizes to `0`; concurrent `-0`/`0` is duplicate numeric reuse. Live response, cancellation, collision, and reuse fixtures cover all beta.5 request-ID cases.
-- [ ] Missing `tools/call` params or missing/non-string name, and unknown names paired with malformed arguments, return fixed bounded SDK-domain `-32602`; known names with missing/non-object/invalid arguments reach the frozen boundary's `CONTRACT_*` classification; unknown names with structurally valid arguments return `TOOL_NOT_FOUND`. Protocol errors, project results, and SDK errors remain distinct and byte-stable.
-- [ ] Post-`READY` `tools/list` accepts absent or empty params and returns the full fixed catalogue without `nextCursor`; any present cursor, including `""`, returns fixed bounded `-32602 Invalid params`, echoes no cursor, and invokes neither catalogue nor tool boundary.
-- [ ] The adapter-owned cancellable `Writable` bridge leaves no owned listener or pending send after close, performs no new destination write after `CLOSING`, allows only caller-stream bytes already accepted before close to flush, and never destroys the caller-owned stream. Never-settling and late handlers, cancellation, signals, backpressure, and close races emit no post-close frame or business side effect.
-- [ ] `src/main.ts` produces a runnable inert stdio server with exactly five listed tools and disabled injected handlers; actual-process and both-Node-version fixtures cover negotiation, list/call/error/cancel races, safe stderr diagnostics, stdout purity, signal shutdown, and handle/listener cleanup without persistence, dispatch, or a tracked release bundle.
+- [ ] Live currency/public API gates run before mutation and immediately before final verification; drift or any failed facade/initialize/projection/teardown invariant stops without dependency mutation or private workaround.
+- [ ] `src/mcp/server.ts` classifies known arguments before handler availability; missing arguments pass unchanged, only present non-object arguments use a surrogate, and object semantics retain one boundary authority across inert and enabled fixtures.
+- [ ] Exact `Server({name:"archflow-mcp",version:"0.0.0"})`, singleton versions, `registerCapabilities({tools:{}})`, two tool handlers, then facade connection produce pinned initialize bytes and transactional malformed-retry/success behavior.
+- [ ] Strict bounded framing, lifetime seen-ID rejection, monotonic non-recycled internal IDs, cancellation tombstones, and the closed initialize/ping/list/call/notification/response table enforce all lifecycle and same-chunk races without unbounded state. “Reuse” fixtures assert rejection after every terminal path.
+- [ ] The exact request/list/call member allowlists reject unknown keys before SDK stripping; permitted `_meta`/legacy `task` are SDK-only inputs; missing/present-non-object/object argument routes reach `CONTRACT_*`, `TOOL_NOT_FOUND`, or `TOOL_DISABLED` exactly. Retained authentic outcomes restore all ArchFlow mappings despite SDK rewriting, while project/SDK/direct/fallback bytes remain distinct and bounded.
+- [ ] The universal capped FIFO separates write admission, callback completion, and backpressure; pauses/resumes ingress, rejects all entries on close, performs no adapter-owned state/output effect after `CLOSING`, quarantines late results, and never destroys caller streams. Injected handlers must honor `AbortSignal`.
+- [ ] The runtime exposes SDK-free termination to the process runner; `src/main.ts` is a thin inert binding with exact stdout, diagnostics, exit, signal, and cleanup behavior.
+- [ ] Focused and live fixtures pass on Node `24.15.0` and `24.18.0` without a new dependency, schema, tracked release output, persistence, dispatch, model-result authority, or REQ-33 completion claim.
 
 ### Phase 5: Offline Bundle and Release Integrity
 
