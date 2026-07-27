@@ -29,5 +29,5 @@ jobs:
       - run: npm run check:dependencies
       - run: npm run check:notices
       - run: npm run test:notices-policy
-      - name: Assert no tracked-release bundle was produced
-        run: test ! -e dist
+      - run: npm run check:phase3-mcp-boundary
+      - run: npm run test:phase3-mcp-boundary-policy

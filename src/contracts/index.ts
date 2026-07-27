@@ -25,6 +25,7 @@ export {
   bindParsedToolCallRequest,
   correlateProjectResult,
   parseToolCall,
+  validateProjectFailureStructure,
   validateProjectResultStructure,
 } from "./mcp-tools.js";
 export type {
@@ -54,4 +55,9 @@ export type {
   WaiverSuccess,
 } from "./mcp-tools.js";
 export type { ConnectionContext, InvocationContext } from "./contexts.js";
-export { createInvocationContext } from "./contexts.js";
+export {
+  assertAuthenticInvocationContext,
+  createInvocationContext,
+  parseClientImplementation,
+  parseTransportRequestId,
+} from "./contexts.js";

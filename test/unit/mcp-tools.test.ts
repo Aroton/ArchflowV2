@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import * as publicContracts from "../../src/contracts/index.js";
+import { createProjectError } from "../../src/contracts/errors.js";
 import { parseSha256Digest } from "../../src/contracts/evidence.js";
-import { bindParsedToolCallRequest, correlateProjectResult, createInternalResultExpectation, parseToolCall, TOOL_DEFINITIONS, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
+import { bindParsedToolCallRequest, correlateProjectResult, createInternalResultExpectation, parseToolCall, TOOL_DEFINITIONS, validateProjectFailureStructure, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
+import { TOOL_NAMES } from "../../src/contracts/tool-names.js";
 
 const digest = parseSha256Digest("a".repeat(64));
 const stateInput = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 2, input_fingerprint: digest, phase_instance: "phase-impl-2", step: "produce", status: "succeeded" } as const;
@@ -33,6 +36,88 @@ describe("correlated MCP tool contracts", () => {
     expect(() => correlateProjectResult({ ...call }, expectation, structural)).toThrow(/authentic/);
   });
 
+  it("authenticates only copied, closed failure results for known tools", () => {
+    const source = {
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("CONTRACT_INVALID", { issue_code: "input-invalid" }),
+    } as const;
+    for (const name of TOOL_NAMES) {
+      const result = validateProjectFailureStructure(name, source);
+      expect(result).not.toBe(source);
+      expect(result).toMatchObject(source);
+      if (result.ok) throw new Error("failure validator minted a success");
+      expect(result.error).not.toBe(source.error);
+      expect(result.error.diagnostic.parameters).not.toBe(source.error.diagnostic.parameters);
+      expect(Object.isFrozen(result)).toBe(true);
+      expect(Object.isFrozen(result.error)).toBe(true);
+      expect(Object.isFrozen(result.error.diagnostic)).toBe(true);
+      expect(Object.isFrozen(result.error.diagnostic.parameters)).toBe(true);
+    }
+    expect(() => validateProjectFailureStructure("archflow_state", { schema_version: "1", ok: true, value: {} })).toThrow();
+    expect(() => validateProjectFailureStructure("archflow_state", { ...source, extra: true })).toThrow();
+    expect(() => validateProjectFailureStructure("not-a-tool" as never, source)).toThrow(/unknown tool/);
+    expect(() => validateProjectFailureStructure("archflow_state", new Map())).toThrow();
+    expect(publicContracts.validateProjectFailureStructure).toBe(validateProjectFailureStructure);
+  });
+
+  it("correlates optional and required diagnostic tool bindings in both structural validators", () => {
+    const call = parseToolCall("archflow_state", stateInput);
+    const neutralContractFailure = {
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("CONTRACT_INVALID", { issue_code: "input-invalid" })
+    } as const;
+    const matchingContractFailure = {
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("CONTRACT_INVALID", { tool: "archflow_state", issue_code: "input-invalid" })
+    } as const;
+    const crossToolContractFailure = {
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("CONTRACT_INVALID", { tool: "archflow_gate", issue_code: "input-invalid" })
+    } as const;
+    const matchingResultFailure = {
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("RESULT_INVALID", { tool: "archflow_state", result_id: "result-1" })
+    } as const;
+    const crossToolResultFailure = {
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("RESULT_INVALID", { tool: "archflow_gate", result_id: "result-1" })
+    } as const;
+
+    for (const candidate of [neutralContractFailure, matchingContractFailure, matchingResultFailure]) {
+      expect(validateProjectFailureStructure("archflow_state", candidate).ok).toBe(false);
+      expect(validateProjectResultStructure(call, candidate).ok).toBe(false);
+    }
+    for (const candidate of [crossToolContractFailure, crossToolResultFailure]) {
+      expect(() => validateProjectFailureStructure("archflow_state", candidate)).toThrow(/tool mismatch/);
+      expect(() => validateProjectResultStructure(call, candidate)).toThrow(/tool mismatch/);
+    }
+    const toolNeutralResultFailure = {
+      schema_version: "1",
+      ok: false,
+      error: { ...matchingResultFailure.error, diagnostic: { ...matchingResultFailure.error.diagnostic, parameters: { result_id: "result-1" } } }
+    } as const;
+    expect(() => validateProjectFailureStructure("archflow_state", toolNeutralResultFailure)).toThrow();
+    expect(() => validateProjectResultStructure(call, toolNeutralResultFailure)).toThrow();
+  });
+
+  it("registers failure authenticity without allowing spread clones or tool substitution", () => {
+    const call = bindParsedToolCallRequest(parseToolCall("archflow_state", stateInput), parseSha256Digest("b".repeat(64)));
+    const success = { path: parseTaskPathClaim("phases/2/result.json"), revision: 3, status: "succeeded" } as const;
+    const expectation = createInternalResultExpectation({ schema_version: "1", tool: "archflow_state", task_id: "task-1", intent_id: "intent-1", input_fingerprint: digest, request_digest: parseSha256Digest("b".repeat(64)), result_id: "result-1", resulting_revision: 3, success });
+    const source = { schema_version: "1", ok: false, error: createProjectError("INTERNAL_ERROR", { correlation_id: "correlation-1" }) } as const;
+    const failure = validateProjectFailureStructure("archflow_state", source);
+    expect(correlateProjectResult(call, expectation, failure)).toBe(failure);
+    expect(() => correlateProjectResult(call, expectation, { ...failure } as never)).toThrow(/authentic/);
+    const substituted = validateProjectFailureStructure("archflow_counter_review", source);
+    expect(() => correlateProjectResult(call, expectation, substituted as never)).toThrow(/tool mismatch/);
+  });
+
   it("uses the authoritative exact current-evidence tuple parser for gates", () => {
     const self = { role: "self-review", evidence_digest: "1".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" };
     const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
@@ -41,6 +126,117 @@ describe("correlated MCP tool contracts", () => {
     expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [counter, self] } })).toThrow();
     expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [self, { ...counter, evidence_digest: self.evidence_digest }] } })).toThrow();
     expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [self, { ...counter, reviewer_family: "claude" }] } })).toThrow();
+  });
+
+  it("revalidates gate success decisions against the authentic call context", () => {
+    const ruleA = { rule_id: "Rule:A", rule_version: 1 } as const;
+    const ruleB = { rule_id: "Rule:B", rule_version: 1 } as const;
+    const self = { role: "self-review", evidence_digest: "1".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" } as const;
+    const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
+    const commonInput = {
+      schema_version: "1",
+      task_id: "Task:1",
+      intent_id: "Intent:1",
+      expected_revision: 0,
+      input_fingerprint: digest,
+      phase_instance: "phase-impl-2",
+      summary: "Review",
+      subject_digest: digest,
+      current_evidence: { set_digest: "3".repeat(64), slots: [self, counter] }
+    } as const;
+    const humanProvenance = {
+      schema_version: "1",
+      actor_class: "human",
+      assurance: "declared-local-trace",
+      channel: "archflow-local",
+      decision_event_id: "Decision:1",
+      helper_invocation_id: "Helper:1",
+      recorded_at: "2026-07-27T12:00:00.000Z"
+    } as const;
+    const envelope = (kind: string, payload: Readonly<Record<string, unknown>>) => ({
+      schema_version: "1",
+      gate_id: "Gate:1",
+      task_id: commonInput.task_id,
+      phase_instance: commonInput.phase_instance,
+      subject_digest: commonInput.subject_digest,
+      context_digest: "4".repeat(64),
+      human_provenance: humanProvenance,
+      kind,
+      payload
+    });
+    const result = (kind: string, payload: Readonly<Record<string, unknown>>) => ({
+      schema_version: "1",
+      ok: true,
+      value: { kind, decision: envelope(kind, payload), notes: payload.reason, revision: 1 }
+    });
+
+    const reviewCall = parseToolCall("archflow_gate", {
+      ...commonInput,
+      kind: "review-trigger",
+      context: {
+        matched_rules: [ruleA, ruleB],
+        uncertain_rules: [],
+        eligible_waiver_rules: [ruleA],
+        waiver_scope: { operation: "review-trigger", boundary: "subject" }
+      }
+    });
+    expect(validateProjectResultStructure(reviewCall, result("review-trigger", {
+      decision: "waiver-requested", reason: "Eligible exception", rule: ruleA, rationale: "Temporary"
+    })).ok).toBe(true);
+    expect(() => validateProjectResultStructure(reviewCall, result("review-trigger", {
+      decision: "waiver-requested", reason: "Ineligible exception", rule: ruleB, rationale: "Temporary"
+    }))).toThrow(/eligible/);
+
+    const adjudicationCall = parseToolCall("archflow_gate", {
+      ...commonInput,
+      kind: "adjudication-failure",
+      context: {
+        constitution: "fail",
+        failed_rules: [ruleA, ruleB],
+        uncertain_rules: [],
+        eligible_waiver_rules: [],
+        waiver_scope: { operation: "adjudication-failure", boundary: "phase" }
+      }
+    });
+    const validResolutions = [
+      { rule: ruleA, resolution: "Accepted mitigation A" },
+      { rule: ruleB, resolution: "Accepted mitigation B" }
+    ] as const;
+    expect(validateProjectResultStructure(adjudicationCall, result("adjudication-failure", {
+      decision: "approve", reason: "Resolved", resolutions: validResolutions
+    })).ok).toBe(true);
+    expect(() => validateProjectResultStructure(adjudicationCall, result("adjudication-failure", {
+      decision: "approve", reason: "Incomplete", resolutions: validResolutions.slice(0, 1)
+    }))).toThrow(/resolutions/);
+    expect(() => validateProjectResultStructure(adjudicationCall, result("adjudication-failure", {
+      decision: "approve", reason: "Unsorted", resolutions: [...validResolutions].reverse()
+    }))).toThrow(/resolutions/);
+
+    const authority = {
+      link_digest: "5".repeat(64),
+      purpose: "restore-adoption",
+      proposed_generation_digest: "6".repeat(64),
+      changed_input_fingerprint: "7".repeat(64)
+    } as const;
+    const restoreCall = parseToolCall("archflow_gate", {
+      ...commonInput,
+      kind: "restore-collision",
+      context: {
+        path: "task/file.md",
+        recorded_generation_digest: "8".repeat(64),
+        current_generation_digest: "9".repeat(64),
+        adoption_candidate: authority
+      }
+    });
+    expect(validateProjectResultStructure(restoreCall, result("restore-collision", {
+      decision: "adopt-as-new-generation", reason: "Adopt", adoption_authority: authority, rationale: "Reviewed"
+    })).ok).toBe(true);
+    expect(() => validateProjectResultStructure(restoreCall, result("restore-collision", {
+      decision: "adopt-as-new-generation",
+      reason: "Adopt mismatched",
+      adoption_authority: { ...authority, link_digest: "a".repeat(64) },
+      rationale: "Reviewed"
+    }))).toThrow(/authority/);
   });
 
   it("enforces waiver origin identity and canonical UTC-millisecond provenance", () => {

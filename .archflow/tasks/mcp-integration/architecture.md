@@ -767,7 +767,7 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 |-------|------|--------|
 | 1 | Contracts, Assets, and Package Scaffold | COMPLETE (2026-07-27) |
 | 2 | Review Evidence and Contract Authority | COMPLETE (2026-07-27) |
-| 3 | MCP Contract Boundary and Dependency Admission | Not Started |
+| 3 | MCP Contract Boundary and Dependency Admission | COMPLETE (2026-07-27) |
 | 4 | Guarded MCP Runtime and SDK Compatibility | Not Started |
 | 5 | Offline Bundle and Release Integrity | Not Started |
 | 6 | Repository Identity, Paths, Schemas, and Canonical Digests | Not Started |

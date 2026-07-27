@@ -422,7 +422,7 @@
           "waiver_gate_id": { "$ref": "#/$defs/id" },
           "task_id": { "$ref": "#/$defs/id" },
           "rule_id": { "$ref": "#/$defs/id" },
-          "rule_version": { "type": "integer", "minimum": 1 },
+          "rule_version": { "$ref": "#/$defs/rule/properties/rule_version" },
           "subject_digest": { "$ref": "#/$defs/digest" },
           "current_evidence_set_digest": { "$ref": "#/$defs/digest" },
           "scope": { "$ref": "#/$defs/scope" },

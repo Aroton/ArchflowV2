@@ -58,6 +58,14 @@ for (const [path, metadata] of Object.entries(lock.packages ?? {})) {
 const recordedSpdx = new Set(
   [...inventory.matchAll(/^\| `([^`]+)` \| `([^`]+)` \|$/gm)].map((match) => `${match[1]} | ${match[2]}`)
 );
+const requiredMcpRoots = new Set([
+  "@modelcontextprotocol/core@2.0.0-beta.5 | MIT",
+  "@modelcontextprotocol/server@2.0.0-beta.5 | MIT"
+]);
+for (const entry of requiredMcpRoots) {
+  if (!expectedSpdx.has(entry)) failures.push(`missing exact MCP root from lock: ${entry}`);
+  if (!recordedSpdx.has(entry)) failures.push(`missing exact MCP root notice entry: ${entry}`);
+}
 for (const entry of [...expectedSpdx].filter((value) => !recordedSpdx.has(value)).sort()) {
   failures.push(`missing SPDX inventory entry: ${entry}`);
 }

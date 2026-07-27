@@ -1,9 +1,10 @@
 # Phase 3: MCP Contract Boundary and Dependency Admission
 
-**Status**: DESIGNED
+**Status**: COMPLETE
 **Task**: mcp-integration
 **Goal**: Admit the exact MCP dependency surface and freeze a complete SDK-free five-tool catalogue and authenticated handler/error boundary for a later transport owner.
 **Requirements**: REQ-04, REQ-05, REQ-11, REQ-27, REQ-33
+**Implemented**: 2026-07-27
 
 ## Context
 
@@ -138,9 +139,11 @@ A valid handler is called at most once and its `unknown` return is structurally 
 | Modify | `scripts/check-dependency-policy.mjs`, `scripts/check-notices.mjs` | Enforce exact root server/core identities, their root package-declared licenses through existing allowed-license policy, and absence of later-phase dependencies. |
 | Modify | `THIRD_PARTY_NOTICES.md`, `docs/dependency-upgrades.md` | Record both root package entries, protocol/public-surface currency evidence, and Node compatibility versus production patch guidance. |
 | Modify | `src/contracts/mcp-tools.ts` | Add the failure-only structural validator without granting success authenticity. |
+| Modify | `src/contracts/schemas/v1/mcp-tools.schema.json` | Keep advertised waiver-success rule versions aligned with the shared positive safe-integer contract. |
 | Modify | `src/contracts/contexts.ts`, `src/contracts/index.ts` | Add shared request-ID/client schemas, parsers, and invocation assertion while keeping the connection factory direct-only and the barrel contract-only. |
 | Create | `src/mcp/tools.ts` | Own and export the catalogue descriptor type and deterministic deeply frozen five-tool catalogue as the supported direct Phase 4 import. |
 | Create | `src/mcp/server.ts` | Export the frozen authenticated SDK-free handler/error/outcome boundary and exact input classification. |
+| Create | `scripts/check-phase-3-mcp-boundary.mjs`, `scripts/test-phase-3-mcp-boundary-policy.mjs` | Enforce and mutation-test the temporary Phase 3 no-SDK/no-runtime/no-release boundary. |
 | Modify | `test/unit/mcp-tools.test.ts`, `test/contracts/mcp-contract-agreement.test.ts`, `test/unit/contexts.test.ts` | Prove failure-only construction, shared parser/mint agreement, exact safe request IDs, full Implementation projection, authenticity, and freezing. |
 | Create | `test/unit/mcp-server.test.ts`, `test/contracts/mcp-advertised-schema.test.ts`, `test/fixtures/mcp/{catalogue,boundary}/**` | Exercise boundary behavior and catalogue portability/public-root agreement without a live transport. |
 | Modify | `.github/workflows/ci.yml` | Run focused checks on the Node matrix and enforce the Phase 3 no-runtime boundary. |

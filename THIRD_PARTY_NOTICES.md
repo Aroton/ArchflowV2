@@ -33,6 +33,8 @@ This inventory is generated from and checked against `package-lock.json`. Option
 | `@esbuild/win32-ia32@0.28.1` | `MIT` |
 | `@esbuild/win32-x64@0.28.1` | `MIT` |
 | `@jridgewell/sourcemap-codec@1.5.5` | `MIT` |
+| `@modelcontextprotocol/core@2.0.0-beta.5` | `MIT` |
+| `@modelcontextprotocol/server@2.0.0-beta.5` | `MIT` |
 | `@rollup/rollup-android-arm-eabi@4.62.3` | `MIT` |
 | `@rollup/rollup-android-arm64@4.62.3` | `MIT` |
 | `@rollup/rollup-darwin-arm64@4.62.3` | `MIT` |

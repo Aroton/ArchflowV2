@@ -1,11 +1,30 @@
 import { readFile } from "node:fs/promises";
+import { specTypeSchemas } from "@modelcontextprotocol/server";
 import { describe, expect, it } from "vitest";
-import { parseToolCall, TOOL_DEFINITIONS } from "../../src/contracts/mcp-tools.js";
+import { parseTransportRequestId } from "../../src/contracts/contexts.js";
+import { parseToolCall, TOOL_DEFINITIONS, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
 import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
 
 const load = async (path: string) => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8")) as object;
 
 describe("MCP contract schema agreement", () => {
+  it("agrees with the public SDK RequestId schema across safe boundaries", () => {
+    const admitted = ["", "arbitrary \n string \u0000", -0, -1, Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER] as const;
+    const rejected: readonly unknown[] = [Number.MIN_SAFE_INTEGER - 1, Number.MAX_SAFE_INTEGER + 1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, null, true, {}, []];
+    for (const candidate of admitted) {
+      const sdkResult = specTypeSchemas.RequestId["~standard"].validate(candidate);
+      if (sdkResult.issues !== undefined) throw new Error("SDK RequestId rejected an admitted boundary fixture");
+      expect(Object.is(sdkResult.value, candidate)).toBe(true);
+      expect(Object.is(parseTransportRequestId(candidate), candidate)).toBe(true);
+    }
+    for (const candidate of rejected) {
+      const sdkResult = specTypeSchemas.RequestId["~standard"].validate(candidate);
+      expect(sdkResult.issues).toBeDefined();
+      expect(() => parseTransportRequestId(candidate)).toThrow();
+    }
+  });
+
   it("compiles every exact tool input fragment and agrees on closed state fixtures", async () => {
     const mcp = await load("../../src/contracts/schemas/v1/mcp-tools.schema.json") as { $defs: Record<string, { input: object }> };
     const references = [await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json")];
@@ -17,6 +36,32 @@ describe("MCP contract schema agreement", () => {
     expect(parseToolCall("archflow_state", valid).name).toBe("archflow_state");
     expect(() => parseToolCall("archflow_state", invalid)).toThrow();
     expect(Object.values(TOOL_DEFINITIONS).every((definition) => definition.input_schema_id.startsWith("https://archflow.dev/schemas/v1/mcp-tools#/$defs/"))).toBe(true);
+  });
+
+  it("keeps waiver success rule versions within the shared positive safe-integer bounds", async () => {
+    const mcp = await load("../../src/contracts/schemas/v1/mcp-tools.schema.json") as { $defs: Record<string, { result?: object }> };
+    const references = [await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json")];
+    const normative = createJsonSchemaValidator({ $schema: "https://json-schema.org/draft/2020-12/schema", ...mcp.$defs.archflow_waiver!.result, $defs: mcp.$defs }, references);
+    const advertisedSchema = ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === "archflow_waiver")!.outputSchema;
+    const advertised = createJsonSchemaValidator(advertisedSchema);
+    const digest = (character: string) => character.repeat(64);
+    const provenance = { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "Decision:1", helper_invocation_id: "Helper:1", recorded_at: "2026-07-27T12:00:00.000Z" };
+    const scope = { operation: "review-trigger", boundary: "subject" } as const;
+    const rawCall = (ruleVersion: number) => ({ schema_version: "1", task_id: "Task:1", intent_id: "Intent:1", expected_revision: 0, input_fingerprint: digest("a"), origin: { origin_gate_id: "Gate:1", origin_decision_digest: digest("1"), origin_context_digest: digest("2"), task_id: "Task:1", phase_instance: "phase-impl-3", subject_digest: digest("3"), current_evidence_set_digest: digest("4"), rule: { rule_id: "Rule:1", rule_version: ruleVersion }, scope }, rationale: "Needed" });
+    const output = (ruleVersion: number) => ({ schema_version: "1", ok: true, value: { origin_gate_id: "Gate:1", waiver_gate_id: "Gate:2", task_id: "Task:1", rule_id: "Rule:1", rule_version: ruleVersion, subject_digest: digest("3"), current_evidence_set_digest: digest("4"), scope, human_provenance: provenance, granted: false, notes: "Denied", revision: 1 } });
+
+    for (const boundary of [1, Number.MAX_SAFE_INTEGER]) {
+      const candidate = output(boundary);
+      expect(normative.validate(candidate), `normative ${boundary}`).toBe(true);
+      expect(advertised.validate(candidate), `advertised ${boundary}`).toBe(true);
+      expect(validateProjectResultStructure(parseToolCall("archflow_waiver", rawCall(boundary)), candidate).ok, `runtime ${boundary}`).toBe(true);
+    }
+    for (const adjacent of [0, Number.MAX_SAFE_INTEGER + 1]) {
+      const candidate = output(adjacent);
+      expect(normative.validate(candidate), `normative ${adjacent}`).toBe(false);
+      expect(advertised.validate(candidate), `advertised ${adjacent}`).toBe(false);
+      expect(() => validateProjectResultStructure(parseToolCall("archflow_waiver", rawCall(1)), candidate), `runtime ${adjacent}`).toThrow();
+    }
   });
 
   it("compiles the closed correlated result-expectation union", async () => {

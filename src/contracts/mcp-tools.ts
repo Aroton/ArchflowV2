@@ -3,7 +3,7 @@ import { z } from "zod";
 import { CONSTITUTION_RESULTS, DRIFT_RESULTS, type ConstitutionResult, type DriftResult } from "./adjudication.js";
 import { parseProjectError, type ProjectResult } from "./errors.js";
 import type { Sha256Digest } from "./evidence.js";
-import { GATE_KINDS, humanDecisionProvenanceV1Schema, parseGateContext, parseGateDecisionEnvelope, type GateContext, type GateDecisionEnvelope, type GateKind, type HumanDecisionProvenance, type RuleVersionRef, type WaiverOriginRef, type WaiverScope } from "./gates.js";
+import { GATE_KINDS, humanDecisionProvenanceV1Schema, parseGateContext, parseGateDecisionEnvelope, validateGateDecision, type GateContext, type GateDecisionEnvelope, type GateKind, type HumanDecisionProvenance, type RuleVersionRef, type WaiverOriginRef, type WaiverScope } from "./gates.js";
 import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { taskPathClaimV1Schema, type TaskPathClaim } from "./path-claims.js";
@@ -82,12 +82,47 @@ const successSchemas = {
 function successFor<K extends ToolName>(call: Extract<ParsedToolCall, { name: K }>, value: unknown): ToolSuccess<K> {
   const parsed = successSchemas[call.name].parse(value) as ToolSuccess<K>;
   if (call.name === "archflow_state" && (parsed as StateSuccess).status !== (call.input as ParsedToolInput<"archflow_state">).status) throw new TypeError("state status mismatch");
-  if (call.name === "archflow_gate") { const input = call.input as ParsedToolInput<"archflow_gate">; const result = parsed as GateSuccess; const decision = parseGateDecisionEnvelope(result.decision); if (result.kind !== input.kind || decision.kind !== input.kind || decision.task_id !== input.task_id || decision.phase_instance !== input.phase_instance || decision.subject_digest !== input.subject_digest || result.notes !== decision.payload.reason) throw new TypeError("gate result mismatch"); }
+  if (call.name === "archflow_gate") {
+    const input = call.input as ParsedToolInput<"archflow_gate">;
+    const result = parsed as GateSuccess;
+    const decision = parseGateDecisionEnvelope(result.decision);
+    if (result.kind !== input.kind || decision.kind !== input.kind || decision.task_id !== input.task_id || decision.phase_instance !== input.phase_instance || decision.subject_digest !== input.subject_digest || result.notes !== decision.payload.reason) throw new TypeError("gate result mismatch");
+    validateGateDecision(input.kind, input.context, decision.payload);
+  }
   if (call.name === "archflow_waiver") { const input = call.input as ParsedToolInput<"archflow_waiver">; const result = parsed as WaiverSuccess; if (result.origin_gate_id !== input.origin.origin_gate_id || result.task_id !== input.task_id || result.rule_id !== input.origin.rule.rule_id || result.rule_version !== input.origin.rule.rule_version || result.subject_digest !== input.origin.subject_digest || result.current_evidence_set_digest !== input.origin.current_evidence_set_digest || !isDeepStrictEqual(result.scope, input.origin.scope)) throw new TypeError("waiver result mismatch"); }
   return parsed;
 }
 export type StructurallyValidProjectResult<K extends ToolName> = ProjectResult<ToolSuccess<K>> & { readonly [structuralResultBrand]: K };
-export function validateProjectResultStructure<K extends ToolName>(call: Extract<ParsedToolCall, { name: K }>, value: unknown): StructurallyValidProjectResult<K> { if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required"); assertPlainJson(value, `${call.name} result`); const base = z.object({ schema_version: z.literal("1"), ok: z.boolean() }).passthrough().parse(value); const result: ProjectResult<ToolSuccess<K>> = base.ok ? (() => { const e = z.object({ schema_version: z.literal("1"), ok: z.literal(true), value: z.unknown() }).strict().parse(value); return { ...e, value: successFor(call, e.value) }; })() : (() => { const e = z.object({ schema_version: z.literal("1"), ok: z.literal(false), error: z.unknown() }).strict().parse(value); return { ...e, error: parseProjectError(e.error) }; })(); const branded = Object.freeze({ ...result, [structuralResultBrand]: call.name }) as StructurallyValidProjectResult<K>; structuralResults.add(branded); return branded; }
+function projectFailureForTool<K extends ToolName>(
+  name: K,
+  value: unknown,
+  label: string
+): Extract<ProjectResult<ToolSuccess<K>>, { readonly ok: false }> {
+  assertPlainJson(value, label);
+  const failure = z.object({ schema_version: z.literal("1"), ok: z.literal(false), error: z.unknown() }).strict().parse(value);
+  const error = parseProjectError(failure.error);
+  const parameters = error.diagnostic.parameters;
+  if (Object.hasOwn(parameters, "tool") && Reflect.get(parameters, "tool") !== name) {
+    throw new TypeError("project failure tool mismatch");
+  }
+  return { schema_version: "1", ok: false, error };
+}
+export function validateProjectResultStructure<K extends ToolName>(call: Extract<ParsedToolCall, { name: K }>, value: unknown): StructurallyValidProjectResult<K> { if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required"); assertPlainJson(value, `${call.name} result`); const base = z.object({ schema_version: z.literal("1"), ok: z.boolean() }).passthrough().parse(value); const result: ProjectResult<ToolSuccess<K>> = base.ok ? (() => { const e = z.object({ schema_version: z.literal("1"), ok: z.literal(true), value: z.unknown() }).strict().parse(value); return { ...e, value: successFor(call, e.value) }; })() : projectFailureForTool(call.name, value, `${call.name} result`); const branded = Object.freeze({ ...result, [structuralResultBrand]: call.name }) as StructurallyValidProjectResult<K>; structuralResults.add(branded); return branded; }
+export function validateProjectFailureStructure<K extends ToolName>(name: K, value: unknown): StructurallyValidProjectResult<K> {
+  if (!(TOOL_NAMES as readonly string[]).includes(name)) throw new TypeError("unknown tool");
+  const failure = projectFailureForTool(name, value, `${name} failure result`);
+  const error = structuredClone(failure.error) as typeof failure.error;
+  const freeze = (candidate: unknown): void => {
+    if (candidate !== null && typeof candidate === "object") {
+      for (const nested of Object.values(candidate)) freeze(nested);
+      Object.freeze(candidate);
+    }
+  };
+  freeze(error);
+  const branded = Object.freeze({ schema_version: "1", ok: false, error, [structuralResultBrand]: name }) as StructurallyValidProjectResult<K>;
+  structuralResults.add(branded);
+  return branded;
+}
 export type ResultExpectationDataByTool = { readonly [P in ToolName]: ResultIdentityPayload<P> };
 export type ResultExpectation<K extends ToolName> = ResultExpectationDataByTool[K] & { readonly [resultExpectationBrand]: K };
 export function createInternalResultExpectation<K extends ToolName>(value: ResultIdentityPayload<K>): ResultExpectation<K> { assertPlainJson(value, "result expectation"); const base = z.object({ schema_version: z.literal("1"), tool: z.enum(TOOL_NAMES), task_id: safeId, intent_id: safeId, input_fingerprint: digest, request_digest: digest, result_id: safeId, resulting_revision: safeInteger, success: z.unknown() }).strict().parse(value); const success = successSchemas[base.tool].parse(base.success) as ToolSuccess<K>; if (base.resulting_revision !== success.revision) throw new TypeError("expectation resulting revision must equal success revision"); const expectation = Object.assign({}, base, { success }) as unknown as ResultExpectation<K>; Object.defineProperty(expectation, resultExpectationBrand, { value: value.tool, enumerable: false, writable: false, configurable: false }); Object.freeze(expectation); resultExpectations.add(expectation); return expectation; }
