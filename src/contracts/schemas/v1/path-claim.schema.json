@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:path-claim",
+  "type": "string",
+  "minLength": 1,
+  "x-archflow-max-utf8-bytes": 1024,
+  "pattern": "^(?!/)(?![A-Za-z]:)(?!//)(?!.*\\\\)(?!.*[\\u0000-\\u001F\\u007F-\\u009F])(?!\\.\\.?(?:/|$))(?!.*\\/\\.\\.?(?:/|$))(?!.*//).+$"
+}

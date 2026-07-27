@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:protocol-error",
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9.-]{1,64}$"
+    },
+    "tool": {
+      "enum": [
+        "archflow_state",
+        "archflow_counter_review",
+        "archflow_adjudicate",
+        "archflow_gate",
+        "archflow_waiver"
+      ]
+    },
+    "base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "code": {},
+        "owner": {
+          "const": "protocol"
+        },
+        "retryable": {
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "properties": {
+            "template_id": {},
+            "parameters": {}
+          }
+        },
+        "next_action": {}
+      }
+    },
+    "notFound": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "TOOL_NOT_FOUND"
+            },
+            "diagnostic": {
+              "properties": {
+                "template_id": {
+                  "const": "TOOL_NOT_FOUND"
+                },
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "tool_name_digest"
+                  ],
+                  "properties": {
+                    "tool_name_digest": {
+                      "$ref": "#/$defs/digest"
+                    }
+                  }
+                }
+              },
+              "type": "object"
+            },
+            "next_action": {
+              "const": "call-advertised-tool"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    "disabled": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "TOOL_DISABLED"
+            },
+            "diagnostic": {
+              "properties": {
+                "template_id": {
+                  "const": "TOOL_DISABLED"
+                },
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "tool",
+                    "lifecycle_state"
+                  ],
+                  "properties": {
+                    "tool": {
+                      "$ref": "#/$defs/tool"
+                    },
+                    "lifecycle_state": {
+                      "$ref": "#/$defs/code"
+                    }
+                  }
+                }
+              },
+              "type": "object"
+            },
+            "next_action": {
+              "const": "wait-for-tool-enable"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    "unsupported": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "UNSUPPORTED_PROTOCOL"
+            },
+            "diagnostic": {
+              "properties": {
+                "template_id": {
+                  "const": "UNSUPPORTED_PROTOCOL"
+                },
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "offered_version",
+                    "supported_version"
+                  ],
+                  "properties": {
+                    "offered_version": {
+                      "$ref": "#/$defs/version"
+                    },
+                    "supported_version": {
+                      "$ref": "#/$defs/version"
+                    }
+                  }
+                }
+              },
+              "type": "object"
+            },
+            "next_action": {
+              "const": "negotiate-supported-protocol"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    "repeated": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "INITIALIZATION_REPEATED"
+            },
+            "diagnostic": {
+              "properties": {
+                "template_id": {
+                  "const": "INITIALIZATION_REPEATED"
+                },
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "connection_id"
+                  ],
+                  "properties": {
+                    "connection_id": {
+                      "$ref": "#/$defs/id"
+                    }
+                  }
+                }
+              },
+              "type": "object"
+            },
+            "next_action": {
+              "const": "open-new-connection"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/notFound"
+    },
+    {
+      "$ref": "#/$defs/disabled"
+    },
+    {
+      "$ref": "#/$defs/unsupported"
+    },
+    {
+      "$ref": "#/$defs/repeated"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:evidence-reference",
+  "oneOf": [
+    { "$ref": "#/$defs/review" },
+    { "$ref": "#/$defs/adjudication" }
+  ],
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "review": { "type": "object", "additionalProperties": false, "required": ["evidence_digest", "evidence"], "properties": { "evidence_digest": { "$ref": "#/$defs/digest" }, "evidence": { "$ref": "urn:archflow:schema:v1:review-evidence" } } },
+    "adjudication": { "type": "object", "additionalProperties": false, "required": ["evidence_digest", "evidence"], "properties": { "evidence_digest": { "$ref": "#/$defs/digest" }, "evidence": { "$ref": "urn:archflow:schema:v1:adjudication-evidence" } } }
+  }
+}

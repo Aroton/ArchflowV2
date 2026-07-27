@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:review-evidence",
+  "oneOf": [
+    { "$ref": "#/$defs/agentDeclared" },
+    { "$ref": "#/$defs/serverAttested" },
+    { "$ref": "#/$defs/degraded" }
+  ],
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
+    "nonBlank": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "familyOrUnknown": { "enum": ["claude", "codex", "unknown"] },
+    "effortOrUnknown": { "enum": ["low", "medium", "high", "xhigh", "max", "ultra", "unknown"] },
+    "reviewProperties": {
+      "type": "object",
+      "x-archflow-review-summary": true,
+      "required": ["schema_version", "task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family", "findings", "matched_rule_versions", "verdict", "blocking_count", "model_family", "model", "effort"],
+      "properties": {
+        "schema_version": { "const": "1" }, "task_id": { "$ref": "#/$defs/id" }, "phase_instance": { "type": "string", "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" }, "step": { "enum": ["self_review", "counter_review"] }, "role": { "enum": ["self-review", "counter-review", "gate-counter-review"] },
+        "subject_digest": { "$ref": "#/$defs/digest" }, "input_fingerprint": { "$ref": "#/$defs/digest" }, "rubric_digest": { "$ref": "#/$defs/digest" }, "producer_family": { "enum": ["claude", "codex"] },
+        "findings": { "type": "array", "x-archflow-unique-by": "finding_id", "items": { "type": "object", "additionalProperties": false, "required": ["finding_id", "severity", "blocking", "summary", "evidence", "suggested_resolution"], "properties": { "finding_id": { "$ref": "#/$defs/id" }, "severity": { "enum": ["blocker", "major", "minor"] }, "blocking": { "type": "boolean" }, "summary": { "$ref": "#/$defs/nonBlank" }, "evidence": { "$ref": "#/$defs/nonBlank" }, "suggested_resolution": { "$ref": "#/$defs/nonBlank" } }, "allOf": [{ "if": { "properties": { "severity": { "const": "blocker" } }, "required": ["severity"] }, "then": { "properties": { "blocking": { "const": true } } }, "else": { "properties": { "blocking": { "const": false } } } }] } },
+        "matched_rule_versions": { "type": "array", "uniqueItems": true, "items": { "type": "object", "additionalProperties": false, "required": ["rule_id", "rule_version"], "properties": { "rule_id": { "$ref": "#/$defs/id" }, "rule_version": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 } } } },
+        "verdict": { "enum": ["pass", "advisory", "fail"] }, "blocking_count": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "model_family": { "$ref": "#/$defs/familyOrUnknown" }, "model": { "$ref": "#/$defs/nonBlank" }, "effort": { "$ref": "#/$defs/effortOrUnknown" }
+      },
+      "allOf": [
+        { "if": { "properties": { "role": { "const": "self-review" } }, "required": ["role"] }, "then": { "properties": { "step": { "const": "self_review" } } }, "else": { "properties": { "step": { "const": "counter_review" } } } }
+      ]
+    },
+    "agentDeclared": { "type": "object", "unevaluatedProperties": false, "allOf": [{ "$ref": "#/$defs/reviewProperties" }, { "type": "object", "required": ["assurance"], "properties": { "assurance": { "const": "agent-declared" } } }] },
+    "degraded": { "type": "object", "unevaluatedProperties": false, "allOf": [{ "$ref": "#/$defs/reviewProperties" }, { "type": "object", "required": ["assurance", "reason"], "properties": { "assurance": { "const": "degraded" }, "reason": { "$ref": "#/$defs/nonBlank" } } }] },
+    "serverAttested": { "type": "object", "unevaluatedProperties": false, "allOf": [{ "$ref": "#/$defs/reviewProperties" }, { "type": "object", "required": ["assurance", "adapter", "cli_version", "invocation_id", "envelope_input_digest", "observed_output_digest", "result_id"], "properties": { "assurance": { "const": "server-attested" }, "adapter": { "enum": ["claude-cli", "codex-cli"] }, "cli_version": { "$ref": "#/$defs/nonBlank" }, "model_family": { "enum": ["claude", "codex"] }, "effort": { "enum": ["low", "medium", "high", "xhigh", "max", "ultra"] }, "invocation_id": { "$ref": "#/$defs/id" }, "envelope_input_digest": { "$ref": "#/$defs/digest" }, "observed_output_digest": { "$ref": "#/$defs/digest" }, "result_id": { "$ref": "#/$defs/id" } }, "not": { "properties": { "role": { "const": "self-review" } }, "required": ["role"] }, "allOf": [{ "if": { "properties": { "producer_family": { "const": "claude" } }, "required": ["producer_family"] }, "then": { "properties": { "model_family": { "const": "codex" } } }, "else": { "properties": { "model_family": { "const": "claude" } } } }] }] }
+  }
+}

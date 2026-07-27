@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:supplemental-review",
+  "type": "object",
+  "x-archflow-supplemental-semantics": true,
+  "oneOf": [
+    { "$ref": "#/$defs/decline" },
+    { "$ref": "#/$defs/ingest" },
+    { "$ref": "#/$defs/noChange" },
+    { "$ref": "#/$defs/supersede" }
+  ],
+  "$defs": {
+    "id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" },
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "phase": {
+      "type": "string",
+      "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+    },
+    "family": { "enum": ["claude", "codex"] },
+    "nonBlank": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prior_gate_id",
+        "task_id",
+        "phase_instance",
+        "subject_digest",
+        "input_fingerprint"
+      ],
+      "properties": {
+        "prior_gate_id": { "$ref": "#/$defs/id" },
+        "task_id": { "$ref": "#/$defs/id" },
+        "phase_instance": { "$ref": "#/$defs/phase" },
+        "subject_digest": { "$ref": "#/$defs/digest" },
+        "input_fingerprint": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "evidence_digest",
+        "assurance",
+        "producer_family",
+        "reviewer_family",
+        "independence",
+        "gate_id"
+      ],
+      "properties": {
+        "role": { "const": "gate-counter-review" },
+        "evidence_digest": { "$ref": "#/$defs/digest" },
+        "assurance": { "enum": ["server-attested", "degraded"] },
+        "producer_family": { "$ref": "#/$defs/family" },
+        "reviewer_family": { "$ref": "#/$defs/family" },
+        "independence": { "const": "opposite-family" },
+        "gate_id": { "$ref": "#/$defs/id" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "producer_family": { "const": "claude" },
+            "reviewer_family": { "const": "codex" }
+          }
+        },
+        {
+          "properties": {
+            "producer_family": { "const": "codex" },
+            "reviewer_family": { "const": "claude" }
+          }
+        }
+      ]
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prior_gate_id",
+        "task_id",
+        "phase_instance",
+        "subject_digest",
+        "input_fingerprint",
+        "evidence_slot"
+      ],
+      "properties": {
+        "prior_gate_id": { "$ref": "#/$defs/id" },
+        "task_id": { "$ref": "#/$defs/id" },
+        "phase_instance": { "$ref": "#/$defs/phase" },
+        "subject_digest": { "$ref": "#/$defs/digest" },
+        "input_fingerprint": { "$ref": "#/$defs/digest" },
+        "evidence_slot": { "$ref": "#/$defs/slot" }
+      }
+    },
+    "decline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "gate", "reason"],
+      "properties": {
+        "action": { "const": "decline" },
+        "gate": { "$ref": "#/$defs/gate" },
+        "reason": { "$ref": "#/$defs/nonBlank" }
+      }
+    },
+    "ingest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "review", "reason"],
+      "properties": {
+        "action": { "const": "ingest" },
+        "review": { "$ref": "#/$defs/review" },
+        "reason": { "$ref": "#/$defs/nonBlank" }
+      }
+    },
+    "noChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "review", "triage_digest", "reason"],
+      "properties": {
+        "action": { "const": "triage-no-change" },
+        "review": { "$ref": "#/$defs/review" },
+        "triage_digest": { "$ref": "#/$defs/digest" },
+        "reason": { "$ref": "#/$defs/nonBlank" }
+      }
+    },
+    "supersede": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "review",
+        "accepted_triage_digest",
+        "old_subject_digest",
+        "new_subject_digest",
+        "reason"
+      ],
+      "properties": {
+        "action": { "const": "supersede" },
+        "review": { "$ref": "#/$defs/review" },
+        "accepted_triage_digest": { "$ref": "#/$defs/digest" },
+        "old_subject_digest": { "$ref": "#/$defs/digest" },
+        "new_subject_digest": { "$ref": "#/$defs/digest" },
+        "reason": { "$ref": "#/$defs/nonBlank" }
+      }
+    }
+  }
+}

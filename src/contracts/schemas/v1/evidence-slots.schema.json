@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:evidence-slots",
+  "oneOf": [
+    { "type": "array", "prefixItems": [{ "$ref": "#/$defs/self" }, { "$ref": "#/$defs/counter" }], "minItems": 2, "maxItems": 2 },
+    { "type": "array", "prefixItems": [{ "$ref": "#/$defs/self" }, { "$ref": "#/$defs/counter" }, { "$ref": "#/$defs/gateCounter" }], "minItems": 3, "maxItems": 3 }
+  ],
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }, "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "family": { "enum": ["claude", "codex"] },
+    "self": { "type": "object", "additionalProperties": false, "required": ["role", "evidence_digest", "assurance", "producer_family", "reviewer_family", "independence"], "properties": { "role": { "const": "self-review" }, "evidence_digest": { "$ref": "#/$defs/digest" }, "assurance": { "const": "agent-declared" }, "producer_family": { "$ref": "#/$defs/family" }, "reviewer_family": { "$ref": "#/$defs/family" }, "independence": { "const": "same-family-self" } }, "oneOf": [{ "properties": { "producer_family": { "const": "claude" }, "reviewer_family": { "const": "claude" } } }, { "properties": { "producer_family": { "const": "codex" }, "reviewer_family": { "const": "codex" } } }] },
+    "counter": { "type": "object", "additionalProperties": false, "required": ["role", "evidence_digest", "assurance", "producer_family", "reviewer_family", "independence"], "properties": { "role": { "const": "counter-review" }, "evidence_digest": { "$ref": "#/$defs/digest" }, "assurance": { "enum": ["server-attested", "degraded"] }, "producer_family": { "$ref": "#/$defs/family" }, "reviewer_family": { "$ref": "#/$defs/family" }, "independence": { "const": "opposite-family" } }, "oneOf": [{ "properties": { "producer_family": { "const": "claude" }, "reviewer_family": { "const": "codex" } } }, { "properties": { "producer_family": { "const": "codex" }, "reviewer_family": { "const": "claude" } } }] },
+    "gateCounter": { "type": "object", "additionalProperties": false, "required": ["role", "evidence_digest", "assurance", "producer_family", "reviewer_family", "independence", "gate_id"], "properties": { "role": { "const": "gate-counter-review" }, "evidence_digest": { "$ref": "#/$defs/digest" }, "assurance": { "enum": ["server-attested", "degraded"] }, "producer_family": { "$ref": "#/$defs/family" }, "reviewer_family": { "$ref": "#/$defs/family" }, "independence": { "const": "opposite-family" }, "gate_id": { "$ref": "#/$defs/id" } }, "oneOf": [{ "properties": { "producer_family": { "const": "claude" }, "reviewer_family": { "const": "codex" } } }, { "properties": { "producer_family": { "const": "codex" }, "reviewer_family": { "const": "claude" } } }] }
+  }
+}

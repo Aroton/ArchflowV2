@@ -1,0 +1,544 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:gate-contract",
+  "type": "object",
+  "x-archflow-gate-semantics": true,
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "safeId": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "\\S"
+    },
+    "safeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "rule_version"],
+      "properties": {
+        "rule_id": { "$ref": "#/$defs/safeId" },
+        "rule_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/rule" }
+    },
+    "digests": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/digest" }
+    },
+    "waiverScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "boundary"],
+      "properties": {
+        "operation": { "enum": ["review-trigger", "adjudication-failure"] },
+        "boundary": { "enum": ["subject", "phase", "task"] }
+      }
+    },
+    "authorityLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "link_digest",
+        "purpose",
+        "proposed_generation_digest",
+        "changed_input_fingerprint"
+      ],
+      "properties": {
+        "link_digest": { "$ref": "#/$defs/digest" },
+        "purpose": { "const": "restore-adoption" },
+        "proposed_generation_digest": { "$ref": "#/$defs/digest" },
+        "changed_input_fingerprint": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "artifactApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "context", "payload"],
+      "properties": {
+        "kind": { "const": "artifact-approval" },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["artifact_kind"],
+          "properties": {
+            "artifact_kind": {
+              "enum": ["prd", "design", "phase-design", "phase-implementation"]
+            }
+          }
+        },
+        "payload": {
+          "oneOf": [
+            { "$ref": "#/$defs/approve" },
+            { "$ref": "#/$defs/revise" },
+            { "$ref": "#/$defs/reject" }
+          ]
+        }
+      }
+    },
+    "reviewTrigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "context", "payload"],
+      "properties": {
+        "kind": { "const": "review-trigger" },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "matched_rules",
+            "uncertain_rules",
+            "eligible_waiver_rules",
+            "waiver_scope"
+          ],
+          "properties": {
+            "matched_rules": { "$ref": "#/$defs/rules" },
+            "uncertain_rules": { "$ref": "#/$defs/rules" },
+            "eligible_waiver_rules": { "$ref": "#/$defs/rules" },
+            "waiver_scope": { "$ref": "#/$defs/waiverScope" }
+          }
+        },
+        "payload": {
+          "oneOf": [
+            { "$ref": "#/$defs/approve" },
+            { "$ref": "#/$defs/revise" },
+            { "$ref": "#/$defs/reject" },
+            { "$ref": "#/$defs/waiverRequested" }
+          ]
+        }
+      }
+    },
+    "materialDrift": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "context", "payload"],
+      "properties": {
+        "kind": { "const": "material-drift" },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["affected_upstream", "drift", "affected_claim_ids"],
+          "properties": {
+            "affected_upstream": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "digest"],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "prd",
+                    "architecture",
+                    "phase-design",
+                    "implementation-result",
+                    "review",
+                    "adjudication",
+                    "constitution",
+                    "workflow",
+                    "import"
+                  ]
+                },
+                "digest": { "$ref": "#/$defs/digest" }
+              }
+            },
+            "drift": { "const": "material" },
+            "affected_claim_ids": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/safeId" }
+            }
+          }
+        },
+        "payload": {
+          "oneOf": [
+            { "$ref": "#/$defs/amendUpstream" },
+            { "$ref": "#/$defs/reviseCurrent" },
+            { "$ref": "#/$defs/reject" }
+          ]
+        }
+      }
+    },
+    "adjudicationFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "context", "payload"],
+      "properties": {
+        "kind": { "const": "adjudication-failure" },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "constitution",
+            "failed_rules",
+            "uncertain_rules",
+            "eligible_waiver_rules",
+            "waiver_scope"
+          ],
+          "properties": {
+            "constitution": { "enum": ["fail", "uncertain"] },
+            "failed_rules": { "$ref": "#/$defs/rules" },
+            "uncertain_rules": { "$ref": "#/$defs/rules" },
+            "eligible_waiver_rules": { "$ref": "#/$defs/rules" },
+            "waiver_scope": { "$ref": "#/$defs/waiverScope" }
+          }
+        },
+        "payload": {
+          "oneOf": [
+            { "$ref": "#/$defs/adjudicationApprove" },
+            { "$ref": "#/$defs/revise" },
+            { "$ref": "#/$defs/reject" },
+            { "$ref": "#/$defs/waiverRequested" }
+          ]
+        }
+      }
+    },
+    "attemptsExhausted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "context", "payload"],
+      "properties": {
+        "kind": { "const": "attempts-exhausted" },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["step", "attempts", "maximum_attempts"],
+          "properties": {
+            "step": {
+              "enum": [
+                "produce",
+                "self_review",
+                "counter_review",
+                "triage",
+                "adjudicate"
+              ]
+            },
+            "attempts": { "$ref": "#/$defs/safeInteger" },
+            "maximum_attempts": { "$ref": "#/$defs/safeInteger" }
+          }
+        },
+        "payload": {
+          "oneOf": [
+            { "$ref": "#/$defs/retryOnce" },
+            { "$ref": "#/$defs/revise" },
+            { "$ref": "#/$defs/abort" }
+          ]
+        }
+      }
+    },
+    "constitutionEdit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "context", "payload"],
+      "properties": {
+        "kind": { "const": "constitution-edit" },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pinned_constitution_digest",
+            "current_constitution_digest",
+            "changed_path_class"
+          ],
+          "properties": {
+            "pinned_constitution_digest": { "$ref": "#/$defs/digest" },
+            "current_constitution_digest": { "$ref": "#/$defs/digest" },
+            "changed_path_class": { "const": "task-branch-constitution" }
+          }
+        },
+        "payload": {
+          "oneOf": [
+            { "$ref": "#/$defs/revertEdit" },
+            { "$ref": "#/$defs/startBaseAmendment" },
+            { "$ref": "#/$defs/abort" }
+          ]
+        }
+      }
+    },
+    "commitAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "context", "payload"],
+      "properties": {
+        "kind": { "const": "commit-authorization" },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "target_ref",
+            "diff_digest",
+            "current_artifact_digests",
+            "parent_document_digests"
+          ],
+          "properties": {
+            "target_ref": { "$ref": "#/$defs/text" },
+            "diff_digest": { "$ref": "#/$defs/digest" },
+            "current_artifact_digests": { "$ref": "#/$defs/digests" },
+            "parent_document_digests": { "$ref": "#/$defs/digests" }
+          }
+        },
+        "payload": {
+          "oneOf": [
+            { "$ref": "#/$defs/authorizeCommit" },
+            { "$ref": "#/$defs/revise" },
+            { "$ref": "#/$defs/abort" }
+          ]
+        }
+      }
+    },
+    "restoreCollision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "context", "payload"],
+      "properties": {
+        "kind": { "const": "restore-collision" },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "recorded_generation_digest",
+            "current_generation_digest"
+          ],
+          "properties": {
+            "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+            "recorded_generation_digest": { "$ref": "#/$defs/digest" },
+            "current_generation_digest": { "$ref": "#/$defs/digest" },
+            "adoption_candidate": { "$ref": "#/$defs/authorityLink" }
+          }
+        },
+        "payload": {
+          "oneOf": [
+            { "$ref": "#/$defs/discardAndRestore" },
+            { "$ref": "#/$defs/adoptGeneration" },
+            { "$ref": "#/$defs/abort" }
+          ]
+        }
+      }
+    },
+    "migrationAudit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "context", "payload"],
+      "properties": {
+        "kind": { "const": "migration-audit" },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source_identity_digest",
+            "destination_identity_digest",
+            "import_digest",
+            "code_baseline_digest",
+            "policy_baseline_digest"
+          ],
+          "properties": {
+            "source_identity_digest": { "$ref": "#/$defs/digest" },
+            "destination_identity_digest": { "$ref": "#/$defs/digest" },
+            "import_digest": { "$ref": "#/$defs/digest" },
+            "code_baseline_digest": { "$ref": "#/$defs/digest" },
+            "policy_baseline_digest": { "$ref": "#/$defs/digest" }
+          }
+        },
+        "payload": {
+          "oneOf": [
+            { "$ref": "#/$defs/acceptImportAudit" },
+            { "$ref": "#/$defs/revise" },
+            { "$ref": "#/$defs/abort" }
+          ]
+        }
+      }
+    },
+    "approve": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason"],
+      "properties": {
+        "decision": { "const": "approve" },
+        "reason": { "$ref": "#/$defs/text" }
+      },
+      "x-archflow-effect": "advance"
+    },
+    "revise": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason"],
+      "properties": {
+        "decision": { "const": "revise" },
+        "reason": { "$ref": "#/$defs/text" }
+      },
+      "x-archflow-effect": "retry"
+    },
+    "reject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason"],
+      "properties": {
+        "decision": { "const": "reject" },
+        "reason": { "$ref": "#/$defs/text" }
+      },
+      "x-archflow-effect": "non-advancing"
+    },
+    "abort": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason"],
+      "properties": {
+        "decision": { "const": "abort" },
+        "reason": { "$ref": "#/$defs/text" }
+      },
+      "x-archflow-effect": "non-advancing"
+    },
+    "waiverRequested": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason", "rule", "rationale"],
+      "properties": {
+        "decision": { "const": "waiver-requested" },
+        "reason": { "$ref": "#/$defs/text" },
+        "rule": { "$ref": "#/$defs/rule" },
+        "rationale": { "$ref": "#/$defs/text" }
+      },
+      "x-archflow-effect": "redirect-waiver"
+    },
+    "adjudicationApprove": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason", "resolutions"],
+      "properties": {
+        "decision": { "const": "approve" },
+        "reason": { "$ref": "#/$defs/text" },
+        "resolutions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["rule", "resolution"],
+            "properties": {
+              "rule": { "$ref": "#/$defs/rule" },
+              "resolution": { "$ref": "#/$defs/text" }
+            }
+          }
+        }
+      },
+      "x-archflow-effect": "advance"
+    },
+    "amendUpstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason"],
+      "properties": {
+        "decision": { "const": "amend-upstream" },
+        "reason": { "$ref": "#/$defs/text" }
+      },
+      "x-archflow-effect": "redirect-upstream"
+    },
+    "reviseCurrent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason"],
+      "properties": {
+        "decision": { "const": "revise-current" },
+        "reason": { "$ref": "#/$defs/text" }
+      },
+      "x-archflow-effect": "retry"
+    },
+    "retryOnce": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason"],
+      "properties": {
+        "decision": { "const": "retry-once" },
+        "reason": { "$ref": "#/$defs/text" }
+      },
+      "x-archflow-effect": "retry"
+    },
+    "revertEdit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason"],
+      "properties": {
+        "decision": { "const": "revert-edit" },
+        "reason": { "$ref": "#/$defs/text" }
+      },
+      "x-archflow-effect": "retry"
+    },
+    "startBaseAmendment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason"],
+      "properties": {
+        "decision": { "const": "start-base-amendment" },
+        "reason": { "$ref": "#/$defs/text" }
+      },
+      "x-archflow-effect": "redirect-upstream"
+    },
+    "authorizeCommit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason"],
+      "properties": {
+        "decision": { "const": "authorize-commit" },
+        "reason": { "$ref": "#/$defs/text" }
+      },
+      "x-archflow-effect": "advance"
+    },
+    "discardAndRestore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason"],
+      "properties": {
+        "decision": { "const": "discard-and-restore" },
+        "reason": { "$ref": "#/$defs/text" }
+      },
+      "x-archflow-effect": "advance"
+    },
+    "adoptGeneration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason", "adoption_authority", "rationale"],
+      "properties": {
+        "decision": { "const": "adopt-as-new-generation" },
+        "reason": { "$ref": "#/$defs/text" },
+        "adoption_authority": { "$ref": "#/$defs/authorityLink" },
+        "rationale": { "$ref": "#/$defs/text" }
+      },
+      "x-archflow-effect": "advance"
+    },
+    "acceptImportAudit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason"],
+      "properties": {
+        "decision": { "const": "accept-import-audit" },
+        "reason": { "$ref": "#/$defs/text" }
+      },
+      "x-archflow-effect": "advance"
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/artifactApproval" },
+    { "$ref": "#/$defs/reviewTrigger" },
+    { "$ref": "#/$defs/materialDrift" },
+    { "$ref": "#/$defs/adjudicationFailure" },
+    { "$ref": "#/$defs/attemptsExhausted" },
+    { "$ref": "#/$defs/constitutionEdit" },
+    { "$ref": "#/$defs/commitAuthorization" },
+    { "$ref": "#/$defs/restoreCollision" },
+    { "$ref": "#/$defs/migrationAudit" }
+  ]
+}

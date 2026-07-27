@@ -1,0 +1,350 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:gate-decision",
+  "type": "object",
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "safeId": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" },
+    "recordedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "connected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "actor_class",
+        "assurance",
+        "channel",
+        "decision_event_id",
+        "connection_id",
+        "request_id_digest",
+        "recorded_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "actor_class": {
+          "enum": ["human", "archforge"]
+        },
+        "assurance": {
+          "const": "declared-local-trace"
+        },
+        "channel": {
+          "const": "connected-host"
+        },
+        "decision_event_id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "connection_id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "request_id_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "recorded_at": {
+          "$ref": "#/$defs/recordedAt"
+        }
+      }
+    },
+    "local": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "actor_class",
+        "assurance",
+        "channel",
+        "decision_event_id",
+        "helper_invocation_id",
+        "recorded_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "actor_class": {
+          "enum": ["human", "archforge"]
+        },
+        "assurance": {
+          "const": "declared-local-trace"
+        },
+        "channel": {
+          "const": "archflow-local"
+        },
+        "decision_event_id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "helper_invocation_id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "recorded_at": {
+          "$ref": "#/$defs/recordedAt"
+        }
+      }
+    },
+    "base": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "subject_digest",
+        "context_digest",
+        "human_provenance"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "task_id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)$"
+        },
+        "subject_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "context_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "human_provenance": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/connected"
+            },
+            {
+              "$ref": "#/$defs/local"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$ref": "#/$defs/base"
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "payload"],
+          "properties": {
+            "kind": {
+              "const": "artifact-approval"
+            },
+            "payload": {
+              "oneOf": [
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/approve"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/revise"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/reject"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "payload"],
+          "properties": {
+            "kind": {
+              "const": "review-trigger"
+            },
+            "payload": {
+              "oneOf": [
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/approve"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/revise"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/reject"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/waiverRequested"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "payload"],
+          "properties": {
+            "kind": {
+              "const": "material-drift"
+            },
+            "payload": {
+              "oneOf": [
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/amendUpstream"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/reviseCurrent"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/reject"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "payload"],
+          "properties": {
+            "kind": {
+              "const": "adjudication-failure"
+            },
+            "payload": {
+              "oneOf": [
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/adjudicationApprove"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/revise"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/reject"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/waiverRequested"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "payload"],
+          "properties": {
+            "kind": {
+              "const": "attempts-exhausted"
+            },
+            "payload": {
+              "oneOf": [
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/retryOnce"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/revise"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/abort"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "payload"],
+          "properties": {
+            "kind": {
+              "const": "constitution-edit"
+            },
+            "payload": {
+              "oneOf": [
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/revertEdit"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/startBaseAmendment"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/abort"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "payload"],
+          "properties": {
+            "kind": {
+              "const": "commit-authorization"
+            },
+            "payload": {
+              "oneOf": [
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/authorizeCommit"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/revise"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/abort"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "payload"],
+          "properties": {
+            "kind": {
+              "const": "restore-collision"
+            },
+            "payload": {
+              "oneOf": [
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/discardAndRestore"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/adoptGeneration"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/abort"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "payload"],
+          "properties": {
+            "kind": {
+              "const": "migration-audit"
+            },
+            "payload": {
+              "oneOf": [
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/acceptImportAudit"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/revise"
+                },
+                {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/abort"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "unevaluatedProperties": false
+}

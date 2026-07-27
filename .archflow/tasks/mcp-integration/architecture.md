@@ -726,7 +726,7 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | Contracts, Assets, and Package Scaffold | COMPLETE (2026-07-27) |
-| 2 | Review Evidence and Contract Authority | Not Started |
+| 2 | Review Evidence and Contract Authority | COMPLETE (2026-07-27) |
 | 3 | Inert MCP Boundary and Offline Bundle | Not Started |
 | 4 | Repository Identity, Paths, Schemas, and Canonical Digests | Not Started |
 | 5 | Transaction Kernel, Intent/CAS, and Crash Recovery | Not Started |

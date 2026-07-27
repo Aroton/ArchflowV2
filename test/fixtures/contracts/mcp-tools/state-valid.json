@@ -1,0 +1,10 @@
+{
+  "schema_version": "1",
+  "task_id": "task-1",
+  "intent_id": "intent-1",
+  "expected_revision": 2,
+  "input_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "phase_instance": "phase-impl-2",
+  "step": "produce",
+  "status": "succeeded"
+}
