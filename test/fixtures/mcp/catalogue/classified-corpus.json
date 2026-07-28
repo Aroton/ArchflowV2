@@ -9,6 +9,7 @@
   { "label": "portable-valid-project-failure", "tool": "archflow_state", "member": "output", "classification": "portable-structure", "materialization": "valid-failure", "portable": true, "runtime": true },
 
   { "label": "runtime-only-input-path-byte-limit", "tool": "archflow_counter_review", "member": "input", "classification": "runtime-semantic", "semantic_category": "path-utf8-input", "materialization": "path-utf8-input", "portable": true, "runtime": false },
+  { "label": "runtime-only-input-path-nfc", "tool": "archflow_counter_review", "member": "input", "classification": "runtime-semantic", "semantic_category": "path-nfc-input", "materialization": "path-nfc-input", "portable": true, "runtime": false },
   { "label": "runtime-only-success-path-byte-limit", "tool": "archflow_state", "member": "output", "classification": "runtime-semantic", "semantic_category": "path-utf8-output", "materialization": "path-utf8-output", "call_fixture": "archflow_state", "portable": true, "runtime": false },
   { "label": "runtime-only-project-error-path-byte-limit", "tool": "archflow_state", "member": "output", "classification": "runtime-semantic", "semantic_category": "project-error-path-utf8", "materialization": "project-error-path-utf8", "portable": true, "runtime": false },
   { "label": "runtime-only-rubric-criterion-id-uniqueness", "tool": "archflow_counter_review", "member": "input", "classification": "runtime-semantic", "semantic_category": "rubric-unique-by", "materialization": "rubric-unique", "portable": true, "runtime": false },

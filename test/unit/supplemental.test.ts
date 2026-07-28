@@ -12,9 +12,16 @@ describe("supplemental review outcomes", () => {
     expect(parseSupplementalReviewOutcome({ action: "supersede", review, accepted_triage_digest: digest("d"), old_subject_digest: digest("a"), new_subject_digest: digest("e"), reason: "revision required" }).action).toBe("supersede");
     expect(() => parseSupplementalReviewOutcome({ action: "supersede", review, accepted_triage_digest: digest("d"), old_subject_digest: digest("a"), new_subject_digest: digest("a"), reason: "revision required" })).toThrow(/new subject/);
   });
-  it("round-trips the shared broad safe identifier grammar", () => {
-    const broad = { ...review, prior_gate_id: "Gate:1", task_id: "Task_1", evidence_slot: { ...review.evidence_slot, gate_id: "Gate:1" } };
-    const parsed = parseSupplementalReviewOutcome({ action: "ingest", review: broad, reason: "late evidence" });
-    expect(parsed.action === "ingest" && parsed.review.prior_gate_id).toBe("Gate:1");
+  it("rejects the previously permitted broad safe-identifier grammar for gate and task IDs", () => {
+    // Before the boundary retightening every one of these round-tripped: `safeId` permits `:`,
+    // `_`, and uppercase, none of which can appear in a path segment or a task slug.
+    const broad = [
+      { ...review, prior_gate_id: "Gate:1", evidence_slot: { ...review.evidence_slot, gate_id: "Gate:1" } },
+      { ...review, evidence_slot: { ...review.evidence_slot, gate_id: "gate:1" } },
+      { ...review, task_id: "Task_1" },
+      { ...review, task_id: "Task-1" },
+      { ...review, task_id: "task:1" }
+    ];
+    for (const value of broad) expect(() => parseSupplementalReviewOutcome({ action: "ingest", review: value, reason: "late evidence" })).toThrow();
   });
 });

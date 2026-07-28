@@ -1,24 +1,48 @@
 import { z } from "zod";
 
+import { endsWithDotOrSpace, isReservedDeviceName, type TaskSlug } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
 
 declare const taskPathClaimBrand: unique symbol;
+declare const repositoryPathClaimBrand: unique symbol;
+declare const rawGitPathBrand: unique symbol;
 
+/** A lexical claim rooted at the task directory, `.archflow/tasks/<task-id>/`. */
 export type TaskPathClaim = string & { readonly [taskPathClaimBrand]: true };
+/** Same lexical rules as `TaskPathClaim`; different frame — rooted at the worktree, not the task. */
+export type RepositoryPathClaim = string & { readonly [repositoryPathClaimBrand]: true };
+/** A path exactly as Git emitted it. Total constructor; carries no lexical guarantee at all. */
+export type RawGitPath = string & { readonly [rawGitPathBrand]: true };
 
 const utf8Length = (value: string): number => Buffer.byteLength(value, "utf8");
 const containsControl = (value: string): boolean => /[\u0000-\u001f\u007f-\u009f]/u.test(value);
 const hasDriveOrUncPrefix = (value: string): boolean => /^[A-Za-z]:/u.test(value) || value.startsWith("//");
 const hasInvalidComponent = (value: string): boolean => value.split("/").some((component) => component === "" || component === "." || component === "..");
+/** `:` also covers Windows drive-relative paths and NTFS alternate data streams; `*?[]` are Git pathspec metacharacters. */
+const forbiddenCharacter = /[:*?[\]<>|]/u;
+/** Both component rules are the shared ones from `evidence.ts`, applied to every segment. */
+const hasReservedComponent = (value: string): boolean => value.split("/").some(isReservedDeviceName);
+const hasTrailingDotOrSpace = (value: string): boolean => value.split("/").some(endsWithDotOrSpace);
 
-export const taskPathClaimV1Schema = z.string()
+/**
+ * The sole lexical authority for both claim frames, mirroring
+ * `src/contracts/schemas/v1/path-claim.schema.json` rule for rule.
+ */
+const pathClaimLexicalSchema = z.string()
   .min(1)
   .refine((value) => utf8Length(value) <= 1024, "path claim must be at most 1024 UTF-8 bytes")
   .refine((value) => !value.startsWith("/"), "path claim must be relative")
   .refine((value) => !hasDriveOrUncPrefix(value), "path claim must not use a drive or UNC prefix")
   .refine((value) => !value.includes("\\"), "path claim must use forward slashes")
   .refine((value) => !containsControl(value), "path claim must not contain control characters")
-  .refine((value) => !hasInvalidComponent(value), "path claim components must be non-empty and may not be . or ..");
+  .refine((value) => !forbiddenCharacter.test(value), "path claim must not contain : * ? [ ] < > or |")
+  .refine((value) => !hasInvalidComponent(value), "path claim components must be non-empty and may not be . or ..")
+  .refine((value) => !hasReservedComponent(value), "path claim components must not be reserved device names")
+  .refine((value) => !hasTrailingDotOrSpace(value), "path claim components must not end with a dot or a space")
+  .refine((value) => value.normalize("NFC") === value, "path claim components must already be NFC");
+
+export const taskPathClaimV1Schema = pathClaimLexicalSchema as unknown as z.ZodType<TaskPathClaim>;
+export const repositoryPathClaimV1Schema = pathClaimLexicalSchema as unknown as z.ZodType<RepositoryPathClaim>;
 
 /**
  * Parses a bounded task-relative lexical claim. This does not inspect a file
@@ -26,5 +50,59 @@ export const taskPathClaimV1Schema = z.string()
  */
 export function parseTaskPathClaim(value: unknown): TaskPathClaim {
   assertPlainJson(value, "task path claim");
-  return taskPathClaimV1Schema.parse(value) as TaskPathClaim;
+  return taskPathClaimV1Schema.parse(value);
+}
+
+/** Parses the same lexical claim in the worktree frame rather than the task frame. */
+export function parseRepositoryPathClaim(value: unknown): RepositoryPathClaim {
+  assertPlainJson(value, "repository path claim");
+  return repositoryPathClaimV1Schema.parse(value);
+}
+
+/**
+ * Re-frames a task claim as a worktree claim under `.archflow/tasks/<task-id>/`. Throws, per the
+ * contract-layer convention, if the composed path is not itself a valid claim — which a 1024-byte
+ * task claim plus the prefix, or a task slug ending in a dot, can produce.
+ */
+export function toRepositoryPathClaim(taskId: TaskSlug, claim: TaskPathClaim): RepositoryPathClaim {
+  return parseRepositoryPathClaim(`.archflow/tasks/${taskId}/${claim}`);
+}
+
+/** Total constructor: a path is branded as Git's output without asserting anything about it. */
+export function rawGitPath(value: string): RawGitPath {
+  return value as RawGitPath;
+}
+
+/**
+ * The sole promotion from untrusted Git output to a branded claim. Returns `undefined` rather
+ * than throwing, so a caller can count the names it cannot represent instead of failing while
+ * merely inspecting them.
+ */
+export function tryRepositoryPathClaim(value: RawGitPath): RepositoryPathClaim | undefined {
+  const result = repositoryPathClaimV1Schema.safeParse(value);
+  return result.success ? result.data : undefined;
+}
+
+export const TASK_PATH_CLASSES = [
+  "task-config", "task-state", "gate-interface", "document", "review",
+  "decision", "result-manifest", "result-payload", "intent", "attempt",
+  "manual-checkpoint", "maintenance-record", "import",
+] as const;
+export const REPOSITORY_PATH_CLASSES = [
+  "shared-workflow", "shared-constitution", "task-branch-constitution", "repository-source",
+] as const;
+export const PATH_CLASSES = [...TASK_PATH_CLASSES, ...REPOSITORY_PATH_CLASSES] as const;
+
+export type TaskPathClass = (typeof TASK_PATH_CLASSES)[number];
+export type RepositoryPathClass = (typeof REPOSITORY_PATH_CLASSES)[number];
+export type PathClass = (typeof PATH_CLASSES)[number];
+
+/** Classes ArchFlow reads but never writes. */
+export const READ_ONLY_PATH_CLASSES: readonly PathClass[] = ["shared-workflow", "shared-constitution"];
+
+const pathClassSchema = z.enum(PATH_CLASSES);
+
+export function parsePathClass(value: unknown): PathClass {
+  assertPlainJson(value, "path class");
+  return pathClassSchema.parse(value);
 }

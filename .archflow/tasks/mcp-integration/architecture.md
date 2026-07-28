@@ -508,14 +508,16 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 
 **Scope**: Implement Git/worktree and task identity; `.archflow/** -text merge=binary` with runtime attribute verification; task-relative and repository-relative path claims, path classes, and filesystem containment; canonical JSON, canonical Git blob/tree-mode identity, and request/declared-input digests; exact whole-file `config.yaml` digest pinning; divergence, conflict, and in-progress-operation detection; and the secret-scan result contract. This phase introduces the first filesystem and Git-subprocess code in `src/`. It implements no durable state or artifact schema, no state mutation, no payload restore, and no secret-scanning engine, and adds no runtime dependency.
 
+**Implemented 2026-07-28.** Three design errors were corrected during implementation and are recorded in the phase log: containment step 6 omitted a `rel !== ".."` guard and therefore accepted the root's own parent; `--literal-pathspecs` and `:(top,literal)` are mutually exclusive on git 2.43, so the flag is now prohibited rather than mandated; and `--git-common-dir` is relative to the process cwd, not the worktree toplevel. The global ID retightening reached a fourth round of previously unlisted sites (`review.ts`, `triage.ts`, `adjudication.ts`, `errors.ts`, `authority-link.schema.json`), where it is a vocabulary swap rather than a pure narrowing. `npm run check:release` remains blocked, but **not** on the risk re-acceptance, which the user granted and which `release:stage` accepted. Promotion fails because three invariants in `scripts/release-support.mjs` cannot co-exist across a bundle change: committed decision records are byte-immutable against HEAD (`:1380`), every decision must bind the current bundle digest (`:803`), and a supersession must retain the superseded decision (`:676-677`) — which necessarily carries the old digest. The tracked `dist/` payload therefore cannot be re-promoted after any bundle change; Phase 5 created the initial release, so this path was never exercised. Fixing Phase 5's integrity model is tracked as a follow-up.
+
 **Success Criteria**:
 
-- [ ] Traversal, absolute paths, drive-relative and UNC inputs, symlink escape, cross-task access, pathspec metacharacters, and repository-identity mismatch fail before any read, while linked worktrees, relocation, spaces, and Unicode pass.
-- [ ] Committed inputs and tracked outputs have identical canonical Git blob/tree identities across LF/CRLF worktrees, `core.autocrlf`, `core.fileMode`, executable-bit support, and symlink-capable/incapable checkouts; unsupported materialization fails closed.
-- [ ] The whole `config.yaml` file is pinned by exact digest, and any byte change is detected as `PINNED_CONFIG_MISMATCH` with expected/observed digests and no config content.
-- [ ] The canonical request digest is computed from its closed field list only, and logically set-valued fingerprint collections hash identically under any input permutation.
-- [ ] Startup and pull/handoff detection identifies divergent histories and `.archflow/**` conflicts as non-authoritative without claiming it can detect independent-clone concurrency before divergence.
-- [ ] Every Git invocation is bound to the discovered worktree root, so no command can silently report an absent path or attribute because of the caller's working directory.
+- [x] Traversal, absolute paths, drive-relative and UNC inputs, symlink escape, cross-task access, pathspec metacharacters, and repository-identity mismatch fail before any read, while linked worktrees, relocation, spaces, and Unicode pass.
+- [x] Committed inputs and tracked outputs have identical canonical Git blob/tree identities across LF/CRLF worktrees, `core.autocrlf`, `core.fileMode`, executable-bit support, and symlink-capable/incapable checkouts; unsupported materialization fails closed.
+- [x] The whole `config.yaml` file is pinned by exact digest, and any byte change is detected as `PINNED_CONFIG_MISMATCH` with expected/observed digests and no config content.
+- [x] The canonical request digest is computed from its closed field list only, and logically set-valued fingerprint collections hash identically under any input permutation. **Limitation recorded**: the closed list is enforced by an exact-name denylist over an open `operation_fields`, so alternate spellings of volatile state are not caught; a closed per-operation allowlist is owned by the phase that defines operation field sets.
+- [x] Startup and pull/handoff detection identifies divergent histories and `.archflow/**` conflicts as non-authoritative without claiming it can detect independent-clone concurrency before divergence.
+- [x] Every Git invocation is bound to the discovered worktree root, so no command can silently report an absent path or attribute because of the caller's working directory.
 
 ### Phase 7: Durable State and Artifact Schemas
 
@@ -795,7 +797,7 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 | 3 | MCP Contract Boundary and Dependency Admission | COMPLETE (2026-07-27) |
 | 4 | Guarded MCP Runtime and SDK Compatibility | COMPLETE (2026-07-27) |
 | 5 | Offline Bundle and Release Integrity | COMPLETE (2026-07-28) |
-| 6 | Repository Identity, Paths, and Canonical Digests | Not Started |
+| 6 | Repository Identity, Paths, and Canonical Digests | COMPLETE (2026-07-28) |
 | 7 | Durable State and Artifact Schemas | Not Started |
 | 8 | Transaction Kernel, Intent/CAS, and Crash Recovery | Not Started |
 | 9 | Snapshots, Implementation Manifests, and Restore | Not Started |

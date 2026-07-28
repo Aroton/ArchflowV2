@@ -84,6 +84,7 @@ const validatingKeywordCoverage = {
     "gate-adjudication-resolution-coverage",
     "gate-restore-adoption-authority"
   ],
+  "x-archflow-nfc": ["path-nfc-input"],
   "x-archflow-sorted-unique": ["project-error-sorted-unique"]
 } as const;
 
@@ -115,7 +116,7 @@ const D = (character: string): string => character.repeat(64);
 const RULE_A = Object.freeze({ rule_id: "Rule:A", rule_version: 1 });
 const RULE_B = Object.freeze({ rule_id: "Rule:B", rule_version: 1 });
 const PROVENANCE = Object.freeze({ schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "Decision:1", helper_invocation_id: "Helper:1", recorded_at: "2026-07-27T12:00:00.000Z" });
-const COMMON = Object.freeze({ schema_version: "1", task_id: "Task:1", intent_id: "Intent:1", expected_revision: 0, input_fingerprint: D("a") });
+const COMMON = Object.freeze({ schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: D("a") });
 const SELF = Object.freeze({ role: "self-review", evidence_digest: D("1"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" });
 const COUNTER = Object.freeze({ role: "counter-review", evidence_digest: D("2"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" });
 const CURRENT_EVIDENCE = Object.freeze({ set_digest: D("3"), slots: [SELF, COUNTER] });
@@ -126,14 +127,14 @@ const stateCall = (status = "running") => ({ ...COMMON, phase_instance: "phase-i
 const counterCall = (artifactPath = "phases/phase-3.md", criteria = [{ id: "paths", text: "Check paths", blocking: true }]) => ({ ...COMMON, artifact_path: artifactPath, rubric: { schema_version: "1", kind: "implementation", mode: "adversarial", criteria } });
 const adjudicateCall = () => ({ ...COMMON, artifact_path: "phases/phase-3.md", upstream_paths: ["architecture.md"] });
 const gateCall = (kind: string, context: unknown) => ({ ...COMMON, phase_instance: "phase-impl-3", summary: "Review", subject_digest: D("b"), current_evidence: CURRENT_EVIDENCE, kind, context });
-const waiverCall = () => ({ ...COMMON, origin: { origin_gate_id: "Gate:1", origin_decision_digest: D("1"), origin_context_digest: D("2"), task_id: COMMON.task_id, phase_instance: "phase-impl-3", subject_digest: D("3"), current_evidence_set_digest: D("4"), rule: RULE_A, scope: SCOPE }, rationale: "Needed" });
+const waiverCall = () => ({ ...COMMON, origin: { origin_gate_id: "gate-1", origin_decision_digest: D("1"), origin_context_digest: D("2"), task_id: COMMON.task_id, phase_instance: "phase-impl-3", subject_digest: D("3"), current_evidence_set_digest: D("4"), rule: RULE_A, scope: SCOPE }, rationale: "Needed" });
 const reviewContext = () => ({ matched_rules: [RULE_A], uncertain_rules: [], eligible_waiver_rules: [RULE_A], waiver_scope: SCOPE });
 const adjudicationContext = () => ({ constitution: "fail", failed_rules: [RULE_A, RULE_B], uncertain_rules: [], eligible_waiver_rules: [], waiver_scope: { operation: "adjudication-failure", boundary: "phase" } });
 const restoreContext = () => ({ path: "task/file.md", recorded_generation_digest: D("7"), current_generation_digest: D("8"), adoption_candidate: AUTHORITY });
 const result = (value: unknown) => ({ schema_version: "1", ok: true, value });
-const decisionEnvelope = (kind: string, payload: unknown, overrides: Record<string, unknown> = {}) => ({ schema_version: "1", gate_id: "Gate:1", task_id: COMMON.task_id, phase_instance: "phase-impl-3", subject_digest: D("b"), context_digest: D("9"), human_provenance: PROVENANCE, kind, payload, ...overrides });
+const decisionEnvelope = (kind: string, payload: unknown, overrides: Record<string, unknown> = {}) => ({ schema_version: "1", gate_id: "gate-1", task_id: COMMON.task_id, phase_instance: "phase-impl-3", subject_digest: D("b"), context_digest: D("9"), human_provenance: PROVENANCE, kind, payload, ...overrides });
 const gateResult = (kind: string, payload: Record<string, unknown>, overrides: Record<string, unknown> = {}) => result({ kind, decision: decisionEnvelope(kind, payload), notes: payload.reason, revision: 1, ...overrides });
-const waiverResult = (overrides: Record<string, unknown> = {}) => result({ origin_gate_id: "Gate:1", waiver_gate_id: "Gate:2", task_id: COMMON.task_id, rule_id: RULE_A.rule_id, rule_version: RULE_A.rule_version, subject_digest: D("3"), current_evidence_set_digest: D("4"), scope: SCOPE, human_provenance: PROVENANCE, granted: false, notes: "Denied", revision: 1, ...overrides });
+const waiverResult = (overrides: Record<string, unknown> = {}) => result({ origin_gate_id: "gate-1", waiver_gate_id: "gate-2", task_id: COMMON.task_id, rule_id: RULE_A.rule_id, rule_version: RULE_A.rule_version, subject_digest: D("3"), current_evidence_set_digest: D("4"), scope: SCOPE, human_provenance: PROVENANCE, granted: false, notes: "Denied", revision: 1, ...overrides });
 
 function freshAjv(): Ajv2020 {
   const ajv = new Ajv2020({ strict: true, allErrors: true, allowUnionTypes: false, coerceTypes: false, removeAdditional: false, useDefaults: false, validateFormats: true });
@@ -154,14 +155,16 @@ async function corpus(): Promise<readonly CorpusCase[]> {
 
 function materialize(entry: CorpusCase): MaterializedCase {
   const longPath = `${"é".repeat(600)}.md`;
+  const nfdPath = "re\u0301sume\u0301.md";
   const artifactGateCall = gateCall("artifact-approval", { artifact_kind: "phase-implementation" });
   const artifactGateResult = gateResult("artifact-approval", { decision: "approve", reason: "Approved" });
   switch (entry.materialization) {
     case "valid-state-input": return { value: stateCall() };
     case "invalid-state-extra": return { value: { ...stateCall(), unexpected: true } };
     case "path-utf8-input": return { value: counterCall(longPath) };
+    case "path-nfc-input": return { value: counterCall(nfdPath) };
     case "rubric-unique": return { value: counterCall("phases/phase-3.md", [{ id: "paths", text: "First", blocking: true }, { id: "paths", text: "Second", blocking: false }]) };
-    case "waiver-origin-task": return { value: { ...waiverCall(), task_id: "Other" } };
+    case "waiver-origin-task": return { value: { ...waiverCall(), task_id: "other" } };
     case "current-evidence": return { value: { ...artifactGateCall, current_evidence: { ...CURRENT_EVIDENCE, slots: [SELF, { ...COUNTER, evidence_digest: SELF.evidence_digest }] } } };
     case "review-rule-order": return { value: gateCall("review-trigger", { ...reviewContext(), matched_rules: [RULE_B, RULE_A], eligible_waiver_rules: [] }) };
     case "adjudication-rule-order": return { value: gateCall("adjudication-failure", { ...adjudicationContext(), failed_rules: [RULE_B, RULE_A] }) };
@@ -192,12 +195,12 @@ function materialize(entry: CorpusCase): MaterializedCase {
     case "state-status-correlation": return { call: stateCall(), value: result({ path: "phases/state.json", revision: 1, status: "failed" }) };
     case "gate-kind-correlation": return { call: artifactGateCall, value: gateResult("artifact-approval", { decision: "approve", reason: "Approved" }, { kind: "review-trigger" }) };
     case "gate-decision-kind-correlation": return { call: artifactGateCall, value: result({ kind: "artifact-approval", decision: decisionEnvelope("material-drift", { decision: "reject", reason: "Approved" }), notes: "Approved", revision: 1 }) };
-    case "gate-task-correlation": return { call: artifactGateCall, value: artifactGateResultWithDecision({ task_id: "Other" }) };
+    case "gate-task-correlation": return { call: artifactGateCall, value: artifactGateResultWithDecision({ task_id: "other" }) };
     case "gate-phase-correlation": return { call: artifactGateCall, value: artifactGateResultWithDecision({ phase_instance: "phase-impl-4" }) };
     case "gate-subject-correlation": return { call: artifactGateCall, value: artifactGateResultWithDecision({ subject_digest: D("c") }) };
     case "gate-notes-correlation": return { call: artifactGateCall, value: result({ ...(artifactGateResult.value as object), notes: "Different" }) };
-    case "waiver-origin-correlation": return { call: waiverCall(), value: waiverResult({ origin_gate_id: "Gate:Other" }) };
-    case "waiver-task-correlation": return { call: waiverCall(), value: waiverResult({ task_id: "Other" }) };
+    case "waiver-origin-correlation": return { call: waiverCall(), value: waiverResult({ origin_gate_id: "gate-other" }) };
+    case "waiver-task-correlation": return { call: waiverCall(), value: waiverResult({ task_id: "other" }) };
     case "waiver-rule-id-correlation": return { call: waiverCall(), value: waiverResult({ rule_id: "Rule:Other" }) };
     case "waiver-rule-version-correlation": return { call: waiverCall(), value: waiverResult({ rule_version: 2 }) };
     case "waiver-subject-correlation": return { call: waiverCall(), value: waiverResult({ subject_digest: D("c") }) };

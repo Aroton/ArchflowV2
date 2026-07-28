@@ -1,0 +1,8 @@
+roles:
+  producer:
+    effort: high
+    model: claude-opus-5
+  counter-reviewer:
+    effort: high
+    model: gpt-5-codex
+schema_version: "1"

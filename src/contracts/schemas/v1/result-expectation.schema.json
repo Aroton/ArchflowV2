@@ -6,6 +6,8 @@
   "$defs": {
     "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" },
+    "taskSlug": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
+    "pathSafeId": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
     "integer": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
     "identity": {
       "type": "object",
@@ -32,8 +34,8 @@
             "archflow_waiver"
           ]
         },
-        "task_id": { "$ref": "#/$defs/id" },
-        "intent_id": { "$ref": "#/$defs/id" },
+        "task_id": { "$ref": "#/$defs/taskSlug" },
+        "intent_id": { "$ref": "#/$defs/pathSafeId" },
         "input_fingerprint": { "$ref": "#/$defs/digest" },
         "request_digest": { "$ref": "#/$defs/digest" },
         "result_id": { "$ref": "#/$defs/id" },

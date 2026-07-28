@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import type { ReferencedEvidence, Sha256Digest } from "./evidence.js";
+import type { ReferencedEvidence, Sha256Digest, TaskSlug } from "./evidence.js";
+import { taskSlugV1Schema } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
 
 export const REVIEW_VERDICTS = ["pass", "advisory", "fail"] as const;
@@ -33,7 +34,7 @@ export interface ReviewFinding {
 
 export interface RawReview {
   readonly schema_version: "1";
-  readonly task_id: string;
+  readonly task_id: TaskSlug;
   readonly phase_instance: string;
   readonly step: "self_review" | "counter_review";
   readonly role: ReviewRole;
@@ -71,7 +72,7 @@ export const reviewFindingSchema = z.object({
 
 export const rawReviewSchema = z.object({
   schema_version: z.literal("1"),
-  task_id: id,
+  task_id: taskSlugV1Schema,
   phase_instance: z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
   step: z.enum(["self_review", "counter_review"]),
   role: z.enum(REVIEW_ROLES),

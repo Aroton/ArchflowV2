@@ -45,4 +45,13 @@ describe("gate catalogue", () => {
     expect(() => parseGateDecisionEnvelope({ ...envelope, human_provenance: { ...envelope.human_provenance, recorded_at: "2026-07-27T12:00:00Z" } })).toThrow();
     expect(() => parseGateDecisionEnvelope({ ...envelope, human_provenance: { ...envelope.human_provenance, recorded_at: "2026-07-27T07:00:00.000-05:00" } })).toThrow();
   });
+
+  it("rejects the previously legal broad gate and task identifiers on the decision envelope", () => {
+    const envelope = { schema_version: "1", gate_id: "gate-1", task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: D, context_digest: D, human_provenance: { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "decision-1", helper_invocation_id: "helper-1", recorded_at: "2026-07-27T12:00:00.000Z" }, kind: "artifact-approval", payload: { decision: "approve", reason: "Approved" } };
+    expect(parseGateDecisionEnvelope(envelope).gate_id).toBe("gate-1");
+    for (const gateId of ["Gate:1", "gate:1"]) expect(() => parseGateDecisionEnvelope({ ...envelope, gate_id: gateId })).toThrow();
+    for (const taskId of ["Task_1", "Task:1", "TASK-1"]) expect(() => parseGateDecisionEnvelope({ ...envelope, task_id: taskId })).toThrow();
+    // decision_event_id and helper_invocation_id are deliberately unchanged.
+    expect(parseGateDecisionEnvelope({ ...envelope, human_provenance: { ...envelope.human_provenance, decision_event_id: "Decision:1", helper_invocation_id: "Helper:1" } }).human_provenance.decision_event_id).toBe("Decision:1");
+  });
 });

@@ -3,8 +3,8 @@ import { z } from "zod";
 
 import type { AdjudicationEvidence, DegradedAdjudication, AgentDeclaredAdjudication, ServerAttestedAdjudication } from "./adjudication.js";
 import { adjudicationEvidenceSchema, parseAndDeriveAdjudication, parseReferencedAdjudicationEvidence } from "./adjudication.js";
-import type { ReferencedEvidence, Sha256Digest } from "./evidence.js";
-import { parseSha256Digest } from "./evidence.js";
+import type { PathSafeId, ReferencedEvidence, Sha256Digest, TaskSlug } from "./evidence.js";
+import { parseSha256Digest, pathSafeIdV1Schema, taskSlugV1Schema } from "./evidence.js";
 import {
   authenticAuthorityLink,
   authenticCurrentReviewSetAuthority,
@@ -37,7 +37,7 @@ export interface ObservationRoleByKind { readonly review: "counter-review" | "ga
 
 export interface ObservationBindingBase<K extends EvidenceKind> {
   readonly kind: K;
-  readonly task_id: string;
+  readonly task_id: TaskSlug;
   readonly phase_instance: PhaseInstanceId;
   readonly role: ObservationRoleByKind[K];
   readonly subject_digest: Sha256Digest;
@@ -52,7 +52,7 @@ export interface ObservationBindingBase<K extends EvidenceKind> {
   readonly effort: (typeof EFFORT_VALUES)[number];
 }
 export interface ObservationBindingByKind {
-  readonly review: ObservationBindingBase<"review"> & ({ readonly role: "counter-review" } | { readonly role: "gate-counter-review"; readonly gate_id: string }) & { readonly rubric_digest: Sha256Digest; readonly producer_family: ModelFamily };
+  readonly review: ObservationBindingBase<"review"> & ({ readonly role: "counter-review" } | { readonly role: "gate-counter-review"; readonly gate_id: PathSafeId }) & { readonly rubric_digest: Sha256Digest; readonly producer_family: ModelFamily };
   readonly adjudication: ObservationBindingBase<"adjudication"> & { readonly pinned_constitution_digest: Sha256Digest; readonly approved_upstream_digests: readonly Sha256Digest[]; readonly source_evidence_set_digest: Sha256Digest };
 }
 export type ObservationCapability<K extends EvidenceKind> = { readonly kind: K; readonly [observationCapabilityBrand]: ObservationBindingByKind[K] };
@@ -123,7 +123,7 @@ export interface ServerAuthorityReferences { readonly kind: "server"; readonly i
 export interface AgentDeclaredAuthorityReferences { readonly kind: "agent-declared"; readonly result_id: string; readonly result_digest: Sha256Digest; readonly state_revision: number }
 export interface DegradedAuthorityReferences { readonly kind: "degraded"; readonly checkpoint_digest: Sha256Digest; readonly checkpoint_revision: number }
 export interface AuthorityReferencesByAssurance { readonly "agent-declared": AgentDeclaredAuthorityReferences; readonly "server-attested": ServerAuthorityReferences; readonly degraded: DegradedAuthorityReferences }
-export interface AuthorityLinkBase<K extends EvidenceKind, A extends Assurance> { readonly schema_version: "1"; readonly evidence_kind: K; readonly assurance: A; readonly role: EvidenceRoleByKind[K]; readonly task_id: string; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest; readonly evidence_digest: Sha256Digest; readonly gate_id?: string; readonly authority: AuthorityReferencesByAssurance[A] }
+export interface AuthorityLinkBase<K extends EvidenceKind, A extends Assurance> { readonly schema_version: "1"; readonly evidence_kind: K; readonly assurance: A; readonly role: EvidenceRoleByKind[K]; readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest; readonly evidence_digest: Sha256Digest; readonly gate_id?: PathSafeId; readonly authority: AuthorityReferencesByAssurance[A] }
 export type AuthorityLinkData<K extends EvidenceKind = EvidenceKind, A extends Assurance = Assurance> = { readonly [P in K]: { readonly [Q in A]: AuthorityLinkBase<P, Q> }[A] }[K];
 export type AuthorityLink<K extends EvidenceKind = EvidenceKind, A extends Assurance = Assurance> = { readonly [P in K]: { readonly [Q in A]: AuthorityLinkBase<P, Q> & { readonly [authorityLinkBrand]: `${P}:${Q}` } }[A] }[K];
 export type VerifiedReferencedEvidence<K extends EvidenceKind = EvidenceKind, A extends Assurance = Assurance> = { readonly [P in K]: { readonly [Q in A]: ReferencedEvidence<EvidenceValueByKindAndAssurance[P][Q]> & { readonly [verifiedReferencedEvidenceBrand]: `${P}:${Q}` } }[A] }[K];
@@ -131,9 +131,9 @@ export type VerifiedReferencedEvidence<K extends EvidenceKind = EvidenceKind, A 
 export type ReviewEvidenceSlot =
   | Readonly<{ role: "self-review"; evidence_digest: Sha256Digest; assurance: "agent-declared"; producer_family: ModelFamily; reviewer_family: ModelFamily; independence: "same-family-self" }>
   | Readonly<{ role: "counter-review"; evidence_digest: Sha256Digest; assurance: "server-attested" | "degraded"; producer_family: ModelFamily; reviewer_family: ModelFamily; independence: "opposite-family" }>
-  | Readonly<{ role: "gate-counter-review"; evidence_digest: Sha256Digest; assurance: "server-attested" | "degraded"; producer_family: ModelFamily; reviewer_family: ModelFamily; independence: "opposite-family"; gate_id: string }>;
+  | Readonly<{ role: "gate-counter-review"; evidence_digest: Sha256Digest; assurance: "server-attested" | "degraded"; producer_family: ModelFamily; reviewer_family: ModelFamily; independence: "opposite-family"; gate_id: PathSafeId }>;
 export type RequiredReviewSlots = readonly [Extract<ReviewEvidenceSlot, { role: "self-review" }>, Extract<ReviewEvidenceSlot, { role: "counter-review" }>] | readonly [Extract<ReviewEvidenceSlot, { role: "self-review" }>, Extract<ReviewEvidenceSlot, { role: "counter-review" }>, Extract<ReviewEvidenceSlot, { role: "gate-counter-review" }>];
-export interface CurrentReviewSetAuthority { readonly task_id: string; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest; readonly slots: RequiredReviewSlots; readonly [currentReviewSetAuthorityBrand]: true }
+export interface CurrentReviewSetAuthority { readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest; readonly slots: RequiredReviewSlots; readonly [currentReviewSetAuthorityBrand]: true }
 export interface CurrentEvidenceSetRef { readonly set_digest: Sha256Digest; readonly slots: RequiredReviewSlots }
 
 const idSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
@@ -145,7 +145,7 @@ const agentAuthoritySchema = z.object({ kind: z.literal("agent-declared"), resul
 const serverAuthoritySchema = z.object({ kind: z.literal("server"), invocation_id: idSchema, result_id: idSchema, receipt_id: idSchema, state_revision: safeInteger, envelope_input_digest: digestSchema, observed_output_digest: digestSchema, result_digest: digestSchema }).strict();
 const degradedAuthoritySchema = z.object({ kind: z.literal("degraded"), checkpoint_digest: digestSchema, checkpoint_revision: safeInteger }).strict();
 const authorityReferencesSchema = z.discriminatedUnion("kind", [agentAuthoritySchema, serverAuthoritySchema, degradedAuthoritySchema]);
-export const authorityLinkDataSchema = z.object({ schema_version: z.literal("1"), evidence_kind: z.enum(["review", "adjudication"]), assurance: z.enum(["agent-declared", "server-attested", "degraded"]), role: z.enum(["self-review", "counter-review", "gate-counter-review", "adjudication"]), task_id: idSchema, phase_instance: phaseSchema, subject_digest: digestSchema, input_fingerprint: digestSchema, evidence_digest: digestSchema, gate_id: idSchema.optional(), authority: authorityReferencesSchema }).strict().superRefine((link, context) => {
+export const authorityLinkDataSchema = z.object({ schema_version: z.literal("1"), evidence_kind: z.enum(["review", "adjudication"]), assurance: z.enum(["agent-declared", "server-attested", "degraded"]), role: z.enum(["self-review", "counter-review", "gate-counter-review", "adjudication"]), task_id: taskSlugV1Schema, phase_instance: phaseSchema, subject_digest: digestSchema, input_fingerprint: digestSchema, evidence_digest: digestSchema, gate_id: pathSafeIdV1Schema.optional(), authority: authorityReferencesSchema }).strict().superRefine((link, context) => {
   if ((link.evidence_kind === "adjudication") !== (link.role === "adjudication")) context.addIssue({ code: "custom", path: ["role"], message: "role must match evidence kind" });
   const expectedAuthorityKind = link.assurance === "server-attested" ? "server" : link.assurance;
   if (link.authority.kind !== expectedAuthorityKind) context.addIssue({ code: "custom", path: ["authority", "kind"], message: "authority references must match assurance" });
@@ -154,7 +154,7 @@ export const authorityLinkDataSchema = z.object({ schema_version: z.literal("1")
 const slotBase = { evidence_digest: digestSchema, producer_family: familySchema, reviewer_family: familySchema };
 const selfSlotSchema = z.object({ ...slotBase, role: z.literal("self-review"), assurance: z.literal("agent-declared"), independence: z.literal("same-family-self") }).strict().superRefine((slot, context) => { if (slot.producer_family !== slot.reviewer_family) context.addIssue({ code: "custom", message: "self-review families must match" }); });
 const counterSlotSchema = z.object({ ...slotBase, role: z.literal("counter-review"), assurance: z.enum(["server-attested", "degraded"]), independence: z.literal("opposite-family") }).strict().superRefine((slot, context) => { if (slot.producer_family === slot.reviewer_family) context.addIssue({ code: "custom", message: "counter-review families must differ" }); });
-const gateCounterSlotSchema = z.object({ ...slotBase, role: z.literal("gate-counter-review"), assurance: z.enum(["server-attested", "degraded"]), independence: z.literal("opposite-family"), gate_id: idSchema }).strict().superRefine((slot, context) => { if (slot.producer_family === slot.reviewer_family) context.addIssue({ code: "custom", message: "gate-counter-review families must differ" }); });
+const gateCounterSlotSchema = z.object({ ...slotBase, role: z.literal("gate-counter-review"), assurance: z.enum(["server-attested", "degraded"]), independence: z.literal("opposite-family"), gate_id: pathSafeIdV1Schema }).strict().superRefine((slot, context) => { if (slot.producer_family === slot.reviewer_family) context.addIssue({ code: "custom", message: "gate-counter-review families must differ" }); });
 export const requiredReviewSlotsSchema = z.union([z.tuple([selfSlotSchema, counterSlotSchema]), z.tuple([selfSlotSchema, counterSlotSchema, gateCounterSlotSchema])]);
 export const currentEvidenceSetRefSchema = z.object({ set_digest: digestSchema, slots: requiredReviewSlotsSchema }).strict();
 export const referencedEvidenceSchema = z.union([
@@ -176,7 +176,7 @@ export type QualifiedReviewEvidenceByAssurance = { readonly [A in Assurance]: Ve
 export type QualifiedReviewEvidence = QualifiedReviewEvidenceByAssurance[Assurance];
 export type QualifiedAdjudicationEvidenceByAssurance = { readonly [A in Assurance]: VerifiedReferencedEvidence<"adjudication", A> & { readonly authority: AuthorityLink<"adjudication", A>; readonly [qualifiedEvidenceBrand]: `adjudication:${A}` } };
 export type QualifiedAdjudicationEvidence = QualifiedAdjudicationEvidenceByAssurance[Assurance];
-export interface CurrentReviewSet { readonly task_id: string; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest; readonly current_evidence_set: CurrentEvidenceSetRef; readonly reviews: readonly QualifiedReviewEvidence[]; readonly [currentReviewSetBrand]: true }
+export interface CurrentReviewSet { readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest; readonly current_evidence_set: CurrentEvidenceSetRef; readonly reviews: readonly QualifiedReviewEvidence[]; readonly [currentReviewSetBrand]: true }
 
 function assertLinkMatches<K extends EvidenceKind, A extends Assurance>(kind: K, link: AuthorityLink<K, A>, value: VerifiedReferencedEvidence<K, A>): void {
   const authenticatedAssurance = (["agent-declared", "server-attested", "degraded"] as const).find((assurance) =>

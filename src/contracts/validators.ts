@@ -44,6 +44,14 @@ function hasBoundedUtf8Length(maximumBytes: number, data: string): boolean {
   return Buffer.byteLength(data, "utf8") <= maximumBytes;
 }
 
+/**
+ * Unicode NFC is not expressible as a JSON Schema `pattern`, so without this keyword an NFD
+ * sample would be accepted by Ajv while the Zod mirror rejects it, failing `assertZodAgreement`.
+ */
+function isUnicodeNormalized(_enabled: true, data: string): boolean {
+  return data.normalize("NFC") === data;
+}
+
 function isOrdinalSortedUnique(_enabled: true, data: string[]): boolean {
   return data.every((value, index) => index === 0 || data[index - 1]! < value);
 }
@@ -181,6 +189,14 @@ export function createJsonSchemaValidator<T>(
     type: "string",
     errors: false,
     validate: hasBoundedUtf8Length
+  });
+  ajv.addKeyword({
+    keyword: "x-archflow-nfc",
+    schemaType: "boolean",
+    metaSchema: { const: true },
+    type: "string",
+    errors: false,
+    validate: isUnicodeNormalized
   });
   ajv.addKeyword({
     keyword: "x-archflow-effect",

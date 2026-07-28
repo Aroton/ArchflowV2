@@ -1,5 +1,6 @@
 export * from "./versions.js";
 export * from "./plain-json.js";
+export * from "./canonical.js";
 export * from "./validators.js";
 export * from "./phase-instance.js";
 export * from "./yaml.js";
@@ -11,6 +12,8 @@ export * from "./constitution.js";
 export * from "./evidence.js";
 export * from "./path-claims.js";
 export * from "./tool-names.js";
+export * from "./fingerprints.js";
+export * from "./secret-scan.js";
 export * from "./review.js";
 export * from "./adjudication.js";
 export * from "./trust.js";

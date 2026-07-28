@@ -1,10 +1,11 @@
 import { z } from "zod";
 
 import type { Sha256Digest } from "./evidence.js";
+import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type TaskSlug } from "./evidence.js";
 import { safeIdV1Schema } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
-import { taskPathClaimV1Schema, type TaskPathClaim } from "./path-claims.js";
+import { taskPathClaimV1Schema, type PathClass, type TaskPathClaim } from "./path-claims.js";
 import { PIPELINE_STEPS, type PipelineStep } from "./vocabulary.js";
 
 export interface RuleVersionRef { readonly rule_id: string; readonly rule_version: number }
@@ -43,15 +44,15 @@ export type GateContext<K extends GateKind> = GateContractByKind[K]["context"];
 export type GateDecisionPayload<K extends GateKind> = GateContractByKind[K]["decision"];
 export type GateEffect = "advance" | "retry" | "redirect-waiver" | "redirect-upstream" | "non-advancing";
 
-export interface GateDecisionEnvelopeBase { readonly schema_version: "1"; readonly gate_id: string; readonly task_id: string; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly context_digest: Sha256Digest; readonly human_provenance: HumanDecisionProvenance }
+export interface GateDecisionEnvelopeBase { readonly schema_version: "1"; readonly gate_id: PathSafeId; readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly context_digest: Sha256Digest; readonly human_provenance: HumanDecisionProvenance }
 export type GateDecisionEnvelope<K extends GateKind = GateKind> = { readonly [P in K]: GateDecisionEnvelopeBase & { readonly kind: P; readonly payload: GateDecisionPayload<P> } }[K];
 
 /** Exact archived origin binding consumed by the later waiver owner. */
 export interface WaiverOriginRef {
-  readonly origin_gate_id: string;
+  readonly origin_gate_id: PathSafeId;
   readonly origin_decision_digest: Sha256Digest;
   readonly origin_context_digest: Sha256Digest;
-  readonly task_id: string;
+  readonly task_id: TaskSlug;
   readonly phase_instance: PhaseInstanceId;
   readonly subject_digest: Sha256Digest;
   readonly current_evidence_set_digest: Sha256Digest;
@@ -90,7 +91,7 @@ const contexts = {
     if (available.size === 0) context.addIssue({ code: "custom", message: "adjudication failure must identify a rule" });
   }),
   "attempts-exhausted": z.object({ step: z.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger }).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts"),
-  "constitution-edit": z.object({ pinned_constitution_digest: digest, current_constitution_digest: digest, changed_path_class: z.literal("task-branch-constitution") }).strict(),
+  "constitution-edit": z.object({ pinned_constitution_digest: digest, current_constitution_digest: digest, changed_path_class: z.literal("task-branch-constitution" satisfies PathClass) }).strict(),
   "commit-authorization": z.object({ target_ref: boundedText, diff_digest: digest, current_artifact_digests: canonicalDigests.min(1), parent_document_digests: canonicalDigests.min(1) }).strict(),
   "restore-collision": z.object({ path: taskPathClaimV1Schema, recorded_generation_digest: digest, current_generation_digest: digest, adoption_candidate: authorityLink.optional() }).strict(),
   "migration-audit": z.object({ source_identity_digest: digest, destination_identity_digest: digest, import_digest: digest, code_baseline_digest: digest, policy_baseline_digest: digest }).strict(),
@@ -117,7 +118,7 @@ export const GATE_CONTRACTS = Object.freeze(Object.fromEntries(GATE_KINDS.map((k
 const connectedProvenance = z.object({ schema_version: z.literal("1"), actor_class: z.enum(["human", "archforge"]), assurance: z.literal("declared-local-trace"), channel: z.literal("connected-host"), decision_event_id: safeId, connection_id: safeId, request_id_digest: digest, recorded_at: z.string().datetime({ offset: false, local: false, precision: 3 }) }).strict();
 const localProvenance = z.object({ schema_version: z.literal("1"), actor_class: z.enum(["human", "archforge"]), assurance: z.literal("declared-local-trace"), channel: z.literal("archflow-local"), decision_event_id: safeId, helper_invocation_id: safeId, recorded_at: z.string().datetime({ offset: false, local: false, precision: 3 }) }).strict();
 export const humanDecisionProvenanceV1Schema = z.union([connectedProvenance, localProvenance]);
-const envelopeBase = { schema_version: z.literal("1"), gate_id: safeId, task_id: safeId, phase_instance: z.string().refine((value) => { try { decodePhaseInstance(value); return true; } catch { return false; } }), subject_digest: digest, context_digest: digest, human_provenance: z.union([connectedProvenance, localProvenance]) } as const;
+const envelopeBase = { schema_version: z.literal("1"), gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, phase_instance: z.string().refine((value) => { try { decodePhaseInstance(value); return true; } catch { return false; } }), subject_digest: digest, context_digest: digest, human_provenance: z.union([connectedProvenance, localProvenance]) } as const;
 
 export const gateContractV1Schema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("artifact-approval"), context: contexts["artifact-approval"], payload: decisions["artifact-approval"] }).strict(),

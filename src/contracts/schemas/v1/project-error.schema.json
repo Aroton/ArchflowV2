@@ -10,6 +10,35 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
     },
+    "taskSlug": {
+      "type": "string",
+      "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "pathSafeId": {
+      "type": "string",
+      "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "pathClass": {
+      "enum": [
+        "task-config",
+        "task-state",
+        "gate-interface",
+        "document",
+        "review",
+        "decision",
+        "result-manifest",
+        "result-payload",
+        "intent",
+        "attempt",
+        "manual-checkpoint",
+        "maintenance-record",
+        "import",
+        "shared-workflow",
+        "shared-constitution",
+        "task-branch-constitution",
+        "repository-source"
+      ]
+    },
     "code": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
@@ -61,11 +90,12 @@
       "type": "string",
       "pattern": "^(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)$"
     },
-    "path": {
+    "repositoryPathClaim": {
       "type": "string",
       "minLength": 1,
       "x-archflow-max-utf8-bytes": 1024,
-      "pattern": "^(?!/)(?![A-Za-z]:)(?!//)(?!.*\\\\)(?!.*[\\u0000-\\u001F\\u007F-\\u009F])(?!\\.\\.?(?:/|$))(?!.*\\/\\.\\.?(?:/|$))(?!.*//).+$"
+      "x-archflow-nfc": true,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!//)(?!.*\\\\)(?!.*[\\u0000-\\u001F\\u007F-\\u009F])(?!\\.\\.?(?:/|$))(?!.*\\/\\.\\.?(?:/|$))(?!.*//)(?!.*[:*?\\[\\]<>|])(?!.*[. ](?:/|$))(?!(?:.*/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?(?:/|$)).+$"
     },
     "issue": {
       "type": "object",
@@ -104,10 +134,10 @@
       ],
       "properties": {
         "task_id": {
-          "$ref": "#/$defs/id"
+          "$ref": "#/$defs/taskSlug"
         },
         "path_class": {
-          "$ref": "#/$defs/code"
+          "$ref": "#/$defs/pathClass"
         }
       }
     },
@@ -578,7 +608,7 @@
                   ],
                   "properties": {
                     "task_id": {
-                      "$ref": "#/$defs/id"
+                      "$ref": "#/$defs/taskSlug"
                     },
                     "issue_code": {
                       "$ref": "#/$defs/code"
@@ -1233,7 +1263,7 @@
                   ],
                   "properties": {
                     "gate_id": {
-                      "$ref": "#/$defs/id"
+                      "$ref": "#/$defs/pathSafeId"
                     },
                     "evidence_digest": {
                       "$ref": "#/$defs/digest"
@@ -1329,7 +1359,7 @@
                       "uniqueItems": true,
                       "x-archflow-sorted-unique": true,
                       "items": {
-                        "$ref": "#/$defs/path"
+                        "$ref": "#/$defs/repositoryPathClaim"
                       }
                     },
                     "current_bytes": {
@@ -1429,10 +1459,10 @@
                   ],
                   "properties": {
                     "gate_id": {
-                      "$ref": "#/$defs/id"
+                      "$ref": "#/$defs/pathSafeId"
                     },
                     "path_class": {
-                      "$ref": "#/$defs/code"
+                      "$ref": "#/$defs/pathClass"
                     }
                   }
                 }
@@ -1525,7 +1555,7 @@
                   ],
                   "properties": {
                     "path_class": {
-                      "$ref": "#/$defs/code"
+                      "$ref": "#/$defs/pathClass"
                     },
                     "detector_id": {
                       "$ref": "#/$defs/id"
@@ -1609,7 +1639,7 @@
                   ],
                   "properties": {
                     "gate_id": {
-                      "$ref": "#/$defs/id"
+                      "$ref": "#/$defs/pathSafeId"
                     },
                     "gate_kind": {
                       "$ref": "#/$defs/gate"
@@ -1674,7 +1704,7 @@
       ],
       "properties": {
         "gate_id": {
-          "$ref": "#/$defs/id"
+          "$ref": "#/$defs/pathSafeId"
         },
         "gate_kind": {
           "$ref": "#/$defs/gate"

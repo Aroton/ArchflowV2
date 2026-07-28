@@ -8,7 +8,7 @@
   ],
   "$defs": {
     "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }, "taskSlug": { "type": "string", "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$" },
     "nonBlank": { "type": "string", "minLength": 1, "pattern": "\\S" },
     "familyOrUnknown": { "enum": ["claude", "codex", "unknown"] },
     "effortOrUnknown": { "enum": ["low", "medium", "high", "xhigh", "max", "ultra", "unknown"] },
@@ -17,7 +17,7 @@
       "x-archflow-review-summary": true,
       "required": ["schema_version", "task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family", "findings", "matched_rule_versions", "verdict", "blocking_count", "model_family", "model", "effort"],
       "properties": {
-        "schema_version": { "const": "1" }, "task_id": { "$ref": "#/$defs/id" }, "phase_instance": { "type": "string", "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" }, "step": { "enum": ["self_review", "counter_review"] }, "role": { "enum": ["self-review", "counter-review", "gate-counter-review"] },
+        "schema_version": { "const": "1" }, "task_id": { "$ref": "#/$defs/taskSlug" }, "phase_instance": { "type": "string", "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" }, "step": { "enum": ["self_review", "counter_review"] }, "role": { "enum": ["self-review", "counter-review", "gate-counter-review"] },
         "subject_digest": { "$ref": "#/$defs/digest" }, "input_fingerprint": { "$ref": "#/$defs/digest" }, "rubric_digest": { "$ref": "#/$defs/digest" }, "producer_family": { "enum": ["claude", "codex"] },
         "findings": { "type": "array", "x-archflow-unique-by": "finding_id", "items": { "type": "object", "additionalProperties": false, "required": ["finding_id", "severity", "blocking", "summary", "evidence", "suggested_resolution"], "properties": { "finding_id": { "$ref": "#/$defs/id" }, "severity": { "enum": ["blocker", "major", "minor"] }, "blocking": { "type": "boolean" }, "summary": { "$ref": "#/$defs/nonBlank" }, "evidence": { "$ref": "#/$defs/nonBlank" }, "suggested_resolution": { "$ref": "#/$defs/nonBlank" } }, "allOf": [{ "if": { "properties": { "severity": { "const": "blocker" } }, "required": ["severity"] }, "then": { "properties": { "blocking": { "const": true } } }, "else": { "properties": { "blocking": { "const": false } } } }] } },
         "matched_rule_versions": { "type": "array", "uniqueItems": true, "items": { "type": "object", "additionalProperties": false, "required": ["rule_id", "rule_version"], "properties": { "rule_id": { "$ref": "#/$defs/id" }, "rule_version": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 } } } },

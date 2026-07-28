@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import type { ReferencedEvidence, Sha256Digest } from "./evidence.js";
+import type { ReferencedEvidence, Sha256Digest, TaskSlug } from "./evidence.js";
+import { taskSlugV1Schema } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
 import { ADAPTER_IDS, EFFORT_VALUES, MODEL_FAMILIES, ruleVersionRefSchema, type AdapterId, type ModelFamily, type RuleVersionRef } from "./review.js";
 
@@ -38,7 +39,7 @@ export interface DriftFinding {
 }
 export interface RawAdjudication {
   readonly schema_version: "1";
-  readonly task_id: string;
+  readonly task_id: TaskSlug;
   readonly phase_instance: string;
   readonly step: "adjudicate";
   readonly subject_digest: Sha256Digest;
@@ -88,7 +89,7 @@ const driftFindingSchema = z.object({
 });
 
 export const rawAdjudicationSchema = z.object({
-  schema_version: z.literal("1"), task_id: id,
+  schema_version: z.literal("1"), task_id: taskSlugV1Schema,
   phase_instance: z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
   step: z.literal("adjudicate"), subject_digest: digest, input_fingerprint: digest,
   pinned_constitution_digest: digest, approved_upstream_digests: z.array(digest), source_evidence_set_digest: digest,

@@ -10,7 +10,8 @@
     { "$ref": "#/$defs/supersede" }
   ],
   "$defs": {
-    "id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" },
+    "taskSlug": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
+    "pathSafeId": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
     "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "phase": {
       "type": "string",
@@ -29,8 +30,8 @@
         "input_fingerprint"
       ],
       "properties": {
-        "prior_gate_id": { "$ref": "#/$defs/id" },
-        "task_id": { "$ref": "#/$defs/id" },
+        "prior_gate_id": { "$ref": "#/$defs/pathSafeId" },
+        "task_id": { "$ref": "#/$defs/taskSlug" },
         "phase_instance": { "$ref": "#/$defs/phase" },
         "subject_digest": { "$ref": "#/$defs/digest" },
         "input_fingerprint": { "$ref": "#/$defs/digest" }
@@ -55,7 +56,7 @@
         "producer_family": { "$ref": "#/$defs/family" },
         "reviewer_family": { "$ref": "#/$defs/family" },
         "independence": { "const": "opposite-family" },
-        "gate_id": { "$ref": "#/$defs/id" }
+        "gate_id": { "$ref": "#/$defs/pathSafeId" }
       },
       "oneOf": [
         {
@@ -84,8 +85,8 @@
         "evidence_slot"
       ],
       "properties": {
-        "prior_gate_id": { "$ref": "#/$defs/id" },
-        "task_id": { "$ref": "#/$defs/id" },
+        "prior_gate_id": { "$ref": "#/$defs/pathSafeId" },
+        "task_id": { "$ref": "#/$defs/taskSlug" },
         "phase_instance": { "$ref": "#/$defs/phase" },
         "subject_digest": { "$ref": "#/$defs/digest" },
         "input_fingerprint": { "$ref": "#/$defs/digest" },

@@ -24,5 +24,6 @@ export const SCHEMA_IDS = {
   resultExpectation: "https://archflow.dev/schemas/v1/result-expectation",
   pathClaim: "urn:archflow:schema:v1:path-claim",
   releaseManifest: "urn:archflow:schema:v1:release-manifest",
-  releaseLegalReview: "urn:archflow:schema:v1:release-legal-review"
+  releaseLegalReview: "urn:archflow:schema:v1:release-legal-review",
+  secretScanResult: "urn:archflow:schema:v1:secret-scan-result"
 } as const;

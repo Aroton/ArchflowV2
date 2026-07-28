@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import type { Sha256Digest } from "./evidence.js";
+import type { Sha256Digest, TaskSlug } from "./evidence.js";
+import { taskSlugV1Schema } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
 import type { CurrentReviewSet } from "./trust.js";
 import { authenticCurrentReviewSet, registerValidatedTriage, validatedTriageBrand } from "./internal/trust-brands.js";
@@ -12,7 +13,7 @@ export interface RejectedDisposition extends FindingRef { readonly disposition: 
 export type TriageDisposition = AcceptedDisposition | RejectedDisposition;
 export interface TriageCandidate {
   readonly schema_version: "1";
-  readonly task_id: string;
+  readonly task_id: TaskSlug;
   readonly phase_instance: string;
   readonly step: "triage";
   readonly subject_digest: Sha256Digest;
@@ -33,7 +34,7 @@ const acceptedDispositionSchema = z.object({ ...findingRefShape, disposition: z.
 const rejectedDispositionSchema = z.object({ ...findingRefShape, disposition: z.literal("rejected"), rationale: nonBlank, evidence: nonBlank }).strict();
 export const triageDispositionSchema = z.discriminatedUnion("disposition", [acceptedDispositionSchema, rejectedDispositionSchema]);
 export const triageCandidateSchema = z.object({
-  schema_version: z.literal("1"), task_id: id,
+  schema_version: z.literal("1"), task_id: taskSlugV1Schema,
   phase_instance: z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
   step: z.literal("triage"), subject_digest: digest, input_fingerprint: digest,
   current_evidence_set_digest: digest, source_evidence_digests: z.array(digest),

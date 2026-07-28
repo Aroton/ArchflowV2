@@ -4,7 +4,7 @@
   "type": "object", "additionalProperties": false, "x-archflow-adjudication-semantics": true,
   "required": ["schema_version", "task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_evidence_set_digest", "rule_findings", "drift_findings", "constitution", "drift", "matched_rule_versions", "uncertain_rule_versions"],
   "properties": {
-    "schema_version": { "const": "1" }, "task_id": { "$ref": "#/$defs/id" }, "phase_instance": { "type": "string", "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" }, "step": { "const": "adjudicate" },
+    "schema_version": { "const": "1" }, "task_id": { "$ref": "#/$defs/taskSlug" }, "phase_instance": { "type": "string", "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" }, "step": { "const": "adjudicate" },
     "subject_digest": { "$ref": "#/$defs/digest" }, "input_fingerprint": { "$ref": "#/$defs/digest" }, "pinned_constitution_digest": { "$ref": "#/$defs/digest" },
     "approved_upstream_digests": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/digest" } }, "source_evidence_set_digest": { "$ref": "#/$defs/digest" },
     "rule_findings": { "type": "array", "items": { "$ref": "#/$defs/ruleFinding" } }, "drift_findings": { "type": "array", "x-archflow-unique-by": "upstream_digest", "items": { "$ref": "#/$defs/driftFinding" } },
@@ -12,7 +12,7 @@
     "matched_rule_versions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/ruleVersion" } }, "uncertain_rule_versions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/ruleVersion" } }
   },
   "$defs": {
-    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }, "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "nonBlank": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }, "taskSlug": { "type": "string", "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$" }, "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "nonBlank": { "type": "string", "minLength": 1, "pattern": "\\S" },
     "compliance": { "enum": ["pass", "fail", "uncertain"] }, "drift": { "enum": ["aligned", "incidental", "material"] },
     "ruleVersion": { "type": "object", "additionalProperties": false, "required": ["rule_id", "rule_version"], "properties": { "rule_id": { "$ref": "#/$defs/id" }, "rule_version": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 } } },
     "mechanical": { "type": "object", "additionalProperties": false, "required": ["mechanism", "state", "details"], "properties": { "mechanism": { "$ref": "#/$defs/nonBlank" }, "state": { "enum": ["current", "missing", "stale", "unknown", "failed", "digest-mismatch"] }, "subject_digest": { "$ref": "#/$defs/digest" }, "evidence_digest": { "$ref": "#/$defs/digest" }, "details": { "$ref": "#/$defs/nonBlank" } }, "allOf": [{ "if": { "properties": { "state": { "enum": ["current", "stale"] } }, "required": ["state"] }, "then": { "properties": { "subject_digest": true, "evidence_digest": true }, "required": ["subject_digest", "evidence_digest"] } }, { "if": { "properties": { "state": { "enum": ["missing", "unknown"] } }, "required": ["state"] }, "then": { "not": { "anyOf": [{ "required": ["subject_digest"] }, { "required": ["evidence_digest"] }] } } }] },

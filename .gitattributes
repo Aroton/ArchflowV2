@@ -1,6 +1,11 @@
 # Auto detect text files and perform LF normalization
 * text=auto
 
+# ArchFlow state is byte-addressed: -text makes blob OIDs independent of core.autocrlf/core.eol,
+# and merge=binary keeps conflicts marker-free while diffs stay readable. Git applies the last
+# matching rule, so this must stay after * text=auto.
+.archflow/** -text merge=binary
+
 # Canonical generated release text is byte-reproducible with LF endings.
 dist/*.mjs text eol=lf
 dist/archflow-mcp.mjs -whitespace

@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import * as publicContracts from "../../src/contracts/index.js";
 import { createProjectError } from "../../src/contracts/errors.js";
-import { parseSha256Digest } from "../../src/contracts/evidence.js";
-import { bindParsedToolCallRequest, correlateProjectResult, createInternalResultExpectation, parseToolCall, TOOL_DEFINITIONS, validateProjectFailureStructure, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
+import { parsePathSafeId, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { bindParsedToolCallRequest, correlateProjectResult, createInternalResultExpectation, parseToolCall, TOOL_DEFINITIONS, validateProjectFailureStructure, validateProjectResultStructure, type AdjudicateInput, type CommonToolInput, type CounterReviewInput, type GateInput, type ResultIdentityPayload, type StateInput, type WaiverDecisionBinding, type WaiverInput } from "../../src/contracts/mcp-tools.js";
+import type { GateDecisionEnvelopeBase } from "../../src/contracts/gates.js";
+import type { GateSupersessionRef, SupplementalGateRef } from "../../src/contracts/supplemental.js";
+import type { PathSafeId, TaskSlug } from "../../src/contracts/evidence.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { TOOL_NAMES } from "../../src/contracts/tool-names.js";
 
@@ -26,7 +29,7 @@ describe("correlated MCP tool contracts", () => {
     const call = bindParsedToolCallRequest(parseToolCall("archflow_state", stateInput), parseSha256Digest("b".repeat(64)));
     const value = { path: parseTaskPathClaim("phases/2/result.json"), revision: 3, status: "succeeded" } as const;
     const structural = validateProjectResultStructure(call, { schema_version: "1", ok: true, value });
-    const expectation = createInternalResultExpectation({ schema_version: "1", tool: "archflow_state", task_id: "task-1", intent_id: "intent-1", input_fingerprint: digest, request_digest: parseSha256Digest("b".repeat(64)), result_id: "result-1", resulting_revision: 3, success: value });
+    const expectation = createInternalResultExpectation({ schema_version: "1", tool: "archflow_state", task_id: parseTaskSlug("task-1"), intent_id: parsePathSafeId("intent-1"), input_fingerprint: digest, request_digest: parseSha256Digest("b".repeat(64)), result_id: "result-1", resulting_revision: 3, success: value });
     expect(correlateProjectResult(call, expectation, structural)).toEqual(expect.objectContaining({ ok: true, value }));
     const wrong = createInternalResultExpectation({ ...expectation, result_id: "result-2", resulting_revision: 4, success: { ...value, revision: 4 } });
     expect(() => correlateProjectResult(call, wrong, structural)).toThrow(/expectation mismatch/);
@@ -109,7 +112,7 @@ describe("correlated MCP tool contracts", () => {
   it("registers failure authenticity without allowing spread clones or tool substitution", () => {
     const call = bindParsedToolCallRequest(parseToolCall("archflow_state", stateInput), parseSha256Digest("b".repeat(64)));
     const success = { path: parseTaskPathClaim("phases/2/result.json"), revision: 3, status: "succeeded" } as const;
-    const expectation = createInternalResultExpectation({ schema_version: "1", tool: "archflow_state", task_id: "task-1", intent_id: "intent-1", input_fingerprint: digest, request_digest: parseSha256Digest("b".repeat(64)), result_id: "result-1", resulting_revision: 3, success });
+    const expectation = createInternalResultExpectation({ schema_version: "1", tool: "archflow_state", task_id: parseTaskSlug("task-1"), intent_id: parsePathSafeId("intent-1"), input_fingerprint: digest, request_digest: parseSha256Digest("b".repeat(64)), result_id: "result-1", resulting_revision: 3, success });
     const source = { schema_version: "1", ok: false, error: createProjectError("INTERNAL_ERROR", { correlation_id: "correlation-1" }) } as const;
     const failure = validateProjectFailureStructure("archflow_state", source);
     expect(correlateProjectResult(call, expectation, failure)).toBe(failure);
@@ -121,8 +124,8 @@ describe("correlated MCP tool contracts", () => {
   it("uses the authoritative exact current-evidence tuple parser for gates", () => {
     const self = { role: "self-review", evidence_digest: "1".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" };
     const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
-    const base = { schema_version: "1", task_id: "Task:1", intent_id: "Intent:1", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: digest, current_evidence: { set_digest: "3".repeat(64), slots: [self, counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } };
-    expect(parseToolCall("archflow_gate", base).input.task_id).toBe("Task:1");
+    const base = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: digest, current_evidence: { set_digest: "3".repeat(64), slots: [self, counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } };
+    expect(parseToolCall("archflow_gate", base).input.task_id).toBe("task-1");
     expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [counter, self] } })).toThrow();
     expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [self, { ...counter, evidence_digest: self.evidence_digest }] } })).toThrow();
     expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [self, { ...counter, reviewer_family: "claude" }] } })).toThrow();
@@ -135,8 +138,8 @@ describe("correlated MCP tool contracts", () => {
     const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
     const commonInput = {
       schema_version: "1",
-      task_id: "Task:1",
-      intent_id: "Intent:1",
+      task_id: "task-1",
+      intent_id: "intent-1",
       expected_revision: 0,
       input_fingerprint: digest,
       phase_instance: "phase-impl-2",
@@ -155,7 +158,7 @@ describe("correlated MCP tool contracts", () => {
     } as const;
     const envelope = (kind: string, payload: Readonly<Record<string, unknown>>) => ({
       schema_version: "1",
-      gate_id: "Gate:1",
+      gate_id: "gate-1",
       task_id: commonInput.task_id,
       phase_instance: commonInput.phase_instance,
       subject_digest: commonInput.subject_digest,
@@ -240,12 +243,91 @@ describe("correlated MCP tool contracts", () => {
   });
 
   it("enforces waiver origin identity and canonical UTC-millisecond provenance", () => {
-    const origin = { origin_gate_id: "Gate:1", origin_decision_digest: "1".repeat(64), origin_context_digest: "2".repeat(64), task_id: "Task_1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), rule: { rule_id: "Rule:1", rule_version: 1 }, scope: { operation: "review-trigger", boundary: "subject" } };
-    const input = { schema_version: "1", task_id: "Task_1", intent_id: "Intent:1", expected_revision: 0, input_fingerprint: digest, origin, rationale: "Needed" };
-    expect(() => parseToolCall("archflow_waiver", { ...input, task_id: "Other" })).toThrow(/task_id/);
+    const origin = { origin_gate_id: "gate-1", origin_decision_digest: "1".repeat(64), origin_context_digest: "2".repeat(64), task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), rule: { rule_id: "Rule:1", rule_version: 1 }, scope: { operation: "review-trigger", boundary: "subject" } };
+    const input = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, origin, rationale: "Needed" };
+    expect(() => parseToolCall("archflow_waiver", { ...input, task_id: "other" })).toThrow(/task_id/);
     const call = parseToolCall("archflow_waiver", input);
-    const success = { origin_gate_id: "Gate:1", waiver_gate_id: "Gate:2", task_id: "Task_1", rule_id: "Rule:1", rule_version: 1, subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), scope: origin.scope, human_provenance: { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "Decision:1", helper_invocation_id: "Helper:1", recorded_at: "2026-07-27T12:00:00.000Z" }, granted: false, notes: "Denied", revision: 1 };
+    const success = { origin_gate_id: "gate-1", waiver_gate_id: "gate-2", task_id: "task-1", rule_id: "Rule:1", rule_version: 1, subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), scope: origin.scope, human_provenance: { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "Decision:1", helper_invocation_id: "Helper:1", recorded_at: "2026-07-27T12:00:00.000Z" }, granted: false, notes: "Denied", revision: 1 };
     expect(validateProjectResultStructure(call, { schema_version: "1", ok: true, value: success }).ok).toBe(true);
     expect(() => validateProjectResultStructure(call, { schema_version: "1", ok: true, value: { ...success, human_provenance: { ...success.human_provenance, recorded_at: "2026-07-27T12:00:00Z" } } })).toThrow();
+  });
+});
+
+describe("retightened boundary identifiers", () => {
+  const rubric = { schema_version: "1", kind: "implementation", mode: "adversarial", criteria: [{ id: "paths", text: "Check paths", blocking: true }] } as const;
+  const counterInput = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, artifact_path: "phases/2/result.md", rubric } as const;
+  const waiverOrigin = { origin_gate_id: "gate-1", origin_decision_digest: "1".repeat(64), origin_context_digest: "2".repeat(64), task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), rule: { rule_id: "Rule:1", rule_version: 1 }, scope: { operation: "review-trigger", boundary: "subject" } } as const;
+  const waiverInput = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, origin: waiverOrigin, rationale: "Needed" } as const;
+
+  // Each value below was accepted before the retightening; `safeId` permits `:`, `_`, and uppercase.
+  it.each(["Task_1", "Task:1", "task:1", "TASK-1", "-task", "a".repeat(65)])("rejects the previously legal task_id %s", (taskId) => {
+    expect(() => parseToolCall("archflow_counter_review", { ...counterInput, task_id: taskId })).toThrow();
+    expect(() => parseToolCall("archflow_waiver", { ...waiverInput, task_id: taskId, origin: { ...waiverOrigin, task_id: taskId } })).toThrow();
+  });
+
+  it.each(["Intent:1", "retry:3", "intent:1"])("rejects the previously legal intent_id %s", (intentId) => {
+    expect(() => parseToolCall("archflow_counter_review", { ...counterInput, intent_id: intentId })).toThrow();
+  });
+
+  it.each(["Gate:1", "gate:1"])("rejects the previously legal gate identifier %s", (gateId) => {
+    expect(() => parseToolCall("archflow_waiver", { ...waiverInput, origin: { ...waiverOrigin, origin_gate_id: gateId } })).toThrow();
+  });
+
+  it("keeps the unchanged identifiers on the broad safeId grammar", () => {
+    // rule_id keeps `:`; it never becomes a path segment.
+    expect(parseToolCall("archflow_waiver", waiverInput).input.origin.rule.rule_id).toBe("Rule:1");
+    const value = { path: parseTaskPathClaim("phases/2/result.json"), revision: 3, status: "succeeded" } as const;
+    expect(createInternalResultExpectation({ schema_version: "1", tool: "archflow_state", task_id: parseTaskSlug("task-1"), intent_id: parsePathSafeId("intent-1"), input_fingerprint: digest, request_digest: parseSha256Digest("b".repeat(64)), result_id: "Result:1", resulting_revision: 3, success: value }).result_id).toBe("Result:1");
+  });
+
+  it("does not let a plain string mint a task slug or a path-safe identifier", () => {
+    expectTypeOf<CommonToolInput["task_id"]>().toEqualTypeOf<TaskSlug>();
+    expectTypeOf<CommonToolInput["intent_id"]>().toEqualTypeOf<PathSafeId>();
+    expectTypeOf<StateInput["task_id"]>().toEqualTypeOf<TaskSlug>();
+    expectTypeOf<CounterReviewInput["task_id"]>().toEqualTypeOf<TaskSlug>();
+    expectTypeOf<AdjudicateInput["task_id"]>().toEqualTypeOf<TaskSlug>();
+    expectTypeOf<GateInput["task_id"]>().toEqualTypeOf<TaskSlug>();
+    expectTypeOf<WaiverInput["task_id"]>().toEqualTypeOf<TaskSlug>();
+    expectTypeOf<ResultIdentityPayload["task_id"]>().toEqualTypeOf<TaskSlug>();
+    expectTypeOf<ResultIdentityPayload["result_id"]>().toEqualTypeOf<string>();
+
+    // @ts-expect-error a plain string is not a validated task slug
+    const commonTask: CommonToolInput["task_id"] = "task-1";
+    // @ts-expect-error a plain string is not a validated path-safe identifier
+    const commonIntent: CommonToolInput["intent_id"] = "intent-1";
+    // @ts-expect-error a plain string is not a validated task slug
+    const stateTask: StateInput["task_id"] = "task-1";
+    // @ts-expect-error a plain string is not a validated task slug
+    const counterTask: CounterReviewInput["task_id"] = "task-1";
+    // @ts-expect-error a plain string is not a validated task slug
+    const adjudicateTask: AdjudicateInput["task_id"] = "task-1";
+    // @ts-expect-error a plain string is not a validated task slug
+    const gateTask: GateInput["task_id"] = "task-1";
+    // @ts-expect-error a plain string is not a validated task slug
+    const waiverTask: WaiverInput["task_id"] = "task-1";
+    // @ts-expect-error a plain string is not a validated task slug
+    const identityTask: ResultIdentityPayload["task_id"] = "task-1";
+    // @ts-expect-error a plain string is not a validated path-safe identifier
+    const identityIntent: ResultIdentityPayload["intent_id"] = "intent-1";
+    // @ts-expect-error a plain string is not a validated path-safe identifier
+    const bindingOrigin: WaiverDecisionBinding["origin_gate_id"] = "gate-1";
+    // @ts-expect-error a plain string is not a validated path-safe identifier
+    const bindingWaiver: WaiverDecisionBinding["waiver_gate_id"] = "gate-2";
+    // @ts-expect-error a plain string is not a validated task slug
+    const bindingTask: WaiverDecisionBinding["task_id"] = "task-1";
+    // @ts-expect-error a plain string is not a validated path-safe identifier
+    const envelopeGate: GateDecisionEnvelopeBase["gate_id"] = "gate-1";
+    // @ts-expect-error a plain string is not a validated task slug
+    const envelopeTask: GateDecisionEnvelopeBase["task_id"] = "task-1";
+    // @ts-expect-error a plain string is not a validated path-safe identifier
+    const supersededGate: GateSupersessionRef["superseded_gate_id"] = "gate-1";
+    // @ts-expect-error a plain string is not a validated path-safe identifier
+    const priorGate: SupplementalGateRef["prior_gate_id"] = "gate-1";
+    // @ts-expect-error a plain string is not a validated task slug
+    const supplementalTask: SupplementalGateRef["task_id"] = "task-1";
+    // rule_id is deliberately unchanged: it is not a path segment and keeps the broad grammar.
+    const ruleId: WaiverDecisionBinding["rule_id"] = "Rule:1";
+
+    expect([commonTask, commonIntent, stateTask, counterTask, adjudicateTask, gateTask, waiverTask, identityTask, identityIntent, bindingOrigin, bindingWaiver, bindingTask, envelopeGate, envelopeTask, supersededGate, priorGate, supplementalTask, ruleId]).toHaveLength(18);
   });
 });

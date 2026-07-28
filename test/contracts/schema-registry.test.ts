@@ -31,6 +31,7 @@ const SCHEMA_FILES = {
   pathClaim: "path-claim",
   releaseManifest: "release-manifest",
   releaseLegalReview: "release-legal-review",
+  secretScanResult: "secret-scan-result",
 } as const satisfies Record<keyof typeof SCHEMA_IDS, string>;
 
 const loadSchema = async (name: string): Promise<Record<string, unknown>> =>

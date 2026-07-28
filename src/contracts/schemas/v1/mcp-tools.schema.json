@@ -6,6 +6,8 @@
   "$defs": {
     "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" },
+    "taskSlug": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
+    "pathSafeId": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
     "text": {
       "type": "string",
       "minLength": 1,
@@ -60,8 +62,8 @@
       ],
       "properties": {
         "schema_version": { "const": "1" },
-        "task_id": { "$ref": "#/$defs/id" },
-        "intent_id": { "$ref": "#/$defs/id" },
+        "task_id": { "$ref": "#/$defs/taskSlug" },
+        "intent_id": { "$ref": "#/$defs/pathSafeId" },
         "expected_revision": { "$ref": "#/$defs/integer" },
         "input_fingerprint": { "$ref": "#/$defs/digest" }
       }
@@ -95,8 +97,8 @@
             ],
             "properties": {
               "schema_version": { "const": "1" },
-              "task_id": { "$ref": "#/$defs/id" },
-              "intent_id": { "$ref": "#/$defs/id" },
+              "task_id": { "$ref": "#/$defs/taskSlug" },
+              "intent_id": { "$ref": "#/$defs/pathSafeId" },
               "expected_revision": { "$ref": "#/$defs/integer" },
               "input_fingerprint": { "$ref": "#/$defs/digest" },
               "phase_instance": { "$ref": "#/$defs/phase" },
@@ -155,8 +157,8 @@
         ],
         "properties": {
           "schema_version": { "const": "1" },
-          "task_id": { "$ref": "#/$defs/id" },
-          "intent_id": { "$ref": "#/$defs/id" },
+          "task_id": { "$ref": "#/$defs/taskSlug" },
+          "intent_id": { "$ref": "#/$defs/pathSafeId" },
           "expected_revision": { "$ref": "#/$defs/integer" },
           "input_fingerprint": { "$ref": "#/$defs/digest" },
           "artifact_path": { "$ref": "#/$defs/path" },
@@ -205,8 +207,8 @@
         ],
         "properties": {
           "schema_version": { "const": "1" },
-          "task_id": { "$ref": "#/$defs/id" },
-          "intent_id": { "$ref": "#/$defs/id" },
+          "task_id": { "$ref": "#/$defs/taskSlug" },
+          "intent_id": { "$ref": "#/$defs/pathSafeId" },
           "expected_revision": { "$ref": "#/$defs/integer" },
           "input_fingerprint": { "$ref": "#/$defs/digest" },
           "artifact_path": { "$ref": "#/$defs/path" },
@@ -263,8 +265,8 @@
         ],
         "properties": {
           "schema_version": { "const": "1" },
-          "task_id": { "$ref": "#/$defs/id" },
-          "intent_id": { "$ref": "#/$defs/id" },
+          "task_id": { "$ref": "#/$defs/taskSlug" },
+          "intent_id": { "$ref": "#/$defs/pathSafeId" },
           "expected_revision": { "$ref": "#/$defs/integer" },
           "input_fingerprint": { "$ref": "#/$defs/digest" },
           "phase_instance": { "$ref": "#/$defs/phase" },
@@ -280,7 +282,7 @@
               "old_subject_digest"
             ],
             "properties": {
-              "superseded_gate_id": { "$ref": "#/$defs/id" },
+              "superseded_gate_id": { "$ref": "#/$defs/pathSafeId" },
               "accepted_triage_digest": { "$ref": "#/$defs/digest" },
               "old_subject_digest": { "$ref": "#/$defs/digest" }
             }
@@ -368,8 +370,8 @@
         ],
         "properties": {
           "schema_version": { "const": "1" },
-          "task_id": { "$ref": "#/$defs/id" },
-          "intent_id": { "$ref": "#/$defs/id" },
+          "task_id": { "$ref": "#/$defs/taskSlug" },
+          "intent_id": { "$ref": "#/$defs/pathSafeId" },
           "expected_revision": { "$ref": "#/$defs/integer" },
           "input_fingerprint": { "$ref": "#/$defs/digest" },
           "origin": {
@@ -387,10 +389,10 @@
               "scope"
             ],
             "properties": {
-              "origin_gate_id": { "$ref": "#/$defs/id" },
+              "origin_gate_id": { "$ref": "#/$defs/pathSafeId" },
               "origin_decision_digest": { "$ref": "#/$defs/digest" },
               "origin_context_digest": { "$ref": "#/$defs/digest" },
-              "task_id": { "$ref": "#/$defs/id" },
+              "task_id": { "$ref": "#/$defs/taskSlug" },
               "phase_instance": { "$ref": "#/$defs/phase" },
               "subject_digest": { "$ref": "#/$defs/digest" },
               "current_evidence_set_digest": { "$ref": "#/$defs/digest" },
@@ -418,9 +420,9 @@
           "revision"
         ],
         "properties": {
-          "origin_gate_id": { "$ref": "#/$defs/id" },
-          "waiver_gate_id": { "$ref": "#/$defs/id" },
-          "task_id": { "$ref": "#/$defs/id" },
+          "origin_gate_id": { "$ref": "#/$defs/pathSafeId" },
+          "waiver_gate_id": { "$ref": "#/$defs/pathSafeId" },
+          "task_id": { "$ref": "#/$defs/taskSlug" },
           "rule_id": { "$ref": "#/$defs/id" },
           "rule_version": { "$ref": "#/$defs/rule/properties/rule_version" },
           "subject_digest": { "$ref": "#/$defs/digest" },

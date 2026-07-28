@@ -116,7 +116,7 @@ describe("exhaustive gate, error, and supplemental authority", () => {
       expect(gateValidator.validate(value), `${String(value.kind)}:${JSON.stringify(gateValidator.validate.errors)}`).toBe(true);
       expect(parseGateContract(value)).toEqual(value);
       expect(value).toEqual(before);
-      const envelope = { schema_version: "1", gate_id: "Gate:1", task_id: "Task_1", phase_instance: "phase-impl-2", subject_digest: D("a"), context_digest: D("b"), human_provenance: { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: `event-${String(value.kind)}`, helper_invocation_id: "helper-1", recorded_at: "2026-07-27T12:00:00.000Z" }, kind: value.kind, payload: value.payload };
+      const envelope = { schema_version: "1", gate_id: "gate-1", task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: D("a"), context_digest: D("b"), human_provenance: { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: `event-${String(value.kind)}`, helper_invocation_id: "helper-1", recorded_at: "2026-07-27T12:00:00.000Z" }, kind: value.kind, payload: value.payload };
       const envelopeBefore = structuredClone(envelope);
       expect(decisionValidator.validate(envelope), `${String(value.kind)}:${JSON.stringify(decisionValidator.validate.errors)}`).toBe(true);
       expect(parseGateDecisionEnvelope(envelope)).toEqual(envelope);
@@ -167,8 +167,8 @@ describe("exhaustive gate, error, and supplemental authority", () => {
   });
 
   it("covers every supplemental variant, gate binding, decline shape, and supersession invariant", () => {
-    const gate = { prior_gate_id: "Gate:1", task_id: "Task_1", phase_instance: "phase-impl-2", subject_digest: D("a"), input_fingerprint: D("b") };
-    const review = { ...gate, evidence_slot: { role: "gate-counter-review", evidence_digest: D("c"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "Gate:1" } };
+    const gate = { prior_gate_id: "gate-1", task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: D("a"), input_fingerprint: D("b") };
+    const review = { ...gate, evidence_slot: { role: "gate-counter-review", evidence_digest: D("c"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-1" } };
     const cases = [
       { action: "decline", gate, reason: "Declined" },
       { action: "ingest", review, reason: "Ingested" },
@@ -183,7 +183,7 @@ describe("exhaustive gate, error, and supplemental authority", () => {
     }
     const invalid = [
       { ...cases[0], review },
-      { ...cases[1], review: { ...review, evidence_slot: { ...review.evidence_slot, gate_id: "Gate:2" } } },
+      { ...cases[1], review: { ...review, evidence_slot: { ...review.evidence_slot, gate_id: "gate-2" } } },
       { ...cases[1], review: { ...review, evidence_slot: { ...review.evidence_slot, reviewer_family: "claude" } } },
       { ...cases[3], old_subject_digest: D("f") },
       { ...cases[3], new_subject_digest: D("a") },

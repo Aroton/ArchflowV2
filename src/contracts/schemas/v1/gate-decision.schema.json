@@ -8,6 +8,8 @@
       "pattern": "^[0-9a-f]{64}$"
     },
     "safeId": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" },
+    "taskSlug": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
+    "pathSafeId": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
     "recordedAt": {
       "type": "string",
       "format": "date-time",
@@ -105,10 +107,10 @@
           "const": "1"
         },
         "gate_id": {
-          "$ref": "#/$defs/safeId"
+          "$ref": "#/$defs/pathSafeId"
         },
         "task_id": {
-          "$ref": "#/$defs/safeId"
+          "$ref": "#/$defs/taskSlug"
         },
         "phase_instance": {
           "type": "string",

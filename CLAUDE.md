@@ -91,3 +91,10 @@ Everything else is a default, not a rule:
 - Numbers (agent counts, phase counts, chunk counts, conversation rounds) are calibration hints — phrase as "typically" or "default," never "must."
 - Techniques that compensate for model limits (mandatory research, forced sub-agent delegation, fixed decomposition) must be conditional on the task actually needing them.
 - The human gate reviews evidence and exercises judgment; the agent performs all labor it is capable of, including running verification itself.
+
+## Git and digest conventions
+
+Learned the hard way in this repository; both apply to any future work.
+
+- **Never pass `--literal-pathspecs` to a Git invocation that uses a `:(top,literal)` pathspec.** The flag disables pathspec magic, so the prefix is then matched as a literal filename and the command silently selects nothing — no error, empty output. `:(top,literal)` alone supplies both literal matching and worktree-root anchoring. `check-attr` takes pathnames rather than pathspecs and needs neither.
+- **Validate and materialize a caller-owned object once before inspecting it more than once** — `assertPlainJson` then `structuredClone`. An enumerable getter can otherwise return one value to a validation pass and a different value to a hashing pass, which defeats any assert-don't-filter security property. This is how an excluded field reached a request digest that was supposed to reject it.

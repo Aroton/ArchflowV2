@@ -47,8 +47,8 @@ describe("MCP contract schema agreement", () => {
     const digest = (character: string) => character.repeat(64);
     const provenance = { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "Decision:1", helper_invocation_id: "Helper:1", recorded_at: "2026-07-27T12:00:00.000Z" };
     const scope = { operation: "review-trigger", boundary: "subject" } as const;
-    const rawCall = (ruleVersion: number) => ({ schema_version: "1", task_id: "Task:1", intent_id: "Intent:1", expected_revision: 0, input_fingerprint: digest("a"), origin: { origin_gate_id: "Gate:1", origin_decision_digest: digest("1"), origin_context_digest: digest("2"), task_id: "Task:1", phase_instance: "phase-impl-3", subject_digest: digest("3"), current_evidence_set_digest: digest("4"), rule: { rule_id: "Rule:1", rule_version: ruleVersion }, scope }, rationale: "Needed" });
-    const output = (ruleVersion: number) => ({ schema_version: "1", ok: true, value: { origin_gate_id: "Gate:1", waiver_gate_id: "Gate:2", task_id: "Task:1", rule_id: "Rule:1", rule_version: ruleVersion, subject_digest: digest("3"), current_evidence_set_digest: digest("4"), scope, human_provenance: provenance, granted: false, notes: "Denied", revision: 1 } });
+    const rawCall = (ruleVersion: number) => ({ schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest("a"), origin: { origin_gate_id: "gate-1", origin_decision_digest: digest("1"), origin_context_digest: digest("2"), task_id: "task-1", phase_instance: "phase-impl-3", subject_digest: digest("3"), current_evidence_set_digest: digest("4"), rule: { rule_id: "Rule:1", rule_version: ruleVersion }, scope }, rationale: "Needed" });
+    const output = (ruleVersion: number) => ({ schema_version: "1", ok: true, value: { origin_gate_id: "gate-1", waiver_gate_id: "gate-2", task_id: "task-1", rule_id: "Rule:1", rule_version: ruleVersion, subject_digest: digest("3"), current_evidence_set_digest: digest("4"), scope, human_provenance: provenance, granted: false, notes: "Denied", revision: 1 } });
 
     for (const boundary of [1, Number.MAX_SAFE_INTEGER]) {
       const candidate = output(boundary);
@@ -82,7 +82,7 @@ describe("MCP contract schema agreement", () => {
     const validator = createJsonSchemaValidator(mcp, references);
     const self = { role: "self-review", evidence_digest: "1".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" };
     const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
-    const gate = { schema_version: "1", task_id: "Task:1", intent_id: "Intent:1", expected_revision: 0, input_fingerprint: "a".repeat(64), phase_instance: "phase-impl-2", summary: "Review", subject_digest: "a".repeat(64), current_evidence: { set_digest: "3".repeat(64), slots: [self, counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } };
+    const gate = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: "a".repeat(64), phase_instance: "phase-impl-2", summary: "Review", subject_digest: "a".repeat(64), current_evidence: { set_digest: "3".repeat(64), slots: [self, counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } };
     expect(validator.validate(gate)).toBe(true);
     for (const invalid of [{ ...gate, current_evidence: { ...gate.current_evidence, slots: [counter, self] } }, { ...gate, current_evidence: { ...gate.current_evidence, slots: [self, { ...counter, evidence_digest: self.evidence_digest }] } }, { ...gate, kind: "attempts-exhausted", context: { step: "produce", attempts: 1, maximum_attempts: 2 } }]) {
       expect(validator.validate(invalid)).toBe(false);
@@ -94,8 +94,8 @@ describe("MCP contract schema agreement", () => {
       expect(validator.validate(input)).toBe(false);
       expect(() => parseToolCall("archflow_counter_review", input)).toThrow();
     }
-    const common = { schema_version: "1", task_id: "Task:1", intent_id: "Intent:1", expected_revision: 0, input_fingerprint: "a".repeat(64) };
-    const waiverOrigin = { origin_gate_id: "Gate:1", origin_decision_digest: "1".repeat(64), origin_context_digest: "2".repeat(64), task_id: "Task:1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), rule: { rule_id: "Rule:1", rule_version: 1 }, scope: { operation: "review-trigger", boundary: "subject" } };
+    const common = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: "a".repeat(64) };
+    const waiverOrigin = { origin_gate_id: "gate-1", origin_decision_digest: "1".repeat(64), origin_context_digest: "2".repeat(64), task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), rule: { rule_id: "Rule:1", rule_version: 1 }, scope: { operation: "review-trigger", boundary: "subject" } };
     const examples = [
       ["archflow_state", { ...common, phase_instance: "phase-impl-2", step: "produce", status: "running" }],
       ["archflow_counter_review", { ...common, artifact_path: "phases/2/result.md", rubric }],
@@ -104,7 +104,7 @@ describe("MCP contract schema agreement", () => {
       ["archflow_waiver", { ...common, origin: waiverOrigin, rationale: "Needed" }]
     ] as const;
     for (const [name, input] of examples) { expect(validator.validate(input), name).toBe(true); expect(parseToolCall(name, input).name).toBe(name); }
-    const wrongWaiver = { ...examples[4][1], task_id: "Other" };
+    const wrongWaiver = { ...examples[4][1], task_id: "other" };
     expect(validator.validate(wrongWaiver)).toBe(false);
     expect(() => parseToolCall("archflow_waiver", wrongWaiver)).toThrow();
   });

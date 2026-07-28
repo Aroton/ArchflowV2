@@ -7,7 +7,7 @@
   "required": ["schema_version", "task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family", "findings", "matched_rule_versions", "verdict", "blocking_count"],
   "properties": {
     "schema_version": { "const": "1" },
-    "task_id": { "$ref": "#/$defs/id" },
+    "task_id": { "$ref": "#/$defs/taskSlug" },
     "phase_instance": { "$ref": "#/$defs/phaseInstance" },
     "step": { "enum": ["self_review", "counter_review"] },
     "role": { "enum": ["self-review", "counter-review", "gate-counter-review"] },
@@ -24,7 +24,7 @@
     { "if": { "properties": { "role": { "const": "self-review" } }, "required": ["role"] }, "then": { "properties": { "step": { "const": "self_review" } } }, "else": { "properties": { "step": { "const": "counter_review" } } } }
   ],
   "$defs": {
-    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }, "taskSlug": { "type": "string", "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$" },
     "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "family": { "enum": ["claude", "codex"] },
     "phaseInstance": { "type": "string", "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" },

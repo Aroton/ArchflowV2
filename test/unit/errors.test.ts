@@ -39,4 +39,22 @@ describe("error registries", () => {
     expect([child.owner, child.retryable, child.next_action]).toEqual(["dispatch", true, "restart-child-attempt"]);
     expect([gate.owner, gate.retryable, gate.next_action]).toEqual(["gate", false, "restart-gate-flow"]);
   });
+
+  it("retightens task and gate identifiers and the offending-path frame in error parameters", () => {
+    for (const taskId of ["Task_1", "Task:1", "TASK-1"]) {
+      expect(() => createProjectError("TASK_INVALID", { task_id: taskId as never, issue_code: "archflow-tree-mode-illegal" })).toThrow();
+      expect(() => createProjectError("PATH_INVALID", { task_id: taskId as never, path_class: "intent" })).toThrow();
+    }
+    for (const gateId of ["Gate:1", "gate:1"]) {
+      expect(() => createProjectError("GATE_ACTIVE", { gate_id: gateId as never, gate_kind: "artifact-approval" })).toThrow();
+      expect(() => createProjectError("SUPPLEMENTAL_REVIEW_REQUIRED", { gate_id: gateId as never, evidence_digest: D })).toThrow();
+    }
+    expect(createProjectError("PATH_ESCAPE", { task_id: "task-1" as never, path_class: "result-payload" }).diagnostic.parameters.path_class).toBe("result-payload");
+    expect(() => createProjectError("PATH_ESCAPE", { task_id: "task-1" as never, path_class: "not-a-class" as never })).toThrow();
+    // offending_paths is repository-relative and shares the tightened claim grammar.
+    expect(createProjectError("SNAPSHOT_LIMIT", { limit_scope: "task", offending_paths: [".archflow/tasks/task-1/a.json" as never], current_bytes: 2, byte_cap: 1 }).diagnostic.parameters.offending_paths).toHaveLength(1);
+    expect(() => createProjectError("SNAPSHOT_LIMIT", { limit_scope: "task", offending_paths: ["bad:path" as never], current_bytes: 2, byte_cap: 1 })).toThrow();
+    // detector_id keeps the broad grammar.
+    expect(createProjectError("SECRET_DETECTED", { path_class: "document", detector_id: "Detector:1" }).diagnostic.parameters.detector_id).toBe("Detector:1");
+  });
 });

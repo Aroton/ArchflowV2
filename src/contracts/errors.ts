@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
 
-import { safeCodeV1Schema, safeIdV1Schema, safeIntegerV1Schema, safeVersionV1Schema, sha256DigestV1Schema } from "./evidence.js";
+import { pathSafeIdV1Schema, safeCodeV1Schema, safeIdV1Schema, safeIntegerV1Schema, safeVersionV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
 import type { Sha256Digest } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
-import { taskPathClaimV1Schema, type TaskPathClaim } from "./path-claims.js";
+import { PATH_CLASSES, repositoryPathClaimV1Schema, type RepositoryPathClaim } from "./path-claims.js";
 import { GATE_KINDS, type GateKind } from "./gates.js";
 import type { AdapterId, ModelFamily } from "./review.js";
 import { TOOL_NAMES, type ToolName } from "./tool-names.js";
@@ -26,9 +26,10 @@ const gateKind = z.enum(GATE_KINDS);
 const phaseInstance = z.string().refine((value) => { try { decodePhaseInstance(value); return true; } catch { return false; } });
 const object = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
 const digestPair = { expected_digest: sha256DigestV1Schema, observed_digest: sha256DigestV1Schema } as const;
-const taskPathClass = { task_id: safeIdV1Schema, path_class: safeCodeV1Schema } as const;
+const pathClass = z.enum(PATH_CLASSES);
+const taskPathClass = { task_id: taskSlugV1Schema, path_class: pathClass } as const;
 const adapterAttempt = { adapter, attempt: safeIntegerV1Schema } as const;
-const sortedPaths = z.array(taskPathClaimV1Schema).min(1).superRefine((items, context) => { for (let index = 1; index < items.length; index += 1) if (items[index - 1]!.localeCompare(items[index]!) >= 0) context.addIssue({ code: "custom", message: "offending_paths must be sorted and unique" }); });
+const sortedPaths = z.array(repositoryPathClaimV1Schema).min(1).superRefine((items, context) => { for (let index = 1; index < items.length; index += 1) if (items[index - 1]!.localeCompare(items[index]!) >= 0) context.addIssue({ code: "custom", message: "offending_paths must be sorted and unique" }); });
 
 const PROJECT_PARAMETER_SCHEMAS = {
   CONTRACT_INVALID: object({ tool: tool.optional(), issue_code: safeCodeV1Schema, schema_version: safeVersionV1Schema.optional() }),
@@ -38,13 +39,13 @@ const PROJECT_PARAMETER_SCHEMAS = {
   CONFIG_MODEL_UNSUPPORTED: object({ model: safeIdV1Schema }), CONFIG_FAMILY_UNSUPPORTED: object({ family: safeIdV1Schema }),
   RUNTIME_VERSION_UNSUPPORTED: object({ component: safeIdV1Schema, version: safeVersionV1Schema }),
   REPOSITORY_NOT_FOUND: object({ repository_candidate_digest: sha256DigestV1Schema }), REPOSITORY_MISMATCH: object(digestPair),
-  TASK_INVALID: object({ task_id: safeIdV1Schema, issue_code: safeCodeV1Schema }), PATH_INVALID: object(taskPathClass), PATH_ESCAPE: object(taskPathClass), TASK_SCOPE_VIOLATION: object(taskPathClass),
+  TASK_INVALID: object({ task_id: taskSlugV1Schema, issue_code: safeCodeV1Schema }), PATH_INVALID: object(taskPathClass), PATH_ESCAPE: object(taskPathClass), TASK_SCOPE_VIOLATION: object(taskPathClass),
   GIT_CONFLICT: object({ operation: safeCodeV1Schema }), GIT_DIVERGED: object(digestPair), HANDOFF_REQUIRED: object({ phase_instance: phaseInstance }),
   POLICY_BASE_INVALID: object({ expected_digest: sha256DigestV1Schema, observed_digest: sha256DigestV1Schema.optional() }), WORKFLOW_MISMATCH: object(digestPair), PINNED_CONFIG_MISMATCH: object(digestPair), STALE_SKILLS: object(digestPair),
   STATE_MISSING: object({ phase_instance: phaseInstance }), STATE_INVALID: object({ phase_instance: phaseInstance, issue_code: safeCodeV1Schema }), TRANSITION_INVALID: object({ phase_instance: phaseInstance, from: safeCodeV1Schema, to: safeCodeV1Schema }),
-  INPUT_FINGERPRINT_MISMATCH: object(digestPair), STATE_CONFLICT: object({ expected_revision: safeIntegerV1Schema, observed_revision: safeIntegerV1Schema }), SUPPLEMENTAL_REVIEW_REQUIRED: object({ gate_id: safeIdV1Schema, evidence_digest: sha256DigestV1Schema }), INTENT_MISMATCH: object(digestPair),
-  SNAPSHOT_LIMIT: object({ limit_scope: z.enum(["result", "task"]), offending_paths: sortedPaths, current_bytes: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }), SNAPSHOT_INVALID: object({ snapshot_digest: sha256DigestV1Schema, issue_code: safeCodeV1Schema }), RESTORE_COLLISION: object({ gate_id: safeIdV1Schema, path_class: safeCodeV1Schema }), RECONCILIATION_REQUIRED: object({ recorded_digest: sha256DigestV1Schema, observed_digest: sha256DigestV1Schema }), SECRET_DETECTED: object({ path_class: safeCodeV1Schema, detector_id: safeIdV1Schema }),
-  GATE_ACTIVE: object({ gate_id: safeIdV1Schema, gate_kind: gateKind }), GATE_DECISION_INVALID: object({ gate_id: safeIdV1Schema, gate_kind: gateKind, issue_code: safeCodeV1Schema }), GATE_CANCELLED: object({ gate_id: safeIdV1Schema, gate_kind: gateKind }),
+  INPUT_FINGERPRINT_MISMATCH: object(digestPair), STATE_CONFLICT: object({ expected_revision: safeIntegerV1Schema, observed_revision: safeIntegerV1Schema }), SUPPLEMENTAL_REVIEW_REQUIRED: object({ gate_id: pathSafeIdV1Schema, evidence_digest: sha256DigestV1Schema }), INTENT_MISMATCH: object(digestPair),
+  SNAPSHOT_LIMIT: object({ limit_scope: z.enum(["result", "task"]), offending_paths: sortedPaths, current_bytes: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }), SNAPSHOT_INVALID: object({ snapshot_digest: sha256DigestV1Schema, issue_code: safeCodeV1Schema }), RESTORE_COLLISION: object({ gate_id: pathSafeIdV1Schema, path_class: pathClass }), RECONCILIATION_REQUIRED: object({ recorded_digest: sha256DigestV1Schema, observed_digest: sha256DigestV1Schema }), SECRET_DETECTED: object({ path_class: pathClass, detector_id: safeIdV1Schema }),
+  GATE_ACTIVE: object({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind }), GATE_DECISION_INVALID: object({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind, issue_code: safeCodeV1Schema }), GATE_CANCELLED: object({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind }),
   UNSUPPORTED_HOST: object({ host: safeIdV1Schema }), UNSUPPORTED_MODEL: object({ model: safeIdV1Schema }), FAMILY_MISMATCH: object({ expected_family: family, observed_family: family }),
   CLI_VERSION_UNSUPPORTED: object({ adapter, version: safeVersionV1Schema }), AUTH_UNAVAILABLE: object({ adapter }), CLI_MISSING: object({ adapter }), SANDBOX_UNAVAILABLE: object({ capability: safeIdV1Schema }), SANDBOX_PROBE_FAILED: object({ capability: safeIdV1Schema, failure_class: safeCodeV1Schema }),
   RATE_LIMITED: object(adapterAttempt), TIMEOUT: object({ ...adapterAttempt, limit_ms: safeIntegerV1Schema }), CANCELLED: object({ source: z.enum(["client", "transport"]), attempt: safeIntegerV1Schema }), MODEL_OUTPUT_INVALID: object({ ...adapterAttempt, issue_code: safeCodeV1Schema }), IO_ERROR: object({ operation: safeCodeV1Schema, attempt: safeIntegerV1Schema }), OUTPUT_OVERFLOW: object({ adapter, byte_count: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }), PROCESS_FAILED: object({ adapter, exit_class: safeCodeV1Schema }), INTERNAL_ERROR: object({ correlation_id: safeIdV1Schema }),
@@ -101,4 +102,4 @@ export function parseProjectError(value: unknown): ProjectError { return parseSe
 export function parseProtocolError(value: unknown): ProtocolError { return parseSerializedError(PROTOCOL_ERROR_DEFINITIONS, value, "protocol error") as ProtocolError; }
 
 // Type-only exports make the exact table primitives discoverable without granting authority.
-export type ErrorParameterPrimitives = { readonly digest: Sha256Digest; readonly tool: ToolName; readonly phase: PhaseInstanceId; readonly path: TaskPathClaim; readonly gate: GateKind; readonly adapter: AdapterId; readonly family: ModelFamily };
+export type ErrorParameterPrimitives = { readonly digest: Sha256Digest; readonly tool: ToolName; readonly phase: PhaseInstanceId; readonly path: RepositoryPathClaim; readonly gate: GateKind; readonly adapter: AdapterId; readonly family: ModelFamily };

@@ -36,11 +36,11 @@ describe("gate and error JSON Schema authority", () => {
   });
 
   it("enforces supplemental gate and subject correlations in both authorities", () => {
-    const review = { prior_gate_id: "Gate:1", task_id: "Task_1", phase_instance: "phase-impl-2", subject_digest: D, input_fingerprint: D, evidence_slot: { role: "gate-counter-review", evidence_digest: "b".repeat(64), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "Gate:1" } };
+    const review = { prior_gate_id: "gate-1", task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: D, input_fingerprint: D, evidence_slot: { role: "gate-counter-review", evidence_digest: "b".repeat(64), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-1" } };
     const valid = { action: "supersede", review, accepted_triage_digest: D, old_subject_digest: D, new_subject_digest: "c".repeat(64), reason: "Revise" };
     expect(supplementalValidator.validate(valid)).toBe(true);
     expect(parseSupplementalReviewOutcome(valid).action).toBe("supersede");
-    for (const value of [{ ...valid, review: { ...review, evidence_slot: { ...review.evidence_slot, gate_id: "Gate:2" } } }, { ...valid, new_subject_digest: D }, { ...valid, old_subject_digest: "d".repeat(64) }]) {
+    for (const value of [{ ...valid, review: { ...review, evidence_slot: { ...review.evidence_slot, gate_id: "gate-2" } } }, { ...valid, new_subject_digest: D }, { ...valid, old_subject_digest: "d".repeat(64) }]) {
       expect(supplementalValidator.validate(value)).toBe(false);
       expect(() => parseSupplementalReviewOutcome(value)).toThrow();
     }
