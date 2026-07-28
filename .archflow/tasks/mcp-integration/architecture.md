@@ -18,7 +18,7 @@
 | Packaging | esbuild `0.28.1`, exact npm lockfile, single host-neutral server/local-helper bundle | `install.sh` installs both `archflow-mcp` and `archflow-local` without an unpinned startup download. |
 | Verification | Vitest `4.1.10` with direct dev pin Vite `7.3.6`, fixture CLIs, fault injection, protocol fixtures, and black-box host/sandbox suites | The exact Vite 7 pin constrains Vitest to its supported permissive line; the lock must prove no `lightningcss` or other copyleft dependency before acceptance. Critical persistence, host, process, protocol, and manual-mode behavior is exercised at its real boundaries. |
 
-All runtime and development dependencies are exact lockfile pins. An update deliberately regenerates the lockfile, runs schema/protocol/CLI fixtures, verifies licenses, and records any format migration; beta, model, and CLI versions never float at startup. Direct pins are permissively licensed, and the complete lock must independently prove a permissive-only graph. The repository currently has no project license, which release packaging records alongside dependency notices. `@anthropic-ai/sandbox-runtime` is the preferred Phase 10 candidate behind the provider interface, not an adopted dependency: its package is Apache-2.0, while its Linux bubblewrap and socat paths introduce LGPL-2.0-or-later and GPL-2.0-only components. Those require later explicit user license approval; without it, affected environments remain unsupported.
+All runtime and development dependencies are exact lockfile pins. An update deliberately regenerates the lockfile, runs schema/protocol/CLI fixtures, verifies licenses, and records any format migration; beta, model, and CLI versions never float at startup. Direct pins are permissively licensed, and the complete lock must independently prove a permissive-only graph. The repository currently has no project license, which release packaging records alongside dependency notices. `@anthropic-ai/sandbox-runtime` is the preferred Phase 11 candidate behind the provider interface, not an adopted dependency: its package is Apache-2.0, while its Linux bubblewrap and socat paths introduce LGPL-2.0-or-later and GPL-2.0-only components. Those require later explicit user license approval; without it, affected environments remain unsupported.
 
 ## System Architecture
 
@@ -305,7 +305,7 @@ Each dispatch creates a fresh, non-resumed child in a temporary directory outsid
 - use an OS containment primitive capable of terminating every descendant on abort, timeout, server shutdown, or output overflow even if a descendant creates a new process group/session—PID namespace/cgroup, Windows job object, or a proven equivalent, not Execa best effort alone; and
 - return a capability proof tied to the OS, provider, CLI/runtime versions, exact allowed-read manifest, and randomized denied canaries.
 
-At install/startup and whenever that fingerprint changes, a black-box probe launches a real child that uses the selected CLI's measured runtime and own-auth paths, reads its envelope, and writes temp output while failing to read/write randomized repository, sibling-task, global agent config/instructions, the other family's credential store, and unrelated-secret canaries. ArchFlow never opens or copies the selected CLI's own credential files, and captured output/persisted diagnostics are scanned for unrelated-secret canaries and prohibited API-key/provider-routing material, not for the mere use of the supported CLI's own authentication. Managed Claude hooks/policy or Codex managed/global instructions make the environment unsupported unless real fixtures prove no injection. The proof is completed in Phase 10 for both producer directions. `@anthropic-ai/sandbox-runtime` remains a non-adopted preferred candidate subject to proof and license approval.
+At install/startup and whenever that fingerprint changes, a black-box probe launches a real child that uses the selected CLI's measured runtime and own-auth paths, reads its envelope, and writes temp output while failing to read/write randomized repository, sibling-task, global agent config/instructions, the other family's credential store, and unrelated-secret canaries. ArchFlow never opens or copies the selected CLI's own credential files, and captured output/persisted diagnostics are scanned for unrelated-secret canaries and prohibited API-key/provider-routing material, not for the mere use of the supported CLI's own authentication. Managed Claude hooks/policy or Codex managed/global instructions make the environment unsupported unless real fixtures prove no injection. The proof is completed in Phase 11 for both producer directions. `@anthropic-ai/sandbox-runtime` remains a non-adopted preferred candidate subject to proof and license approval.
 
 The Claude adapter uses fresh `--safe-mode`, `--tools ""`, a strict empty MCP config, disabled slash commands, no persistence, and schema-constrained output. It preflights subscription authentication and managed hooks/policy. Host setup configures and validates the Claude server entry's persistent per-server `timeout` when supported; otherwise a newly started host must inherit `MCP_TOOL_TIMEOUT` as described below. Cancellation or host timeout always leaves a durable resumable gate; timeout-then-resume is supported normal behavior. The Codex adapter uses exact fixture-proven ephemeral, ignore-user-config, `--ignore-rules`, read-only, and output-schema behavior while preserving first-party auth; `--ignore-rules` is inherited-context isolation only, never security confinement. It configures/tests `project_doc_max_bytes=0` or a proven equivalent and rejects managed instruction injection. An ArchFlow deny-all Codex execpolicy remains an early feasibility candidate, and the design does not claim it works. Both adapters still require OS sandbox proof, are version-gated from real fixtures, and spawn with `shell: false`, scrubbed environment, no provider keys/routing or unrelated secrets, `killDescendants`, cancellation, timeout/output bounds, forced escalation, and provider-owned descendant containment. Stable failures cover missing CLI, auth, unsupported host/model, family mismatch, rate limit, timeout, cancellation, overflow, invalid output, nonzero exit, and I/O failure.
 
@@ -375,22 +375,22 @@ Release is blocked unless all applicable tests pass and the supported matrix is 
 
 | Coverage area | Requirements | Validation | Primary phases | Proof boundary |
 |---------------|--------------|------------|----------------|----------------|
-| Initialization and canonical repository contracts | REQ-01, REQ-02, REQ-03, REQ-04, REQ-05, REQ-06 | VAL-08, VAL-11, VAL-12 | 1, 5, 13, 14, 19 | Strict assets/schemas, dependency-complete offline packaging, preserving official registration, fixed graph, and documentation agreement establish one v1 authority. |
-| Thin phase marshalling and production lifecycle | REQ-07, REQ-08, REQ-09, REQ-10 | VAL-01, VAL-02, VAL-05, VAL-06, VAL-16 | 1, 12, 14, 18, 19 | Normal skills drive persisted boundaries, implementation manifests, current-digest loops, approvals, parent updates, and commit authorization. |
-| Review evidence and truthful status | REQ-11, REQ-12, REQ-13, REQ-14 | VAL-02, VAL-05, VAL-06, VAL-08, VAL-12, VAL-16 | 2, 5, 6, 7, 8, 11, 14, 15, 17, 18 | Structured JSON/projections, manifest evidence, fixed-point fixtures, and reconciled normal/degraded status distinguish provenance. |
-| Constitution and task policy | REQ-15, REQ-16, REQ-17 | VAL-03, VAL-15 | 1, 2, 11, 16, 17, 18 | Explicit approved policy base, trigger corpus, and unresolved-edit rejection fail closed. |
-| Waivers, drift, and human authority | REQ-18, REQ-19, REQ-20 | VAL-01, VAL-03, VAL-04, VAL-09, VAL-15 | 2, 9, 11, 16, 18 | Digest-bound decisions, scoped expiry, migration audit, separate verdicts, and upstream reopening preserve authority. |
-| Durable state and recovery | REQ-21, REQ-22 | VAL-05, VAL-06, VAL-09, VAL-12 | 6, 7, 8, 9, 15, 17, 18 | Prepared-before-state semantics, fault injection, durable gates, helper reconciliation, and collision-safe restore never infer success. |
-| Idempotency and concurrency | REQ-23, REQ-24, REQ-25 | VAL-05, VAL-06, VAL-08, VAL-10 | 6, 7, 8, 9, 15, 16, 17 | Intent/state commitment, local lock/CAS, one-writer Git handoff, manifests, and exact restore cover retries/races without claiming distributed locks. |
-| Repository and task isolation | REQ-26 | VAL-07, VAL-10, VAL-11, VAL-13 | 6, 7, 8, 10, 16, 17, 18 | Path guards, narrow pre-init legacy read, and measured sandbox manifests block undeclared access. |
-| Fixed MCP boundary and local service | REQ-27, REQ-28 | VAL-08, VAL-13 | 2, 3, 4, 5, 12, 13, 17, 18 | Correlated five-tool contracts, v2 fixtures, and the license-complete deterministic offline payload expose only the stdio boundary; the separate offline helper is not an MCP tool. |
-| Host identity and routing | REQ-29, REQ-30, REQ-31 | VAL-07, VAL-08 | 10, 12, 17, 18 | Real handshakes and exact CLI fixtures bind immutable host/opposite family and reject injected managed context. |
-| Fresh structured dispatch | REQ-32, REQ-33 | VAL-02, VAL-07, VAL-08, VAL-13 | 2, 3, 4, 5, 10, 11, 12, 17, 18 | Hashed envelopes, portable manifest evidence, measured runtime/selected-CLI own-auth reads, fresh PIDs, OS isolation, validation, and attestation prove the boundary. |
-| Authentication and child lifecycle | REQ-34, REQ-35 | VAL-07, VAL-08, VAL-13, VAL-14 | 10, 13, 17, 18, 19 | Auth/version/policy preflights, environment sentinels, descendant escape tests, and the legal release gate prevent unsafe dispatch. |
-| Durable gate semantics | REQ-36, REQ-37 | VAL-01, VAL-03, VAL-09, VAL-10 | 2, 9, 12, 15, 17, 18 | Deterministic IDs, pre-block publication, supplemental-review retry, cancellation, and CAS resolution prove exactly-once decisions. |
-| Degraded/manual terminal completion | REQ-38, REQ-39, REQ-40 | VAL-06, VAL-09, VAL-12 | 12, 13, 15, 16, 18 | `archflow-local` and exact fallback templates advance only from validating evidence; loss of both paths stops for repair. |
-| Optional cross-client gate review | REQ-41 | VAL-09, VAL-12, VAL-16 | 2, 9, 14, 15, 18 | Caller-known gate IDs avoid blocking deadlock; triage resumes or supersedes deterministically and decline fabricates nothing. |
-| Legacy migration | REQ-50 | VAL-17 | 6, 7, 8, 9, 16, 17, 18 | Staged import, no-state initialization union, existing phase mappings, implementation audits, and interruption fixtures prevent auto-promotion. |
+| Initialization and canonical repository contracts | REQ-01, REQ-02, REQ-03, REQ-04, REQ-05, REQ-06 | VAL-08, VAL-11, VAL-12 | 1, 5, 14, 15, 20 | Strict assets/schemas, dependency-complete offline packaging, preserving official registration, fixed graph, and documentation agreement establish one v1 authority. |
+| Thin phase marshalling and production lifecycle | REQ-07, REQ-08, REQ-09, REQ-10 | VAL-01, VAL-02, VAL-05, VAL-06, VAL-16 | 1, 13, 15, 19, 20 | Normal skills drive persisted boundaries, implementation manifests, current-digest loops, approvals, parent updates, and commit authorization. |
+| Review evidence and truthful status | REQ-11, REQ-12, REQ-13, REQ-14 | VAL-02, VAL-05, VAL-06, VAL-08, VAL-12, VAL-16 | 2, 5, 6, 7, 8, 9, 12, 15, 16, 18, 19 | Structured JSON/projections, manifest evidence, fixed-point fixtures, and reconciled normal/degraded status distinguish provenance. |
+| Constitution and task policy | REQ-15, REQ-16, REQ-17 | VAL-03, VAL-15 | 1, 2, 12, 17, 18, 19 | Explicit approved policy base, trigger corpus, and unresolved-edit rejection fail closed. |
+| Waivers, drift, and human authority | REQ-18, REQ-19, REQ-20 | VAL-01, VAL-03, VAL-04, VAL-09, VAL-15 | 2, 10, 12, 17, 19 | Digest-bound decisions, scoped expiry, migration audit, separate verdicts, and upstream reopening preserve authority. |
+| Durable state and recovery | REQ-21, REQ-22 | VAL-05, VAL-06, VAL-09, VAL-12 | 6, 7, 8, 9, 10, 16, 18, 19 | Prepared-before-state semantics, fault injection, durable gates, helper reconciliation, and collision-safe restore never infer success. |
+| Idempotency and concurrency | REQ-23, REQ-24, REQ-25 | VAL-05, VAL-06, VAL-08, VAL-10 | 6, 7, 8, 9, 10, 16, 17, 18 | Intent/state commitment, local lock/CAS, one-writer Git handoff, manifests, and exact restore cover retries/races without claiming distributed locks. |
+| Repository and task isolation | REQ-26 | VAL-07, VAL-10, VAL-11, VAL-13 | 6, 7, 8, 9, 11, 17, 18, 19 | Path guards, narrow pre-init legacy read, and measured sandbox manifests block undeclared access. |
+| Fixed MCP boundary and local service | REQ-27, REQ-28 | VAL-08, VAL-13 | 2, 3, 4, 5, 13, 14, 18, 19 | Correlated five-tool contracts, v2 fixtures, and the license-complete deterministic offline payload expose only the stdio boundary; the separate offline helper is not an MCP tool. |
+| Host identity and routing | REQ-29, REQ-30, REQ-31 | VAL-07, VAL-08 | 11, 13, 18, 19 | Real handshakes and exact CLI fixtures bind immutable host/opposite family and reject injected managed context. |
+| Fresh structured dispatch | REQ-32, REQ-33 | VAL-02, VAL-07, VAL-08, VAL-13 | 2, 3, 4, 5, 11, 12, 13, 18, 19 | Hashed envelopes, portable manifest evidence, measured runtime/selected-CLI own-auth reads, fresh PIDs, OS isolation, validation, and attestation prove the boundary. |
+| Authentication and child lifecycle | REQ-34, REQ-35 | VAL-07, VAL-08, VAL-13, VAL-14 | 11, 14, 18, 19, 20 | Auth/version/policy preflights, environment sentinels, descendant escape tests, and the legal release gate prevent unsafe dispatch. |
+| Durable gate semantics | REQ-36, REQ-37 | VAL-01, VAL-03, VAL-09, VAL-10 | 2, 10, 13, 16, 18, 19 | Deterministic IDs, pre-block publication, supplemental-review retry, cancellation, and CAS resolution prove exactly-once decisions. |
+| Degraded/manual terminal completion | REQ-38, REQ-39, REQ-40 | VAL-06, VAL-09, VAL-12 | 13, 14, 16, 17, 19 | `archflow-local` and exact fallback templates advance only from validating evidence; loss of both paths stops for repair. |
+| Optional cross-client gate review | REQ-41 | VAL-09, VAL-12, VAL-16 | 2, 10, 15, 16, 19 | Caller-known gate IDs avoid blocking deadlock; triage resumes or supersedes deterministically and decline fabricates nothing. |
+| Legacy migration | REQ-50 | VAL-17 | 6, 7, 8, 9, 10, 17, 18, 19 | Staged import, no-state initialization union, existing phase mappings, implementation audits, and interruption fixtures prevent auto-promotion. |
 
 All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release validations `VAL-01` through `VAL-17`, appear above. `REQ-52` remains explicitly outside the v1 architecture.
 
@@ -404,7 +404,7 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 
 **Requirements**: REQ-02, REQ-03, REQ-04, REQ-05, REQ-06, REQ-10, REQ-15, REQ-17
 
-**Scope**: First add the visible lineage/supersession banner to `docs/mcp-integration-design.md`, preserving it as originating design and linking the normative PRD/architecture; Phase 19 later updates surrounding documentation. Establish a private ESM package, exact lockfile, scripts, Node matrix CI, dependency notices/policy, and only Phase-1 direct dependencies: Zod, Ajv, `ajv-formats`, YAML, TypeScript, Node typings, esbuild, Vitest, and direct Vite `7.3.6`. Implement recursive plain-JSON preflight, strict non-mutating Ajv2020, explicit Zod agreement infrastructure, branded canonical phase-instance codec, safe YAML parsing, fixed workflow/config/rubric/constitution rule contracts, shipped workflow/constitution assets, and append-only constitution evolution fixtures. This phase has no review/triage/adjudication contracts or renderers, error registry, tool schemas, MCP SDK/server, or tracked offline bundle.
+**Scope**: First add the visible lineage/supersession banner to `docs/mcp-integration-design.md`, preserving it as originating design and linking the normative PRD/architecture; Phase 20 later updates surrounding documentation. Establish a private ESM package, exact lockfile, scripts, Node matrix CI, dependency notices/policy, and only Phase-1 direct dependencies: Zod, Ajv, `ajv-formats`, YAML, TypeScript, Node typings, esbuild, Vitest, and direct Vite `7.3.6`. Implement recursive plain-JSON preflight, strict non-mutating Ajv2020, explicit Zod agreement infrastructure, branded canonical phase-instance codec, safe YAML parsing, fixed workflow/config/rubric/constitution rule contracts, shipped workflow/constitution assets, and append-only constitution evolution fixtures. This phase has no review/triage/adjudication contracts or renderers, error registry, tool schemas, MCP SDK/server, or tracked offline bundle.
 
 **Success Criteria**:
 
@@ -498,33 +498,52 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 - [ ] Node-core guards prove startup and protocol exercise open no network connection or listener, emit only MCP traffic on stdout, route diagnostics to stderr, and leave no background handle.
 - [ ] CI validates the manifest schema and all input/hash/license bindings, reproduces the payload, runs the hostile clean-copy smoke, and fails on bundle, lock, schema, asset, metafile, legal-inventory, attribution, or protocol-fixture drift.
 
-### Phase 6: Repository Identity, Paths, Schemas, and Canonical Digests
+### Phase 6: Repository Identity, Paths, and Canonical Digests
 
-**Goal**: Establish the repository/task identity, path safety, durable schemas, immutable task configuration, and byte-stable digest contracts used by every mutation.
+**Goal**: Establish the repository/task identity, path safety, immutable task configuration pinning, and byte-stable digest contracts used by every mutation.
 
 **Depends on**: Phases 1–5
 
-**Requirements**: REQ-04, REQ-05, REQ-11, REQ-13, REQ-14, REQ-21, REQ-26, REQ-33, REQ-39, REQ-50
+**Requirements**: REQ-04, REQ-05, REQ-13, REQ-26
 
-**Scope**: Implement Git/worktree and task identity; `.archflow/** -text merge=binary`; path allowlists; the durable `state.json` schema and task-initialization, document, implementation-output, legacy-import, manual-checkpoint, checkpoint-import, maintenance-record, and snapshot-accounting schemas; exact whole-file `config.yaml` pinning; canonical Git blob/tree-mode and request/input digests; divergence/conflict detection; and secret-scan result contracts. This phase does not implement state mutation or payload restore.
+**Scope**: Implement Git/worktree and task identity; `.archflow/** -text merge=binary` with runtime attribute verification; task-relative and repository-relative path claims, path classes, and filesystem containment; canonical JSON, canonical Git blob/tree-mode identity, and request/declared-input digests; exact whole-file `config.yaml` digest pinning; divergence, conflict, and in-progress-operation detection; and the secret-scan result contract. This phase introduces the first filesystem and Git-subprocess code in `src/`. It implements no durable state or artifact schema, no state mutation, no payload restore, and no secret-scanning engine, and adds no runtime dependency.
 
 **Success Criteria**:
 
-- [ ] Task initialization schemas bind the exact whole-file config digest. Any byte change is detected as `PINNED_CONFIG_MISMATCH` with expected/observed digests and no config content; no re-pin/amendment schema exists.
-- [ ] Traversal, absolute paths, symlink escape, cross-task access, and identity mismatch fail before reads, while linked worktrees, relocation, spaces, and Unicode pass.
+- [ ] Traversal, absolute paths, drive-relative and UNC inputs, symlink escape, cross-task access, pathspec metacharacters, and repository-identity mismatch fail before any read, while linked worktrees, relocation, spaces, and Unicode pass.
 - [ ] Committed inputs and tracked outputs have identical canonical Git blob/tree identities across LF/CRLF worktrees, `core.autocrlf`, `core.fileMode`, executable-bit support, and symlink-capable/incapable checkouts; unsupported materialization fails closed.
-- [ ] Valid state/initialization/document/implementation/import/checkpoint/maintenance samples round-trip through normative schemas; predecessor gaps, unknown fields, digest mismatches, invalid phase IDs, and contradictory accounting fail with stable errors.
+- [ ] The whole `config.yaml` file is pinned by exact digest, and any byte change is detected as `PINNED_CONFIG_MISMATCH` with expected/observed digests and no config content.
+- [ ] The canonical request digest is computed from its closed field list only, and logically set-valued fingerprint collections hash identically under any input permutation.
 - [ ] Startup and pull/handoff detection identifies divergent histories and `.archflow/**` conflicts as non-authoritative without claiming it can detect independent-clone concurrency before divergence.
+- [ ] Every Git invocation is bound to the discovered worktree root, so no command can silently report an absent path or attribute because of the caller's working directory.
 
-### Phase 7: Transaction Kernel, Intent/CAS, and Crash Recovery
+### Phase 7: Durable State and Artifact Schemas
 
-**Goal**: Commit one task's transitions exactly once under races, crashes, retries, config drift, and bounded reconciliation.
+**Goal**: Define every persisted shape as a versioned normative schema with one cross-document semantic authority.
 
 **Depends on**: Phase 6
 
+**Requirements**: REQ-04, REQ-11, REQ-13, REQ-14, REQ-21, REQ-26, REQ-39, REQ-50
+
+**Scope**: Author the durable `state.json` schema and the task-initialization, document, implementation-output, legacy-import-initialization, manual-checkpoint, checkpoint-import, maintenance-record, and snapshot-accounting schemas, with Zod mirrors wherever a shape is reachable from the `archflow_state.artifact` union, plus one consolidated semantic validator for cross-document invariants. This phase consumes Phase 6's identity, path, and digest primitives. It implements no state mutation, transaction kernel, snapshot materialization, or payload restore.
+
+**Success Criteria**:
+
+- [ ] Task-initialization and legacy-import-initialization schemas bind the exact whole-file config digest; no re-pin or amendment schema exists.
+- [ ] Valid state/initialization/document/implementation/import/checkpoint/maintenance samples round-trip through normative schemas; predecessor gaps, unknown fields, digest mismatches, invalid phase IDs, and contradictory accounting fail with stable errors.
+- [ ] Every shape reachable from the `archflow_state.artifact` union passes Ajv/Zod agreement; purely server-internal shapes have exactly one shape model.
+- [ ] Implementation-output manifests represent add/modify/delete/rename, tree modes, canonical Git blob identities, and bounded payload accounting without any structurally representable contradiction.
+- [ ] Byte accounting is bound to the 25 MiB per-result and 250 MiB per-task caps and corresponds one-to-one with the declared outputs it measures.
+
+### Phase 8: Transaction Kernel, Intent/CAS, and Crash Recovery
+
+**Goal**: Commit one task's transitions exactly once under races, crashes, retries, config drift, and bounded reconciliation.
+
+**Depends on**: Phase 7
+
 **Requirements**: REQ-04, REQ-08, REQ-13, REQ-14, REQ-21, REQ-22, REQ-23, REQ-24, REQ-26, REQ-39, REQ-50
 
-**Scope**: Implement task locks, revision CAS on every invocation, closed request digests, prepared receipts/results, atomic projections, state-last commitment, direct and checkpoint-1-constrained revision-0→1 adoption, bounded ordinary reconciliation, explicit full audit/repair, config-pin enforcement before transition, and divergent-history repair/handoff. Payload snapshots and restore are Phase 8.
+**Scope**: Implement task locks, revision CAS on every invocation, closed request digests, prepared receipts/results, atomic projections, state-last commitment, direct and checkpoint-1-constrained revision-0→1 adoption, bounded ordinary reconciliation, explicit full audit/repair, config-pin enforcement before transition, and divergent-history repair/handoff. Payload snapshots and restore are Phase 9.
 
 **Success Criteria**:
 
@@ -535,15 +554,15 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 - [ ] Mature-task step boundaries and status reconcile only current state projections, the relevant active/prepared intent, and active gate/checkpoint head; only explicit repair/import/audit walks history.
 - [ ] Divergent/conflicted clones remain non-authoritative until preserve-both-heads repair selects/replays one successor chain and records a clean one-writer handoff.
 
-### Phase 8: Snapshots, Implementation Manifests, and Restore
+### Phase 9: Snapshots, Implementation Manifests, and Restore
 
 **Goal**: Retain and restore deterministic declared outputs within explicit storage, retention, collision, and secret-safety bounds.
 
-**Depends on**: Phase 7
+**Depends on**: Phase 8
 
 **Requirements**: REQ-08, REQ-11, REQ-13, REQ-21, REQ-22, REQ-23, REQ-25, REQ-26, REQ-33, REQ-39, REQ-50
 
-**Scope**: Implement content-addressed result manifests, tracked-output Git-object reuse, bounded untracked/generated/restore payload storage, implementation-output manifests, snapshot/checkpoint secret scanning, atomic projection/restore, collision classification, retention reachability, and explicit maintenance records. Phase 9 connects collision decisions to the gate service.
+**Scope**: Implement content-addressed result manifests, tracked-output Git-object reuse, bounded untracked/generated/restore payload storage, implementation-output manifests, snapshot/checkpoint secret scanning, atomic projection/restore, collision classification, retention reachability, and explicit maintenance records. Phase 10 connects collision decisions to the gate service.
 
 **Success Criteria**:
 
@@ -554,11 +573,11 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 - [ ] Secret fixtures in any candidate Git-tracked snapshot/checkpoint projection fail before projection with safe remediation warning that later `.archflow/` deletion cannot erase branch history; clean binary/text fixtures pass without logging secret values.
 - [ ] Snapshot/projection/restore fault injection preserves prior/next authority or exact repair, and the three `restore-collision` outcomes are representable without silent overwrite.
 
-### Phase 9: Durable Gates, Waivers, and Manual Decisions
+### Phase 10: Durable Gates, Waivers, and Manual Decisions
 
 **Goal**: Persist every human authority boundary independently of a live MCP request.
 
-**Depends on**: Phase 8
+**Depends on**: Phase 9
 
 **Requirements**: REQ-09, REQ-13, REQ-18, REQ-20, REQ-21, REQ-22, REQ-23, REQ-24, REQ-36, REQ-37, REQ-38, REQ-39, REQ-40, REQ-41, REQ-50
 
@@ -574,11 +593,11 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 - [ ] `waiver-requested` is non-advancing and archives the current gate before the sole waiver gate opens; grant resumes only the recorded rule/scope, denial remains non-advancing, and no nested gate exists. `restore-collision` exposes only discard-and-restore, adopt-as-new-generation with changed inputs/fingerprint and rationale, or abort.
 - [ ] A real Claude host timeout leaves one pending gate, and a later invocation resumes and resolves that gate exactly once; timeout-then-resume is normal supported behavior.
 
-### Phase 10: Host Identity, Sandbox, and CLI Dispatch
+### Phase 11: Host Identity, Sandbox, and CLI Dispatch
 
 **Goal**: Prove fresh opposite-family reviewer processes receive only declared envelopes and are safe to dispatch on every claimed environment.
 
-**Depends on**: Phases 1–9
+**Depends on**: Phases 1–10
 
 **Requirements**: REQ-26, REQ-29, REQ-30, REQ-31, REQ-32, REQ-34, REQ-35
 
@@ -595,11 +614,11 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 - [ ] Any external sandbox dependency and license is presented for explicit acceptance before adoption; copyleft is never silently bundled.
 - [ ] The Anthropic subscription-authenticated dispatch path remains release-disabled until written clarification or a qualified legal determination satisfies `VAL-14`; implementation or fixture success is not legal approval.
 
-### Phase 11: Constitution Adjudication, Drift, and Review Fixed Point
+### Phase 12: Constitution Adjudication, Drift, and Review Fixed Point
 
 **Goal**: Turn validated reviewer output and pinned policy/upstream inputs into current-digest advancement evidence.
 
-**Depends on**: Phases 1–10
+**Depends on**: Phases 1–11
 
 **Requirements**: REQ-10, REQ-11, REQ-12, REQ-13, REQ-15, REQ-16, REQ-17, REQ-18, REQ-19, REQ-20, REQ-32, REQ-33
 
@@ -612,11 +631,11 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 - [ ] Positive, negative, and uncertain triggers plus current/missing/stale/failed mechanical evidence behave fail-closed against the approved policy-base constitution.
 - [ ] Aligned and incidental drift are recorded correctly; material drift gates and an accepted change reopens the affected upstream approval/evidence chain.
 
-### Phase 12: Five-Tool MCP Assembly and Offline Local CLI
+### Phase 13: Five-Tool MCP Assembly and Offline Local CLI
 
 **Goal**: Assemble persistence, dispatch, adjudication, and decisions behind the complete and only MCP workflow surface.
 
-**Depends on**: Phases 1–11
+**Depends on**: Phases 1–12
 
 **Requirements**: REQ-07, REQ-08, REQ-11, REQ-13, REQ-21, REQ-23, REQ-27, REQ-28, REQ-29, REQ-30, REQ-31, REQ-32, REQ-33, REQ-35, REQ-36, REQ-37, REQ-38, REQ-39, REQ-40
 
@@ -632,15 +651,15 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 - [ ] `archflow-local checkpoint` atomically extends only a valid reconciled chain, and server adoption imports only its greatest valid checkpoint via the closed union tag.
 - [ ] The updated tracked manifest binds the complete server/helper bundle to current package/lock/source/schema/assets digests and passes clean-checkout offline startup before installer work.
 
-### Phase 13: Installer, Initialization, and Host Registration
+### Phase 14: Installer, Initialization, and Host Registration
 
 **Goal**: Install the offline bundle and initialize supported repositories repeatedly without damaging host or project configuration.
 
-**Depends on**: Phases 1, 10, and 12
+**Depends on**: Phases 1, 11, and 13
 
 **Requirements**: REQ-01, REQ-02, REQ-28, REQ-29, REQ-34, REQ-37, REQ-40
 
-**Scope**: Verify the Phase 12 tracked bundle/manifest, then extend `install.sh` for both bundle launchers and skill targets, replacing hard-coded `STALE_SKILLS` deletion with an ArchFlow-owned install manifest that removes only obsolete owned files and preserves unrelated skills; create `archflow-init`; scaffold assets; require `claude mcp add --scope project` to create/update committed shared `.mcp.json` with the PATH command `archflow-mcp`, and use official Codex registration; narrowly patch unsupported persistent per-server timeout/required settings with parse-before/after preservation; otherwise emit exact shell-profile guidance and verify a newly started host inherits `MCP_TOOL_TIMEOUT`; detect collisions, untrusted or managed config, unsupported versions/auth, and missing sandbox capability; and add recovery guidance.
+**Scope**: Verify the Phase 13 tracked bundle/manifest, then extend `install.sh` for both bundle launchers and skill targets, replacing hard-coded `STALE_SKILLS` deletion with an ArchFlow-owned install manifest that removes only obsolete owned files and preserves unrelated skills; create `archflow-init`; scaffold assets; require `claude mcp add --scope project` to create/update committed shared `.mcp.json` with the PATH command `archflow-mcp`, and use official Codex registration; narrowly patch unsupported persistent per-server timeout/required settings with parse-before/after preservation; otherwise emit exact shell-profile guidance and verify a newly started host inherits `MCP_TOOL_TIMEOUT`; detect collisions, untrusted or managed config, unsupported versions/auth, and missing sandbox capability; and add recovery guidance.
 
 **Success Criteria**:
 
@@ -652,11 +671,11 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 - [ ] Initialized state is Git-trackable/shareable, contains no machine-specific executable path in portable task state, and works after repository relocation and in linked/space/Unicode worktrees.
 - [ ] `archflow-init` creates no task state and no commit. Fresh task creation refuses to start until workflow/constitution assets resolve from an explicitly approved immutable commit and then stages the normal initialization manifest.
 
-### Phase 14: Normal-Mode Thin Phase Skills and Truthful Status
+### Phase 15: Normal-Mode Thin Phase Skills and Truthful Status
 
 **Goal**: Drive the normal MCP workflow from host-neutral phase skills and report only reconciled durable truth.
 
-**Depends on**: Phases 1–13
+**Depends on**: Phases 1–14
 
 **Requirements**: REQ-03, REQ-06, REQ-07, REQ-08, REQ-09, REQ-10, REQ-13, REQ-14, REQ-20, REQ-41
 
@@ -670,11 +689,11 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 - [ ] The server sees only complete supplemental projections through filesystem notification plus bounded polling fallback. The gate-pending transition table admits only supplemental ingestion, triage, explicit decline/decision, cancellation, or supersession; `SUPPLEMENTAL_REVIEW_REQUIRED` rejection resumes the gate and accepted change supersedes it and re-enters the fixed point.
 - [ ] Status verifies the immutable whole-config digest before recommending work; `PINNED_CONFIG_MISMATCH` reports no config content and recommends only a distinct new task or explicit upgrade for intentional routing/model/effort changes.
 
-### Phase 15: Manual and Degraded Recovery Workflow
+### Phase 16: Manual and Degraded Recovery Workflow
 
 **Goal**: Complete and recover the workflow conservatively when individual MCP tools or the server are unavailable.
 
-**Depends on**: Phases 1–14
+**Depends on**: Phases 1–15
 
 **Requirements**: REQ-08, REQ-09, REQ-11, REQ-12, REQ-13, REQ-14, REQ-18, REQ-20, REQ-21, REQ-22, REQ-23, REQ-24, REQ-25, REQ-36, REQ-37, REQ-38, REQ-39, REQ-40, REQ-41
 
@@ -688,11 +707,11 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 - [ ] Supplemental-review arrival, rejection/resume, accepted-change supersession, explicit decline, cancellation, and restart behave identically to normal-mode milestones.
 - [ ] Manual operation never auto-commits/pushes and documents clean human-approved checkpoint handoff between writers.
 
-### Phase 16: Legacy Upgrade Workflow
+### Phase 17: Legacy Upgrade Workflow
 
 **Goal**: Migrate selected legacy material into a distinct canonical task without changing or implicitly approving the source.
 
-**Depends on**: Phases 6–9, 11, 12, 14, and 15
+**Depends on**: Phases 6–10, 12, 13, 15, and 16
 
 **Requirements**: REQ-02, REQ-04, REQ-09, REQ-13, REQ-15, REQ-16, REQ-17, REQ-18, REQ-19, REQ-20, REQ-21, REQ-22, REQ-23, REQ-24, REQ-25, REQ-26, REQ-38, REQ-39, REQ-40, REQ-41, REQ-50
 
@@ -707,11 +726,11 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 - [ ] Pure manual upgrade begins with a validating legacy-initialization checkpoint and later server recovery adopts its chain without changing the source or replaying decisions.
 - [ ] The repository's current legacy task layout upgrades through the same fixture path, and release guidance tells users with in-flight tasks how to finish in legacy tooling or checkpoint/handoff into a distinct upgraded task without silent in-place conversion.
 
-### Phase 17: Reliability and Security Matrices
+### Phase 18: Reliability and Security Matrices
 
 **Goal**: Prove persistence, race, path, process, and isolation invariants under adversarial failures.
 
-**Depends on**: Phases 1–16
+**Depends on**: Phases 1–17
 
 **Requirements**: REQ-04, REQ-05, REQ-11, REQ-12, REQ-13, REQ-14, REQ-15, REQ-16, REQ-17, REQ-18, REQ-20, REQ-21, REQ-22, REQ-23, REQ-24, REQ-25, REQ-26, REQ-27, REQ-28, REQ-29, REQ-30, REQ-31, REQ-32, REQ-33, REQ-34, REQ-35, REQ-36, REQ-37, REQ-38, REQ-39, REQ-50
 
@@ -727,11 +746,11 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 - [ ] Binary/mode/rename/delete restore, manual recovery, and legacy staging remain collision-safe under fault injection; tracked canonical blob/tree identities remain stable across attributes, LF/CRLF and `core.autocrlf`, `core.fileMode`, executable-bit, and symlink checkout cases.
 - [ ] Boundary and over-limit payload matrices prove 25 MiB/result and 250 MiB/task enforcement, no truncation/hidden authority, authoritative/evidence retention, maintenance reachability records, and pre-projection secret rejection under crashes and retries.
 
-### Phase 18: Real-Host E2E and Review-Quality Validation
+### Phase 19: Real-Host E2E and Review-Quality Validation
 
 **Goal**: Validate useful independent review and complete normal, manual, and migration journeys in both producer directions.
 
-**Depends on**: Phases 1–17
+**Depends on**: Phases 1–18
 
 **Requirements**: REQ-01, REQ-02, REQ-03, REQ-06, REQ-07, REQ-08, REQ-09, REQ-10, REQ-11, REQ-12, REQ-13, REQ-14, REQ-15, REQ-16, REQ-17, REQ-18, REQ-19, REQ-20, REQ-21, REQ-22, REQ-23, REQ-24, REQ-25, REQ-26, REQ-27, REQ-28, REQ-29, REQ-30, REQ-31, REQ-32, REQ-33, REQ-34, REQ-35, REQ-36, REQ-37, REQ-38, REQ-39, REQ-40, REQ-41, REQ-50
 
@@ -748,11 +767,11 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 - [ ] A real task reaches the snapshot boundaries, receives `SNAPSHOT_LIMIT` above either cap without partial authority, retains all current/evidence chains, records a safe maintenance prune, and rejects a secret-bearing checkpoint before Git projection.
 - [ ] The approved corpus thresholds demonstrate substantive defect detection and acceptable false blockers; failure of `VAL-02` reopens the automation premise.
 
-### Phase 19: Release Packaging, Support Matrix, and Documentation Consistency
+### Phase 20: Release Packaging, Support Matrix, and Documentation Consistency
 
 **Goal**: Produce a coherent beta release candidate and an explicit report of any remaining external release blockers.
 
-**Depends on**: Phases 1–18
+**Depends on**: Phases 1–19
 
 **Requirements**: REQ-01, REQ-02, REQ-03, REQ-04, REQ-05, REQ-06, REQ-07, REQ-08, REQ-09, REQ-10, REQ-11, REQ-12, REQ-13, REQ-14, REQ-15, REQ-16, REQ-17, REQ-18, REQ-19, REQ-20, REQ-21, REQ-22, REQ-23, REQ-24, REQ-25, REQ-26, REQ-27, REQ-28, REQ-29, REQ-30, REQ-31, REQ-32, REQ-33, REQ-34, REQ-35, REQ-36, REQ-37, REQ-38, REQ-39, REQ-40, REQ-41, REQ-50
 
@@ -776,20 +795,21 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 | 3 | MCP Contract Boundary and Dependency Admission | COMPLETE (2026-07-27) |
 | 4 | Guarded MCP Runtime and SDK Compatibility | COMPLETE (2026-07-27) |
 | 5 | Offline Bundle and Release Integrity | COMPLETE (2026-07-28) |
-| 6 | Repository Identity, Paths, Schemas, and Canonical Digests | Not Started |
-| 7 | Transaction Kernel, Intent/CAS, and Crash Recovery | Not Started |
-| 8 | Snapshots, Implementation Manifests, and Restore | Not Started |
-| 9 | Durable Gates, Waivers, and Manual Decisions | Not Started |
-| 10 | Host Identity, Sandbox, and CLI Dispatch | Not Started |
-| 11 | Constitution Adjudication, Drift, and Review Fixed Point | Not Started |
-| 12 | Five-Tool MCP Assembly and Offline Local CLI | Not Started |
-| 13 | Installer, Initialization, and Host Registration | Not Started |
-| 14 | Normal-Mode Thin Phase Skills and Truthful Status | Not Started |
-| 15 | Manual and Degraded Recovery Workflow | Not Started |
-| 16 | Legacy Upgrade Workflow | Not Started |
-| 17 | Reliability and Security Matrices | Not Started |
-| 18 | Real-Host E2E and Review-Quality Validation | Not Started |
-| 19 | Release Packaging, Support Matrix, and Documentation Consistency | Not Started |
+| 6 | Repository Identity, Paths, and Canonical Digests | Not Started |
+| 7 | Durable State and Artifact Schemas | Not Started |
+| 8 | Transaction Kernel, Intent/CAS, and Crash Recovery | Not Started |
+| 9 | Snapshots, Implementation Manifests, and Restore | Not Started |
+| 10 | Durable Gates, Waivers, and Manual Decisions | Not Started |
+| 11 | Host Identity, Sandbox, and CLI Dispatch | Not Started |
+| 12 | Constitution Adjudication, Drift, and Review Fixed Point | Not Started |
+| 13 | Five-Tool MCP Assembly and Offline Local CLI | Not Started |
+| 14 | Installer, Initialization, and Host Registration | Not Started |
+| 15 | Normal-Mode Thin Phase Skills and Truthful Status | Not Started |
+| 16 | Manual and Degraded Recovery Workflow | Not Started |
+| 17 | Legacy Upgrade Workflow | Not Started |
+| 18 | Reliability and Security Matrices | Not Started |
+| 19 | Real-Host E2E and Review-Quality Validation | Not Started |
+| 20 | Release Packaging, Support Matrix, and Documentation Consistency | Not Started |
 
 ---
 *Created: 2026-07-26*
