@@ -1,6 +1,7 @@
 # Phase 6: Repository Identity, Paths, and Canonical Digests
 
-**Status**: IN PROGRESS
+**Status**: COMPLETE
+**Implemented**: 2026-07-28
 **Task**: mcp-integration
 **Goal**: Establish the repository/task identity, path safety, immutable task configuration pinning, and byte-stable digest contracts used by every mutation.
 **Requirements completed**: none
