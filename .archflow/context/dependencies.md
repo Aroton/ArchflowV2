@@ -1,7 +1,7 @@
 # Dependencies and Integrations
 
-**Explored:** 2026-07-27
-**Commit:** `8e3144c`
+**Explored:** 2026-07-28
+**Commit:** `91a7c95`
 
 ## Package and runtime baseline
 
@@ -13,12 +13,13 @@
 
 | Dependency | Pin | Use |
 | --- | --- | --- |
+| `@modelcontextprotocol/server` | `2.0.0` | MCP server SDK (phase 4+) for stdio transport binding and tool dispatch. Used in `src/mcp/sdk-adapter.ts` to initialize the Server, handle `Transport`, and implement the `startMcpRuntime` entry point. Includes protocol types and error handling. |
 | `zod` | `4.4.3` | Primary TypeScript-side structural and semantic validation throughout `src/contracts/`, including configuration, workflow, gates, evidence, reviews, errors, MCP tool envelopes, and trust records. |
 | `ajv` | `8.20.0` | JSON Schema 2020-12 compilation and validation in `src/contracts/validators.ts`; loaded through `ajv/dist/2020.js`. |
 | `ajv-formats` | `3.0.1` | Adds standard JSON Schema formats to the Ajv validator in `src/contracts/validators.ts`. |
 | `yaml` | `2.9.0` | Strict YAML 1.2 parsing in `src/contracts/yaml.ts`, including rejection of multiple documents, warnings, duplicate keys, merges, aliases, and non-plain-JSON values. This parser feeds configuration, workflow, and rubric loading. |
 
-The contract layer also uses only built-in Node modules: `node:crypto` for SHA-256 trust/evidence digests and `node:util` for deep equality. Scripts use built-in filesystem, path, process, OS, assertion, and child-process APIs.
+The contract layer and MCP runtime also use only built-in Node modules: `node:crypto` for SHA-256 trust/evidence digests, `node:util` for deep equality, `node:buffer` for transport framing, and `node:stream` for Readable/Writable transport abstractions. Scripts use built-in filesystem, path, process, OS, assertion, and child-process APIs.
 
 ## Development and build dependencies
 
@@ -40,11 +41,17 @@ No ESLint, Prettier, Biome, or separate coverage package/configuration is presen
 
 ## External integrations and persistence
 
-At this commit, `src/` contains the shared contract and validation layer only. There is no executable MCP server entry point, transport binding, HTTP client, database driver, filesystem-backed state store, or cloud service integration. There are no calls to `fetch`, no database/auth-provider packages, and no application secrets or API-key requirements.
+At this commit, `src/` contains the contract, validation, and MCP stdio transport layers. The MCP server implementation (`src/mcp/`) provides:
 
-The future MCP integration is described in `docs/mcp-integration-design.md`: it is intended to dispatch short-lived `claude -p` and `codex exec` processes using the user's existing subscription authentication. The design explicitly avoids requiring or forwarding `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`, because those variables can switch child processes to metered API authentication. That behavior is design intent, not implemented runtime behavior in the current source tree.
+- **Transport**: stdio-based message framing via `src/mcp/framing.ts` (JSON-line protocol), `src/mcp/send-queue.ts` (send buffering), and `src/mcp/process-runner.ts` (Node process integration).
+- **Server**: `src/mcp/sdk-adapter.ts` binds the `@modelcontextprotocol/server` SDK, `src/mcp/server.ts` implements tool boundary enforcement and response verification, and `src/mcp/tools.ts` defines the advertised tool catalogue.
+- **Session management**: `src/mcp/session.ts` handles JSON-RPC invocation context and argument projection.
 
-`scripts/check-dependency-policy.mjs` additionally rejects packages reserved for later implementation phases: `@anthropic-ai/sandbox-runtime`, `@modelcontextprotocol/server`, `execa`, `proper-lockfile`, and `write-file-atomic`. Their absence is deliberate and confirms that MCP transport/dispatch, sandboxing, locking, and atomic state persistence have not yet landed.
+There is no HTTP client, database driver, filesystem-backed state store, or cloud service integration. There are no calls to `fetch`, no database/auth-provider packages, and no application secrets or API-key requirements.
+
+The MCP integration dispatches short-lived `claude -p` and `codex exec` processes using the user's existing subscription authentication, as designed in `docs/mcp-integration-design.md`. The design explicitly avoids requiring or forwarding `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`, because those variables can switch child processes to metered API authentication.
+
+`scripts/check-dependency-policy.mjs` additionally rejects packages reserved for later implementation phases: `@anthropic-ai/sandbox-runtime`, `execa`, `proper-lockfile`, and `write-file-atomic`. Their absence is deliberate and confirms that sandboxing, locking, and atomic state persistence have not yet landed.
 
 Schema identifiers such as `https://archflow.dev/schemas/v1/mcp-tools` in `src/contracts/versions.ts` and `src/contracts/schemas/v1/*.json` are stable identifiers/references; the current validators register and resolve the bundled local schemas rather than fetching them over the network.
 
@@ -57,16 +64,23 @@ Schema identifiers such as `https://archflow.dev/schemas/v1/mcp-tools` in `src/c
 
 ## CI/CD and verification
 
-GitHub Actions is the only CI/CD integration (`.github/workflows/ci.yml`). On every push and pull request, an Ubuntu job runs for each supported Node version with read-only repository contents permission:
+GitHub Actions is the only CI/CD integration (`.github/workflows/ci.yml`). On every push and pull request, an Ubuntu job runs for each supported Node version (`24.15.0`, `24.18.0`) with read-only repository contents permission:
 
 1. `npm ci`
-2. `npm run typecheck`
-3. `npm test`
-4. `npm run test:contracts`
-5. `npm run build:temp`
-6. `npm run check:dependencies`
-7. `npm run check:notices`
-8. `npm run test:notices-policy`
-9. Assert that no tracked/release `dist` directory was produced
+2. `npm run probe:phase4-mcp-compatibility` — MCP SDK compatibility checks
+3. `npm run typecheck`
+4. `npm run test:mcp-runtime` — Unit and integration tests for MCP transport and process binding
+5. `npm test` — Full test suite
+6. `npm run test:contracts` — Contract-specific tests
+7. `npm run build:temp` — Temporary bundle artifact for smoke testing
+8. `npm run check:dependencies` — Dependency policy verification
+9. `npm run check:notices` — Third-party notice inventory validation
+10. `npm run test:notices-policy` — Notice mutation tests
+11. `npm run check:phase4-mcp-boundary` — Phase 4 MCP module boundary checks
+12. `npm run test:phase4-mcp-boundary-policy` — Phase 4 boundary mutation tests
+13. `npm run release:check` — Release payload verification
+14. `npm run release:smoke` — Release bundle smoke tests
+15. `npm run release:mutations` — Release integrity mutation tests
+16. `npm run release:reproduce` — Release reproducibility verification
 
-`npm run check` provides the corresponding local aggregate, though it invokes the broad `npm test` and then the contract subset again. There is no deployment, package publication, container build, release workflow, or external CI service configured.
+`npm run check` provides the corresponding local aggregate that runs all verification steps in sequence. There is no deployment, package publication, container build, or external CI service configured; releases are staged to a tracked `dist/` directory for reproducibility validation.

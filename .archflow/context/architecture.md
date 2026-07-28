@@ -1,113 +1,312 @@
-# Architecture Context
+# ArchFlow MCP Server Architecture
 
-**Explored:** 2026-07-27
-**Commit:** `8e3144c`
+**Date**: 2026-07-28  
+**Commit**: 91a7c95
 
-## Current shape
+## Overview
 
-This repository is the ArchFlow skills distribution plus an in-progress, contract-first TypeScript implementation of the planned local MCP integration. The implemented runtime code is currently a reusable contract library under `src/contracts/`; there is no MCP transport entry point, stdio server, persistent state engine, or tracked `dist/` bundle yet. The normative future design and phase plan live in `.archflow/tasks/mcp-integration/architecture.md`, while this document describes the code that exists at the stamped commit.
+ArchFlow is a lightweight development workflow framework that runs as an MCP (Model Context Protocol) server. It provides six portable Agent Skills for Claude Code and Codex, guiding structured development from exploration through implementation with human review at every stage. The codebase consists of TypeScript/Node.js runtime logic and Markdown-based skill definitions.
 
-The package is private, ESM-only, and targets Node 24 / ES2024. `src/contracts/index.ts` is its sole aggregate entry point. A temporary bundle is built from that file for compatibility smoke testing, but the package does not currently declare a public `exports`, `bin`, or production build artifact.
+## Top-Level Directory Map
 
-## Repository map
-
-| Path | Responsibility |
-|---|---|
-| `src/contracts/` | TypeScript domain contracts, parsers, validators, trust/provenance rules, canonical renderers, MCP tool request/result shapes, and error catalogues. |
-| `src/contracts/schemas/v1/` | Versioned JSON Schema counterparts for the TypeScript/Zod contracts. Contract-agreement tests keep both representations aligned. |
-| `src/contracts/internal/` | Non-public capability/branding seams. Test capabilities can construct otherwise unforgeable trust objects without exporting those constructors from `index.ts`. |
-| `assets/workflow.yaml` | Shipped fixed ArchFlow phase graph and gate policy. |
-| `assets/constitution/` | Shipped repository-wide policy rule templates, one stable/versioned rule per numbered Markdown file. |
-| `skills/` | Portable source of truth for the six Claude Code/Codex Agent Skills. This layer is installed by `install.sh` and is not wired to a server executable yet. |
-| `test/unit/` | Behavioral tests for individual contract modules and cross-module invariants. |
-| `test/contracts/` | Zod/JSON-Schema agreement, schema registry, MCP surface, and exhaustive catalogue tests. |
-| `test/fixtures/` | Valid and invalid serialized contract examples used by both test layers. |
-| `scripts/` | Temporary bundling/smoke checks and dependency/license/NOTICE policy enforcement. |
-| `docs/` | User/process documentation and the preserved originating MCP integration design. |
-| `.archflow/tasks/mcp-integration/` | Tracked workflow planning, phase designs/logs, and reviews for the MCP implementation itself. |
-| `.github/workflows/ci.yml` | Node-version matrix verification pipeline. |
-| `notices/`, `THIRD_PARTY_NOTICES.md` | Retained third-party notice material and the lockfile-derived license inventory. |
-
-Generated `.tmp/` bundles and installed `node_modules/` are local build products, not architecture sources. `dist/` is deliberately absent at this stage.
-
-## Entry points and wiring
-
-### Public contract surface
-
-`src/contracts/index.ts` re-exports the supported library surface. Consumers are expected to enter through it rather than importing internal trust-brand machinery. Notably, connection contexts are type-exported and only invocation-context derivation is public; server-owned/test-only constructors remain internal.
-
-The temporary build demonstrates the intended library boundary:
-
-```js
-entryPoints: ["src/contracts/index.ts"],
-outfile: ".tmp/archflow-contracts.mjs",
-platform: "node",
-format: "esm"
+```
+.
+├── src/                          # TypeScript source
+│   ├── main.ts                   # Entry point: process wiring
+│   ├── contracts/                # Data structures & validation schemas
+│   └── mcp/                       # MCP protocol & runtime
+├── skills/                        # Six portable Agent Skills (Markdown)
+│   ├── archflow-explore/
+│   ├── archflow-prd/
+│   ├── archflow-design/
+│   ├── archflow-phase-design/
+│   ├── archflow-phase-impl/
+│   └── archflow-status/
+├── test/                         # Test suite (Vitest)
+│   ├── unit/
+│   ├── integration/
+│   ├── contracts/
+│   └── fixtures/
+├── dist/                         # Build output (bundled MCP runtime)
+├── scripts/                       # Build & release tooling
+├── docs/                         # Process documentation
+├── release/                      # Release artifacts
+├── package.json                  # Node.js dependencies & scripts
+├── tsconfig.json                 # TypeScript configuration
+├── vitest.config.ts              # Test runner configuration
+└── THIRD_PARTY_NOTICES.md        # License information
 ```
 
-`scripts/smoke-temp-bundle.mjs` dynamically imports that bundle and exercises YAML parsing, JSON Schema validation, review/adjudication derivation, render anti-spoofing, error creation, phase parsing, and the exact five-tool catalogue.
+## Key Entry Points
 
-### Contract layering
+### Main Process Entry Point
 
-The source dependency flow is mostly inward from generic serialization primitives toward workflow semantics:
+**File**: `src/main.ts`
 
-1. `plain-json.ts`, `versions.ts`, `vocabulary.ts`, and `phase-instance.ts` establish safe values, version constants, fixed vocabulary, and canonical phase identifiers.
-2. `yaml.ts` and `validators.ts` provide strict YAML parsing and non-mutating Ajv 2020 validation; other parsers preflight input through the plain-JSON boundary.
-3. `workflow.ts`, `config.ts`, `rubric.ts`, and `constitution.ts` validate repository configuration and shipped policy assets.
-4. `evidence.ts`, `path-claims.ts`, `review.ts`, and `adjudication.ts` define digest-bound evidence, task-scoped paths, review findings, and policy/drift results.
-5. `trust.ts` qualifies evidence using invocation/result/authority bindings. `internal/trust-brands.ts` guards authentic branded values; `internal/test-capabilities.ts` exposes controlled fixture seams only to tests.
-6. `triage.ts`, `supplemental.ts`, and `renderers.ts` consume qualified evidence to validate exact review-set dispositions and produce canonical human-readable artifacts.
-7. `gates.ts` defines gate contexts and decision effects. `errors.ts` composes the domain types into exhaustive project and protocol error catalogues.
-8. `mcp-tools.ts` binds the five fixed tool names to versioned request/result schemas, validates calls, correlates results with expected identity, and exports immutable tool definitions.
-9. `contexts.ts` creates immutable invocation-scoped context from connection data and maps invalid context to protocol errors; live MCP handshake/transport ownership is intentionally not implemented yet.
+```typescript
+import { runMcpProcess } from "./mcp/process-runner.js";
+import { startMcpRuntime } from "./mcp/sdk-adapter.js";
 
-The five frozen tool names are `archflow_state`, `archflow_counter_review`, `archflow_adjudicate`, `archflow_gate`, and `archflow_waiver`. They are data contracts only at this commit—there are no handlers behind them.
+void runMcpProcess(
+  {
+    input: process.stdin,
+    output: process.stdout,
+    diagnostic: process.stderr,
+    workingDirectory: process.cwd(),
+    signals: process,
+    setExitCode: (code) => { process.exitCode = code; },
+  },
+  startMcpRuntime,
+);
+```
 
-### Assets to contracts
+**Wiring**: The entry point binds Node.js process streams (stdin/stdout/stderr) and signals to the MCP runtime, allowing the server to receive JSON-RPC messages from clients and send responses via stdout with diagnostics on stderr.
 
-`assets/workflow.yaml` is parsed against a fixed workflow shape: explore is optional/ungated; PRD and design always gate; phase design and implementation gate on triggers. Constitution Markdown combines strict YAML frontmatter with normative prose. The contract tests load these assets directly, so shipped configuration and parser expectations are checked together.
+### MCP Runtime Initialization
 
-### Skills and installation
+**Files**:
+- `src/mcp/sdk-adapter.ts` — Starts the MCP runtime; adapts @modelcontextprotocol/server SDK
+- `src/mcp/process-runner.ts` — Manages process lifecycle: startup, signal handling, graceful shutdown
+- `src/mcp/session.ts` — Session state machine and JSON-RPC request routing
+- `src/mcp/server.ts` — Tool invocation boundary with error handling and contract validation
 
-`install.sh` copies the same `skills/` tree to `~/.claude/skills/` and/or `~/.agents/skills/`, optionally selected with `--claude` or `--codex`. It currently installs prompt/skill content only. MCP launchers, host registration, initialization, and offline helper installation remain planned later phases.
+**Import Chain**:
+1. `main.ts` calls `runMcpProcess()`
+2. `runMcpProcess()` starts the MCP runtime via `startMcpRuntime()`
+3. `startMcpRuntime()` creates an MCP `Server` instance, wires up tool handlers, and manages the JSON-RPC transport
+4. Tool calls are routed through `createToolBoundary()` which validates inputs/outputs against contract schemas
 
-## Build and verification
+## Application Wiring & Dependency Flow
 
-`package.json` provides no production build command yet. The principal commands are:
+### Protocol Stack (Bottom Up)
 
-| Command | Purpose |
-|---|---|
-| `npm run typecheck` | Strict TypeScript check with no emission. |
-| `npm test` | Run all Vitest unit and contract-agreement tests. |
-| `npm run test:unit` | Run module-level behavioral tests. |
-| `npm run test:contracts` | Run schema and catalogue agreement tests. This is also run after the full suite in CI as an explicit gate. |
-| `npm run build:temp` | Bundle `src/contracts/index.ts` with esbuild, then import and exercise the Node-targeted ESM bundle. |
-| `npm run check:dependencies` | Enforce exact direct dependencies, exact lock metadata, approved licenses, and phase-boundary exclusions. |
-| `npm run check:notices` | Verify the lockfile license inventory and retained notice digests. |
-| `npm run test:notices-policy` | Mutation-test the NOTICE checks. |
-| `npm run check` | Run the repository's complete local verification chain. |
+1. **Framing** (`src/mcp/framing.ts`)
+   - JSON Line protocol encoding/decoding
+   - Ingress frame parsing
+   - Egress message serialization
 
-GitHub Actions repeats these checks on Node `24.15.0` and `24.18.0`, using `npm ci`, and asserts that no tracked-release `dist/` bundle is produced prematurely.
+2. **Send Queue** (`src/mcp/send-queue.ts`)
+   - Serializes outgoing responses
+   - Coordinates queueing and backpressure
 
-## Configuration
+3. **Session Controller** (`src/mcp/session.ts`)
+   - JSON-RPC request/response correlation
+   - Session state machine (PRE_INIT → INITIALIZING → INIT_RESPONSE_ACCEPTED → READY → CLOSING → CLOSED)
+   - Routes incoming requests to `initialize`, `ping`, `tools/list`, or `tools/call`
 
-- `package.json`: private ESM package, exact runtime/development versions, and verification scripts.
-- `package-lock.json`: npm lockfile v3; policy scripts treat exact resolution and license metadata as architectural constraints.
-- `tsconfig.json`: `NodeNext` modules/resolution, ES2024 target, strict mode, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`, and `noEmit`.
-- `vitest.config.ts`: Node test environment, `test/**/*.test.ts`, coverage output under `coverage/`.
-- `.github/workflows/ci.yml`: read-only CI permissions and supported Node matrix.
-- `.gitattributes`: automatic text detection and LF normalization.
-- `assets/workflow.yaml`: canonical application phase topology.
-- `assets/constitution/*.md`: canonical initial policy rules.
+4. **Tool Boundary** (`src/mcp/server.ts`)
+   - Validates tool names against contract (`isToolName()`)
+   - Parses structured inputs via `parseToolCall()`
+   - Enforces output schema via `validateProjectResultStructure()` / `validateProjectFailureStructure()`
+   - Returns either `project-result` or `protocol-error`
 
-There are currently no runtime environment variables, network endpoints, database settings, authentication provider settings, or MCP host configuration consumed by the implemented TypeScript code. Host CLI/auth/sandbox configuration belongs to future adapter and installer phases, not the present contract package.
+5. **SDK Adapter** (`src/mcp/sdk-adapter.ts`)
+   - Wraps @modelcontextprotocol/server `Server` class
+   - Configures tool registry from `ADVERTISED_TOOL_CATALOGUE`
+   - Implements `MessageHandler` interface for MCP protocol events
 
-## Architectural boundaries to preserve
+6. **Process Runner** (`src/mcp/process-runner.ts`)
+   - Orchestrates startup and graceful shutdown
+   - Handles SIGINT/SIGTERM
+   - Reports exit codes
 
-- Keep serialized inputs at a strict plain-JSON boundary before domain validation.
-- Keep Zod behavior and shipped JSON Schemas demonstrably equivalent.
-- Preserve digest-, task-, phase-, invocation-, and authority-bound evidence; schema-shaped objects alone must not acquire trust.
-- Keep internal trust brands/capability constructors out of the aggregate public entry point.
-- Preserve exactly five MCP tools; local maintenance/helper operations are designed for a separate CLI rather than expanding `tools/list`.
-- Keep MCP SDK/transport concerns isolated from the contract layer when the server adapter arrives.
-- Treat `.archflow/tasks/mcp-integration/architecture.md` as the implementation plan, but verify current code before assuming a planned subsystem exists.
+### Tool Definitions & Contracts
+
+**File**: `src/mcp/tools.ts`
+
+- **`ADVERTISED_TOOL_CATALOGUE`**: Array of `AdvertisedToolDescriptor` (name, inputSchema, outputSchema)
+- **Tool schemas**: JSON Schema documents defining each tool's contract
+  - `mcp-tools.schema.json` — Main tool definitions
+  - `primitives.schema.json` — Common data types
+  - `path-claim.schema.json` — File path validation
+  - `evidence-slots.schema.json` — Evidence structures
+  - `rubric.schema.json` — Review criteria
+  - `gate-contract.schema.json` — Review gates
+  - `gate-decision.schema.json` — Gate outcomes
+  - `project-error.schema.json` — Error structures
+
+**Defined Tools** (sample):
+- `analyze-code-structure` — Map codebase
+- `perform-research` — Domain research
+- `design-phase` — Phase design
+- `review-document` — Cross-client review
+- `gate-adjudication` — Human approval gates
+- `execute-shell` — Shell commands
+- etc. (full list in `src/contracts/tool-names.ts`)
+
+### Contract Layer
+
+**Directory**: `src/contracts/`
+
+Exports re-exported from `src/contracts/index.ts`:
+
+| Module | Purpose |
+|--------|---------|
+| `workflow.ts` | Workflow state (discovery, planning, implementation) |
+| `mcp-tools.ts` | Tool contract parsing, validation, correlation |
+| `tool-names.ts` | `ToolName` union type and validation |
+| `yaml.ts` | YAML parsing for skill definitions |
+| `contexts.ts` | Invocation context (user, client, phase, session) |
+| `errors.ts` | Protocol and project errors |
+| `evidence.ts` | Evidence slot structures |
+| `gates.ts` | Review gate rules |
+| `trust.ts` | Human trust boundaries |
+| `triage.ts` | Counter-review triage |
+| `plain-json.ts` | JSON value normalization |
+| `validators.ts` | Input/output validation |
+| `config.ts` | Configuration parsing |
+| `renderers.ts` | Markdown rendering |
+
+## Build System & Configuration
+
+### TypeScript Configuration
+
+**File**: `tsconfig.json`
+
+- **Target**: ES2024
+- **Module System**: ESM (NodeNext resolution)
+- **Strict Mode**: Enabled (`strict: true`)
+- **Root**: Current directory (monorepo-friendly)
+- **No-Emit**: Type-checking only (compilation via esbuild)
+
+### NPM Scripts
+
+**Key scripts** (from `package.json`):
+
+| Script | Purpose |
+|--------|---------|
+| `typecheck` | TypeScript validation |
+| `test` | Full vitest suite (unit + contracts + integration) |
+| `test:unit` | Unit tests only |
+| `test:mcp-runtime` | MCP protocol runtime tests |
+| `build:temp` | Build temporary bundles for smoke testing |
+| `release:stage` | Build release artifacts |
+| `release:check` | Validate release bundle |
+| `release:smoke` | Smoke test the bundle |
+| `check:release` | Full release verification |
+| `check` | Full CI suite: probe, typecheck, test, build, release, notices |
+
+### Test Configuration
+
+**File**: `vitest.config.ts`
+
+- **Environment**: Node.js
+- **Test Patterns**: `test/**/*.test.ts`
+- **Coverage**: Reported to `coverage/` directory
+
+### Build Artifacts
+
+**Output Directory**: `dist/`
+
+- `archflow-mcp.mjs` — Bundled MCP server (esbuild output, ~1.3MB)
+- `manifest.json` — Tool metadata for distribution
+- `metafile.json` — Build metadata
+- `legal/` — Third-party notices
+
+**Build Tool**: esbuild (v0.28.1)
+
+## Skill System
+
+**Directory**: `skills/`
+
+Each skill is a self-contained Markdown document with YAML frontmatter:
+
+```
+skills/archflow-explore/SKILL.md
+  ├── name: archflow-explore
+  ├── description: Explore a codebase and produce persistent ArchFlow context references
+  └── [Full skill logic in Markdown format]
+```
+
+Skills define:
+- Workflow steps (research, design, implementation)
+- Sub-agent delegation strategy
+- Approval gates
+- File artifacts and state machines
+
+## Node.js Dependencies
+
+**Runtime** (`dependencies` in package.json):
+
+- `@modelcontextprotocol/server@2.0.0` — MCP SDK
+- `ajv@8.20.0` — JSON Schema validation
+- `ajv-formats@3.0.1` — Format validation (email, uri, etc.)
+- `yaml@2.9.0` — YAML parsing for skill definitions
+- `zod@4.4.3` — Data validation (complementary to JSON Schema)
+
+**Development** (`devDependencies`):
+
+- `typescript@7.0.2` — Type checking
+- `vitest@4.1.10` — Test runner
+- `esbuild@0.28.1` — Bundler
+- `vite@7.3.6` — Build coordination
+- `@types/node@24.13.3` — Node.js type definitions
+
+**Node.js Engine**: >= 24.15.0 (ES2024 features required)
+
+## Critical Boundaries & Trust
+
+### Protocol Guarantee
+
+The tool boundary (in `src/mcp/server.ts`) enforces a strict contract:
+
+1. **Input validation**: All tool arguments parsed and validated against contract schema before handler invocation
+2. **Output validation**: All handler results validated against expected output schema
+3. **Error coercion**: Failures are coerced into protocol-safe `ProtocolError` structures
+4. **No handler bypass**: Direct tool access forbidden; all invocations go through boundary
+
+### Session State Machine
+
+The session controller enforces strict ordering:
+
+```
+PRE_INIT → INITIALIZING → INIT_RESPONSE_ACCEPTED → READY
+  ↓                                                     ↓
+  ├─────────────── (tool calls only in READY) ─────────→
+  ↓
+CLOSING → CLOSED
+```
+
+Tool calls are rejected if session is not READY.
+
+## Test Structure
+
+**Directory**: `test/`
+
+| Path | Purpose |
+|------|---------|
+| `unit/` | Individual module tests |
+| `contracts/` | Contract validation tests |
+| `integration/` | MCP protocol end-to-end tests (stdio simulation) |
+| `fixtures/` | Test data and utilities |
+| `types/` | Type-checking tests |
+
+## Release & Integrity
+
+**Release Process**:
+
+1. **Stage**: Build temporary bundle, verify structure
+2. **Check**: Run smoke tests on bundle
+3. **Mutations**: Test integrity against bit-flip attacks
+4. **Reproduce**: Verify deterministic rebuild
+5. **Write**: Track release in git
+
+**Release Artifacts** (in `release/`):
+- Tracked bundles for reproducibility
+- Checksums for integrity verification
+- Legal notices for distribution
+
+## Configuration & Environment
+
+- **Working Directory**: Current working directory (passed from caller)
+- **Stdin/Stdout/Stderr**: Bound from process streams
+- **Signals**: SIGINT (graceful close) and SIGTERM (immediate close)
+- **Exit Codes**:
+  - `0` — Clean shutdown
+  - `1` — Protocol error or startup failure
+  - `130` — SIGINT (Ctrl+C)
+  - `143` — SIGTERM
+
+---
+
+**Key Architectural Principle**: ArchFlow separates *protocol and runtime* (MCP server in `src/mcp/`) from *domain logic* (workflow contracts and validation in `src/contracts/`), and *portable skills* (Markdown in `skills/`). This allows the same skill source to be distributed to both Claude Code and Codex without client-specific wiring.
