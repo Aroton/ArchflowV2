@@ -29,6 +29,8 @@ const SCHEMA_FILES = {
   mcpTools: "mcp-tools",
   resultExpectation: "result-expectation",
   pathClaim: "path-claim",
+  releaseManifest: "release-manifest",
+  releaseLegalReview: "release-legal-review",
 } as const satisfies Record<keyof typeof SCHEMA_IDS, string>;
 
 const loadSchema = async (name: string): Promise<Record<string, unknown>> =>

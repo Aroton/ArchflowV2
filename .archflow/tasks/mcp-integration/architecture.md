@@ -775,7 +775,7 @@ All v1 requirements `REQ-01` through `REQ-41` and `REQ-50`, and all release vali
 | 2 | Review Evidence and Contract Authority | COMPLETE (2026-07-27) |
 | 3 | MCP Contract Boundary and Dependency Admission | COMPLETE (2026-07-27) |
 | 4 | Guarded MCP Runtime and SDK Compatibility | COMPLETE (2026-07-27) |
-| 5 | Offline Bundle and Release Integrity | Not Started |
+| 5 | Offline Bundle and Release Integrity | COMPLETE (2026-07-28) |
 | 6 | Repository Identity, Paths, Schemas, and Canonical Digests | Not Started |
 | 7 | Transaction Kernel, Intent/CAS, and Crash Recovery | Not Started |
 | 8 | Snapshots, Implementation Manifests, and Restore | Not Started |

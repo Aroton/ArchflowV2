@@ -164,7 +164,7 @@ beforeAll(async () => {
   runtimeBundle = built.stdout;
   expect(relative(repositoryRoot, runtimeBundle).startsWith("..")).toBe(true);
 
-  const trackedBuildOutput = spawnSync("git", ["ls-files", "--", ".tmp", "dist"], {
+  const trackedBuildOutput = spawnSync("git", ["ls-files", "--", ".tmp"], {
     cwd: repositoryRoot,
     encoding: "utf8",
     timeout: PROCESS_TIMEOUT_MS,

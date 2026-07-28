@@ -1,0 +1,20 @@
+{
+  "bundle_digest": "16faf6365bc502ec0c0e00f150b43c300e65dfa9dcace1cce3d98d850b8cbbd0",
+  "entry_bindings": [
+    {
+      "handler_authority": "inert-no-handler",
+      "id": "mcp-stdio",
+      "role": "mcp-stdio"
+    }
+  ],
+  "finding": "Vulnerable URI routines are runtime-reachable during trusted SDK schema compilation, but the inert handler-free runtime exposes no identified route from untrusted JSON-RPC input to URI normalization.",
+  "limitations": [
+    "This focused result does not remediate the vulnerable dependency.",
+    "This result is invalidated by any bundle, dependency, entry, or handler-authority change."
+  ],
+  "observed_on": "2026-07-27",
+  "record_type": "focused-inert-reachability",
+  "schema_version": "1",
+  "trusted_schema_compilation_reachable": true,
+  "untrusted_json_rpc_route_identified": false
+}

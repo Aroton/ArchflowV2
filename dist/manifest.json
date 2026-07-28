@@ -1,0 +1,2174 @@
+{
+  "adjacent_map_expectations": [
+    {
+      "expectation": "present",
+      "input_key": "node_modules/@modelcontextprotocol/core/dist/auth-CUe6YdwF.mjs",
+      "map": {
+        "digest": "92212ffee512d7c81f4476a62062dfecb43c59292628ef51d026f4491c2de6a7",
+        "package_name": "@modelcontextprotocol/core",
+        "package_relative_path": "dist/auth-CUe6YdwF.mjs.map",
+        "package_version": "2.0.0"
+      },
+      "recognized_third_party_components": [],
+      "reviewed_first_party_roots": [
+        "../src"
+      ]
+    },
+    {
+      "expectation": "present",
+      "input_key": "node_modules/@modelcontextprotocol/server/dist/ajvProvider-CEoC__sr.mjs",
+      "map": {
+        "digest": "2eb52e887d5fda7dad8191f9b1adae36d8b77566cf2c8228eb2844e0358f751e",
+        "package_name": "@modelcontextprotocol/server",
+        "package_relative_path": "dist/ajvProvider-CEoC__sr.mjs.map",
+        "package_version": "2.0.0"
+      },
+      "recognized_third_party_components": [
+        "ajv-formats@3.0.1",
+        "ajv@8.18.0",
+        "fast-deep-equal@3.1.3",
+        "fast-uri@3.1.0",
+        "json-schema-traverse@1.0.0"
+      ],
+      "reviewed_first_party_roots": [
+        "../../core-internal/src"
+      ]
+    },
+    {
+      "expectation": "expected-absent",
+      "input_key": "node_modules/@modelcontextprotocol/server/dist/chunk-Br0eD_fh.mjs",
+      "rationale": "The reviewed SDK bridge chunk has no published adjacent source map in @modelcontextprotocol/server@2.0.0."
+    },
+    {
+      "expectation": "present",
+      "input_key": "node_modules/@modelcontextprotocol/server/dist/dialects-DoSzNhcb.mjs",
+      "map": {
+        "digest": "196fc76d86a5665c7b12ad8727ac3c68d196001d7e12bea3b6a6347405036499",
+        "package_name": "@modelcontextprotocol/server",
+        "package_relative_path": "dist/dialects-DoSzNhcb.mjs.map",
+        "package_version": "2.0.0"
+      },
+      "recognized_third_party_components": [],
+      "reviewed_first_party_roots": [
+        "../../core-internal/src"
+      ]
+    },
+    {
+      "expectation": "present",
+      "input_key": "node_modules/@modelcontextprotocol/server/dist/mcp-DXXb3Vv3.mjs",
+      "map": {
+        "digest": "d7dfb58b7eecce56be099afc8c2551687382e084e6465889c31c933705827915",
+        "package_name": "@modelcontextprotocol/server",
+        "package_relative_path": "dist/mcp-DXXb3Vv3.mjs.map",
+        "package_version": "2.0.0"
+      },
+      "recognized_third_party_components": [],
+      "reviewed_first_party_roots": [
+        "../src"
+      ]
+    },
+    {
+      "expectation": "present",
+      "input_key": "node_modules/@modelcontextprotocol/server/dist/src-CX2iR2pK.mjs",
+      "map": {
+        "digest": "c1fdb7f323bc60b04d4a7fd81036694a11ef3057716a971a0502be4812de8102",
+        "package_name": "@modelcontextprotocol/server",
+        "package_relative_path": "dist/src-CX2iR2pK.mjs.map",
+        "package_version": "2.0.0"
+      },
+      "recognized_third_party_components": [
+        "content-type@1.0.5"
+      ],
+      "reviewed_first_party_roots": [
+        "../../core-internal/src"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "digest": "16faf6365bc502ec0c0e00f150b43c300e65dfa9dcace1cce3d98d850b8cbbd0",
+      "path": "archflow-mcp.mjs",
+      "role": "executable",
+      "size": 1316957
+    },
+    {
+      "digest": "1fc9bc935d131e66af8510397d05364e32d313a1bbd2e67454f6e848cee1b153",
+      "path": "legal/THIRD_PARTY_NOTICES.md",
+      "role": "legal-notice",
+      "size": 542
+    },
+    {
+      "digest": "23185d9f96e4a3bc86199e3d146a7b6cc734c7f6097175007e9d2bf1c79e7e96",
+      "path": "legal/review.json",
+      "role": "legal-review",
+      "size": 19066
+    },
+    {
+      "digest": "a05350a88e318e4f5f2c2a1ff1e2e88daa4dd38e6e78b71cccae422bdc762cc3",
+      "path": "legal/upstream/ajv-8.18.0/LICENSE",
+      "role": "upstream-legal",
+      "size": 1090
+    },
+    {
+      "digest": "9df3bb69929a3b650ed73b3bfa1756725aaff0ac296461605753547004eafeaf",
+      "path": "legal/upstream/ajv-formats-3.0.1/LICENSE",
+      "role": "upstream-legal",
+      "size": 1074
+    },
+    {
+      "digest": "257aed98914108e91a337912727b6a802eef218248507f74b76faffaff517a38",
+      "path": "legal/upstream/content-type-1.0.5/LICENSE",
+      "role": "upstream-legal",
+      "size": 1089
+    },
+    {
+      "digest": "7bf9b2de73a6b356761c948d0e9eeb4be6c1270bd04c79cd489c1e400ffdfc1a",
+      "path": "legal/upstream/fast-deep-equal-3.1.3/LICENSE",
+      "role": "upstream-legal",
+      "size": 1074
+    },
+    {
+      "digest": "185ef4f377743572c2bf0931f741fae52401268cbe70c880b74063799814083e",
+      "path": "legal/upstream/fast-uri-3.1.0/LICENSE",
+      "role": "upstream-legal",
+      "size": 1852
+    },
+    {
+      "digest": "7bf9b2de73a6b356761c948d0e9eeb4be6c1270bd04c79cd489c1e400ffdfc1a",
+      "path": "legal/upstream/json-schema-traverse-1.0.0/LICENSE",
+      "role": "upstream-legal",
+      "size": 1074
+    },
+    {
+      "digest": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
+      "path": "legal/upstream/modelcontextprotocol-core-2.0.0/LICENSE",
+      "role": "upstream-legal",
+      "size": 12227
+    },
+    {
+      "digest": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
+      "path": "legal/upstream/modelcontextprotocol-server-2.0.0/LICENSE",
+      "role": "upstream-legal",
+      "size": 12227
+    },
+    {
+      "digest": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8",
+      "path": "legal/upstream/zod-4.4.3/LICENSE",
+      "role": "upstream-legal",
+      "size": 1072
+    },
+    {
+      "path": "manifest.json",
+      "role": "manifest"
+    },
+    {
+      "digest": "ca871d3d29ba375dcd56b8893fac72508fe165975862c24a55587e4ff03789e9",
+      "path": "metafile.json",
+      "role": "metafile",
+      "size": 71101
+    }
+  ],
+  "build_entries": [
+    {
+      "entry_point": "src/main.ts",
+      "handler_authority": "inert-no-handler",
+      "id": "mcp-stdio",
+      "output_path": "archflow-mcp.mjs",
+      "role": "mcp-stdio"
+    }
+  ],
+  "bundle_digest": "16faf6365bc502ec0c0e00f150b43c300e65dfa9dcace1cce3d98d850b8cbbd0",
+  "bundle_inputs": [
+    {
+      "bytes_in_output": 34870,
+      "digest": "17df1168d46e8215ad9b204b0ba5061a7ff44a787bf7a8dd8ba5b20ac4499e68",
+      "key": "node_modules/@modelcontextprotocol/core/dist/auth-CUe6YdwF.mjs",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "@modelcontextprotocol/core",
+        "package_relative_path": "dist/auth-CUe6YdwF.mjs",
+        "package_version": "2.0.0"
+      },
+      "size": 68485
+    },
+    {
+      "bytes_in_output": 0,
+      "digest": "0cc572e7ac91e9f1a36133b83a6207fdea87cb41f9531c7f406d5eca3c355dfb",
+      "key": "node_modules/@modelcontextprotocol/core/dist/internal.mjs",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "@modelcontextprotocol/core",
+        "package_relative_path": "dist/internal.mjs",
+        "package_version": "2.0.0"
+      },
+      "size": 11434
+    },
+    {
+      "bytes_in_output": 271819,
+      "digest": "218157a99879a59cdea0b720a484dfe9989fa768f3d05318c2803b61705373fa",
+      "key": "node_modules/@modelcontextprotocol/server/dist/ajvProvider-CEoC__sr.mjs",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "@modelcontextprotocol/server",
+        "package_relative_path": "dist/ajvProvider-CEoC__sr.mjs",
+        "package_version": "2.0.0"
+      },
+      "size": 273658
+    },
+    {
+      "bytes_in_output": 1382,
+      "digest": "d4a000980e7c6a8a2ee04c12d80cf538b11e5040e8487dad7661b09d85894e74",
+      "key": "node_modules/@modelcontextprotocol/server/dist/chunk-Br0eD_fh.mjs",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "@modelcontextprotocol/server",
+        "package_relative_path": "dist/chunk-Br0eD_fh.mjs",
+        "package_version": "2.0.0"
+      },
+      "size": 1426
+    },
+    {
+      "bytes_in_output": 1284,
+      "digest": "9340570968ae24904805bbb0ee637f9aa1a17f7d2b87c26ba8290809b4cc7080",
+      "key": "node_modules/@modelcontextprotocol/server/dist/dialects-DoSzNhcb.mjs",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "@modelcontextprotocol/server",
+        "package_relative_path": "dist/dialects-DoSzNhcb.mjs",
+        "package_version": "2.0.0"
+      },
+      "size": 2107
+    },
+    {
+      "bytes_in_output": 0,
+      "digest": "4494af7ea28b45d1655df5a67dcbd6079a50cbe382f811d82441ad2004bf4d60",
+      "key": "node_modules/@modelcontextprotocol/server/dist/index.mjs",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "@modelcontextprotocol/server",
+        "package_relative_path": "dist/index.mjs",
+        "package_version": "2.0.0"
+      },
+      "size": 80210
+    },
+    {
+      "bytes_in_output": 40127,
+      "digest": "b25a912ea68ae396bb3f7367fa9fdd64231899266f1dc6e243dd3d2064c0d5af",
+      "key": "node_modules/@modelcontextprotocol/server/dist/mcp-DXXb3Vv3.mjs",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "@modelcontextprotocol/server",
+        "package_relative_path": "dist/mcp-DXXb3Vv3.mjs",
+        "package_version": "2.0.0"
+      },
+      "size": 87288
+    },
+    {
+      "bytes_in_output": 0,
+      "digest": "efa8ef680135a81cd4b3dadaa765ad5cf506523e410c8a9702ab6d9095869d8f",
+      "key": "node_modules/@modelcontextprotocol/server/dist/shimsNode.mjs",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "@modelcontextprotocol/server",
+        "package_relative_path": "dist/shimsNode.mjs",
+        "package_version": "2.0.0"
+      },
+      "size": 184
+    },
+    {
+      "bytes_in_output": 184676,
+      "digest": "32ecc5f9aaaab5f35499fdfb11e0f1cb3f39a763d762f21e76c5cd55cc11c9c0",
+      "key": "node_modules/@modelcontextprotocol/server/dist/src-CX2iR2pK.mjs",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "@modelcontextprotocol/server",
+        "package_relative_path": "dist/src-CX2iR2pK.mjs",
+        "package_version": "2.0.0"
+      },
+      "size": 331079
+    },
+    {
+      "bytes_in_output": 0,
+      "digest": "c733a1897d6b4b30dad6998597f6896b265b094a65534359ada34b08ecf8932c",
+      "key": "node_modules/zod/index.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "index.js",
+        "package_version": "4.4.3"
+      },
+      "size": 121
+    },
+    {
+      "bytes_in_output": 858,
+      "digest": "78a162d29e06001b4d919e1ed08f6e7d0d665bba0ef983201373745410d7b354",
+      "key": "node_modules/zod/v4/classic/checks.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/classic/checks.js",
+        "package_version": "4.4.3"
+      },
+      "size": 663
+    },
+    {
+      "bytes_in_output": 540,
+      "digest": "fb2efe3b6eacc475c77cbb571b5fb8650d92a10f316dc869e49b722973d83c3c",
+      "key": "node_modules/zod/v4/classic/coerce.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/classic/coerce.js",
+        "package_version": "4.4.3"
+      },
+      "size": 550
+    },
+    {
+      "bytes_in_output": 641,
+      "digest": "0e948b101771cc0e7b753e54b3f5b486929d3db9bd4c09d98fe4ce86271bcf7b",
+      "key": "node_modules/zod/v4/classic/compat.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/classic/compat.js",
+        "package_version": "4.4.3"
+      },
+      "size": 1090
+    },
+    {
+      "bytes_in_output": 1023,
+      "digest": "b155316267f79068ddc2dddc7046e13785804b768ca36e6deff1691d154f7c20",
+      "key": "node_modules/zod/v4/classic/errors.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/classic/errors.js",
+        "package_version": "4.4.3"
+      },
+      "size": 1609
+    },
+    {
+      "bytes_in_output": 6908,
+      "digest": "179a03ace3d1d77895cc5b3c54a3fcbf2b7f8bad44d6f030092491c10e5d9097",
+      "key": "node_modules/zod/v4/classic/external.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/classic/external.js",
+        "package_version": "4.4.3"
+      },
+      "size": 907
+    },
+    {
+      "bytes_in_output": 16474,
+      "digest": "d8866bf5232e55d12cda032bde6a56a05a0a8b276945c2e4eed66432ef5cc9b2",
+      "key": "node_modules/zod/v4/classic/from-json-schema.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/classic/from-json-schema.js",
+        "package_version": "4.4.3"
+      },
+      "size": 24161
+    },
+    {
+      "bytes_in_output": 0,
+      "digest": "d49030b9a324bab9bcf9f663a70298391b0f5a25328409174d86617512bf3037",
+      "key": "node_modules/zod/v4/classic/index.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/classic/index.js",
+        "package_version": "4.4.3"
+      },
+      "size": 99
+    },
+    {
+      "bytes_in_output": 1205,
+      "digest": "3cc5e6b4da086b8ffc7ee3188c69e4d3c945b368092e78d2299b5321182752c5",
+      "key": "node_modules/zod/v4/classic/iso.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/classic/iso.js",
+        "package_version": "4.4.3"
+      },
+      "size": 1151
+    },
+    {
+      "bytes_in_output": 736,
+      "digest": "14cbcc416ab9169abc2cde97af77da54ca769684eac1e03a3753c16ea4a7cd95",
+      "key": "node_modules/zod/v4/classic/parse.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/classic/parse.js",
+        "package_version": "4.4.3"
+      },
+      "size": 997
+    },
+    {
+      "bytes_in_output": 45669,
+      "digest": "eb4af7946a092aff8678b9251728ea58dab40154920cd65ec4a2ca1d4df68393",
+      "key": "node_modules/zod/v4/classic/schemas.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/classic/schemas.js",
+        "package_version": "4.4.3"
+      },
+      "size": 51378
+    },
+    {
+      "bytes_in_output": 22885,
+      "digest": "00cb5edcfde8098e5a169e66c1dce50c101484d21436e3d78e137e1fa87c4836",
+      "key": "node_modules/zod/v4/core/api.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/api.js",
+        "package_version": "4.4.3"
+      },
+      "size": 28054
+    },
+    {
+      "bytes_in_output": 16479,
+      "digest": "5a33a20dcad372b4d18ead8d1e58b1950454f136a2216e62f247e0e5601ac838",
+      "key": "node_modules/zod/v4/core/checks.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/checks.js",
+        "package_version": "4.4.3"
+      },
+      "size": 20005
+    },
+    {
+      "bytes_in_output": 2090,
+      "digest": "a5e713beaac4647151e03716a83f51ab714e5337cf66850f3b28eaf072a0bbfe",
+      "key": "node_modules/zod/v4/core/core.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/core.js",
+        "package_version": "4.4.3"
+      },
+      "size": 2578
+    },
+    {
+      "bytes_in_output": 924,
+      "digest": "e084bbcc536746a8942fd33b08afe4db345554b3a0383114f1dca95261c958d9",
+      "key": "node_modules/zod/v4/core/doc.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/doc.js",
+        "package_version": "4.4.3"
+      },
+      "size": 1088
+    },
+    {
+      "bytes_in_output": 4672,
+      "digest": "bdd0ed8fd4a6e9d04fe6423b0f9df3a0b403939bc7dcedd8930a4b8df1fb118c",
+      "key": "node_modules/zod/v4/core/errors.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/errors.js",
+        "package_version": "4.4.3"
+      },
+      "size": 6413
+    },
+    {
+      "bytes_in_output": 8865,
+      "digest": "f9698820ee8371215e8d015cfa060230c62e65428397dce83f78e6538976301c",
+      "key": "node_modules/zod/v4/core/index.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/index.js",
+        "package_version": "4.4.3"
+      },
+      "size": 594
+    },
+    {
+      "bytes_in_output": 2118,
+      "digest": "9cc884cdb535a9c87b85b66e61a593ff6b686222f038834f81c5e92552cd6e23",
+      "key": "node_modules/zod/v4/core/json-schema-generator.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/json-schema-generator.js",
+        "package_version": "4.4.3"
+      },
+      "size": 3218
+    },
+    {
+      "bytes_in_output": 16938,
+      "digest": "ff15f567c9401dd7d3151ce11736283ff747c9a9e205cc08ee96f90eadc1c0c6",
+      "key": "node_modules/zod/v4/core/json-schema-processors.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/json-schema-processors.js",
+        "package_version": "4.4.3"
+      },
+      "size": 20716
+    },
+    {
+      "bytes_in_output": 30,
+      "digest": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+      "key": "node_modules/zod/v4/core/json-schema.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/json-schema.js",
+        "package_version": "4.4.3"
+      },
+      "size": 11
+    },
+    {
+      "bytes_in_output": 3794,
+      "digest": "2578b8d1341c3882a6c089f9ec57ce1c1a16b8b2b477721d4d89ba3d3ee50c9c",
+      "key": "node_modules/zod/v4/core/parse.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/parse.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4444
+    },
+    {
+      "bytes_in_output": 7520,
+      "digest": "3cb122080c1154321331322ebc0cbe04878fe104c8c7b335891d9f85fc4b3f63",
+      "key": "node_modules/zod/v4/core/regexes.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/regexes.js",
+        "package_version": "4.4.3"
+      },
+      "size": 9078
+    },
+    {
+      "bytes_in_output": 1330,
+      "digest": "620ea1a715ccc4e6e605a271343bf47942dccae90885dc71f137b1f08a972e50",
+      "key": "node_modules/zod/v4/core/registries.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/registries.js",
+        "package_version": "4.4.3"
+      },
+      "size": 1512
+    },
+    {
+      "bytes_in_output": 66155,
+      "digest": "09da9b0cb9b9d2d795c349bc47c7521d5aaffe241885f0c9728f2aa7de3834c9",
+      "key": "node_modules/zod/v4/core/schemas.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/schemas.js",
+        "package_version": "4.4.3"
+      },
+      "size": 83322
+    },
+    {
+      "bytes_in_output": 11413,
+      "digest": "fb3c9ab59947582f7671a53c8e20a3ced5eaa92d1c220ce8b27717a59033ad0d",
+      "key": "node_modules/zod/v4/core/to-json-schema.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/to-json-schema.js",
+        "package_version": "4.4.3"
+      },
+      "size": 17006
+    },
+    {
+      "bytes_in_output": 19852,
+      "digest": "968e3433e810cf7ba5efb609a1cb6d9a6cfb51215fd1f699938228f7ac25deb3",
+      "key": "node_modules/zod/v4/core/util.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/util.js",
+        "package_version": "4.4.3"
+      },
+      "size": 22018
+    },
+    {
+      "bytes_in_output": 54,
+      "digest": "bf082fde98fa7725412d713c7f56da3a5603bdef199d68d5769263f30ce9c756",
+      "key": "node_modules/zod/v4/core/versions.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/core/versions.js",
+        "package_version": "4.4.3"
+      },
+      "size": 70
+    },
+    {
+      "bytes_in_output": 0,
+      "digest": "a4b634bb8c97cc700dbf165f3bb0095ec669042da72eaf28a7c5e2ddd98169ce",
+      "key": "node_modules/zod/v4/index.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/index.js",
+        "package_version": "4.4.3"
+      },
+      "size": 92
+    },
+    {
+      "bytes_in_output": 7121,
+      "digest": "220ca3ca8cf67e4ccc05d789eeed2692d970269fe0cd82f05db8fd899b661b9e",
+      "key": "node_modules/zod/v4/locales/ar.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/ar.js",
+        "package_version": "4.4.3"
+      },
+      "size": 5188
+    },
+    {
+      "bytes_in_output": 4340,
+      "digest": "4725ffef0b2f2df947194f9698c792b69f52a8c3a5a1e1bdfabbf62259a1dd46",
+      "key": "node_modules/zod/v4/locales/az.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/az.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4511
+    },
+    {
+      "bytes_in_output": 8702,
+      "digest": "da4bda7fbc940dd9f50efdd914caa9397243be779a505b82bd4be5395d3b795e",
+      "key": "node_modules/zod/v4/locales/be.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/be.js",
+        "package_version": "4.4.3"
+      },
+      "size": 6619
+    },
+    {
+      "bytes_in_output": 7825,
+      "digest": "48511ad2f86043f0eea6e7673d5e2b848a3295a26c9c4650e96b3884d640196d",
+      "key": "node_modules/zod/v4/locales/bg.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/bg.js",
+        "package_version": "4.4.3"
+      },
+      "size": 5785
+    },
+    {
+      "bytes_in_output": 4154,
+      "digest": "796f9ba7dcd53648171aa0132c50271ef358936765cec0a44a642c41d05b3e8c",
+      "key": "node_modules/zod/v4/locales/ca.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/ca.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4710
+    },
+    {
+      "bytes_in_output": 4466,
+      "digest": "670a75fe1db1104db090c95aabb01e4eb6decd451fe77fd830c2e4dafc79b49a",
+      "key": "node_modules/zod/v4/locales/cs.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/cs.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4772
+    },
+    {
+      "bytes_in_output": 4171,
+      "digest": "cdaad7a1fa370abda1943fe9c2caba961e7896b9808d51275daf33f964af49cc",
+      "key": "node_modules/zod/v4/locales/da.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/da.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4804
+    },
+    {
+      "bytes_in_output": 4003,
+      "digest": "521a4ed29fcaf3f781163875dc282cfb5262047773aa2b70a852996b1d8a51b9",
+      "key": "node_modules/zod/v4/locales/de.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/de.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4588
+    },
+    {
+      "bytes_in_output": 7983,
+      "digest": "9857a9e4909282b2efd86317fc3e67ed86e24287f32329cfa5ab833c05fc0d81",
+      "key": "node_modules/zod/v4/locales/el.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/el.js",
+        "package_version": "4.4.3"
+      },
+      "size": 5544
+    },
+    {
+      "bytes_in_output": 4077,
+      "digest": "232a0828d64df8e410b23ac9825a667bd9d485fd70acdc4b4d0870539faef0a4",
+      "key": "node_modules/zod/v4/locales/en.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/en.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4805
+    },
+    {
+      "bytes_in_output": 4043,
+      "digest": "ebe08048aa3ee9871ce9fe1271e254cb672b1968ec40ac253066d08d176e8a65",
+      "key": "node_modules/zod/v4/locales/eo.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/eo.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4603
+    },
+    {
+      "bytes_in_output": 4783,
+      "digest": "4edd9302e9724c408b024220e99092fbd2f90100ac3c6407a94543b79843610c",
+      "key": "node_modules/zod/v4/locales/es.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/es.js",
+        "package_version": "4.4.3"
+      },
+      "size": 5439
+    },
+    {
+      "bytes_in_output": 6726,
+      "digest": "2dc1bee1e984e8a15191fb3c69aaecaa26c922e12a0d4486ac005a0372b78565",
+      "key": "node_modules/zod/v4/locales/fa.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/fa.js",
+        "package_version": "4.4.3"
+      },
+      "size": 5131
+    },
+    {
+      "bytes_in_output": 4247,
+      "digest": "3911184979f01d2ae580ce611710ee40597eff97a410d0fa823ab6ea27cee88c",
+      "key": "node_modules/zod/v4/locales/fi.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/fi.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4818
+    },
+    {
+      "bytes_in_output": 3999,
+      "digest": "f8716c2baaccdfd1d958743bbc5250c9bdef5152d0801470e9b9a380d618f4ab",
+      "key": "node_modules/zod/v4/locales/fr-CA.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/fr-CA.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4554
+    },
+    {
+      "bytes_in_output": 4525,
+      "digest": "3ea466ca5737984bb5acc9008822060272f596317004618cfe1e05109f707577",
+      "key": "node_modules/zod/v4/locales/fr.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/fr.js",
+        "package_version": "4.4.3"
+      },
+      "size": 5137
+    },
+    {
+      "bytes_in_output": 13032,
+      "digest": "290512e43d2907700211da09dc3959fd98d120bfb89f8836e6e3f83a472e26fe",
+      "key": "node_modules/zod/v4/locales/he.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/he.js",
+        "package_version": "4.4.3"
+      },
+      "size": 12005
+    },
+    {
+      "bytes_in_output": 4429,
+      "digest": "1ea65433c32b89bead43113ac69b3acc520bb73ae231dd2e05fedf8e8c5656d6",
+      "key": "node_modules/zod/v4/locales/hr.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/hr.js",
+        "package_version": "4.4.3"
+      },
+      "size": 5052
+    },
+    {
+      "bytes_in_output": 4279,
+      "digest": "913ee94a253db79b31463ae23a337060b6fe28be73dfc7657d8a83a4942bd8a8",
+      "key": "node_modules/zod/v4/locales/hu.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/hu.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4696
+    },
+    {
+      "bytes_in_output": 8264,
+      "digest": "0d3bbb96c0f8bc74468a2dfc7d066e838bb56fab64fd5ec03ce9c4d89eccbe99",
+      "key": "node_modules/zod/v4/locales/hy.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/hy.js",
+        "package_version": "4.4.3"
+      },
+      "size": 6390
+    },
+    {
+      "bytes_in_output": 3964,
+      "digest": "cd2c19b5c30dade3ed91ffcff3deb0b068713be24f02248e7e46b87b2b9553ee",
+      "key": "node_modules/zod/v4/locales/id.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/id.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4577
+    },
+    {
+      "bytes_in_output": 1322,
+      "digest": "d73f41a76614855d43eea493030a1aa05dca30c9a17015a0da5b8b70da61b6b1",
+      "key": "node_modules/zod/v4/locales/index.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/index.js",
+        "package_version": "4.4.3"
+      },
+      "size": 2149
+    },
+    {
+      "bytes_in_output": 4144,
+      "digest": "ead5b14eac892229f915fe38ec94ab3b1e676f8aa2df2a8450848ba9ca9a1612",
+      "key": "node_modules/zod/v4/locales/is.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/is.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4635
+    },
+    {
+      "bytes_in_output": 3962,
+      "digest": "439969d199427d77ebf1e477bf2295b226712804b25437d442f9dfc78aca95e0",
+      "key": "node_modules/zod/v4/locales/it.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/it.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4582
+    },
+    {
+      "bytes_in_output": 5348,
+      "digest": "43ee10378cac22b0b8aee912a66c3f36a834d5b4c76e9748f88a784044f248fd",
+      "key": "node_modules/zod/v4/locales/ja.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/ja.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4851
+    },
+    {
+      "bytes_in_output": 7817,
+      "digest": "0ab5322368f9ac6e6b58f93dac484a4f4f06cdf4c0677f4df88164e9d8b4bf81",
+      "key": "node_modules/zod/v4/locales/ka.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/ka.js",
+        "package_version": "4.4.3"
+      },
+      "size": 6202
+    },
+    {
+      "bytes_in_output": 49,
+      "digest": "78c3d1991041bb8c8fc0f7c5d745aae422d4c2e4e8f30bae44f3fef4765900a8",
+      "key": "node_modules/zod/v4/locales/kh.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/kh.js",
+        "package_version": "4.4.3"
+      },
+      "size": 111
+    },
+    {
+      "bytes_in_output": 8032,
+      "digest": "dbdabda94dd93d4a1827e6c809505c79fa6aa7abefec91dc50fa0871382c99cc",
+      "key": "node_modules/zod/v4/locales/km.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/km.js",
+        "package_version": "4.4.3"
+      },
+      "size": 6242
+    },
+    {
+      "bytes_in_output": 5145,
+      "digest": "d2efe22ac069d9b32b0109fa07713ac0695ac1c1357afc4e4277056466f2e196",
+      "key": "node_modules/zod/v4/locales/ko.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/ko.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4929
+    },
+    {
+      "bytes_in_output": 7201,
+      "digest": "dad886e52c56a1329d22e072f8b08dc8730f69c3dc5e5acf8267cac18df1ab28",
+      "key": "node_modules/zod/v4/locales/lt.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/lt.js",
+        "package_version": "4.4.3"
+      },
+      "size": 8082
+    },
+    {
+      "bytes_in_output": 7000,
+      "digest": "9eb4af0392fc5b9c438cdc6ceea446acc541b59e221dba918f7b80800d9da3d1",
+      "key": "node_modules/zod/v4/locales/mk.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/mk.js",
+        "package_version": "4.4.3"
+      },
+      "size": 5157
+    },
+    {
+      "bytes_in_output": 3873,
+      "digest": "c550a9185d997e8fcd17311951aa1e29793a50b8e825e18310efd5a46c641795",
+      "key": "node_modules/zod/v4/locales/ms.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/ms.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4491
+    },
+    {
+      "bytes_in_output": 4129,
+      "digest": "acba414579c5bbd7f83dc6661fa1a12d65f1822f9b0f5035549ac60f46d93763",
+      "key": "node_modules/zod/v4/locales/nl.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/nl.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4762
+    },
+    {
+      "bytes_in_output": 3925,
+      "digest": "1854483c7cf158b8f97f0faf6fd799eb1f762009018b5fde893ca33f2fb0b313",
+      "key": "node_modules/zod/v4/locales/no.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/no.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4506
+    },
+    {
+      "bytes_in_output": 4143,
+      "digest": "34ae496104bc17fea7d30c3d45c94cfe3d1d569b5d39a6ca51de6c177690c556",
+      "key": "node_modules/zod/v4/locales/ota.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/ota.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4525
+    },
+    {
+      "bytes_in_output": 4655,
+      "digest": "18eab58f395e30b906e8e3fddc5f212eb19f2c4362410889a5c5e0141ebe2144",
+      "key": "node_modules/zod/v4/locales/pl.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/pl.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4966
+    },
+    {
+      "bytes_in_output": 6076,
+      "digest": "f977b5141fa8fb6a8459372e0b2895d74b381c9f2ff4899141f7ee3e639a4513",
+      "key": "node_modules/zod/v4/locales/ps.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/ps.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4909
+    },
+    {
+      "bytes_in_output": 4004,
+      "digest": "df172afc585544dee7c063c484f5a07b5ed103e2c1072a782c763ad8ceb08e17",
+      "key": "node_modules/zod/v4/locales/pt.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/pt.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4568
+    },
+    {
+      "bytes_in_output": 4366,
+      "digest": "ecae409f4299ab91e2aff1095db14e23f3cf2c05b3654e242047655352c7f46b",
+      "key": "node_modules/zod/v4/locales/ro.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/ro.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4774
+    },
+    {
+      "bytes_in_output": 8988,
+      "digest": "c397a473e94d7d189a9c09c7890fe379c4f6f46d9556d52a040a90ffa56f7b93",
+      "key": "node_modules/zod/v4/locales/ru.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/ru.js",
+        "package_version": "4.4.3"
+      },
+      "size": 6714
+    },
+    {
+      "bytes_in_output": 4022,
+      "digest": "ee2ff3a19b62cd2f89b54b165088773b937de15df7253df220bef07d9adf2d80",
+      "key": "node_modules/zod/v4/locales/sl.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/sl.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4567
+    },
+    {
+      "bytes_in_output": 4120,
+      "digest": "97d6718fb643e05d6fe30fa4f9f09b8d9a3eda4a3a350b57dfb2944943d19502",
+      "key": "node_modules/zod/v4/locales/sv.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/sv.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4663
+    },
+    {
+      "bytes_in_output": 8172,
+      "digest": "04bbde9766251f9047e786fdd77632f2ecd53aec2eb060eb2fc85bf576ad729d",
+      "key": "node_modules/zod/v4/locales/ta.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/ta.js",
+        "package_version": "4.4.3"
+      },
+      "size": 6369
+    },
+    {
+      "bytes_in_output": 8107,
+      "digest": "aea70c9ac2b399fe4749e19ba3aa99c3efb4dfb50eadfb62b0b2a6e005748f3d",
+      "key": "node_modules/zod/v4/locales/th.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/th.js",
+        "package_version": "4.4.3"
+      },
+      "size": 6290
+    },
+    {
+      "bytes_in_output": 4081,
+      "digest": "4449f41d22c6f15ede5066f79d840a52ec45a6b694c859e16f9121062b6fad2f",
+      "key": "node_modules/zod/v4/locales/tr.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/tr.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4454
+    },
+    {
+      "bytes_in_output": 49,
+      "digest": "9391169ffbc72f777a83230b6ffcc3f4cf46ab5945ec540de9ef4609dca1f4cc",
+      "key": "node_modules/zod/v4/locales/ua.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/ua.js",
+        "package_version": "4.4.3"
+      },
+      "size": 111
+    },
+    {
+      "bytes_in_output": 7877,
+      "digest": "77136a2a60eef62f7cc803a0f9971aebbc641403af77c1b41fd5ce59abfa5de3",
+      "key": "node_modules/zod/v4/locales/uk.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/uk.js",
+        "package_version": "4.4.3"
+      },
+      "size": 5430
+    },
+    {
+      "bytes_in_output": 7394,
+      "digest": "858f4f38d651073e7a3fbec7ed356692578b3ad1fae1b453cb3d85312a4f39d2",
+      "key": "node_modules/zod/v4/locales/ur.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/ur.js",
+        "package_version": "4.4.3"
+      },
+      "size": 5271
+    },
+    {
+      "bytes_in_output": 4218,
+      "digest": "d540bed482d15c47cb45439cff34e053379c53019c7c7c5fbe43f222d0c81f04",
+      "key": "node_modules/zod/v4/locales/uz.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/uz.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4739
+    },
+    {
+      "bytes_in_output": 4665,
+      "digest": "2c61bd3f4a733f3cbb1ad85e75a053cb15a8ebeb83ab56dc21f2948b1138e12f",
+      "key": "node_modules/zod/v4/locales/vi.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/vi.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4772
+    },
+    {
+      "bytes_in_output": 4784,
+      "digest": "98b9cbf31bf00c8b2c00de62725a9dd7cb718ac72d6e8fd4e0a1a7c49723e0f4",
+      "key": "node_modules/zod/v4/locales/yo.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/yo.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4665
+    },
+    {
+      "bytes_in_output": 4504,
+      "digest": "99a4b16af598834a0b11607fcdebd1c6de026386ff1d6a5a306b364c154c5899",
+      "key": "node_modules/zod/v4/locales/zh-CN.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/zh-CN.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4452
+    },
+    {
+      "bytes_in_output": 4609,
+      "digest": "37dcae620e1553e9174a4b9434bbcc4e465150a627e80c9c17fd01de8baaf59a",
+      "key": "node_modules/zod/v4/locales/zh-TW.js",
+      "origin": {
+        "kind": "dependency",
+        "package_name": "zod",
+        "package_relative_path": "v4/locales/zh-TW.js",
+        "package_version": "4.4.3"
+      },
+      "size": 4498
+    },
+    {
+      "bytes_in_output": 7747,
+      "digest": "d27c062a547ad878f65c6e5ac11f560c3facce05bfa2cf02e2fd883ba45e8595",
+      "key": "src/contracts/adjudication.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/adjudication.ts"
+      },
+      "size": 11437
+    },
+    {
+      "bytes_in_output": 3278,
+      "digest": "9a9f33dc04b04c7ba3d146c524b5dd20e04df945c07ea82b0e02da67670235ff",
+      "key": "src/contracts/contexts.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/contexts.ts"
+      },
+      "size": 4800
+    },
+    {
+      "bytes_in_output": 14954,
+      "digest": "84382e5717529315802a8ba698eb57a16202214e3170b17ed9f86a3ac2ce3b64",
+      "key": "src/contracts/errors.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/errors.ts"
+      },
+      "size": 20041
+    },
+    {
+      "bytes_in_output": 566,
+      "digest": "1daff619c757dd0839f10ee089b15c5577aa9f16d7766402f2bb40df3560646a",
+      "key": "src/contracts/evidence.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/evidence.ts"
+      },
+      "size": 1993
+    },
+    {
+      "bytes_in_output": 14100,
+      "digest": "211d726a22a47c06b3fe8e8afee8329dfc2d44e1030760523a4d8d9c4f20b0b6",
+      "key": "src/contracts/gates.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/gates.ts"
+      },
+      "size": 20832
+    },
+    {
+      "bytes_in_output": 1368,
+      "digest": "964768a530102d72d6c1b861536d17e46689e9a777711526702939541df54bfc",
+      "key": "src/contracts/internal/trust-brands.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/internal/trust-brands.ts"
+      },
+      "size": 3476
+    },
+    {
+      "bytes_in_output": 9327,
+      "digest": "149c55d5ad27a1fa2db03cb4470757a18b85c953c2b1ac799d673eba90c0fb67",
+      "key": "src/contracts/mcp-tools.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/mcp-tools.ts"
+      },
+      "size": 18076
+    },
+    {
+      "bytes_in_output": 975,
+      "digest": "6d6c79b379f74d9455007586fccedfd7c03703a029516b55ba97dc0f04393272",
+      "key": "src/contracts/path-claims.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/path-claims.ts"
+      },
+      "size": 1595
+    },
+    {
+      "bytes_in_output": 1112,
+      "digest": "020be1a5950242fa49dd67340f3078a49a04fffdad776f28722a1998fc93c879",
+      "key": "src/contracts/phase-instance.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/phase-instance.ts"
+      },
+      "size": 1801
+    },
+    {
+      "bytes_in_output": 3767,
+      "digest": "6d3c496cc1c3240971944f8401987c47890043c70f4aa9526fbf51865910c393",
+      "key": "src/contracts/plain-json.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/plain-json.ts"
+      },
+      "size": 4540
+    },
+    {
+      "bytes_in_output": 5775,
+      "digest": "9dc87ff04be02a829479ad201dec6d806f04af72f2e0bd0c721335ffbcc55240",
+      "key": "src/contracts/review.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/review.ts"
+      },
+      "size": 8734
+    },
+    {
+      "bytes_in_output": 913,
+      "digest": "275ec6607262098fd7c7ef9184fbc3fb0ac88c06a2b66b97556615f22e9fe771",
+      "key": "src/contracts/rubric.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/rubric.ts"
+      },
+      "size": 1322
+    },
+    {
+      "bytes_in_output": 2613,
+      "digest": "23863a2cdc37b22409125077c2c9090dd92f8305f5e1b008a6118c392d1fb21b",
+      "key": "src/contracts/schemas/v1/evidence-slots.schema.json",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/schemas/v1/evidence-slots.schema.json"
+      },
+      "size": 2790
+    },
+    {
+      "bytes_in_output": 15993,
+      "digest": "ff9fe5fdb4cc57c678eebeb358f4a238fdb04dea902ea2e7ffde8c855f9f0b38",
+      "key": "src/contracts/schemas/v1/gate-contract.schema.json",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/schemas/v1/gate-contract.schema.json"
+      },
+      "size": 16873
+    },
+    {
+      "bytes_in_output": 9098,
+      "digest": "fbebec077ce0d1250081ac623dcff5c02ef892f8ba05397f3f6a51807e7f8295",
+      "key": "src/contracts/schemas/v1/gate-decision.schema.json",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/schemas/v1/gate-decision.schema.json"
+      },
+      "size": 9402
+    },
+    {
+      "bytes_in_output": 15803,
+      "digest": "fd22fb332a9d6524976f456dea60822dc193eab163da5b9f302c9ed1d5967515",
+      "key": "src/contracts/schemas/v1/mcp-tools.schema.json",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/schemas/v1/mcp-tools.schema.json"
+      },
+      "size": 16657
+    },
+    {
+      "bytes_in_output": 350,
+      "digest": "2603575ffd5a9799e23e73a31cb7f0671ba49a0cccb03869f94de9f9d6ca8d30",
+      "key": "src/contracts/schemas/v1/path-claim.schema.json",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/schemas/v1/path-claim.schema.json"
+      },
+      "size": 327
+    },
+    {
+      "bytes_in_output": 717,
+      "digest": "7f8875d0c91f484e70181b704d83059fc93251a0fddf4a6c762d55cee333b59a",
+      "key": "src/contracts/schemas/v1/primitives.schema.json",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/schemas/v1/primitives.schema.json"
+      },
+      "size": 730
+    },
+    {
+      "bytes_in_output": 62400,
+      "digest": "99273bf880aaa1b7f25ca1ff77d53dee4eeca6a9f25d0661a9f599257d616def",
+      "key": "src/contracts/schemas/v1/project-error.schema.json",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/schemas/v1/project-error.schema.json"
+      },
+      "size": 65252
+    },
+    {
+      "bytes_in_output": 760,
+      "digest": "daa63bd9ca84173bb8ad97c6c34c5e8b4411a80992d756b4bac1ae1cd15926da",
+      "key": "src/contracts/schemas/v1/rubric.schema.json",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/schemas/v1/rubric.schema.json"
+      },
+      "size": 781
+    },
+    {
+      "bytes_in_output": 247,
+      "digest": "94bea791365f8046caf32de54f670be5ca99415419f27284b297a0acf6f45c73",
+      "key": "src/contracts/tool-names.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/tool-names.ts"
+      },
+      "size": 377
+    },
+    {
+      "bytes_in_output": 14468,
+      "digest": "3dc2237b5a6fe40c200be9904d9e77e02c8026c15dc6c3e377e6e94e4c9836b3",
+      "key": "src/contracts/trust.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/trust.ts"
+      },
+      "size": 25661
+    },
+    {
+      "bytes_in_output": 91,
+      "digest": "baab340034b7a26daeb2348a20fae49a7123bfda0a56b40f6bf1eb7fe85ec403",
+      "key": "src/contracts/vocabulary.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/vocabulary.ts"
+      },
+      "size": 569
+    },
+    {
+      "bytes_in_output": 304,
+      "digest": "706331c01fc14057d786a57ff581c58d5edf608e768987a527e0c15483ba98ba",
+      "key": "src/main.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/main.ts"
+      },
+      "size": 414
+    },
+    {
+      "bytes_in_output": 2632,
+      "digest": "be8099df7ace5dc3e4e657ba108145949163aec1fe79f5729a2cc471733c8bdd",
+      "key": "src/mcp/framing.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/mcp/framing.ts"
+      },
+      "size": 3378
+    },
+    {
+      "bytes_in_output": 3855,
+      "digest": "daa9009e3c27f45dd5167b29f1da5e4dabdec808a96527fece835adfd870a74b",
+      "key": "src/mcp/process-runner.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/mcp/process-runner.ts"
+      },
+      "size": 5511
+    },
+    {
+      "bytes_in_output": 15075,
+      "digest": "1e76e7a84e3997fa4091c2d31cbeec4842c98def3de4906952da3272d29eed0f",
+      "key": "src/mcp/sdk-adapter.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/mcp/sdk-adapter.ts"
+      },
+      "size": 18189
+    },
+    {
+      "bytes_in_output": 4962,
+      "digest": "51f16df62171c611425003c1cf0722793c0698c6abdc9829f58494e397946fa5",
+      "key": "src/mcp/send-queue.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/mcp/send-queue.ts"
+      },
+      "size": 6425
+    },
+    {
+      "bytes_in_output": 6292,
+      "digest": "84d5ee328076901f749755749069a4629aa3d0d05a29ad6baa94396d72e69625",
+      "key": "src/mcp/server.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/mcp/server.ts"
+      },
+      "size": 9506
+    },
+    {
+      "bytes_in_output": 15513,
+      "digest": "307167530a39cf35597f609b7cc1f19bf0156ed9342b5f3e8649f8e23c34df7c",
+      "key": "src/mcp/session.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/mcp/session.ts"
+      },
+      "size": 21494
+    },
+    {
+      "bytes_in_output": 3555,
+      "digest": "0478ce7030935539241d491291fd4fc1c7ca6896a2d1dae360e85eb14c9d19c4",
+      "key": "src/mcp/tools.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/mcp/tools.ts"
+      },
+      "size": 4924
+    }
+  ],
+  "contributing_inputs": [
+    "node_modules/@modelcontextprotocol/core/dist/auth-CUe6YdwF.mjs",
+    "node_modules/@modelcontextprotocol/server/dist/ajvProvider-CEoC__sr.mjs",
+    "node_modules/@modelcontextprotocol/server/dist/chunk-Br0eD_fh.mjs",
+    "node_modules/@modelcontextprotocol/server/dist/dialects-DoSzNhcb.mjs",
+    "node_modules/@modelcontextprotocol/server/dist/mcp-DXXb3Vv3.mjs",
+    "node_modules/@modelcontextprotocol/server/dist/src-CX2iR2pK.mjs",
+    "node_modules/zod/v4/classic/checks.js",
+    "node_modules/zod/v4/classic/coerce.js",
+    "node_modules/zod/v4/classic/compat.js",
+    "node_modules/zod/v4/classic/errors.js",
+    "node_modules/zod/v4/classic/external.js",
+    "node_modules/zod/v4/classic/from-json-schema.js",
+    "node_modules/zod/v4/classic/iso.js",
+    "node_modules/zod/v4/classic/parse.js",
+    "node_modules/zod/v4/classic/schemas.js",
+    "node_modules/zod/v4/core/api.js",
+    "node_modules/zod/v4/core/checks.js",
+    "node_modules/zod/v4/core/core.js",
+    "node_modules/zod/v4/core/doc.js",
+    "node_modules/zod/v4/core/errors.js",
+    "node_modules/zod/v4/core/index.js",
+    "node_modules/zod/v4/core/json-schema-generator.js",
+    "node_modules/zod/v4/core/json-schema-processors.js",
+    "node_modules/zod/v4/core/json-schema.js",
+    "node_modules/zod/v4/core/parse.js",
+    "node_modules/zod/v4/core/regexes.js",
+    "node_modules/zod/v4/core/registries.js",
+    "node_modules/zod/v4/core/schemas.js",
+    "node_modules/zod/v4/core/to-json-schema.js",
+    "node_modules/zod/v4/core/util.js",
+    "node_modules/zod/v4/core/versions.js",
+    "node_modules/zod/v4/locales/ar.js",
+    "node_modules/zod/v4/locales/az.js",
+    "node_modules/zod/v4/locales/be.js",
+    "node_modules/zod/v4/locales/bg.js",
+    "node_modules/zod/v4/locales/ca.js",
+    "node_modules/zod/v4/locales/cs.js",
+    "node_modules/zod/v4/locales/da.js",
+    "node_modules/zod/v4/locales/de.js",
+    "node_modules/zod/v4/locales/el.js",
+    "node_modules/zod/v4/locales/en.js",
+    "node_modules/zod/v4/locales/eo.js",
+    "node_modules/zod/v4/locales/es.js",
+    "node_modules/zod/v4/locales/fa.js",
+    "node_modules/zod/v4/locales/fi.js",
+    "node_modules/zod/v4/locales/fr-CA.js",
+    "node_modules/zod/v4/locales/fr.js",
+    "node_modules/zod/v4/locales/he.js",
+    "node_modules/zod/v4/locales/hr.js",
+    "node_modules/zod/v4/locales/hu.js",
+    "node_modules/zod/v4/locales/hy.js",
+    "node_modules/zod/v4/locales/id.js",
+    "node_modules/zod/v4/locales/index.js",
+    "node_modules/zod/v4/locales/is.js",
+    "node_modules/zod/v4/locales/it.js",
+    "node_modules/zod/v4/locales/ja.js",
+    "node_modules/zod/v4/locales/ka.js",
+    "node_modules/zod/v4/locales/kh.js",
+    "node_modules/zod/v4/locales/km.js",
+    "node_modules/zod/v4/locales/ko.js",
+    "node_modules/zod/v4/locales/lt.js",
+    "node_modules/zod/v4/locales/mk.js",
+    "node_modules/zod/v4/locales/ms.js",
+    "node_modules/zod/v4/locales/nl.js",
+    "node_modules/zod/v4/locales/no.js",
+    "node_modules/zod/v4/locales/ota.js",
+    "node_modules/zod/v4/locales/pl.js",
+    "node_modules/zod/v4/locales/ps.js",
+    "node_modules/zod/v4/locales/pt.js",
+    "node_modules/zod/v4/locales/ro.js",
+    "node_modules/zod/v4/locales/ru.js",
+    "node_modules/zod/v4/locales/sl.js",
+    "node_modules/zod/v4/locales/sv.js",
+    "node_modules/zod/v4/locales/ta.js",
+    "node_modules/zod/v4/locales/th.js",
+    "node_modules/zod/v4/locales/tr.js",
+    "node_modules/zod/v4/locales/ua.js",
+    "node_modules/zod/v4/locales/uk.js",
+    "node_modules/zod/v4/locales/ur.js",
+    "node_modules/zod/v4/locales/uz.js",
+    "node_modules/zod/v4/locales/vi.js",
+    "node_modules/zod/v4/locales/yo.js",
+    "node_modules/zod/v4/locales/zh-CN.js",
+    "node_modules/zod/v4/locales/zh-TW.js",
+    "src/contracts/adjudication.ts",
+    "src/contracts/contexts.ts",
+    "src/contracts/errors.ts",
+    "src/contracts/evidence.ts",
+    "src/contracts/gates.ts",
+    "src/contracts/internal/trust-brands.ts",
+    "src/contracts/mcp-tools.ts",
+    "src/contracts/path-claims.ts",
+    "src/contracts/phase-instance.ts",
+    "src/contracts/plain-json.ts",
+    "src/contracts/review.ts",
+    "src/contracts/rubric.ts",
+    "src/contracts/schemas/v1/evidence-slots.schema.json",
+    "src/contracts/schemas/v1/gate-contract.schema.json",
+    "src/contracts/schemas/v1/gate-decision.schema.json",
+    "src/contracts/schemas/v1/mcp-tools.schema.json",
+    "src/contracts/schemas/v1/path-claim.schema.json",
+    "src/contracts/schemas/v1/primitives.schema.json",
+    "src/contracts/schemas/v1/project-error.schema.json",
+    "src/contracts/schemas/v1/rubric.schema.json",
+    "src/contracts/tool-names.ts",
+    "src/contracts/trust.ts",
+    "src/contracts/vocabulary.ts",
+    "src/main.ts",
+    "src/mcp/framing.ts",
+    "src/mcp/process-runner.ts",
+    "src/mcp/sdk-adapter.ts",
+    "src/mcp/send-queue.ts",
+    "src/mcp/server.ts",
+    "src/mcp/session.ts",
+    "src/mcp/tools.ts"
+  ],
+  "declared_content": {
+    "constitution": [
+      "assets/constitution/00-process.md",
+      "assets/constitution/10-architecture.md",
+      "assets/constitution/20-data.md",
+      "assets/constitution/30-product.md",
+      "assets/constitution/README.md"
+    ],
+    "schemas": [
+      "src/contracts/schemas/v1/adjudication-evidence.schema.json",
+      "src/contracts/schemas/v1/adjudication.schema.json",
+      "src/contracts/schemas/v1/authority-link.schema.json",
+      "src/contracts/schemas/v1/config.schema.json",
+      "src/contracts/schemas/v1/constitution-rule.schema.json",
+      "src/contracts/schemas/v1/evidence-reference.schema.json",
+      "src/contracts/schemas/v1/evidence-slots.schema.json",
+      "src/contracts/schemas/v1/gate-contract.schema.json",
+      "src/contracts/schemas/v1/gate-decision.schema.json",
+      "src/contracts/schemas/v1/mcp-tools.schema.json",
+      "src/contracts/schemas/v1/path-claim.schema.json",
+      "src/contracts/schemas/v1/phase-instance.schema.json",
+      "src/contracts/schemas/v1/primitives.schema.json",
+      "src/contracts/schemas/v1/project-error.schema.json",
+      "src/contracts/schemas/v1/protocol-error.schema.json",
+      "src/contracts/schemas/v1/release-legal-review.schema.json",
+      "src/contracts/schemas/v1/release-manifest.schema.json",
+      "src/contracts/schemas/v1/result-expectation.schema.json",
+      "src/contracts/schemas/v1/review-evidence.schema.json",
+      "src/contracts/schemas/v1/review.schema.json",
+      "src/contracts/schemas/v1/rubric.schema.json",
+      "src/contracts/schemas/v1/supplemental-review.schema.json",
+      "src/contracts/schemas/v1/triage.schema.json",
+      "src/contracts/schemas/v1/workflow.schema.json"
+    ],
+    "workflow": "assets/workflow.yaml"
+  },
+  "dependency_inventory_digest": "1f93c687b91691f3afb99d657246504a9b369311333ecd4e8c77abab1a23c046",
+  "dependency_provenance_inputs": [
+    {
+      "digest": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
+      "package_name": "@modelcontextprotocol/core",
+      "package_relative_path": "LICENSE",
+      "package_version": "2.0.0",
+      "purpose": "license",
+      "size": 12227
+    },
+    {
+      "digest": "92212ffee512d7c81f4476a62062dfecb43c59292628ef51d026f4491c2de6a7",
+      "package_name": "@modelcontextprotocol/core",
+      "package_relative_path": "dist/auth-CUe6YdwF.mjs.map",
+      "package_version": "2.0.0",
+      "purpose": "source-map",
+      "size": 131225
+    },
+    {
+      "digest": "dc2e8e1fc31878b0b537b0ea034d4a11284cce20fe81f4c6ea823dd6db7e7ad5",
+      "package_name": "@modelcontextprotocol/core",
+      "package_relative_path": "package.json",
+      "package_version": "2.0.0",
+      "purpose": "package-manifest",
+      "size": 2282
+    },
+    {
+      "digest": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
+      "package_name": "@modelcontextprotocol/server",
+      "package_relative_path": "LICENSE",
+      "package_version": "2.0.0",
+      "purpose": "license",
+      "size": 12227
+    },
+    {
+      "digest": "2eb52e887d5fda7dad8191f9b1adae36d8b77566cf2c8228eb2844e0358f751e",
+      "package_name": "@modelcontextprotocol/server",
+      "package_relative_path": "dist/ajvProvider-CEoC__sr.mjs.map",
+      "package_version": "2.0.0",
+      "purpose": "source-map",
+      "size": 448931
+    },
+    {
+      "digest": "196fc76d86a5665c7b12ad8727ac3c68d196001d7e12bea3b6a6347405036499",
+      "package_name": "@modelcontextprotocol/server",
+      "package_relative_path": "dist/dialects-DoSzNhcb.mjs.map",
+      "package_version": "2.0.0",
+      "purpose": "source-map",
+      "size": 3672
+    },
+    {
+      "digest": "d7dfb58b7eecce56be099afc8c2551687382e084e6465889c31c933705827915",
+      "package_name": "@modelcontextprotocol/server",
+      "package_relative_path": "dist/mcp-DXXb3Vv3.mjs.map",
+      "package_version": "2.0.0",
+      "purpose": "source-map",
+      "size": 210668
+    },
+    {
+      "digest": "c1fdb7f323bc60b04d4a7fd81036694a11ef3057716a971a0502be4812de8102",
+      "package_name": "@modelcontextprotocol/server",
+      "package_relative_path": "dist/src-CX2iR2pK.mjs.map",
+      "package_version": "2.0.0",
+      "purpose": "source-map",
+      "size": 713015
+    },
+    {
+      "digest": "ff7f23c4a4a3162a34a2cb21087e1844bb8631724d8e43aa14aaa86d3f7e07c2",
+      "package_name": "@modelcontextprotocol/server",
+      "package_relative_path": "package.json",
+      "package_version": "2.0.0",
+      "purpose": "package-manifest",
+      "size": 4390
+    },
+    {
+      "digest": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8",
+      "package_name": "zod",
+      "package_relative_path": "LICENSE",
+      "package_version": "4.4.3",
+      "purpose": "license",
+      "size": 1072
+    },
+    {
+      "digest": "c630bd10b52dcf71c112a2bf78dbf2734b9db58d62de663b8d86c2ec2c8cda2e",
+      "package_name": "zod",
+      "package_relative_path": "package.json",
+      "package_version": "4.4.3",
+      "purpose": "package-manifest",
+      "size": 3796
+    }
+  ],
+  "launch_profile": {
+    "allowed_imports": [
+      "node:buffer",
+      "node:crypto",
+      "node:module",
+      "node:process",
+      "node:util"
+    ],
+    "argv": [
+      "--require",
+      "hostile-runtime-guard.cjs",
+      "archflow-mcp.mjs"
+    ],
+    "canary_paths": [
+      "ambient/node_modules/archflow-release-canary/index.js",
+      "repository-canary/SECRET"
+    ],
+    "cwd_class": "copied-payload",
+    "environment_keys": [
+      "HOME",
+      "LANG",
+      "LC_ALL",
+      "NPM_CONFIG_CACHE",
+      "PATH",
+      "TMPDIR",
+      "XDG_CACHE_HOME",
+      "XDG_CONFIG_HOME",
+      "XDG_DATA_HOME"
+    ],
+    "executable": "process.execPath",
+    "fixture_digests": [
+      {
+        "digest": "33401af67624bd2bd7bf8073e50d33a3f20e2ade0bee33fadee00fc1aa3ad53e",
+        "path": "test/fixtures/mcp/runtime/adversarial-bytes.json"
+      },
+      {
+        "digest": "39d0dc0461a2b64e0844ff119a0647cd89388191e03f5a55baccd01149f3c9ba",
+        "path": "test/fixtures/mcp/runtime/calls.json"
+      },
+      {
+        "digest": "5547b92a1f0667ef70c712cd99800fa38074278e4470a20231893e023c1504dc",
+        "path": "test/fixtures/mcp/runtime/initialize.json"
+      }
+    ],
+    "guard_path": "test/fixtures/release/hostile-runtime-guard.cjs",
+    "node_major": 24,
+    "removed_environment_keys": [
+      "NODE_OPTIONS",
+      "NODE_PATH"
+    ],
+    "stdio": {
+      "guard_fd": 3,
+      "stderr": "pipe",
+      "stdin": "pipe",
+      "stdout": "pipe"
+    }
+  },
+  "legal_review": {
+    "digest": "23185d9f96e4a3bc86199e3d146a7b6cc734c7f6097175007e9d2bf1c79e7e96",
+    "payload_path": "legal/review.json",
+    "source_path": "release/legal-review.json"
+  },
+  "proof_inputs": [
+    ".github/workflows/ci.yml",
+    "package.json",
+    "scripts/smoke-release-bundle.mjs",
+    "scripts/test-release-integrity.mjs",
+    "test/fixtures/mcp/runtime/adversarial-bytes.json",
+    "test/fixtures/mcp/runtime/calls.json",
+    "test/fixtures/mcp/runtime/initialize.json",
+    "test/fixtures/release/hostile-runtime-guard.cjs",
+    "test/integration/mcp-stdio.test.ts",
+    "test/integration/release-offline.test.ts"
+  ],
+  "release_control_inputs": [
+    {
+      "digest": "e07e170132a9cd967123322237aebf6ade34b912bfca125ce87eae309383f5fb",
+      "path": ".gitattributes",
+      "size": 492
+    },
+    {
+      "digest": "01d12ca38a1035b6439066ed3646ec7df46d2b82666d9a6f47531d045aaf7736",
+      "path": ".github/workflows/ci.yml",
+      "size": 1340
+    },
+    {
+      "digest": "a18054ccff3d98f0dd686f5e90a426510652d336b369e876545de8e0e9e55a01",
+      "path": "assets/constitution/00-process.md",
+      "size": 463
+    },
+    {
+      "digest": "fee43cdf00279e3b6a36ee2f13146c51961c428294f78687a81ef82ae9b32e61",
+      "path": "assets/constitution/10-architecture.md",
+      "size": 529
+    },
+    {
+      "digest": "1f835c3ec9a4125eeaf2936727ea6e79daf6a32d8132cf538ca0e94926e2b705",
+      "path": "assets/constitution/20-data.md",
+      "size": 530
+    },
+    {
+      "digest": "1a1b4411022791aba686b88ed5935f5be2440881a69554eca146f55b57156dc1",
+      "path": "assets/constitution/30-product.md",
+      "size": 499
+    },
+    {
+      "digest": "37ba4931fc7b16e093aab9228594d6194f79be1f42ce6d1de53b261196fb39e2",
+      "path": "assets/constitution/README.md",
+      "size": 509
+    },
+    {
+      "digest": "f05eaac7b1b81f736977b03284848c42743cf033e562de8d2384d7ff70f30409",
+      "path": "assets/workflow.yaml",
+      "size": 781
+    },
+    {
+      "digest": "efdad7f57217e4afbc44ccfff701237db8d3f8a43379a09e14d7bf2149ac5812",
+      "path": "package-lock.json",
+      "size": 65981
+    },
+    {
+      "digest": "0d26854c81e22b70f514f48b7b311e2c1cec877d6efed15f9a41155fb1bd2667",
+      "path": "package.json",
+      "size": 2110
+    },
+    {
+      "digest": "6282adc7c1d1304f245ff5877a2824b05b53f9842dc658282610c981505f0caf",
+      "path": "release/evidence/advisory-snapshot.json",
+      "size": 1060
+    },
+    {
+      "digest": "cac675f0183bfaa2e44707c4be9e93d156c9a695bef61177f305145995165007",
+      "path": "release/evidence/focused-inert-reachability.json",
+      "size": 835
+    },
+    {
+      "digest": "deb867f4b505da598ea0bf483ae6ecdb116460ebac573489d7763c720ad55ee1",
+      "path": "release/evidence/patched-artifact-availability.json",
+      "size": 424
+    },
+    {
+      "digest": "d625ac9d722a8710bb8b0f18f69207df9434953584393a80e5f66d9e2fa0122f",
+      "path": "release/evidence/user-risk-acceptance.json",
+      "size": 705
+    },
+    {
+      "digest": "23185d9f96e4a3bc86199e3d146a7b6cc734c7f6097175007e9d2bf1c79e7e96",
+      "path": "release/legal-review.json",
+      "size": 19066
+    },
+    {
+      "digest": "a05350a88e318e4f5f2c2a1ff1e2e88daa4dd38e6e78b71cccae422bdc762cc3",
+      "path": "release/legal/upstream/ajv-8.18.0/LICENSE",
+      "size": 1090
+    },
+    {
+      "digest": "9df3bb69929a3b650ed73b3bfa1756725aaff0ac296461605753547004eafeaf",
+      "path": "release/legal/upstream/ajv-formats-3.0.1/LICENSE",
+      "size": 1074
+    },
+    {
+      "digest": "257aed98914108e91a337912727b6a802eef218248507f74b76faffaff517a38",
+      "path": "release/legal/upstream/content-type-1.0.5/LICENSE",
+      "size": 1089
+    },
+    {
+      "digest": "7bf9b2de73a6b356761c948d0e9eeb4be6c1270bd04c79cd489c1e400ffdfc1a",
+      "path": "release/legal/upstream/fast-deep-equal-3.1.3/LICENSE",
+      "size": 1074
+    },
+    {
+      "digest": "185ef4f377743572c2bf0931f741fae52401268cbe70c880b74063799814083e",
+      "path": "release/legal/upstream/fast-uri-3.1.0/LICENSE",
+      "size": 1852
+    },
+    {
+      "digest": "7bf9b2de73a6b356761c948d0e9eeb4be6c1270bd04c79cd489c1e400ffdfc1a",
+      "path": "release/legal/upstream/json-schema-traverse-1.0.0/LICENSE",
+      "size": 1074
+    },
+    {
+      "digest": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
+      "path": "release/legal/upstream/modelcontextprotocol-core-2.0.0/LICENSE",
+      "size": 12227
+    },
+    {
+      "digest": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
+      "path": "release/legal/upstream/modelcontextprotocol-server-2.0.0/LICENSE",
+      "size": 12227
+    },
+    {
+      "digest": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8",
+      "path": "release/legal/upstream/zod-4.4.3/LICENSE",
+      "size": 1072
+    },
+    {
+      "digest": "5d2e8237f5b41cd99e599c1d98ada3033a4845549458cfdd659af242b8272311",
+      "path": "scripts/build-release.mjs",
+      "size": 562
+    },
+    {
+      "digest": "a7a4b6db0cffdc6ab714a8dedb53aca3d257443ced3e94ed92e9996956024856",
+      "path": "scripts/check-release.mjs",
+      "size": 610
+    },
+    {
+      "digest": "8b66f2fa6716a22036a29fdd648076fc289f4fe78a9f89ad5da2926f17c6ce05",
+      "path": "scripts/release-support.mjs",
+      "size": 79892
+    },
+    {
+      "digest": "ccfbcc8df639e93b98bf292de22364e20c3f45b6e8993d2db8606160d0aa7a8e",
+      "path": "scripts/reproduce-release.mjs",
+      "size": 510
+    },
+    {
+      "digest": "b6fd01099a143412ec22b7662872c1f971fa7bc8712ed69a860a6872573670bd",
+      "path": "scripts/smoke-release-bundle.mjs",
+      "size": 13956
+    },
+    {
+      "digest": "b36e42dd28f88d8230cc6d2a5dac5ce22eedc7575ccbe63c0d84f4adfce72cf6",
+      "path": "scripts/test-release-integrity.mjs",
+      "size": 13103
+    },
+    {
+      "digest": "594a118045a89acf3b33bcca4c8bfd3d0022beed13aeef897174ce4b10c90f97",
+      "path": "scripts/write-tracked-release.mjs",
+      "size": 604
+    },
+    {
+      "digest": "9aa3796abbf42eded4c24e905ae7b31fc29cccd23bda3dd36787c04290675894",
+      "path": "src/contracts/schemas/v1/adjudication-evidence.schema.json",
+      "size": 6526
+    },
+    {
+      "digest": "5cebe476968faf9755b789574e8c0be9552626b3a4839162980540933903aa4b",
+      "path": "src/contracts/schemas/v1/adjudication.schema.json",
+      "size": 4685
+    },
+    {
+      "digest": "9b2d936b124881a9da122c44f88bfc39f68301aed02151234a9e1c78bc598384",
+      "path": "src/contracts/schemas/v1/authority-link.schema.json",
+      "size": 3628
+    },
+    {
+      "digest": "86d25924b7f091b651a515a5ea6293700f9cff98a67852fdba3b92b718d79fd5",
+      "path": "src/contracts/schemas/v1/config.schema.json",
+      "size": 1166
+    },
+    {
+      "digest": "6b98163ecbf98341d2d4e23ceeef1fda7ec46a3b48a191d33b8a3aba48ab28bf",
+      "path": "src/contracts/schemas/v1/constitution-rule.schema.json",
+      "size": 698
+    },
+    {
+      "digest": "3ff3379c5c3d623887b0566699988ad481d653f887be44e880ae596f18d858b7",
+      "path": "src/contracts/schemas/v1/evidence-reference.schema.json",
+      "size": 793
+    },
+    {
+      "digest": "efa7beb830e99ce839b2e24bfa40e9a15defda90813b42bf2c08e62685c37358",
+      "path": "src/contracts/schemas/v1/phase-instance.schema.json",
+      "size": 1002
+    },
+    {
+      "digest": "a5b3d175d1745547e3961a67eefb6e902dc410e479c552b3891ab4a2dae8c206",
+      "path": "src/contracts/schemas/v1/protocol-error.schema.json",
+      "size": 5829
+    },
+    {
+      "digest": "b85df56b0d03d24b7550a7a10d385f68b637753d0f9fb2772a0b0c37882fd023",
+      "path": "src/contracts/schemas/v1/release-legal-review.schema.json",
+      "size": 15880
+    },
+    {
+      "digest": "c74addf0733b7607ac12cbc8ca58b1d981b518c2f6f81a1175ece38be883bd09",
+      "path": "src/contracts/schemas/v1/release-manifest.schema.json",
+      "size": 12819
+    },
+    {
+      "digest": "1f1ea2cbd0a70a44654df726f0bf5bc12841e32745bdd00562715a7d0fcde23a",
+      "path": "src/contracts/schemas/v1/result-expectation.schema.json",
+      "size": 3531
+    },
+    {
+      "digest": "fbf802dfac543b8340f33a792ad86dbec2367cee5d95d085a7684aaeae986636",
+      "path": "src/contracts/schemas/v1/review-evidence.schema.json",
+      "size": 4807
+    },
+    {
+      "digest": "1e645d58cf3c38d0dd1fe772dcb31aed2c82bdb978c09529cb67dd8deae9ee65",
+      "path": "src/contracts/schemas/v1/review.schema.json",
+      "size": 2924
+    },
+    {
+      "digest": "dff331ba25bb526a64f0360d535e0d8c26232a3144c73f75eba227096ef04033",
+      "path": "src/contracts/schemas/v1/supplemental-review.schema.json",
+      "size": 4522
+    },
+    {
+      "digest": "d8b063ecb6b51279e05cf77b990635fb65074781b8d7079b902fe45d0c7040c6",
+      "path": "src/contracts/schemas/v1/triage.schema.json",
+      "size": 2283
+    },
+    {
+      "digest": "35079ed6f14b96684240998400bbe9dd5a2b91f1ff69d36d9c4eaa295a94ecb3",
+      "path": "src/contracts/schemas/v1/workflow.schema.json",
+      "size": 1269
+    },
+    {
+      "digest": "45c30c1a970d10122644ea629373f109d17b8ce92fece352c56cabfa341f5deb",
+      "path": "src/contracts/versions.ts",
+      "size": 1452
+    },
+    {
+      "digest": "12668b3bc02270962b875cf840e51489b05a6b90d60af4eecf5b03d8f992adbe",
+      "path": "test/contracts/release-contracts.test.ts",
+      "size": 16797
+    },
+    {
+      "digest": "b181c4f2c8068a968df3596cdfde288a1f0552341da8f26cf4992eb417ffdba0",
+      "path": "test/contracts/schema-registry.test.ts",
+      "size": 3499
+    },
+    {
+      "digest": "33401af67624bd2bd7bf8073e50d33a3f20e2ade0bee33fadee00fc1aa3ad53e",
+      "path": "test/fixtures/mcp/runtime/adversarial-bytes.json",
+      "size": 261
+    },
+    {
+      "digest": "39d0dc0461a2b64e0844ff119a0647cd89388191e03f5a55baccd01149f3c9ba",
+      "path": "test/fixtures/mcp/runtime/calls.json",
+      "size": 1145
+    },
+    {
+      "digest": "5547b92a1f0667ef70c712cd99800fa38074278e4470a20231893e023c1504dc",
+      "path": "test/fixtures/mcp/runtime/initialize.json",
+      "size": 1091
+    },
+    {
+      "digest": "044dfd578041d22f584729f216cf5e82644ad6b45e54a8deee61e33e79dc32ca",
+      "path": "test/fixtures/release/hostile-runtime-guard.cjs",
+      "size": 3289
+    },
+    {
+      "digest": "8af4f3d653852533985025a71fcd291d69cc9bbbc11a59012d3b1f8807ac0508",
+      "path": "test/integration/mcp-stdio.test.ts",
+      "size": 11457
+    },
+    {
+      "digest": "2314859de76f3fa2214113d84eaaa0a65e7b6ec71588fa091d27d31a3a847791",
+      "path": "test/integration/release-offline.test.ts",
+      "size": 3539
+    }
+  ],
+  "schema_version": "1"
+}

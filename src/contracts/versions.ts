@@ -22,5 +22,7 @@ export const SCHEMA_IDS = {
   protocolError: "urn:archflow:schema:v1:protocol-error",
   mcpTools: "https://archflow.dev/schemas/v1/mcp-tools",
   resultExpectation: "https://archflow.dev/schemas/v1/result-expectation",
-  pathClaim: "urn:archflow:schema:v1:path-claim"
+  pathClaim: "urn:archflow:schema:v1:path-claim",
+  releaseManifest: "urn:archflow:schema:v1:release-manifest",
+  releaseLegalReview: "urn:archflow:schema:v1:release-legal-review"
 } as const;

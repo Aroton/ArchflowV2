@@ -1,2 +1,15 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Canonical generated release text is byte-reproducible with LF endings.
+dist/*.mjs text eol=lf
+dist/archflow-mcp.mjs -whitespace
+dist/*.json text eol=lf
+dist/legal/*.json text eol=lf
+dist/legal/*.md text eol=lf
+
+# Retained upstream legal evidence preserves the exact reviewed source bytes.
+release/legal/upstream/** -text
+release/legal/upstream/** -whitespace
+dist/legal/upstream/** -text
+dist/legal/upstream/** -whitespace

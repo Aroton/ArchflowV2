@@ -16,11 +16,10 @@ jobs:
       matrix:
         node-version: ["24.15.0", "24.18.0"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
       - run: npm ci
       - run: npm run probe:phase4-mcp-compatibility
       - run: npm run typecheck
@@ -33,4 +32,10 @@ jobs:
       - run: npm run test:notices-policy
       - run: npm run check:phase4-mcp-boundary
       - run: npm run test:phase4-mcp-boundary-policy
-      - run: test ! -e dist && test ! -e .tmp
+      - run: npm run release:check -- --payload dist
+      - run: npm run release:smoke -- --payload dist
+      - run: npm run release:mutations
+      - run: npm run release:reproduce
+      - run: npm run release:stage -- --output "${RUNNER_TEMP}/archflow-release-stage"
+      - run: npm run release:check -- --payload dist --compare "${RUNNER_TEMP}/archflow-release-stage"
+      - run: test ! -e .tmp

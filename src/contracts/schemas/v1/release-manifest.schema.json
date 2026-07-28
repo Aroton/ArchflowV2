@@ -1,0 +1,379 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:release-manifest",
+  "title": "ArchFlow Release Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_digest",
+    "dependency_inventory_digest",
+    "bundle_inputs",
+    "contributing_inputs",
+    "release_control_inputs",
+    "dependency_provenance_inputs",
+    "adjacent_map_expectations",
+    "proof_inputs",
+    "declared_content",
+    "build_entries",
+    "launch_profile",
+    "legal_review",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "bundle_digest": { "$ref": "#/$defs/digest" },
+    "dependency_inventory_digest": { "$ref": "#/$defs/digest" },
+    "bundle_inputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/bundle_input" },
+      "x-archflow-unique-by": "key"
+    },
+    "contributing_inputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/metafile_key" },
+      "x-archflow-sorted-unique": true
+    },
+    "release_control_inputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/repository_file" },
+      "x-archflow-unique-by": "path"
+    },
+    "dependency_provenance_inputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dependency_file" },
+      "x-archflow-unique-by": ["package_name", "package_version", "package_relative_path"]
+    },
+    "adjacent_map_expectations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/adjacent_map_expectation" },
+      "x-archflow-unique-by": "input_key"
+    },
+    "proof_inputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/portable_path" },
+      "x-archflow-sorted-unique": true
+    },
+    "declared_content": { "$ref": "#/$defs/declared_content" },
+    "build_entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/build_entry" },
+      "x-archflow-unique-by": "id"
+    },
+    "launch_profile": { "$ref": "#/$defs/launch_profile" },
+    "legal_review": { "$ref": "#/$defs/legal_review_binding" },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/artifact" },
+      "x-archflow-unique-by": "path"
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "portable_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:)(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)[^/]+(?:/[^/]+)*$"
+    },
+    "metafile_key": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:)(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)[^/]+(?:/[^/]+)*$"
+    },
+    "dependency_prebundle_key": {
+      "type": "string",
+      "pattern": "^node_modules/(?:@[^/]+/)?[^/]+/.+\\.mjs$"
+    },
+    "byte_size": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "package_name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?:@[^/\\s]+/)?[^/\\s]+$"
+    },
+    "package_version": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\s]+$"
+    },
+    "repository_origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": { "const": "repository" },
+        "path": { "$ref": "#/$defs/portable_path" }
+      }
+    },
+    "dependency_origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "package_name", "package_version", "package_relative_path"],
+      "properties": {
+        "kind": { "const": "dependency" },
+        "package_name": { "$ref": "#/$defs/package_name" },
+        "package_version": { "$ref": "#/$defs/package_version" },
+        "package_relative_path": { "$ref": "#/$defs/portable_path" }
+      }
+    },
+    "bundle_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "origin", "size", "digest", "bytes_in_output"],
+      "properties": {
+        "key": { "$ref": "#/$defs/metafile_key" },
+        "origin": {
+          "oneOf": [
+            { "$ref": "#/$defs/repository_origin" },
+            { "$ref": "#/$defs/dependency_origin" }
+          ]
+        },
+        "size": { "$ref": "#/$defs/byte_size" },
+        "digest": { "$ref": "#/$defs/digest" },
+        "bytes_in_output": { "$ref": "#/$defs/byte_size" }
+      }
+    },
+    "repository_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "size", "digest"],
+      "properties": {
+        "path": { "$ref": "#/$defs/portable_path" },
+        "size": { "$ref": "#/$defs/byte_size" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "dependency_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_name", "package_version", "package_relative_path", "purpose", "size", "digest"],
+      "properties": {
+        "package_name": { "$ref": "#/$defs/package_name" },
+        "package_version": { "$ref": "#/$defs/package_version" },
+        "package_relative_path": { "$ref": "#/$defs/portable_path" },
+        "purpose": {
+          "enum": ["package-manifest", "source-map", "license", "notice", "provenance"]
+        },
+        "size": { "$ref": "#/$defs/byte_size" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "dependency_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_name", "package_version", "package_relative_path", "digest"],
+      "properties": {
+        "package_name": { "$ref": "#/$defs/package_name" },
+        "package_version": { "$ref": "#/$defs/package_version" },
+        "package_relative_path": { "$ref": "#/$defs/portable_path" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "dependency_map_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_name", "package_version", "package_relative_path", "digest"],
+      "properties": {
+        "package_name": { "$ref": "#/$defs/package_name" },
+        "package_version": { "$ref": "#/$defs/package_version" },
+        "package_relative_path": { "type": "string", "pattern": "^[^\\\\]+\\.mjs\\.map$" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "adjacent_map_expectation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input_key", "expectation", "map", "reviewed_first_party_roots", "recognized_third_party_components"],
+          "properties": {
+            "input_key": { "$ref": "#/$defs/dependency_prebundle_key" },
+            "expectation": { "const": "present" },
+            "map": { "$ref": "#/$defs/dependency_map_reference" },
+            "reviewed_first_party_roots": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "uniqueItems": true,
+              "x-archflow-sorted-unique": true
+            },
+            "recognized_third_party_components": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^(?:@[^/\\s]+/)?[^@/\\s]+@[^\\s]+$" },
+              "uniqueItems": true,
+              "x-archflow-sorted-unique": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input_key", "expectation", "rationale"],
+          "properties": {
+            "input_key": { "$ref": "#/$defs/dependency_prebundle_key" },
+            "expectation": { "const": "expected-absent" },
+            "rationale": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "declared_content": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemas", "workflow", "constitution"],
+      "properties": {
+        "schemas": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/portable_path" },
+          "x-archflow-sorted-unique": true
+        },
+        "workflow": { "const": "assets/workflow.yaml" },
+        "constitution": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/portable_path" },
+          "x-archflow-sorted-unique": true
+        }
+      }
+    },
+    "build_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "entry_point", "output_path", "handler_authority"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "role": { "enum": ["mcp-stdio", "local-cli"] },
+        "entry_point": { "$ref": "#/$defs/portable_path" },
+        "output_path": { "$ref": "#/$defs/portable_path" },
+        "handler_authority": { "enum": ["inert-no-handler", "local-cli-handler"] }
+      }
+    },
+    "launch_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node_major",
+        "executable",
+        "argv",
+        "environment_keys",
+        "removed_environment_keys",
+        "cwd_class",
+        "stdio",
+        "guard_path",
+        "canary_paths",
+        "fixture_digests",
+        "allowed_imports"
+      ],
+      "properties": {
+        "node_major": { "const": 24 },
+        "executable": { "const": "process.execPath" },
+        "argv": {
+          "const": ["--require", "hostile-runtime-guard.cjs", "archflow-mcp.mjs"]
+        },
+        "environment_keys": {
+          "const": ["HOME", "LANG", "LC_ALL", "NPM_CONFIG_CACHE", "PATH", "TMPDIR", "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"]
+        },
+        "removed_environment_keys": {
+          "const": ["NODE_OPTIONS", "NODE_PATH"]
+        },
+        "cwd_class": { "const": "copied-payload" },
+        "stdio": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stdin", "stdout", "stderr", "guard_fd"],
+          "properties": {
+            "stdin": { "const": "pipe" },
+            "stdout": { "const": "pipe" },
+            "stderr": { "const": "pipe" },
+            "guard_fd": { "const": 3 }
+          }
+        },
+        "guard_path": { "const": "test/fixtures/release/hostile-runtime-guard.cjs" },
+        "canary_paths": {
+          "const": ["ambient/node_modules/archflow-release-canary/index.js", "repository-canary/SECRET"]
+        },
+        "fixture_digests": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "prefixItems": [
+            { "$ref": "#/$defs/adversarial_fixture" },
+            { "$ref": "#/$defs/calls_fixture" },
+            { "$ref": "#/$defs/initialize_fixture" }
+          ],
+          "items": false,
+          "x-archflow-unique-by": "path"
+        },
+        "allowed_imports": {
+          "const": ["node:buffer", "node:crypto", "node:module", "node:process", "node:util"]
+        }
+      }
+    },
+    "adversarial_fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "digest"],
+      "properties": {
+        "path": { "const": "test/fixtures/mcp/runtime/adversarial-bytes.json" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "calls_fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "digest"],
+      "properties": {
+        "path": { "const": "test/fixtures/mcp/runtime/calls.json" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "initialize_fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "digest"],
+      "properties": {
+        "path": { "const": "test/fixtures/mcp/runtime/initialize.json" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "legal_review_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_path", "payload_path", "digest"],
+      "properties": {
+        "source_path": { "const": "release/legal-review.json" },
+        "payload_path": { "const": "legal/review.json" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "artifact": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "role"],
+          "properties": {
+            "path": { "const": "manifest.json" },
+            "role": { "const": "manifest" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "role", "size", "digest"],
+          "properties": {
+            "path": { "$ref": "#/$defs/portable_path" },
+            "role": { "enum": ["executable", "metafile", "legal-review", "legal-notice", "upstream-legal"] },
+            "size": { "$ref": "#/$defs/byte_size" },
+            "digest": { "$ref": "#/$defs/digest" }
+          }
+        }
+      ]
+    }
+  }
+}

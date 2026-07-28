@@ -1,6 +1,7 @@
 # Phase 5: Offline Bundle and Release Integrity
 
-**Status**: DESIGNED
+**Status**: COMPLETE
+**Implemented**: 2026-07-28
 **Task**: mcp-integration
 **Goal**: Produce a license-complete deterministic tracked offline payload and prove hostile clean-copy startup.
 **Requirements**: REQ-04, REQ-05, REQ-11, REQ-27, REQ-28, REQ-33
@@ -105,7 +106,7 @@ writeTrackedReleasePayload(options: {
 }): Promise<ReproductionProof>;
 ```
 
-The CLI forms are fixed as `npm run release:stage -- --output <empty-dir>`, `npm run release:check -- --payload <dir> [--compare <dir>]`, `npm run release:write -- --stage <dir>`, `npm run release:smoke -- --payload <dir>`, and `npm run release:mutations`. On success, each command writes one canonical JSON summary to stdout. Diagnostics go to stderr. Exit status is `0` for success, `1` for an operation or validation failure, and `2` for invalid usage. The tracked-write command creates its own dedicated materialization and comparison roots and must complete the independent reproduction path above before touching `dist/`.
+The CLI forms are fixed as `npm run release:stage -- --output <empty-dir>`, `npm run release:check -- --payload <dir> [--compare <dir>]`, `npm run release:reproduce`, `npm run release:write -- --stage <dir>`, `npm run release:smoke -- --payload <dir>`, and `npm run release:mutations`. On success, each command writes one canonical JSON summary to stdout. Diagnostics go to stderr. Exit status is `0` for success, `1` for an operation or validation failure, and `2` for invalid usage. The non-promoting reproduction command independently stages, materializes, installs, rebuilds, and compares without touching `dist/`. The tracked-write command creates its own dedicated materialization and comparison roots and must complete the same independent reproduction path before touching `dist/`.
 
 ## Files
 
@@ -122,6 +123,7 @@ The CLI forms are fixed as `npm run release:stage -- --output <empty-dir>`, `npm
 | Create | `scripts/build-release.mjs` | Expose the external empty-stage build form and validate the complete in-memory payload before materialization. |
 | Create | `scripts/write-tracked-release.mjs` | Independently materialize, install, verify, rebuild, compare, and only then replace the fixed tracked payload. |
 | Create | `scripts/check-release.mjs` | Read-only validation of one payload and optional comparison of two validated payloads. |
+| Create | `scripts/reproduce-release.mjs` | Exercise the fresh-`npm ci` materialization/rebuild proof without promoting tracked output. |
 | Create | `scripts/test-release-integrity.mjs` | Mutation-test representative schema, graph, provenance, path, write, normalization, and proof-input failures. |
 | Create | `scripts/smoke-release-bundle.mjs` | Run exact-payload and guarded hostile-copy protocol exercises through direct Node. |
 | Create | `test/fixtures/release/hostile-runtime-guard.cjs` | Instrument the declared global runtime surfaces before bundle import and report violations on inherited fd 3. |

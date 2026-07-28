@@ -1,0 +1,392 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:release-legal-review",
+  "title": "ArchFlow Release Legal Review v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project_license_status",
+    "distribution_status",
+    "inventory_method",
+    "limitations",
+    "current_components",
+    "dependency_gate_decisions",
+    "amendments",
+    "supersessions",
+    "upstream_legal_sources"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "project_license_status": { "const": "missing" },
+    "distribution_status": { "const": "unresolved" },
+    "inventory_method": { "const": "conservative-mapped-component-inventory" },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "x-archflow-sorted-unique": true
+    },
+    "current_components": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/current_component" },
+      "x-archflow-unique-by": "component_id"
+    },
+    "dependency_gate_decisions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/gate_decision" },
+      "x-archflow-unique-by": "id"
+    },
+    "amendments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/amendment" },
+      "x-archflow-unique-by": "id"
+    },
+    "supersessions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/supersession" },
+      "uniqueItems": true,
+      "x-archflow-unique-by": "superseded_decision_id"
+    },
+    "upstream_legal_sources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/upstream_legal_source" },
+      "x-archflow-unique-by": "source_path"
+    }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "portable_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:)(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)[^/]+(?:/[^/]+)*$"
+    },
+    "stable_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "package_name": { "type": "string", "minLength": 1, "pattern": "^(?:@[^/\\s]+/)?[^/\\s]+$" },
+    "package_version": { "type": "string", "minLength": 1, "pattern": "^[^\\s]+$" },
+    "current_component": {
+      "type": "object",
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "type": "object", "properties": { "provenance_kind": { "const": "embedded" } }, "required": ["provenance_kind"] },
+          "then": {
+            "type": "object",
+            "properties": {
+              "package_identity": {
+                "type": "object",
+                "properties": { "authority": { "const": "npm-registry-artifact" } }
+              }
+            }
+          }
+        },
+        {
+          "if": { "type": "object", "properties": { "provenance_kind": { "const": "installed" } }, "required": ["provenance_kind"] },
+          "then": {
+            "type": "object",
+            "properties": {
+              "package_identity": {
+                "type": "object",
+                "properties": { "authority": { "const": "package-lock" } }
+              }
+            }
+          }
+        }
+      ],
+      "required": [
+        "component_id",
+        "package_name",
+        "package_version",
+        "provenance_kind",
+        "source_root",
+        "license_expression",
+        "legal_source",
+        "package_identity",
+        "provenance_inputs",
+        "source_map_expected"
+      ],
+      "properties": {
+        "component_id": { "$ref": "#/$defs/stable_id" },
+        "package_name": { "$ref": "#/$defs/package_name" },
+        "package_version": { "$ref": "#/$defs/package_version" },
+        "provenance_kind": { "enum": ["installed", "embedded"] },
+        "source_root": { "$ref": "#/$defs/portable_path" },
+        "license_expression": { "type": "string", "minLength": 1 },
+        "legal_source": { "$ref": "#/$defs/legal_source_binding" },
+        "package_identity": { "$ref": "#/$defs/package_identity" },
+        "provenance_inputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dependency_reference" },
+          "x-archflow-unique-by": ["package_name", "package_version", "package_relative_path"]
+        },
+        "source_map_expected": { "type": "boolean" }
+      }
+    },
+    "dependency_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_name", "package_version", "package_relative_path"],
+      "properties": {
+        "package_name": { "$ref": "#/$defs/package_name" },
+        "package_version": { "$ref": "#/$defs/package_version" },
+        "package_relative_path": { "$ref": "#/$defs/portable_path" }
+      }
+    },
+    "legal_source_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_path", "payload_path", "digest"],
+      "properties": {
+        "source_path": { "$ref": "#/$defs/portable_path" },
+        "payload_path": { "$ref": "#/$defs/portable_path" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "package_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "tarball_url", "integrity"],
+      "properties": {
+        "authority": { "enum": ["package-lock", "npm-registry-artifact"] },
+        "tarball_url": { "type": "string", "format": "uri", "pattern": "^https://registry\\.npmjs\\.org/" },
+        "integrity": { "type": "string", "pattern": "^sha512-[A-Za-z0-9+/]+={0,2}$" }
+      }
+    },
+    "entry_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "handler_authority"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stable_id" },
+        "role": { "enum": ["mcp-stdio", "local-cli"] },
+        "handler_authority": { "enum": ["inert-no-handler", "local-cli-handler"] }
+      }
+    },
+    "advisory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "severity", "affected_version", "safe_version"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^GHSA-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}$" },
+        "severity": { "enum": ["low", "moderate", "high", "critical"] },
+        "affected_version": { "$ref": "#/$defs/package_version" },
+        "safe_version": { "$ref": "#/$defs/package_version" },
+        "source_url": { "type": "string", "format": "uri", "pattern": "^https://github\\.com/advisories/GHSA-" }
+      }
+    },
+    "gate_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "decision_digest",
+        "status",
+        "scope",
+        "package_name",
+        "package_version",
+        "advisories",
+        "bundle_digest",
+        "entry_bindings",
+        "dependency_inventory_digest",
+        "advisory_snapshot",
+        "patched_artifact_availability",
+        "reachability_evidence",
+        "user_acceptance"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/stable_id" },
+        "decision_digest": { "$ref": "#/$defs/digest" },
+        "status": { "const": "accepted" },
+        "scope": { "$ref": "#/$defs/risk_scope" },
+        "package_name": { "$ref": "#/$defs/package_name" },
+        "package_version": { "$ref": "#/$defs/package_version" },
+        "advisories": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/advisory" },
+          "x-archflow-unique-by": "id"
+        },
+        "bundle_digest": { "$ref": "#/$defs/digest" },
+        "entry_bindings": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/entry_binding" },
+          "x-archflow-unique-by": "id"
+        },
+        "dependency_inventory_digest": { "$ref": "#/$defs/digest" },
+        "advisory_snapshot": { "$ref": "#/$defs/advisory_snapshot_binding" },
+        "patched_artifact_availability": { "$ref": "#/$defs/artifact_availability_binding" },
+        "reachability_evidence": { "$ref": "#/$defs/reachability_binding" },
+        "user_acceptance": { "$ref": "#/$defs/user_acceptance_binding" }
+      }
+    },
+    "evidence_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "digest"],
+      "properties": {
+        "path": { "$ref": "#/$defs/portable_path" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "advisory_snapshot_binding": {
+      "allOf": [
+        { "$ref": "#/$defs/evidence_binding" },
+        { "type": "object", "properties": { "path": { "const": "release/evidence/advisory-snapshot.json" } } }
+      ]
+    },
+    "artifact_availability_binding": {
+      "allOf": [
+        { "$ref": "#/$defs/evidence_binding" },
+        { "type": "object", "properties": { "path": { "const": "release/evidence/patched-artifact-availability.json" } } }
+      ]
+    },
+    "reachability_binding": {
+      "allOf": [
+        { "$ref": "#/$defs/evidence_binding" },
+        { "type": "object", "properties": { "path": { "const": "release/evidence/focused-inert-reachability.json" } } }
+      ]
+    },
+    "user_acceptance_binding": {
+      "allOf": [
+        { "$ref": "#/$defs/evidence_binding" },
+        { "type": "object", "properties": { "path": { "const": "release/evidence/user-risk-acceptance.json" } } }
+      ]
+    },
+    "risk_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deployment", "operators", "production", "handler_authority", "invalidated_by"],
+      "properties": {
+        "deployment": { "const": "local-only" },
+        "operators": { "const": "user-owned-agents" },
+        "production": { "const": false },
+        "handler_authority": { "const": "inert-no-handler" },
+        "invalidated_by": {
+          "type": "array",
+          "minItems": 4,
+          "uniqueItems": true,
+          "items": { "enum": ["bundle-change", "dependency-change", "entry-change", "handler-authority-change"] },
+          "x-archflow-sorted-unique": true
+        }
+      }
+    },
+    "amendment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "amendment_digest", "decision_id", "prior_decision_digest", "reason", "evidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stable_id" },
+        "amendment_digest": { "$ref": "#/$defs/digest" },
+        "decision_id": { "$ref": "#/$defs/stable_id" },
+        "prior_decision_digest": { "$ref": "#/$defs/digest" },
+        "reason": { "type": "string", "minLength": 1 },
+        "evidence": { "$ref": "#/$defs/evidence_binding" }
+      }
+    },
+    "supersession": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "supersession_digest", "superseded_decision_id", "superseded_decision_digest", "replacement_decision_id", "replacement_decision_digest", "reason", "evidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stable_id" },
+        "supersession_digest": { "$ref": "#/$defs/digest" },
+        "superseded_decision_id": { "$ref": "#/$defs/stable_id" },
+        "superseded_decision_digest": { "$ref": "#/$defs/digest" },
+        "replacement_decision_id": { "$ref": "#/$defs/stable_id" },
+        "replacement_decision_digest": { "$ref": "#/$defs/digest" },
+        "reason": { "type": "string", "minLength": 1 },
+        "evidence": { "$ref": "#/$defs/evidence_binding" }
+      }
+    },
+    "upstream_legal_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component_id", "source_path", "payload_path", "digest", "package_identity"],
+      "properties": {
+        "component_id": { "$ref": "#/$defs/stable_id" },
+        "source_path": { "$ref": "#/$defs/portable_path" },
+        "payload_path": { "$ref": "#/$defs/portable_path" },
+        "digest": { "$ref": "#/$defs/digest" },
+        "package_identity": { "$ref": "#/$defs/package_identity" }
+      }
+    },
+    "advisory_snapshot_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "record_type", "observed_on", "package_name", "package_version", "safe_version_floor", "advisories"],
+      "properties": {
+        "schema_version": { "const": "1" },
+        "record_type": { "const": "advisory-snapshot" },
+        "observed_on": { "type": "string", "format": "date" },
+        "package_name": { "$ref": "#/$defs/package_name" },
+        "package_version": { "$ref": "#/$defs/package_version" },
+        "safe_version_floor": { "$ref": "#/$defs/package_version" },
+        "advisories": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/advisory" },
+              {
+                "type": "object",
+                "required": ["source_url"],
+                "properties": { "source_url": { "type": "string", "format": "uri", "pattern": "^https://github\\.com/advisories/GHSA-" } }
+              }
+            ]
+          },
+          "x-archflow-unique-by": "id"
+        }
+      }
+    },
+    "artifact_availability_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "record_type", "observed_on", "server_package", "server_version", "embedded_package", "embedded_version", "safe_version_floor", "compatible_patched_artifact_available", "registry_source"],
+      "properties": {
+        "schema_version": { "const": "1" },
+        "record_type": { "const": "patched-artifact-availability" },
+        "observed_on": { "type": "string", "format": "date" },
+        "server_package": { "const": "@modelcontextprotocol/server" },
+        "server_version": { "const": "2.0.0" },
+        "embedded_package": { "const": "fast-uri" },
+        "embedded_version": { "const": "3.1.0" },
+        "safe_version_floor": { "const": "3.1.4" },
+        "compatible_patched_artifact_available": { "const": false },
+        "registry_source": { "type": "string", "format": "uri" }
+      }
+    },
+    "reachability_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "record_type", "observed_on", "bundle_digest", "entry_bindings", "trusted_schema_compilation_reachable", "untrusted_json_rpc_route_identified", "finding", "limitations"],
+      "properties": {
+        "schema_version": { "const": "1" },
+        "record_type": { "const": "focused-inert-reachability" },
+        "observed_on": { "type": "string", "format": "date" },
+        "bundle_digest": { "$ref": "#/$defs/digest" },
+        "entry_bindings": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/entry_binding" }, "x-archflow-unique-by": "id" },
+        "trusted_schema_compilation_reachable": { "const": true },
+        "untrusted_json_rpc_route_identified": { "const": false },
+        "finding": { "type": "string", "minLength": 1 },
+        "limitations": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true, "x-archflow-sorted-unique": true }
+      }
+    },
+    "user_acceptance_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "record_type", "accepted_on", "acceptance_text", "package_name", "package_version", "advisory_ids", "scope"],
+      "properties": {
+        "schema_version": { "const": "1" },
+        "record_type": { "const": "user-risk-acceptance" },
+        "accepted_on": { "type": "string", "format": "date" },
+        "acceptance_text": { "type": "string", "minLength": 1 },
+        "package_name": { "const": "fast-uri" },
+        "package_version": { "const": "3.1.0" },
+        "advisory_ids": { "const": ["GHSA-4c8g-83qw-93j6", "GHSA-q3j6-qgpj-74h6", "GHSA-v2hh-gcrm-f6hx", "GHSA-v39h-62p7-jpjc"] },
+        "scope": { "$ref": "#/$defs/risk_scope" }
+      }
+    }
+  }
+}
