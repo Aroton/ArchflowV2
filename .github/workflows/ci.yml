@@ -22,12 +22,15 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
+      - run: npm run probe:phase4-mcp-compatibility
       - run: npm run typecheck
+      - run: npm run test:mcp-runtime
       - run: npm test
       - run: npm run test:contracts
       - run: npm run build:temp
       - run: npm run check:dependencies
       - run: npm run check:notices
       - run: npm run test:notices-policy
-      - run: npm run check:phase3-mcp-boundary
-      - run: npm run test:phase3-mcp-boundary-policy
+      - run: npm run check:phase4-mcp-boundary
+      - run: npm run test:phase4-mcp-boundary-policy
+      - run: test ! -e dist && test ! -e .tmp

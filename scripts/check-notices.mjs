@@ -59,8 +59,8 @@ const recordedSpdx = new Set(
   [...inventory.matchAll(/^\| `([^`]+)` \| `([^`]+)` \|$/gm)].map((match) => `${match[1]} | ${match[2]}`)
 );
 const requiredMcpRoots = new Set([
-  "@modelcontextprotocol/core@2.0.0-beta.5 | MIT",
-  "@modelcontextprotocol/server@2.0.0-beta.5 | MIT"
+  "@modelcontextprotocol/core@2.0.0 | MIT",
+  "@modelcontextprotocol/server@2.0.0 | MIT"
 ]);
 for (const entry of requiredMcpRoots) {
   if (!expectedSpdx.has(entry)) failures.push(`missing exact MCP root from lock: ${entry}`);

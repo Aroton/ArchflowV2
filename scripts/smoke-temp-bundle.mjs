@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
-const contracts = await import(new URL("../.tmp/archflow-contracts.mjs", import.meta.url));
+export async function smokeTemporaryBundles({ contractsBundle, runtimeBundle }) {
+const contracts = await import(pathToFileURL(contractsBundle));
 
 assert.deepEqual(
   contracts.parseSingleYamlDocument("name: archflow\nenabled: true\n", "bundle-smoke.yaml"),
@@ -114,4 +117,13 @@ assert.equal("createTestAuthorityLink" in contracts, false);
 assert.equal("createTestVerifiedReferencedEvidence" in contracts, false);
 assert.equal("createTestCurrentReviewSetAuthority" in contracts, false);
 
-console.log(`Temporary contract bundle loaded and exercised under ${process.version}.`);
+const runtime = spawnSync(process.execPath, [runtimeBundle], {
+  encoding: "utf8",
+  input: "",
+  timeout: 10_000
+});
+assert.equal(runtime.error, undefined, "inert runtime must terminate after stdin EOF");
+assert.equal(runtime.status, 0, `inert runtime exited unsuccessfully: ${runtime.stderr}`);
+assert.equal(runtime.stdout, "", "runtime stdout must contain protocol frames only");
+assert.equal(runtime.stderr, "", "clean inert EOF must not emit diagnostics");
+}

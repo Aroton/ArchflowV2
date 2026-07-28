@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 const expectedRuntime = Object.freeze({
-  "@modelcontextprotocol/server": "2.0.0-beta.5",
+  "@modelcontextprotocol/server": "2.0.0",
   ajv: "8.20.0",
   "ajv-formats": "3.0.1",
   yaml: "2.9.0",
@@ -89,12 +89,12 @@ function packageNameFromPath(path, metadata) {
 const expectedMcpRoots = Object.freeze({
   "node_modules/@modelcontextprotocol/core": Object.freeze({
     name: "@modelcontextprotocol/core",
-    version: "2.0.0-beta.5",
+    version: "2.0.0",
     license: "MIT"
   }),
   "node_modules/@modelcontextprotocol/server": Object.freeze({
     name: "@modelcontextprotocol/server",
-    version: "2.0.0-beta.5",
+    version: "2.0.0",
     license: "MIT"
   })
 });
@@ -113,8 +113,8 @@ for (const [path, expected] of Object.entries(expectedMcpRoots)) {
   }
 }
 const lockedServer = lock.packages?.["node_modules/@modelcontextprotocol/server"];
-if (lockedServer?.dependencies?.["@modelcontextprotocol/core"] !== "2.0.0-beta.5") {
-  failures.push("the exact MCP server root must lock exact @modelcontextprotocol/core@2.0.0-beta.5");
+if (lockedServer?.dependencies?.["@modelcontextprotocol/core"] !== "2.0.0") {
+  failures.push("the exact MCP server root must lock exact @modelcontextprotocol/core@2.0.0");
 }
 
 for (const [path, metadata] of Object.entries(lock.packages ?? {})) {

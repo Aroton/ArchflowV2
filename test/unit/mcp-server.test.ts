@@ -29,6 +29,15 @@ const stateSuccess = {
   ok: true,
   value: { path: "phases/3/result.json", revision: 3, status: "succeeded" }
 } as const;
+const counterReviewInput = {
+  schema_version: "1",
+  task_id: "task-1",
+  intent_id: "intent-1",
+  expected_revision: 2,
+  input_fingerprint: digest,
+  artifact_path: `${"é".repeat(600)}.md`,
+  rubric: { schema_version: "1", criteria: [{ id: "paths", text: "Paths are correct", blocking: true }] }
+} as const;
 
 interface ClassificationFixtures {
   readonly not_object: readonly unknown[];
@@ -157,14 +166,19 @@ describe("SDK-free MCP tool boundary", () => {
     expect(Object.isFrozen(unknown.error)).toBe(true);
     expect(Object.isFrozen(unknown.error.value.diagnostic.parameters)).toBe(true);
     expect(() => assertAuthenticToolBoundaryOutcome(unknown)).not.toThrow();
+    const unknownWithMissingArgs = await boundary.invoke("Ü\u0000tool", undefined, invocation);
+    expect(unknownWithMissingArgs).toMatchObject({
+      kind: "protocol-error",
+      error: { value: { code: "TOOL_NOT_FOUND" } }
+    });
 
-    const disabled = await boundary.invoke("archflow_gate", null, invocation);
+    const disabled = await boundary.invoke("archflow_state", stateInput, invocation);
     expect(disabled).toMatchObject({
       kind: "protocol-error",
       error: {
         value: {
           code: "TOOL_DISABLED",
-          diagnostic: { parameters: { tool: "archflow_gate", lifecycle_state: "inert-no-handler" } }
+          diagnostic: { parameters: { tool: "archflow_state", lifecycle_state: "inert-no-handler" } }
         }
       }
     });
@@ -172,11 +186,39 @@ describe("SDK-free MCP tool boundary", () => {
     expect(() => assertAuthenticToolBoundaryOutcome(structuredClone(disabled) as never)).toThrow(/authentic tool boundary outcome/);
   });
 
+  it("classifies missing, non-object, and portable-shaped runtime-invalid known input before inert availability", async () => {
+    const boundary = createToolBoundary({});
+    const invocation = context("boundary-inert-precedence-1");
+
+    for (const candidate of [undefined, 42] as const) {
+      expectProjectFailure(await boundary.invoke("archflow_state", candidate, invocation), "archflow_state", "CONTRACT_INVALID", {
+        tool: "archflow_state", issue_code: "input-not-object"
+      });
+    }
+    const semantic = await boundary.invoke("archflow_counter_review", counterReviewInput, invocation);
+    expect(semantic.kind).toBe("project-result");
+    if (semantic.kind !== "project-result" || semantic.result.ok) throw new Error("expected project failure");
+    expect(semantic.result.error.code).toBe("CONTRACT_INVALID");
+    expect(semantic.result.error.diagnostic.parameters).toEqual({
+      tool: "archflow_counter_review", issue_code: "input-invalid"
+    });
+
+    const valid = await boundary.invoke("archflow_state", stateInput, invocation);
+    expect(valid).toMatchObject({
+      kind: "protocol-error",
+      error: { value: { code: "TOOL_DISABLED" } }
+    });
+  });
+
   it("classifies every known-tool argument failure before calling the handler", async () => {
     const fixtures = await loadClassificationFixtures();
     let calls = 0;
     const boundary = createToolBoundary({ archflow_state: () => { calls += 1; return stateSuccess; } });
     const invocation = context("boundary-input-1");
+
+    expectProjectFailure(await boundary.invoke("archflow_state", undefined, invocation), "archflow_state", "CONTRACT_INVALID", {
+      tool: "archflow_state", issue_code: "input-not-object"
+    });
 
     for (const candidate of fixtures.not_object) {
       expectProjectFailure(await boundary.invoke("archflow_state", candidate, invocation), "archflow_state", "CONTRACT_INVALID", {

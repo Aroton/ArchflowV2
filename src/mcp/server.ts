@@ -197,6 +197,9 @@ export function createToolBoundary(handlers: ToolHandlerRegistry): ToolBoundary 
         return protocolOutcome(createProtocolError("TOOL_NOT_FOUND", { tool_name_digest: toolNameDigest }));
       }
 
+      const classified = classifyVersionedArgs(name, args);
+      if ("outcome" in classified) return classified.outcome;
+
       const handler = registry[name] as ToolHandler<typeof name> | undefined;
       if (handler === undefined) {
         return protocolOutcome(createProtocolError("TOOL_DISABLED", {
@@ -204,9 +207,6 @@ export function createToolBoundary(handlers: ToolHandlerRegistry): ToolBoundary 
           lifecycle_state: "inert-no-handler"
         }));
       }
-
-      const classified = classifyVersionedArgs(name, args);
-      if ("outcome" in classified) return classified.outcome;
 
       let returned: unknown;
       try {

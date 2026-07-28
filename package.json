@@ -11,16 +11,18 @@
     "test": "vitest run",
     "test:unit": "vitest run test/unit",
     "test:contracts": "vitest run test/contracts",
-    "build:temp": "node scripts/build-temp.mjs && node scripts/smoke-temp-bundle.mjs",
+    "test:mcp-runtime": "vitest run test/unit/mcp-*.test.ts test/integration/mcp-stdio.test.ts",
+    "probe:phase4-mcp-compatibility": "node scripts/probe-phase-4-mcp-compatibility.mjs",
+    "build:temp": "node scripts/build-temp.mjs",
     "check:dependencies": "node scripts/check-dependency-policy.mjs",
     "check:notices": "node scripts/check-notices.mjs",
     "test:notices-policy": "node scripts/test-notices-policy.mjs",
-    "check:phase3-mcp-boundary": "node scripts/check-phase-3-mcp-boundary.mjs",
-    "test:phase3-mcp-boundary-policy": "node scripts/test-phase-3-mcp-boundary-policy.mjs",
-    "check": "npm run typecheck && npm test && npm run test:contracts && npm run build:temp && npm run check:dependencies && npm run check:notices && npm run test:notices-policy && npm run check:phase3-mcp-boundary && npm run test:phase3-mcp-boundary-policy"
+    "check:phase4-mcp-boundary": "node scripts/check-phase-4-mcp-boundary.mjs",
+    "test:phase4-mcp-boundary-policy": "node scripts/test-phase-4-mcp-boundary-policy.mjs",
+    "check": "npm run probe:phase4-mcp-compatibility && npm run typecheck && npm run test:mcp-runtime && npm test && npm run test:contracts && npm run build:temp && npm run check:dependencies && npm run check:notices && npm run test:notices-policy && npm run check:phase4-mcp-boundary && npm run test:phase4-mcp-boundary-policy"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.0.0-beta.5",
+    "@modelcontextprotocol/server": "2.0.0",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "yaml": "2.9.0",
