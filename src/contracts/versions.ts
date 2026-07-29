@@ -28,6 +28,7 @@ export const SCHEMA_IDS = {
   secretScanResult: "urn:archflow:schema:v1:secret-scan-result",
   durablePrimitives: "urn:archflow:schema:v1:durable-primitives",
   taskState: "urn:archflow:schema:v1:task-state",
+  intentReceipt: "urn:archflow:schema:v1:intent-receipt",
   maintenanceRecord: "urn:archflow:schema:v1:maintenance-record",
   taskInitialization: "urn:archflow:schema:v1:task-initialization",
   legacyImportInitialization: "urn:archflow:schema:v1:legacy-import-initialization",

@@ -3,9 +3,8 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import { parseGitOid, parseGitTreeMode } from "../../src/contracts/canonical.js";
-import { parseSafeCode, parseSafeId, parseSha256Digest } from "../../src/contracts/evidence.js";
+import { parseSafeId, parseSha256Digest } from "../../src/contracts/evidence.js";
 import {
-  EXCLUDED_REQUEST_DIGEST_FIELDS,
   computeInputFingerprint,
   computePinnedConfigDigest,
   computeRequestDigest,
@@ -17,7 +16,6 @@ import {
 } from "../../src/contracts/fingerprints.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
-import type { PlainJsonObject } from "../../src/contracts/plain-json.js";
 
 const digest = (seed: string): ReturnType<typeof parseSha256Digest> => parseSha256Digest(seed.repeat(64).slice(0, 64));
 const oid = (seed: string): ReturnType<typeof parseGitOid> => parseGitOid(seed.repeat(40).slice(0, 40));
@@ -58,15 +56,50 @@ const subject: InputFingerprintSubject = {
 /** A rotation is a permutation that never leaves the input in its original order. */
 const rotate = <T,>(items: readonly T[]): readonly T[] => [...items.slice(1), items[0]!];
 
-const requestSubject = (operationFields: PlainJsonObject): RequestDigestSubject => ({
+type StateOperationFields = { readonly phase_instance: typeof phaseInstance; readonly step: "produce"; readonly status: "succeeded" | "failed" };
+const requestSubject = (operationFields: StateOperationFields): RequestDigestSubject => ({
   schema_version: "1",
   tool: "archflow_state",
   repository_identity_digest: digest("e"),
   task_identity_digest: digest("f"),
-  operation: parseSafeCode("record-phase-result"),
+  operation: "record-state-boundary",
   operation_fields: operationFields,
   input_fingerprint: computeInputFingerprint(subject),
 });
+
+const requestCommon = {
+  schema_version: "1",
+  repository_identity_digest: digest("e"),
+  task_identity_digest: digest("f"),
+  input_fingerprint: computeInputFingerprint(subject),
+} as const;
+const requestRubric = { schema_version: "1", kind: "implementation", mode: "adversarial", criteria: [{ id: "paths", text: "Check paths", blocking: true }] } as const;
+const requestEvidence = {
+  set_digest: digest("8"),
+  slots: [
+    { role: "self-review", evidence_digest: digest("5"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
+    { role: "counter-review", evidence_digest: digest("6"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+  ],
+} as const;
+const requestOrigin = {
+  origin_gate_id: "gate-1",
+  origin_decision_digest: digest("1"),
+  origin_context_digest: digest("2"),
+  task_id: "task-1",
+  phase_instance: phaseInstance,
+  subject_digest: digest("3"),
+  current_evidence_set_digest: digest("4"),
+  rule: { rule_id: "Rule:1", rule_version: 1 },
+  scope: { operation: "review-trigger", boundary: "subject" },
+} as const;
+const requestSubjects = {
+  archflow_state: { ...requestCommon, tool: "archflow_state", operation: "record-state-boundary", operation_fields: { phase_instance: phaseInstance, step: "produce", status: "succeeded" } },
+  archflow_counter_review: { ...requestCommon, tool: "archflow_counter_review", operation: "counter-review", operation_fields: { artifact_path: "phases/9/result.md", rubric: requestRubric } },
+  archflow_adjudicate: { ...requestCommon, tool: "archflow_adjudicate", operation: "adjudicate", operation_fields: { artifact_path: "phases/9/result.md", upstream_paths: ["prd.md", "architecture.md"] } },
+  archflow_gate: { ...requestCommon, tool: "archflow_gate", operation: "gate", operation_fields: { phase_instance: phaseInstance, summary: "Approve implementation", subject_digest: digest("7"), current_evidence: requestEvidence, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } } },
+  archflow_gate_supersedes: { ...requestCommon, tool: "archflow_gate", operation: "gate", operation_fields: { phase_instance: phaseInstance, summary: "Approve implementation", subject_digest: digest("7"), current_evidence: requestEvidence, supersedes: { superseded_gate_id: "gate-0", accepted_triage_digest: digest("9"), old_subject_digest: digest("a") }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } } },
+  archflow_waiver: { ...requestCommon, tool: "archflow_waiver", operation: "waiver", operation_fields: { origin: requestOrigin, rationale: "A bounded exception is required" } },
+} as unknown as Readonly<Record<string, RequestDigestSubject>>;
 
 const configUrl = new URL("../fixtures/contracts/fingerprints/config.yaml", import.meta.url);
 const reorderedConfigUrl = new URL("../fixtures/contracts/fingerprints/config-reordered.yaml", import.meta.url);
@@ -111,6 +144,59 @@ describe("computeInputFingerprint", () => {
 });
 
 describe("computeRequestDigest", () => {
+  it("pins stable golden digests for every closed selector and both gate shapes", () => {
+    expect(Object.fromEntries(Object.entries(requestSubjects).map(([name, value]) => [name, computeRequestDigest(value)]))).toEqual({
+      archflow_state: "9e18ce122452f01f99faa4f2b1f2c99364c580049e1cd5296bd295d37b0f7217",
+      archflow_counter_review: "42b856af8a42fa8e3070048c88bab5beecfa1c0987a743328f7b180b671988b2",
+      archflow_adjudicate: "f736d8b058537377d8030b67dea2fb03ea6085f7a545d4f855b351e8abb89be5",
+      archflow_gate: "4ba0f06fa0f705c3357e40ba9a7f4fbe9d034da71923d49a9b2ee3fb80d03f22",
+      archflow_gate_supersedes: "c89840cd3f406159c57181903e8e80e52a693f19f537070143346f06c4e8d1c9",
+      archflow_waiver: "c1baf879238bc647da60c3ec7cf8655c844d986a79e25306388450a1260e3f38",
+    });
+  });
+
+  it("changes for every selected semantic field", () => {
+    const mutations: Readonly<Record<string, readonly RequestDigestSubject[]>> = {
+      archflow_state: [
+        { ...requestSubjects.archflow_state!, operation_fields: { phase_instance: "phase-impl-7", step: "produce", status: "succeeded" } },
+        { ...requestSubjects.archflow_state!, operation_fields: { phase_instance: phaseInstance, step: "triage", status: "succeeded" } },
+        { ...requestSubjects.archflow_state!, operation_fields: { phase_instance: phaseInstance, step: "produce", status: "failed" } },
+      ] as unknown as RequestDigestSubject[],
+      archflow_counter_review: [
+        { ...requestSubjects.archflow_counter_review!, operation_fields: { artifact_path: "phases/9/other.md", rubric: requestRubric } },
+        { ...requestSubjects.archflow_counter_review!, operation_fields: { artifact_path: "phases/9/result.md", rubric: { ...requestRubric, criteria: [{ ...requestRubric.criteria[0]!, text: "Check receipts" }] } } },
+      ] as unknown as RequestDigestSubject[],
+      archflow_adjudicate: [
+        { ...requestSubjects.archflow_adjudicate!, operation_fields: { artifact_path: "phases/9/other.md", upstream_paths: ["prd.md", "architecture.md"] } },
+        { ...requestSubjects.archflow_adjudicate!, operation_fields: { artifact_path: "phases/9/result.md", upstream_paths: ["architecture.md", "prd.md"] } },
+      ] as unknown as RequestDigestSubject[],
+      archflow_gate: [
+        { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, phase_instance: "phase-impl-7" } },
+        { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, summary: "Revise implementation" } },
+        { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, subject_digest: digest("0") } },
+        { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, current_evidence: { ...requestEvidence, set_digest: digest("0") } } },
+        requestSubjects.archflow_gate_supersedes!,
+        { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, kind: "commit-authorization" } },
+        { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, context: { artifact_kind: "phase-design" } } },
+      ] as unknown as RequestDigestSubject[],
+      archflow_waiver: [
+        { ...requestSubjects.archflow_waiver!, operation_fields: { origin: { ...requestOrigin, origin_context_digest: digest("0") }, rationale: "A bounded exception is required" } },
+        { ...requestSubjects.archflow_waiver!, operation_fields: { origin: requestOrigin, rationale: "A different exception is required" } },
+      ] as unknown as RequestDigestSubject[],
+    };
+    for (const [name, variants] of Object.entries(mutations)) {
+      const baseline = computeRequestDigest(requestSubjects[name]!);
+      for (const variant of variants) expect(computeRequestDigest(variant), name).not.toBe(baseline);
+    }
+  });
+
+  it("rejects wrong operation literals and fields outside every closed selector", () => {
+    for (const [name, value] of Object.entries(requestSubjects)) {
+      expect(() => computeRequestDigest({ ...value, operation: "wrong" } as unknown as RequestDigestSubject), name).toThrow(/invalid/u);
+      expect(() => computeRequestDigest({ ...value, operation_fields: { ...value.operation_fields, excluded_transport_field: "x" } } as unknown as RequestDigestSubject), name).toThrow(/contain exactly/u);
+    }
+  });
+
   it("excludes volatile request state: two requests differing only there share one digest", () => {
     // The volatile fields live on the request envelope, never inside the closed digest field list.
     const first = {
@@ -119,7 +205,7 @@ describe("computeRequestDigest", () => {
       timestamp: "2026-07-28T00:00:00.000Z",
       attempt: 1,
       connection_id: "connection-1",
-      operation_fields: { phase_instance: phaseInstance, verdict: "pass" } satisfies PlainJsonObject,
+      operation_fields: { phase_instance: phaseInstance, step: "produce", status: "succeeded" } satisfies StateOperationFields,
     };
     const retry = {
       ...first,
@@ -134,20 +220,17 @@ describe("computeRequestDigest", () => {
   });
 
   it("is stable under operation_fields key order and sensitive to semantic fields", () => {
-    const digestA = computeRequestDigest(requestSubject({ verdict: "pass", phase_instance: phaseInstance }));
-    const digestB = computeRequestDigest(requestSubject({ phase_instance: phaseInstance, verdict: "pass" }));
+    const digestA = computeRequestDigest(requestSubject({ status: "succeeded", step: "produce", phase_instance: phaseInstance }));
+    const digestB = computeRequestDigest(requestSubject({ phase_instance: phaseInstance, step: "produce", status: "succeeded" }));
     expect(digestA).toBe(digestB);
-    expect(computeRequestDigest(requestSubject({ phase_instance: phaseInstance, verdict: "fail" }))).not.toBe(digestA);
+    expect(computeRequestDigest(requestSubject({ phase_instance: phaseInstance, step: "produce", status: "failed" }))).not.toBe(digestA);
   });
 
-  it("asserts rather than filters every excluded field name, at any depth", () => {
-    expect(EXCLUDED_REQUEST_DIGEST_FIELDS).toEqual(expect.arrayContaining([
-      "intent_id", "expected_revision", "timestamp", "attempt", "connection_id",
-    ]));
-    for (const field of EXCLUDED_REQUEST_DIGEST_FIELDS) {
-      expect(() => computeRequestDigest(requestSubject({ [field]: "x" }))).toThrow(/excluded request-digest field/u);
-      expect(() => computeRequestDigest(requestSubject({ nested: { [field]: "x" } }))).toThrow(/excluded request-digest field/u);
-      expect(() => computeRequestDigest(requestSubject({ items: [{ [field]: "x" }] }))).toThrow(/excluded request-digest field/u);
+  it("rejects every field outside the closed tool selector", () => {
+    const valid = { phase_instance: phaseInstance, step: "produce", status: "succeeded" } as const;
+    for (const field of ["intent_id", "expected_revision", "timestamp", "attempt", "connection_id", "retry_reason"]) {
+      expect(() => computeRequestDigest(requestSubject({ ...valid, [field]: "x" } as StateOperationFields)))
+        .toThrow(/contain exactly/u);
     }
   });
 });
@@ -170,16 +253,16 @@ const withGetter = <T extends object>(source: T, key: keyof T & string, values: 
 
 describe("split-observation defence", () => {
   it("rejects a getter-backed operation_fields instead of digesting a smuggled excluded field", () => {
-    const smuggler = withGetter(requestSubject({ verdict: "pass" }), "operation_fields", [
-      { safe: 1 },
-      { intent_id: "smuggled" },
+    const smuggler = withGetter(requestSubject({ phase_instance: phaseInstance, step: "produce", status: "succeeded" }), "operation_fields", [
+      { phase_instance: phaseInstance, step: "produce", status: "succeeded" },
+      { phase_instance: phaseInstance, step: "produce", status: "failed" },
     ]);
     expect(() => computeRequestDigest(smuggler)).toThrow(/accessor properties are not JSON values/u);
   });
 
   it("rejects a getter nested inside operation_fields", () => {
-    const fields = withGetter({ nested: { safe: 1 } }, "nested", [{ safe: 1 }, { intent_id: "smuggled" }]);
-    expect(() => computeRequestDigest(requestSubject(fields as PlainJsonObject)))
+    const fields = withGetter({ phase_instance: phaseInstance, step: "produce", status: "succeeded" } as const, "status", ["succeeded", "failed"]);
+    expect(() => computeRequestDigest(requestSubject(fields)))
       .toThrow(/accessor properties are not JSON values/u);
   });
 
@@ -205,7 +288,7 @@ describe("split-observation defence", () => {
     const fingerprints = [computeInputFingerprint(subject), computeInputFingerprint(subject), computeInputFingerprint(subject)];
     expect(new Set(fingerprints).size).toBe(1);
 
-    const request = requestSubject({ phase_instance: phaseInstance, verdict: "pass" });
+    const request = requestSubject({ phase_instance: phaseInstance, step: "produce", status: "succeeded" });
     const digests = [computeRequestDigest(request), computeRequestDigest(request), computeRequestDigest(request)];
     expect(new Set(digests).size).toBe(1);
   });

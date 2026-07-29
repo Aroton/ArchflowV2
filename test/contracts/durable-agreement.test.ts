@@ -79,6 +79,7 @@ const ALL_SCHEMAS: ReadonlyMap<string, JsonObject> = new Map(
 const NEW_SCHEMA_STEMS = [
   "durable-primitives",
   "task-state",
+  "intent-receipt",
   "maintenance-record",
   "task-initialization",
   "legacy-import-initialization",
@@ -92,6 +93,7 @@ const NEW_SCHEMA_STEMS = [
 const NEW_MODULES = [
   "durable-primitives.ts",
   "durable-state.ts",
+  "durable-intent.ts",
   "durable-maintenance.ts",
   "durable-task-initialization.ts",
   "durable-legacy-import.ts",
@@ -337,14 +339,14 @@ describe("D2 — the Zod-mirror half agrees with its JSON Schema authority", () 
 });
 
 /**
- * The other half of D2, asserted negatively. `task-state` and `maintenance-record` are the phase's
+ * The other half of D2, asserted negatively. `task-state`, `intent-receipt`, and `maintenance-record` are
  * only purely server-internal shapes and have exactly one shape model each — Phase 5's precedent,
  * where `release-manifest.schema.json` has JSON Schema authority and no TypeScript module at all.
  * A missing mirror and a forgotten mirror are indistinguishable without this.
  */
 describe("D2 — the no-mirror half has exactly one shape model", () => {
   it("neither server-internal module declares a Zod schema", () => {
-    for (const name of ["durable-state.ts", "durable-maintenance.ts"]) {
+    for (const name of ["durable-state.ts", "durable-intent.ts", "durable-maintenance.ts"]) {
       const text = source(name);
       expect(text, `${name} imports zod`).not.toMatch(/from\s+"zod"/u);
       expect(text, `${name} declares a Zod schema`).not.toMatch(/\bz\s*\./u);
@@ -352,14 +354,14 @@ describe("D2 — the no-mirror half has exactly one shape model", () => {
     }
   });
 
-  it("no Zod schema anywhere names a field of task-state, maintenance-record, or PreparedIntentRef", () => {
+  it("no Zod schema anywhere names a field of task-state, receipt, maintenance-record, or CommittedIntentRef", () => {
     // One distinctive, uniquely-owned field per unmirrored shape. A Zod mirror for any of them would
     // have to name at least one of these, so a module that both imports zod and mentions one is the
     // exact drift this asserts against.
     const unmirroredFields = [
-      "prepared_intent", // TaskStateV1
+      "committed_intent", // TaskStateV1
       "reachability_proof_digest", // MaintenanceRecordV1
-      "prior_revision", // PreparedIntentRef
+      "prepared_state_digest", // IntentReceiptV1
     ] as const;
 
     // D21 makes the other task-state reference shapes mirrored Phase 8 authorities.
@@ -457,7 +459,7 @@ const DEF_INVENTORY: ReadonlyArray<readonly [string, readonly string[]]> = [
       "approvalRef",
       "waiverRef",
       "openGateRef",
-      "preparedIntentRef",
+      "committedIntentRef",
       "adoptedCheckpointRef",
     ],
   ],
@@ -520,11 +522,11 @@ describe("the pinned $def inventory resolves", () => {
   });
 });
 
-describe("registry invariants after chunk 8", () => {
-  it("SCHEMA_IDS holds 34 entries in exact bijection with the schema directory", () => {
-    expect(Object.keys(SCHEMA_IDS)).toHaveLength(34);
-    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(34);
-    expect(schemaFileNames()).toHaveLength(34);
+describe("registry invariants after phase 9 receipt registration", () => {
+  it("SCHEMA_IDS holds 35 entries in exact bijection with the schema directory", () => {
+    expect(Object.keys(SCHEMA_IDS)).toHaveLength(35);
+    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(35);
+    expect(schemaFileNames()).toHaveLength(35);
 
     const idsInFiles = [...ALL_SCHEMAS.values()].map((document) => document.$id as string).sort();
     expect(idsInFiles).toEqual([...Object.values(SCHEMA_IDS)].sort());
@@ -534,6 +536,7 @@ describe("registry invariants after chunk 8", () => {
     const pinned = {
       durablePrimitives: "durable-primitives",
       taskState: "task-state",
+      intentReceipt: "intent-receipt",
       maintenanceRecord: "maintenance-record",
       taskInitialization: "task-initialization",
       legacyImportInitialization: "legacy-import-initialization",
@@ -650,7 +653,9 @@ describe("the phase's exclusions hold", () => {
       }
     };
     for (const [stem, document] of ALL_SCHEMAS) walk(document, stem);
-    expect(nullNodes).toEqual([]);
+    // Optional durable fields still use omission. The receipt's generic PlainJson outcome is the
+    // one value position where JSON null is data rather than an absence marker.
+    expect(nullNodes).toEqual(["intent-receipt/$defs/plainJson/anyOf/0/type"]);
   });
 
   it("no new module uses .nullable() or z.null", () => {

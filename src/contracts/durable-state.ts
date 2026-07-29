@@ -32,7 +32,7 @@ export type TerminalState = (typeof TERMINAL_STATES)[number];
  * `task-state.schema.json` owns each `$def`. They were briefly moved into `durable-primitives`
  * when a *mirrored* `ManualCheckpointV1` also consumed them and needed a pinned Zod name to
  * compose. The Phase 8 split removed that second consumer, so each is now consumed by exactly one
- * unmirrored root — the same condition under which `PreparedIntentRef` and `MaintenanceDeletion`
+ * unmirrored root — the same condition under which `CommittedIntentRef` and `MaintenanceDeletion`
  * already stay where they are. Phase 8 reaches them by `$ref` and authors its own mirrors then.
  * The reason is recorded so they are not moved back on the strength of the retired rationale.
  *
@@ -84,11 +84,16 @@ export type WaiverRef = {
   readonly granted_at_revision: SafeInteger;
 };
 
-export type PreparedIntentRef = {
+export type CommittedIntentRef = {
   readonly intent_id: PathSafeId;
   readonly request_digest: Sha256Digest;
-  /** `>= 1` (D8). */
+  readonly receipt_digest: Sha256Digest;
+  readonly outcome_digest: Sha256Digest;
+  /** `>= 0`; initialization may commit from the synthetic predecessor revision 0. */
   readonly prior_revision: SafeInteger;
+  /** `>= 1`. */
+  readonly resulting_revision: SafeInteger;
+  readonly result_id: SafeId;
 };
 
 export type AdoptedCheckpointRef = {
@@ -106,9 +111,9 @@ export type AdoptedCheckpointRef = {
  * every one of them, one field at a time.
  *
  * **There is deliberately no recorded blocking reason (D13).** REQ-14's blocking reason is a
- * *function* of `open_gate`, `terminal`, `prepared_intent`, and attempt exhaustion; recording it
- * would create a second source of truth that can disagree with the first. Phase 16 derives and
- * reports it. Do not add a field for it.
+ * *function* of `open_gate`, `terminal`, and attempt exhaustion; recording it would create a second
+ * source of truth that can disagree with the first. A receipt not yet referenced by state is
+ * deliberately invisible to state-only status until Phase 17 adds reconciliation-aware status.
  */
 export type TaskStateV1 = {
   readonly schema_version: "1";
@@ -146,7 +151,7 @@ export type TaskStateV1 = {
    * when this may be set, cleared, or superseded. Phase 7 owns only the shape.
    */
   readonly open_gate?: OpenGateRef;
-  readonly prepared_intent?: PreparedIntentRef;
+  readonly committed_intent?: CommittedIntentRef;
   readonly adopted_checkpoint?: AdoptedCheckpointRef;
   readonly terminal?: TerminalState;
 };

@@ -73,10 +73,14 @@
     "context_digest": "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
     "opened_at_revision": 7
   },
-  "prepared_intent": {
+  "committed_intent": {
     "intent_id": "intent-0001",
     "request_digest": "1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b",
-    "prior_revision": 6
+    "receipt_digest": "3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d",
+    "outcome_digest": "4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e",
+    "prior_revision": 6,
+    "resulting_revision": 7,
+    "result_id": "phase-impl-1:self_review:2"
   },
   "adopted_checkpoint": {
     "revision": 7,

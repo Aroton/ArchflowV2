@@ -2,7 +2,8 @@ import type { GitOid, GitTreeMode } from "./canonical.js";
 import { canonicalJsonDigest, sha256Bytes } from "./canonical.js";
 import type { ProjectResult } from "./errors.js";
 import { createProjectError } from "./errors.js";
-import type { SafeCode, SafeId, Sha256Digest } from "./evidence.js";
+import type { SafeId, Sha256Digest } from "./evidence.js";
+import type { AdjudicateInput, CommonToolInput, CounterReviewInput, GateInput, StateInput, ToolInput, WaiverInput } from "./mcp-tools.js";
 import type { RepositoryPathClaim } from "./path-claims.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson, type PlainJsonObject, type PlainJsonValue } from "./plain-json.js";
@@ -34,63 +35,55 @@ export interface InputFingerprintSubject {
   readonly declared_inputs: readonly DeclaredInputRef[];
 }
 
-export interface RequestDigestSubject {
+type RequestDigestCommon = {
   readonly schema_version: "1";
-  readonly tool: ToolName;
   readonly repository_identity_digest: Sha256Digest;
   readonly task_identity_digest: Sha256Digest;
-  readonly operation: SafeCode;
-  readonly operation_fields: PlainJsonObject;
   readonly input_fingerprint: Sha256Digest;
-}
+};
 
-/**
- * Names that may never appear in `operation_fields`. The exclusions are the security property of
- * the request digest, so they are asserted rather than filtered: silently dropping a field would
- * let a caller believe a value participated in the digest when it did not. The list covers the
- * receipt identifier, the optimistic-concurrency revision, connection and transport identifiers,
- * timestamps, attempt counters, timeout and cancellation state, and retry metadata.
- *
- * KNOWN LIMITATION, deliberately not closed in Phase 6. `operation_fields` is an open
- * `PlainJsonObject`, so this exact-name denylist cannot catch every spelling of a volatile value:
- * `started_at`, `finished_at`, `attempt_number`, `retry_reason`, and `timed_out` all pass and would
- * change the digest, letting two callers encode the same volatile state under different names and
- * disagree. The correct fix is a *closed* per-operation semantic-field schema, so that only
- * approved fields ever reach canonical hashing — an allowlist, not a denylist. That is not built
- * here because Phase 6 defines no operations and wires no handler: there is nothing yet to close
- * over, and an operation-field registry invented now would be speculative machinery. Padding this
- * list with further guessed spellings was also rejected — it trades a visible gap for a hidden one.
- * OWNER: the phase that defines the per-operation request field sets must replace this denylist
- * with closed schemas and delete this note.
- *
- * A retry after `SUPPLEMENTAL_REVIEW_REQUIRED` therefore reuses the same request digest with a
- * refreshed `expected_revision`.
- */
-export const EXCLUDED_REQUEST_DIGEST_FIELDS: readonly string[] = Object.freeze([
-  "intent_id",
-  "expected_revision",
-  "observed_revision",
-  "connection_id",
-  "invocation_id",
-  "transport_request_id",
-  "request_id",
-  "session_id",
-  "client_id",
-  "timestamp",
-  "created_at",
-  "updated_at",
-  "received_at",
-  "attempt",
-  "attempt_count",
-  "retry_count",
-  "retry_after_ms",
-  "timeout_ms",
-  "deadline_ms",
-  "cancelled",
-  "cancellation_reason",
-]);
+export type RequestDigestSubject = RequestDigestCommon & ({
+  readonly tool: "archflow_state";
+  readonly operation: "record-state-boundary";
+  readonly operation_fields: Pick<StateInput, "phase_instance" | "step" | "status">;
+} | {
+  readonly tool: "archflow_counter_review";
+  readonly operation: "counter-review";
+  readonly operation_fields: Pick<CounterReviewInput, "artifact_path" | "rubric">;
+} | {
+  readonly tool: "archflow_adjudicate";
+  readonly operation: "adjudicate";
+  readonly operation_fields: Pick<AdjudicateInput, "artifact_path" | "upstream_paths">;
+} | {
+  readonly tool: "archflow_gate";
+  readonly operation: "gate";
+  readonly operation_fields: Pick<GateInput, "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "supersedes" | "kind" | "context">;
+} | {
+  readonly tool: "archflow_waiver";
+  readonly operation: "waiver";
+  readonly operation_fields: Pick<WaiverInput, "origin" | "rationale">;
+});
 
-const EXCLUDED_FIELD_SET = new Set(EXCLUDED_REQUEST_DIGEST_FIELDS);
+type SelectorKeys = {
+  readonly archflow_state: "phase_instance" | "step" | "status";
+  readonly archflow_counter_review: "artifact_path" | "rubric";
+  readonly archflow_adjudicate: "artifact_path" | "upstream_paths";
+  readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "supersedes" | "kind" | "context";
+  readonly archflow_waiver: "origin" | "rationale";
+};
+type ExactSelectorCoverage = {
+  readonly [K in ToolName]: Exclude<keyof ToolInput<K>, keyof CommonToolInput> extends SelectorKeys[K]
+    ? Exclude<SelectorKeys[K], Exclude<keyof ToolInput<K>, keyof CommonToolInput>> extends never ? true : never
+    : never;
+};
+const exactSelectorCoverage: ExactSelectorCoverage = {
+  archflow_state: true,
+  archflow_counter_review: true,
+  archflow_adjudicate: true,
+  archflow_gate: true,
+  archflow_waiver: true,
+};
+void exactSelectorCoverage;
 
 /**
  * Takes the one snapshot every later step reads.
@@ -169,17 +162,61 @@ export function computeInputFingerprint(subject: InputFingerprintSubject): Sha25
   });
 }
 
-function assertNoExcludedFields(value: PlainJsonValue, path: string): void {
-  if (Array.isArray(value)) {
-    (value as readonly PlainJsonValue[]).forEach((entry, index) => { assertNoExcludedFields(entry, `${path}[${String(index)}]`); });
-    return;
+const exactFields = (value: object, expected: readonly string[]): void => {
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
+    throw new TypeError(`operation_fields must contain exactly ${wanted.join(", ")}`);
   }
-  if (value === null || typeof value !== "object") return;
-  for (const [key, entry] of Object.entries(value as PlainJsonObject)) {
-    if (EXCLUDED_FIELD_SET.has(key)) {
-      throw new TypeError(`operation_fields must not contain the excluded request-digest field ${JSON.stringify(key)} at ${path}`);
+};
+
+function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
+  switch (subject.tool) {
+    case "archflow_state": {
+      const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_state" }>).operation_fields;
+      if (subject.operation !== "record-state-boundary") throw new TypeError("invalid archflow_state operation");
+      exactFields(fields, ["phase_instance", "step", "status"]);
+      return { phase_instance: fields.phase_instance, step: fields.step, status: fields.status };
     }
-    assertNoExcludedFields(entry, `${path}.${key}`);
+    case "archflow_counter_review": {
+      const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_counter_review" }>).operation_fields;
+      if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
+      exactFields(fields, ["artifact_path", "rubric"]);
+      return { artifact_path: fields.artifact_path, rubric: fields.rubric as unknown as PlainJsonValue };
+    }
+    case "archflow_adjudicate": {
+      const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_adjudicate" }>).operation_fields;
+      if (subject.operation !== "adjudicate") throw new TypeError("invalid archflow_adjudicate operation");
+      exactFields(fields, ["artifact_path", "upstream_paths"]);
+      return { artifact_path: fields.artifact_path, upstream_paths: fields.upstream_paths };
+    }
+    case "archflow_gate": {
+      const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_gate" }>).operation_fields;
+      if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
+      const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context"];
+      if (fields.supersedes !== undefined) expected.push("supersedes");
+      exactFields(fields, expected);
+      const selected = {
+        phase_instance: fields.phase_instance,
+        summary: fields.summary,
+        subject_digest: fields.subject_digest,
+        current_evidence: fields.current_evidence as unknown as PlainJsonValue,
+        kind: fields.kind,
+        context: fields.context as unknown as PlainJsonValue,
+        ...(fields.supersedes === undefined ? {} : { supersedes: fields.supersedes as unknown as PlainJsonValue }),
+      } satisfies PlainJsonObject;
+      return selected as PlainJsonObject;
+    }
+    case "archflow_waiver": {
+      const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_waiver" }>).operation_fields;
+      if (subject.operation !== "waiver") throw new TypeError("invalid archflow_waiver operation");
+      exactFields(fields, ["origin", "rationale"]);
+      return { origin: fields.origin as unknown as PlainJsonValue, rationale: fields.rationale };
+    }
+    default: {
+      const exhaustive: never = subject;
+      throw new TypeError(`unknown request tool ${String((exhaustive as { tool?: unknown }).tool)}`);
+    }
   }
 }
 
@@ -191,14 +228,14 @@ function assertNoExcludedFields(value: PlainJsonValue, path: string): void {
  */
 export function computeRequestDigest(subject: RequestDigestSubject): Sha256Digest {
   const snapshot = materialize(subject, "request digest subject");
-  assertNoExcludedFields(snapshot.operation_fields, "operation_fields");
+  const operationFields = closedOperationFields(snapshot);
   return canonicalJsonDigest({
     schema_version: snapshot.schema_version,
     tool: snapshot.tool,
     repository_identity_digest: snapshot.repository_identity_digest,
     task_identity_digest: snapshot.task_identity_digest,
     operation: snapshot.operation,
-    operation_fields: snapshot.operation_fields,
+    operation_fields: operationFields,
     input_fingerprint: snapshot.input_fingerprint,
   });
 }

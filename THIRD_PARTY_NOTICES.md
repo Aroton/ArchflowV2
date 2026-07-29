@@ -116,6 +116,7 @@ This inventory is generated from and checked against `package-lock.json`. Option
 | `require-from-string@2.0.2` | `MIT` |
 | `rollup@4.62.3` | `MIT` |
 | `siginfo@2.0.0` | `ISC` |
+| `signal-exit@4.1.0` | `ISC` |
 | `source-map-js@1.2.1` | `BSD-3-Clause` |
 | `stackback@0.0.2` | `MIT` |
 | `std-env@4.2.0` | `MIT` |
@@ -128,6 +129,7 @@ This inventory is generated from and checked against `package-lock.json`. Option
 | `vite@7.3.6` | `MIT` |
 | `vitest@4.1.10` | `MIT` |
 | `why-is-node-running@2.3.0` | `MIT` |
+| `write-file-atomic@8.0.0` | `ISC` |
 | `yaml@2.9.0` | `ISC` |
 | `zod@4.4.3` | `MIT` |
 

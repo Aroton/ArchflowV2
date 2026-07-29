@@ -20,6 +20,35 @@ describe("correlated MCP tool contracts", () => {
       expect(definition.result_schema_id).toBe(`https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/result`);
     }
   });
+  it("detaches and recursively freezes every nested parsed-call semantic", () => {
+    const rubricSource = { schema_version: "1", kind: "implementation", mode: "adversarial", criteria: [{ id: "paths", text: "Check paths", blocking: true }] };
+    const counterSource = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, artifact_path: "phases/2/result.md", rubric: rubricSource };
+    const counter = parseToolCall("archflow_counter_review", counterSource);
+    rubricSource.criteria[0]!.text = "mutated";
+    expect(counter.input.rubric.criteria[0]!.text).toBe("Check paths");
+    expect(Object.isFrozen(counter.input.rubric.criteria)).toBe(true);
+    expect(Object.isFrozen(counter.input.rubric.criteria[0])).toBe(true);
+
+    const upstreamSource = ["prd.md", "design.md"];
+    const adjudicate = parseToolCall("archflow_adjudicate", { schema_version: "1", task_id: "task-1", intent_id: "intent-2", expected_revision: 0, input_fingerprint: digest, artifact_path: "phases/2/result.md", upstream_paths: upstreamSource });
+    upstreamSource[0] = "mutated.md";
+    expect(adjudicate.input.upstream_paths).toEqual(["prd.md", "design.md"]);
+    expect(Object.isFrozen(adjudicate.input.upstream_paths)).toBe(true);
+
+    const originSource = { origin_gate_id: "gate-1", origin_decision_digest: "1".repeat(64), origin_context_digest: "2".repeat(64), task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), rule: { rule_id: "Rule:1", rule_version: 1 }, scope: { operation: "review-trigger", boundary: "subject" } };
+    const waiver = parseToolCall("archflow_waiver", { schema_version: "1", task_id: "task-1", intent_id: "intent-3", expected_revision: 0, input_fingerprint: digest, origin: originSource, rationale: "Needed" });
+    originSource.rule.rule_version = 2;
+    expect(waiver.input.origin.rule.rule_version).toBe(1);
+    expect(Object.isFrozen(waiver.input.origin.rule)).toBe(true);
+    expect(Object.isFrozen(waiver.input.origin.scope)).toBe(true);
+
+    const self = { role: "self-review", evidence_digest: "5".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" };
+    const counterSlot = { role: "counter-review", evidence_digest: "6".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
+    const gate = parseToolCall("archflow_gate", { schema_version: "1", task_id: "task-1", intent_id: "intent-4", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: "7".repeat(64), current_evidence: { set_digest: "8".repeat(64), slots: [self, counterSlot] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } });
+    expect(Object.isFrozen(gate.input.current_evidence.slots)).toBe(true);
+    expect(Object.isFrozen(gate.input.current_evidence.slots[0])).toBe(true);
+    expect(Object.isFrozen(gate.input.context)).toBe(true);
+  });
   it("rejects state artifacts and checks direct request/result equalities", () => {
     expect(() => parseToolCall("archflow_state", { ...stateInput, artifact: null })).toThrow();
     const call = bindParsedToolCallRequest(parseToolCall("archflow_state", stateInput), parseSha256Digest("b".repeat(64)));

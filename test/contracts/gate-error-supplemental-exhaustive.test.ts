@@ -131,7 +131,7 @@ describe("exhaustive gate, error, and supplemental authority", () => {
     expect(() => parseGateContract(wrongAuthority)).toThrow();
   });
 
-  it("exercises all 56 exact error rows and rejects every correlated-field mutation", () => {
+  it("exercises all 57 exact error rows and rejects every correlated-field mutation", () => {
     const roots = [projectErrorSchema as unknown as JsonObject, protocolErrorSchema as unknown as JsonObject] as const;
     const exercisedCodes = new Set<string>();
     let exercised = 0;
@@ -162,7 +162,7 @@ describe("exhaustive gate, error, and supplemental authority", () => {
         exercised += 1;
       }
     }
-    expect(exercised).toBe(56);
+    expect(exercised).toBe(57);
     expect(exercisedCodes).toEqual(new Set([...Object.keys(PROJECT_ERROR_DEFINITIONS), ...Object.keys(PROTOCOL_ERROR_DEFINITIONS)]));
   });
 

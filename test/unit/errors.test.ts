@@ -6,7 +6,7 @@ const D = "a".repeat(64);
 
 describe("error registries", () => {
   it("are exhaustive, separate, and recursively immutable at definition boundaries", () => {
-    expect(Object.keys(PROJECT_ERROR_DEFINITIONS)).toHaveLength(52);
+    expect(Object.keys(PROJECT_ERROR_DEFINITIONS)).toHaveLength(53);
     expect(Object.keys(PROTOCOL_ERROR_DEFINITIONS)).toEqual(["TOOL_NOT_FOUND", "TOOL_DISABLED", "UNSUPPORTED_PROTOCOL", "INITIALIZATION_REPEATED"]);
     expect(Object.keys(PROJECT_ERROR_DEFINITIONS).some((code) => Object.hasOwn(PROTOCOL_ERROR_DEFINITIONS, code))).toBe(false);
     expect(Object.isFrozen(PROJECT_ERROR_DEFINITIONS)).toBe(true);
@@ -22,6 +22,30 @@ describe("error registries", () => {
     expect(() => createProjectError("STATE_CONFLICT", { expected_revision: 2, observed_revision: 3, raw_exception: "secret" } as never)).toThrow();
     const reordered = { next_action: conflict.next_action, diagnostic: { parameters: { observed_revision: 3, expected_revision: 2 }, template_id: conflict.code }, retryable: conflict.retryable, owner: conflict.owner, code: conflict.code, schema_version: conflict.schema_version };
     expect(parseProjectError(reordered)).toBe(reordered);
+  });
+
+  it("pins the retired immutable intent outcome", () => {
+    const error = createProjectError("INTENT_NOT_CURRENT", {
+      intent_id: "intent-0001",
+      receipt_revision: 7,
+      current_revision: 9,
+    });
+    expect(error).toEqual({
+      schema_version: "1",
+      code: "INTENT_NOT_CURRENT",
+      owner: "intent",
+      retryable: false,
+      diagnostic: {
+        template_id: "INTENT_NOT_CURRENT",
+        parameters: { intent_id: "intent-0001", receipt_revision: 7, current_revision: 9 },
+      },
+      next_action: "inspect-current-state",
+    });
+    expect(() => createProjectError("INTENT_NOT_CURRENT", {
+      intent_id: "bad:intent",
+      receipt_revision: 7,
+      current_revision: 9,
+    })).toThrow();
   });
 
   it("keeps protocol diagnostics safe and distinct from project errors", () => {

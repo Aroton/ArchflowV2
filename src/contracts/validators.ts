@@ -2,7 +2,12 @@ import { isDeepStrictEqual } from "node:util";
 import { Ajv2020, type AnySchema, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 import * as formatsModule from "ajv-formats";
 import type { FormatsPlugin } from "ajv-formats";
+import type { IntentReceiptV1 } from "./durable-intent.js";
 import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
+import intentReceiptSchema from "./schemas/v1/intent-receipt.schema.json" with { type: "json" };
+import pathClaimSchema from "./schemas/v1/path-claim.schema.json" with { type: "json" };
+import primitivesSchema from "./schemas/v1/primitives.schema.json" with { type: "json" };
+import taskStateSchema from "./schemas/v1/task-state.schema.json" with { type: "json" };
 
 export interface JsonSchemaValidator<T> {
   readonly validate: ValidateFunction<T>;
@@ -295,6 +300,13 @@ export function createJsonSchemaValidator<T>(
   };
   return { validate, assert };
 }
+
+/** Compiled normative authority for the unmirrored server-internal receipt root. */
+export const intentReceiptV1Validator = createJsonSchemaValidator<IntentReceiptV1>(intentReceiptSchema, [
+  primitivesSchema,
+  pathClaimSchema,
+  taskStateSchema,
+]);
 
 export function assertValidJsonSchema<T>(
   validator: JsonSchemaValidator<T> | ValidateFunction<T>,

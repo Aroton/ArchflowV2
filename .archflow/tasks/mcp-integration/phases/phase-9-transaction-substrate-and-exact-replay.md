@@ -1,6 +1,6 @@
 # Phase 9: Transaction Substrate and Exact Replay
 
-**Status**: DESIGNED
+**Status**: IN PROGRESS
 **Task**: mcp-integration
 **Goal**: Establish the exact-once local transaction substrate so one task's prepared operation is committed once under races, crashes, retries, and config drift.
 **Requirements**: REQ-04, REQ-08, REQ-13, REQ-14, REQ-21, REQ-22, REQ-23, REQ-24, REQ-26

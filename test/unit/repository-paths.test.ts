@@ -36,6 +36,7 @@ import {
   classifyTaskPath,
   openResolved,
   resolveRepositoryPath,
+  resolveTaskRoot,
   resolveTaskPath,
   type ResolvedTaskPath,
 } from "../../src/repository/paths.js";
@@ -816,6 +817,16 @@ describe.skipIf(!hasGit)("openResolved — containment step 7", () => {
 // ---------------------------------------------------------------------------
 
 describe("path brands", () => {
+  it("mints the authentic task root through live containment", async () => {
+    const { root, runner } = await freshWorktree();
+    const result = await resolveTaskRoot({ runner, taskId: TASK_ID, context });
+    expect(result).toEqual({
+      schema_version: "1",
+      ok: true,
+      value: join(root, ".archflow", "tasks", TASK_ID),
+    });
+  });
+
   it("keeps the two claim frames and the resolved brand mutually unassignable", () => {
     const taskClaim = parseTaskPathClaim("state.json");
     const repositoryClaim = parseRepositoryPathClaim("state.json");

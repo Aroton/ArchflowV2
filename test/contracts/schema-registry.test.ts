@@ -34,6 +34,7 @@ const SCHEMA_FILES = {
   secretScanResult: "secret-scan-result",
   durablePrimitives: "durable-primitives",
   taskState: "task-state",
+  intentReceipt: "intent-receipt",
   maintenanceRecord: "maintenance-record",
   taskInitialization: "task-initialization",
   legacyImportInitialization: "legacy-import-initialization",
@@ -81,6 +82,7 @@ describe("SCHEMA_IDS registry", () => {
       "createTestVerifiedReferencedEvidence",
       "createTestCurrentReviewSetAuthority",
       "createTestResultExpectation",
+      "assertAuthenticParsedToolCall",
     ]));
   });
 });

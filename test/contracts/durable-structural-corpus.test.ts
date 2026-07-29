@@ -580,7 +580,7 @@ const POSITIVE_FIELDS: readonly { readonly shape: string; readonly path: string 
   { shape: "task-state", path: "open_gate.opened_at_revision" },
   { shape: "task-state", path: "waivers.0.rule_version" },
   { shape: "task-state", path: "waivers.0.granted_at_revision" },
-  { shape: "task-state", path: "prepared_intent.prior_revision" },
+  { shape: "task-state", path: "committed_intent.resulting_revision" },
   { shape: "maintenance-record", path: "performed_at_revision" },
   { shape: "snapshot-accounting", path: "measured_at_revision" },
   { shape: "task-state", path: "adopted_checkpoint.revision" },
@@ -706,7 +706,10 @@ describe("absence is omission, never null", () => {
       };
       walk(parsed, "");
     }
-    expect(offenders).toStrictEqual([]);
+    expect(offenders).toStrictEqual([
+      "intent-receipt.schema.json",
+      "intent-receipt.schema.json/$defs/plainJson/anyOf/0/type",
+    ]);
   });
 
   it("no durable-* module uses .nullable() or z.null", () => {
@@ -722,7 +725,7 @@ describe("absence is omission, never null", () => {
   });
 
   it("supplying null for an optional field is rejected", () => {
-    for (const path of ["open_gate", "prepared_intent", "terminal"]) {
+    for (const path of ["open_gate", "committed_intent", "terminal"]) {
       accepts(taskState, without(taskState.sample, path), `${path} omitted`);
       rejects(taskState, at(taskState.sample, path, () => null), `${path} null`);
     }

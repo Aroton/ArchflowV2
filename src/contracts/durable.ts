@@ -1,4 +1,5 @@
 import { canonicalJsonDigest, type CanonicalDocument } from "./canonical.js";
+import { isDeepStrictEqual } from "node:util";
 import {
   chainAnchor,
   chainHeadBreak,
@@ -10,6 +11,7 @@ import type { DocumentArtifactV1 } from "./durable-document.js";
 import type { ImplementationOutputV1 } from "./durable-implementation-output.js";
 import type { LegacyImportInitializationV1 } from "./durable-legacy-import.js";
 import type { MaintenanceRecordV1 } from "./durable-maintenance.js";
+import type { IntentReceiptV1 } from "./durable-intent.js";
 import type { TaskStateV1 } from "./durable-state.js";
 import type { TaskInitializationV1 } from "./durable-task-initialization.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "./errors.js";
@@ -20,7 +22,7 @@ import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
 /**
  * The phase's single cross-document semantic authority.
  *
- * **The subject has exactly three slots and this module claims nothing beyond them.** There is no
+ * **The subject has three independent durable slots plus one discriminated intent relation.** There is no
  * result-manifest, decision, approval, waiver, authority-link, or evidence slot, so no reference
  * target is resolved here: not `authoritative_results[*].result_digest`, not `approvals[*].gate_id`,
  * not `open_gate.gate_id`, not `waivers[*].gate_id`. Each has a named later owner (Phases 10 and 11).
@@ -45,7 +47,38 @@ export type DurableSemanticSubject = {
   readonly state?: CanonicalDocument<TaskStateV1>;
   readonly artifact?: CanonicalDocument<DurableArtifact>;
   readonly maintenance?: CanonicalDocument<MaintenanceRecordV1>;
+  readonly intent_relation?: DurableIntentRelation;
 };
+
+export type DurableIntentRelation =
+  | Readonly<{
+      mode: "prepared";
+      predecessor: CanonicalDocument<TaskStateV1>;
+      receipt: CanonicalDocument<IntentReceiptV1>;
+    }>
+  | Readonly<{
+      mode: "committed";
+      state: CanonicalDocument<TaskStateV1>;
+      receipt: CanonicalDocument<IntentReceiptV1>;
+    }>;
+
+export function createPreparedIntentSubject(
+  predecessor: CanonicalDocument<TaskStateV1>,
+  receipt: CanonicalDocument<IntentReceiptV1>
+): DurableSemanticSubject {
+  materialize<TaskStateV1>(predecessor, "prepared intent predecessor document");
+  materialize<IntentReceiptV1>(receipt, "prepared intent receipt document");
+  return Object.freeze({ intent_relation: Object.freeze({ mode: "prepared", predecessor, receipt }) });
+}
+
+export function createCommittedIntentSubject(
+  state: CanonicalDocument<TaskStateV1>,
+  receipt: CanonicalDocument<IntentReceiptV1>
+): DurableSemanticSubject {
+  materialize<TaskStateV1>(state, "committed intent state document");
+  materialize<IntentReceiptV1>(receipt, "committed intent receipt document");
+  return Object.freeze({ intent_relation: Object.freeze({ mode: "committed", state, receipt }) });
+}
 
 /**
  * Every `issue_code` this module can emit, transcribed from the pinned invariant table. Each is a
@@ -97,6 +130,29 @@ export const DURABLE_ISSUE_CODES = Object.freeze({
   /** 7f */ workflowDigestMismatch: "workflow-digest-mismatch",
   /** 7g */ constitutionDigestMismatch: "constitution-digest-mismatch",
   /** 7h */ policyBaseCommitMismatch: "policy-base-commit-mismatch",
+  /** 3 */ intentReceiptSelfDigestMismatch: "intent-receipt-self-digest-mismatch",
+  /** 4b */ intentReceiptOutcomeDigestMismatch: "intent-receipt-outcome-digest-mismatch",
+  /** 4b */ intentReceiptPreparedStateDigestMismatch: "intent-receipt-prepared-state-digest-mismatch",
+  /** 4b */ intentReceiptRevisionNotSuccessor: "intent-receipt-revision-not-successor",
+  /** 8a */ intentReceiptFutureRevision: "intent-receipt-future-revision",
+  /** 4b */ intentReceiptPreparedStateRevisionMismatch: "intent-receipt-prepared-state-revision-mismatch",
+  /** 4b */ intentReceiptPreparedStateCommittedIntentPresent: "intent-receipt-prepared-state-committed-intent-present",
+  /** 8a */ intentReceiptTaskMismatch: "intent-receipt-task-mismatch",
+  /** 8a */ intentReceiptRepositoryMismatch: "intent-receipt-repository-mismatch",
+  /** 8a */ intentReceiptInitializationMismatch: "intent-receipt-initialization-mismatch",
+  /** 8a */ intentReceiptConfigMismatch: "intent-receipt-config-mismatch",
+  /** 8a */ intentReceiptWorkflowMismatch: "intent-receipt-workflow-mismatch",
+  /** 8a */ intentReceiptConstitutionMismatch: "intent-receipt-constitution-mismatch",
+  /** 8a */ intentReceiptPolicyBaseMismatch: "intent-receipt-policy-base-mismatch",
+  /** 8a */ intentReceiptAdoptedCheckpointMismatch: "intent-receipt-adopted-checkpoint-mismatch",
+  /** 8b */ intentReceiptIntentMismatch: "intent-receipt-intent-mismatch",
+  /** 8b */ intentReceiptRequestMismatch: "intent-receipt-request-mismatch",
+  /** 8a */ intentReceiptInputFingerprintMismatch: "intent-receipt-input-fingerprint-mismatch",
+  /** 8b */ intentReceiptReferenceDigestMismatch: "intent-receipt-reference-digest-mismatch",
+  /** 8b */ intentReceiptReferenceOutcomeMismatch: "intent-receipt-reference-outcome-mismatch",
+  /** 8b */ intentReceiptReferenceRevisionMismatch: "intent-receipt-reference-revision-mismatch",
+  /** 8b */ intentReceiptReferenceResultMismatch: "intent-receipt-reference-result-mismatch",
+  /** 8b */ intentReceiptFinalStateMismatch: "intent-receipt-final-state-mismatch",
   /** 9a */ maintenanceTotalBytesMismatch: "maintenance-total-bytes-mismatch",
   /** 9b */ maintenanceRevisionAfterState: "maintenance-revision-after-state",
 } as const);
@@ -141,6 +197,17 @@ function ownDataField(document: unknown, field: "value" | "digest", label: strin
   return descriptor.value;
 }
 
+function ownEnumerableDataField(document: unknown, field: string, label: string): unknown {
+  const descriptor =
+    document === null || (typeof document !== "object" && typeof document !== "function")
+      ? undefined
+      : Object.getOwnPropertyDescriptor(document, field);
+  if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+    throw new TypeError(`${label}: ${field} must be an own enumerable data property`);
+  }
+  return descriptor.value;
+}
+
 type Materialized<T> = { readonly value: T; readonly digest: unknown };
 
 /**
@@ -175,6 +242,10 @@ function artifactInvalid(artifact: DurableArtifact, issue_code: IssueCode): Proj
 
 function maintenanceInvalid(maintenance: MaintenanceRecordV1, issue_code: IssueCode): ProjectError {
   return createProjectError("TASK_INVALID", { task_id: maintenance.task_id, issue_code });
+}
+
+function receiptInvalid(receipt: IntentReceiptV1, issue_code: IssueCode): ProjectError {
+  return createProjectError("TASK_INVALID", { task_id: receipt.task_id, issue_code });
 }
 
 function contractInvalid(issue_code: IssueCode): ProjectError {
@@ -233,6 +304,7 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   const stateDocument = ownDataSlot(subject, "state");
   const artifactDocument = ownDataSlot(subject, "artifact");
   const maintenanceDocument = ownDataSlot(subject, "maintenance");
+  const relationValue = ownDataSlot(subject, "intent_relation");
 
   const stateSlot =
     stateDocument === undefined ? undefined : materialize<TaskStateV1>(stateDocument, "durable state document");
@@ -245,9 +317,32 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
       ? undefined
       : materialize<MaintenanceRecordV1>(maintenanceDocument, "durable maintenance document");
 
+  let relation: { readonly mode: "prepared" | "committed"; readonly state: Materialized<TaskStateV1>; readonly receipt: Materialized<IntentReceiptV1> } | undefined;
+  if (relationValue !== undefined) {
+    const mode = ownEnumerableDataField(relationValue, "mode", "durable intent relation");
+    if (mode !== "prepared" && mode !== "committed") throw new TypeError("durable intent relation: invalid mode");
+    const expectedKeys = mode === "prepared" ? ["mode", "predecessor", "receipt"] : ["mode", "state", "receipt"];
+    if (!isDeepStrictEqual(Object.keys(relationValue as object).sort(), [...expectedKeys].sort())) {
+      throw new TypeError("durable intent relation: unexpected or missing slots");
+    }
+    const stateDocumentForRelation = ownEnumerableDataField(
+      relationValue,
+      mode === "prepared" ? "predecessor" : "state",
+      "durable intent relation"
+    );
+    const receiptDocument = ownEnumerableDataField(relationValue, "receipt", "durable intent relation");
+    relation = {
+      mode,
+      state: materialize<TaskStateV1>(stateDocumentForRelation, `${mode} intent state document`),
+      receipt: materialize<IntentReceiptV1>(receiptDocument, `${mode} intent receipt document`),
+    };
+  }
+
   const state = stateSlot?.value;
   const artifact = artifactSlot?.value;
   const maintenance = maintenanceSlot?.value;
+  const intentState = relation?.state.value;
+  const receipt = relation?.receipt.value;
 
   /*
    * Rank 2 — carriability, and it must precede every rank that may report under `STATE_INVALID`.
@@ -261,6 +356,9 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   if (state !== undefined && !decodable(state.phase_instance)) {
     return fail(contractInvalid(DURABLE_ISSUE_CODES.statePhaseInstanceUndecodable));
   }
+  if (intentState !== undefined && !decodable(intentState.phase_instance)) {
+    return fail(contractInvalid(DURABLE_ISSUE_CODES.statePhaseInstanceUndecodable));
+  }
 
   /* Rank 3 — self-digest agreement, per supplied document, in slot order. */
   if (state !== undefined && canonicalJsonDigest(state) !== stateSlot?.digest) {
@@ -271,6 +369,9 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   }
   if (maintenance !== undefined && canonicalJsonDigest(maintenance) !== maintenanceSlot?.digest) {
     return fail(maintenanceInvalid(maintenance, DURABLE_ISSUE_CODES.documentDigestMismatch));
+  }
+  if (receipt !== undefined && canonicalJsonDigest(receipt) !== relation?.receipt.digest) {
+    return fail(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptSelfDigestMismatch));
   }
 
   /*
@@ -336,6 +437,25 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   if (artifact !== undefined && artifact.artifact_kind === "implementation-output") {
     if (decodePhaseInstance(artifact.phase_instance).kind !== "phase-impl") {
       return fail(contractInvalid(DURABLE_ISSUE_CODES.implementationOutputPhaseKind));
+    }
+  }
+
+  /* Rank 4b — receipt-local relations, before every cross-document comparison. */
+  if (receipt !== undefined) {
+    if (canonicalJsonDigest(receipt.outcome) !== receipt.outcome_digest) {
+      return fail(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptOutcomeDigestMismatch));
+    }
+    if (canonicalJsonDigest(receipt.prepared_state) !== receipt.prepared_state_digest) {
+      return fail(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptPreparedStateDigestMismatch));
+    }
+    if (receipt.prior_revision === Number.MAX_SAFE_INTEGER || receipt.resulting_revision !== receipt.prior_revision + 1) {
+      return fail(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptRevisionNotSuccessor));
+    }
+    if (receipt.prepared_state.revision !== receipt.resulting_revision) {
+      return fail(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptPreparedStateRevisionMismatch));
+    }
+    if (receipt.prepared_state.committed_intent !== undefined) {
+      return fail(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptPreparedStateCommittedIntentPresent));
     }
   }
 
@@ -591,6 +711,88 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
       const expected: Sha256Digest = state.input_fingerprint;
       const observed: Sha256Digest = artifact.input_fingerprint;
       return fail(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: expected, observed_digest: observed }));
+    }
+  }
+
+  /* Rank 8a — receipt identity agrees with the prepared successor in either relation mode. */
+  if (relation !== undefined && receipt !== undefined && intentState !== undefined) {
+    if (receipt.task_id !== receipt.prepared_state.task_id) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptTaskMismatch));
+    }
+    if (receipt.repository_identity_digest !== receipt.prepared_state.repository_identity_digest) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptRepositoryMismatch));
+    }
+    if (receipt.input_fingerprint !== receipt.prepared_state.input_fingerprint) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptInputFingerprintMismatch));
+    }
+  }
+
+  /* Rank 8a — an uncommitted receipt must be the exact successor of its supplied predecessor. */
+  if (relation?.mode === "prepared" && receipt !== undefined && intentState !== undefined) {
+    const prepared = receipt.prepared_state;
+    if (receipt.prior_revision > intentState.revision) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptFutureRevision));
+    }
+    // The receipt is locally a successor, but it must also succeed this exact predecessor.
+    if (receipt.prior_revision < intentState.revision) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptRevisionNotSuccessor));
+    }
+    if (receipt.task_id !== intentState.task_id || prepared.task_id !== intentState.task_id) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptTaskMismatch));
+    }
+    if (
+      receipt.repository_identity_digest !== intentState.repository_identity_digest ||
+      prepared.repository_identity_digest !== intentState.repository_identity_digest
+    ) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptRepositoryMismatch));
+    }
+    if (prepared.initialization_digest !== intentState.initialization_digest) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptInitializationMismatch));
+    }
+    if (prepared.config_digest !== intentState.config_digest) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptConfigMismatch));
+    }
+    if (prepared.workflow_digest !== intentState.workflow_digest) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptWorkflowMismatch));
+    }
+    if (prepared.constitution_digest !== intentState.constitution_digest) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptConstitutionMismatch));
+    }
+    if (prepared.policy_base_commit !== intentState.policy_base_commit) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptPolicyBaseMismatch));
+    }
+    if (!isDeepStrictEqual(prepared.adopted_checkpoint, intentState.adopted_checkpoint)) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptAdoptedCheckpointMismatch));
+    }
+  }
+
+  /* Rank 8b — final state is prepared state plus only the kernel-derived committed binding. */
+  if (relation?.mode === "committed" && receipt !== undefined && intentState !== undefined) {
+    const reference = intentState.committed_intent;
+    if (reference === undefined || reference.intent_id !== receipt.intent_id) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptIntentMismatch));
+    }
+    if (reference.request_digest !== receipt.request_digest) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptRequestMismatch));
+    }
+    if (reference.receipt_digest !== canonicalJsonDigest(receipt)) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptReferenceDigestMismatch));
+    }
+    if (reference.outcome_digest !== receipt.outcome_digest) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptReferenceOutcomeMismatch));
+    }
+    if (
+      reference.prior_revision !== receipt.prior_revision ||
+      reference.resulting_revision !== receipt.resulting_revision
+    ) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptReferenceRevisionMismatch));
+    }
+    if (reference.result_id !== receipt.result_id) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptReferenceResultMismatch));
+    }
+    const expectedState: TaskStateV1 = { ...receipt.prepared_state, committed_intent: reference };
+    if (!isDeepStrictEqual(intentState, expectedState)) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptFinalStateMismatch));
     }
   }
 

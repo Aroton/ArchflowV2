@@ -1403,9 +1403,9 @@ describe("evidence-slot composition observations", () => {
 
 /* ----------------------------------------------------------------------- negative-space assertions */
 
-describe("the validator claims nothing its three-slot subject cannot receive", () => {
+describe("the validator claims nothing its durable subject cannot receive", () => {
   /**
-   * `DurableSemanticSubject` has exactly three slots and no result-manifest, decision, approval,
+   * `DurableSemanticSubject` has no result-manifest, decision, approval,
    * waiver, authority-link, or evidence slot, so there is no target to resolve any pointer against.
    * Each unresolved pointer has a named later owner: `authoritative_results[*].result_digest` is
    * Phase 10's; `approvals[*].gate_id`, `open_gate.gate_id`, and `waivers[*].gate_id` are Phase 11's.
@@ -1520,6 +1520,29 @@ describe("the pinned issue_code literals", () => {
       workflowDigestMismatch: "workflow-digest-mismatch",
       constitutionDigestMismatch: "constitution-digest-mismatch",
       policyBaseCommitMismatch: "policy-base-commit-mismatch",
+      intentReceiptSelfDigestMismatch: "intent-receipt-self-digest-mismatch",
+      intentReceiptOutcomeDigestMismatch: "intent-receipt-outcome-digest-mismatch",
+      intentReceiptPreparedStateDigestMismatch: "intent-receipt-prepared-state-digest-mismatch",
+      intentReceiptRevisionNotSuccessor: "intent-receipt-revision-not-successor",
+      intentReceiptFutureRevision: "intent-receipt-future-revision",
+      intentReceiptPreparedStateRevisionMismatch: "intent-receipt-prepared-state-revision-mismatch",
+      intentReceiptPreparedStateCommittedIntentPresent: "intent-receipt-prepared-state-committed-intent-present",
+      intentReceiptTaskMismatch: "intent-receipt-task-mismatch",
+      intentReceiptRepositoryMismatch: "intent-receipt-repository-mismatch",
+      intentReceiptInitializationMismatch: "intent-receipt-initialization-mismatch",
+      intentReceiptConfigMismatch: "intent-receipt-config-mismatch",
+      intentReceiptWorkflowMismatch: "intent-receipt-workflow-mismatch",
+      intentReceiptConstitutionMismatch: "intent-receipt-constitution-mismatch",
+      intentReceiptPolicyBaseMismatch: "intent-receipt-policy-base-mismatch",
+      intentReceiptAdoptedCheckpointMismatch: "intent-receipt-adopted-checkpoint-mismatch",
+      intentReceiptIntentMismatch: "intent-receipt-intent-mismatch",
+      intentReceiptRequestMismatch: "intent-receipt-request-mismatch",
+      intentReceiptInputFingerprintMismatch: "intent-receipt-input-fingerprint-mismatch",
+      intentReceiptReferenceDigestMismatch: "intent-receipt-reference-digest-mismatch",
+      intentReceiptReferenceOutcomeMismatch: "intent-receipt-reference-outcome-mismatch",
+      intentReceiptReferenceRevisionMismatch: "intent-receipt-reference-revision-mismatch",
+      intentReceiptReferenceResultMismatch: "intent-receipt-reference-result-mismatch",
+      intentReceiptFinalStateMismatch: "intent-receipt-final-state-mismatch",
       maintenanceTotalBytesMismatch: "maintenance-total-bytes-mismatch",
       maintenanceRevisionAfterState: "maintenance-revision-after-state",
     });
@@ -1527,7 +1550,7 @@ describe("the pinned issue_code literals", () => {
 
   it("are all SafeCode, and rank 8 has none", () => {
     for (const code of Object.values(DURABLE_ISSUE_CODES)) expect(code).toMatch(SAFE_CODE);
-    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(44);
+    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(67);
     expect(Object.values(DURABLE_ISSUE_CODES)).not.toContain("input-fingerprint-mismatch");
   });
 });

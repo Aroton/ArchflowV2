@@ -73,7 +73,7 @@ describe("task state contract", () => {
     }));
     await rejects((state) => ({
       ...state,
-      prepared_intent: { ...(state.prepared_intent as Record<string, unknown>), prior_revision: 0 },
+      committed_intent: { ...(state.committed_intent as Record<string, unknown>), resulting_revision: 0 },
     }));
     await rejects((state) => ({
       ...state,

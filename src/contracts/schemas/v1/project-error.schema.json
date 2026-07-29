@@ -1316,6 +1316,54 @@
         }
       ]
     },
+    "E_INTENT_NOT_CURRENT": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/errorBase"
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "INTENT_NOT_CURRENT"
+            },
+            "owner": {
+              "const": "intent"
+            },
+            "retryable": {
+              "const": false
+            },
+            "diagnostic": {
+              "properties": {
+                "template_id": {
+                  "const": "INTENT_NOT_CURRENT"
+                },
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["intent_id", "receipt_revision", "current_revision"],
+                  "properties": {
+                    "intent_id": {
+                      "$ref": "#/$defs/pathSafeId"
+                    },
+                    "receipt_revision": {
+                      "$ref": "#/$defs/integer"
+                    },
+                    "current_revision": {
+                      "$ref": "#/$defs/integer"
+                    }
+                  }
+                }
+              },
+              "type": "object"
+            },
+            "next_action": {
+              "const": "inspect-current-state"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
     "E_SNAPSHOT_LIMIT": {
       "allOf": [
         {
@@ -2585,6 +2633,9 @@
     },
     {
       "$ref": "#/$defs/E_INTENT_MISMATCH"
+    },
+    {
+      "$ref": "#/$defs/E_INTENT_NOT_CURRENT"
     },
     {
       "$ref": "#/$defs/E_SNAPSHOT_LIMIT"

@@ -27,6 +27,14 @@ The package remains explicitly beta and warns that breaking changes are possible
 
 Node `24.15.0` remains the functional package floor and lower CI matrix entry. Production and release verification should use the current Node 24 LTS security patch (`24.18.0` at this review); the separately pinned `@types/node` patch need only remain compatible with the Node 24 major.
 
+## Phase 9 persistence admission — 2026-07-29
+
+`write-file-atomic@8.0.0` is the exact runtime pin for atomic replacement of `state.json`. Its reviewed lock-resolved graph adds only `signal-exit@4.1.0`; both packages declare ISC. Neither package distributes a standalone `NOTICE` or `THIRD_PARTY` file, so their SPDX entries require no retained notice asset.
+
+Version 8 is CommonJS and does not ship TypeScript declarations. The repository therefore owns a narrow local declaration for only the promise API used by the state adapter; do not add the stale community typings for an earlier major. Upgrades must re-review the implementation, local declaration, Node engine, temporary-file cleanup behavior, `fsync` default, rename semantics, dependency edge, licenses, and standalone notices together.
+
+The root engine is `^24.15.0`: Node 24.15.0 remains the functional floor, and Node 25 is deliberately excluded. `write-file-atomic` provides temp-file `fsync` plus rename replacement and no-torn-file reader visibility; it does not establish newest-rename power-loss durability or replace the task-local writer lock.
+
 ## Upgrade procedure
 
 1. Review official registry/repository release and license metadata for each proposed direct update and its resolved graph.
@@ -35,4 +43,4 @@ Node `24.15.0` remains the functional package floor and lower CI matrix entry. P
 4. Run `npm ci`, `npm run typecheck`, `npm test`, `npm run test:contracts`, `npm run build:temp`, `npm run check:dependencies`, `npm run check:notices`, and `npm run test:notices-policy` on both supported exact Node versions.
 5. Review schema, serialized-format, CLI, and protocol migrations before accepting the regenerated lock.
 
-The dependency policy rejects direct ranges, packages outside the phase allowlist, missing/unreviewed licenses, copyleft licenses, Lightning CSS, and dependencies reserved for later phases. Any policy expansion requires explicit review rather than weakening the checker as part of an unrelated update.
+The dependency policy rejects direct ranges, packages outside the phase allowlist, missing/unreviewed licenses, copyleft licenses, Lightning CSS, and dependencies reserved for later phases. `proper-lockfile` remains prohibited because Phase 9 uses the reviewed core `mkdir` lock with no stale takeover. Any policy expansion requires explicit review rather than weakening the checker as part of an unrelated update.

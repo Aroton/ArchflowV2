@@ -66,9 +66,34 @@ function inputFor<K extends ToolName>(name: K, value: unknown): ToolInput<K> {
   if (name === "archflow_waiver") { const v = parsed as z.infer<typeof waiverInput>; if (v.task_id !== v.origin.task_id) throw new TypeError("waiver task_id must match origin task_id"); }
   return parsed as ToolInput<K>;
 }
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object") {
+    for (const nested of Object.values(value)) deepFreeze(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
 export type ParsedToolInput<K extends keyof ToolContractMap> = ToolInput<K> & { readonly [parsedToolInputBrand]: K };
 export type ParsedToolCall<K extends ToolName = ToolName> = { readonly [P in K]: Readonly<{ name: P; input: ParsedToolInput<P> }> }[K];
-export function parseToolCall<K extends ToolName>(name: K, value: unknown): Extract<ParsedToolCall, { name: K }> { if (!(TOOL_NAMES as readonly string[]).includes(name)) throw new TypeError("unknown tool"); assertPlainJson(value, `${name} input`); const call = Object.freeze({ name, input: Object.freeze({ ...inputFor(name, value), [parsedToolInputBrand]: name }) }) as unknown as Extract<ParsedToolCall, { name: K }>; parsedCalls.add(call); return call; }
+/** Internal authenticity assertion for state/repository kernels; deliberately absent from the public barrel. */
+export function assertAuthenticParsedToolCall(value: unknown): asserts value is ParsedToolCall {
+  if (value === null || typeof value !== "object" || !parsedCalls.has(value)) {
+    throw new TypeError("an authentic parsed tool call is required");
+  }
+}
+export function parseToolCall<K extends ToolName>(name: K, value: unknown): Extract<ParsedToolCall, { name: K }> {
+  if (!(TOOL_NAMES as readonly string[]).includes(name)) throw new TypeError("unknown tool");
+  assertPlainJson(value, `${name} input`);
+  const parsed = inputFor(name, value);
+  assertPlainJson(parsed, `${name} parsed input`);
+  const input = structuredClone(parsed) as ToolInput<K> & { [parsedToolInputBrand]?: K };
+  for (const nested of Object.values(input)) deepFreeze(nested);
+  Object.defineProperty(input, parsedToolInputBrand, { value: name, enumerable: false, writable: false, configurable: false });
+  Object.freeze(input);
+  const call = Object.freeze({ name, input }) as unknown as Extract<ParsedToolCall, { name: K }>;
+  parsedCalls.add(call);
+  return call;
+}
 export type RequestIdentifiedToolCall<K extends ToolName = ToolName> = ParsedToolCall<K> & { readonly request_digest: Sha256Digest };
 export function bindParsedToolCallRequest<K extends ToolName>(call: Extract<ParsedToolCall, { name: K }>, requestDigest: Sha256Digest): Extract<RequestIdentifiedToolCall, { name: K }> { if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required"); digest.parse(requestDigest); requestDigests.set(call, requestDigest); return call as Extract<RequestIdentifiedToolCall, { name: K }>; }
 

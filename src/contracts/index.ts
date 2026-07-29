@@ -25,6 +25,7 @@ export * from "./gates.js";
 export * from "./errors.js";
 export * from "./durable-primitives.js";
 export * from "./durable-state.js";
+export * from "./durable-intent.js";
 export * from "./durable-maintenance.js";
 export * from "./durable-task-initialization.js";
 export * from "./durable-legacy-import.js";

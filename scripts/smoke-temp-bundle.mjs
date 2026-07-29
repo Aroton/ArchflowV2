@@ -80,7 +80,7 @@ assert.throws(() => contracts.renderReviewEvidence(forgedReview), /qualified rev
 assert.throws(() => contracts.renderAdjudicationEvidence({ evidence_digest: digest, evidence: {}, authority: {} }), /qualified adjudication evidence/u);
 assert.throws(() => contracts.renderTriage({ schema_version: "1" }), /validated triage/u);
 
-assert.equal(Object.keys(contracts.PROJECT_ERROR_DEFINITIONS).length, 52);
+assert.equal(Object.keys(contracts.PROJECT_ERROR_DEFINITIONS).length, 53);
 assert.equal(Object.keys(contracts.PROTOCOL_ERROR_DEFINITIONS).length, 4);
 assert.equal(
   contracts.createProjectError("STATE_CONFLICT", { expected_revision: 1, observed_revision: 2 }).next_action,
@@ -116,6 +116,20 @@ assert.equal("createTestObservationCapability" in contracts, false);
 assert.equal("createTestAuthorityLink" in contracts, false);
 assert.equal("createTestVerifiedReferencedEvidence" in contracts, false);
 assert.equal("createTestCurrentReviewSetAuthority" in contracts, false);
+assert.equal(typeof contracts.parseIntentReceipt, "function");
+assert.equal(typeof contracts.intentReceiptDigest, "function");
+assert.equal(typeof contracts.intentOutcomeDigest, "function");
+for (const internalStateCapability of [
+  "AtomicReplaceError",
+  "createAtomicWriter",
+  "TaskLockError",
+  "createTaskLock",
+  "createInternalTransactionAuthority",
+  "createInternalInputFingerprintResolver",
+  "runStateTransaction"
+]) {
+  assert.equal(internalStateCapability in contracts, false);
+}
 
 const runtime = spawnSync(process.execPath, [runtimeBundle], {
   encoding: "utf8",

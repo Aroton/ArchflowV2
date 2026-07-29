@@ -52,31 +52,69 @@ describe("the contracts / repository directional boundary", () => {
     );
     expect(schema).toContain('"changed_path_class": { "const": "task-branch-constitution" }');
   });
+
+  it("exports the durable intent contract without exposing internal state filesystem capabilities", () => {
+    const indexPath = join(repositoryRoot, "src", "contracts", "index.ts");
+    const source = readFileSync(indexPath, "utf8");
+    const stateTargets = [...source.matchAll(IMPORT_SPECIFIER)]
+      .map((match) => match.groups?.["target"] ?? "")
+      .filter((target) => /(?:^|\/)state(?:\/|$)/u.test(target));
+
+    expect(source).toContain('export * from "./durable-intent.js";');
+    expect(stateTargets).toEqual([]);
+    for (const internalCapability of [
+      "AtomicWriter",
+      "AtomicReplaceError",
+      "createAtomicWriter",
+      "TaskLock",
+      "TaskLockError",
+      "createTaskLock",
+      "TransactionAuthority",
+      "createInternalTransactionAuthority",
+      "InputFingerprintResolver",
+      "createInternalInputFingerprintResolver",
+      "runStateTransaction",
+    ]) {
+      expect(source).not.toContain(internalCapability);
+    }
+  });
 });
 
 /**
- * `package.json` is deliberately untouched by this phase: the Vitest include pattern already covers
- * every test file under `test/`, so bare `npm test` — the fourth step of `npm run check` and of CI —
- * picks the integration suite up automatically, and adding a `test:repository` script wired into
- * `check` would run the phase's most expensive suite twice. These two lists are the pre-phase state,
- * pinned so that "unchanged" is enforced rather than asserted in prose.
+ * The Vitest include pattern already covers every test file under `test/`, so bare `npm test` — the
+ * fourth step of `npm run check` and of CI — picks the integration suite up automatically. Phase 9
+ * admits one persistence dependency and narrows the engine while leaving the script surface fixed.
  */
 describe("package.json dependencies and scripts", () => {
   const manifest = JSON.parse(
     readFileSync(join(repositoryRoot, "package.json"), "utf8")
   ) as Readonly<{
     dependencies: Readonly<Record<string, string>>;
+    engines: Readonly<{ node: string }>;
     scripts: Readonly<Record<string, string>>;
   }>;
 
-  it("adds no runtime dependency", () => {
+  it("admits only the exact Phase 9 runtime baseline and Node 24 engine line", () => {
     expect(manifest.dependencies).toEqual({
       "@modelcontextprotocol/server": "2.0.0",
       ajv: "8.20.0",
       "ajv-formats": "3.0.1",
+      "write-file-atomic": "8.0.0",
       yaml: "2.9.0",
       zod: "4.4.3",
     });
+    expect(manifest.engines.node).toBe("^24.15.0");
+    for (const prohibited of [
+      "@anthropic-ai/sandbox-runtime",
+      "@modelcontextprotocol/client",
+      "@modelcontextprotocol/express",
+      "@modelcontextprotocol/hono",
+      "@modelcontextprotocol/node",
+      "execa",
+      "proper-lockfile",
+    ]) {
+      expect(manifest.dependencies).not.toHaveProperty(prohibited);
+    }
   });
 
   it("adds no script, and leaves `check` running the test suite exactly once", () => {

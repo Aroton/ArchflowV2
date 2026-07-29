@@ -428,6 +428,29 @@ export async function resolveTaskPath(options: {
 }
 
 /**
+ * Resolves the task directory itself through the same live containment authority used for files.
+ * This is an internal repository seam: callers cannot mint a task root by taking `dirname` and
+ * casting a resolved child path.
+ */
+export async function resolveTaskRoot(options: {
+  readonly runner: RootBoundGitRunner;
+  readonly taskId: TaskSlug;
+  readonly context: RepositoryOperationContext;
+}): Promise<ProjectResult<ResolvedTaskPath>> {
+  const { runner, taskId, context } = options;
+  const repositoryRelative = join(ARCHFLOW_TREE, "tasks", taskId);
+  const withinWorktree = await containedUnder(runner.location.worktreeRoot, repositoryRelative);
+  if (withinWorktree.kind === "io") return fail(ioError(context));
+  if (withinWorktree.kind === "escape") return fail(pathEscape(taskId, "task-state"));
+
+  const taskRoot = resolvePath(runner.location.worktreeRoot, repositoryRelative);
+  const self = await containedUnder(taskRoot, "");
+  if (self.kind === "io") return fail(ioError(context));
+  if (self.kind === "escape") return fail(taskScopeViolation(taskId, "task-state"));
+  return ok(self.absolute);
+}
+
+/**
  * Resolves a worktree-frame claim.
  *
  * `expectedClass: "task-branch-constitution"` is the documented narrowing described on

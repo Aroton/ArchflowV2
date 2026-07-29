@@ -4,6 +4,7 @@ const expectedRuntime = Object.freeze({
   "@modelcontextprotocol/server": "2.0.0",
   ajv: "8.20.0",
   "ajv-formats": "3.0.1",
+  "write-file-atomic": "8.0.0",
   yaml: "2.9.0",
   zod: "4.4.3"
 });
@@ -29,8 +30,7 @@ const prohibitedLaterPhasePackages = new Set([
   "@modelcontextprotocol/hono",
   "@modelcontextprotocol/node",
   "execa",
-  "proper-lockfile",
-  "write-file-atomic"
+  "proper-lockfile"
 ]);
 
 const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
@@ -53,8 +53,8 @@ function compareDirect(actual, expected, label) {
 if (packageJson.private !== true || packageJson.type !== "module") {
   failures.push("package.json must describe a private ESM package");
 }
-if (packageJson.engines?.node !== ">=24.15.0") {
-  failures.push("package.json must keep Node 24.15.0 as the functional runtime floor");
+if (packageJson.engines?.node !== "^24.15.0") {
+  failures.push("package.json must support only the Node 24 line from the 24.15.0 functional floor");
 }
 compareDirect(packageJson.dependencies, expectedRuntime, "runtime");
 compareDirect(packageJson.devDependencies, expectedDevelopment, "development");
@@ -68,8 +68,8 @@ if (lock.lockfileVersion !== 3 || lock.requires !== true) {
   failures.push("package-lock.json must be an npm lockfileVersion 3 exact lock");
 }
 const root = lock.packages?.[""];
-if (root?.engines?.node !== ">=24.15.0") {
-  failures.push("lockfile root must keep Node 24.15.0 as the functional runtime floor");
+if (root?.engines?.node !== "^24.15.0") {
+  failures.push("lockfile root must support only the Node 24 line from the 24.15.0 functional floor");
 }
 compareDirect(root?.dependencies, expectedRuntime, "lockfile root runtime");
 compareDirect(root?.devDependencies, expectedDevelopment, "lockfile root development");
@@ -115,6 +115,36 @@ for (const [path, expected] of Object.entries(expectedMcpRoots)) {
 const lockedServer = lock.packages?.["node_modules/@modelcontextprotocol/server"];
 if (lockedServer?.dependencies?.["@modelcontextprotocol/core"] !== "2.0.0") {
   failures.push("the exact MCP server root must lock exact @modelcontextprotocol/core@2.0.0");
+}
+
+const expectedPersistenceRoots = Object.freeze({
+  "node_modules/signal-exit": Object.freeze({
+    name: "signal-exit",
+    version: "4.1.0",
+    license: "ISC"
+  }),
+  "node_modules/write-file-atomic": Object.freeze({
+    name: "write-file-atomic",
+    version: "8.0.0",
+    license: "ISC"
+  })
+});
+for (const [path, expected] of Object.entries(expectedPersistenceRoots)) {
+  const metadata = lock.packages?.[path];
+  const actual = metadata === undefined
+    ? undefined
+    : {
+        name: packageNameFromPath(path, metadata),
+        version: metadata.version,
+        license: metadata.license
+      };
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    failures.push(`${path} must resolve exactly to ${expected.name}@${expected.version} with ${expected.license}`);
+  }
+}
+const lockedAtomicWriter = lock.packages?.["node_modules/write-file-atomic"];
+if (lockedAtomicWriter?.dependencies?.["signal-exit"] !== "^4.0.1") {
+  failures.push("write-file-atomic@8.0.0 must retain its reviewed signal-exit@^4.0.1 dependency edge");
 }
 
 for (const [path, metadata] of Object.entries(lock.packages ?? {})) {
