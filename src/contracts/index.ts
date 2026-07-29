@@ -30,6 +30,7 @@ export * from "./durable-task-initialization.js";
 export * from "./durable-legacy-import.js";
 export * from "./durable-document.js";
 export * from "./durable-implementation-output.js";
+export * from "./durable-checkpoint.js";
 export * from "./durable.js";
 export {
   TOOL_DEFINITIONS,

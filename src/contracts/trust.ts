@@ -134,7 +134,7 @@ export type ReviewEvidenceSlot =
   | Readonly<{ role: "gate-counter-review"; evidence_digest: Sha256Digest; assurance: "server-attested" | "degraded"; producer_family: ModelFamily; reviewer_family: ModelFamily; independence: "opposite-family"; gate_id: PathSafeId }>;
 export type RequiredReviewSlots = readonly [Extract<ReviewEvidenceSlot, { role: "self-review" }>, Extract<ReviewEvidenceSlot, { role: "counter-review" }>] | readonly [Extract<ReviewEvidenceSlot, { role: "self-review" }>, Extract<ReviewEvidenceSlot, { role: "counter-review" }>, Extract<ReviewEvidenceSlot, { role: "gate-counter-review" }>];
 export interface CurrentReviewSetAuthority { readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest; readonly slots: RequiredReviewSlots; readonly [currentReviewSetAuthorityBrand]: true }
-export interface CurrentEvidenceSetRef { readonly set_digest: Sha256Digest; readonly slots: RequiredReviewSlots }
+export type CurrentEvidenceSetRef = { readonly set_digest: Sha256Digest; readonly slots: RequiredReviewSlots };
 
 const idSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u) as unknown as z.ZodType<Sha256Digest>;

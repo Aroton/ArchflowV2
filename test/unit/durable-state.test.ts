@@ -75,6 +75,10 @@ describe("task state contract", () => {
       ...state,
       prepared_intent: { ...(state.prepared_intent as Record<string, unknown>), prior_revision: 0 },
     }));
+    await rejects((state) => ({
+      ...state,
+      adopted_checkpoint: { ...(state.adopted_checkpoint as Record<string, unknown>), revision: 0 },
+    }));
   });
 
   it("rejects a shuffled or duplicated authoritative_results — a SET on the (phase_instance, step) tuple", async () => {

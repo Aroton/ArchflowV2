@@ -25,15 +25,21 @@ function formatAjvErrors(errors: ErrorObject[] | null | undefined): string {
   return errors.map((error) => `${error.instancePath || "/"} ${error.message ?? error.keyword}`).join("; ");
 }
 
-function hasUniqueObjectPropertyValues(properties: string | readonly string[], data: unknown[]): boolean {
+export function hasUniqueObjectPropertyValues(properties: string | readonly string[], data: unknown[]): boolean {
   const propertyNames = typeof properties === "string" ? [properties] : properties;
   const seen: unknown[][] = [];
   for (const item of data) {
     if (typeof item !== "object" || item === null) continue;
-    const values = propertyNames.map((property) => {
+    const values: unknown[] = [];
+    for (const property of propertyNames) {
       const descriptor = Object.getOwnPropertyDescriptor(item, property);
-      return descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined;
-    });
+      if (descriptor === undefined) {
+        values.push(undefined);
+        continue;
+      }
+      if (!descriptor.enumerable || !("value" in descriptor)) return false;
+      values.push(descriptor.value);
+    }
     if (seen.some((candidate) => isDeepStrictEqual(candidate, values))) return false;
     seen.push(values);
   }

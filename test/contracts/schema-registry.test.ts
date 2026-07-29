@@ -39,6 +39,8 @@ const SCHEMA_FILES = {
   legacyImportInitialization: "legacy-import-initialization",
   documentArtifact: "document-artifact",
   implementationOutput: "implementation-output",
+  manualCheckpoint: "manual-checkpoint",
+  manualCheckpointImport: "manual-checkpoint-import",
 } as const satisfies Record<keyof typeof SCHEMA_IDS, string>;
 
 const loadSchema = async (name: string): Promise<Record<string, unknown>> =>

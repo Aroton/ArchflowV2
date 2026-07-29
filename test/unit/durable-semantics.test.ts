@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest } from "../../src/contracts/canonical.js";
+import type { ManualCheckpointImportV1 } from "../../src/contracts/durable-checkpoint.js";
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { ImplementationOutputV1 } from "../../src/contracts/durable-implementation-output.js";
 import type { LegacyImportInitializationV1 } from "../../src/contracts/durable-legacy-import.js";
@@ -31,6 +32,10 @@ const legacyImport = async (): Promise<LegacyImportInitializationV1> =>
 const documentArtifact = async (): Promise<DocumentArtifactV1> => fixture<DocumentArtifactV1>("document-artifact");
 const implementationOutput = async (): Promise<ImplementationOutputV1> =>
   fixture<ImplementationOutputV1>("implementation-output");
+const checkpointImport = async (): Promise<ManualCheckpointImportV1> =>
+  fixture<ManualCheckpointImportV1>("manual-checkpoint-import");
+const checkpointContinuationImport = async (): Promise<ManualCheckpointImportV1> =>
+  fixture<ManualCheckpointImportV1>("manual-checkpoint-import-continuation");
 const maintenanceRecord = async (): Promise<MaintenanceRecordV1> =>
   fixture<MaintenanceRecordV1>("maintenance-record");
 
@@ -75,6 +80,33 @@ describe("validateDurableSemantics — positive path", () => {
 
   it("accepts an implementation-output artifact supplied alone", async () => {
     accept({ artifact: canonicalDocument(await implementationOutput()) });
+  });
+
+  it("accepts an initial manual-checkpoint import without state", async () => {
+    accept({ artifact: canonicalDocument(await checkpointImport()) });
+  });
+
+  it("accepts a continuation manual-checkpoint import with its computed matching state", async () => {
+    const imported = await checkpointContinuationImport();
+    if (imported.import_mode !== "continuation") throw new TypeError("expected continuation import fixture");
+    const first = imported.chain[0];
+    if (first === undefined) throw new TypeError("expected non-empty checkpoint chain fixture");
+
+    const matchingState: TaskStateV1 = {
+      ...(await state()),
+      task_id: imported.task_id,
+      repository_identity_digest: imported.repository_identity_digest,
+      revision: imported.predecessor.revision,
+      adopted_checkpoint: imported.predecessor,
+      initialization_digest: first.initialization_digest,
+    };
+    const matchingImport: ManualCheckpointImportV1 = {
+      ...imported,
+      expected_state_revision: imported.predecessor.revision,
+      expected_state_digest: canonicalJsonDigest(matchingState),
+    };
+
+    accept({ state: canonicalDocument(matchingState), artifact: canonicalDocument(matchingImport) });
   });
 
   it("accepts a maintenance record supplied alone", async () => {

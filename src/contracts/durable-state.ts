@@ -91,6 +91,12 @@ export type PreparedIntentRef = {
   readonly prior_revision: SafeInteger;
 };
 
+export type AdoptedCheckpointRef = {
+  /** `>= 1` (D8). */
+  readonly revision: SafeInteger;
+  readonly checkpoint_digest: Sha256Digest;
+};
+
 /**
  * The five pinned-input fields `repository_identity_digest`, `config_digest`, `workflow_digest`,
  * `constitution_digest`, and `policy_base_commit` also live in whichever initialization document
@@ -141,5 +147,6 @@ export type TaskStateV1 = {
    */
   readonly open_gate?: OpenGateRef;
   readonly prepared_intent?: PreparedIntentRef;
+  readonly adopted_checkpoint?: AdoptedCheckpointRef;
   readonly terminal?: TerminalState;
 };

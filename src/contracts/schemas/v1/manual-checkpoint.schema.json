@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:manual-checkpoint",
+  "title": "ArchFlow Manual Checkpoint v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "repository_identity_digest",
+    "revision",
+    "phase_instance",
+    "step",
+    "status",
+    "attempt",
+    "input_fingerprint",
+    "assurance",
+    "initialization_digest",
+    "authoritative_results",
+    "projections",
+    "evidence_chain",
+    "approvals",
+    "waivers"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "task_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
+    "repository_identity_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
+    "step": { "enum": ["produce", "self_review", "counter_review", "triage", "adjudicate"] },
+    "status": { "$ref": "urn:archflow:schema:v1:task-state#/$defs/stepStatus" },
+    "attempt": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "assurance": { "const": "degraded" },
+    "initialization_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "initialization": {
+      "oneOf": [
+        { "$ref": "urn:archflow:schema:v1:task-initialization" },
+        { "$ref": "urn:archflow:schema:v1:legacy-import-initialization" }
+      ]
+    },
+    "predecessor": { "$ref": "#/$defs/predecessorLink" },
+    "authoritative_results": {
+      "type": "array",
+      "items": { "$ref": "urn:archflow:schema:v1:task-state#/$defs/authoritativeResultRef" },
+      "x-archflow-sorted-unique-by": ["phase_instance", "step"]
+    },
+    "projections": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/projectionDigestRef" },
+      "x-archflow-sorted-unique-by": "path"
+    },
+    "evidence_chain": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidenceChainEntry" },
+      "x-archflow-sorted-unique-by": ["phase_instance", "step"]
+    },
+    "approvals": {
+      "type": "array",
+      "items": { "$ref": "urn:archflow:schema:v1:task-state#/$defs/approvalRef" },
+      "x-archflow-sorted-unique-by": "gate_id"
+    },
+    "waivers": {
+      "type": "array",
+      "items": { "$ref": "urn:archflow:schema:v1:task-state#/$defs/waiverRef" },
+      "x-archflow-sorted-unique-by": "gate_id"
+    },
+    "open_gate": { "$ref": "urn:archflow:schema:v1:task-state#/$defs/openGateRef" },
+    "terminal": { "enum": ["complete", "abandoned"] }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "revision": { "type": "integer", "const": 1 },
+        "initialization": true
+      },
+      "required": ["initialization"],
+      "not": { "properties": { "predecessor": true }, "required": ["predecessor"] }
+    },
+    {
+      "properties": {
+        "revision": { "type": "integer", "minimum": 2 },
+        "predecessor": true
+      },
+      "required": ["predecessor"],
+      "not": { "properties": { "initialization": true }, "required": ["initialization"] }
+    }
+  ],
+  "$defs": {
+    "predecessorLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "checkpoint_digest"],
+      "properties": {
+        "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "checkpoint_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" }
+      }
+    },
+    "projectionDigestRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "content_digest"],
+      "properties": {
+        "path": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
+        "content_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" }
+      }
+    },
+    "evidenceChainEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase_instance", "step", "subject_digest", "input_fingerprint", "current_evidence"],
+      "properties": {
+        "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
+        "step": { "enum": ["produce", "self_review", "counter_review", "triage", "adjudicate"] },
+        "subject_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "current_evidence": { "$ref": "#/$defs/currentEvidenceSetRef" }
+      }
+    },
+    "currentEvidenceSetRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["set_digest", "slots"],
+      "properties": {
+        "set_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "slots": { "$ref": "urn:archflow:schema:v1:evidence-slots" }
+      }
+    }
+  }
+}

@@ -76,8 +76,9 @@
       "$ref": "#/$defs/openGateRef"
     },
     "prepared_intent": { "$ref": "#/$defs/preparedIntentRef" },
+    "adopted_checkpoint": { "$ref": "#/$defs/adoptedCheckpointRef" },
     "terminal": {
-      "$comment": "`TERMINAL_STATES`. Declared inline rather than as a $def: the pinned $def inventory names exactly seven $defs for this file and nothing outside it consumes a terminal-state type.",
+      "$comment": "`TERMINAL_STATES`. Declared inline rather than as a $def because copying its two enum members is cheaper than promoting another shared reference shape.",
       "enum": ["complete", "abandoned"]
     }
   },
@@ -164,6 +165,16 @@
         "intent_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
         "request_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
         "prior_revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+      }
+    },
+    "adoptedCheckpointRef": {
+      "$comment": "Phase 8 D-M. The manual checkpoint this revision adopted, when it adopted one. Phase 9 owns when it is written; nothing in Phase 8 sets it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "checkpoint_digest"],
+      "properties": {
+        "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "checkpoint_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" }
       }
     }
   }

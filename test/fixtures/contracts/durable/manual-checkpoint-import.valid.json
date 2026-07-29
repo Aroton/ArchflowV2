@@ -1,0 +1,67 @@
+{
+  "schema_version": "1",
+  "artifact_kind": "manual-checkpoint-import",
+  "task_id": "mcp-integration",
+  "repository_identity_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+  "import_mode": "initial",
+  "chain": [
+    {
+      "schema_version": "1",
+      "task_id": "mcp-integration",
+      "repository_identity_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+      "revision": 1,
+      "phase_instance": "phase-impl-8",
+      "step": "self_review",
+      "status": "running",
+      "attempt": 1,
+      "input_fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+      "assurance": "degraded",
+      "initialization_digest": "817534ce02dc4334035765abc41e1766ba2733c567770e59e7da2689c4a3d66c",
+      "initialization": {
+        "schema_version": "1",
+        "artifact_kind": "task-initialization",
+        "task_id": "mcp-integration",
+        "repository_identity_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+        "code_baseline_commit": "0123456789abcdef0123456789abcdef01234567",
+        "policy_base_commit": "89abcdef0123456789abcdef0123456789abcdef",
+        "constitution_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+        "workflow_digest": "4444444444444444444444444444444444444444444444444444444444444444",
+        "config_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+        "canonical_paths": {
+          "task_root": ".archflow/tasks/mcp-integration",
+          "config": ".archflow/tasks/mcp-integration/config.yaml",
+          "state": ".archflow/tasks/mcp-integration/state.json",
+          "workflow": ".archflow/workflow.yaml",
+          "constitution_root": ".archflow/constitution"
+        }
+      },
+      "authoritative_results": [],
+      "projections": [],
+      "evidence_chain": [],
+      "approvals": [],
+      "waivers": []
+    },
+    {
+      "schema_version": "1",
+      "task_id": "mcp-integration",
+      "repository_identity_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+      "revision": 2,
+      "phase_instance": "phase-impl-8",
+      "step": "self_review",
+      "status": "running",
+      "attempt": 1,
+      "input_fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+      "assurance": "degraded",
+      "initialization_digest": "817534ce02dc4334035765abc41e1766ba2733c567770e59e7da2689c4a3d66c",
+      "predecessor": {
+        "revision": 1,
+        "checkpoint_digest": "c2c6a1c1ac9b7b31966dccad796e007e2cbc774d7b7362279726027673d2cdf2"
+      },
+      "authoritative_results": [],
+      "projections": [],
+      "evidence_chain": [],
+      "approvals": [],
+      "waivers": []
+    }
+  ]
+}

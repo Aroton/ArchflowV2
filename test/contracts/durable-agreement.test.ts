@@ -3,6 +3,17 @@ import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { documentArtifactV1Schema } from "../../src/contracts/durable-document.js";
+import {
+  approvalRefV1Schema,
+  authoritativeResultRefV1Schema,
+  evidenceChainEntryV1Schema,
+  manualCheckpointImportV1Schema,
+  manualCheckpointV1Schema,
+  openGateRefV1Schema,
+  predecessorLinkV1Schema,
+  projectionDigestRefV1Schema,
+  waiverRefV1Schema,
+} from "../../src/contracts/durable-checkpoint.js";
 import { implementationOutputV1Schema } from "../../src/contracts/durable-implementation-output.js";
 import { legacyImportInitializationV1Schema } from "../../src/contracts/durable-legacy-import.js";
 import {
@@ -15,6 +26,7 @@ import {
 } from "../../src/contracts/durable-primitives.js";
 import { taskInitializationV1Schema } from "../../src/contracts/durable-task-initialization.js";
 import { PATH_CLASSES } from "../../src/contracts/path-claims.js";
+import { currentEvidenceSetRefSchema } from "../../src/contracts/trust.js";
 import {
   assertZodAgreement,
   createJsonSchemaValidator,
@@ -63,7 +75,7 @@ const ALL_SCHEMAS: ReadonlyMap<string, JsonObject> = new Map(
   })
 );
 
-/** The seven schema files this phase adds, in the pinned transcription-table order. */
+/** The nine schema files this phase adds, in the pinned transcription-table order. */
 const NEW_SCHEMA_STEMS = [
   "durable-primitives",
   "task-state",
@@ -72,9 +84,11 @@ const NEW_SCHEMA_STEMS = [
   "legacy-import-initialization",
   "document-artifact",
   "implementation-output",
+  "manual-checkpoint",
+  "manual-checkpoint-import",
 ] as const;
 
-/** The eight modules this phase adds. `durable.ts` registers no schema; it holds the validator. */
+/** The nine modules this phase adds. `durable.ts` registers no schema; it holds the validator. */
 const NEW_MODULES = [
   "durable-primitives.ts",
   "durable-state.ts",
@@ -83,6 +97,7 @@ const NEW_MODULES = [
   "durable-legacy-import.ts",
   "durable-document.ts",
   "durable-implementation-output.ts",
+  "durable-checkpoint.ts",
   "durable.ts",
 ] as const;
 
@@ -172,10 +187,117 @@ const MIRRORED: readonly Mirrored[] = [
     zod: canonicalTaskPathsV1Schema,
     sample: clone(fixture("task-initialization").canonical_paths),
   },
+  {
+    name: "manual-checkpoint",
+    json: validator("manual-checkpoint", [
+      ...WITH_PRIMITIVES,
+      "task-state",
+      "task-initialization",
+      "legacy-import-initialization",
+      "evidence-slots",
+    ]),
+    zod: manualCheckpointV1Schema,
+    sample: fixture("manual-checkpoint"),
+  },
+  {
+    name: "manual-checkpoint-import",
+    json: validator("manual-checkpoint-import", [
+      ...WITH_PRIMITIVES,
+      "task-state",
+      "task-initialization",
+      "legacy-import-initialization",
+      "evidence-slots",
+      "manual-checkpoint",
+    ]),
+    zod: manualCheckpointImportV1Schema,
+    sample: fixture("manual-checkpoint-import"),
+  },
+  {
+    name: "authoritativeResultRef",
+    json: defValidator("taskState", "authoritativeResultRef", [...BASE, "task-state"]),
+    zod: authoritativeResultRefV1Schema,
+    sample: clone((fixture("manual-checkpoint").authoritative_results as readonly unknown[])[0]),
+  },
+  {
+    name: "approvalRef",
+    json: defValidator("taskState", "approvalRef", [...BASE, "task-state"]),
+    zod: approvalRefV1Schema,
+    sample: clone((fixture("manual-checkpoint").approvals as readonly unknown[])[0]),
+  },
+  {
+    name: "waiverRef",
+    json: defValidator("taskState", "waiverRef", [...BASE, "task-state"]),
+    zod: waiverRefV1Schema,
+    sample: clone((fixture("manual-checkpoint").waivers as readonly unknown[])[0]),
+  },
+  {
+    name: "openGateRef",
+    json: defValidator("taskState", "openGateRef", [...BASE, "task-state"]),
+    zod: openGateRefV1Schema,
+    sample: clone(fixture("manual-checkpoint").open_gate),
+  },
+  {
+    name: "predecessorLink",
+    json: defValidator("manualCheckpoint", "predecessorLink", [
+      ...WITH_PRIMITIVES,
+      "task-state",
+      "task-initialization",
+      "legacy-import-initialization",
+      "evidence-slots",
+      "manual-checkpoint",
+    ]),
+    zod: predecessorLinkV1Schema,
+    sample: clone(
+      ((fixture("manual-checkpoint-import-continuation").chain as readonly JsonObject[])[1] as JsonObject)
+        .predecessor,
+    ),
+  },
+  {
+    name: "projectionDigestRef",
+    json: defValidator("manualCheckpoint", "projectionDigestRef", [
+      ...WITH_PRIMITIVES,
+      "task-state",
+      "task-initialization",
+      "legacy-import-initialization",
+      "evidence-slots",
+      "manual-checkpoint",
+    ]),
+    zod: projectionDigestRefV1Schema,
+    sample: clone((fixture("manual-checkpoint").projections as readonly unknown[])[0]),
+  },
+  {
+    name: "evidenceChainEntry",
+    json: defValidator("manualCheckpoint", "evidenceChainEntry", [
+      ...WITH_PRIMITIVES,
+      "task-state",
+      "task-initialization",
+      "legacy-import-initialization",
+      "manual-checkpoint",
+      "evidence-slots",
+    ]),
+    zod: evidenceChainEntryV1Schema,
+    sample: clone((fixture("manual-checkpoint").evidence_chain as readonly unknown[])[0]),
+  },
+  {
+    name: "currentEvidenceSetRef",
+    json: defValidator("manualCheckpoint", "currentEvidenceSetRef", [
+      ...WITH_PRIMITIVES,
+      "task-state",
+      "task-initialization",
+      "legacy-import-initialization",
+      "manual-checkpoint",
+      "evidence-slots",
+    ]),
+    zod: currentEvidenceSetRefSchema,
+    sample: clone(
+      ((fixture("manual-checkpoint").evidence_chain as readonly JsonObject[])[0] as JsonObject)
+        .current_evidence,
+    ),
+  },
 ];
 
 describe("D2 — the Zod-mirror half agrees with its JSON Schema authority", () => {
-  it("mirrors exactly the five shapes reachable from the artifact union, plus the three shared $defs", () => {
+  it("mirrors exactly the eighteen pinned roots and $defs", () => {
     expect(MIRRORED.map((entry) => entry.name)).toEqual([
       "task-initialization",
       "legacy-import-initialization",
@@ -185,6 +307,16 @@ describe("D2 — the Zod-mirror half agrees with its JSON Schema authority", () 
       "outputEntry",
       "declaredInputRef",
       "canonicalTaskPaths",
+      "manual-checkpoint",
+      "manual-checkpoint-import",
+      "authoritativeResultRef",
+      "approvalRef",
+      "waiverRef",
+      "openGateRef",
+      "predecessorLink",
+      "projectionDigestRef",
+      "evidenceChainEntry",
+      "currentEvidenceSetRef",
     ]);
   });
 
@@ -220,19 +352,17 @@ describe("D2 — the no-mirror half has exactly one shape model", () => {
     }
   });
 
-  it("no Zod schema anywhere names a field of task-state, maintenance-record, or a D21 reference shape", () => {
+  it("no Zod schema anywhere names a field of task-state, maintenance-record, or PreparedIntentRef", () => {
     // One distinctive, uniquely-owned field per unmirrored shape. A Zod mirror for any of them would
     // have to name at least one of these, so a module that both imports zod and mentions one is the
     // exact drift this asserts against.
     const unmirroredFields = [
-      "initialization_digest", // TaskStateV1
+      "prepared_intent", // TaskStateV1
       "reachability_proof_digest", // MaintenanceRecordV1
-      "manifest_path", // AuthoritativeResultRef
-      "resolved_at_revision", // ApprovalRef
-      "granted_at_revision", // WaiverRef
-      "opened_at_revision", // OpenGateRef
       "prior_revision", // PreparedIntentRef
     ] as const;
+
+    // D21 makes the other task-state reference shapes mirrored Phase 8 authorities.
 
     const modules = readdirSync(SRC).filter((name) => name.endsWith(".ts"));
     expect(modules.length).toBeGreaterThan(NEW_MODULES.length);
@@ -328,9 +458,14 @@ const DEF_INVENTORY: ReadonlyArray<readonly [string, readonly string[]]> = [
       "waiverRef",
       "openGateRef",
       "preparedIntentRef",
+      "adoptedCheckpointRef",
     ],
   ],
   ["maintenance-record", ["maintenanceDeletion"]],
+  [
+    "manual-checkpoint",
+    ["predecessorLink", "projectionDigestRef", "evidenceChainEntry", "currentEvidenceSetRef"],
+  ],
 ];
 
 /** Recursively collect every `$ref` string in a schema document. */
@@ -355,7 +490,7 @@ describe("the pinned $def inventory resolves", () => {
     expect((ALL_SCHEMAS.get("secret-scan-result") as JsonObject).$id).toBe(SCHEMA_IDS.secretScanResult);
   });
 
-  it("every $ref in the seven new schemas resolves — Ajv raises no unresolved reference", () => {
+  it("every $ref in the nine new schemas resolves — Ajv raises no unresolved reference", () => {
     const everyOther = (stem: string): readonly string[] =>
       [...ALL_SCHEMAS.keys()].filter((other) => other !== stem);
 
@@ -364,7 +499,7 @@ describe("the pinned $def inventory resolves", () => {
     }
   });
 
-  it("every external $ref in the seven new schemas names a registered schema id", () => {
+  it("every external $ref in the nine new schemas names a registered schema id", () => {
     const registered = new Set<string>(Object.values(SCHEMA_IDS));
     for (const stem of NEW_SCHEMA_STEMS) {
       const document = ALL_SCHEMAS.get(stem) as JsonObject;
@@ -385,17 +520,17 @@ describe("the pinned $def inventory resolves", () => {
   });
 });
 
-describe("registry invariants after chunk 13", () => {
-  it("SCHEMA_IDS holds 32 entries in exact bijection with the schema directory", () => {
-    expect(Object.keys(SCHEMA_IDS)).toHaveLength(32);
-    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(32);
-    expect(schemaFileNames()).toHaveLength(32);
+describe("registry invariants after chunk 8", () => {
+  it("SCHEMA_IDS holds 34 entries in exact bijection with the schema directory", () => {
+    expect(Object.keys(SCHEMA_IDS)).toHaveLength(34);
+    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(34);
+    expect(schemaFileNames()).toHaveLength(34);
 
     const idsInFiles = [...ALL_SCHEMAS.values()].map((document) => document.$id as string).sort();
     expect(idsInFiles).toEqual([...Object.values(SCHEMA_IDS)].sort());
   });
 
-  it("registers the seven new keys with the pinned urn ids and filenames", () => {
+  it("registers the nine new keys with the pinned urn ids and filenames", () => {
     const pinned = {
       durablePrimitives: "durable-primitives",
       taskState: "task-state",
@@ -404,6 +539,8 @@ describe("registry invariants after chunk 13", () => {
       legacyImportInitialization: "legacy-import-initialization",
       documentArtifact: "document-artifact",
       implementationOutput: "implementation-output",
+      manualCheckpoint: "manual-checkpoint",
+      manualCheckpointImport: "manual-checkpoint-import",
     } as const;
 
     expect(Object.values(pinned).sort()).toEqual([...NEW_SCHEMA_STEMS].sort());
@@ -413,7 +550,7 @@ describe("registry invariants after chunk 13", () => {
     }
   });
 
-  it("the barrel carries the eight new lines after errors.js, with no duplicate export line", () => {
+  it("the barrel carries the nine new lines after errors.js, with no duplicate export line", () => {
     const barrel = source("index.ts");
     const lines = barrel.split("\n");
     const starExports = lines
@@ -428,8 +565,8 @@ describe("registry invariants after chunk 13", () => {
       NEW_MODULES.map((module) => module.replace(/\.ts$/u, ".js"))
     );
 
-    // Eight barrel lines but seven registry keys: `durable.js` holds the validator and registers no schema.
-    expect(NEW_MODULES).toHaveLength(NEW_SCHEMA_STEMS.length + 1);
+    // `durable-checkpoint.ts` carries two schemas while `durable.ts` carries none, so the offsets cancel.
+    expect(NEW_MODULES).toHaveLength(NEW_SCHEMA_STEMS.length);
     for (const line of lines) expect(line.trim()).not.toBe('export * from "./durable.js"; export * from "./durable.js";');
   });
 });

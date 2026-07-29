@@ -15,11 +15,21 @@ import {
   type DurableArtifact,
   type DurableSemanticSubject,
 } from "../../src/contracts/durable.js";
+import {
+  CHAIN_SELECTION_OUTCOMES,
+  CHECKPOINT_BREAK_CODES,
+  chainAnchor,
+  checkpointSelfDigest,
+  manualCheckpointV1Schema,
+  selectGreatestValidChain,
+  type ManualCheckpointV1,
+} from "../../src/contracts/durable-checkpoint.js";
 import type { MaintenanceRecordV1 } from "../../src/contracts/durable-maintenance.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { createProjectError } from "../../src/contracts/errors.js";
 import type { Sha256Digest } from "../../src/contracts/evidence.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
+import { parseCurrentEvidenceSetRef } from "../../src/contracts/trust.js";
 
 /**
  * **The adversarial corpus for `validateDurableSemantics` (chunk 12).** Written from the phase
@@ -55,6 +65,8 @@ const LEGACY_INIT = load("legacy-import-initialization");
 const DOCUMENT = load("document-artifact");
 const OUTPUT = load("implementation-output");
 const MAINTENANCE = load("maintenance-record");
+const INITIAL_IMPORT = load("manual-checkpoint-import");
+const CONTINUATION_IMPORT = load("manual-checkpoint-import-continuation");
 
 /** Matches `primitives#/$defs/phaseInstanceId` and is rejected by `decodePhaseInstance` (D6). */
 const UNDECODABLE = "phase-impl-99999999999999999999";
@@ -95,6 +107,50 @@ const adopting = (state: Json, initialization: Json): Json => ({
   constitution_digest: initialization.constitution_digest,
   policy_base_commit: initialization.policy_base_commit,
 });
+
+const successor = (previous: Json, changes: Json = {}): Json => ({
+  ...copy(list(INITIAL_IMPORT, "chain")[1]!),
+  task_id: previous.task_id,
+  repository_identity_digest: previous.repository_identity_digest,
+  revision: (previous.revision as number) + 1,
+  initialization_digest: previous.initialization_digest,
+  predecessor: {
+    revision: previous.revision,
+    checkpoint_digest: checkpointSelfDigest(previous as unknown as ManualCheckpointV1),
+  },
+  ...changes,
+});
+
+const validContinuation = (stateChanges: Json = {}, artifactChanges: Json = {}): {
+  readonly state: Json;
+  readonly artifact: Json;
+} => {
+  const artifact = patch(CONTINUATION_IMPORT, artifactChanges);
+  const predecessor = artifact.predecessor as Json;
+  const first = list(artifact, "chain")[0]!;
+  const state = patch(STATE, {
+    revision: artifact.expected_state_revision,
+    repository_identity_digest: artifact.repository_identity_digest,
+    initialization_digest: first.initialization_digest,
+    adopted_checkpoint: {
+      revision: predecessor.revision,
+      checkpoint_digest: predecessor.checkpoint_digest,
+    },
+    ...stateChanges,
+  });
+  if (!("expected_state_digest" in artifactChanges)) {
+    artifact.expected_state_digest = canonicalJsonDigest(state as unknown as PlainJsonValue);
+  }
+  return { state, artifact };
+};
+
+const expectImportIssue = (artifact: Json, issue_code: string, state?: Json): void => {
+  expectReject(
+    { artifact: artifactDoc(artifact), ...(state === undefined ? {} : { state: stateDoc(state) }) },
+    "TASK_INVALID",
+    { task_id: artifact.task_id, issue_code }
+  );
+};
 
 /* ------------------------------------------------------------------------------- assertion core */
 
@@ -356,6 +412,55 @@ describe("rank 4 — the phase-instance residue, CONTRACT_INVALID in every slot"
     });
   });
 
+  it("4a: an undecodable checkpoint-root phase_instance", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    list(artifact, "chain")[0]!.phase_instance = UNDECODABLE;
+    expectReject({ artifact: artifactDoc(artifact) }, "CONTRACT_INVALID", {
+      issue_code: DURABLE_ISSUE_CODES.phaseInstanceUndecodable,
+    });
+  });
+
+  it("4a: an undecodable checkpoint authoritative-result phase_instance", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    list(list(artifact, "chain")[0]!, "authoritative_results").push({
+      ...list(STATE, "authoritative_results")[0]!,
+      phase_instance: UNDECODABLE,
+    });
+    expectReject({ artifact: artifactDoc(artifact) }, "CONTRACT_INVALID", {
+      issue_code: DURABLE_ISSUE_CODES.phaseInstanceUndecodable,
+    });
+  });
+
+  it("4a: an undecodable checkpoint evidence-chain phase_instance", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    list(list(artifact, "chain")[0]!, "evidence_chain").push({
+      phase_instance: UNDECODABLE,
+      step: "counter_review",
+      subject_digest: "1".repeat(64),
+      input_fingerprint: "2".repeat(64),
+      current_evidence: {
+        set_digest: "3".repeat(64),
+        slots: [
+          { role: "self-review", evidence_digest: "4".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
+          { role: "counter-review", evidence_digest: "5".repeat(64), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+        ],
+      },
+    });
+    expectReject({ artifact: artifactDoc(artifact) }, "CONTRACT_INVALID", {
+      issue_code: DURABLE_ISSUE_CODES.phaseInstanceUndecodable,
+    });
+  });
+
+  it("4a: an undecodable mapping inside an embedded legacy initialization", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    const first = list(artifact, "chain")[0]!;
+    first.initialization = copy(LEGACY_INIT);
+    list(first.initialization as Json, "mapping")[0]!.phase_instance = UNDECODABLE;
+    expectReject({ artifact: artifactDoc(artifact) }, "CONTRACT_INVALID", {
+      issue_code: DURABLE_ISSUE_CODES.phaseInstanceUndecodable,
+    });
+  });
+
   it("4b: an implementation output whose phase_instance decodes to a non-phase-impl kind", () => {
     for (const phase_instance of ["phase-design-1", "design", "prd"]) {
       expectReject(
@@ -414,6 +519,236 @@ describe("rank 5 — the output-entry residue", () => {
       snapshot_digest: OUTPUT.snapshot_digest,
       issue_code: DURABLE_ISSUE_CODES.restoreTargetNotDeclared,
     });
+  });
+});
+
+/* ------------------------------------------------ rank 5c-5t — manual checkpoint import invariants */
+
+describe("rank 5c-5t — the manual checkpoint import is a conservative authority", () => {
+  const issue = (artifact: Json, code: string, state?: Json): void => expectImportIssue(artifact, code, state);
+  const withInitialization = (initialization: Json): Json => {
+    const artifact = copy(INITIAL_IMPORT);
+    const chain = list(artifact, "chain");
+    chain[0]!.initialization = copy(initialization);
+    (chain[0]!.initialization as Json).task_id = artifact.task_id;
+    (chain[0]!.initialization as Json).repository_identity_digest = artifact.repository_identity_digest;
+    const digest = canonicalJsonDigest(chain[0]!.initialization as PlainJsonValue);
+    chain[0]!.initialization_digest = digest;
+    chain[1]!.initialization_digest = digest;
+    (chain[1]!.predecessor as Json).checkpoint_digest = checkpointSelfDigest(chain[0] as never);
+    return artifact;
+  };
+
+  it("accepts both valid import modes", () => {
+    expectAccept({ artifact: artifactDoc(INITIAL_IMPORT) });
+    const { state, artifact } = validContinuation();
+    expectAccept({ state: stateDoc(state), artifact: artifactDoc(artifact) });
+  });
+
+  it("accepts a correctly linked continuation chain across revisions 9 to 10", () => {
+    const predecessor = { revision: 8, checkpoint_digest: "8".repeat(64) };
+    const first = patch(list(CONTINUATION_IMPORT, "chain")[0]!, {
+      revision: 9,
+      predecessor,
+    });
+    const second = successor(first);
+    expect(second.revision).toBe(10);
+    expect((second.predecessor as Json).revision).toBe(9);
+    expect((second.predecessor as Json).checkpoint_digest).toBe(
+      checkpointSelfDigest(first as unknown as ManualCheckpointV1)
+    );
+    const { state, artifact } = validContinuation(
+      {},
+      { chain: [first, second], predecessor, expected_state_revision: 8 }
+    );
+    expectAccept({ state: stateDoc(state), artifact: artifactDoc(artifact) });
+  });
+
+  it("5c: rejects a correctly linked checkpoint from another task before linkage", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    list(artifact, "chain")[1]!.task_id = "another-task";
+    issue(artifact, DURABLE_ISSUE_CODES.importChainTaskIdMismatch);
+  });
+
+  it("5d: rejects a checkpoint from another repository", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    list(artifact, "chain")[1]!.repository_identity_digest = "2".repeat(64);
+    issue(artifact, DURABLE_ISSUE_CODES.importChainRepositoryIdentityMismatch);
+  });
+
+  it("5e: rejects a checkpoint that is not its named predecessor's successor", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    (list(artifact, "chain")[1]!.predecessor as Json).revision = 7;
+    issue(artifact, DURABLE_ISSUE_CODES.importCheckpointRevisionNotSuccessor);
+  });
+
+  it("5f: rejects an adjacent revision gap", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    const second = list(artifact, "chain")[1]!;
+    second.revision = 3;
+    (second.predecessor as Json).revision = 2;
+    issue(artifact, DURABLE_ISSUE_CODES.importChainGap);
+  });
+
+  it("5f: rejects a predecessor self-digest mismatch", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    (list(artifact, "chain")[1]!.predecessor as Json).checkpoint_digest = FORGED_DIGEST;
+    issue(artifact, DURABLE_ISSUE_CODES.importPredecessorDigestMismatch);
+  });
+
+  it("5f checks revision before digest at the same index", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    const second = list(artifact, "chain")[1]!;
+    second.revision = 3;
+    second.predecessor = { revision: 2, checkpoint_digest: FORGED_DIGEST };
+    const observed = reject({ artifact: artifactDoc(artifact) });
+    expect(observed.parameters.issue_code).toBe(DURABLE_ISSUE_CODES.importChainGap);
+    expect(observed.parameters.issue_code).not.toBe(DURABLE_ISSUE_CODES.importPredecessorDigestMismatch);
+  });
+
+  it("5g: initial mode begins at revision 1", () => {
+    issue(patch(INITIAL_IMPORT, { chain: copy(CONTINUATION_IMPORT).chain }), DURABLE_ISSUE_CODES.importChainHeadNotRevisionOne);
+  });
+
+  it("5h: continuation mode requires the head to name the anchor revision", () => {
+    const artifact = patch(CONTINUATION_IMPORT, { chain: [copy(list(INITIAL_IMPORT, "chain")[0]!)] });
+    issue(artifact, DURABLE_ISSUE_CODES.importHeadPredecessorRevisionMismatch);
+  });
+
+  it("5h checks predecessor revision before digest", () => {
+    const artifact = copy(CONTINUATION_IMPORT);
+    const first = list(artifact, "chain")[0]!;
+    artifact.chain = [first];
+    first.revision = 3;
+    const predecessor = first.predecessor as Json;
+    predecessor.revision = 2;
+    predecessor.checkpoint_digest = FORGED_DIGEST;
+    const observed = reject({ artifact: artifactDoc(artifact) });
+    expect(observed.parameters.issue_code).toBe(DURABLE_ISSUE_CODES.importHeadPredecessorRevisionMismatch);
+    expect(observed.parameters.issue_code).not.toBe(DURABLE_ISSUE_CODES.importHeadPredecessorDigestMismatch);
+  });
+
+  it("5h: rejects a matching-revision head with a different predecessor digest", () => {
+    const artifact = copy(CONTINUATION_IMPORT);
+    const first = list(artifact, "chain")[0]!;
+    artifact.chain = [first];
+    (first.predecessor as Json).checkpoint_digest = FORGED_DIGEST;
+    issue(artifact, DURABLE_ISSUE_CODES.importHeadPredecessorDigestMismatch);
+  });
+
+  it("5i: the initial checkpoint supplies the initialization it names", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    const chain = list(artifact, "chain");
+    (chain[0]!.initialization as Json).config_digest = "9".repeat(64);
+    (chain[1]!.predecessor as Json).checkpoint_digest = checkpointSelfDigest(chain[0] as never);
+    issue(artifact, DURABLE_ISSUE_CODES.importInitializationDigestMismatch);
+  });
+
+  it("5j: the embedded initialization belongs to the wrapper's task", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    const first = list(artifact, "chain")[0]!;
+    (first.initialization as Json).task_id = "another-task";
+    first.initialization_digest = canonicalJsonDigest(first.initialization as PlainJsonValue);
+    list(artifact, "chain")[1]!.initialization_digest = first.initialization_digest;
+    (list(artifact, "chain")[1]!.predecessor as Json).checkpoint_digest = checkpointSelfDigest(first as never);
+    issue(artifact, DURABLE_ISSUE_CODES.importInitializationTaskIdMismatch);
+  });
+
+  it("5k: the embedded initialization belongs to the wrapper's repository", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    const first = list(artifact, "chain")[0]!;
+    (first.initialization as Json).repository_identity_digest = "2".repeat(64);
+    first.initialization_digest = canonicalJsonDigest(first.initialization as PlainJsonValue);
+    list(artifact, "chain")[1]!.initialization_digest = first.initialization_digest;
+    (list(artifact, "chain")[1]!.predecessor as Json).checkpoint_digest = checkpointSelfDigest(first as never);
+    issue(artifact, DURABLE_ISSUE_CODES.importInitializationRepositoryIdentityMismatch);
+  });
+
+  it("5j applies identically to an embedded legacy-import initialization", () => {
+    const foreignTask = withInitialization(LEGACY_INIT);
+    const taskHead = list(foreignTask, "chain")[0]!;
+    (taskHead.initialization as Json).task_id = "another-task";
+    taskHead.initialization_digest = canonicalJsonDigest(taskHead.initialization as PlainJsonValue);
+    list(foreignTask, "chain")[1]!.initialization_digest = taskHead.initialization_digest;
+    (list(foreignTask, "chain")[1]!.predecessor as Json).checkpoint_digest = checkpointSelfDigest(taskHead as never);
+    issue(foreignTask, DURABLE_ISSUE_CODES.importInitializationTaskIdMismatch);
+  });
+
+  it("5k applies identically to an embedded legacy-import initialization", () => {
+    const foreignRepository = withInitialization(LEGACY_INIT);
+    const repositoryHead = list(foreignRepository, "chain")[0]!;
+    (repositoryHead.initialization as Json).repository_identity_digest = "2".repeat(64);
+    repositoryHead.initialization_digest = canonicalJsonDigest(repositoryHead.initialization as PlainJsonValue);
+    list(foreignRepository, "chain")[1]!.initialization_digest = repositoryHead.initialization_digest;
+    (list(foreignRepository, "chain")[1]!.predecessor as Json).checkpoint_digest = checkpointSelfDigest(repositoryHead as never);
+    issue(foreignRepository, DURABLE_ISSUE_CODES.importInitializationRepositoryIdentityMismatch);
+  });
+
+  it("5l: every checkpoint names the head's initialization", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    list(artifact, "chain")[1]!.initialization_digest = "2".repeat(64);
+    issue(artifact, DURABLE_ISSUE_CODES.importChainInitializationMismatch);
+  });
+
+  it("5m: wrapper revision correlation precedes absent-state reporting", () => {
+    const artifact = patch(CONTINUATION_IMPORT, { expected_state_revision: 57 });
+    issue(artifact, DURABLE_ISSUE_CODES.importPredecessorStateRevisionMismatch);
+  });
+
+  it("5m: wrapper revision correlation also runs when state is supplied", () => {
+    const { state, artifact } = validContinuation({ revision: 57 }, { expected_state_revision: 57 });
+    issue(artifact, DURABLE_ISSUE_CODES.importPredecessorStateRevisionMismatch, state);
+  });
+
+  it("5n: continuation mode requires a state slot", () => {
+    issue(CONTINUATION_IMPORT, DURABLE_ISSUE_CODES.importContinuationWithoutState);
+  });
+
+  it("5o: initial mode forbids a state slot", () => {
+    issue(INITIAL_IMPORT, DURABLE_ISSUE_CODES.importInitialWithState, STATE);
+  });
+
+  it("5p: state revision equals the expected predecessor revision", () => {
+    const { state, artifact } = validContinuation({ revision: 4 });
+    issue(artifact, DURABLE_ISSUE_CODES.importStateRevisionMismatch, state);
+  });
+
+  it("5q: matching-revision state bytes must match expected_state_digest", () => {
+    const { state, artifact } = validContinuation({}, { expected_state_digest: FORGED_DIGEST });
+    issue(artifact, DURABLE_ISSUE_CODES.importStateDigestMismatch, state);
+  });
+
+  it("5r: state repository identity equals the wrapper's", () => {
+    const { state, artifact } = validContinuation({ repository_identity_digest: "2".repeat(64) });
+    issue(artifact, DURABLE_ISSUE_CODES.importStateRepositoryIdentityMismatch, state);
+  });
+
+  it("5s: adopted_checkpoint is required, not an optional skip", () => {
+    const { state, artifact } = validContinuation();
+    delete state.adopted_checkpoint;
+    artifact.expected_state_digest = canonicalJsonDigest(state as PlainJsonValue);
+    issue(artifact, DURABLE_ISSUE_CODES.importStateAdoptedCheckpointMissing, state);
+  });
+
+  it("5s: adopted checkpoint revision is compared before digest", () => {
+    const { state, artifact } = validContinuation({
+      adopted_checkpoint: { revision: 99, checkpoint_digest: FORGED_DIGEST },
+    });
+    const observed = reject({ state: stateDoc(state), artifact: artifactDoc(artifact) });
+    expect(observed.parameters.issue_code).toBe(DURABLE_ISSUE_CODES.importStateAdoptedCheckpointRevisionMismatch);
+    expect(observed.parameters.issue_code).not.toBe(DURABLE_ISSUE_CODES.importStateAdoptedCheckpointDigestMismatch);
+  });
+
+  it("5s: D1 and D2 at the same revision are distinguished by digest", () => {
+    const { state, artifact } = validContinuation({
+      adopted_checkpoint: { revision: 3, checkpoint_digest: "d".repeat(64) },
+    });
+    issue(artifact, DURABLE_ISSUE_CODES.importStateAdoptedCheckpointDigestMismatch, state);
+  });
+
+  it("5t: continuation state and chain share one initialization", () => {
+    const { state, artifact } = validContinuation({ initialization_digest: "2".repeat(64) });
+    issue(artifact, DURABLE_ISSUE_CODES.importStateInitializationMismatch, state);
   });
 });
 
@@ -788,6 +1123,36 @@ describe("the reported error is a total function of the subject", () => {
     });
   });
 
+  it("(c'') the import rank-4a chain-root violation precedes a later evidence-chain violation", () => {
+    const evidenceEntry = {
+      phase_instance: UNDECODABLE,
+      step: "counter_review",
+      subject_digest: "1".repeat(64),
+      input_fingerprint: "2".repeat(64),
+      current_evidence: {
+        set_digest: "3".repeat(64),
+        slots: [
+          { role: "self-review", evidence_digest: "4".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
+          { role: "counter-review", evidence_digest: "5".repeat(64), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+        ],
+      },
+    };
+    const lowerOnly = copy(INITIAL_IMPORT);
+    list(lowerOnly, "chain")[0]!.phase_instance = UNDECODABLE;
+    const both = copy(lowerOnly);
+    list(list(both, "chain")[1]!, "evidence_chain").push(evidenceEntry);
+    const higherOnly = copy(INITIAL_IMPORT);
+    list(list(higherOnly, "chain")[1]!, "evidence_chain").push(evidenceEntry);
+
+    const expected = { issue_code: DURABLE_ISSUE_CODES.phaseInstanceUndecodable };
+    expectReject({ artifact: artifactDoc(lowerOnly) }, "CONTRACT_INVALID", expected);
+    expectReject({ artifact: artifactDoc(both) }, "CONTRACT_INVALID", expected);
+    expectReject({ artifact: artifactDoc(higherOnly) }, "CONTRACT_INVALID", expected);
+    expect(reject({ artifact: artifactDoc(both) })).toEqual(
+      reject({ artifact: artifactDoc(lowerOnly) })
+    );
+  });
+
   it("(d) two sub-ranks at the same rank and slot with no index to separate them: 7a beats 7b", () => {
     const state = patch(adopting(STATE, TASK_INIT), {
       initialization_digest: FORGED_DIGEST,
@@ -855,6 +1220,184 @@ describe("the reported error is a total function of the subject", () => {
       maintenance: forged<MaintenanceRecordV1>(copy(MAINTENANCE)),
     });
     expect(reject(build())).toEqual(reject(build()));
+  });
+});
+
+describe("manual import total ordering and shared derivation seams", () => {
+  const three = (): Json[] => {
+    const first = copy(list(INITIAL_IMPORT, "chain")[0]!);
+    const second = successor(first);
+    return [first, second, successor(second)];
+  };
+  const initialWith = (chain: Json[]): Json => patch(INITIAL_IMPORT, { chain });
+
+  it("rank 4a precedes 5c", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    list(artifact, "chain")[0]!.phase_instance = UNDECODABLE;
+    list(artifact, "chain")[1]!.task_id = "another-task";
+    expectReject({ artifact: artifactDoc(artifact) }, "CONTRACT_INVALID", {
+      issue_code: DURABLE_ISSUE_CODES.phaseInstanceUndecodable,
+    });
+  });
+
+  it("5c precedes rank 7b", () => {
+    const { state, artifact } = validContinuation({ task_id: "state-task" });
+    list(artifact, "chain")[1]!.task_id = "chain-task";
+    expectImportIssue(artifact, DURABLE_ISSUE_CODES.importChainTaskIdMismatch, state);
+  });
+
+  it("(c,d) complete passes: d@0 and c@1 reports c, and the mirror still reports c", () => {
+    const chain = three();
+    chain[0]!.repository_identity_digest = "2".repeat(64);
+    chain[1]!.task_id = "another-task";
+    expectImportIssue(initialWith(chain), DURABLE_ISSUE_CODES.importChainTaskIdMismatch);
+
+    const mirror = three();
+    mirror[0]!.task_id = "another-task";
+    mirror[1]!.repository_identity_digest = "2".repeat(64);
+    expectImportIssue(initialWith(mirror), DURABLE_ISSUE_CODES.importChainTaskIdMismatch);
+  });
+
+  it("(d,e) complete passes: e@0 and d@1 reports d", () => {
+    const artifact = copy(CONTINUATION_IMPORT);
+    (list(artifact, "chain")[0]!.predecessor as Json).revision = 2;
+    list(artifact, "chain")[1]!.repository_identity_digest = "2".repeat(64);
+    expectImportIssue(artifact, DURABLE_ISSUE_CODES.importChainRepositoryIdentityMismatch);
+  });
+
+  it("(e,f) complete passes: f@1 and e@2 reports e", () => {
+    const chain = three();
+    chain[1]!.revision = 3;
+    (chain[1]!.predecessor as Json).revision = 2;
+    (chain[2]!.predecessor as Json).revision = 1;
+    expectImportIssue(initialWith(chain), DURABLE_ISSUE_CODES.importCheckpointRevisionNotSuccessor);
+  });
+
+  it("(f,l) complete passes: l@1 and f@2 reports f", () => {
+    const chain = three();
+    chain[1]!.initialization_digest = "2".repeat(64);
+    chain[2]!.revision = 4;
+    (chain[2]!.predecessor as Json).revision = 3;
+    expectImportIssue(initialWith(chain), DURABLE_ISSUE_CODES.importChainGap);
+  });
+
+  it("(c,l) non-adjacent witness: l@1 and c@2 reports c", () => {
+    const chain = three();
+    chain[1]!.initialization_digest = "2".repeat(64);
+    chain[2]!.task_id = "another-task";
+    expectImportIssue(initialWith(chain), DURABLE_ISSUE_CODES.importChainTaskIdMismatch);
+  });
+
+  it("a shuffled chain is structurally representable but rejected semantically at 5f", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    artifact.chain = [...list(artifact, "chain")].reverse();
+    expectImportIssue(artifact, DURABLE_ISSUE_CODES.importChainGap);
+  });
+
+  it("selector and validator agree on the continuation-head self-break quantifier", () => {
+    const artifact = copy(CONTINUATION_IMPORT);
+    const divergent = list(artifact, "chain")[0]!;
+    divergent.revision = 7;
+    artifact.chain = [divergent];
+    expect(selectGreatestValidChain(chainAnchor(artifact as never), [divergent as never])).toEqual({
+      kind: "stop",
+      outcome: "gap",
+    });
+    expectImportIssue(artifact, DURABLE_ISSUE_CODES.importCheckpointRevisionNotSuccessor);
+  });
+
+  it("selector and validator share checkpointSelfDigest against independently pinned fixture links", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    const chain = list(artifact, "chain") as unknown as ManualCheckpointV1[];
+    expect(selectGreatestValidChain(chainAnchor(artifact as never), chain)).toEqual({ kind: "chain", chain });
+    expectAccept({ artifact: artifactDoc(artifact) });
+  });
+
+  it("cross-task identity is a selector stop and a whole-wrapper 5c rejection", () => {
+    const artifact = copy(INITIAL_IMPORT);
+    const foreign = { ...list(artifact, "chain")[1]!, task_id: "another-task" } as Json;
+    expect(selectGreatestValidChain(chainAnchor(artifact as never), [list(artifact, "chain")[0] as never, foreign as never])).toEqual({
+      kind: "stop",
+      outcome: "foreign-candidate",
+    });
+    artifact.chain = [list(artifact, "chain")[0]!, foreign];
+    expectImportIssue(artifact, DURABLE_ISSUE_CODES.importChainTaskIdMismatch);
+  });
+});
+
+describe("manual import carrier and reachability proofs", () => {
+  it("TASK_INVALID returns for schema-valid slugs at the reserved-name and trailing-character boundaries", () => {
+    for (const task_id of ["con-safe", "ends-dot-safe"]) {
+      expect(() => createProjectError("TASK_INVALID", {
+        task_id,
+        issue_code: DURABLE_ISSUE_CODES.importChainGap,
+      })).not.toThrow();
+    }
+  });
+
+  it("rank 2 returns CONTRACT_INVALID before an import can reach TASK_INVALID or STATE_INVALID", () => {
+    const { state, artifact } = validContinuation({ phase_instance: UNDECODABLE });
+    list(artifact, "chain")[0]!.task_id = "another-task";
+    expect(() => validateDurableSemantics({ state: stateDoc(state), artifact: artifactDoc(artifact) })).not.toThrow();
+    expectReject({ state: stateDoc(state), artifact: artifactDoc(artifact) }, "CONTRACT_INVALID", {
+      issue_code: DURABLE_ISSUE_CODES.statePhaseInstanceUndecodable,
+    });
+  });
+
+  it("implementation-output and import branches are structurally mutually exclusive", () => {
+    const artifacts = [TASK_INIT, LEGACY_INIT, DOCUMENT, OUTPUT, INITIAL_IMPORT, CONTINUATION_IMPORT];
+    for (const artifact of artifacts) {
+      expect(Object.hasOwn(artifact, "outputs") && Object.hasOwn(artifact, "chain")).toBe(false);
+    }
+  });
+
+  it("rank 7 is vacuous for import-embedded initialization, with 5h closing the only escape", () => {
+    const subjects = [
+      { artifact: INITIAL_IMPORT },
+      { ...validContinuation(), artifact: validContinuation().artifact },
+    ];
+    for (const subject of subjects) {
+      const artifact = subject.artifact;
+      if (artifact.import_mode === "initial") expect(Object.hasOwn(subject, "state")).toBe(false);
+      if (artifact.import_mode === "continuation") {
+        expect(list(artifact, "chain").every((checkpoint) => !Object.hasOwn(checkpoint, "initialization"))).toBe(true);
+      }
+    }
+    const smuggled = patch(CONTINUATION_IMPORT, { chain: [copy(list(INITIAL_IMPORT, "chain")[0]!)] });
+    expectImportIssue(smuggled, DURABLE_ISSUE_CODES.importHeadPredecessorRevisionMismatch);
+  });
+
+  it("checkpoint break codes are validator issues, while selector outcomes are not", () => {
+    const issues = Object.values(DURABLE_ISSUE_CODES);
+    for (const code of CHECKPOINT_BREAK_CODES) expect(issues).toContain(code);
+    for (const outcome of CHAIN_SELECTION_OUTCOMES) expect(issues).not.toContain(outcome);
+  });
+});
+
+describe("evidence-slot composition observations", () => {
+  const self = { role: "self-review", evidence_digest: "1".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" };
+  const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
+  const checkpointWith = (slots: unknown[]): Json => {
+    const checkpoint = copy(list(INITIAL_IMPORT, "chain")[0]!);
+    checkpoint.evidence_chain = [{
+      phase_instance: "phase-impl-8",
+      step: "counter_review",
+      subject_digest: "3".repeat(64),
+      input_fingerprint: "4".repeat(64),
+      current_evidence: { set_digest: "5".repeat(64), slots },
+    }];
+    return checkpoint;
+  };
+
+  it("the composed checkpoint mirror preserves role order and family independence", () => {
+    expect(manualCheckpointV1Schema.safeParse(checkpointWith([counter, self])).success).toBe(false);
+    expect(manualCheckpointV1Schema.safeParse(checkpointWith([self, { ...counter, reviewer_family: "claude" }])).success).toBe(false);
+  });
+
+  it("records the inherited evidence-digest uniqueness gap explicitly", () => {
+    const duplicate = { set_digest: "5".repeat(64), slots: [self, { ...counter, evidence_digest: self.evidence_digest }] };
+    expect(manualCheckpointV1Schema.safeParse(checkpointWith(duplicate.slots)).success).toBe(true);
+    expect(() => parseCurrentEvidenceSetRef(duplicate)).toThrow(/unique/u);
   });
 });
 
@@ -941,6 +1484,28 @@ describe("the pinned issue_code literals", () => {
       implementationOutputPhaseKind: "implementation-output-phase-kind",
       renamePreviousPathEqualsPath: "rename-previous-path-equals-path",
       restoreTargetNotDeclared: "restore-target-not-declared",
+      importChainTaskIdMismatch: "import-chain-task-id-mismatch",
+      importChainRepositoryIdentityMismatch: "import-chain-repository-identity-mismatch",
+      importCheckpointRevisionNotSuccessor: "import-checkpoint-revision-not-successor",
+      importChainGap: "import-chain-gap",
+      importPredecessorDigestMismatch: "import-predecessor-digest-mismatch",
+      importChainHeadNotRevisionOne: "import-chain-head-not-revision-one",
+      importHeadPredecessorRevisionMismatch: "import-head-predecessor-revision-mismatch",
+      importHeadPredecessorDigestMismatch: "import-head-predecessor-digest-mismatch",
+      importInitializationDigestMismatch: "import-initialization-digest-mismatch",
+      importInitializationTaskIdMismatch: "import-initialization-task-id-mismatch",
+      importInitializationRepositoryIdentityMismatch: "import-initialization-repository-identity-mismatch",
+      importChainInitializationMismatch: "import-chain-initialization-mismatch",
+      importPredecessorStateRevisionMismatch: "import-predecessor-state-revision-mismatch",
+      importContinuationWithoutState: "import-continuation-without-state",
+      importInitialWithState: "import-initial-with-state",
+      importStateRevisionMismatch: "import-state-revision-mismatch",
+      importStateDigestMismatch: "import-state-digest-mismatch",
+      importStateRepositoryIdentityMismatch: "import-state-repository-identity-mismatch",
+      importStateAdoptedCheckpointMissing: "import-state-adopted-checkpoint-missing",
+      importStateAdoptedCheckpointRevisionMismatch: "import-state-adopted-checkpoint-revision-mismatch",
+      importStateAdoptedCheckpointDigestMismatch: "import-state-adopted-checkpoint-digest-mismatch",
+      importStateInitializationMismatch: "import-state-initialization-mismatch",
       accountingResultBytesSum: "accounting-result-bytes-sum",
       accountingTaskBytesBelowResult: "accounting-task-bytes-below-result",
       accountingEntryUnmatched: "accounting-entry-unmatched",
@@ -962,7 +1527,7 @@ describe("the pinned issue_code literals", () => {
 
   it("are all SafeCode, and rank 8 has none", () => {
     for (const code of Object.values(DURABLE_ISSUE_CODES)) expect(code).toMatch(SAFE_CODE);
-    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(22);
+    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(44);
     expect(Object.values(DURABLE_ISSUE_CODES)).not.toContain("input-fingerprint-mismatch");
   });
 });

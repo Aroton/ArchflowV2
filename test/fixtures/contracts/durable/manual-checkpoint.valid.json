@@ -1,0 +1,158 @@
+{
+  "schema_version": "1",
+  "task_id": "mcp-integration",
+  "repository_identity_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+  "revision": 1,
+  "phase_instance": "phase-impl-8",
+  "step": "self_review",
+  "status": "running",
+  "attempt": 1,
+  "input_fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+  "assurance": "degraded",
+  "initialization_digest": "817534ce02dc4334035765abc41e1766ba2733c567770e59e7da2689c4a3d66c",
+  "initialization": {
+    "schema_version": "1",
+    "artifact_kind": "task-initialization",
+    "task_id": "mcp-integration",
+    "repository_identity_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+    "code_baseline_commit": "0123456789abcdef0123456789abcdef01234567",
+    "policy_base_commit": "89abcdef0123456789abcdef0123456789abcdef",
+    "constitution_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+    "workflow_digest": "4444444444444444444444444444444444444444444444444444444444444444",
+    "config_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+    "canonical_paths": {
+      "task_root": ".archflow/tasks/mcp-integration",
+      "config": ".archflow/tasks/mcp-integration/config.yaml",
+      "state": ".archflow/tasks/mcp-integration/state.json",
+      "workflow": ".archflow/workflow.yaml",
+      "constitution_root": ".archflow/constitution"
+    }
+  },
+  "authoritative_results": [
+    {
+      "phase_instance": "design",
+      "step": "produce",
+      "result_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+      "result_id": "design:produce:1",
+      "input_fingerprint": "7777777777777777777777777777777777777777777777777777777777777777",
+      "manifest_path": ".archflow/tasks/mcp-integration/results/design-produce/manifest.json"
+    },
+    {
+      "phase_instance": "phase-impl-8",
+      "step": "produce",
+      "result_digest": "8888888888888888888888888888888888888888888888888888888888888888",
+      "result_id": "phase-impl-8:produce:1",
+      "input_fingerprint": "9999999999999999999999999999999999999999999999999999999999999999",
+      "manifest_path": ".archflow/tasks/mcp-integration/results/phase-impl-8-produce/manifest.json"
+    }
+  ],
+  "projections": [
+    {
+      "path": ".archflow/tasks/mcp-integration/architecture.md",
+      "content_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    },
+    {
+      "path": ".archflow/tasks/mcp-integration/phases/phase-8-manual-checkpoint-chain-and-import.md",
+      "content_digest": "123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0"
+    }
+  ],
+  "evidence_chain": [
+    {
+      "phase_instance": "design",
+      "step": "counter_review",
+      "subject_digest": "23456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01",
+      "input_fingerprint": "3456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef012",
+      "current_evidence": {
+        "set_digest": "456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123",
+        "slots": [
+          {
+            "role": "self-review",
+            "evidence_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "assurance": "agent-declared",
+            "producer_family": "claude",
+            "reviewer_family": "claude",
+            "independence": "same-family-self"
+          },
+          {
+            "role": "counter-review",
+            "evidence_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "assurance": "server-attested",
+            "producer_family": "claude",
+            "reviewer_family": "codex",
+            "independence": "opposite-family"
+          }
+        ]
+      }
+    },
+    {
+      "phase_instance": "phase-impl-8",
+      "step": "self_review",
+      "subject_digest": "56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234",
+      "input_fingerprint": "6789abcdef0123456789abcdef0123456789abcdef0123456789abcdef012345",
+      "current_evidence": {
+        "set_digest": "789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456",
+        "slots": [
+          {
+            "role": "self-review",
+            "evidence_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "assurance": "agent-declared",
+            "producer_family": "codex",
+            "reviewer_family": "codex",
+            "independence": "same-family-self"
+          },
+          {
+            "role": "counter-review",
+            "evidence_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "assurance": "degraded",
+            "producer_family": "codex",
+            "reviewer_family": "claude",
+            "independence": "opposite-family"
+          }
+        ]
+      }
+    }
+  ],
+  "approvals": [
+    {
+      "gate_id": "gate-design-approval",
+      "gate_kind": "artifact-approval",
+      "subject_digest": "89abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567",
+      "decision_digest": "9abcdef0123456789abcdef0123456789abcdef0123456789abcdef012345678",
+      "resolved_at_revision": 1
+    },
+    {
+      "gate_id": "gate-phase-8-drift",
+      "gate_kind": "material-drift",
+      "subject_digest": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "decision_digest": "bcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789a",
+      "resolved_at_revision": 1
+    }
+  ],
+  "waivers": [
+    {
+      "gate_id": "gate-phase-8-review",
+      "rule_id": "constitution:no-broad-refactor",
+      "rule_version": 1,
+      "subject_digest": "cdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab",
+      "granted": true,
+      "expires": "task-complete",
+      "granted_at_revision": 1
+    },
+    {
+      "gate_id": "gate-phase-8-scope",
+      "rule_id": "workflow:checkpoint-scope",
+      "rule_version": 1,
+      "subject_digest": "def0123456789abcdef0123456789abcdef0123456789abcdef0123456789abc",
+      "granted": false,
+      "expires": "task-complete",
+      "granted_at_revision": 1
+    }
+  ],
+  "open_gate": {
+    "gate_id": "gate-phase-8-commit",
+    "gate_kind": "commit-authorization",
+    "subject_digest": "ef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd",
+    "context_digest": "f0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde",
+    "opened_at_revision": 1
+  }
+}

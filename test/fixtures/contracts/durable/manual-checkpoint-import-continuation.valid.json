@@ -1,0 +1,59 @@
+{
+  "schema_version": "1",
+  "artifact_kind": "manual-checkpoint-import",
+  "task_id": "mcp-integration",
+  "repository_identity_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+  "import_mode": "continuation",
+  "chain": [
+    {
+      "schema_version": "1",
+      "task_id": "mcp-integration",
+      "repository_identity_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+      "revision": 4,
+      "phase_instance": "phase-impl-8",
+      "step": "self_review",
+      "status": "running",
+      "attempt": 1,
+      "input_fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+      "assurance": "degraded",
+      "initialization_digest": "817534ce02dc4334035765abc41e1766ba2733c567770e59e7da2689c4a3d66c",
+      "predecessor": {
+        "revision": 3,
+        "checkpoint_digest": "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+      },
+      "authoritative_results": [],
+      "projections": [],
+      "evidence_chain": [],
+      "approvals": [],
+      "waivers": []
+    },
+    {
+      "schema_version": "1",
+      "task_id": "mcp-integration",
+      "repository_identity_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+      "revision": 5,
+      "phase_instance": "phase-impl-8",
+      "step": "self_review",
+      "status": "running",
+      "attempt": 1,
+      "input_fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+      "assurance": "degraded",
+      "initialization_digest": "817534ce02dc4334035765abc41e1766ba2733c567770e59e7da2689c4a3d66c",
+      "predecessor": {
+        "revision": 4,
+        "checkpoint_digest": "bffabc7cd737b950f868094c7897f6c29141dd6b352c839ffdc021ede1547d38"
+      },
+      "authoritative_results": [],
+      "projections": [],
+      "evidence_chain": [],
+      "approvals": [],
+      "waivers": []
+    }
+  ],
+  "predecessor": {
+    "revision": 3,
+    "checkpoint_digest": "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+  },
+  "expected_state_revision": 3,
+  "expected_state_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+}
