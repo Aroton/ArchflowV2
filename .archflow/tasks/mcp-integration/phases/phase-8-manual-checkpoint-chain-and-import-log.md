@@ -1,7 +1,7 @@
 ## Implementation Log: Phase 8 - Manual Checkpoint Chain and Import
 
 **Implemented**: 2026-07-28
-**Status**: COMPLETE pending commit
+**Status**: COMPLETE
 **Requirements advanced**: REQ-11, REQ-21, REQ-26, REQ-39, REQ-50 (none completed — this phase defines formats and pure validation/selection, with adoption and runtime wiring in later phases)
 
 ### Decisions Made
