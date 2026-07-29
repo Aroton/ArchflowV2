@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:task-initialization",
+  "title": "ArchFlow Task Initialization v1",
+  "$comment": "The document a normally-initialized task adopts once, carrying every pinned input later comparisons read. `artifact_kind` is the discriminant of the durable artifact union. D15 — there is deliberately no re-pin field, no amendment field, no upgrade field, and no second config digest: `config_digest` is the exact whole-file config.yaml bytes and is the only one. D7 — ID patterns are $ref'd from `primitives` rather than inlined, and `canonical_paths` $refs the pinned `durable-primitives#/$defs/canonicalTaskPaths` rather than re-declaring a local synonym.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_kind",
+    "task_id",
+    "repository_identity_digest",
+    "code_baseline_commit",
+    "policy_base_commit",
+    "constitution_digest",
+    "workflow_digest",
+    "config_digest",
+    "canonical_paths"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "artifact_kind": { "const": "task-initialization" },
+    "task_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
+    "repository_identity_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "code_baseline_commit": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid" },
+    "policy_base_commit": {
+      "$comment": "Explicitly approved and human-committed; never derived from the working tree.",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+    },
+    "constitution_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "workflow_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "config_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "canonical_paths": { "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/canonicalTaskPaths" }
+  }
+}

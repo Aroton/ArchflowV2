@@ -1,3 +1,7 @@
+import { z } from "zod";
+
+import { assertPlainJson } from "./plain-json.js";
+
 declare const positiveSafePhaseBrand: unique symbol;
 declare const phaseInstanceIdBrand: unique symbol;
 
@@ -39,4 +43,26 @@ export function decodePhaseInstance(value: unknown): PhaseInstance {
   if (match === null) throw new TypeError("phase instance must use a canonical phase encoding");
   const phase = parsePositiveSafePhaseNumber(Number(match[2]));
   return match[1] === "phase-design" ? { kind: "phase-design", phase } : { kind: "phase-impl", phase };
+}
+
+/**
+ * The shared authority for the phase-instance *string*. It delegates to `decodePhaseInstance`
+ * rather than copying `ITERATED_PHASE`, exactly as `errors.ts:26` and `gates.ts:121` already do, so
+ * no further literal copy of the pattern exists. It is therefore strictly stronger than
+ * `primitives.schema.json#/$defs/phaseInstanceId`, which can only be a `pattern` and so admits phase
+ * numbers above `Number.MAX_SAFE_INTEGER` that this schema rejects.
+ */
+export const phaseInstanceIdV1Schema = z.string().refine((value) => {
+  try {
+    decodePhaseInstance(value);
+    return true;
+  } catch {
+    return false;
+  }
+}) as unknown as z.ZodType<PhaseInstanceId>;
+
+/** Throws, per the contract-layer convention. */
+export function parsePhaseInstanceId(value: unknown): PhaseInstanceId {
+  assertPlainJson(value, "phase instance id");
+  return phaseInstanceIdV1Schema.parse(value);
 }

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:legacy-import-initialization",
+  "title": "ArchFlow Legacy Import Initialization v1",
+  "$comment": "The document a legacy-import-initialized task adopts once. It carries all five pinned inputs `task-state` duplicates plus `task_id`, in the same names `task-initialization` uses, so one comparison clause list covers both artifact kinds with no branch. D15 — there is deliberately no re-pin field, no amendment field, no upgrade field, and no second config digest: `config_digest` is the exact whole-file config bytes of the DESTINATION task and is the only one. D7 — ID patterns are $ref'd from `primitives` rather than inlined, and `canonical_paths` $refs the pinned `durable-primitives#/$defs/canonicalTaskPaths` rather than re-declaring a local synonym. The manual-import-as-checkpoint-chain half of REQ-50 belongs to the checkpoint family and is deliberately absent here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_kind",
+    "task_id",
+    "repository_identity_digest",
+    "source_identity_digest",
+    "import_digest",
+    "import_baseline_commit",
+    "code_baseline_commit",
+    "policy_base_commit",
+    "constitution_digest",
+    "workflow_digest",
+    "config_digest",
+    "canonical_paths",
+    "mapping",
+    "staged_payload_refs"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "artifact_kind": { "const": "legacy-import-initialization" },
+    "task_id": {
+      "$comment": "The destination task.",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+    },
+    "repository_identity_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "source_identity_digest": {
+      "$comment": "The selected legacy source, never mutated.",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "import_digest": {
+      "$comment": "The immutable staged import.",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "import_baseline_commit": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid" },
+    "code_baseline_commit": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid" },
+    "policy_base_commit": {
+      "$comment": "Explicitly approved and human-committed; never derived from the working tree.",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+    },
+    "constitution_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "workflow_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "config_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "canonical_paths": { "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/canonicalTaskPaths" },
+    "mapping": {
+      "$comment": "SET — sorted by `destination_path`, duplicates rejected. The keyword and the Zod mirror both call `isSortedUniqueBy` with `tupleKey(\"destination_path\")`, so the two authorities are one predicate. Ordering is structural because `canonicalJsonBytes` preserves array order.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/legacyMappingEntry" },
+      "x-archflow-sorted-unique-by": "destination_path"
+    },
+    "staged_payload_refs": {
+      "$comment": "SET — sorted by `legacy_path`, duplicates rejected, on the same shared predicate.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/stagedPayloadRef" },
+      "x-archflow-sorted-unique-by": "legacy_path"
+    }
+  },
+  "$defs": {
+    "legacyMappingEntry": {
+      "$comment": "One legacy document, where it lands in the destination task, and what standing it arrives with. `disposition` admits exactly `draft` and `historical` and NEVER `approved`: an imported legacy document has not passed this system's gates, so it cannot arrive pre-approved. The two-member enum makes that unrepresentable rather than rejected by a later rule. Root-internal: nothing outside this file $refs it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["legacy_path", "destination_path", "phase_instance", "disposition"],
+      "properties": {
+        "legacy_path": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
+        "destination_path": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
+        "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
+        "disposition": { "enum": ["draft", "historical"] }
+      }
+    },
+    "stagedPayloadRef": {
+      "$comment": "One staged byte payload of the immutable import, addressed by its source path. `byte_count` $refs `safeInteger` deliberately (D8): a zero-byte staged payload is legal, so this is not a `>= 1` field. Root-internal: nothing outside this file $refs it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["legacy_path", "digest", "byte_count"],
+      "properties": {
+        "legacy_path": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
+        "digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "byte_count": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger" }
+      }
+    }
+  }
+}

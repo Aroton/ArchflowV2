@@ -25,5 +25,12 @@ export const SCHEMA_IDS = {
   pathClaim: "urn:archflow:schema:v1:path-claim",
   releaseManifest: "urn:archflow:schema:v1:release-manifest",
   releaseLegalReview: "urn:archflow:schema:v1:release-legal-review",
-  secretScanResult: "urn:archflow:schema:v1:secret-scan-result"
+  secretScanResult: "urn:archflow:schema:v1:secret-scan-result",
+  durablePrimitives: "urn:archflow:schema:v1:durable-primitives",
+  taskState: "urn:archflow:schema:v1:task-state",
+  maintenanceRecord: "urn:archflow:schema:v1:maintenance-record",
+  taskInitialization: "urn:archflow:schema:v1:task-initialization",
+  legacyImportInitialization: "urn:archflow:schema:v1:legacy-import-initialization",
+  documentArtifact: "urn:archflow:schema:v1:document-artifact",
+  implementationOutput: "urn:archflow:schema:v1:implementation-output"
 } as const;

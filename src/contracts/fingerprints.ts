@@ -8,10 +8,10 @@ import type { PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson, type PlainJsonObject, type PlainJsonValue } from "./plain-json.js";
 import type { ToolName } from "./tool-names.js";
 
-export interface DeclaredInputRef {
+export type DeclaredInputRef = {
   readonly input_id: SafeId;
   readonly digest: Sha256Digest;
-}
+};
 
 export interface GitIdentityRef {
   readonly path: RepositoryPathClaim;
@@ -104,9 +104,12 @@ const EXCLUDED_FIELD_SET = new Set(EXCLUDED_REQUEST_DIGEST_FIELDS);
  * validation can no longer differ between traversals: every subsequent step reads this copy, never
  * the caller's object.
  *
- * The subject types are `PlainJsonValue`-shaped but are declared as interfaces carrying branded
- * strings, so they are not *structurally* assignable to `PlainJsonObject`; the generic parameter is
- * the narrow, deliberate conversion at that boundary and keeps the public signatures unchanged.
+ * The subject types are `PlainJsonValue`-shaped but are declared as `interface`s, so they are not
+ * *structurally* assignable to `PlainJsonObject`: TypeScript grants the implicit index signature
+ * that assignability needs to type aliases only, never to interfaces. The branded string fields are
+ * not the cause — a type alias carrying branded fields satisfies the constraint — the declaration
+ * form is. The generic parameter is the narrow, deliberate conversion at that boundary and keeps the
+ * public signatures unchanged.
  */
 function materialize<T>(subject: T, label: string): T {
   assertPlainJson(subject, label);

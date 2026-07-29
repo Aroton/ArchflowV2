@@ -52,8 +52,39 @@ function isUnicodeNormalized(_enabled: true, data: string): boolean {
   return data.normalize("NFC") === data;
 }
 
-function isOrdinalSortedUnique(_enabled: true, data: string[]): boolean {
-  return data.every((value, index) => index === 0 || data[index - 1]! < value);
+/**
+ * The module's one ordering predicate. Every set rule — both Ajv keywords and every Zod `.refine()`
+ * that mirrors them — calls this, so "the same function" is literally true and the two authorities
+ * cannot drift. Strict increase implies uniqueness, so it subsumes `x-archflow-unique-by` for the
+ * shapes that use it. The default `key` is `String`, which means an array of objects compares
+ * `"[object Object]" < "[object Object]"` and is rejected at length >= 2; callers that need object
+ * ordering supply `tupleKey`.
+ */
+export function isSortedUniqueBy(items: unknown, key: (value: unknown) => string = String): boolean {
+  return Array.isArray(items) && items.every((value, index) => index === 0 || key(items[index - 1]) < key(value));
+}
+
+/**
+ * Builds the ordering key for a multi-property set. Each property is read with
+ * `Object.getOwnPropertyDescriptor` plus `"value" in descriptor` — the shipped form at
+ * `hasUniqueObjectPropertyValues` above — so an accessor property yields `undefined` instead of
+ * invoking a getter, which a naive `item[property]` would do.
+ *
+ * Components are `String()`-coerced and joined with `U+0000`. That join is injective here: every ID
+ * primitive and `path-claim.schema.json` reject the whole `U+0000`-`U+001F` range, and because
+ * `U+0000` sorts below every admitted character the joined comparison is exactly componentwise
+ * ordinal comparison. The `":"`-joined `ruleKey` below is deliberately not reused — `SafeId` admits
+ * `":"`, so that key can collide across a component boundary.
+ */
+export function tupleKey(properties: string | readonly string[]): (value: unknown) => string {
+  const propertyNames = typeof properties === "string" ? [properties] : properties;
+  return (value: unknown): string => {
+    if (typeof value !== "object" || value === null) return String(value);
+    return propertyNames.map((property) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, property);
+      return String(descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined);
+    }).join("\u0000");
+  };
 }
 
 function hasConsistentReviewSummary(_enabled: true, data: Record<string, unknown>): boolean {
@@ -66,11 +97,10 @@ function hasConsistentReviewSummary(_enabled: true, data: Record<string, unknown
 function hasConsistentAdjudicationSemantics(_enabled: true, data: Record<string, unknown>): boolean {
   if (!Array.isArray(data.rule_findings) || !Array.isArray(data.drift_findings) || !Array.isArray(data.approved_upstream_digests)) return true;
   const ruleKey = (rule: Record<string, unknown>): string => `${String(rule.rule_id)}:${String(rule.rule_version)}`;
-  const sortedUnique = (values: readonly string[]): boolean => values.every((value, index) => index === 0 || values[index - 1]! < value);
   const ruleFindings = data.rule_findings as Record<string, unknown>[];
   const driftFindings = data.drift_findings as Record<string, unknown>[];
   const upstream = data.approved_upstream_digests as string[];
-  if (!sortedUnique(upstream) || !sortedUnique(ruleFindings.map(ruleKey)) || !sortedUnique(driftFindings.map((finding) => String(finding.upstream_digest)))) return false;
+  if (!isSortedUniqueBy(upstream) || !isSortedUniqueBy(ruleFindings.map(ruleKey)) || !isSortedUniqueBy(driftFindings.map((finding) => String(finding.upstream_digest)))) return false;
   if (driftFindings.length !== upstream.length || driftFindings.some((finding, index) => finding.upstream_digest !== upstream[index])) return false;
   for (const finding of ruleFindings) {
     if (!Array.isArray(finding.enforced_by)) return false;
@@ -93,22 +123,21 @@ function hasConsistentAdjudicationSemantics(_enabled: true, data: Record<string,
 
 const record = (value: unknown): Record<string, unknown> | undefined => typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 const ruleKey = (value: unknown): string => { const item = record(value); return `${String(item?.rule_id)}:${String(item?.rule_version)}`; };
-const sortedUniqueBy = (values: unknown, key: (value: unknown) => string = String): boolean => Array.isArray(values) && values.every((value, index) => index === 0 || key(values[index - 1]) < key(value));
 
 function hasGateContextSemantics(kind: unknown, contextValue: unknown): boolean {
   const context = record(contextValue);
   if (context === undefined) return true;
   if (kind === "review-trigger" || kind === "adjudication-failure") {
     const primary = kind === "review-trigger" ? context.matched_rules : context.failed_rules;
-    if (!sortedUniqueBy(primary, ruleKey) || !sortedUniqueBy(context.uncertain_rules, ruleKey) || !sortedUniqueBy(context.eligible_waiver_rules, ruleKey)) return false;
+    if (!isSortedUniqueBy(primary, ruleKey) || !isSortedUniqueBy(context.uncertain_rules, ruleKey) || !isSortedUniqueBy(context.eligible_waiver_rules, ruleKey)) return false;
     const available = new Set([...(primary as unknown[]), ...(context.uncertain_rules as unknown[])].map(ruleKey));
     if ((context.eligible_waiver_rules as unknown[]).some((item) => !available.has(ruleKey(item)))) return false;
     if (kind === "adjudication-failure" && available.size === 0) return false;
     return record(context.waiver_scope)?.operation === kind;
   }
   if (kind === "attempts-exhausted") return typeof context.attempts === "number" && typeof context.maximum_attempts === "number" && context.attempts >= context.maximum_attempts;
-  if (kind === "material-drift") return sortedUniqueBy(context.affected_claim_ids);
-  if (kind === "commit-authorization") return sortedUniqueBy(context.current_artifact_digests) && sortedUniqueBy(context.parent_document_digests);
+  if (kind === "material-drift") return isSortedUniqueBy(context.affected_claim_ids);
+  if (kind === "commit-authorization") return isSortedUniqueBy(context.current_artifact_digests) && isSortedUniqueBy(context.parent_document_digests);
   return true;
 }
 
@@ -122,7 +151,7 @@ function hasGateSemantics(_enabled: true, data: Record<string, unknown>): boolea
   if (data.kind === "adjudication-failure" && payload.decision === "approve") {
     const eligible = new Set((context.eligible_waiver_rules as unknown[]).map(ruleKey));
     const required = new Set([...(context.failed_rules as unknown[]), ...(context.uncertain_rules as unknown[])].map(ruleKey).filter((key) => !eligible.has(key)));
-    if (!sortedUniqueBy(payload.resolutions, (item) => ruleKey(record(item)?.rule))) return false;
+    if (!isSortedUniqueBy(payload.resolutions, (item) => ruleKey(record(item)?.rule))) return false;
     const actual = (payload.resolutions as unknown[]).map((item) => ruleKey(record(item)?.rule));
     return actual.length === required.size && actual.every((key) => required.has(key));
   }
@@ -214,7 +243,20 @@ export function createJsonSchemaValidator<T>(
     metaSchema: { const: true },
     type: "array",
     errors: false,
-    validate: isOrdinalSortedUnique
+    validate: (_enabled: true, data: unknown) => isSortedUniqueBy(data)
+  });
+  ajv.addKeyword({
+    keyword: "x-archflow-sorted-unique-by",
+    schemaType: ["string", "array"],
+    metaSchema: {
+      oneOf: [
+        { type: "string", minLength: 1 },
+        { type: "array", minItems: 1, uniqueItems: true, items: { type: "string", minLength: 1 } }
+      ]
+    },
+    type: "array",
+    errors: false,
+    validate: (properties: string | readonly string[], data: unknown) => isSortedUniqueBy(data, tupleKey(properties))
   });
   ajv.addKeyword({
     keyword: "x-archflow-review-summary",

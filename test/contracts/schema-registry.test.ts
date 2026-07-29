@@ -32,6 +32,13 @@ const SCHEMA_FILES = {
   releaseManifest: "release-manifest",
   releaseLegalReview: "release-legal-review",
   secretScanResult: "secret-scan-result",
+  durablePrimitives: "durable-primitives",
+  taskState: "task-state",
+  maintenanceRecord: "maintenance-record",
+  taskInitialization: "task-initialization",
+  legacyImportInitialization: "legacy-import-initialization",
+  documentArtifact: "document-artifact",
+  implementationOutput: "implementation-output",
 } as const satisfies Record<keyof typeof SCHEMA_IDS, string>;
 
 const loadSchema = async (name: string): Promise<Record<string, unknown>> =>

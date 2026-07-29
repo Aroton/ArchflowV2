@@ -1,0 +1,99 @@
+import { readFile } from "node:fs/promises";
+
+import { describe, expect, it } from "vitest";
+
+import { STEP_STATUSES, TERMINAL_STATES, type TaskStateV1 } from "../../src/contracts/durable-state.js";
+import { GATE_KINDS } from "../../src/contracts/gates.js";
+import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { PIPELINE_STEPS } from "../../src/contracts/vocabulary.js";
+
+/**
+ * `task-state` has exactly one shape authority (D2): `durable-state.ts` declares no Zod schema, so
+ * there is no `assertZodAgreement` here and there must not be. Chunk 13 registers the schema; until
+ * then the validator is built directly, as `durable-primitives.test.ts` already does.
+ */
+const readJson = async (url: URL): Promise<Record<string, unknown>> =>
+  JSON.parse(await readFile(url, "utf8")) as Record<string, unknown>;
+
+const schema = async (name: string): Promise<Record<string, unknown>> =>
+  readJson(new URL(`../../src/contracts/schemas/v1/${name}.schema.json`, import.meta.url));
+
+const taskStateValidator = async () =>
+  createJsonSchemaValidator<TaskStateV1>(await schema("task-state"), [
+    await schema("primitives"),
+    await schema("path-claim"),
+  ]);
+
+const validState = async (): Promise<Record<string, unknown>> =>
+  readJson(new URL("../fixtures/contracts/durable/task-state.valid.json", import.meta.url));
+
+/** Every rejection below is structural — the schema's, never a validator rule. */
+const rejects = async (mutate: (state: Record<string, unknown>) => Record<string, unknown>): Promise<void> => {
+  const validator = await taskStateValidator();
+  expect(validator.validate(mutate(await validState()))).toBe(false);
+};
+
+const enums = (value: unknown): readonly string[] | undefined => (value as { enum?: readonly string[] }).enum;
+
+describe("task state contract", () => {
+  it("round-trips the canonical valid fixture through its JSON Schema", async () => {
+    const validator = await taskStateValidator();
+    const state = await validState();
+    expect(validator.validate(state), JSON.stringify(validator.validate.errors)).toBe(true);
+  });
+
+  it("keeps every vocabulary tuple identical to its schema enum", async () => {
+    const taskState = await schema("task-state");
+    const defs = taskState.$defs as Record<string, unknown>;
+    const properties = taskState.properties as Record<string, unknown>;
+    expect(enums(defs.stepStatus)).toEqual([...STEP_STATUSES]);
+    expect(enums(defs.gateKind)).toEqual([...GATE_KINDS]);
+    expect(enums(properties.terminal)).toEqual([...TERMINAL_STATES]);
+    expect(enums(properties.step)).toEqual([...PIPELINE_STEPS]);
+  });
+
+  it("rejects 0 in every `>= 1` field (D8 — SafeInteger admits 0)", async () => {
+    await rejects((state) => ({ ...state, revision: 0 }));
+    await rejects((state) => ({ ...state, attempt: 0 }));
+    await rejects((state) => ({
+      ...state,
+      approvals: [{ ...(state.approvals as Record<string, unknown>[])[0], resolved_at_revision: 0 }],
+    }));
+    await rejects((state) => ({
+      ...state,
+      open_gate: { ...(state.open_gate as Record<string, unknown>), opened_at_revision: 0 },
+    }));
+    await rejects((state) => ({
+      ...state,
+      waivers: [{ ...(state.waivers as Record<string, unknown>[])[0], rule_version: 0 }],
+    }));
+    await rejects((state) => ({
+      ...state,
+      waivers: [{ ...(state.waivers as Record<string, unknown>[])[0], granted_at_revision: 0 }],
+    }));
+    await rejects((state) => ({
+      ...state,
+      prepared_intent: { ...(state.prepared_intent as Record<string, unknown>), prior_revision: 0 },
+    }));
+  });
+
+  it("rejects a shuffled or duplicated authoritative_results — a SET on the (phase_instance, step) tuple", async () => {
+    await rejects((state) => ({ ...state, authoritative_results: [...(state.authoritative_results as unknown[])].reverse() }));
+    await rejects((state) => {
+      const [first] = state.authoritative_results as unknown[];
+      return { ...state, authoritative_results: [first, first] };
+    });
+  });
+
+  it("rejects a shuffled or duplicated approvals set", async () => {
+    await rejects((state) => ({ ...state, approvals: [...(state.approvals as unknown[])].reverse() }));
+    await rejects((state) => {
+      const [first] = state.approvals as unknown[];
+      return { ...state, approvals: [first, first] };
+    });
+  });
+
+  it("rejects an open_gate supplied as an array — a nested gate is unrepresentable, not merely rejected", async () => {
+    await rejects((state) => ({ ...state, open_gate: [state.open_gate] }));
+  });
+});

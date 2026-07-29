@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:document-artifact",
+  "title": "ArchFlow Document Artifact v1",
+  "$comment": "The normative structural authority for a projected agent document. D3 — `document_path` is the TASK-relative frame and `projection_target` is the REPOSITORY frame; the two $defs are the same underlying claim validator, so the frame is named at the reference site and is not runtime-checkable. D19 — `step` is required here as well as in the type alias and the Zod mirror; the fingerprint correlation keys on (phase_instance, step).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_kind",
+    "task_id",
+    "phase_instance",
+    "step",
+    "document_path",
+    "path_class",
+    "byte_count",
+    "content_digest",
+    "declared_inputs",
+    "input_fingerprint",
+    "snapshot_digest",
+    "projection_target"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "artifact_kind": { "const": "document" },
+    "task_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
+    "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
+    "step": {
+      "$comment": "D19 — exactly PIPELINE_STEPS (`vocabulary.ts:2`).",
+      "enum": ["produce", "self_review", "counter_review", "triage", "adjudicate"]
+    },
+    "document_path": {
+      "$comment": "TASK-relative frame (D3).",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
+    },
+    "path_class": {
+      "$comment": "A const, not the 17-member path class vocabulary.",
+      "const": "document"
+    },
+    "byte_count": {
+      "$comment": "D8 declares no own minimum: a zero-byte document is legal, so `safeInteger` is the right $ref.",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+    },
+    "content_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "declared_inputs": {
+      "$comment": "SET — sorted by `input_id`, duplicates rejected. The keyword and the Zod mirror both call `isSortedUniqueBy` with `tupleKey(\"input_id\")`, so the two authorities are one predicate.",
+      "type": "array",
+      "items": { "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/declaredInputRef" },
+      "x-archflow-sorted-unique-by": "input_id"
+    },
+    "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "snapshot_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "projection_target": {
+      "$comment": "REPOSITORY frame (D3).",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+    }
+  }
+}

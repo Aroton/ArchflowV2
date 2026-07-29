@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:implementation-output",
+  "title": "ArchFlow Implementation Output v1",
+  "$comment": "The manifest an implementation step produces. `artifact_kind` is the discriminant of the durable artifact union. Built entirely by $ref against the pinned $def inventory (D7): `outputEntry`, `declaredInputRef`, and the `snapshotAccounting` ROOT come from `durable-primitives`; `taskSlug`, `phaseInstanceId`, `gitOid`, `sha256Digest`, `safeInteger`, `pathSafeId`, `repositoryPathClaim`, and `taskPathClaim` come from `primitives`; `secret_scan` $refs the whole `secret-scan-result` root, which carries its own nested `schema_version` — that nesting is expected. Nothing here is re-declared locally. STRUCTURALLY TOTAL BUT NOT INTEGRITY-TOTAL: `payload_bytes`, `payload_digest`, and `after.oid` are assertions in Phase 7; Phase 10 verifies them against retained bytes at materialization time, so a passing validation here is not evidence that the bytes exist. `restore_targets` subset-of-outputs, the accounting sums and correspondence, `previous_path !== path`, and `phase_instance` decoding to `phase-impl` are all `validateDurableSemantics`'s (chunk 10) and are deliberately NOT duplicated here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_kind",
+    "task_id",
+    "phase_instance",
+    "step",
+    "base_commit",
+    "index_identity_digest",
+    "worktree_identity_digest",
+    "outputs",
+    "parent_documents",
+    "diff_digest",
+    "snapshot_digest",
+    "restore_targets",
+    "accounting",
+    "secret_scan",
+    "undeclared_changes",
+    "declared_inputs",
+    "input_fingerprint"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "artifact_kind": { "const": "implementation-output" },
+    "task_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
+    "phase_instance": {
+      "$comment": "Chunk 10's rank 4b restricts this to `phase-impl-<n>`; the $def can only be a pattern, so the narrowing stays semantic.",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+    },
+    "step": {
+      "$comment": "D19 — required in all three authorities, with members exactly `PIPELINE_STEPS` (`vocabulary.ts:2`). Chunk 10's rank-8 fingerprint correlation keys on (phase_instance, step) and had nothing to compare against before this field existed.",
+      "enum": ["produce", "self_review", "counter_review", "triage", "adjudicate"]
+    },
+    "base_commit": {
+      "$comment": "Immutable: the tree the diff is taken against.",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+    },
+    "index_identity_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "worktree_identity_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "outputs": {
+      "$comment": "SET — sorted by `path`, duplicates rejected, and NON-EMPTY. The keyword and the Zod mirror both call `isSortedUniqueBy` with `tupleKey(\"path\")`, so the two authorities are one predicate.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/outputEntry" },
+      "x-archflow-sorted-unique-by": "path"
+    },
+    "parent_documents": {
+      "$comment": "SET — sorted by `document_path`, duplicates rejected.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/parentDocumentRef" },
+      "x-archflow-sorted-unique-by": "document_path"
+    },
+    "diff_digest": {
+      "$comment": "The exact review and commit-authorization subject.",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "snapshot_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "restore_targets": {
+      "$comment": "SET — sorted, duplicates rejected. Bare strings, so the string-array keyword applies. A subset of `outputs[].path`; that containment is chunk 10's rank 5b and is deliberately not checked here. D3 — `repositoryPathClaim`, the worktree frame, the same frame as `outputEntry.path`.",
+      "type": "array",
+      "items": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
+      "x-archflow-sorted-unique": true
+    },
+    "accounting": {
+      "$comment": "$refs the snapshotAccounting ROOT, not the entry.",
+      "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/snapshotAccounting"
+    },
+    "secret_scan": {
+      "$comment": "The whole `secret-scan-result` root. All three of its variants carry their own `schema_version: \"1\"`, so this manifest carries a nested one — expected, not a duplication defect.",
+      "$ref": "urn:archflow:schema:v1:secret-scan-result"
+    },
+    "undeclared_changes": { "$ref": "#/$defs/undeclaredChangeReport" },
+    "declared_inputs": {
+      "$comment": "SET — sorted by `input_id`, duplicates rejected.",
+      "type": "array",
+      "items": { "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/declaredInputRef" },
+      "x-archflow-sorted-unique-by": "input_id"
+    },
+    "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "constitution_edit_gate_id": {
+      "$comment": "D14 — a structural hook and NOTHING more. An earlier draft made a `task-branch-constitution` output claimable only when this field was present; that is constitution-edit gate policy, which is REQ-16 and Phase 11's. There is deliberately no conditional-requirement rule tying this field to `path_class`. Absence is omission from `required`, never `null`.",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+    }
+  },
+  "$defs": {
+    "parentDocumentRef": {
+      "$comment": "D3 — `document_path` is a `taskPathClaim`: task-relative, rooted at `.archflow/tasks/<task_id>/`, a different frame from `outputs[].path` and `restore_targets`, which are `repositoryPathClaim` and rooted at the worktree. Both brands are one runtime validator cast twice, so the $ref name here is what states the frame; there is no runtime frame check.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["document_path", "content_digest", "role"],
+      "properties": {
+        "document_path": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim" },
+        "content_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "role": { "enum": ["prd", "design", "phase-design", "impl-notes"] }
+      }
+    },
+    "undeclaredChangeReport": {
+      "$comment": "`undeclared_paths` is RAW Git output, not a path claim, and its mirror is deliberately a bare `{\"type\": \"string\"}` declared inline rather than a $def: a valid repository may contain a dirty file whose name carries a colon, a trailing dot, non-NFC text, or a newline, and reporting an undeclared change must not throw when it meets one. `RawGitPath` (`path-claims.ts:15`, `:72`) is a total constructor with no lexical rule and has no $def in `primitives.schema.json`. `unrepresentable_count` counts the names that could not be represented at all, and genuinely admits 0, so it $refs `safeInteger` (D8).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scanned", "undeclared_paths", "unrepresentable_count"],
+      "properties": {
+        "scanned": { "type": "boolean" },
+        "undeclared_paths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "x-archflow-sorted-unique": true
+        },
+        "unrepresentable_count": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger" }
+      }
+    }
+  }
+}

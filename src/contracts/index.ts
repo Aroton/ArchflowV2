@@ -23,6 +23,14 @@ export * from "./renderers.js";
 export type { RuleVersionRef } from "./gates.js";
 export * from "./gates.js";
 export * from "./errors.js";
+export * from "./durable-primitives.js";
+export * from "./durable-state.js";
+export * from "./durable-maintenance.js";
+export * from "./durable-task-initialization.js";
+export * from "./durable-legacy-import.js";
+export * from "./durable-document.js";
+export * from "./durable-implementation-output.js";
+export * from "./durable.js";
 export {
   TOOL_DEFINITIONS,
   bindParsedToolCallRequest,

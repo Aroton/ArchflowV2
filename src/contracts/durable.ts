@@ -1,0 +1,425 @@
+import { canonicalJsonDigest, type CanonicalDocument } from "./canonical.js";
+import type { DocumentArtifactV1 } from "./durable-document.js";
+import type { ImplementationOutputV1 } from "./durable-implementation-output.js";
+import type { LegacyImportInitializationV1 } from "./durable-legacy-import.js";
+import type { MaintenanceRecordV1 } from "./durable-maintenance.js";
+import type { TaskStateV1 } from "./durable-state.js";
+import type { TaskInitializationV1 } from "./durable-task-initialization.js";
+import { createProjectError, type ProjectError, type ProjectResult } from "./errors.js";
+import type { Sha256Digest } from "./evidence.js";
+import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
+import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
+
+/**
+ * The phase's single cross-document semantic authority.
+ *
+ * **The subject has exactly three slots and this module claims nothing beyond them.** There is no
+ * result-manifest, decision, approval, waiver, authority-link, or evidence slot, so no reference
+ * target is resolved here: not `authoritative_results[*].result_digest`, not `approvals[*].gate_id`,
+ * not `open_gate.gate_id`, not `waivers[*].gate_id`. Each has a named later owner (Phases 10 and 11).
+ *
+ * **No template-based path classification (D4).** The class -> template tables live in
+ * `src/repository/paths.ts`, which `src/contracts/**` may never import
+ * (`test/contracts/repository-boundary.test.ts:28-38`). A cross-class rename is *representable* and
+ * is **not** rejected here; rank 5a checks only `previous_path !== path`, and Phase 10 classifies
+ * both endpoints. `payload_bytes`, `payload_digest`, and `after.oid` are assertions in this phase
+ * and become verified facts in Phase 10; nothing here sees a byte, and `CanonicalDocument.bytes` is
+ * never inspected.
+ */
+
+export type DurableArtifact =
+  | TaskInitializationV1
+  | LegacyImportInitializationV1
+  | DocumentArtifactV1
+  | ImplementationOutputV1;
+
+export type DurableSemanticSubject = {
+  readonly state?: CanonicalDocument<TaskStateV1>;
+  readonly artifact?: CanonicalDocument<DurableArtifact>;
+  readonly maintenance?: CanonicalDocument<MaintenanceRecordV1>;
+};
+
+/**
+ * Every `issue_code` this module can emit, transcribed from the pinned invariant table. Each is a
+ * `SafeCode` (`[a-z0-9][a-z0-9_-]{0,63}`, `evidence.ts:22`). They are named here so the rejection
+ * corpus can assert against the same literals the validator constructs rather than a retyped copy.
+ * `INPUT_FINGERPRINT_MISMATCH` is deliberately absent: its parameters are exactly the two digests
+ * under `.strict()` (`errors.ts:46`), so it carries no `issue_code` at all.
+ */
+export const DURABLE_ISSUE_CODES = Object.freeze({
+  /** 2 */ statePhaseInstanceUndecodable: "state-phase-instance-undecodable",
+  /** 3 */ documentDigestMismatch: "document-digest-mismatch",
+  /** 4a */ phaseInstanceUndecodable: "phase-instance-undecodable",
+  /** 4b */ implementationOutputPhaseKind: "implementation-output-phase-kind",
+  /** 5a */ renamePreviousPathEqualsPath: "rename-previous-path-equals-path",
+  /** 5b */ restoreTargetNotDeclared: "restore-target-not-declared",
+  /** 6a */ accountingResultBytesSum: "accounting-result-bytes-sum",
+  /** 6b */ accountingTaskBytesBelowResult: "accounting-task-bytes-below-result",
+  /** 6c */ accountingEntryUnmatched: "accounting-entry-unmatched",
+  /** 6d */ accountingOutputUnmatched: "accounting-output-unmatched",
+  /** 6e */ accountingStorageMismatch: "accounting-storage-mismatch",
+  /** 6f */ accountingStoredBytesMismatch: "accounting-stored-bytes-mismatch",
+  /** 7a */ initializationDigestMismatch: "initialization-digest-mismatch",
+  /** 7b */ artifactTaskIdMismatch: "artifact-task-id-mismatch",
+  /** 7c */ maintenanceTaskIdMismatch: "maintenance-task-id-mismatch",
+  /** 7d */ repositoryIdentityDigestMismatch: "repository-identity-digest-mismatch",
+  /** 7e */ configDigestMismatch: "config-digest-mismatch",
+  /** 7f */ workflowDigestMismatch: "workflow-digest-mismatch",
+  /** 7g */ constitutionDigestMismatch: "constitution-digest-mismatch",
+  /** 7h */ policyBaseCommitMismatch: "policy-base-commit-mismatch",
+  /** 9a */ maintenanceTotalBytesMismatch: "maintenance-total-bytes-mismatch",
+  /** 9b */ maintenanceRevisionAfterState: "maintenance-revision-after-state",
+} as const);
+
+type IssueCode = (typeof DURABLE_ISSUE_CODES)[keyof typeof DURABLE_ISSUE_CODES];
+
+const OK: ProjectResult<void> = Object.freeze({ schema_version: "1", ok: true, value: undefined });
+const fail = (error: ProjectError): ProjectResult<void> => ({ schema_version: "1", ok: false, error });
+
+/* ------------------------------------------------------------------ input discipline (rank 1) */
+
+/**
+ * The shipped own-data-descriptor idiom (`validators.ts:33-36`), reused rather than reinvented. A
+ * getter-backed slot or shell field is a defect in the *calling server code*, not agent-supplied
+ * data, so the repository convention is a throw. Reading alone does not reject a getter — the
+ * descriptor check is what does.
+ *
+ * `enumerable` is required as well as `value`, matching `assertPlainJson`, which already rejects a
+ * non-enumerable property inside a value as "not a JSON value" (`plain-json.ts:85`). Without it the
+ * shell check would be weaker than the check applied to the shell's own contents, and a
+ * non-enumerable `value` or `digest` — invisible to `canonicalJsonBytes`, which serializes only
+ * enumerable properties — would pass. `canonicalDocument` builds its result from an object literal
+ * (`canonical.ts:104`), so every document from the sanctioned constructor satisfies this.
+ */
+function ownDataSlot(subject: DurableSemanticSubject, slot: keyof DurableSemanticSubject): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(subject, slot);
+  if (descriptor === undefined) return undefined;
+  if (!("value" in descriptor) || !descriptor.enumerable) {
+    throw new TypeError(`durable semantic subject: ${slot} must be an own enumerable data property`);
+  }
+  return descriptor.value;
+}
+
+function ownDataField(document: unknown, field: "value" | "digest", label: string): unknown {
+  const descriptor =
+    document === null || (typeof document !== "object" && typeof document !== "function")
+      ? undefined
+      : Object.getOwnPropertyDescriptor(document, field);
+  if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+    throw new TypeError(`${label}: ${field} must be an own enumerable data property`);
+  }
+  return descriptor.value;
+}
+
+type Materialized<T> = { readonly value: T; readonly digest: unknown };
+
+/**
+ * Validate and materialize a caller-owned object **once** before inspecting it more than once, per
+ * `CLAUDE.md`: `assertPlainJson` then `structuredClone`, and validate only the clone. An enumerable
+ * getter can otherwise return one value to a validation pass and a different value to a hashing
+ * pass. `assertPlainJson` guards the *inside* of a value and can never be applied to a whole
+ * `CanonicalDocument`, because `bytes` is a `Uint8Array` (`canonical.ts:99`).
+ *
+ * The caller's `digest` is carried but is never authority: a `CanonicalDocument` can be built as an
+ * object literal rather than through `parseCanonicalDocument`, so every digest this module compares
+ * is re-derived with `canonicalJsonDigest`.
+ */
+function materialize<T extends PlainJsonValue>(document: unknown, label: string): Materialized<T> {
+  const value = ownDataField(document, "value", label);
+  const digest = ownDataField(document, "digest", label);
+  assertPlainJson(value, `${label} value`);
+  return { value: structuredClone(value) as T, digest };
+}
+
+/* ------------------------------------------------------------------- reporting code by subject */
+
+function stateInvalid(state: TaskStateV1, issue_code: IssueCode): ProjectError {
+  return createProjectError("STATE_INVALID", { phase_instance: state.phase_instance, issue_code });
+}
+
+function artifactInvalid(artifact: DurableArtifact, issue_code: IssueCode): ProjectError {
+  return artifact.artifact_kind === "implementation-output"
+    ? createProjectError("SNAPSHOT_INVALID", { snapshot_digest: artifact.snapshot_digest, issue_code })
+    : createProjectError("TASK_INVALID", { task_id: artifact.task_id, issue_code });
+}
+
+function maintenanceInvalid(maintenance: MaintenanceRecordV1, issue_code: IssueCode): ProjectError {
+  return createProjectError("TASK_INVALID", { task_id: maintenance.task_id, issue_code });
+}
+
+function contractInvalid(issue_code: IssueCode): ProjectError {
+  return createProjectError("CONTRACT_INVALID", { issue_code });
+}
+
+/* ---------------------------------------------------------------------------- small predicates */
+
+function decodable(value: PhaseInstanceId): boolean {
+  try {
+    decodePhaseInstance(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+type InitializationArtifact = TaskInitializationV1 | LegacyImportInitializationV1;
+
+function isInitialization(artifact: DurableArtifact): artifact is InitializationArtifact {
+  return artifact.artifact_kind === "task-initialization" || artifact.artifact_kind === "legacy-import-initialization";
+}
+
+/** The two kinds carrying a `step`, and therefore the only ones rank 8's guard can admit (D19). */
+type SteppedArtifact = DocumentArtifactV1 | ImplementationOutputV1;
+
+function isStepped(artifact: DurableArtifact): artifact is SteppedArtifact {
+  return artifact.artifact_kind === "document" || artifact.artifact_kind === "implementation-output";
+}
+
+/* ------------------------------------------------------------------------------- the validator */
+
+/**
+ * **Two exits, and only two.** Semantic disagreement *returns* `ProjectResult{ok:false}` carrying
+ * one of the five pinned existing error codes; an input-discipline violation *throws* a `TypeError`.
+ * Structural failure never arrives: unknown fields, missing required properties, closed-enum
+ * violations, and pattern failures are rejected by the normative JSON Schema or the Zod mirror at
+ * the caller's parse boundary. **Precondition: the caller has already validated the subject against
+ * its normative JSON Schema.** No structure is re-checked here, with exactly two deliberate
+ * residues — ranks 2 and 4 — which exist because the `phaseInstanceId` JSON `pattern` is weaker
+ * than the decoder that is the real authority (D6).
+ *
+ * `ProjectResult` carries exactly one error, so the evaluation order below is normative: the
+ * reported error is the minimum under *(rank, sub-rank, slot, collection path, index)* compared
+ * lexicographically, and the clauses are written in exactly that order so the first failure found
+ * is that minimum. Slot is `state` = 0, `artifact` = 1, `maintenance` = 2; collection path is the
+ * walked collection's dotted property path, `""` for a root clause, which sorts below every
+ * property name; index is the ascending array index, `0` for a root clause.
+ */
+export function validateDurableSemantics(subject: DurableSemanticSubject): ProjectResult<void> {
+  /* Rank 1 — input discipline, before any slot and before any `.value` or `.digest` is read. */
+  const stateDocument = ownDataSlot(subject, "state");
+  const artifactDocument = ownDataSlot(subject, "artifact");
+  const maintenanceDocument = ownDataSlot(subject, "maintenance");
+
+  const stateSlot =
+    stateDocument === undefined ? undefined : materialize<TaskStateV1>(stateDocument, "durable state document");
+  const artifactSlot =
+    artifactDocument === undefined
+      ? undefined
+      : materialize<DurableArtifact>(artifactDocument, "durable artifact document");
+  const maintenanceSlot =
+    maintenanceDocument === undefined
+      ? undefined
+      : materialize<MaintenanceRecordV1>(maintenanceDocument, "durable maintenance document");
+
+  const state = stateSlot?.value;
+  const artifact = artifactSlot?.value;
+  const maintenance = maintenanceSlot?.value;
+
+  /*
+   * Rank 2 — carriability, and it must precede every rank that may report under `STATE_INVALID`.
+   * That code's `phase_instance` parameter runs `decodePhaseInstance` under `.strict()`, and the
+   * JSON `pattern` admits `phase-impl-99999999999999999999`, which the decoder rejects. Ranks 3 and
+   * 5-9 may all report `STATE_INVALID`, so an undecodable `state.phase_instance` is *established*
+   * here and no later rank runs — otherwise `createProjectError` would throw a `ZodError` exactly
+   * where the contract requires a return. Routing rank 4 to `CONTRACT_INVALID` does not protect
+   * rank 3, which is why an earlier ordering was wrong.
+   */
+  if (state !== undefined && !decodable(state.phase_instance)) {
+    return fail(contractInvalid(DURABLE_ISSUE_CODES.statePhaseInstanceUndecodable));
+  }
+
+  /* Rank 3 — self-digest agreement, per supplied document, in slot order. */
+  if (state !== undefined && canonicalJsonDigest(state) !== stateSlot?.digest) {
+    return fail(stateInvalid(state, DURABLE_ISSUE_CODES.documentDigestMismatch));
+  }
+  if (artifact !== undefined && canonicalJsonDigest(artifact) !== artifactSlot?.digest) {
+    return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.documentDigestMismatch));
+  }
+  if (maintenance !== undefined && canonicalJsonDigest(maintenance) !== maintenanceSlot?.digest) {
+    return fail(maintenanceInvalid(maintenance, DURABLE_ISSUE_CODES.documentDigestMismatch));
+  }
+
+  /*
+   * Rank 4a — the residue: every `phase_instance` rank 2 did not cover. It reports
+   * `CONTRACT_INVALID` in every slot uniformly, because a phase-instance value is the one thing
+   * this error family cannot carry. Slot order state -> artifact; within the artifact slot the
+   * root clause (collection path `""`) precedes `mapping`.
+   */
+  if (state !== undefined) {
+    for (const result of state.authoritative_results) {
+      if (!decodable(result.phase_instance)) {
+        return fail(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
+      }
+    }
+  }
+  if (artifact !== undefined) {
+    if (isStepped(artifact) && !decodable(artifact.phase_instance)) {
+      return fail(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
+    }
+    if (artifact.artifact_kind === "legacy-import-initialization") {
+      for (const entry of artifact.mapping) {
+        if (!decodable(entry.phase_instance)) {
+          return fail(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
+        }
+      }
+    }
+  }
+
+  /* Rank 4b — an implementation output is produced by an implementation phase and nothing else. */
+  if (artifact !== undefined && artifact.artifact_kind === "implementation-output") {
+    if (decodePhaseInstance(artifact.phase_instance).kind !== "phase-impl") {
+      return fail(contractInvalid(DURABLE_ISSUE_CODES.implementationOutputPhaseKind));
+    }
+  }
+
+  if (artifact !== undefined && artifact.artifact_kind === "implementation-output") {
+    /*
+     * Rank 5a — the one rename clause this phase can evaluate. Verifying that the two endpoints
+     * belong to the same path class needs the template tables and is Phase 10's (D4).
+     */
+    for (const output of artifact.outputs) {
+      if (output.operation === "rename" && output.previous_path === output.path) {
+        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.renamePreviousPathEqualsPath));
+      }
+    }
+
+    /* Rank 5b — a restore target must be one of the outputs the manifest declares. */
+    const declaredPaths = new Set<string>(artifact.outputs.map((output) => output.path));
+    for (const target of artifact.restore_targets) {
+      if (!declaredPaths.has(target)) {
+        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.restoreTargetNotDeclared));
+      }
+    }
+
+    /*
+     * Rank 6 — the accounting correspondence, ordered by dependency: 6e and 6f presuppose the
+     * pairing 6c and 6d establish. The `git-object => stored_bytes === 0` half is **not** here:
+     * D16 made it structural, a discriminated union on `storage` in chunk 4's schema.
+     */
+    const accounting = artifact.accounting;
+    let storedTotal = 0;
+    for (const entry of accounting.counted_entries) storedTotal += entry.stored_bytes;
+    if (accounting.result_bytes !== storedTotal) {
+      return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingResultBytesSum));
+    }
+    if (accounting.task_bytes < accounting.result_bytes) {
+      return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingTaskBytesBelowResult));
+    }
+
+    const outputsByPath = new Map<string, (typeof artifact.outputs)[number][]>();
+    for (const output of artifact.outputs) {
+      const bucket = outputsByPath.get(output.path);
+      if (bucket === undefined) outputsByPath.set(output.path, [output]);
+      else bucket.push(output);
+    }
+    const entriesByPath = new Map<string, (typeof accounting.counted_entries)[number][]>();
+    for (const entry of accounting.counted_entries) {
+      const bucket = entriesByPath.get(entry.path);
+      if (bucket === undefined) entriesByPath.set(entry.path, [entry]);
+      else bucket.push(entry);
+    }
+
+    for (const entry of accounting.counted_entries) {
+      if (outputsByPath.get(entry.path)?.length !== 1) {
+        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingEntryUnmatched));
+      }
+    }
+    for (const output of artifact.outputs) {
+      if (entriesByPath.get(output.path)?.length !== 1) {
+        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingOutputUnmatched));
+      }
+    }
+    for (const entry of accounting.counted_entries) {
+      const output = outputsByPath.get(entry.path)![0]!;
+      if (output.storage !== entry.storage) {
+        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStorageMismatch));
+      }
+    }
+    for (const entry of accounting.counted_entries) {
+      const output = outputsByPath.get(entry.path)![0]!;
+      if (entry.storage === "raw-payload" && output.storage === "raw-payload") {
+        if (entry.stored_bytes !== output.payload_bytes) {
+          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStoredBytesMismatch));
+        }
+      }
+    }
+  }
+
+  /*
+   * Rank 7 — state <-> artifact and state <-> maintenance agreement. A clause spanning two slots
+   * reports against the slot its rank is named for, so every clause here reports against `state`.
+   * 7d-7h presuppose 7a: comparing pinned inputs against a document the state does not actually
+   * adopt would report a mismatch that is not one.
+   */
+  if (state !== undefined) {
+    const initialization = artifact !== undefined && isInitialization(artifact) ? artifact : undefined;
+
+    if (initialization !== undefined && state.initialization_digest !== canonicalJsonDigest(initialization)) {
+      return fail(stateInvalid(state, DURABLE_ISSUE_CODES.initializationDigestMismatch));
+    }
+    if (artifact !== undefined && state.task_id !== artifact.task_id) {
+      return fail(stateInvalid(state, DURABLE_ISSUE_CODES.artifactTaskIdMismatch));
+    }
+    if (maintenance !== undefined && state.task_id !== maintenance.task_id) {
+      return fail(stateInvalid(state, DURABLE_ISSUE_CODES.maintenanceTaskIdMismatch));
+    }
+    if (initialization !== undefined) {
+      /*
+       * The five duplicated pinned-input fields. The duplication stays because `archflow-status`
+       * reads `state.json` alone, without loading the initialization document (REQ-14, REQ-21);
+       * what keeps the two authorities from disagreeing is this comparison, one field at a time.
+       */
+      if (state.repository_identity_digest !== initialization.repository_identity_digest) {
+        return fail(stateInvalid(state, DURABLE_ISSUE_CODES.repositoryIdentityDigestMismatch));
+      }
+      if (state.config_digest !== initialization.config_digest) {
+        return fail(stateInvalid(state, DURABLE_ISSUE_CODES.configDigestMismatch));
+      }
+      if (state.workflow_digest !== initialization.workflow_digest) {
+        return fail(stateInvalid(state, DURABLE_ISSUE_CODES.workflowDigestMismatch));
+      }
+      if (state.constitution_digest !== initialization.constitution_digest) {
+        return fail(stateInvalid(state, DURABLE_ISSUE_CODES.constitutionDigestMismatch));
+      }
+      if (state.policy_base_commit !== initialization.policy_base_commit) {
+        return fail(stateInvalid(state, DURABLE_ISSUE_CODES.policyBaseCommitMismatch));
+      }
+    }
+
+    /*
+     * Rank 8 — the in-flight fingerprint. **The guard is a correctness condition, not an
+     * optimization**: `state.input_fingerprint` is the *in-flight* step's (D13), so comparing a
+     * completed artifact from a different `(phase_instance, step)` would be wrong. Orientation is
+     * pinned — `expected_digest` is the state of truth, `observed_digest` is what the artifact
+     * claims; the reverse would invert every diagnostic this phase emits. The code names the
+     * invariant, so there is no `issue_code`: `errors.ts:46` is `.strict()` over exactly the two
+     * digests and `createProjectError` throws if given one. Phase 9 owns the half this guard
+     * cannot supply (D19).
+     */
+    if (
+      artifact !== undefined &&
+      isStepped(artifact) &&
+      artifact.phase_instance === state.phase_instance &&
+      artifact.step === state.step &&
+      artifact.input_fingerprint !== state.input_fingerprint
+    ) {
+      const expected: Sha256Digest = state.input_fingerprint;
+      const observed: Sha256Digest = artifact.input_fingerprint;
+      return fail(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: expected, observed_digest: observed }));
+    }
+  }
+
+  /* Rank 9 — the maintenance record's own arithmetic, and its position relative to the state. */
+  if (maintenance !== undefined) {
+    let deletedTotal = 0;
+    for (const deletion of maintenance.deletions) deletedTotal += deletion.byte_count;
+    if (maintenance.total_bytes_deleted !== deletedTotal) {
+      return fail(maintenanceInvalid(maintenance, DURABLE_ISSUE_CODES.maintenanceTotalBytesMismatch));
+    }
+    if (state !== undefined && maintenance.performed_at_revision > state.revision) {
+      return fail(maintenanceInvalid(maintenance, DURABLE_ISSUE_CODES.maintenanceRevisionAfterState));
+    }
+  }
+
+  return OK;
+}

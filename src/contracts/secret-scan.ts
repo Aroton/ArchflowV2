@@ -28,7 +28,7 @@ export interface SecretScanCandidate {
  * survives into logs through a stray object spread. `loc.start.line` and `loc.start.column` map
  * cleanly onto `line`/`column`, and `ruleId` maps onto `detector_id`.
  */
-export interface SecretFinding {
+export type SecretFinding = {
   readonly detector_id: SafeId;
   readonly path_class: PathClass;
   readonly virtual_path: RepositoryPathClaim;
@@ -36,7 +36,7 @@ export interface SecretFinding {
   readonly line: SafeInteger;
   /** 1-based. */
   readonly column: SafeInteger;
-}
+};
 
 /**
  * `outcome: "unavailable"` is the one declared exception to the phase's failure convention, and it

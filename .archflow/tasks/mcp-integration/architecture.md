@@ -533,11 +533,15 @@ Phases 8–20 were renumbered to 9–21 on 2026-07-28, when the manual-checkpoin
 
 **Success Criteria**:
 
-- [ ] Task-initialization and legacy-import-initialization schemas bind the exact whole-file config digest; no re-pin or amendment schema exists.
-- [ ] Valid state/initialization/document/implementation/maintenance samples round-trip through normative schemas; unknown fields, digest mismatches, invalid phase IDs, and contradictory accounting fail with stable errors.
-- [ ] Every shape reachable from the `archflow_state.artifact` union passes Ajv/Zod agreement; purely server-internal shapes have exactly one shape model.
-- [ ] Implementation-output manifests represent add/modify/delete/rename, tree modes, canonical Git blob identities, and bounded payload accounting without any structurally representable contradiction.
-- [ ] Byte accounting is bound to the 25 MiB per-result and 250 MiB per-task caps and corresponds one-to-one with the declared outputs it measures.
+- [x] Task-initialization and legacy-import-initialization schemas bind the exact whole-file config digest; no re-pin or amendment schema exists.
+- [x] Valid state/initialization/document/implementation/maintenance samples round-trip through normative schemas; unknown fields, digest mismatches, invalid phase IDs, and contradictory accounting fail with stable errors.
+- [x] Every shape reachable from the `archflow_state.artifact` union passes Ajv/Zod agreement; purely server-internal shapes have exactly one shape model.
+- [x] Implementation-output manifests represent add/modify/delete/rename, tree modes, canonical Git blob identities, and bounded payload accounting without any structurally representable contradiction.
+- [x] Byte accounting is bound to the 25 MiB per-result and 250 MiB per-task caps and corresponds one-to-one with the declared outputs it measures.
+
+**Implemented 2026-07-28.** One scope limitation is recorded rather than absorbed, because it narrows the fourth criterion: a **cross-class rename is representable** here. `path` and `previous_path` are runtime-indistinguishable `RepositoryPathClaim` strings, Phase 6's sole lexical validator derives no class from either, and the class→template tables sit on the repository side of an import boundary `src/contracts/**` may not cross. Phase 7 therefore checks only `previous_path !== path` and supplies both typed endpoints; **Phase 10 classifies and verifies both endpoints and rejects a rename whose endpoints disagree**. The criterion holds for the operation × storage × file-type table, tree modes, blob identities, and accounting — all structurally unrepresentable when contradictory — but not for path-class agreement.
+
+Two further deferrals the phase makes explicit: `payload_bytes`, `payload_digest`, and `after.oid` are **assertions** here and become verified facts in Phase 10, which is the layer that sees bytes; and the collection-path component of the semantic validator's pinned total order is never a tiebreaker in the current invariant table, because no artifact kind carries both a root `phase_instance` and a `phase_instance`-bearing collection.
 
 ### Phase 8: Manual Checkpoint Chain and Import
 
@@ -819,7 +823,7 @@ Phases 8–20 were renumbered to 9–21 on 2026-07-28, when the manual-checkpoin
 | 4 | Guarded MCP Runtime and SDK Compatibility | COMPLETE (2026-07-27) |
 | 5 | Offline Bundle and Release Integrity | COMPLETE (2026-07-28) |
 | 6 | Repository Identity, Paths, and Canonical Digests | COMPLETE (2026-07-28) |
-| 7 | Durable State and Artifact Schemas | Not Started |
+| 7 | Durable State and Artifact Schemas | COMPLETE (2026-07-28) |
 | 8 | Manual Checkpoint Chain and Import | Not Started |
 | 9 | Transaction Kernel, Intent/CAS, and Crash Recovery | Not Started |
 | 10 | Snapshots, Implementation Manifests, and Restore | Not Started |
