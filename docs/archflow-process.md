@@ -16,14 +16,18 @@ flowchart LR
     style Done fill:#4CAF50,stroke:#333,color:#fff
 ```
 
-Each skill has a human review gate -- nothing proceeds without your approval. Before a document reaches that gate, a sub-agent review loop has already critiqued and revised it; at the gate, the skill also emits a ready-to-paste **counter-review prompt** for the other client (Claude Code ↔ Codex), whose findings land in `reviews/` and are triaged explicitly. See skill details below for full flows.
+Each skill has a human review gate -- nothing proceeds without your approval. Before a document reaches that gate, fresh-context sub-agents have already critiqued and revised it; at the gate, the skill also emits a ready-to-paste **counter-review prompt** for the other client (Claude Code ↔ Codex), whose findings land in `reviews/` and are triaged explicitly. See skill details below for full flows.
+
+Every reviewed artifact carries a **rubric** with a human review-time budget — a PRD reads in 5–10 minutes, an architecture in under 10 — given to both writer and reviewer agents, so drafts are held to the bar before the gate rather than pulled back at it. Phase designs and implementation logs are written primarily for the machine that consumes them next.
+
+Two constraints keep that machinery from running away. Reviewers are held to a **materiality bar** — only findings that change what gets built, at two severities (blocker, major); wording and polish are never findings, and a second round runs only when revisions changed the document's shape. And every design is held to the PRD's **operating envelope** — the scale, criticality, and threat model the product actually faces — so complexity nothing in the requirements pays for is treated as a defect.
 
 ```mermaid
 flowchart TD
     subgraph "Each Document Skill Internally"
         Read[Read .archflow/ context] --> Agents[Sub-agents<br/>explore, research, plan]
         Agents --> Output[Write .archflow/ doc]
-        Output --> SelfReview[Sub-agent review loop:<br/>critique, triage, revise]
+        Output --> SelfReview[Sub-agent review:<br/>critique, triage, revise]
         SelfReview --> Review{{Human Review<br/>+ counter-review prompt offered}}
         Review -->|Feedback| Agents
         Review -->|Counter-review findings<br/>in reviews/| Triage[Triage: accept & revise<br/>or reject with reason]
@@ -178,7 +182,7 @@ flowchart TD
     P1a --> P2
     P1 -->|No| P2
 
-    P2[Gather Requirements] --> P2a{{Conversation<br/>2-4 rounds}}
+    P2[Gather Requirements] --> P2a{{Conversation<br/>a few rounds}}
     P2a --> P3
 
     subgraph "Parallel Research Agents"
@@ -191,8 +195,8 @@ flowchart TD
     P4 --> P6
     P5 --> P6
 
-    P6[Plan Agent<br/>Design PRD structure] --> P7[Write prd.md]
-    P7 --> P7a[Sub-agent review loop:<br/>critique, triage, revise<br/>until a round changes nothing]
+    P6[Writer Agent<br/>Draft PRD to rubric] --> P7[Write prd.md]
+    P7 --> P7a[Sub-agent review:<br/>critique, triage, revise<br/>blocker/major findings only]
     P7a --> P8{{Human reviews PRD<br/>+ counter-review prompt offered}}
     P8 -->|Changes| P2
     P8 -->|Counter-review findings| P8a[Triage findings:<br/>accept & revise / reject with reason]
@@ -209,7 +213,7 @@ flowchart TD
     style P8 fill:#ffd700,stroke:#333,color:#000
 ```
 
-**Agents**: 0-3x general-purpose (parallel research — only load-bearing dimensions) + 1x general-purpose (plan + write PRD) + 1x+ general-purpose (fresh-context review loop, typically 1-2 rounds)
+**Agents**: 0-3x general-purpose (parallel research — only load-bearing dimensions) + 1x general-purpose (draft PRD) + 1x+ general-purpose (fresh-context review loop, typically 1-2 rounds)
 **Output**: `.archflow/tasks/{task}/prd.md` (+ triaged `reviews/prd-counter-review.md` when the user runs the counter-review)
 **Context read**: `.archflow/context/*` (if available)
 
@@ -234,9 +238,9 @@ flowchart TD
 
     D3{{Discuss key decisions<br/>with user}} --> D4
 
-    D4[Plan Agent<br/>Design full architecture<br/>phases sized to impl budget] --> D5[Write architecture.md]
+    D4[Writer Agent<br/>Draft architecture to rubric<br/>right-size phases to impl budget] --> D5[Write architecture.md]
 
-    D5 --> D5a[Sub-agent review loop:<br/>coverage, phase sizing,<br/>independence, decisions]
+    D5 --> D5a[Sub-agent review:<br/>coverage, phase sizing, independence,<br/>decisions, over-engineering]
     D5a --> D6{{Human reviews architecture<br/>+ counter-review prompt offered}}
     D6 -->|Changes| D3
     D6 -->|Counter-review findings| D6a[Triage findings:<br/>accept & revise / reject with reason]
@@ -252,7 +256,7 @@ flowchart TD
     style D_stop fill:#ef5350,stroke:#333,color:#fff
 ```
 
-**Agents**: 1x Explore + 0-1x general-purpose (research) + 1x general-purpose (plan + write architecture) + 1x+ general-purpose (fresh-context review loop, typically 1-2 rounds)
+**Agents**: 1x Explore + 0-1x general-purpose (research) + 1x general-purpose (draft architecture) + 1x+ general-purpose (fresh-context review loop, typically 1-2 rounds)
 **Output**: `.archflow/tasks/{task}/architecture.md` (+ triaged `reviews/architecture-counter-review.md` when the user runs the counter-review)
 **Context read**: `.archflow/tasks/{task}/prd.md` + `.archflow/context/*`
 
@@ -282,12 +286,12 @@ flowchart TD
     PD2 --> PD4
     PD3 --> PD4
 
-    PD4[Plan Agent<br/>Detailed phase plan<br/>sized to impl budget] --> PD_size{Fits one impl<br/>session?}
-    PD_size -->|No| PD_split{{Propose splitting phase,<br/>update architecture.md}}
+    PD4[Writer Agent<br/>Draft phase design<br/>within the architecture's<br/>phase boundary] --> PD_size{Fits one impl session<br/>even fully delegated?}
+    PD_size -->|No: rare| PD_split{{Propose splitting phase,<br/>user approves architecture amendment}}
     PD_split --> PD4
     PD_size -->|Yes| PD5[Write phase-N-name.md<br/>Status: DESIGNED]
 
-    PD5 --> PD5a[Sub-agent review loop:<br/>coverage, seams, sizing,<br/>integration risks]
+    PD5 --> PD5a[Sub-agent review:<br/>coverage, seams, integration risks,<br/>over-engineering — blocker/major only]
     PD5a --> PD6{{Human reviews design<br/>+ counter-review prompt offered}}
     PD6 -->|Feedback| PD4
     PD6 -->|Counter-review findings| PD_triage[Triage findings:<br/>accept & revise / reject with reason<br/>append ## Triage to review file]
@@ -305,7 +309,7 @@ flowchart TD
     style PD_done fill:#4CAF50,stroke:#333,color:#fff
 ```
 
-**Agents**: 1x Explore + 0-1x general-purpose (research) + 1x general-purpose (plan + write phase doc) + 1x+ general-purpose (fresh-context review loop, typically 1-2 rounds)
+**Agents**: 1x Explore + 0-1x general-purpose (research) + 1x general-purpose (draft phase doc) + 1x+ general-purpose (fresh-context review loop, typically 1-2 rounds)
 **Output**: `.archflow/tasks/{task}/phases/phase-N-{slug}.md` at `DESIGNED` (+ triaged `reviews/phase-N-design-counter-review.md`)
 **Context read**: architecture.md (kept current) + prd.md + immediately prior phase doc/log + older logs on demand + `.archflow/context/*`
 **No code is written in this skill.** Implementation happens in a fresh session so the whole phase gets a clean context window.
@@ -365,7 +369,7 @@ flowchart TD
 **Output**: actual code + `phase-N-{slug}-log.md` + updated parent docs (+ triaged `reviews/phase-N-impl-counter-review.md`)
 **Context read**: phase-N doc (required) + architecture.md + immediately prior log + `.archflow/context/*`
 
-**Why delegation is the default**: the orchestrator's ~200k window loses ~40–50k to overhead and inputs and must also hold verification (~10–30k). A directly-implemented chunk costs it ~15–30k; a delegated chunk ~2–5k. Delegating keeps a full phase — typically 8–12 chunks — inside one session without compaction.
+**Why delegation is the default**: the orchestrator must finish the whole phase — implementation, verification, and review — without compacting its context. A delegated chunk costs it a brief and a summary; a direct one costs the full file reads, edits, and test output. The sizing calibration lives in `archflow-design`, which cuts phases to fit one fully delegated session.
 
 ---
 
@@ -421,7 +425,7 @@ sequenceDiagram
 
     U->>C: /archflow-prd my-feature
     C->>FS: Read context/*.md
-    C->>U: Gather requirements (2-4 rounds)
+    C->>U: Gather requirements (a few rounds)
     C->>FS: Write tasks/my-feature/prd.md
     U->>U: Review PRD in editor
 
@@ -521,7 +525,7 @@ Each completed phase gets a companion **log file** at `phase-N-{slug}-log.md`. T
 **How it flows:**
 - Phase 1 completes → log written to `phase-1-setup-log.md` → architecture.md and prd.md updated if deviations occurred → durable, task-independent conventions proposed for the project's CLAUDE.md
 - Phase 2 starts → reads the architecture doc (kept current) plus the immediately prior phase doc and log; older logs are pulled in only when they cover ground the new phase touches. This keeps context linear instead of O(N²) as phases accumulate.
-- Phase 2's Plan Agent receives these learnings as input → avoids repeating mistakes, reuses established patterns, builds on actual interfaces (not just planned ones)
+- Phase 2's writer agent receives these learnings as input → avoids repeating mistakes, reuses established patterns, builds on actual interfaces (not just planned ones)
 - The architecture doc stays accurate because each phase updates it on completion — remaining phase definitions reflect reality, not the original guess. Because the architecture doc absorbs deviations, it (not the log pile) is the durable source of truth.
 
 Separate file keeps the design doc clean and the log focused. The naming convention (`-log.md` suffix) makes it easy to glob for all logs.

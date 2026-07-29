@@ -11,6 +11,8 @@ Create reference documents in `.archflow/context/`; they persist across tasks an
 
 Create `.archflow/context/` if needed. If context documents already exist, explain that refreshing overwrites them and stop for confirmation.
 
+Context is per-repo: in a multi-root workspace each repo keeps its own `.archflow/context/`, produced by running this skill against it. Explore the repo the user points at (default: the primary working directory) and write to that repo's context directory; when other workspace repos lack context and upcoming work will span them, suggest running this skill against them too.
+
 ## Parallel exploration
 
 Decompose exploration into independent investigations sized to the repository. The default set below fits most single-package repos; add, merge, or split documents when the repo's shape demands it — for example, per-package documents in a monorepo, or a dedicated document for a dominant subsystem. When the user supplied a focus area, each investigation must go deeper in that area.
@@ -20,6 +22,8 @@ Exploration is bulk reading, and the reading belongs in sub-agent contexts, not 
 1. **Structure and architecture**: map top-level directories, key entry points, application wiring/import and dependency flow, build system, and configuration. Write a clean, scannable document with paths and small code snippets to `.archflow/context/architecture.md`.
 2. **Patterns and conventions**: find naming conventions; error handling, state-management, and data-access patterns; testing framework, layout, and fixtures; formatting, import organization, and module conventions. Write concrete examples to `.archflow/context/patterns.md`.
 3. **Dependencies and integrations**: identify key dependencies and their uses; external APIs, databases, and auth providers; environment variables and config; linters, formatters, and CI/CD. Write findings to `.archflow/context/dependencies.md`.
+
+A good context document is scannable in minutes: concrete paths and short snippets over prose, organized so a later session finds what it needs without re-exploring. State that bar in each sub-agent brief and hold spot checks to it.
 
 Stamp every context document's header with the date and current commit (`git rev-parse --short HEAD`) so later skills can detect staleness.
 
@@ -34,7 +38,7 @@ Summarize the findings and present the written context files for review (default
 Stop. Apply requested changes and re-present until the user explicitly approves. Only then stage the context documents and commit with:
 
 ```text
-Archflow: Explore Codebase Context
+ArchFlow: Explore Codebase Context
 ```
 
 Report completion with both refresh and workflow-next actions:

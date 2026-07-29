@@ -31,7 +31,7 @@ Optionally accept a task name. Inspect `.archflow/` without changing files.
 
    If several tasks exist, use a compact version for each.
 4. Check `.archflow/tasks/<task>/reviews/` for counter-review files lacking a `## Triage` section. An untriaged counter-review means the authoring skill should be resumed to triage it, and that takes priority as the next action (PRD or architecture reviews → the skill that wrote the document; `phase-N-design-*` → `archflow-phase-design`; `phase-N-impl-*` → `archflow-phase-impl`).
-5. If context documents exist, report when they were last updated. If they carry a commit stamp, compare it against the current HEAD (`git rev-list --count <stamp>..HEAD`) and flag significant drift with a suggestion to re-run `archflow-explore`, focused on the areas that changed most.
+5. Check every workspace repo for `.archflow/context/` and report when each repo's context was last updated. If documents carry a commit stamp, compare it against that repo's current HEAD and flag significant drift with a suggestion to re-run `archflow-explore` against that repo, focused on the areas that changed most.
 6. Show the five most recent commit subjects using `git log --oneline -5`.
 7. Recommend exactly one next action for the requested or most active task: create a PRD, design architecture, triage an untriaged counter-review, or advance the next incomplete phase — `archflow-phase-design <task> N` when the phase has no design doc, `archflow-phase-impl <task> N` (in a fresh session) when it is `DESIGNED` or `IN PROGRESS` — or declare completion. If context does not exist, recommend exploration only when it is the most useful next action.
 

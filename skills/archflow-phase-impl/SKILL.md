@@ -7,11 +7,13 @@ description: Implement, verify, review, log, and commit one designed ArchFlow ph
 
 Treat the supplied arguments as `<task> <phase-number>`. This skill implements a phase that was designed and approved via `archflow-phase-design`; it is meant to run in a fresh session so the whole phase fits in a clean context.
 
+**Build to the operating envelope.** Implement the approved design and no more: functionality and maintainability first, for the scale, criticality, and threat model the PRD states — absent one, an early-stage product serving thousands of users. Do not add abstraction layers, configuration hooks, defensive invariants, or recovery paths the design did not call for; if implementation reveals one is genuinely needed, that is a deviation worth raising, not a silent addition. State this in every implementation sub-agent brief — an unconstrained agent will over-build.
+
 ## Setup and state
 
 1. Read `.archflow/tasks/<task>/architecture.md`; it is required. If missing, stop and direct the user to `archflow-design <task>`.
 2. Read the phase design document `phase-<N>-*.md` in `.archflow/tasks/<task>/phases/`; it is required. If missing, stop and direct the user to `archflow-phase-design <task> <N>`.
-3. Read relevant `.archflow/context/` documents, and for phase 2 or later the immediately prior phase's implementation log (older logs only when they cover ground this phase touches).
+3. Read relevant `.archflow/context/` documents from every workspace repo that has them, and for phase 2 or later the immediately prior phase's implementation log (older logs only when they cover ground this phase touches).
 4. Check `.archflow/tasks/<task>/reviews/` for this phase's review files.
 
 Then act on state:
@@ -22,7 +24,7 @@ Then act on state:
 
 ## Implement
 
-Set the phase status to `IN PROGRESS`. **Delegate chunks to implementation sub-agents by default.** The orchestrator's context must last the entire phase — implementation, verification, and review — and a delegated chunk costs it only ~2–5k tokens (instructions out, summary back) where a directly-implemented chunk costs ~15–30k in file reads, edits, and test output. Treat sub-agents as available — both Claude Code and Codex provide them natively. Implement directly only when the phase is small enough (a few chunks touching few files) that delegation overhead buys nothing; the numbers are today's calibration for a ~200k window, the rule is finishing without compaction.
+Set the phase status to `IN PROGRESS`. **Delegate chunks to implementation sub-agents by default.** The orchestrator's context must last the entire phase — implementation, verification, and review — and a delegated chunk costs it a brief out and a summary back, where direct implementation costs the full file reads, edits, and test output. Treat sub-agents as available — both Claude Code and Codex provide them natively. Implement directly only when the phase is small enough (a few chunks touching few files) that delegation overhead buys nothing; the rule is finishing the phase without compaction.
 
 Spawn one implementation agent per chunk. A sub-agent sees nothing of this session, so its brief must be complete: the chunk objective, relevant Files-table paths, the pinned interface contracts, prior-log patterns, and architecture/context conventions. Instruct agents to write files directly and return only a concise summary of modified or created paths. Run chunks in parallel only when their file sets are disjoint — parallel edits to the same file conflict; sequence dependent or overlapping chunks, passing forward the summaries and interfaces they need. After all chunks finish, run the applicable test suite.
 
@@ -40,22 +42,32 @@ Alongside the verification evidence, offer a **counter-review of the implementat
 Counter-review the implementation of phase <N> of task <task>.
 
 Read first: the design at .archflow/tasks/<task>/phases/phase-<N>-<slug>.md,
-.archflow/tasks/<task>/architecture.md, and .archflow/context/ if present.
+.archflow/tasks/<task>/architecture.md, and .archflow/context/ if present —
+check every workspace repo for its own .archflow/context/, not just the repo
+holding the task.
 The changed code is uncommitted — inspect it with git status / git diff, scoped
 to the files in the design's Files table.
 
 A different model implemented and already verified this — your job is to find
 what it missed: bugs, unhandled edge cases, silent deviations from the design,
 unmet success criteria, and violations of the project's established patterns.
-Do not change any files.
+This targets the operating envelope in the PRD, so do not ask for hardening,
+abstraction, or failure handling beyond what the design called for — code that
+exists without a requirement behind it is itself a finding. Do not change any
+files.
+
+Report only findings that would change the code: a real defect, an unmet
+criterion, a deviation that matters. Style preferences, naming, and speculative
+robustness are not findings. Use two severities: blocker (wrong behavior, data
+loss, or an unmet success criterion) and major (likely to bite in normal use).
 
 Write your findings to
 .archflow/tasks/<task>/reviews/phase-<N>-impl-counter-review.md
-as a list, each with a severity (blocker / major / minor) and a suggested
-resolution. If you find nothing substantive, say so explicitly in that file.
+as a list, each with a severity and a suggested resolution. If nothing meets that
+bar, say so explicitly in that file — that is a valid result.
 ```
 
-When the user returns and the review file exists without a `## Triage` section, read it and triage every finding: accept it and fix the code, or reject it with a stated reason. Append the dispositions as a `## Triage` section to the review file, re-verify what the fixes touched, and re-present only what changed.
+When the user returns and the review file exists without a `## Triage` section, read it and triage every finding: accept it and fix the code, or reject it with a stated reason. Rejecting is a normal outcome — a finding that only expresses a style preference, or that asks for hardening beyond the operating envelope, is rejected by default. Append the dispositions as a `## Triage` section to the review file, re-verify what the fixes touched, and re-present only what changed.
 
 ## Log and update parents
 
@@ -80,7 +92,7 @@ Create `phase-<N>-<slug>-log.md` with this structure:
 [Exact paths, exports, and function signatures future phases depend on]
 ```
 
-Be concrete. Review the log and update only parent-doc content that implementation made inaccurate:
+Be concrete — the log's reader is the next phase's agent, so every entry is an exact path, signature, or fact a future session would otherwise rediscover the hard way; anything else stays out. Review the log and update only parent-doc content that implementation made inaccurate:
 
 - In `architecture.md`, mark the phase complete; update system architecture, data model, decisions, and remaining phases when actual deviations require it, including adding, removing, or reordering phases.
 - In `prd.md`, update requirements made infeasible, split, or newly necessary; move confirmed exclusions to Out of Scope with a reason.
