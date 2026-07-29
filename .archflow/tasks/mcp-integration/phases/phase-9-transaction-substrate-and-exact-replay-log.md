@@ -1,7 +1,7 @@
 ## Implementation Log: Phase 9 - Transaction Substrate and Exact Replay
 
 **Implemented**: 2026-07-29
-**Status**: COMPLETE pending commit
+**Status**: COMPLETE
 **Requirements advanced**: REQ-04, REQ-08, REQ-13, REQ-14, REQ-21, REQ-22, REQ-23, REQ-24, REQ-26 (none completed — initialization/reconciliation, payload projections, MCP wiring, and status remain assigned to later phases)
 
 ### Decisions Made
