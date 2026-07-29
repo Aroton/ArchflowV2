@@ -47,8 +47,8 @@ async function writeAll(handle: FileHandle, bytes: Uint8Array): Promise<void> {
 }
 
 async function createExclusive(path: ResolvedPath, bytes: Uint8Array): Promise<ExclusiveCreateResult> {
-  if (path.path_class !== "intent") {
-    throw new TypeError("createExclusive requires an intent resolved path");
+  if (path.path_class !== "intent" && path.path_class !== "maintenance-record") {
+    throw new TypeError("createExclusive requires an intent or maintenance-record resolved path");
   }
 
   const target = path.absolute;

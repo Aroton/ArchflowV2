@@ -20,6 +20,7 @@ import { discoverWorktree } from "../../src/repository/identity.js";
 import { createAtomicWriter, type AtomicWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "../../src/state/authority.js";
 import { createTaskLock } from "../../src/state/lock.js";
+import { planAbandonedLockRepair, repairAbandonedLock } from "../../src/state/repair.js";
 import { readIntentReceipt, readTaskConfig, readTaskState } from "../../src/state/read.js";
 import {
   runStateTransaction,
@@ -346,22 +347,20 @@ describe("state transaction crash boundaries", () => {
     expect(restart.prepare.calls()).toBe(0);
   });
 
-  it("leaves a SIGKILL-abandoned lock blocking until exact explicit test cleanup", async () => {
-    const taskRoot = join(await mkdtemp(join(tmpdir(), "archflow-transaction-kill-")), "task");
-    roots.push(taskRoot.slice(0, -"/task".length));
-    await mkdir(taskRoot);
-    const killed = startLockChild(taskRoot);
+  it("leaves a SIGKILL-abandoned lock blocking until exact explicit confirmed repair", async () => {
+    const input = await fixture();
+    const killed = startLockChild(input.taskRoot);
     await childEvent(killed, "entered");
     expect(killed.kill("SIGKILL")).toBe(true);
     await new Promise<void>((resolve) => killed.once("exit", () => resolve()));
-    const lockPath = join(taskRoot, ".transaction-lock");
-    expect(await readdir(taskRoot)).toContain(".transaction-lock");
+    expect(await readdir(input.taskRoot)).toContain(".transaction-lock");
 
-    const blocked = startLockChild(taskRoot);
+    const blocked = startLockChild(input.taskRoot);
     expect(await childEvent(blocked, "failed")).toMatchObject({ name: "TaskLockError", stage: "acquire" });
-    await rmdir(lockPath);
+    const repair = await planAbandonedLockRepair(input.authority);
+    await repairAbandonedLock(input.authority, repair, true);
 
-    const repaired = startLockChild(taskRoot);
+    const repaired = startLockChild(input.taskRoot);
     await childEvent(repaired, "entered");
     repaired.send?.({ type: "release" });
   });

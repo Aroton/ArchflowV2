@@ -14,13 +14,13 @@ export type DeclaredInputRef = {
   readonly digest: Sha256Digest;
 };
 
-export interface GitIdentityRef {
+export type GitIdentityRef = {
   readonly path: RepositoryPathClaim;
   readonly mode: GitTreeMode;
   readonly oid: GitOid;
-}
+};
 
-export interface InputFingerprintSubject {
+export type InputFingerprintSubject = {
   readonly schema_version: "1";
   readonly workflow_digest: Sha256Digest;
   readonly config_digest: Sha256Digest;
@@ -33,7 +33,7 @@ export interface InputFingerprintSubject {
   readonly phase_instance: PhaseInstanceId;
   /** SET — sorted by `input_id` and checked for duplicates before hashing. */
   readonly declared_inputs: readonly DeclaredInputRef[];
-}
+};
 
 type RequestDigestCommon = {
   readonly schema_version: "1";
@@ -42,10 +42,26 @@ type RequestDigestCommon = {
   readonly input_fingerprint: Sha256Digest;
 };
 
+export type StateArtifactOperation =
+  | "adopt-task-initialization"
+  | "adopt-legacy-import-initialization"
+  | "record-document-artifact"
+  | "record-implementation-output"
+  | "adopt-manual-checkpoint-import";
+
+export type StateArtifactOperationFields = Pick<StateInput, "phase_instance" | "step" | "status"> & {
+  readonly artifact_kind: NonNullable<StateInput["artifact"]>["artifact_kind"];
+  readonly artifact_digest: Sha256Digest;
+};
+
 export type RequestDigestSubject = RequestDigestCommon & ({
   readonly tool: "archflow_state";
   readonly operation: "record-state-boundary";
   readonly operation_fields: Pick<StateInput, "phase_instance" | "step" | "status">;
+} | {
+  readonly tool: "archflow_state";
+  readonly operation: StateArtifactOperation;
+  readonly operation_fields: StateArtifactOperationFields;
 } | {
   readonly tool: "archflow_counter_review";
   readonly operation: "counter-review";
@@ -65,7 +81,7 @@ export type RequestDigestSubject = RequestDigestCommon & ({
 });
 
 type SelectorKeys = {
-  readonly archflow_state: "phase_instance" | "step" | "status";
+  readonly archflow_state: "phase_instance" | "step" | "status" | "artifact";
   readonly archflow_counter_review: "artifact_path" | "rubric";
   readonly archflow_adjudicate: "artifact_path" | "upstream_paths";
   readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "supersedes" | "kind" | "context";
@@ -174,9 +190,29 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
   switch (subject.tool) {
     case "archflow_state": {
       const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_state" }>).operation_fields;
-      if (subject.operation !== "record-state-boundary") throw new TypeError("invalid archflow_state operation");
-      exactFields(fields, ["phase_instance", "step", "status"]);
-      return { phase_instance: fields.phase_instance, step: fields.step, status: fields.status };
+      if (subject.operation === "record-state-boundary") {
+        exactFields(fields, ["phase_instance", "step", "status"]);
+        return { phase_instance: fields.phase_instance, step: fields.step, status: fields.status };
+      }
+      const artifactFields = fields as StateArtifactOperationFields;
+      const operationForKind: Readonly<Record<StateArtifactOperationFields["artifact_kind"], StateArtifactOperation>> = {
+        "task-initialization": "adopt-task-initialization",
+        "legacy-import-initialization": "adopt-legacy-import-initialization",
+        document: "record-document-artifact",
+        "implementation-output": "record-implementation-output",
+        "manual-checkpoint-import": "adopt-manual-checkpoint-import",
+      };
+      if (operationForKind[artifactFields.artifact_kind] !== subject.operation) {
+        throw new TypeError("invalid archflow_state operation for artifact_kind");
+      }
+      exactFields(artifactFields, ["phase_instance", "step", "status", "artifact_kind", "artifact_digest"]);
+      return {
+        phase_instance: artifactFields.phase_instance,
+        step: artifactFields.step,
+        status: artifactFields.status,
+        artifact_kind: artifactFields.artifact_kind,
+        artifact_digest: artifactFields.artifact_digest,
+      };
     }
     case "archflow_counter_review": {
       const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_counter_review" }>).operation_fields;

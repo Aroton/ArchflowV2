@@ -20,6 +20,15 @@
       "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
     },
     "path": { "$ref": "urn:archflow:schema:v1:path-claim" },
+    "durableArtifact": {
+      "oneOf": [
+        { "$ref": "urn:archflow:schema:v1:task-initialization" },
+        { "$ref": "urn:archflow:schema:v1:legacy-import-initialization" },
+        { "$ref": "urn:archflow:schema:v1:document-artifact" },
+        { "$ref": "urn:archflow:schema:v1:implementation-output" },
+        { "$ref": "urn:archflow:schema:v1:manual-checkpoint-import" }
+      ]
+    },
     "rule": {
       "type": "object",
       "additionalProperties": false,
@@ -111,7 +120,8 @@
                   "adjudicate"
                 ]
               },
-              "status": { "enum": ["running", "succeeded", "failed"] }
+              "status": { "enum": ["running", "succeeded", "failed"] },
+              "artifact": { "$ref": "#/$defs/durableArtifact" }
             }
           }
         ]

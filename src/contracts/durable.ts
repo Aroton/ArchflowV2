@@ -106,7 +106,6 @@ export const DURABLE_ISSUE_CODES = Object.freeze({
   /** 5j */ importInitializationTaskIdMismatch: "import-initialization-task-id-mismatch",
   /** 5k */ importInitializationRepositoryIdentityMismatch: "import-initialization-repository-identity-mismatch",
   /** 5l */ importChainInitializationMismatch: "import-chain-initialization-mismatch",
-  /** 5m */ importPredecessorStateRevisionMismatch: "import-predecessor-state-revision-mismatch",
   /** 5n */ importContinuationWithoutState: "import-continuation-without-state",
   /** 5o */ importInitialWithState: "import-initial-with-state",
   /** 5p */ importStateRevisionMismatch: "import-state-revision-mismatch",
@@ -115,6 +114,7 @@ export const DURABLE_ISSUE_CODES = Object.freeze({
   /** 5s */ importStateAdoptedCheckpointMissing: "import-state-adopted-checkpoint-missing",
   /** 5s */ importStateAdoptedCheckpointRevisionMismatch: "import-state-adopted-checkpoint-revision-mismatch",
   /** 5s */ importStateAdoptedCheckpointDigestMismatch: "import-state-adopted-checkpoint-digest-mismatch",
+  /** 5s */ importStateAdoptedCheckpointPresent: "import-state-adopted-checkpoint-present",
   /** 5t */ importStateInitializationMismatch: "import-state-initialization-mismatch",
   /** 6a */ accountingResultBytesSum: "accounting-result-bytes-sum",
   /** 6b */ accountingTaskBytesBelowResult: "accounting-task-bytes-below-result",
@@ -527,30 +527,29 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
       }
     }
 
-    /* Rank 5m — a continuation wrapper's expected state revision names its predecessor revision. */
-    if (
-      artifact.import_mode === "continuation" &&
-      artifact.expected_state_revision !== artifact.predecessor.revision
-    ) {
-      return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importPredecessorStateRevisionMismatch));
-    }
-
-    /* Ranks 5n-5o — continuation requires state; initial mode forbids it. */
-    if (artifact.import_mode === "continuation" && state === undefined) {
+    /* Ranks 5n-5o — state-anchored and continuation imports require state; initial mode forbids it. */
+    if (artifact.import_mode !== "initial" && state === undefined) {
       return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importContinuationWithoutState));
     }
     if (artifact.import_mode === "initial" && state !== undefined) {
       return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importInitialWithState));
     }
 
-    if (artifact.import_mode === "continuation" && state !== undefined) {
-      /* Rank 5p — the supplied state has the expected predecessor revision. */
-      if (state.revision !== artifact.expected_state_revision) {
+    if (artifact.import_mode !== "initial" && state !== undefined) {
+      const expectedStateRevision = artifact.import_mode === "state-anchored"
+        ? artifact.state_anchor.state_revision
+        : artifact.expected_state_revision;
+      const expectedStateDigest = artifact.import_mode === "state-anchored"
+        ? artifact.state_anchor.state_digest
+        : artifact.expected_state_digest;
+
+      /* Rank 5p — the supplied state has the independently expected current revision. */
+      if (state.revision !== expectedStateRevision) {
         return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateRevisionMismatch));
       }
 
       /* Rank 5q — the supplied state's canonical bytes have the expected digest. */
-      if (canonicalJsonDigest(state) !== artifact.expected_state_digest) {
+      if (canonicalJsonDigest(state) !== expectedStateDigest) {
         return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateDigestMismatch));
       }
 
@@ -559,15 +558,21 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
         return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateRepositoryIdentityMismatch));
       }
 
-      /* Rank 5s — the state records adoption of the wrapper's exact predecessor checkpoint. */
-      if (state.adopted_checkpoint === undefined) {
-        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateAdoptedCheckpointMissing));
-      }
-      if (state.adopted_checkpoint.revision !== artifact.predecessor.revision) {
-        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateAdoptedCheckpointRevisionMismatch));
-      }
-      if (state.adopted_checkpoint.checkpoint_digest !== artifact.predecessor.checkpoint_digest) {
-        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateAdoptedCheckpointDigestMismatch));
+      /* Rank 5s — bootstrap requires ordinary state; continuation authenticates its checkpoint independently. */
+      if (artifact.import_mode === "state-anchored") {
+        if (state.adopted_checkpoint !== undefined) {
+          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateAdoptedCheckpointPresent));
+        }
+      } else {
+        if (state.adopted_checkpoint === undefined) {
+          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateAdoptedCheckpointMissing));
+        }
+        if (state.adopted_checkpoint.revision !== artifact.predecessor.revision) {
+          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateAdoptedCheckpointRevisionMismatch));
+        }
+        if (state.adopted_checkpoint.checkpoint_digest !== artifact.predecessor.checkpoint_digest) {
+          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateAdoptedCheckpointDigestMismatch));
+        }
       }
 
       /* Rank 5t — the state and supplied chain derive from the same initialization. */
@@ -761,7 +766,10 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     if (prepared.policy_base_commit !== intentState.policy_base_commit) {
       return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptPolicyBaseMismatch));
     }
-    if (!isDeepStrictEqual(prepared.adopted_checkpoint, intentState.adopted_checkpoint)) {
+    if (
+      receipt.operation !== "adopt-manual-checkpoint-import" &&
+      !isDeepStrictEqual(prepared.adopted_checkpoint, intentState.adopted_checkpoint)
+    ) {
       return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptAdoptedCheckpointMismatch));
     }
   }

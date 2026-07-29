@@ -14,6 +14,7 @@ import {
   parseManualCheckpoint,
   parseManualCheckpointImport,
   predecessorLinkV1Schema,
+  stateAnchorV1Schema,
   projectionDigestRefV1Schema,
   waiverRefV1Schema,
   type ContinuationManualCheckpointV1,
@@ -87,6 +88,14 @@ const continuation = (): Record<string, unknown> => {
   return value;
 };
 
+const stateAnchored = (): Record<string, unknown> => {
+  const value = continuation();
+  delete value.predecessor;
+  value.revision = 5;
+  value.state_anchor = { anchor_kind: "state", state_revision: 4, state_digest: "f".repeat(64) };
+  return value;
+};
+
 const parsedContinuation = parseManualCheckpoint(continuation());
 if (!("predecessor" in parsedContinuation)) throw new TypeError("continuation fixture must carry a predecessor");
 const positiveTypedContinuation: ContinuationManualCheckpointV1 = parsedContinuation;
@@ -121,6 +130,14 @@ describe("manual checkpoint contract", () => {
     const jsonValidator = await validator();
     expect(assertZodAgreement(value, jsonValidator, manualCheckpointV1Schema)).toBe(value);
     expect(parseManualCheckpoint(value)).toEqual(value);
+  });
+
+  it("accepts the strict state-anchored first-checkpoint branch", async () => {
+    const value = stateAnchored();
+    expect(assertZodAgreement(value, await validator(), manualCheckpointV1Schema)).toBe(value);
+    expect(assertZodAgreement(value.state_anchor, await defValidator("stateAnchor"), stateAnchorV1Schema)).toBe(value.state_anchor);
+    await rejectedBoth({ ...value, predecessor: continuation().predecessor });
+    await rejectedBoth({ ...value, state_anchor: { ...(value.state_anchor as object), extra: true } });
   });
 
   it("derives the self digest from the whole checkpoint", () => {
@@ -205,6 +222,20 @@ describe("manual checkpoint import contract", () => {
       expect(assertZodAgreement(sample, jsonValidator, manualCheckpointImportV1Schema)).toBe(sample);
       expect(parseManualCheckpointImport(sample)).toEqual(sample);
     }
+  });
+
+  it("round-trips the state-anchored import mode and closes its branch fields", async () => {
+    const stateAnchor = (stateAnchored().state_anchor as Record<string, unknown>);
+    const value = {
+      ...importFixture,
+      import_mode: "state-anchored",
+      chain: [stateAnchored()],
+      state_anchor: stateAnchor,
+    };
+    expect(assertZodAgreement(value, await importValidator(), manualCheckpointImportV1Schema)).toBe(value);
+    expect(parseManualCheckpointImport(value)).toEqual(value);
+    await importRejectedBoth({ ...value, predecessor: continuationImportFixture.predecessor });
+    await importRejectedBoth({ ...value, expected_state_revision: 4 });
   });
 
   it("requires each continuation-only field in continuation mode", async () => {

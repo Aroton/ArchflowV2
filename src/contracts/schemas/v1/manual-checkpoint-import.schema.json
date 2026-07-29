@@ -17,7 +17,7 @@
     "artifact_kind": { "const": "manual-checkpoint-import" },
     "task_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
     "repository_identity_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    "import_mode": { "enum": ["initial", "continuation"] },
+    "import_mode": { "enum": ["initial", "state-anchored", "continuation"] },
     "chain": {
       "type": "array",
       "minItems": 1,
@@ -25,6 +25,7 @@
       "x-archflow-unique-by": "revision"
     },
     "predecessor": { "$ref": "urn:archflow:schema:v1:manual-checkpoint#/$defs/predecessorLink" },
+    "state_anchor": { "$ref": "urn:archflow:schema:v1:manual-checkpoint#/$defs/stateAnchor" },
     "expected_state_revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
     "expected_state_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" }
   },
@@ -45,7 +46,25 @@
             "properties": { "expected_state_digest": true },
             "required": ["expected_state_digest"]
           }
+        },
+        {
+          "not": {
+            "properties": { "state_anchor": true },
+            "required": ["state_anchor"]
+          }
         }
+      ]
+    },
+    {
+      "properties": {
+        "import_mode": { "const": "state-anchored" },
+        "state_anchor": true
+      },
+      "required": ["import_mode", "state_anchor"],
+      "allOf": [
+        { "not": { "properties": { "predecessor": true }, "required": ["predecessor"] } },
+        { "not": { "properties": { "expected_state_revision": true }, "required": ["expected_state_revision"] } },
+        { "not": { "properties": { "expected_state_digest": true }, "required": ["expected_state_digest"] } }
       ]
     },
     {
@@ -55,7 +74,8 @@
         "expected_state_revision": true,
         "expected_state_digest": true
       },
-      "required": ["import_mode", "predecessor", "expected_state_revision", "expected_state_digest"]
+      "required": ["import_mode", "predecessor", "expected_state_revision", "expected_state_digest"],
+      "not": { "properties": { "state_anchor": true }, "required": ["state_anchor"] }
     }
   ]
 }

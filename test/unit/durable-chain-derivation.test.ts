@@ -35,8 +35,19 @@ const continuationAnchor = chainAnchor(continuationImport);
 const initial = initialImport.chain[0]!;
 if (!("initialization" in initial)) throw new Error("expected initial checkpoint");
 const continuationTemplate = initialImport.chain[1]!;
-
 const clone = <T>(value: T): T => structuredClone(value);
+const stateAnchor: ChainAnchor = {
+  mode: "state",
+  task_id: initial.task_id,
+  repository_identity_digest: initial.repository_identity_digest,
+  state_anchor: { anchor_kind: "state", state_revision: 4 as never, state_digest: "f".repeat(64) as never },
+};
+const stateAnchoredFirst = {
+  ...clone(continuationTemplate),
+  revision: 5 as never,
+  state_anchor: stateAnchor.state_anchor,
+} as ManualCheckpointV1;
+delete (stateAnchoredFirst as { predecessor?: unknown }).predecessor;
 
 const asContinuation = (checkpoint: ManualCheckpointV1): ContinuationManualCheckpointV1 => {
   if (!("predecessor" in checkpoint)) throw new Error("expected continuation checkpoint");
@@ -76,7 +87,7 @@ describe("manual checkpoint chain predicates", () => {
     expect(CHAIN_SELECTION_OUTCOMES).toEqual(["gap", "fork", "foreign-candidate"]);
   });
 
-  it("derives both flat anchor branches from wrappers", () => {
+  it("derives the initial and checkpoint-predecessor anchor branches from wrappers", () => {
     expect(initialAnchor).toEqual({
       mode: "initial",
       task_id: initialImport.task_id,
@@ -88,6 +99,17 @@ describe("manual checkpoint chain predicates", () => {
       repository_identity_digest: continuationImport.repository_identity_digest,
       predecessor: continuationImport.predecessor,
     });
+  });
+
+  it("validates and selects a state-anchored first checkpoint followed by ordinary links", () => {
+    expect(chainHeadBreak(stateAnchor, stateAnchoredFirst)).toBeUndefined();
+    expect(checkpointSelfBreak(stateAnchoredFirst)).toBeUndefined();
+    const next = successor(stateAnchoredFirst);
+    expect(selectGreatestValidChain(stateAnchor, shuffled([next, stateAnchoredFirst]))).toEqual({
+      kind: "chain",
+      chain: [stateAnchoredFirst, next],
+    });
+    expect(chainHeadBreak(stateAnchor, { ...stateAnchoredFirst, state_anchor: { ...stateAnchor.state_anchor, state_digest: "0".repeat(64) as never } } as ManualCheckpointV1)).toBe("import-head-predecessor-digest-mismatch");
   });
 
   it("checks a continuation checkpoint's own predecessor revision", () => {

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import * as publicContracts from "../../src/contracts/index.js";
 import { createProjectError } from "../../src/contracts/errors.js";
@@ -11,6 +12,10 @@ import { TOOL_NAMES } from "../../src/contracts/tool-names.js";
 
 const digest = parseSha256Digest("a".repeat(64));
 const stateInput = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 2, input_fingerprint: digest, phase_instance: "phase-impl-2", step: "produce", status: "succeeded" } as const;
+const taskInitialization = JSON.parse(readFileSync(
+  new URL("../fixtures/contracts/durable/task-initialization.valid.json", import.meta.url),
+  "utf8",
+)) as Record<string, unknown>;
 
 describe("correlated MCP tool contracts", () => {
   it("publishes exactly five exact schema fragment pairs", () => {
@@ -49,8 +54,16 @@ describe("correlated MCP tool contracts", () => {
     expect(Object.isFrozen(gate.input.current_evidence.slots[0])).toBe(true);
     expect(Object.isFrozen(gate.input.context)).toBe(true);
   });
-  it("rejects state artifacts and checks direct request/result equalities", () => {
+  it("accepts and freezes closed durable state artifacts while rejecting values outside the union", () => {
+    const source = structuredClone(taskInitialization);
+    const call = parseToolCall("archflow_state", { ...stateInput, artifact: source });
+    source.task_id = "mutated";
+    expect(call.input.artifact?.task_id).toBe(taskInitialization.task_id);
+    expect(Object.isFrozen(call.input.artifact)).toBe(true);
     expect(() => parseToolCall("archflow_state", { ...stateInput, artifact: null })).toThrow();
+    expect(() => parseToolCall("archflow_state", { ...stateInput, artifact: { ...taskInitialization, artifact_kind: "unknown" } })).toThrow();
+  });
+  it("checks direct state request/result equalities", () => {
     const call = bindParsedToolCallRequest(parseToolCall("archflow_state", stateInput), parseSha256Digest("b".repeat(64)));
     expect(() => validateProjectResultStructure(call, { schema_version: "1", ok: true, value: { path: "phases/2/result.json", revision: 3, status: "failed" } })).toThrow(/status mismatch/);
   });

@@ -18,6 +18,7 @@ import {
   type IntentReceiptV1,
 } from "../contracts/durable-intent.js";
 import type { CommittedIntentRef, TaskStateV1 } from "../contracts/durable-state.js";
+import { checkpointSelfDigest } from "../contracts/durable-checkpoint.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
 import { computeInputFingerprint, type InputFingerprintSubject } from "../contracts/fingerprints.js";
@@ -42,6 +43,7 @@ import { assertInternalTransactionAuthority, type TransactionAuthority } from ".
 import type { InputFingerprintResolver } from "./fingerprint.js";
 import { identifyTransactionRequest } from "./request.js";
 import { IntentLayoutError, ensureIntentDirectory } from "./layout.js";
+import { assertInternalCheckpointAdoptionPlan } from "./checkpoints.js";
 import type {
   ConfigReadResult,
   ReceiptReadResult,
@@ -121,15 +123,25 @@ function fingerprintMismatch(expected_digest: Sha256Digest, observed_digest: Sha
   return fail(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest, observed_digest }));
 }
 
-function operationFor(tool: ToolName): IntentReceiptV1["operation"] {
-  switch (tool) {
-    case "archflow_state": return "record-state-boundary" as IntentReceiptV1["operation"];
+function operationFor(call: ParsedToolCall): IntentReceiptV1["operation"] {
+  switch (call.name) {
+    case "archflow_state": {
+      const artifact = call.input.artifact;
+      if (artifact === undefined) return "record-state-boundary" as IntentReceiptV1["operation"];
+      switch (artifact.artifact_kind) {
+        case "task-initialization": return "adopt-task-initialization" as IntentReceiptV1["operation"];
+        case "legacy-import-initialization": return "adopt-legacy-import-initialization" as IntentReceiptV1["operation"];
+        case "document": return "record-document-artifact" as IntentReceiptV1["operation"];
+        case "implementation-output": return "record-implementation-output" as IntentReceiptV1["operation"];
+        case "manual-checkpoint-import": return "adopt-manual-checkpoint-import" as IntentReceiptV1["operation"];
+      }
+    }
     case "archflow_counter_review": return "counter-review" as IntentReceiptV1["operation"];
     case "archflow_adjudicate": return "adjudicate" as IntentReceiptV1["operation"];
     case "archflow_gate": return "gate" as IntentReceiptV1["operation"];
     case "archflow_waiver": return "waiver" as IntentReceiptV1["operation"];
     default: {
-      const exhaustive: never = tool;
+      const exhaustive: never = call;
       throw new TypeError(`unknown transaction tool ${String(exhaustive)}`);
     }
   }
@@ -167,7 +179,7 @@ function sameCheckpoint(left: TaskStateV1["adopted_checkpoint"], right: TaskStat
   return isDeepStrictEqual(left, right);
 }
 
-function assertPreserved(current: TaskStateV1, next: NextStateDraft): void {
+function assertPreserved(current: TaskStateV1, next: NextStateDraft, preparedValue: object): void {
   if (
     next.task_id !== current.task_id ||
     next.repository_identity_digest !== current.repository_identity_digest ||
@@ -175,10 +187,12 @@ function assertPreserved(current: TaskStateV1, next: NextStateDraft): void {
     next.config_digest !== current.config_digest ||
     next.workflow_digest !== current.workflow_digest ||
     next.constitution_digest !== current.constitution_digest ||
-    next.policy_base_commit !== current.policy_base_commit ||
-    !sameCheckpoint(next.adopted_checkpoint, current.adopted_checkpoint)
+    next.policy_base_commit !== current.policy_base_commit
   ) {
     throw new TypeError("next state draft changed a transaction-substrate identity or pin");
+  }
+  if (!sameCheckpoint(next.adopted_checkpoint, current.adopted_checkpoint)) {
+    assertInternalCheckpointAdoptionPlan(preparedValue);
   }
 }
 
@@ -288,7 +302,7 @@ function validateReceiptIdentity<K extends ToolName>(
     return taskIssue(receipt.task_id, "intent-receipt-intent-mismatch");
   }
   if (receipt.tool !== request.call.name) return taskIssue(receipt.task_id, "intent-receipt-tool-mismatch");
-  if (receipt.operation !== operationFor(request.call.name)) {
+  if (receipt.operation !== operationFor(request.call)) {
     return taskIssue(receipt.task_id, "intent-receipt-operation-mismatch");
   }
   if (receipt.task_id !== request.authority.task_id) {
@@ -322,6 +336,30 @@ function validateReceiptLocally(receiptDocument: CanonicalDocument<IntentReceipt
   }
   if (receipt.prepared_state.committed_intent !== undefined) {
     return taskIssue(receipt.task_id, "intent-receipt-prepared-state-committed-intent-present");
+  }
+  return ok(undefined);
+}
+
+function validateAdoptionPreparedState<K extends ToolName>(
+  request: TransactionRequest<K>,
+  receipt: IntentReceiptV1,
+): ProjectResult<void> {
+  if (receipt.operation !== "adopt-manual-checkpoint-import") return ok(undefined);
+  if (request.call.name !== "archflow_state") {
+    return taskIssue(receipt.task_id, "intent-receipt-adopted-checkpoint-mismatch");
+  }
+  const stateCall = request.call as Extract<ParsedToolCall, { readonly name: "archflow_state" }>;
+  if (stateCall.input.artifact?.artifact_kind !== "manual-checkpoint-import") {
+    return taskIssue(receipt.task_id, "intent-receipt-adopted-checkpoint-mismatch");
+  }
+  const head = stateCall.input.artifact.chain.at(-1);
+  if (head === undefined) return taskIssue(receipt.task_id, "intent-receipt-adopted-checkpoint-mismatch");
+  const expected: TaskStateV1["adopted_checkpoint"] = {
+    revision: parseSafeInteger(head.revision),
+    checkpoint_digest: checkpointSelfDigest(head),
+  };
+  if (!sameCheckpoint(receipt.prepared_state.adopted_checkpoint, expected)) {
+    return taskIssue(receipt.task_id, "intent-receipt-adopted-checkpoint-mismatch");
   }
   return ok(undefined);
 }
@@ -397,7 +435,13 @@ function buildPlan<K extends ToolName>(
   if (plan.expectation.resulting_revision !== resultingRevision || correlated.value.revision !== resultingRevision) {
     throw new TypeError("prepared transaction revision is not the immediate successor");
   }
-  assertPreserved(current.value, plan.next_state);
+  assertPreserved(current.value, plan.next_state, preparedValue as object);
+  if (
+    !sameCheckpoint(plan.next_state.adopted_checkpoint, current.value.adopted_checkpoint) &&
+    operationFor(request.call) !== "adopt-manual-checkpoint-import"
+  ) {
+    throw new TypeError("checkpoint adoption requires the manual-checkpoint-import operation");
+  }
   const preparedState: TaskStateV1 = { ...plan.next_state, revision: resultingRevision };
   const outcome = structuredClone(correlated.value as unknown as PlainJsonValue) as unknown as ToolSuccess<K>;
   const receiptValue = parseIntentReceipt({
@@ -406,7 +450,7 @@ function buildPlan<K extends ToolName>(
     task_id: request.authority.task_id,
     repository_identity_digest: request.authority.repository_identity_digest,
     tool: request.call.name,
-    operation: operationFor(request.call.name),
+    operation: operationFor(request.call),
     request_digest: identified.request_digest,
     input_fingerprint: identified.input_fingerprint,
     prior_revision: current.value.revision,
@@ -566,6 +610,8 @@ async function handleExisting<K extends ToolName>(
   if (identified.value.request_digest !== receipt.value.request_digest) {
     return mismatch(receipt.value.request_digest, identified.value.request_digest);
   }
+  const adoption = validateAdoptionPreparedState(request, receipt.value);
+  if (!adoption.ok) return adoption;
 
   if (receipt.value.resulting_revision <= current.value.revision) {
     return fail(createProjectError("INTENT_NOT_CURRENT", {

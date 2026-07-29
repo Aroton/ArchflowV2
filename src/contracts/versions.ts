@@ -35,5 +35,6 @@ export const SCHEMA_IDS = {
   documentArtifact: "urn:archflow:schema:v1:document-artifact",
   implementationOutput: "urn:archflow:schema:v1:implementation-output",
   manualCheckpoint: "urn:archflow:schema:v1:manual-checkpoint",
-  manualCheckpointImport: "urn:archflow:schema:v1:manual-checkpoint-import"
+  manualCheckpointImport: "urn:archflow:schema:v1:manual-checkpoint-import",
+  handoffRecord: "urn:archflow:schema:v1:handoff-record"
 } as const;

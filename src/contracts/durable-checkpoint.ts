@@ -37,6 +37,12 @@ export type PredecessorLink = {
   readonly checkpoint_digest: Sha256Digest;
 };
 
+export type StateAnchor = {
+  readonly anchor_kind: "state";
+  readonly state_revision: SafeInteger;
+  readonly state_digest: Sha256Digest;
+};
+
 declare const continuationCheckpointRevisionBrand: unique symbol;
 /** A checkpoint revision proven by the checkpoint parser to be at least 2. */
 export type ContinuationCheckpointRevision = SafeInteger & {
@@ -100,7 +106,29 @@ export type ContinuationManualCheckpointV1 = {
   readonly terminal?: "complete" | "abandoned";
 };
 
-export type ManualCheckpointV1 = InitialManualCheckpointV1 | ContinuationManualCheckpointV1;
+export type StateAnchoredManualCheckpointV1 = {
+  readonly schema_version: "1";
+  readonly task_id: TaskSlug;
+  readonly repository_identity_digest: Sha256Digest;
+  readonly revision: ContinuationCheckpointRevision;
+  readonly phase_instance: PhaseInstanceId;
+  readonly step: PipelineStep;
+  readonly status: StepStatus;
+  readonly attempt: SafeInteger;
+  readonly input_fingerprint: Sha256Digest;
+  readonly assurance: "degraded";
+  readonly initialization_digest: Sha256Digest;
+  readonly state_anchor: StateAnchor;
+  readonly authoritative_results: readonly AuthoritativeResultRef[];
+  readonly projections: readonly ProjectionDigestRef[];
+  readonly evidence_chain: readonly EvidenceChainEntry[];
+  readonly approvals: readonly ApprovalRef[];
+  readonly waivers: readonly WaiverRef[];
+  readonly open_gate?: OpenGateRef;
+  readonly terminal?: "complete" | "abandoned";
+};
+
+export type ManualCheckpointV1 = InitialManualCheckpointV1 | StateAnchoredManualCheckpointV1 | ContinuationManualCheckpointV1;
 
 export type InitialImportV1 = {
   readonly schema_version: "1";
@@ -123,7 +151,17 @@ export type ContinuationImportV1 = {
   readonly expected_state_digest: Sha256Digest;
 };
 
-export type ManualCheckpointImportV1 = InitialImportV1 | ContinuationImportV1;
+export type StateAnchoredImportV1 = {
+  readonly schema_version: "1";
+  readonly artifact_kind: "manual-checkpoint-import";
+  readonly task_id: TaskSlug;
+  readonly repository_identity_digest: Sha256Digest;
+  readonly import_mode: "state-anchored";
+  readonly chain: readonly ManualCheckpointV1[];
+  readonly state_anchor: StateAnchor;
+};
+
+export type ManualCheckpointImportV1 = InitialImportV1 | StateAnchoredImportV1 | ContinuationImportV1;
 
 const digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
 const positiveSafeInteger = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER) as unknown as z.ZodType<SafeInteger>;
@@ -168,6 +206,12 @@ export const predecessorLinkV1Schema = z.object({
   checkpoint_digest: digest,
 }).strict() as unknown as z.ZodType<PredecessorLink>;
 
+export const stateAnchorV1Schema = z.object({
+  anchor_kind: z.literal("state"),
+  state_revision: positiveSafeInteger,
+  state_digest: digest,
+}).strict() as unknown as z.ZodType<StateAnchor>;
+
 export const projectionDigestRefV1Schema = z.object({
   path: repositoryPathClaimV1Schema,
   content_digest: digest,
@@ -195,6 +239,7 @@ const checkpointObject = z.object({
   initialization_digest: digest,
   initialization: z.union([taskInitializationV1Schema, legacyImportInitializationV1Schema]).optional(),
   predecessor: predecessorLinkV1Schema.optional(),
+  state_anchor: stateAnchorV1Schema.optional(),
   authoritative_results: z.array(authoritativeResultRefV1Schema)
     .refine(
       (items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])),
@@ -221,9 +266,12 @@ const checkpointObject = z.object({
     if (checkpoint.predecessor !== undefined) {
       context.addIssue({ code: "custom", path: ["predecessor"], message: "revision 1 forbids predecessor" });
     }
+    if (checkpoint.state_anchor !== undefined) {
+      context.addIssue({ code: "custom", path: ["state_anchor"], message: "revision 1 forbids state_anchor" });
+    }
   } else {
-    if (checkpoint.predecessor === undefined) {
-      context.addIssue({ code: "custom", path: ["predecessor"], message: "revision 2 or later requires predecessor" });
+    if ((checkpoint.predecessor === undefined) === (checkpoint.state_anchor === undefined)) {
+      context.addIssue({ code: "custom", path: ["predecessor"], message: "revision 2 or later requires exactly one predecessor or state_anchor" });
     }
     if (checkpoint.initialization !== undefined) {
       context.addIssue({ code: "custom", path: ["initialization"], message: "revision 2 or later forbids initialization" });
@@ -243,20 +291,33 @@ const checkpointImportObject = z.object({
   artifact_kind: z.literal("manual-checkpoint-import"),
   task_id: taskSlugV1Schema,
   repository_identity_digest: digest,
-  import_mode: z.enum(["initial", "continuation"]),
+  import_mode: z.enum(["initial", "state-anchored", "continuation"]),
   chain: checkpointChainSchema,
   predecessor: predecessorLinkV1Schema.optional(),
+  state_anchor: stateAnchorV1Schema.optional(),
   expected_state_revision: positiveSafeInteger.optional(),
   expected_state_digest: digest.optional(),
 }).strict().superRefine((wrapper, context) => {
   const continuationFields = ["predecessor", "expected_state_revision", "expected_state_digest"] as const;
   if (wrapper.import_mode === "initial") {
-    for (const field of continuationFields) {
+    for (const field of [...continuationFields, "state_anchor"] as const) {
       if (wrapper[field] !== undefined) {
         context.addIssue({ code: "custom", path: [field], message: `initial import forbids ${field}` });
       }
     }
+  } else if (wrapper.import_mode === "state-anchored") {
+    if (wrapper.state_anchor === undefined) {
+      context.addIssue({ code: "custom", path: ["state_anchor"], message: "state-anchored import requires state_anchor" });
+    }
+    for (const field of continuationFields) {
+      if (wrapper[field] !== undefined) {
+        context.addIssue({ code: "custom", path: [field], message: `state-anchored import forbids ${field}` });
+      }
+    }
   } else {
+    if (wrapper.state_anchor !== undefined) {
+      context.addIssue({ code: "custom", path: ["state_anchor"], message: "continuation import forbids state_anchor" });
+    }
     for (const field of continuationFields) {
       if (wrapper[field] === undefined) {
         context.addIssue({ code: "custom", path: [field], message: `continuation import requires ${field}` });
@@ -304,7 +365,14 @@ export type ContinuationChainAnchor = {
   readonly predecessor: PredecessorLink;
 };
 
-export type ChainAnchor = InitialChainAnchor | ContinuationChainAnchor;
+export type StateChainAnchor = {
+  readonly mode: "state";
+  readonly task_id: TaskSlug;
+  readonly repository_identity_digest: Sha256Digest;
+  readonly state_anchor: StateAnchor;
+};
+
+export type ChainAnchor = InitialChainAnchor | StateChainAnchor | ContinuationChainAnchor;
 
 /** Derives the checkpoint-chain anchor carried by an import wrapper. */
 export function chainAnchor(wrapper: ManualCheckpointImportV1): ChainAnchor {
@@ -314,6 +382,14 @@ export function chainAnchor(wrapper: ManualCheckpointImportV1): ChainAnchor {
       task_id: wrapper.task_id,
       repository_identity_digest: wrapper.repository_identity_digest,
       predecessor: wrapper.predecessor,
+    };
+  }
+  if (wrapper.import_mode === "state-anchored") {
+    return {
+      mode: "state",
+      task_id: wrapper.task_id,
+      repository_identity_digest: wrapper.repository_identity_digest,
+      state_anchor: wrapper.state_anchor,
     };
   }
   return {
@@ -328,6 +404,9 @@ export function checkpointSelfBreak(
   checkpoint: ManualCheckpointV1
 ): "import-checkpoint-revision-not-successor" | undefined {
   if ("predecessor" in checkpoint && checkpoint.revision !== checkpoint.predecessor.revision + 1) {
+    return "import-checkpoint-revision-not-successor";
+  }
+  if ("state_anchor" in checkpoint && checkpoint.revision !== checkpoint.state_anchor.state_revision + 1) {
     return "import-checkpoint-revision-not-successor";
   }
   return undefined;
@@ -357,6 +436,15 @@ export function chainHeadBreak(
   | undefined {
   if (anchor.mode === "initial") {
     return first.revision === 1 ? undefined : "import-chain-head-not-revision-one";
+  }
+  if (anchor.mode === "state") {
+    if (!("state_anchor" in first) || first.state_anchor.state_revision !== anchor.state_anchor.state_revision) {
+      return "import-head-predecessor-revision-mismatch";
+    }
+    if (first.state_anchor.state_digest !== anchor.state_anchor.state_digest) {
+      return "import-head-predecessor-digest-mismatch";
+    }
+    return undefined;
   }
   if (!("predecessor" in first) || first.predecessor.revision !== anchor.predecessor.revision) {
     return "import-head-predecessor-revision-mismatch";
@@ -388,7 +476,11 @@ export function selectGreatestValidChain(
     return { kind: "stop", outcome: "foreign-candidate" };
   }
 
-  const expectedHeadRevision = anchor.mode === "initial" ? 1 : anchor.predecessor.revision + 1;
+  const expectedHeadRevision = anchor.mode === "initial"
+    ? 1
+    : anchor.mode === "state"
+      ? anchor.state_anchor.state_revision + 1
+      : anchor.predecessor.revision + 1;
   const heads = candidates.filter(
     (candidate) => checkpointSelfBreak(candidate) === undefined && chainHeadBreak(anchor, candidate) === undefined
   );

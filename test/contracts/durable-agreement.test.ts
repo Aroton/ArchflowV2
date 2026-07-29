@@ -523,10 +523,10 @@ describe("the pinned $def inventory resolves", () => {
 });
 
 describe("registry invariants after phase 9 receipt registration", () => {
-  it("SCHEMA_IDS holds 35 entries in exact bijection with the schema directory", () => {
-    expect(Object.keys(SCHEMA_IDS)).toHaveLength(35);
-    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(35);
-    expect(schemaFileNames()).toHaveLength(35);
+  it("SCHEMA_IDS holds 36 entries in exact bijection with the schema directory", () => {
+    expect(Object.keys(SCHEMA_IDS)).toHaveLength(36);
+    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(36);
+    expect(schemaFileNames()).toHaveLength(36);
 
     const idsInFiles = [...ALL_SCHEMAS.values()].map((document) => document.$id as string).sort();
     expect(idsInFiles).toEqual([...Object.values(SCHEMA_IDS)].sort());

@@ -42,6 +42,7 @@ const SCHEMA_FILES = {
   implementationOutput: "implementation-output",
   manualCheckpoint: "manual-checkpoint",
   manualCheckpointImport: "manual-checkpoint-import",
+  handoffRecord: "handoff-record",
 } as const satisfies Record<keyof typeof SCHEMA_IDS, string>;
 
 const loadSchema = async (name: string): Promise<Record<string, unknown>> =>

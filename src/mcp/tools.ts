@@ -1,11 +1,20 @@
 import evidenceSlotsSchema from "../contracts/schemas/v1/evidence-slots.schema.json" with { type: "json" };
+import documentArtifactSchema from "../contracts/schemas/v1/document-artifact.schema.json" with { type: "json" };
+import durablePrimitivesSchema from "../contracts/schemas/v1/durable-primitives.schema.json" with { type: "json" };
 import gateContractSchema from "../contracts/schemas/v1/gate-contract.schema.json" with { type: "json" };
 import gateDecisionSchema from "../contracts/schemas/v1/gate-decision.schema.json" with { type: "json" };
 import mcpToolsSchema from "../contracts/schemas/v1/mcp-tools.schema.json" with { type: "json" };
+import implementationOutputSchema from "../contracts/schemas/v1/implementation-output.schema.json" with { type: "json" };
+import legacyImportInitializationSchema from "../contracts/schemas/v1/legacy-import-initialization.schema.json" with { type: "json" };
+import manualCheckpointSchema from "../contracts/schemas/v1/manual-checkpoint.schema.json" with { type: "json" };
+import manualCheckpointImportSchema from "../contracts/schemas/v1/manual-checkpoint-import.schema.json" with { type: "json" };
 import pathClaimSchema from "../contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
 import primitivesSchema from "../contracts/schemas/v1/primitives.schema.json" with { type: "json" };
 import projectErrorSchema from "../contracts/schemas/v1/project-error.schema.json" with { type: "json" };
 import rubricSchema from "../contracts/schemas/v1/rubric.schema.json" with { type: "json" };
+import secretScanResultSchema from "../contracts/schemas/v1/secret-scan-result.schema.json" with { type: "json" };
+import taskInitializationSchema from "../contracts/schemas/v1/task-initialization.schema.json" with { type: "json" };
+import taskStateSchema from "../contracts/schemas/v1/task-state.schema.json" with { type: "json" };
 import { TOOL_NAMES, type ToolName } from "../contracts/tool-names.js";
 
 export interface AdvertisedToolDescriptor {
@@ -27,7 +36,16 @@ const schemaDocuments = Object.freeze([
   Object.freeze({ key: "rubric", id: "urn:archflow:schema:v1:rubric", schema: rubricSchema }),
   Object.freeze({ key: "gate-contract", id: "urn:archflow:schema:v1:gate-contract", schema: gateContractSchema }),
   Object.freeze({ key: "gate-decision", id: "urn:archflow:schema:v1:gate-decision", schema: gateDecisionSchema }),
-  Object.freeze({ key: "project-error", id: "urn:archflow:schema:v1:project-error", schema: projectErrorSchema })
+  Object.freeze({ key: "project-error", id: "urn:archflow:schema:v1:project-error", schema: projectErrorSchema }),
+  Object.freeze({ key: "durable-primitives", id: "urn:archflow:schema:v1:durable-primitives", schema: durablePrimitivesSchema }),
+  Object.freeze({ key: "task-state", id: "urn:archflow:schema:v1:task-state", schema: taskStateSchema }),
+  Object.freeze({ key: "task-initialization", id: "urn:archflow:schema:v1:task-initialization", schema: taskInitializationSchema }),
+  Object.freeze({ key: "legacy-import-initialization", id: "urn:archflow:schema:v1:legacy-import-initialization", schema: legacyImportInitializationSchema }),
+  Object.freeze({ key: "document-artifact", id: "urn:archflow:schema:v1:document-artifact", schema: documentArtifactSchema }),
+  Object.freeze({ key: "implementation-output", id: "urn:archflow:schema:v1:implementation-output", schema: implementationOutputSchema }),
+  Object.freeze({ key: "manual-checkpoint", id: "urn:archflow:schema:v1:manual-checkpoint", schema: manualCheckpointSchema }),
+  Object.freeze({ key: "manual-checkpoint-import", id: "urn:archflow:schema:v1:manual-checkpoint-import", schema: manualCheckpointImportSchema }),
+  Object.freeze({ key: "secret-scan-result", id: "urn:archflow:schema:v1:secret-scan-result", schema: secretScanResultSchema })
 ] as const);
 
 const documentKeysById = new Map<string, string>(schemaDocuments.map(({ id, key }) => [id, key]));

@@ -1,11 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
 import { computeRequestDigest, type RequestDigestSubject } from "../../src/contracts/fingerprints.js";
 import { parseToolCall, type ParsedToolCall } from "../../src/contracts/mcp-tools.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
@@ -68,6 +69,11 @@ const rawInputs = () => ({
   archflow_waiver: { ...common, origin: waiverOrigin, rationale: "A bounded exception is required" },
 } as const);
 
+const durableFixture = (name: string): unknown => JSON.parse(readFileSync(
+  new URL(`../fixtures/contracts/durable/${name}.valid.json`, import.meta.url),
+  "utf8",
+));
+
 type SelectorFixture = Readonly<{
   call: ParsedToolCall;
   operation: RequestDigestSubject["operation"];
@@ -124,6 +130,37 @@ describe("internal transaction request identity", () => {
       expect(identified.call).toBe(fixture.call);
       expect(identified.input_fingerprint).toBe(fingerprint);
       expect(identified.request_digest, fixture.call.name).toBe(computeRequestDigest(subject));
+    }
+  });
+
+  it("selects every artifact operation and binds the exact canonical artifact digest", () => {
+    const cases = [
+      ["task-initialization", "adopt-task-initialization"],
+      ["legacy-import-initialization", "adopt-legacy-import-initialization"],
+      ["document-artifact", "record-document-artifact"],
+      ["implementation-output", "record-implementation-output"],
+      ["manual-checkpoint-import", "adopt-manual-checkpoint-import"],
+    ] as const;
+    for (const [fixtureName, operation] of cases) {
+      const artifact = durableFixture(fixtureName);
+      const call = parseToolCall("archflow_state", { ...rawInputs().archflow_state, artifact });
+      const identified = identifyTransactionRequest(call, authority, fingerprint);
+      const expected = computeRequestDigest({
+        schema_version: "1",
+        tool: "archflow_state",
+        repository_identity_digest: authority.repository_identity_digest,
+        task_identity_digest: authority.task_identity_digest,
+        operation,
+        operation_fields: {
+          phase_instance: phase,
+          step: "produce",
+          status: "succeeded",
+          artifact_kind: call.input.artifact!.artifact_kind,
+          artifact_digest: canonicalJsonDigest(call.input.artifact!),
+        },
+        input_fingerprint: fingerprint,
+      });
+      expect(identified.request_digest, fixtureName).toBe(expected);
     }
   });
 

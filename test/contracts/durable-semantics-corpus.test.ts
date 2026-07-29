@@ -690,14 +690,14 @@ describe("rank 5c-5t — the manual checkpoint import is a conservative authorit
     issue(artifact, DURABLE_ISSUE_CODES.importChainInitializationMismatch);
   });
 
-  it("5m: wrapper revision correlation precedes absent-state reporting", () => {
+  it("5n: absent-state reporting is independent of checkpoint predecessor revision", () => {
     const artifact = patch(CONTINUATION_IMPORT, { expected_state_revision: 57 });
-    issue(artifact, DURABLE_ISSUE_CODES.importPredecessorStateRevisionMismatch);
+    issue(artifact, DURABLE_ISSUE_CODES.importContinuationWithoutState);
   });
 
-  it("5m: wrapper revision correlation also runs when state is supplied", () => {
+  it("accepts independent current-state and adopted-checkpoint revisions", () => {
     const { state, artifact } = validContinuation({ revision: 57 }, { expected_state_revision: 57 });
-    issue(artifact, DURABLE_ISSUE_CODES.importPredecessorStateRevisionMismatch, state);
+    expect(validateDurableSemantics({ state: stateDoc(state), artifact: artifactDoc(artifact) }).ok).toBe(true);
   });
 
   it("5n: continuation mode requires a state slot", () => {
@@ -1496,7 +1496,6 @@ describe("the pinned issue_code literals", () => {
       importInitializationTaskIdMismatch: "import-initialization-task-id-mismatch",
       importInitializationRepositoryIdentityMismatch: "import-initialization-repository-identity-mismatch",
       importChainInitializationMismatch: "import-chain-initialization-mismatch",
-      importPredecessorStateRevisionMismatch: "import-predecessor-state-revision-mismatch",
       importContinuationWithoutState: "import-continuation-without-state",
       importInitialWithState: "import-initial-with-state",
       importStateRevisionMismatch: "import-state-revision-mismatch",
@@ -1505,6 +1504,7 @@ describe("the pinned issue_code literals", () => {
       importStateAdoptedCheckpointMissing: "import-state-adopted-checkpoint-missing",
       importStateAdoptedCheckpointRevisionMismatch: "import-state-adopted-checkpoint-revision-mismatch",
       importStateAdoptedCheckpointDigestMismatch: "import-state-adopted-checkpoint-digest-mismatch",
+      importStateAdoptedCheckpointPresent: "import-state-adopted-checkpoint-present",
       importStateInitializationMismatch: "import-state-initialization-mismatch",
       accountingResultBytesSum: "accounting-result-bytes-sum",
       accountingTaskBytesBelowResult: "accounting-task-bytes-below-result",

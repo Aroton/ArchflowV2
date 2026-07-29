@@ -34,7 +34,16 @@ const expectedSchemaDocuments = [
   "rubric",
   "gate-contract",
   "gate-decision",
-  "project-error"
+  "project-error",
+  "durable-primitives",
+  "task-state",
+  "task-initialization",
+  "legacy-import-initialization",
+  "document-artifact",
+  "implementation-output",
+  "manual-checkpoint",
+  "manual-checkpoint-import",
+  "secret-scan-result"
 ] as const;
 
 const schemaDocumentPaths = [
@@ -45,7 +54,16 @@ const schemaDocumentPaths = [
   "../../src/contracts/schemas/v1/rubric.schema.json",
   "../../src/contracts/schemas/v1/gate-contract.schema.json",
   "../../src/contracts/schemas/v1/gate-decision.schema.json",
-  "../../src/contracts/schemas/v1/project-error.schema.json"
+  "../../src/contracts/schemas/v1/project-error.schema.json",
+  "../../src/contracts/schemas/v1/durable-primitives.schema.json",
+  "../../src/contracts/schemas/v1/task-state.schema.json",
+  "../../src/contracts/schemas/v1/task-initialization.schema.json",
+  "../../src/contracts/schemas/v1/legacy-import-initialization.schema.json",
+  "../../src/contracts/schemas/v1/document-artifact.schema.json",
+  "../../src/contracts/schemas/v1/implementation-output.schema.json",
+  "../../src/contracts/schemas/v1/manual-checkpoint.schema.json",
+  "../../src/contracts/schemas/v1/manual-checkpoint-import.schema.json",
+  "../../src/contracts/schemas/v1/secret-scan-result.schema.json"
 ] as const;
 
 const validatingKeywordCoverage = {
@@ -85,7 +103,8 @@ const validatingKeywordCoverage = {
     "gate-restore-adoption-authority"
   ],
   "x-archflow-nfc": ["path-nfc-input"],
-  "x-archflow-sorted-unique": ["project-error-sorted-unique"]
+  "x-archflow-sorted-unique": ["project-error-sorted-unique"],
+  "x-archflow-sorted-unique-by": ["checkpoint-authoritative-result-order"]
 } as const;
 
 const resultCorrelationCoverage = [
@@ -122,6 +141,10 @@ const COUNTER = Object.freeze({ role: "counter-review", evidence_digest: D("2"),
 const CURRENT_EVIDENCE = Object.freeze({ set_digest: D("3"), slots: [SELF, COUNTER] });
 const AUTHORITY = Object.freeze({ link_digest: D("4"), purpose: "restore-adoption", proposed_generation_digest: D("5"), changed_input_fingerprint: D("6") });
 const SCOPE = Object.freeze({ operation: "review-trigger", boundary: "subject" });
+const MANUAL_CHECKPOINT = JSON.parse(await readFile(
+  new URL("../fixtures/contracts/durable/manual-checkpoint.valid.json", import.meta.url),
+  "utf8",
+)) as Record<string, unknown>;
 
 const stateCall = (status = "running") => ({ ...COMMON, phase_instance: "phase-impl-3", step: "produce", status });
 const counterCall = (artifactPath = "phases/phase-3.md", criteria = [{ id: "paths", text: "Check paths", blocking: true }]) => ({ ...COMMON, artifact_path: artifactPath, rubric: { schema_version: "1", kind: "implementation", mode: "adversarial", criteria } });
@@ -164,6 +187,24 @@ function materialize(entry: CorpusCase): MaterializedCase {
     case "path-utf8-input": return { value: counterCall(longPath) };
     case "path-nfc-input": return { value: counterCall(nfdPath) };
     case "rubric-unique": return { value: counterCall("phases/phase-3.md", [{ id: "paths", text: "First", blocking: true }, { id: "paths", text: "Second", blocking: false }]) };
+    case "checkpoint-authoritative-result-order": {
+      const checkpoint = structuredClone(MANUAL_CHECKPOINT);
+      const results = checkpoint.authoritative_results as unknown[];
+      checkpoint.authoritative_results = [results[0], results[0]];
+      return {
+        value: {
+          ...stateCall(),
+          artifact: {
+            schema_version: "1",
+            artifact_kind: "manual-checkpoint-import",
+            task_id: checkpoint.task_id,
+            repository_identity_digest: checkpoint.repository_identity_digest,
+            import_mode: "initial",
+            chain: [checkpoint],
+          },
+        },
+      };
+    }
     case "waiver-origin-task": return { value: { ...waiverCall(), task_id: "other" } };
     case "current-evidence": return { value: { ...artifactGateCall, current_evidence: { ...CURRENT_EVIDENCE, slots: [SELF, { ...COUNTER, evidence_digest: SELF.evidence_digest }] } } };
     case "review-rule-order": return { value: gateCall("review-trigger", { ...reviewContext(), matched_rules: [RULE_B, RULE_A], eligible_waiver_rules: [] }) };

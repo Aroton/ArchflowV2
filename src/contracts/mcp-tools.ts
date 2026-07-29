@@ -1,6 +1,12 @@
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { CONSTITUTION_RESULTS, DRIFT_RESULTS, type ConstitutionResult, type DriftResult } from "./adjudication.js";
+import { manualCheckpointImportV1Schema } from "./durable-checkpoint.js";
+import { documentArtifactV1Schema } from "./durable-document.js";
+import { implementationOutputV1Schema } from "./durable-implementation-output.js";
+import { legacyImportInitializationV1Schema } from "./durable-legacy-import.js";
+import { taskInitializationV1Schema } from "./durable-task-initialization.js";
+import type { DurableArtifact } from "./durable.js";
 import { parseProjectError, type ProjectResult } from "./errors.js";
 import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type Sha256Digest, type TaskSlug } from "./evidence.js";
 import { GATE_KINDS, humanDecisionProvenanceV1Schema, parseGateContext, parseGateDecisionEnvelope, validateGateDecision, type GateContext, type GateDecisionEnvelope, type GateKind, type HumanDecisionProvenance, type RuleVersionRef, type WaiverOriginRef, type WaiverScope } from "./gates.js";
@@ -29,8 +35,8 @@ const scope = z.object({ operation: z.enum(["review-trigger", "adjudication-fail
 const provenance = humanDecisionProvenanceV1Schema as z.ZodType<HumanDecisionProvenance>;
 const common = { schema_version: z.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger, input_fingerprint: digest } as const;
 
-export interface CommonToolInput { readonly schema_version: "1"; readonly task_id: TaskSlug; readonly intent_id: PathSafeId; readonly expected_revision: number; readonly input_fingerprint: Sha256Digest }
-export interface StateInput extends CommonToolInput { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "self_review" | "counter_review" | "triage" | "adjudicate"; readonly status: "running" | "succeeded" | "failed" }
+export type CommonToolInput = { readonly schema_version: "1"; readonly task_id: TaskSlug; readonly intent_id: PathSafeId; readonly expected_revision: number; readonly input_fingerprint: Sha256Digest };
+export type StateInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "self_review" | "counter_review" | "triage" | "adjudicate"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact };
 export interface StateSuccess { readonly path: TaskPathClaim; readonly revision: number; readonly status: StateInput["status"] }
 export interface CounterReviewInput extends CommonToolInput { readonly artifact_path: TaskPathClaim; readonly rubric: RubricV1 }
 export interface CounterReviewSuccess { readonly path: TaskPathClaim; readonly verdict: "pass" | "advisory" | "fail"; readonly blocking_count: number; readonly revision: number }
@@ -52,7 +58,14 @@ export interface ToolDefinition<K extends ToolName> { readonly name: K; readonly
 const def = <K extends ToolName>(name: K): ToolDefinition<K> => Object.freeze({ name, input_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/input`, result_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/result` });
 export const TOOL_DEFINITIONS = Object.freeze({ archflow_state: def("archflow_state"), archflow_counter_review: def("archflow_counter_review"), archflow_adjudicate: def("archflow_adjudicate"), archflow_gate: def("archflow_gate"), archflow_waiver: def("archflow_waiver") }) satisfies { readonly [K in keyof ToolContractMap]: ToolDefinition<K> };
 
-const stateInput = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "self_review", "counter_review", "triage", "adjudicate"]), status: z.enum(["running", "succeeded", "failed"]) }).strict();
+const durableArtifact = z.union([
+  taskInitializationV1Schema,
+  legacyImportInitializationV1Schema,
+  documentArtifactV1Schema,
+  implementationOutputV1Schema,
+  manualCheckpointImportV1Schema,
+]) as unknown as z.ZodType<DurableArtifact>;
+const stateInput = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "self_review", "counter_review", "triage", "adjudicate"]), status: z.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
 const counterInput = z.object({ ...common, artifact_path: taskPathClaimV1Schema, rubric: rubricV1Schema }).strict();
 const adjudicateInput = z.object({ ...common, artifact_path: taskPathClaimV1Schema, upstream_paths: z.array(taskPathClaimV1Schema) }).strict();
 const supersedes = z.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest, old_subject_digest: digest }).strict();
@@ -84,7 +97,7 @@ export function assertAuthenticParsedToolCall(value: unknown): asserts value is 
 export function parseToolCall<K extends ToolName>(name: K, value: unknown): Extract<ParsedToolCall, { name: K }> {
   if (!(TOOL_NAMES as readonly string[]).includes(name)) throw new TypeError("unknown tool");
   assertPlainJson(value, `${name} input`);
-  const parsed = inputFor(name, value);
+  const parsed = inputFor(name, structuredClone(value));
   assertPlainJson(parsed, `${name} parsed input`);
   const input = structuredClone(parsed) as ToolInput<K> & { [parsedToolInputBrand]?: K };
   for (const nested of Object.values(input)) deepFreeze(nested);

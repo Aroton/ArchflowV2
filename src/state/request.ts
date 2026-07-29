@@ -1,4 +1,5 @@
-import { computeRequestDigest, type RequestDigestSubject } from "../contracts/fingerprints.js";
+import { canonicalJsonDigest } from "../contracts/canonical.js";
+import { computeRequestDigest, type RequestDigestSubject, type StateArtifactOperation } from "../contracts/fingerprints.js";
 import {
   bindParsedToolCallRequest,
   type ParsedToolCall,
@@ -17,7 +18,27 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
   };
   switch (call.name) {
     case "archflow_state":
-      return { ...common, tool: call.name, operation: "record-state-boundary", operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status } };
+      if (call.input.artifact === undefined) {
+        return { ...common, tool: call.name, operation: "record-state-boundary", operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status } };
+      }
+      return {
+        ...common,
+        tool: call.name,
+        operation: ({
+          "task-initialization": "adopt-task-initialization",
+          "legacy-import-initialization": "adopt-legacy-import-initialization",
+          document: "record-document-artifact",
+          "implementation-output": "record-implementation-output",
+          "manual-checkpoint-import": "adopt-manual-checkpoint-import",
+        } satisfies Readonly<Record<typeof call.input.artifact.artifact_kind, StateArtifactOperation>>)[call.input.artifact.artifact_kind],
+        operation_fields: {
+          phase_instance: call.input.phase_instance,
+          step: call.input.step,
+          status: call.input.status,
+          artifact_kind: call.input.artifact.artifact_kind,
+          artifact_digest: canonicalJsonDigest(call.input.artifact),
+        },
+      };
     case "archflow_counter_review":
       return { ...common, tool: call.name, operation: "counter-review", operation_fields: { artifact_path: call.input.artifact_path, rubric: call.input.rubric } };
     case "archflow_adjudicate":

@@ -3,8 +3,10 @@ import { Ajv2020, type AnySchema, type ErrorObject, type ValidateFunction } from
 import * as formatsModule from "ajv-formats";
 import type { FormatsPlugin } from "ajv-formats";
 import type { IntentReceiptV1 } from "./durable-intent.js";
+import type { HandoffRecordV1 } from "./durable-handoff.js";
 import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
 import intentReceiptSchema from "./schemas/v1/intent-receipt.schema.json" with { type: "json" };
+import handoffRecordSchema from "./schemas/v1/handoff-record.schema.json" with { type: "json" };
 import pathClaimSchema from "./schemas/v1/path-claim.schema.json" with { type: "json" };
 import primitivesSchema from "./schemas/v1/primitives.schema.json" with { type: "json" };
 import taskStateSchema from "./schemas/v1/task-state.schema.json" with { type: "json" };
@@ -306,6 +308,11 @@ export const intentReceiptV1Validator = createJsonSchemaValidator<IntentReceiptV
   primitivesSchema,
   pathClaimSchema,
   taskStateSchema,
+]);
+
+/** Compiled normative authority for the server-authored immutable handoff root. */
+export const handoffRecordV1Validator = createJsonSchemaValidator<HandoffRecordV1>(handoffRecordSchema, [
+  primitivesSchema,
 ]);
 
 export function assertValidJsonSchema<T>(

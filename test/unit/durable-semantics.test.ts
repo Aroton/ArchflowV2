@@ -189,6 +189,37 @@ describe("validateDurableSemantics — positive path", () => {
     accept({ state: canonicalDocument(matchingState), artifact: canonicalDocument(matchingImport) });
   });
 
+  it("accepts the first checkpoint anchored to ordinary state with no adopted checkpoint", async () => {
+    const baseState = { ...(await state()) };
+    delete (baseState as { adopted_checkpoint?: unknown }).adopted_checkpoint;
+    const imported = await checkpointImport();
+    const template = structuredClone(imported.chain[1]!);
+    delete (template as { predecessor?: unknown }).predecessor;
+    const stateAnchor = {
+      anchor_kind: "state" as const,
+      state_revision: baseState.revision,
+      state_digest: canonicalJsonDigest(baseState),
+    };
+    const first = {
+      ...template,
+      task_id: baseState.task_id,
+      repository_identity_digest: baseState.repository_identity_digest,
+      revision: (baseState.revision + 1) as never,
+      initialization_digest: baseState.initialization_digest,
+      state_anchor: stateAnchor,
+    };
+    const artifact = {
+      schema_version: "1" as const,
+      artifact_kind: "manual-checkpoint-import" as const,
+      task_id: baseState.task_id,
+      repository_identity_digest: baseState.repository_identity_digest,
+      import_mode: "state-anchored" as const,
+      chain: [first],
+      state_anchor: stateAnchor,
+    };
+    accept({ state: canonicalDocument(baseState), artifact: canonicalDocument(artifact) });
+  });
+
   it("accepts a maintenance record supplied alone", async () => {
     accept({ maintenance: canonicalDocument(await maintenanceRecord()) });
   });
@@ -483,6 +514,23 @@ describe("validateDurableSemantics — positive path", () => {
     for (const [candidate, issueCode] of relationCases) {
       expectIntentIssue(subject(candidate), "STATE_INVALID", stateParameters(issueCode));
     }
+  });
+
+  it("permits adopted-checkpoint movement only for the durable adoption operation", async () => {
+    const { predecessor, receipt } = await intentPair();
+    const changed = receiptWithPrepared(receipt, {
+      adopted_checkpoint: {
+        revision: parseSafeInteger(predecessor.revision + 1),
+        checkpoint_digest: "4".repeat(64) as never,
+      },
+    });
+    const adoptionReceipt = { ...changed, operation: "adopt-manual-checkpoint-import" } as IntentReceiptV1;
+    accept(createPreparedIntentSubject(canonicalDocument(predecessor), canonicalDocument(adoptionReceipt)));
+    expectIntentIssue(
+      createPreparedIntentSubject(canonicalDocument(predecessor), canonicalDocument(changed)),
+      "STATE_INVALID",
+      { phase_instance: predecessor.phase_instance, issue_code: DURABLE_ISSUE_CODES.intentReceiptAdoptedCheckpointMismatch },
+    );
   });
 
   it("reports every committed reference issue at rank 8b with the final STATE_INVALID carrier", async () => {

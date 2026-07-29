@@ -190,6 +190,34 @@ describe("computeRequestDigest", () => {
     }
   });
 
+  it("binds artifact kind and recomputed digest under each pinned state operation", () => {
+    const cases = [
+      ["adopt-task-initialization", "task-initialization"],
+      ["adopt-legacy-import-initialization", "legacy-import-initialization"],
+      ["record-document-artifact", "document"],
+      ["record-implementation-output", "implementation-output"],
+      ["adopt-manual-checkpoint-import", "manual-checkpoint-import"],
+    ] as const;
+    for (const [operation, artifact_kind] of cases) {
+      const candidate = {
+        ...requestCommon,
+        tool: "archflow_state",
+        operation,
+        operation_fields: {
+          phase_instance: phaseInstance,
+          step: "produce",
+          status: "succeeded",
+          artifact_kind,
+          artifact_digest: digest("1"),
+        },
+      } as RequestDigestSubject;
+      const baseline = computeRequestDigest(candidate);
+      expect(computeRequestDigest({ ...candidate, operation_fields: { ...candidate.operation_fields, artifact_digest: digest("2") } } as unknown as RequestDigestSubject)).not.toBe(baseline);
+      const wrongKind = artifact_kind === "document" ? "task-initialization" : "document";
+      expect(() => computeRequestDigest({ ...candidate, operation_fields: { ...candidate.operation_fields, artifact_kind: wrongKind } } as RequestDigestSubject)).toThrow(/operation/u);
+    }
+  });
+
   it("rejects wrong operation literals and fields outside every closed selector", () => {
     for (const [name, value] of Object.entries(requestSubjects)) {
       expect(() => computeRequestDigest({ ...value, operation: "wrong" } as unknown as RequestDigestSubject), name).toThrow(/invalid/u);
