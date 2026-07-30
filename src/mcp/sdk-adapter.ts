@@ -17,6 +17,7 @@ import {
   type ConnectionContext
 } from "../contracts/contexts.js";
 import type { ProtocolError } from "../contracts/errors.js";
+import { deriveHostIdentity } from "../contracts/hosts.js";
 import { createJsonLineFramer, type IngressFrame } from "./framing.js";
 import { createSendQueue, type SendSource } from "./send-queue.js";
 import {
@@ -267,7 +268,11 @@ export async function startMcpRuntime(options: McpRuntimeOptions): Promise<McpRu
           return;
         }
         try {
-          connection = startup.initialize({ client, host: "unknown", protocol_version: protocolVersion });
+          connection = startup.initialize({
+            client,
+            host: deriveHostIdentity(client),
+            protocol_version: protocolVersion
+          });
         } catch {
           void terminate("protocol-fatal");
         }

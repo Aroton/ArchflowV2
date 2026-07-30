@@ -16,6 +16,12 @@ export function createTestObservationCapability<K extends EvidenceKind>(binding:
   registerObservationCapability(capability, copiedBinding);
   return capability;
 }
+export function createReviewObservationCapability(binding: ObservationBindingByKind["review"]): ObservationCapability<"review"> {
+  const copiedBinding = deepFreeze(structuredClone(binding));
+  const capability = Object.freeze({ kind: copiedBinding.kind }) as ObservationCapability<"review">;
+  registerObservationCapability(capability, copiedBinding);
+  return capability;
+}
 export function createTestAuthorityLink<K extends EvidenceKind, A extends Assurance>(data: AuthorityLinkData<K, A>): AuthorityLink<K, A> {
   const link = deepFreeze(structuredClone(data)) as AuthorityLink<K, A>;
   registerAuthorityLink(link, { kind: data.evidence_kind, assurance: data.assurance });

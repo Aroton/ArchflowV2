@@ -74,7 +74,7 @@ function decodeJson(bytes: Uint8Array): unknown {
 }
 const digestBytes = (bytes: Uint8Array): Sha256Digest => parseSha256Digest(createHash("sha256").update(bytes).digest("hex"));
 const copiedBytes = (bytes: Uint8Array): Uint8Array => Uint8Array.from(bytes);
-function assertAdapterFamily(adapter: AdapterId, family: ModelFamily): void {
+export function assertAdapterFamily(adapter: AdapterId, family: ModelFamily): void {
   const expected = adapter === "claude-cli" ? "claude" : "codex";
   if (family !== expected) throw new TypeError("adapter and model family do not match");
 }
@@ -97,7 +97,7 @@ export const observationSource: ObservationSource = Object.freeze({
     assertAdapterFamily(binding.adapter, binding.family);
     const bytes = copiedBytes(observedOutputBytes);
     const derived = parseAndDeriveReview(decodeJson(bytes));
-    for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]] as const) assertEqual(derived[key], expected, key);
+    for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]] as const) assertEqual(derived[key], expected, key);
     if (binding.family === binding.producer_family) throw new TypeError("review observation must be opposite-family");
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation<"review">(binding, bytes, raw_output_digest);
