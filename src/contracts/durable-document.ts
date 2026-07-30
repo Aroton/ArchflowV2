@@ -66,7 +66,7 @@ export type DocumentArtifactV1 = {
   /** SET — sorted by `input_id`, duplicates rejected (D11). */
   readonly declared_inputs: readonly DeclaredInputRef[];
   readonly input_fingerprint: Sha256Digest;
-  /** The retained result this document projects. */
+  /** Domain-separated canonical declared-output snapshot; never the retained result address. */
   readonly snapshot_digest: Sha256Digest;
   /** REPOSITORY frame (D3). */
   readonly projection_target: RepositoryPathClaim;

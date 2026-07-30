@@ -1545,12 +1545,22 @@ describe("the pinned issue_code literals", () => {
       intentReceiptFinalStateMismatch: "intent-receipt-final-state-mismatch",
       maintenanceTotalBytesMismatch: "maintenance-total-bytes-mismatch",
       maintenanceRevisionAfterState: "maintenance-revision-after-state",
+      resultManifestArtifactDigestMismatch: "result-manifest-artifact-digest-mismatch",
+      resultManifestTaskMismatch: "result-manifest-task-mismatch",
+      resultManifestPhaseMismatch: "result-manifest-phase-mismatch",
+      resultManifestStepMismatch: "result-manifest-step-mismatch",
+      resultManifestInputFingerprintMismatch: "result-manifest-input-fingerprint-mismatch",
+      resultManifestSnapshotMismatch: "result-manifest-snapshot-mismatch",
+      resultManifestOutputsMismatch: "result-manifest-outputs-mismatch",
+      resultManifestProjectionsMismatch: "result-manifest-projections-mismatch",
+      resultManifestAccountingMismatch: "result-manifest-accounting-mismatch",
+      resultManifestSecretScanMismatch: "result-manifest-secret-scan-mismatch",
     });
   });
 
   it("are all SafeCode, and rank 8 has none", () => {
     for (const code of Object.values(DURABLE_ISSUE_CODES)) expect(code).toMatch(SAFE_CODE);
-    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(67);
+    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(77);
     expect(Object.values(DURABLE_ISSUE_CODES)).not.toContain("input-fingerprint-mismatch");
   });
 });

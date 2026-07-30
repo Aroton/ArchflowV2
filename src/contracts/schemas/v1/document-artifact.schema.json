@@ -49,7 +49,10 @@
       "x-archflow-sorted-unique-by": "input_id"
     },
     "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    "snapshot_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "snapshot_digest": {
+      "$comment": "Domain-separated canonical declared-output snapshot; never the retained result address.",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
     "projection_target": {
       "$comment": "REPOSITORY frame (D3).",
       "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"

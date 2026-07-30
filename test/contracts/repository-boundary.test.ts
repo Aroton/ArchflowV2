@@ -94,9 +94,11 @@ describe("package.json dependencies and scripts", () => {
     scripts: Readonly<Record<string, string>>;
   }>;
 
-  it("admits only the exact Phase 9 runtime baseline and Node 24 engine line", () => {
+  it("admits only the exact Phase 11 runtime baseline and Node 24 engine line", () => {
     expect(manifest.dependencies).toEqual({
       "@modelcontextprotocol/server": "2.0.0",
+      "@secretlint/core": "13.0.4",
+      "@secretlint/secretlint-rule-preset-recommend": "13.0.4",
       ajv: "8.20.0",
       "ajv-formats": "3.0.1",
       "write-file-atomic": "8.0.0",

@@ -1,6 +1,6 @@
 # Phase 11: Snapshots, Implementation Manifests, and Restore
 
-**Status**: DESIGNED
+**Status**: COMPLETE
 **Task**: mcp-integration
 **Goal**: Retain and restore deterministic declared outputs within explicit storage, retention, collision, and secret-safety bounds.
 **Requirements**: REQ-08, REQ-11, REQ-13, REQ-21, REQ-22, REQ-23, REQ-25, REQ-26, REQ-33, REQ-39, REQ-50
@@ -78,15 +78,15 @@ The server derives and compares these facts when creating the result. Later read
 
 ## Success Criteria
 
-- [ ] An unchanged fingerprint restores byte-identical declared outputs while unrelated tracked/untracked bytes remain untouched; a changed fingerprint creates one retained generation, and a collision changes nothing before an explicit decision.
-- [ ] The four canonical digest producers reject forged `diff_digest`, `snapshot_digest`, `index_identity_digest`, and `worktree_identity_digest`; implementation manifests round-trip add/modify/delete/rename, binary data, modes, regular-file attribute conversion, unconverted symlink OIDs, parents, restore targets, and undeclared-change observations.
-- [ ] A manifest retains and revalidates its exact source artifact, so Phase 12 can load `diff_digest`, parent documents, declared inputs, and the other implementation evidence without relying on request-lifetime memory.
-- [ ] Only output bytes addressable in the retained base tree receive zero-copy `git-object` storage. Adds, changed after-images, document outputs, and index-only objects use counted raw payloads and remain restorable after `git prune --expire=now`; a later deletion may authenticate its before-image from that current authoritative payload.
-- [ ] Representative copied-byte growth reaches but never exceeds 25 MiB per result or 250 MiB per task; either excess returns non-advancing `SNAPSHOT_LIMIT`, writes no partial payload/projection, and creates no hidden authority.
-- [ ] Every current, checkpoint, decision/review, and resumable-receipt result remains reachable. Human-approved maintenance prunes only the two permitted non-authority categories and cannot break rerun, restore, receipt resume, or checkpoint chains.
-- [ ] Secret fixtures fail before projection even when surrounded by broad, line-scoped, or rule-targeted Secretlint disable directives; the filter rule is absent from top-level registration, `.p12` performs no filesystem read, and upstream secret-bearing messages/content never escape the adapter.
-- [ ] The result reference reaches `next_state` only on its matching producing transition; receipt-only retry restores retained bytes without a second preparation call.
-- [ ] A changed target between classification and apply, or between two path mutations, is never silently overwritten; the transaction leaves prior/next authority or one exact repair.
+- [x] An unchanged fingerprint restores byte-identical declared outputs while unrelated tracked/untracked bytes remain untouched; a changed fingerprint creates one retained generation, and a collision changes nothing before an explicit decision.
+- [x] The four canonical digest producers reject forged `diff_digest`, `snapshot_digest`, `index_identity_digest`, and `worktree_identity_digest`; implementation manifests round-trip add/modify/delete/rename, binary data, modes, regular-file attribute conversion, unconverted symlink OIDs, parents, restore targets, and undeclared-change observations.
+- [x] A manifest retains and revalidates its exact source artifact, so Phase 12 can load `diff_digest`, parent documents, declared inputs, and the other implementation evidence without relying on request-lifetime memory.
+- [x] Only output bytes addressable in the retained base tree receive zero-copy `git-object` storage. Adds, changed after-images, document outputs, and index-only objects use counted raw payloads and remain restorable after `git prune --expire=now`; a later deletion may authenticate its before-image from that current authoritative payload.
+- [x] Representative copied-byte growth reaches but never exceeds 25 MiB per result or 250 MiB per task; either excess returns non-advancing `SNAPSHOT_LIMIT`, writes no partial payload/projection, and creates no hidden authority.
+- [x] Every current, checkpoint, decision/review, and resumable-receipt result remains reachable. Human-approved maintenance prunes only the two permitted non-authority categories and cannot break rerun, restore, receipt resume, or checkpoint chains.
+- [x] Secret fixtures fail before projection even when surrounded by broad, line-scoped, or rule-targeted Secretlint disable directives; the filter rule is absent from top-level registration, `.p12` performs no filesystem read, and upstream secret-bearing messages/content never escape the adapter.
+- [x] The result reference reaches `next_state` only on its matching producing transition; receipt-only retry restores retained bytes without a second preparation call.
+- [x] A changed target between classification and apply, or between two path mutations, is never silently overwritten; the transaction leaves prior/next authority or one exact repair.
 
 ## Verification Steps
 
@@ -99,4 +99,4 @@ Inject real faults around payload, manifest, projection, receipt, and state auth
 Run `npm run typecheck`, affected Vitest files, `npm test`, `npm run test:contracts`, `npm run build:temp`, dependency-policy and notice checks, and aggregate `npm run check`. Verify the lock contains exactly the reviewed fourteen-package Secretlint-related closure (twelve MIT, two BSD-2-Clause) and no copyleft dependency. If the inherited three `test/integration/release-offline.test.ts` failures remain, confirm the assertion set is unchanged and do not regenerate or weaken tracked release authority.
 
 ---
-*Designed: 2026-07-29; revised after counter-review: 2026-07-29*
+*Designed: 2026-07-29; revised after counter-review: 2026-07-29; implemented: 2026-07-29*

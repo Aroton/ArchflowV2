@@ -4,12 +4,18 @@ import * as formatsModule from "ajv-formats";
 import type { FormatsPlugin } from "ajv-formats";
 import type { IntentReceiptV1 } from "./durable-intent.js";
 import type { HandoffRecordV1 } from "./durable-handoff.js";
+import type { ResultManifestV1 } from "./durable-result-manifest.js";
 import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
 import intentReceiptSchema from "./schemas/v1/intent-receipt.schema.json" with { type: "json" };
 import handoffRecordSchema from "./schemas/v1/handoff-record.schema.json" with { type: "json" };
+import resultManifestSchema from "./schemas/v1/result-manifest.schema.json" with { type: "json" };
+import documentArtifactSchema from "./schemas/v1/document-artifact.schema.json" with { type: "json" };
+import durablePrimitivesSchema from "./schemas/v1/durable-primitives.schema.json" with { type: "json" };
+import implementationOutputSchema from "./schemas/v1/implementation-output.schema.json" with { type: "json" };
 import pathClaimSchema from "./schemas/v1/path-claim.schema.json" with { type: "json" };
 import primitivesSchema from "./schemas/v1/primitives.schema.json" with { type: "json" };
 import taskStateSchema from "./schemas/v1/task-state.schema.json" with { type: "json" };
+import secretScanResultSchema from "./schemas/v1/secret-scan-result.schema.json" with { type: "json" };
 
 export interface JsonSchemaValidator<T> {
   readonly validate: ValidateFunction<T>;
@@ -313,6 +319,16 @@ export const intentReceiptV1Validator = createJsonSchemaValidator<IntentReceiptV
 /** Compiled normative authority for the server-authored immutable handoff root. */
 export const handoffRecordV1Validator = createJsonSchemaValidator<HandoffRecordV1>(handoffRecordSchema, [
   primitivesSchema,
+]);
+
+/** Compiled normative authority for the unmirrored server-internal retained result root. */
+export const resultManifestV1Validator = createJsonSchemaValidator<ResultManifestV1>(resultManifestSchema, [
+  primitivesSchema,
+  pathClaimSchema,
+  durablePrimitivesSchema,
+  secretScanResultSchema,
+  documentArtifactSchema,
+  implementationOutputSchema,
 ]);
 
 export function assertValidJsonSchema<T>(

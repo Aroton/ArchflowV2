@@ -4,6 +4,7 @@ import { isAbsolute, relative } from "node:path";
 import {
   canonicalDocument,
   canonicalJsonDigest,
+  sha256Bytes,
   type CanonicalDocument,
 } from "../contracts/canonical.js";
 import {
@@ -17,7 +18,8 @@ import {
   parseIntentReceipt,
   type IntentReceiptV1,
 } from "../contracts/durable-intent.js";
-import type { CommittedIntentRef, TaskStateV1 } from "../contracts/durable-state.js";
+import type { AuthoritativeResultRef, CommittedIntentRef, TaskStateV1 } from "../contracts/durable-state.js";
+import { parseResultManifest } from "../contracts/durable-result-manifest.js";
 import { checkpointSelfDigest } from "../contracts/durable-checkpoint.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
@@ -37,8 +39,8 @@ import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js
 import type { ToolName } from "../contracts/tool-names.js";
 import type { GitEnvironment } from "../repository/git.js";
 import { verifyRepositoryIdentity, type RootBoundGitRunner } from "../repository/identity.js";
-import { resolveTaskPath, type ResolvedPath } from "../repository/paths.js";
-import { AtomicReplaceError, type AtomicWriter } from "./atomic.js";
+import { resolveTaskPath, type ResolvedPath, type ResolvedTaskPath } from "../repository/paths.js";
+import { AtomicReplaceError, type AtomicWriter, type ProjectionWriter } from "./atomic.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
 import type { InputFingerprintResolver } from "./fingerprint.js";
 import { identifyTransactionRequest } from "./request.js";
@@ -50,6 +52,15 @@ import type {
   StateReadResult,
 } from "./read.js";
 import { TaskLockError, type TaskLock } from "./lock.js";
+import {
+  applyProjectionPlan,
+  installSnapshot,
+  prepareSnapshot,
+  RESULT_BYTE_CAP,
+  TASK_BYTE_CAP,
+  type PreparedSnapshot,
+  type ProjectionPlan,
+} from "./snapshots.js";
 
 const MAX_RECEIPT_BYTES = 1024 * 1024;
 
@@ -62,6 +73,10 @@ export type TransactionDependencies = Readonly<{
   read_state: (path: ResolvedPath) => Promise<StateReadResult>;
   read_config: (path: ResolvedPath) => Promise<ConfigReadResult>;
   read_receipt: (path: ResolvedPath) => Promise<ReceiptReadResult>;
+  projection_writer?: ProjectionWriter;
+  /** Returns retained bytes excluding `reference`, when supplied, so replay never double-counts its generation. */
+  read_retained_task_bytes?: (reference?: AuthoritativeResultRef) => Promise<SafeInteger>;
+  load_retained_result?: (reference: AuthoritativeResultRef) => Promise<ProjectResult<RetainedResultInstallation>>;
 }>;
 
 export type NextStateDraft = Omit<TaskStateV1, "revision" | "committed_intent"> & {
@@ -74,6 +89,66 @@ export type PreparedTransaction<K extends ToolName> = Readonly<{
   result: StructurallyValidProjectResult<K>;
   next_state: NextStateDraft;
 }>;
+
+export type ResultInstallationPlan = Readonly<{
+  reference: AuthoritativeResultRef;
+  prepared: PreparedSnapshot;
+  manifest_target: ResolvedPath;
+  projection_plan: ProjectionPlan;
+  worktree_root: ResolvedTaskPath;
+}>;
+
+export type RetainedResultInstallation = Readonly<Omit<ResultInstallationPlan, "reference">>;
+
+export type InternalResultInstallation = Readonly<{ readonly kind: "archflow-result-installation" }>;
+
+export type PreparedResultTransaction<K extends ToolName> = PreparedTransaction<K> & Readonly<{
+  result_installation: InternalResultInstallation;
+}>;
+
+type ResultInstallationFacts = Readonly<{
+  plan: ResultInstallationPlan;
+}>;
+
+const resultInstallations = new WeakMap<object, ResultInstallationFacts>();
+const consumedResultInstallations = new WeakSet<object>();
+
+function materializeResultInstallation(plan: ResultInstallationPlan): ResultInstallationFacts {
+  const reference = structuredClone(ownDataField(plan, "reference", "result installation plan")) as AuthoritativeResultRef;
+  const prepared = structuredClone(ownDataField(plan, "prepared", "result installation plan")) as PreparedSnapshot;
+  const manifestTarget = structuredClone(ownDataField(plan, "manifest_target", "result installation plan")) as ResolvedPath;
+  const projectionPlan = structuredClone(ownDataField(plan, "projection_plan", "result installation plan")) as ProjectionPlan;
+  const worktreeRoot = ownDataField(plan, "worktree_root", "result installation plan");
+  assertPlainJson(reference, "result installation reference");
+  assertPlainJson(manifestTarget, "result installation manifest target");
+  if (typeof worktreeRoot !== "string") throw new TypeError("result installation worktree root must be a string");
+  if (reference.result_digest !== prepared.result_digest || prepared.manifest.digest !== prepared.result_digest) {
+    throw new TypeError("result installation reference does not bind the prepared snapshot");
+  }
+  if (manifestTarget.path_class !== "result-manifest" || reference.manifest_path !== manifestTarget.repositoryRelative) {
+    throw new TypeError("result installation reference does not bind the manifest target");
+  }
+  const canonical = canonicalDocument(prepared.manifest.value);
+  if (canonical.digest !== prepared.manifest.digest || !Buffer.from(canonical.bytes).equals(Buffer.from(prepared.manifest.bytes))) {
+    throw new TypeError("prepared snapshot manifest document disagrees");
+  }
+  parseResultManifest(prepared.manifest.value);
+  if (!validateDurableSemantics({ result_manifest: prepared.manifest }).ok) {
+    throw new TypeError("prepared snapshot manifest semantics are invalid");
+  }
+  return Object.freeze({ plan: Object.freeze({
+    reference, prepared, manifest_target: manifestTarget, projection_plan: projectionPlan,
+    worktree_root: worktreeRoot as ResolvedTaskPath,
+  }) });
+}
+
+/** Mints a one-shot internal capability after staging exact immutable and projection bytes outside the task lock. */
+export function prepareResultInstallation(plan: ResultInstallationPlan): InternalResultInstallation {
+  const facts = materializeResultInstallation(plan);
+  const capability = Object.freeze({ kind: "archflow-result-installation" as const });
+  resultInstallations.set(capability, facts);
+  return capability;
+}
 
 export type TransactionRequest<K extends ToolName = ToolName> = Readonly<{
   call: Extract<ParsedToolCall, { readonly name: K }>;
@@ -92,6 +167,7 @@ type PlannedCommit<K extends ToolName> = Readonly<{
   receipt: CanonicalDocument<IntentReceiptV1>;
   final: CanonicalDocument<TaskStateV1>;
   outcome: ToolSuccess<K>;
+  result_installation?: ResultInstallationFacts;
 }>;
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
@@ -409,9 +485,12 @@ function validatePreparedAndCommitted(
   return validateDurableSemantics(createCommittedIntentSubject(final, receipt));
 }
 
-function materializePlan<K extends ToolName>(value: unknown): PreparedTransaction<K> {
+function materializePlan<K extends ToolName>(value: unknown): PreparedTransaction<K> & { result_installation?: ResultInstallationFacts } {
   if (value === null || typeof value !== "object") throw new TypeError("prepared transaction must be an object");
-  const expected = ["expectation", "next_state", "result"];
+  const hasInstallation = Object.hasOwn(value, "result_installation");
+  const expected = hasInstallation
+    ? ["expectation", "next_state", "result", "result_installation"]
+    : ["expectation", "next_state", "result"];
   const keys = Reflect.ownKeys(value);
   if (keys.some((key) => typeof key !== "string") || !isDeepStrictEqual((keys as string[]).sort(), expected)) {
     throw new TypeError("prepared transaction has unexpected or missing slots");
@@ -419,7 +498,15 @@ function materializePlan<K extends ToolName>(value: unknown): PreparedTransactio
   const expectation = ownDataField(value, "expectation", "prepared transaction") as ResultExpectation<K>;
   const result = ownDataField(value, "result", "prepared transaction") as StructurallyValidProjectResult<K>;
   const nextState = materializeDraft(ownDataField(value, "next_state", "prepared transaction"));
-  return { expectation, result, next_state: nextState };
+  if (!hasInstallation) return { expectation, result, next_state: nextState };
+  const capability = ownDataField(value, "result_installation", "prepared transaction");
+  if (capability === null || typeof capability !== "object") throw new TypeError("result installation capability is invalid");
+  const facts = resultInstallations.get(capability);
+  if (facts === undefined || consumedResultInstallations.has(capability)) {
+    throw new TypeError("result installation capability is unauthenticated or already consumed");
+  }
+  consumedResultInstallations.add(capability);
+  return { expectation, result, next_state: nextState, result_installation: facts };
 }
 
 function buildPlan<K extends ToolName>(
@@ -436,6 +523,22 @@ function buildPlan<K extends ToolName>(
     throw new TypeError("prepared transaction revision is not the immediate successor");
   }
   assertPreserved(current.value, plan.next_state, preparedValue as object);
+  if (plan.result_installation !== undefined) {
+    const stateCall = request.call.name === "archflow_state"
+      ? request.call as Extract<ParsedToolCall, { readonly name: "archflow_state" }>
+      : undefined;
+    const artifact = stateCall?.input.artifact;
+    const producing = stateCall?.input.step === "produce" && stateCall.input.status === "succeeded" &&
+      (artifact?.artifact_kind === "document" || artifact?.artifact_kind === "implementation-output");
+    if (!producing) throw new TypeError("result installation is permitted only at a successful producing boundary");
+    const reference = plan.result_installation.plan.reference;
+    const nextReference = plan.next_state.authoritative_results.find((entry) =>
+      entry.phase_instance === reference.phase_instance && entry.step === reference.step);
+    if (!isDeepStrictEqual(nextReference, reference) || reference.result_id !== plan.expectation.result_id ||
+        reference.input_fingerprint !== identified.input_fingerprint) {
+      throw new TypeError("result installation reference does not match the prepared transaction");
+    }
+  }
   if (
     !sameCheckpoint(plan.next_state.adopted_checkpoint, current.value.adopted_checkpoint) &&
     operationFor(request.call) !== "adopt-manual-checkpoint-import"
@@ -466,7 +569,8 @@ function buildPlan<K extends ToolName>(
   const final = committedState(receipt);
   const semantics = validatePreparedAndCommitted(current, receipt, final);
   if (!semantics.ok) return semantics;
-  return ok(Object.freeze({ receipt, final, outcome }));
+  return ok(Object.freeze({ receipt, final, outcome,
+    ...(plan.result_installation === undefined ? {} : { result_installation: plan.result_installation }) }));
 }
 
 async function authenticateCommitted<K extends ToolName>(
@@ -524,6 +628,85 @@ async function arbitrate<K extends ToolName>(
   return stateIssue(predecessor.value, "transaction-outcome-ambiguous");
 }
 
+function copiedResultBytes(prepared: PreparedSnapshot): number {
+  const payloads = new Map(prepared.payloads.map((payload) => [payload.path, payload]));
+  if (payloads.size !== prepared.payloads.length) throw new TypeError("prepared snapshot has duplicate payload paths");
+  let bytes = 0;
+  for (const output of prepared.manifest.value.outputs) {
+    if (output.storage !== "raw-payload") continue;
+    const payload = payloads.get(output.path);
+    if (
+      payload === undefined || payload.target.path_class !== "result-payload" ||
+      payload.bytes.byteLength !== output.payload_bytes || sha256Bytes(payload.bytes) !== output.payload_digest
+    ) throw new TypeError("prepared snapshot payload facts disagree");
+    bytes += payload.bytes.byteLength;
+    payloads.delete(output.path);
+  }
+  if (payloads.size !== 0 || bytes !== prepared.manifest.value.accounting.result_bytes) {
+    throw new TypeError("prepared snapshot accounting disagrees");
+  }
+  return bytes;
+}
+
+async function installResultFacts(
+  dependencies: TransactionDependencies,
+  current: CanonicalDocument<TaskStateV1>,
+  facts: ResultInstallationFacts,
+  replay: boolean,
+): Promise<ProjectResult<void>> {
+  if (dependencies.read_retained_task_bytes === undefined || dependencies.projection_writer === undefined) {
+    return stateIssue(current.value, "result-installation-unavailable");
+  }
+  if (facts.plan.worktree_root !== dependencies.runner.location.worktreeRoot) {
+    throw new TypeError("result installation worktree root is not the authenticated repository root");
+  }
+  const resultBytes = copiedResultBytes(facts.plan.prepared);
+  const retainedBytes = parseSafeInteger(
+    await dependencies.read_retained_task_bytes(replay ? facts.plan.reference : undefined),
+  );
+  if (resultBytes > RESULT_BYTE_CAP) {
+    return fail(createProjectError("SNAPSHOT_LIMIT", {
+      limit_scope: "result", offending_paths: facts.plan.prepared.payloads.map((item) => item.path).sort(),
+      current_bytes: resultBytes, byte_cap: RESULT_BYTE_CAP,
+    }));
+  }
+  const taskBytes = retainedBytes + resultBytes;
+  if (taskBytes > TASK_BYTE_CAP) {
+    return fail(createProjectError("SNAPSHOT_LIMIT", {
+      limit_scope: "task", offending_paths: facts.plan.prepared.payloads.map((item) => item.path).sort(),
+      current_bytes: taskBytes, byte_cap: TASK_BYTE_CAP,
+    }));
+  }
+  if (!replay && facts.plan.prepared.manifest.value.accounting.task_bytes !== taskBytes) {
+    throw new TypeError("prepared snapshot creation-time accounting is stale");
+  }
+  const creationRetainedBytes = replay
+    ? parseSafeInteger(facts.plan.prepared.manifest.value.accounting.task_bytes - resultBytes)
+    : retainedBytes;
+  const revalidated = prepareSnapshot({
+    manifest: facts.plan.prepared.manifest.value,
+    payloads: facts.plan.prepared.payloads,
+    retained_task_bytes: creationRetainedBytes,
+    validate_manifest: parseResultManifest,
+  });
+  if (!revalidated.ok) return revalidated;
+  const installed = await installSnapshot(
+    dependencies.atomic,
+    revalidated.value,
+    facts.plan.manifest_target,
+    facts.plan.worktree_root,
+  );
+  if (!installed.ok) return installed;
+  const projected = await applyProjectionPlan(dependencies.projection_writer, facts.plan.projection_plan);
+  if (projected.outcome !== "applied") {
+    return fail(createProjectError("SNAPSHOT_INVALID", {
+      snapshot_digest: facts.plan.prepared.manifest.value.snapshot_digest,
+      issue_code: `projection-${projected.outcome}`,
+    }));
+  }
+  return ok(undefined);
+}
+
 async function installPlan<K extends ToolName>(
   dependencies: TransactionDependencies,
   request: TransactionRequest<K>,
@@ -532,6 +715,27 @@ async function installPlan<K extends ToolName>(
   plan: PlannedCommit<K>,
   receiptAlreadyExists: boolean,
 ): Promise<ProjectResult<TransactionOutcome<K>>> {
+  const resumesResult = plan.receipt.value.operation === "record-document-artifact" ||
+    plan.receipt.value.operation === "record-implementation-output";
+  if (receiptAlreadyExists && resumesResult) {
+    const reference = plan.final.value.authoritative_results.find((entry) => entry.result_id === plan.receipt.value.result_id);
+    if (reference !== undefined) {
+      if (dependencies.load_retained_result === undefined) return stateIssue(current.value, "result-resume-unavailable");
+      const loaded = await dependencies.load_retained_result(reference);
+      if (!loaded.ok) return loaded;
+      const resumed = await installResultFacts(dependencies, current, materializeResultInstallation({
+        reference,
+        prepared: loaded.value.prepared,
+        manifest_target: loaded.value.manifest_target,
+        projection_plan: loaded.value.projection_plan,
+        worktree_root: loaded.value.worktree_root,
+      }), true);
+      if (!resumed.ok) return resumed;
+    }
+  } else if (plan.result_installation !== undefined) {
+    const installed = await installResultFacts(dependencies, current, plan.result_installation, false);
+    if (!installed.ok) return installed;
+  }
   try {
     await ensureIntentDirectory(request.authority);
   } catch (error) {

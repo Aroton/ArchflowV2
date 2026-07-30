@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { link, open, unlink, type FileHandle } from "node:fs/promises";
+import { link, open, rename, symlink, unlink, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import writeFileAtomic from "write-file-atomic";
@@ -11,6 +11,13 @@ export type ExclusiveCreateResult = "created" | "exists";
 export type AtomicWriter = Readonly<{
   createExclusive(path: ResolvedPath, bytes: Uint8Array): Promise<ExclusiveCreateResult>;
   replace(path: ResolvedPath, bytes: Uint8Array): Promise<void>;
+}>;
+
+/** Narrow mutable-file primitives used by snapshot projection after collision checks. */
+export type ProjectionWriter = Readonly<{
+  replaceRegular(path: ResolvedPath, bytes: Uint8Array, executable: boolean): Promise<void>;
+  replaceSymlink(path: ResolvedPath, target: string): Promise<void>;
+  remove(path: ResolvedPath): Promise<void>;
 }>;
 
 export class AtomicReplaceError extends Error {
@@ -47,8 +54,11 @@ async function writeAll(handle: FileHandle, bytes: Uint8Array): Promise<void> {
 }
 
 async function createExclusive(path: ResolvedPath, bytes: Uint8Array): Promise<ExclusiveCreateResult> {
-  if (path.path_class !== "intent" && path.path_class !== "maintenance-record") {
-    throw new TypeError("createExclusive requires an intent or maintenance-record resolved path");
+  if (
+    path.path_class !== "intent" && path.path_class !== "maintenance-record" &&
+    path.path_class !== "result-manifest" && path.path_class !== "result-payload"
+  ) {
+    throw new TypeError("createExclusive requires an immutable resolved path");
   }
 
   const target = path.absolute;
@@ -107,4 +117,53 @@ async function replace(path: ResolvedPath, bytes: Uint8Array): Promise<void> {
 
 export function createAtomicWriter(): AtomicWriter {
   return Object.freeze({ createExclusive, replace });
+}
+
+const PROJECTABLE = new Set([
+  "document", "import", "manual-checkpoint", "repository-source", "result-payload", "review",
+  "task-branch-constitution",
+]);
+
+function requireProjectable(path: ResolvedPath): void {
+  if (!PROJECTABLE.has(path.path_class)) throw new TypeError("projection requires a declared output path");
+}
+
+async function replaceRegular(path: ResolvedPath, bytes: Uint8Array, executable: boolean): Promise<void> {
+  requireProjectable(path);
+  try {
+    await writeFileAtomic(path.absolute, bytes, { mode: executable ? 0o755 : 0o644 });
+  } catch {
+    throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: true, collision: false });
+  }
+}
+
+async function replaceSymlink(path: ResolvedPath, target: string): Promise<void> {
+  requireProjectable(path);
+  const temporary = join(dirname(path.absolute), `.${basename(path.absolute)}.${process.pid}.${randomUUID()}.tmp`);
+  let created = false;
+  try {
+    await symlink(target, temporary);
+    created = true;
+    await rename(temporary, path.absolute);
+    created = false;
+  } catch {
+    throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: created, collision: false });
+  } finally {
+    if (created) await unlink(temporary).catch(() => undefined);
+  }
+}
+
+async function remove(path: ResolvedPath): Promise<void> {
+  requireProjectable(path);
+  try {
+    await unlink(path.absolute);
+  } catch (error) {
+    if (errnoOf(error) !== "ENOENT") {
+      throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: false, collision: false });
+    }
+  }
+}
+
+export function createProjectionWriter(): ProjectionWriter {
+  return Object.freeze({ replaceRegular, replaceSymlink, remove });
 }

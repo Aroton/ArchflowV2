@@ -40,6 +40,7 @@ const SCHEMA_FILES = {
   legacyImportInitialization: "legacy-import-initialization",
   documentArtifact: "document-artifact",
   implementationOutput: "implementation-output",
+  resultManifest: "result-manifest",
   manualCheckpoint: "manual-checkpoint",
   manualCheckpointImport: "manual-checkpoint-import",
   handoffRecord: "handoff-record",

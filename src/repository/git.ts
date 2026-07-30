@@ -69,6 +69,8 @@ export interface ExpectedAbsence {
 export interface GitCommandSpec {
   readonly argv: readonly string[];
   readonly operation: SafeCode;
+  /** Optional binary stdin, copied once before the child is spawned. */
+  readonly stdin?: Uint8Array;
   readonly expectedAbsence?: readonly ExpectedAbsence[];
   readonly maxBuffer?: number;
   readonly timeoutMs?: number;
@@ -107,6 +109,7 @@ export interface RepositoryOperationContext {
 
 const DEFAULT_MAX_BUFFER = 8 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_STDIN = 26_214_400;
 const GIT_MAJOR_FLOOR = 2;
 const GIT_MINOR_FLOOR = 25;
 
@@ -125,7 +128,7 @@ function execGit(
   options: { readonly cwd: string; readonly maxBuffer: number; readonly timeoutMs: number }
 ): Promise<ExecOutcome> {
   return new Promise<ExecOutcome>((resolve) => {
-    execFile(
+    const child = execFile(
       gitPath,
       [...spec.argv],
       {
@@ -143,6 +146,8 @@ function execGit(
         });
       }
     );
+    child.stdin?.on("error", () => undefined);
+    child.stdin?.end(spec.stdin);
   });
 }
 
@@ -177,7 +182,17 @@ export function createGitRunner(options: {
   const runnerTimeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   async function run(spec: GitCommandSpec): Promise<GitInvocationResult> {
-    const outcome = await execGit(gitPath, spec, {
+    const stdin = spec.stdin === undefined ? undefined : new Uint8Array(spec.stdin);
+    if (stdin !== undefined && stdin.byteLength > DEFAULT_MAX_STDIN) {
+      throw new GitInvocationError({
+        kind: "output-overflow",
+        operation: spec.operation,
+        argv: spec.argv,
+        message: `git ${spec.operation} stdin exceeds the bounded result-byte limit`,
+      });
+    }
+    const materializedSpec = stdin === undefined ? spec : { ...spec, stdin };
+    const outcome = await execGit(gitPath, materializedSpec, {
       cwd,
       maxBuffer: spec.maxBuffer ?? runnerMaxBuffer,
       timeoutMs: spec.timeoutMs ?? runnerTimeoutMs,
@@ -232,6 +247,183 @@ export function createGitRunner(options: {
   }
 
   return Object.freeze({ cwd, run, runText, runNulFields });
+}
+
+export type GitTreeBlobEntry = Readonly<{
+  mode: "100644" | "100755" | "120000";
+  oid: string;
+}>;
+
+const HASH_OBJECT_OPERATION = "git-hash-object" as SafeCode;
+const ANCESTOR_OPERATION = "git-ancestor" as SafeCode;
+const TREE_ENTRY_OPERATION = "git-tree-entry" as SafeCode;
+const OBJECT_SIZE_OPERATION = "git-object-size" as SafeCode;
+const OBJECT_READ_OPERATION = "git-object-read" as SafeCode;
+const GIT_OID = /^[0-9a-f]{40}$/u;
+const BLOB_MODE = /^(?:100644|100755|120000)$/u;
+const MAX_RESULT_BLOB_BYTES = 25 * 1024 * 1024;
+
+/** Hashes bytes as Git would for a declared path. Omit `path` for unconverted symlink targets. */
+export async function hashGitBlob(
+  runner: GitRunner,
+  bytes: Uint8Array,
+  path?: string
+): Promise<string> {
+  const argv = ["hash-object"];
+  if (path !== undefined) argv.push(`--path=${path}`);
+  argv.push("--stdin");
+  const oid = await runner.runText({ argv, operation: HASH_OBJECT_OPERATION, stdin: bytes });
+  if (!GIT_OID.test(oid)) throw new TypeError("git hash-object returned an invalid SHA-1 object id");
+  return oid;
+}
+
+/**
+ * Hashes path-converted bytes and materializes the resulting loose object only long enough to
+ * measure Git's canonical blob byte length. Object existence is never a retention proof: callers
+ * must still select `git-object` storage exclusively through a retained commit/tree proof.
+ */
+export async function hashGitBlobIdentity(
+  runner: GitRunner,
+  bytes: Uint8Array,
+  path?: string
+): Promise<Readonly<{ oid: string; size_bytes: number }>> {
+  const argv = ["hash-object", "-w"];
+  if (path !== undefined) argv.push(`--path=${path}`);
+  argv.push("--stdin");
+  const oid = await runner.runText({ argv, operation: HASH_OBJECT_OPERATION, stdin: bytes });
+  if (!GIT_OID.test(oid)) throw new TypeError("git hash-object returned an invalid SHA-1 object id");
+  return Object.freeze({ oid, size_bytes: await readGitBlobSize(runner, oid) });
+}
+
+export type GitChangedPathReport = Readonly<{
+  paths: readonly string[];
+  unrepresentable_count: number;
+}>;
+
+/** Reads porcelain-v1 `-z` without losing invalid UTF-8 names; those are counted, never omitted silently. */
+export async function readChangedGitPaths(runner: GitRunner): Promise<GitChangedPathReport> {
+  const result = await runner.run({
+    argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    operation: "git-status-declared-scope" as SafeCode,
+  });
+  const fields: Uint8Array[] = [];
+  let start = 0;
+  for (let index = 0; index < result.stdout.byteLength; index += 1) {
+    if (result.stdout[index] === 0) {
+      fields.push(result.stdout.slice(start, index));
+      start = index + 1;
+    }
+  }
+  if (start !== result.stdout.byteLength) throw new TypeError("git status porcelain output is not NUL-terminated");
+  const paths: string[] = [];
+  let unrepresentable = 0;
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index]!;
+    if (field.byteLength < 4 || field[2] !== 0x20) throw new TypeError("git status porcelain record is malformed");
+    const status = String.fromCharCode(field[0]!, field[1]!);
+    const pathFields: Uint8Array[] = [field.slice(3)];
+    if (status.includes("R") || status.includes("C")) {
+      const source = fields[index + 1];
+      if (source === undefined) throw new TypeError("git status rename record lacks its source");
+      pathFields.push(source);
+      index += 1;
+    }
+    for (const pathBytes of pathFields) {
+      try { paths.push(fatalDecoder.decode(pathBytes)); }
+      catch { unrepresentable += 1; }
+    }
+  }
+  paths.sort();
+  return Object.freeze({ paths: Object.freeze([...new Set(paths)]), unrepresentable_count: unrepresentable });
+}
+
+/** True only when `ancestor` is retained by the current HEAD ancestry. */
+export async function isCommitAncestorOfHead(
+  runner: GitRunner,
+  ancestor: string
+): Promise<boolean> {
+  const result = await runner.run({
+    argv: ["merge-base", "--is-ancestor", ancestor, "HEAD"],
+    operation: ANCESTOR_OPERATION,
+    expectedAbsence: [{ code: 1, stderrIncludes: "" }],
+  });
+  return !result.absent;
+}
+
+/** Resolves one exact blob entry from a commit tree; empty output is ordinary absence. */
+export async function readCommitTreeBlob(
+  runner: GitRunner,
+  commit: string,
+  path: string
+): Promise<GitTreeBlobEntry | undefined> {
+  const fields = await runner.runNulFields({
+    argv: ["ls-tree", "-z", commit, "--", path],
+    operation: TREE_ENTRY_OPERATION,
+  });
+  if (fields.length === 0) return undefined;
+  if (fields.length !== 1) throw new TypeError("git ls-tree returned conflicting path entries");
+  const match = /^(?<mode>\d{6}) blob (?<oid>[0-9a-f]+)\t(?<path>[\s\S]+)$/u.exec(fields[0] ?? "");
+  if (
+    match?.groups === undefined ||
+    match.groups["path"] !== path ||
+    !BLOB_MODE.test(match.groups["mode"] ?? "") ||
+    !GIT_OID.test(match.groups["oid"] ?? "")
+  ) {
+    throw new TypeError("git ls-tree returned an invalid or mismatched blob entry");
+  }
+  return Object.freeze({
+    mode: match.groups["mode"] as GitTreeBlobEntry["mode"],
+    oid: match.groups["oid"] as string,
+  });
+}
+
+/** Reads the byte size of a blob already named by an authenticated tree entry. */
+export async function readGitBlobSize(runner: GitRunner, oid: string): Promise<number> {
+  if (!GIT_OID.test(oid)) throw new TypeError("Git blob object id is invalid");
+  const output = await runner.runText({
+    argv: ["cat-file", "-s", oid],
+    operation: OBJECT_SIZE_OPERATION,
+  });
+  if (!/^(?:0|[1-9][0-9]*)$/u.test(output)) throw new TypeError("git cat-file returned an invalid size");
+  const size = Number(output);
+  if (!Number.isSafeInteger(size)) throw new TypeError("git blob size exceeds the safe integer range");
+  return size;
+}
+
+/** Reads one authenticated Git blob without permitting a result-sized object to exceed storage bounds. */
+export async function readGitBlobBytes(runner: GitRunner, oid: string): Promise<Uint8Array> {
+  const size = await readGitBlobSize(runner, oid);
+  if (size > MAX_RESULT_BLOB_BYTES) throw new TypeError("Git blob exceeds the bounded result-byte limit");
+  const result = await runner.run({
+    argv: ["cat-file", "blob", oid],
+    operation: OBJECT_READ_OPERATION,
+    maxBuffer: MAX_RESULT_BLOB_BYTES,
+  });
+  if (result.stdout.byteLength !== size) throw new TypeError("git cat-file blob size changed during read");
+  return new Uint8Array(result.stdout);
+}
+
+/** Materializes a regular blob through the declared destination path's checkout filters. */
+export async function readGitBlobProjectedBytes(
+  runner: GitRunner,
+  oid: string,
+  path: string,
+): Promise<Uint8Array> {
+  if (!GIT_OID.test(oid)) throw new TypeError("cannot read an invalid Git object id");
+  const result = await runner.run({
+    argv: ["cat-file", "--filters", `--path=${path}`, oid],
+    operation: "git-object-projected-bytes" as SafeCode,
+    maxBuffer: MAX_RESULT_BLOB_BYTES,
+  });
+  if (result.stdout.byteLength > MAX_RESULT_BLOB_BYTES) {
+    throw new GitInvocationError({
+      kind: "output-overflow",
+      operation: "git-object-projected-bytes" as SafeCode,
+      argv: ["cat-file", "--filters", `--path=${path}`, oid],
+      message: "projected Git blob exceeds the bounded result-byte limit",
+    });
+  }
+  return new Uint8Array(result.stdout);
 }
 
 /**

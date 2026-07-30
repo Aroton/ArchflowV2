@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 
 import type { DurableArtifact } from "../contracts/durable.js";
-import type { TaskStateV1 } from "../contracts/durable-state.js";
+import type { AuthoritativeResultRef, TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import type { SafeInteger, Sha256Digest } from "../contracts/evidence.js";
 import { decodePhaseInstance, encodePhaseInstance, parsePositiveSafePhaseNumber } from "../contracts/phase-instance.js";
@@ -23,6 +23,7 @@ export type TransitionPlanInput = Readonly<{
   target: TransitionTarget;
   recomputed_input_fingerprint: Sha256Digest;
   artifact?: DurableArtifact;
+  result_reference?: AuthoritativeResultRef;
 }>;
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
@@ -121,6 +122,33 @@ function artifactMatches(input: TransitionPlanInput): boolean {
   return input.target.phase_instance === input.current.phase_instance && input.target.step === input.current.step;
 }
 
+function resultReferenceMatches(input: TransitionPlanInput): boolean {
+  const reference = input.result_reference;
+  const producing = input.target.status === "succeeded" && input.target.step === "produce" &&
+    (input.artifact?.artifact_kind === "document" || input.artifact?.artifact_kind === "implementation-output");
+  if (!producing) return reference === undefined;
+  if (reference === undefined) return false;
+  return reference.phase_instance === input.target.phase_instance &&
+    reference.step === input.target.step &&
+    reference.input_fingerprint === input.recomputed_input_fingerprint;
+}
+
+function withResultReference(
+  current: readonly AuthoritativeResultRef[],
+  reference: AuthoritativeResultRef | undefined,
+): readonly AuthoritativeResultRef[] {
+  if (reference === undefined) return current;
+  const next = current.filter((entry) =>
+    entry.phase_instance !== reference.phase_instance || entry.step !== reference.step);
+  next.push(reference);
+  next.sort((left, right) => {
+    const leftKey = `${left.phase_instance}\u0000${left.step}`;
+    const rightKey = `${right.phase_instance}\u0000${right.step}`;
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+  });
+  return Object.freeze(next);
+}
+
 /** Plans one fixed-workflow move. It is pure and performs no receipt or state write. */
 export function planStateTransition(value: TransitionPlanInput): ProjectResult<NextStateDraft> {
   assertPlainJson(value, "transition plan input");
@@ -130,7 +158,9 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
   if (input.target.input_fingerprint !== input.recomputed_input_fingerprint) {
     return fingerprintFailure(input.recomputed_input_fingerprint, input.target.input_fingerprint);
   }
-  if (!legalMovement(input.current, input.target) || !artifactMatches(input)) return invalid(input, from, to);
+  if (!legalMovement(input.current, input.target) || !artifactMatches(input) || !resultReferenceMatches(input)) {
+    return invalid(input, from, to);
+  }
 
   const { revision: _revision, committed_intent: _intent, ...preserved } = input.current;
   const draft: NextStateDraft = Object.freeze({
@@ -140,8 +170,9 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     status: input.target.status,
     attempt: input.target.attempt,
     input_fingerprint: input.target.input_fingerprint,
+    authoritative_results: withResultReference(preserved.authoritative_results, input.result_reference),
   });
-  if (!isDeepStrictEqual(draft.authoritative_results, input.current.authoritative_results)) {
+  if (input.result_reference === undefined && !isDeepStrictEqual(draft.authoritative_results, input.current.authoritative_results)) {
     throw new TypeError("transition planning changed authoritative results");
   }
   return ok(draft);

@@ -1,4 +1,4 @@
-import { canonicalJsonDigest, type CanonicalDocument } from "./canonical.js";
+import { canonicalDocument, canonicalJsonDigest, type CanonicalDocument } from "./canonical.js";
 import { isDeepStrictEqual } from "node:util";
 import {
   chainAnchor,
@@ -9,6 +9,7 @@ import {
 } from "./durable-checkpoint.js";
 import type { DocumentArtifactV1 } from "./durable-document.js";
 import type { ImplementationOutputV1 } from "./durable-implementation-output.js";
+import type { ResultManifestV1 } from "./durable-result-manifest.js";
 import type { LegacyImportInitializationV1 } from "./durable-legacy-import.js";
 import type { MaintenanceRecordV1 } from "./durable-maintenance.js";
 import type { IntentReceiptV1 } from "./durable-intent.js";
@@ -23,16 +24,16 @@ import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
  * The phase's single cross-document semantic authority.
  *
  * **The subject has three independent durable slots plus one discriminated intent relation.** There is no
- * result-manifest, decision, approval, waiver, authority-link, or evidence slot, so no reference
- * target is resolved here: not `authoritative_results[*].result_digest`, not `approvals[*].gate_id`,
- * not `open_gate.gate_id`, not `waivers[*].gate_id`. Each has a named later owner (Phases 10 and 11).
+ * decision, approval, waiver, authority-link, or evidence slot, so those reference targets are not
+ * resolved here: not `approvals[*].gate_id`, not `open_gate.gate_id`, or `waivers[*].gate_id`.
+ * Result manifests are the one resolved retained-result authority added by Phase 11.
  *
  * **No template-based path classification (D4).** The class -> template tables live in
  * `src/repository/paths.ts`, which `src/contracts/**` may never import
  * (`test/contracts/repository-boundary.test.ts:28-38`). A cross-class rename is *representable* and
- * is **not** rejected here; rank 5a checks only `previous_path !== path`, and Phase 10 classifies
+ * is **not** rejected here; rank 5a checks only `previous_path !== path`, and Phase 11 classifies
  * both endpoints. `payload_bytes`, `payload_digest`, and `after.oid` are assertions in this phase
- * and become verified facts in Phase 10; nothing here sees a byte, and `CanonicalDocument.bytes` is
+ * and become verified facts in Phase 11; nothing here sees a byte, and `CanonicalDocument.bytes` is
  * never inspected.
  */
 
@@ -47,6 +48,7 @@ export type DurableSemanticSubject = {
   readonly state?: CanonicalDocument<TaskStateV1>;
   readonly artifact?: CanonicalDocument<DurableArtifact>;
   readonly maintenance?: CanonicalDocument<MaintenanceRecordV1>;
+  readonly result_manifest?: CanonicalDocument<ResultManifestV1>;
   readonly intent_relation?: DurableIntentRelation;
 };
 
@@ -155,6 +157,16 @@ export const DURABLE_ISSUE_CODES = Object.freeze({
   /** 8b */ intentReceiptFinalStateMismatch: "intent-receipt-final-state-mismatch",
   /** 9a */ maintenanceTotalBytesMismatch: "maintenance-total-bytes-mismatch",
   /** 9b */ maintenanceRevisionAfterState: "maintenance-revision-after-state",
+  /** result */ resultManifestArtifactDigestMismatch: "result-manifest-artifact-digest-mismatch",
+  /** result */ resultManifestTaskMismatch: "result-manifest-task-mismatch",
+  /** result */ resultManifestPhaseMismatch: "result-manifest-phase-mismatch",
+  /** result */ resultManifestStepMismatch: "result-manifest-step-mismatch",
+  /** result */ resultManifestInputFingerprintMismatch: "result-manifest-input-fingerprint-mismatch",
+  /** result */ resultManifestSnapshotMismatch: "result-manifest-snapshot-mismatch",
+  /** result */ resultManifestOutputsMismatch: "result-manifest-outputs-mismatch",
+  /** result */ resultManifestProjectionsMismatch: "result-manifest-projections-mismatch",
+  /** result */ resultManifestAccountingMismatch: "result-manifest-accounting-mismatch",
+  /** result */ resultManifestSecretScanMismatch: "result-manifest-secret-scan-mismatch",
 } as const);
 
 type IssueCode = (typeof DURABLE_ISSUE_CODES)[keyof typeof DURABLE_ISSUE_CODES];
@@ -248,6 +260,10 @@ function receiptInvalid(receipt: IntentReceiptV1, issue_code: IssueCode): Projec
   return createProjectError("TASK_INVALID", { task_id: receipt.task_id, issue_code });
 }
 
+function resultManifestInvalid(manifest: ResultManifestV1, issue_code: IssueCode): ProjectError {
+  return createProjectError("SNAPSHOT_INVALID", { snapshot_digest: manifest.snapshot_digest, issue_code });
+}
+
 function contractInvalid(issue_code: IssueCode): ProjectError {
   return createProjectError("CONTRACT_INVALID", { issue_code });
 }
@@ -304,6 +320,7 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   const stateDocument = ownDataSlot(subject, "state");
   const artifactDocument = ownDataSlot(subject, "artifact");
   const maintenanceDocument = ownDataSlot(subject, "maintenance");
+  const resultManifestDocument = ownDataSlot(subject, "result_manifest");
   const relationValue = ownDataSlot(subject, "intent_relation");
 
   const stateSlot =
@@ -316,6 +333,10 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     maintenanceDocument === undefined
       ? undefined
       : materialize<MaintenanceRecordV1>(maintenanceDocument, "durable maintenance document");
+  const resultManifestSlot =
+    resultManifestDocument === undefined
+      ? undefined
+      : materialize<ResultManifestV1>(resultManifestDocument, "durable result manifest document");
 
   let relation: { readonly mode: "prepared" | "committed"; readonly state: Materialized<TaskStateV1>; readonly receipt: Materialized<IntentReceiptV1> } | undefined;
   if (relationValue !== undefined) {
@@ -341,6 +362,7 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   const state = stateSlot?.value;
   const artifact = artifactSlot?.value;
   const maintenance = maintenanceSlot?.value;
+  const resultManifest = resultManifestSlot?.value;
   const intentState = relation?.state.value;
   const receipt = relation?.receipt.value;
 
@@ -359,6 +381,9 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   if (intentState !== undefined && !decodable(intentState.phase_instance)) {
     return fail(contractInvalid(DURABLE_ISSUE_CODES.statePhaseInstanceUndecodable));
   }
+  if (resultManifest !== undefined && !decodable(resultManifest.phase_instance)) {
+    return fail(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
+  }
 
   /* Rank 3 — self-digest agreement, per supplied document, in slot order. */
   if (state !== undefined && canonicalJsonDigest(state) !== stateSlot?.digest) {
@@ -369,6 +394,9 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   }
   if (maintenance !== undefined && canonicalJsonDigest(maintenance) !== maintenanceSlot?.digest) {
     return fail(maintenanceInvalid(maintenance, DURABLE_ISSUE_CODES.documentDigestMismatch));
+  }
+  if (resultManifest !== undefined && canonicalJsonDigest(resultManifest) !== resultManifestSlot?.digest) {
+    return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.documentDigestMismatch));
   }
   if (receipt !== undefined && canonicalJsonDigest(receipt) !== relation?.receipt.digest) {
     return fail(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptSelfDigestMismatch));
@@ -437,6 +465,78 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   if (artifact !== undefined && artifact.artifact_kind === "implementation-output") {
     if (decodePhaseInstance(artifact.phase_instance).kind !== "phase-impl") {
       return fail(contractInvalid(DURABLE_ISSUE_CODES.implementationOutputPhaseKind));
+    }
+  }
+
+  if (resultManifest !== undefined) {
+    const source = resultManifest.source_artifact;
+    const sourceSemantics = validateDurableSemantics({ artifact: canonicalDocument(source) });
+    if (!sourceSemantics.ok) return sourceSemantics;
+    if (resultManifest.artifact_digest !== canonicalJsonDigest(source)) {
+      return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestArtifactDigestMismatch));
+    }
+    if (resultManifest.task_id !== source.task_id) {
+      return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestTaskMismatch));
+    }
+    if (resultManifest.phase_instance !== source.phase_instance) {
+      return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestPhaseMismatch));
+    }
+    if (resultManifest.step !== source.step) {
+      return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestStepMismatch));
+    }
+    if (resultManifest.input_fingerprint !== source.input_fingerprint) {
+      return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestInputFingerprintMismatch));
+    }
+    if (resultManifest.snapshot_digest !== source.snapshot_digest) {
+      return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestSnapshotMismatch));
+    }
+
+    if (source.artifact_kind === "implementation-output") {
+      if (!isDeepStrictEqual(resultManifest.outputs, source.outputs)) {
+        return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestOutputsMismatch));
+      }
+      if (!isDeepStrictEqual(resultManifest.accounting, source.accounting)) {
+        return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestAccountingMismatch));
+      }
+      if (!isDeepStrictEqual(resultManifest.secret_scan, source.secret_scan)) {
+        return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestSecretScanMismatch));
+      }
+      const expectedProjectionPaths = source.outputs
+        .filter((output) => output.operation !== "delete")
+        .map((output) => output.path);
+      if (!isDeepStrictEqual(resultManifest.projections.map((projection) => projection.path), expectedProjectionPaths)) {
+        return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+      }
+      for (const [index, output] of source.outputs.filter((entry) => entry.operation !== "delete").entries()) {
+        if (
+          output.storage === "raw-payload" &&
+          resultManifest.projections[index]?.content_digest !== output.payload_digest
+        ) {
+          return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+        }
+      }
+    } else {
+      const output = resultManifest.outputs[0];
+      if (
+        resultManifest.outputs.length !== 1 ||
+        output?.operation !== "add" ||
+        output.storage !== "raw-payload" ||
+        output.file_type !== "regular" ||
+        output.path !== source.projection_target ||
+        output.path_class !== "document" ||
+        output.payload_bytes !== source.byte_count ||
+        output.payload_digest !== source.content_digest ||
+        output.after.mode !== "100644"
+      ) {
+        return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestOutputsMismatch));
+      }
+      if (
+        resultManifest.projections.length !== 1 ||
+        resultManifest.projections[0]?.path !== source.projection_target ||
+        resultManifest.projections[0]?.content_digest !== source.content_digest
+      ) {
+        return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+      }
     }
   }
 
@@ -585,7 +685,7 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   if (artifact !== undefined && artifact.artifact_kind === "implementation-output") {
     /*
      * Rank 5a — the one rename clause this phase can evaluate. Verifying that the two endpoints
-     * belong to the same path class needs the template tables and is Phase 10's (D4).
+     * belong to the same path class needs the template tables and is Phase 11's (D4).
      */
     for (const output of artifact.outputs) {
       if (output.operation === "rename" && output.previous_path === output.path) {

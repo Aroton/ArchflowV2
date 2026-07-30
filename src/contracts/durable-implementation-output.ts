@@ -67,12 +67,12 @@ export type UndeclaredChangeReport = {
  *
  * D14 — `constitution_edit_gate_id` is a **structural hook and nothing more**. An earlier draft made
  * a `task-branch-constitution` output claimable only when this field was present; that is
- * constitution-edit *gate policy*, which is REQ-16 and belongs to Phase 11. There is deliberately no
+ * constitution-edit *gate policy*, which is REQ-16 and belongs to Phase 12. There is deliberately no
  * conditional-requirement rule tying this field to `path_class`, in either authority.
  *
  * **Structurally total, not integrity-total.** Nothing here requires `payload_bytes` to equal the
  * length of bytes actually retained, `payload_digest` to equal SHA-256 of those bytes, or
- * `after.oid` to equal `gitBlobOid(bytes)`. In Phase 7 those three are *assertions*; Phase 10 turns
+ * `after.oid` to equal `gitBlobOid(bytes)`. In Phase 7 those three are *assertions*; Phase 11 turns
  * them into verified facts at materialization time. A passing validation here is not evidence that
  * the bytes exist.
  *
@@ -101,6 +101,7 @@ export type ImplementationOutputV1 = {
   readonly parent_documents: readonly ParentDocumentRef[];
   /** The exact review and commit-authorization subject. */
   readonly diff_digest: Sha256Digest;
+  /** Domain-separated canonical declared-output snapshot; never the retained result address. */
   readonly snapshot_digest: Sha256Digest;
   /** SET — sorted, duplicates rejected. A subset of `outputs[].path`, checked by chunk 10. */
   readonly restore_targets: readonly RepositoryPathClaim[];

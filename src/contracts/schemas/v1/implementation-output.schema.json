@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:archflow:schema:v1:implementation-output",
   "title": "ArchFlow Implementation Output v1",
-  "$comment": "The manifest an implementation step produces. `artifact_kind` is the discriminant of the durable artifact union. Built entirely by $ref against the pinned $def inventory (D7): `outputEntry`, `declaredInputRef`, and the `snapshotAccounting` ROOT come from `durable-primitives`; `taskSlug`, `phaseInstanceId`, `gitOid`, `sha256Digest`, `safeInteger`, `pathSafeId`, `repositoryPathClaim`, and `taskPathClaim` come from `primitives`; `secret_scan` $refs the whole `secret-scan-result` root, which carries its own nested `schema_version` — that nesting is expected. Nothing here is re-declared locally. STRUCTURALLY TOTAL BUT NOT INTEGRITY-TOTAL: `payload_bytes`, `payload_digest`, and `after.oid` are assertions in Phase 7; Phase 10 verifies them against retained bytes at materialization time, so a passing validation here is not evidence that the bytes exist. `restore_targets` subset-of-outputs, the accounting sums and correspondence, `previous_path !== path`, and `phase_instance` decoding to `phase-impl` are all `validateDurableSemantics`'s (chunk 10) and are deliberately NOT duplicated here.",
+  "$comment": "The manifest an implementation step produces. `artifact_kind` is the discriminant of the durable artifact union. Built entirely by $ref against the pinned $def inventory (D7): `outputEntry`, `declaredInputRef`, and the `snapshotAccounting` ROOT come from `durable-primitives`; `taskSlug`, `phaseInstanceId`, `gitOid`, `sha256Digest`, `safeInteger`, `pathSafeId`, `repositoryPathClaim`, and `taskPathClaim` come from `primitives`; `secret_scan` $refs the whole `secret-scan-result` root, which carries its own nested `schema_version` — that nesting is expected. Nothing here is re-declared locally. STRUCTURALLY TOTAL BUT NOT INTEGRITY-TOTAL: `payload_bytes`, `payload_digest`, and `after.oid` are assertions in Phase 7; Phase 11 verifies them against retained bytes at materialization time, so a passing validation here is not evidence that the bytes exist. `restore_targets` subset-of-outputs, the accounting sums and correspondence, `previous_path !== path`, and `phase_instance` decoding to `phase-impl` are all `validateDurableSemantics`'s (chunk 10) and are deliberately NOT duplicated here.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -60,7 +60,10 @@
       "$comment": "The exact review and commit-authorization subject.",
       "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
     },
-    "snapshot_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "snapshot_digest": {
+      "$comment": "Domain-separated canonical declared-output snapshot; never the retained result address.",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
     "restore_targets": {
       "$comment": "SET — sorted, duplicates rejected. Bare strings, so the string-array keyword applies. A subset of `outputs[].path`; that containment is chunk 10's rank 5b and is deliberately not checked here. D3 — `repositoryPathClaim`, the worktree frame, the same frame as `outputEntry.path`.",
       "type": "array",
@@ -84,7 +87,7 @@
     },
     "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
     "constitution_edit_gate_id": {
-      "$comment": "D14 — a structural hook and NOTHING more. An earlier draft made a `task-branch-constitution` output claimable only when this field was present; that is constitution-edit gate policy, which is REQ-16 and Phase 11's. There is deliberately no conditional-requirement rule tying this field to `path_class`. Absence is omission from `required`, never `null`.",
+      "$comment": "D14 — a structural hook and NOTHING more. An earlier draft made a `task-branch-constitution` output claimable only when this field was present; that is constitution-edit gate policy, which is REQ-16 and Phase 12's. There is deliberately no conditional-requirement rule tying this field to `path_class`. Absence is omission from `required`, never `null`.",
       "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
     }
   },

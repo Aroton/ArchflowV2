@@ -25,6 +25,7 @@ import {
   type TaskPathClaim,
   type TaskPathClass,
 } from "../contracts/path-claims.js";
+import type { ClaimableOutputPathClass } from "../contracts/durable-primitives.js";
 import type { RepositoryOperationContext } from "./git.js";
 import type { RootBoundGitRunner } from "./identity.js";
 
@@ -488,6 +489,78 @@ export async function resolveRepositoryPath(options: {
       absolute: withinWorktree.absolute,
     })
   );
+}
+
+const TASK_OUTPUT_CLASSES: ReadonlySet<ClaimableOutputPathClass> = new Set([
+  "document",
+  "import",
+  "manual-checkpoint",
+  "result-payload",
+  "review",
+]);
+
+/**
+ * Resolves one implementation-output claim in its declared class. Task-owned output paths are
+ * repository-frame claims in the contract, so the active task prefix is removed exactly once
+ * before delegating to the task-frame resolver.
+ */
+export async function resolveDeclaredOutputPath(options: {
+  readonly runner: RootBoundGitRunner;
+  readonly taskId: TaskSlug;
+  readonly claim: RepositoryPathClaim;
+  readonly pathClass: ClaimableOutputPathClass;
+  readonly context: RepositoryOperationContext;
+}): Promise<ProjectResult<ResolvedPath>> {
+  const { runner, taskId, claim, pathClass, context } = options;
+  if (TASK_OUTPUT_CLASSES.has(pathClass)) {
+    const prefix = `.archflow/tasks/${taskId}/`;
+    if (!claim.startsWith(prefix)) return fail(pathInvalid(taskId, pathClass));
+    const taskClaim = claim.slice(prefix.length) as TaskPathClaim;
+    return resolveTaskPath({
+      runner,
+      taskId,
+      claim: taskClaim,
+      expectedClass: pathClass as TaskPathClass,
+      context,
+    });
+  }
+  return resolveRepositoryPath({
+    runner,
+    claim,
+    expectedClass: pathClass as RepositoryPathClass,
+    context,
+  });
+}
+
+/** Resolves a non-overwriting rename and rejects endpoints in different path classes. */
+export async function resolveDeclaredRename(options: {
+  readonly runner: RootBoundGitRunner;
+  readonly taskId: TaskSlug;
+  readonly previousPath: RepositoryPathClaim;
+  readonly path: RepositoryPathClaim;
+  readonly pathClass: ClaimableOutputPathClass;
+  readonly context: RepositoryOperationContext;
+}): Promise<ProjectResult<Readonly<{ previous: ResolvedPath; next: ResolvedPath }>>> {
+  const previous = await resolveDeclaredOutputPath({
+    runner: options.runner,
+    taskId: options.taskId,
+    claim: options.previousPath,
+    pathClass: options.pathClass,
+    context: options.context,
+  });
+  if (!previous.ok) return previous;
+  const next = await resolveDeclaredOutputPath({
+    runner: options.runner,
+    taskId: options.taskId,
+    claim: options.path,
+    pathClass: options.pathClass,
+    context: options.context,
+  });
+  if (!next.ok) return next;
+  if (previous.value.path_class !== next.value.path_class) {
+    return fail(pathInvalid(options.taskId, options.pathClass));
+  }
+  return ok(Object.freeze({ previous: previous.value, next: next.value }));
 }
 
 /**

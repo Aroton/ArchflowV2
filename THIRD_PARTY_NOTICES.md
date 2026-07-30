@@ -35,6 +35,11 @@ This inventory is generated from and checked against `package-lock.json`. Option
 | `@jridgewell/sourcemap-codec@1.5.5` | `MIT` |
 | `@modelcontextprotocol/core@2.0.0` | `MIT` |
 | `@modelcontextprotocol/server@2.0.0` | `MIT` |
+| `@secretlint/core@13.0.4` | `MIT` |
+| `@secretlint/profiler@13.0.4` | `MIT` |
+| `@secretlint/secretlint-rule-aws@13.0.4` | `MIT` |
+| `@secretlint/secretlint-rule-preset-recommend@13.0.4` | `MIT` |
+| `@secretlint/types@13.0.4` | `MIT` |
 | `@rollup/rollup-android-arm-eabi@4.62.3` | `MIT` |
 | `@rollup/rollup-android-arm64@4.62.3` | `MIT` |
 | `@rollup/rollup-darwin-arm64@4.62.3` | `MIT` |
@@ -61,6 +66,7 @@ This inventory is generated from and checked against `package-lock.json`. Option
 | `@rollup/rollup-win32-x64-gnu@4.62.3` | `MIT` |
 | `@rollup/rollup-win32-x64-msvc@4.62.3` | `MIT` |
 | `@standard-schema/spec@1.1.0` | `MIT` |
+| `@textlint/regexp-string-matcher@2.0.2` | `MIT` |
 | `@types/chai@5.2.3` | `MIT` |
 | `@types/deep-eql@4.0.2` | `MIT` |
 | `@types/estree@1.0.9` | `MIT` |
@@ -95,10 +101,13 @@ This inventory is generated from and checked against `package-lock.json`. Option
 | `ajv-formats@3.0.1` | `MIT` |
 | `ajv@8.20.0` | `MIT` |
 | `assertion-error@2.0.1` | `MIT` |
+| `boundary@2.0.0` | `BSD-2-Clause` |
 | `chai@6.2.2` | `MIT` |
 | `convert-source-map@2.0.0` | `MIT` |
+| `debug@4.4.3` | `MIT` |
 | `es-module-lexer@2.3.1` | `MIT` |
 | `esbuild@0.28.1` | `MIT` |
+| `escape-string-regexp@4.0.0` | `MIT` |
 | `estree-walker@3.0.3` | `MIT` |
 | `expect-type@1.4.0` | `Apache-2.0` |
 | `fast-deep-equal@3.1.3` | `MIT` |
@@ -106,7 +115,11 @@ This inventory is generated from and checked against `package-lock.json`. Option
 | `fdir@6.5.0` | `MIT` |
 | `fsevents@2.3.3` | `MIT` |
 | `json-schema-traverse@1.0.0` | `MIT` |
+| `lodash.sortby@4.7.0` | `MIT` |
+| `lodash.uniq@4.5.0` | `MIT` |
+| `lodash.uniqwith@4.5.0` | `MIT` |
 | `magic-string@0.30.21` | `MIT` |
+| `ms@2.1.3` | `MIT` |
 | `nanoid@3.3.16` | `MIT` |
 | `obug@2.1.4` | `MIT` |
 | `pathe@2.0.3` | `MIT` |
@@ -119,6 +132,7 @@ This inventory is generated from and checked against `package-lock.json`. Option
 | `signal-exit@4.1.0` | `ISC` |
 | `source-map-js@1.2.1` | `BSD-3-Clause` |
 | `stackback@0.0.2` | `MIT` |
+| `structured-source@4.0.0` | `BSD-2-Clause` |
 | `std-env@4.2.0` | `MIT` |
 | `tinybench@2.9.0` | `MIT` |
 | `tinyexec@1.2.4` | `MIT` |

@@ -523,10 +523,10 @@ describe("the pinned $def inventory resolves", () => {
 });
 
 describe("registry invariants after phase 9 receipt registration", () => {
-  it("SCHEMA_IDS holds 36 entries in exact bijection with the schema directory", () => {
-    expect(Object.keys(SCHEMA_IDS)).toHaveLength(36);
-    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(36);
-    expect(schemaFileNames()).toHaveLength(36);
+  it("SCHEMA_IDS holds 37 entries in exact bijection with the schema directory", () => {
+    expect(Object.keys(SCHEMA_IDS)).toHaveLength(37);
+    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(37);
+    expect(schemaFileNames()).toHaveLength(37);
 
     const idsInFiles = [...ALL_SCHEMAS.values()].map((document) => document.$id as string).sort();
     expect(idsInFiles).toEqual([...Object.values(SCHEMA_IDS)].sort());
@@ -553,7 +553,7 @@ describe("registry invariants after phase 9 receipt registration", () => {
     }
   });
 
-  it("the barrel carries the nine new lines after errors.js, with no duplicate export line", () => {
+  it("the barrel carries the durable roots after errors.js, with no duplicate export line", () => {
     const barrel = source("index.ts");
     const lines = barrel.split("\n");
     const starExports = lines
@@ -564,12 +564,13 @@ describe("registry invariants after phase 9 receipt registration", () => {
 
     const errorsAt = starExports.indexOf("errors.js");
     expect(errorsAt).toBeGreaterThanOrEqual(0);
-    expect(starExports.slice(errorsAt + 1, errorsAt + 1 + NEW_MODULES.length)).toEqual(
-      NEW_MODULES.map((module) => module.replace(/\.ts$/u, ".js"))
-    );
+    const expectedModules = NEW_MODULES
+      .map((module) => module.replace(/\.ts$/u, ".js"))
+      .toSpliced(8, 0, "durable-result-manifest.js");
+    expect(starExports.slice(errorsAt + 1, errorsAt + 1 + expectedModules.length)).toEqual(expectedModules);
 
     // `durable-checkpoint.ts` carries two schemas while `durable.ts` carries none, so the offsets cancel.
-    expect(NEW_MODULES).toHaveLength(NEW_SCHEMA_STEMS.length);
+    expect(expectedModules).toHaveLength(NEW_SCHEMA_STEMS.length + 1);
     for (const line of lines) expect(line.trim()).not.toBe('export * from "./durable.js"; export * from "./durable.js";');
   });
 });

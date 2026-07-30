@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:result-manifest",
+  "title": "ArchFlow Result Manifest v1",
+  "$comment": "The sole normative structural authority for the server-internal retained result root. The exact source artifact is embedded and is not added to the MCP artifact union. Cross-field digest and source-artifact correlations are enforced by validateDurableSemantics.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "repository_identity_digest",
+    "result_id",
+    "phase_instance",
+    "step",
+    "artifact_digest",
+    "source_artifact",
+    "input_fingerprint",
+    "snapshot_digest",
+    "outputs",
+    "projections",
+    "accounting",
+    "secret_scan"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "task_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
+    "repository_identity_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "result_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" },
+    "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
+    "step": { "enum": ["produce", "self_review", "counter_review", "triage", "adjudicate"] },
+    "artifact_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "source_artifact": {
+      "oneOf": [
+        { "$ref": "urn:archflow:schema:v1:document-artifact" },
+        { "$ref": "urn:archflow:schema:v1:implementation-output" }
+      ]
+    },
+    "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "snapshot_digest": {
+      "$comment": "Domain-separated declared-output snapshot; the canonical digest of this whole manifest is the result address.",
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "outputs": {
+      "type": "array",
+      "items": { "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/outputEntry" },
+      "x-archflow-sorted-unique-by": "path"
+    },
+    "projections": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/projectionDigestRef" },
+      "x-archflow-sorted-unique-by": "path"
+    },
+    "accounting": { "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/snapshotAccounting" },
+    "secret_scan": { "$ref": "urn:archflow:schema:v1:secret-scan-result" }
+  },
+  "$defs": {
+    "projectionDigestRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "content_digest"],
+      "properties": {
+        "path": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
+        "content_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" }
+      }
+    }
+  }
+}

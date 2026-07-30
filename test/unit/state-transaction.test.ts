@@ -1,16 +1,19 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { canonicalDocument, parseCanonicalDocument, type CanonicalDocument } from "../../src/contracts/canonical.js";
+import { canonicalDocument, canonicalJsonDigest, gitBlobOid, parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../../src/contracts/canonical.js";
+import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
+import type { ResultManifestV1 } from "../../src/contracts/durable-result-manifest.js";
 import type { IntentReceiptV1 } from "../../src/contracts/durable-intent.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import {
   parsePathSafeId,
   parseSafeCode,
+  parseSafeId,
   parseSafeInteger,
   parseSha256Digest,
   parseTaskSlug,
@@ -24,16 +27,18 @@ import {
   type RequestIdentifiedToolCall,
 } from "../../src/contracts/mcp-tools.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
-import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
+import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { createGitRunner, preflightGit, type GitEnvironment, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree, type RootBoundGitRunner } from "../../src/repository/identity.js";
-import type { ResolvedTaskPath } from "../../src/repository/paths.js";
-import { AtomicReplaceError, type AtomicWriter } from "../../src/state/atomic.js";
+import type { ResolvedPath, ResolvedTaskPath } from "../../src/repository/paths.js";
+import { AtomicReplaceError, createProjectionWriter, type AtomicWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "../../src/state/authority.js";
 import { identifyTransactionRequest } from "../../src/state/request.js";
 import { TaskLockError } from "../../src/state/lock.js";
+import { deriveDeclaredSnapshotDigest, TASK_BYTE_CAP, type PreparedSnapshot, type ProjectionPlan } from "../../src/state/snapshots.js";
 import {
   runStateTransaction,
+  prepareResultInstallation,
   type PreparedTransaction,
   type TransactionDependencies,
   type TransactionRequest,
@@ -149,7 +154,14 @@ async function harness(): Promise<Harness> {
   } as unknown as Harness;
 
   const atomic: AtomicWriter = {
-    createExclusive: async (_path, bytes) => {
+    createExclusive: async (path, bytes) => {
+      if (path.path_class !== "intent") {
+        events.push(path.path_class === "result-manifest" ? "result-manifest" : "result-payload");
+        mkdirSync(dirname(path.absolute), { recursive: true });
+        if (existsSync(path.absolute)) return "exists";
+        writeFileSync(path.absolute, bytes);
+        return "created";
+      }
       events.push("receipt-create");
       if (value.createFault === "before") {
         throw new AtomicReplaceError({ operation: "create-exclusive", target_may_have_changed: false, collision: false });
@@ -192,11 +204,64 @@ async function harness(): Promise<Harness> {
       counts.receipt += 1;
       return value.receipt === undefined ? { kind: "missing" } : { kind: "canonical", document: value.receipt };
     },
+    projection_writer: {
+      replaceRegular: async () => undefined,
+      replaceSymlink: async () => undefined,
+      remove: async () => undefined,
+    },
+    read_retained_task_bytes: async () => parseSafeInteger(0),
   };
   return value;
 }
 
-function call(expected_revision: number, status: "running" | "succeeded" | "failed" = "succeeded", intent = "intent-1"): StateCall {
+function documentResultFixture(h: Harness, bytes: Uint8Array): Readonly<{
+  prepared: PreparedSnapshot;
+  manifestPath: ReturnType<typeof parseRepositoryPathClaim>;
+  manifestTarget: ResolvedPath;
+}> {
+  const outputPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/phases/phase-9-output.md`);
+  const contentDigest = sha256Bytes(bytes);
+  const byteCount = parseSafeInteger(bytes.byteLength);
+  const output = {
+    path: outputPath, path_class: "document" as const, operation: "add" as const,
+    storage: "raw-payload" as const, payload_bytes: byteCount, payload_digest: contentDigest,
+    file_type: "regular" as const, after: { oid: gitBlobOid(bytes), mode: "100644" as const, size_bytes: byteCount },
+  };
+  const projections = [{ path: outputPath, content_digest: contentDigest }];
+  const snapshotDigest = deriveDeclaredSnapshotDigest([output], projections);
+  const source: DocumentArtifactV1 = {
+    schema_version: "1", artifact_kind: "document", task_id: TASK, phase_instance: PHASE, step: "produce",
+    document_path: parseTaskPathClaim("phases/phase-9-output.md"), path_class: "document",
+    byte_count: byteCount, content_digest: contentDigest, declared_inputs: [], input_fingerprint: FINGERPRINT,
+    snapshot_digest: snapshotDigest, projection_target: outputPath,
+  };
+  const manifestValue: ResultManifestV1 = {
+    schema_version: "1", task_id: TASK, repository_identity_digest: h.authority.repository_identity_digest,
+    result_id: parseSafeId("state:8"), phase_instance: PHASE, step: "produce",
+    artifact_digest: canonicalJsonDigest(source), source_artifact: source, input_fingerprint: FINGERPRINT,
+    snapshot_digest: snapshotDigest, outputs: [output], projections,
+    accounting: {
+      schema_version: "1", result_bytes: byteCount, task_bytes: byteCount,
+      result_byte_cap: 26_214_400, task_byte_cap: 262_144_000,
+      counted_entries: [{ path: outputPath, storage: "raw-payload", stored_bytes: byteCount }],
+      measured_at_revision: parseSafeInteger(7),
+    },
+    secret_scan: { schema_version: "1", outcome: "clean", detector_set_id: parseSafeId("test"), scanned_paths: [outputPath] },
+  };
+  const manifest = canonicalDocument(manifestValue);
+  const manifestPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/results/sha256/${manifest.digest}/manifest.json`);
+  const payloadPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/results/sha256/${manifest.digest}/payload/${outputPath}`);
+  return {
+    prepared: { manifest, result_digest: manifest.digest, payloads: [{
+      path: outputPath, bytes,
+      target: { absolute: join(h.root, payloadPath) as ResolvedTaskPath, repositoryRelative: payloadPath, path_class: "result-payload" },
+    }] },
+    manifestPath,
+    manifestTarget: { absolute: join(h.root, manifestPath) as ResolvedTaskPath, repositoryRelative: manifestPath, path_class: "result-manifest" },
+  };
+}
+
+function call(expected_revision: number, status: "running" | "succeeded" | "failed" = "succeeded", intent = "intent-1", withArtifact = false): StateCall {
   return parseToolCall("archflow_state", {
     schema_version: "1",
     task_id: TASK,
@@ -206,6 +271,13 @@ function call(expected_revision: number, status: "running" | "succeeded" | "fail
     phase_instance: PHASE,
     step: "produce",
     status,
+    ...(withArtifact ? { artifact: {
+      schema_version: "1", artifact_kind: "document", task_id: TASK,
+      phase_instance: PHASE, step: "produce", document_path: "phases/phase-9-output.md",
+      path_class: "document", byte_count: 1, content_digest: D("a"), declared_inputs: [],
+      input_fingerprint: FINGERPRINT, snapshot_digest: D("b"),
+      projection_target: `.archflow/tasks/${TASK}/phases/phase-9-output.md`,
+    } } : {}),
   });
 }
 
@@ -261,6 +333,139 @@ describe("mature state transaction kernel", () => {
     expect(result.value.state.value.committed_intent?.receipt_digest).toBe(h.receipt?.digest);
     expect(h.events).toEqual(["lock", "config", "fingerprint", "prepare", "receipt-create", "state-replace"]);
     expect(h.counts.prepare).toBe(1);
+  });
+
+  it("authenticates and installs a one-shot result capability before receipt and state", async () => {
+    const h = await harness();
+    const parsed = call(7, "succeeded", "intent-1", true);
+    const base = preparer(h, parsed);
+    const result = await runStateTransaction(h.dependencies, request(h.authority, parsed), async (current, identified) => {
+      const prepared = await base(current, identified);
+      if (!prepared.ok) return prepared;
+      const bytes = new TextEncoder().encode("retained");
+      const retained = documentResultFixture(h, bytes);
+      const reference = {
+        phase_instance: current.value.phase_instance,
+        step: current.value.step,
+        result_digest: retained.prepared.result_digest,
+        result_id: parseSafeId("state:8"),
+        input_fingerprint: FINGERPRINT,
+        manifest_path: retained.manifestPath,
+      };
+      const capability = prepareResultInstallation({
+        reference,
+        prepared: retained.prepared,
+        manifest_target: retained.manifestTarget,
+        projection_plan: { entries: [], collisions: [], collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"] },
+        worktree_root: h.runner.location.worktreeRoot as ResolvedTaskPath,
+      });
+      return {
+        ...prepared,
+        value: {
+          ...prepared.value,
+          next_state: { ...prepared.value.next_state, authoritative_results: [reference] },
+          result_installation: capability,
+        },
+      };
+    });
+    expect(result.ok).toBe(true);
+    expect(h.events).toEqual(["lock", "config", "fingerprint", "prepare", "result-payload", "result-manifest", "receipt-create", "state-replace"]);
+    expect(h.state.value.authoritative_results).toHaveLength(1);
+  });
+
+  it("rejects an installation capability whose reference does not bind its manifest bytes or target", async () => {
+    const h = await harness();
+    const retained = documentResultFixture(h, new TextEncoder().encode("retained"));
+    const reference = {
+      phase_instance: PHASE, step: "produce" as const, result_digest: D("9"), result_id: parseSafeId("result-1"),
+      input_fingerprint: FINGERPRINT, manifest_path: retained.manifestPath,
+    };
+    expect(() => prepareResultInstallation({
+      reference,
+      prepared: retained.prepared,
+      manifest_target: retained.manifestTarget,
+      projection_plan: { entries: [], collisions: [], collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"] },
+      worktree_root: h.runner.location.worktreeRoot as ResolvedTaskPath,
+    })).toThrow(/does not bind the prepared snapshot/u);
+  });
+
+  it("rechecks the live task cap under the lock before writing any result bytes", async () => {
+    const h = await harness();
+    h.dependencies = { ...h.dependencies, read_retained_task_bytes: async () => parseSafeInteger(TASK_BYTE_CAP) };
+    const parsed = call(7, "succeeded", "intent-1", true);
+    const base = preparer(h, parsed);
+    const result = await runStateTransaction(h.dependencies, request(h.authority, parsed), async (current, identified) => {
+      const transaction = await base(current, identified);
+      if (!transaction.ok) return transaction;
+      const bytes = new Uint8Array([1]);
+      const retained = documentResultFixture(h, bytes);
+      const reference = {
+        phase_instance: PHASE, step: current.value.step, result_digest: retained.prepared.result_digest,
+        result_id: parseSafeId("state:8"), input_fingerprint: FINGERPRINT, manifest_path: retained.manifestPath,
+      };
+      const capability = prepareResultInstallation({
+        reference,
+        prepared: retained.prepared,
+        manifest_target: retained.manifestTarget,
+        projection_plan: { entries: [], collisions: [], collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"] },
+        worktree_root: h.runner.location.worktreeRoot as ResolvedTaskPath,
+      });
+      return { ...transaction, value: { ...transaction.value,
+        next_state: { ...transaction.value.next_state, authoritative_results: [reference] }, result_installation: capability } };
+    });
+    expect(result.ok ? undefined : result.error.code).toBe("SNAPSHOT_LIMIT");
+    expect(h.events).not.toContain("result-payload");
+    expect(h.events).not.toContain("result-manifest");
+    expect(h.events).not.toContain("receipt-create");
+  });
+
+  it("receipt-only resume reloads retained facts and restores projection bytes without preparation", async () => {
+    const h = await harness();
+    h.dependencies = { ...h.dependencies, projection_writer: createProjectionWriter() };
+    h.replaceFault = "before";
+    const parsed = call(7, "succeeded", "intent-1", true);
+    const base = preparer(h, parsed);
+    const desired = new TextEncoder().encode("restored\n");
+    const targetPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/phases/phase-9-output.md`);
+    const target: ResolvedPath = { absolute: join(h.root, targetPath) as ResolvedTaskPath, repositoryRelative: targetPath, path_class: "document" };
+    mkdirSync(dirname(target.absolute), { recursive: true });
+    const projection = (): ProjectionPlan => ({
+      entries: [{ path: targetPath, target, observed_before: { state: "absent" },
+        desired: { state: "present", file_type: "regular", mode: "100644", bytes: desired }, disposition: "restore-ready" }],
+      collisions: [], collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"],
+    });
+    const snapshot = documentResultFixture(h, desired);
+    const reference = { phase_instance: PHASE, step: "produce" as const, result_digest: snapshot.prepared.result_digest,
+      result_id: parseSafeId("state:8"), input_fingerprint: FINGERPRINT, manifest_path: snapshot.manifestPath };
+    const retained = {
+      prepared: snapshot.prepared,
+      manifest_target: snapshot.manifestTarget,
+      projection_plan: projection(), worktree_root: h.runner.location.worktreeRoot as ResolvedTaskPath,
+    };
+    const first = await runStateTransaction(h.dependencies, request(h.authority, parsed), async (current, identified) => {
+      const transaction = await base(current, identified);
+      if (!transaction.ok) return transaction;
+      return { ...transaction, value: { ...transaction.value,
+        next_state: { ...transaction.value.next_state, authoritative_results: [reference] },
+        result_installation: prepareResultInstallation({ reference, ...retained }),
+      } };
+    });
+    expect(first.ok).toBe(false);
+    expect(readFileSync(target.absolute)).toEqual(Buffer.from(desired));
+    unlinkSync(target.absolute);
+    h.replaceFault = undefined;
+    let loads = 0;
+    h.dependencies = { ...h.dependencies, load_retained_result: async (observed) => {
+      loads += 1;
+      expect(observed).toEqual(reference);
+      return { schema_version: "1", ok: true, value: { ...retained, projection_plan: projection() } };
+    } };
+    const resumed = await runStateTransaction(h.dependencies, request(h.authority, parsed), async () => {
+      throw new Error("receipt-only resume must not prepare");
+    });
+    expect(resumed.ok).toBe(true);
+    expect(loads).toBe(1);
+    expect(readFileSync(target.absolute)).toEqual(Buffer.from(desired));
   });
 
   it("runs CAS before receipt/config and requires refreshed CAS for exact replay", async () => {

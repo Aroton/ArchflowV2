@@ -205,7 +205,8 @@ async function run(
   return { result, prepare };
 }
 
-type CrashCutPoint = "receipt-temp" | "receipt-link" | "state-replace-before" | "state-replace-after";
+type CrashCutPoint = "receipt-temp" | "receipt-link" | "state-replace-before" | "state-replace-after" |
+  "result-payload-link" | "result-manifest-link";
 
 function startCrashChild(input: Fixture, cutPoint: CrashCutPoint): ChildProcess {
   const child = spawn(process.execPath, [
@@ -219,6 +220,15 @@ function startCrashChild(input: Fixture, cutPoint: CrashCutPoint): ChildProcess 
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
+  children.add(child);
+  return child;
+}
+
+function startResultChild(input: Fixture, action: "run-result-transaction" | "run-crash-result-transaction", cutPoint?: CrashCutPoint): ChildProcess {
+  const child = spawn(process.execPath, [
+    childProgram.pathname, action, input.taskRoot, input.call.input.intent_id,
+    String(input.call.input.expected_revision), ...(cutPoint === undefined ? [] : [cutPoint]),
+  ], { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe", "ipc"] });
   children.add(child);
   return child;
 }
@@ -256,7 +266,7 @@ function startLockChild(taskRoot: string): ChildProcess {
   return child;
 }
 
-function childEvent(child: ChildProcess, type: "entered" | "failed" | "cut"): Promise<Record<string, unknown>> {
+function childEvent(child: ChildProcess, type: "entered" | "failed" | "cut" | "result"): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => finish(new Error(`timed out waiting for ${type}`)), 5_000);
     const onMessage = (message: unknown): void => {
@@ -278,6 +288,37 @@ function childEvent(child: ChildProcess, type: "entered" | "failed" | "cut"): Pr
 }
 
 describe("state transaction crash boundaries", () => {
+  it("leaves result bytes non-authoritative after a manifest cut and safely retries the exact installation", async () => {
+    const input = await fixture();
+    const killed = startResultChild(input, "run-crash-result-transaction", "result-manifest-link");
+    const cut = await childEvent(killed, "cut");
+    await new Promise<void>((resolve) => killed.once("exit", () => resolve()));
+    expect(cut).toMatchObject({ point: "result-manifest-link" });
+    expect(await readFile(String(cut.path))).not.toHaveLength(0);
+    expect((await readTaskState(input.authority.state))).toMatchObject({
+      kind: "canonical", document: { value: { revision: 1, authoritative_results: [] } },
+    });
+    await clearAbandonedLock(input);
+    const retry = startResultChild(input, "run-result-transaction");
+    const result = await childEvent(retry, "result");
+    expect(result).toMatchObject({ ok: true, revision: 2, replayed: false, prepareCalls: 1 });
+    expect((await readTaskState(input.authority.state))).toMatchObject({
+      kind: "canonical", document: { value: { revision: 2, authoritative_results: [{ result_id: "result-crash-intent" }] } },
+    });
+  });
+
+  it("resumes a result receipt after SIGKILL without invoking preparation", async () => {
+    const input = await fixture();
+    const killed = startResultChild(input, "run-crash-result-transaction", "receipt-link");
+    await childEvent(killed, "cut");
+    await new Promise<void>((resolve) => killed.once("exit", () => resolve()));
+    expect((await readTaskState(input.authority.state))).toMatchObject({ kind: "canonical", document: { value: { revision: 1 } } });
+    await clearAbandonedLock(input);
+    const retry = startResultChild(input, "run-result-transaction");
+    const result = await childEvent(retry, "result");
+    expect(result).toMatchObject({ ok: true, revision: 2, replayed: false, prepareCalls: 0 });
+  });
+
   it("survives SIGKILL after receipt temp sync and safely prepares again", async () => {
     const input = await fixture();
     const cut = await killAtRealCut(input, "receipt-temp");

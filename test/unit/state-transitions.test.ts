@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
-import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
+import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import { planStateTransition } from "../../src/state/transitions.js";
 
 const D = (value: string) => parseSha256Digest(value.repeat(64));
@@ -49,6 +50,41 @@ describe("planStateTransition", () => {
       recomputed_input_fingerprint: D("8"),
     });
     expect(result.ok ? undefined : result.error.code).toBe("TRANSITION_INVALID");
+  });
+
+  it("inserts or replaces only the matching producing result reference", () => {
+    const current = state();
+    const artifact = {
+      artifact_kind: "document",
+      task_id: current.task_id,
+      phase_instance: current.phase_instance,
+      step: "produce",
+      input_fingerprint: D("8"),
+    } as never;
+    const reference = {
+      phase_instance: current.phase_instance,
+      step: "produce" as const,
+      result_digest: D("9"),
+      result_id: parseSafeId("result-1"),
+      input_fingerprint: D("8"),
+      manifest_path: parseRepositoryPathClaim(".archflow/tasks/task-1/results/sha256/" + "9".repeat(64) + "/manifest.json"),
+    };
+    const result = planStateTransition({
+      current,
+      target: { phase_instance: current.phase_instance, step: "produce", status: "succeeded", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"), artifact, result_reference: reference,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.authoritative_results).toEqual([reference]);
+
+    const replacement = { ...reference, result_digest: D("a"), result_id: parseSafeId("result-2") };
+    const replaced = planStateTransition({
+      current: state({ authoritative_results: [reference] }),
+      target: { phase_instance: current.phase_instance, step: "produce", status: "succeeded", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"), artifact, result_reference: replacement,
+    });
+    expect(replaced.ok && replaced.value.authoritative_results).toEqual([replacement]);
   });
 
   it("moves only through the fixed pipeline and fixed phase sequence", () => {

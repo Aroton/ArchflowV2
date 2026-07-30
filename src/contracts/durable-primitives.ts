@@ -77,10 +77,10 @@ export const SERVER_OWNED_PATH_CLASSES = [
  * `after` is absent. `delete` forces `git-object` because there is no post-state content to store.
  *
  * `payload_bytes` and `payload_digest`, and `BlobIdentity.oid`, are assertions here, not verified
- * facts: nothing in this phase sees a byte. Phase 10 verifies them at materialization time.
+ * facts: nothing in this format module sees a byte. Phase 11 verifies them at materialization time.
  *
  * A cross-class rename is *representable*: `path` and `previous_path` are runtime-indistinguishable
- * `RepositoryPathClaim` strings and no class can be derived from either here. Phase 10 classifies
+ * `RepositoryPathClaim` strings and no class can be derived from either here. Phase 11 classifies
  * both endpoints.
  */
 type AddGitRegular = {

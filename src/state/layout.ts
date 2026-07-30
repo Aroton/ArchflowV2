@@ -1,6 +1,6 @@
 import { constants as fsConstants } from "node:fs";
 import { lstat, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 
 import { openResolved, type ResolvedTaskPath } from "../repository/paths.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
@@ -9,6 +9,13 @@ export class IntentLayoutError extends Error {
   public constructor(public readonly stage: "create" | "verify") {
     super(`intent layout ${stage} failed`);
     this.name = "IntentLayoutError";
+  }
+}
+
+export class ResultLayoutError extends Error {
+  public constructor(public readonly stage: "create" | "verify") {
+    super(`result layout ${stage} failed`);
+    this.name = "ResultLayoutError";
   }
 }
 
@@ -46,4 +53,53 @@ export async function ensureIntentDirectory(authority: TransactionAuthority): Pr
   } finally {
     await handle?.close().catch(() => undefined);
   }
+}
+
+
+async function ensureRealDirectory(path: ResolvedTaskPath): Promise<void> {
+  try {
+    await mkdir(path);
+  } catch (error) {
+    if (errnoOf(error) !== "EEXIST") throw new ResultLayoutError("create");
+  }
+  const directoryFlag = (fsConstants as { O_DIRECTORY?: number }).O_DIRECTORY ?? 0;
+  let handle;
+  try {
+    const metadata = await lstat(path);
+    if (metadata.isSymbolicLink() || !metadata.isDirectory()) throw new ResultLayoutError("verify");
+    handle = await openResolved(path, fsConstants.O_RDONLY | directoryFlag);
+    if (!(await handle.stat()).isDirectory()) throw new ResultLayoutError("verify");
+  } catch (error) {
+    if (error instanceof ResultLayoutError) throw error;
+    throw new ResultLayoutError("verify");
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+/** Creates only the fixed task-local content-address hierarchy for one validated digest. */
+export async function ensureResultDirectory(authority: TransactionAuthority, digest: string): Promise<void> {
+  assertInternalTransactionAuthority(authority);
+  if (!/^[0-9a-f]{64}$/u.test(digest)) throw new TypeError("result digest must be lowercase SHA-256");
+  const parts = ["results", "sha256", digest, "payload"];
+  let current = authority.task_root as string;
+  for (const part of parts) {
+    current = join(current, part);
+    await ensureRealDirectory(current as ResolvedTaskPath);
+  }
+}
+
+/** Ensures payload subdirectories cannot leave the authenticated result payload root. */
+export async function ensurePayloadParent(
+  authority: TransactionAuthority,
+  digest: string,
+  target: ResolvedTaskPath,
+): Promise<void> {
+  assertInternalTransactionAuthority(authority);
+  if (!/^[0-9a-f]{64}$/u.test(digest)) throw new TypeError("result digest must be lowercase SHA-256");
+  const root = join(authority.task_root, "results", "sha256", digest, "payload");
+  const parent = join(target, "..");
+  const rel = relative(root, parent);
+  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new TypeError("payload parent escaped result directory");
+  await mkdir(parent, { recursive: true });
 }

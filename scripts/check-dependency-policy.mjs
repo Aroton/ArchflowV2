@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 
 const expectedRuntime = Object.freeze({
   "@modelcontextprotocol/server": "2.0.0",
+  "@secretlint/core": "13.0.4",
+  "@secretlint/secretlint-rule-preset-recommend": "13.0.4",
   ajv: "8.20.0",
   "ajv-formats": "3.0.1",
   "write-file-atomic": "8.0.0",
@@ -9,6 +11,7 @@ const expectedRuntime = Object.freeze({
   zod: "4.4.3"
 });
 const expectedDevelopment = Object.freeze({
+  "@secretlint/secretlint-rule-aws": "13.0.4",
   "@types/node": "24.13.3",
   esbuild: "0.28.1",
   typescript: "7.0.2",
@@ -145,6 +148,47 @@ for (const [path, expected] of Object.entries(expectedPersistenceRoots)) {
 const lockedAtomicWriter = lock.packages?.["node_modules/write-file-atomic"];
 if (lockedAtomicWriter?.dependencies?.["signal-exit"] !== "^4.0.1") {
   failures.push("write-file-atomic@8.0.0 must retain its reviewed signal-exit@^4.0.1 dependency edge");
+}
+
+const expectedSecretlintClosure = Object.freeze({
+  "@secretlint/core": ["13.0.4", "MIT"],
+  "@secretlint/profiler": ["13.0.4", "MIT"],
+  "@secretlint/secretlint-rule-aws": ["13.0.4", "MIT"],
+  "@secretlint/secretlint-rule-preset-recommend": ["13.0.4", "MIT"],
+  "@secretlint/types": ["13.0.4", "MIT"],
+  "@textlint/regexp-string-matcher": ["2.0.2", "MIT"],
+  boundary: ["2.0.0", "BSD-2-Clause"],
+  debug: ["4.4.3", "MIT"],
+  "escape-string-regexp": ["4.0.0", "MIT"],
+  "lodash.sortby": ["4.7.0", "MIT"],
+  "lodash.uniq": ["4.5.0", "MIT"],
+  "lodash.uniqwith": ["4.5.0", "MIT"],
+  ms: ["2.1.3", "MIT"],
+  "structured-source": ["4.0.0", "BSD-2-Clause"]
+});
+for (const [name, [version, license]] of Object.entries(expectedSecretlintClosure)) {
+  const metadata = lock.packages?.[`node_modules/${name}`];
+  if (metadata?.version !== version || metadata?.license !== license) {
+    failures.push(`reviewed Secretlint closure requires exactly ${name}@${version} with ${license}`);
+  }
+}
+const observedSecretlintClosure = new Set();
+function visitSecretlintDependency(name) {
+  if (observedSecretlintClosure.has(name)) return;
+  observedSecretlintClosure.add(name);
+  const metadata = lock.packages?.[`node_modules/${name}`];
+  for (const dependency of Object.keys(metadata?.dependencies ?? {})) visitSecretlintDependency(dependency);
+}
+for (const rootName of [
+  "@secretlint/core",
+  "@secretlint/secretlint-rule-preset-recommend",
+  "@secretlint/secretlint-rule-aws"
+]) visitSecretlintDependency(rootName);
+if (
+  JSON.stringify([...observedSecretlintClosure].sort()) !==
+  JSON.stringify(Object.keys(expectedSecretlintClosure).sort())
+) {
+  failures.push("Secretlint dependency closure must contain exactly the fourteen reviewed packages");
 }
 
 for (const [path, metadata] of Object.entries(lock.packages ?? {})) {

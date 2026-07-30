@@ -633,14 +633,16 @@ The full suite passed 1,163 of 1,166 tests. The three failures are exactly the i
 
 **Scope**: Implement content-addressed result manifests that retain their exact validated source artifact, commit-reachable tracked-output Git-object reuse, bounded payload storage for every other required byte, implementation-output manifest fact derivation, snapshot/checkpoint secret scanning, atomic projection/restore with apply-time before-image revalidation, collision classification, schema-specific bounded retention reachability, and explicit maintenance records. Phase 12 connects collision decisions to the gate service.
 
+**Implemented 2026-07-29.** Result manifests now retain and revalidate their exact source artifacts and restore sources. Path-aware Git identities distinguish converted blob size from worktree byte size, Git-object restoration replays checkout filters for the destination path, unchanged fingerprints reuse the original retained manifest without rewriting creation-time accounting, and every read/restore re-proves durable semantics, base ancestry, tree identity, and projection bytes. Projection, transaction resume, secret scanning, and content-address-bound maintenance are integrated with no-follow filesystem access and state-last authority.
+
 **Success Criteria**:
 
-- [ ] An unchanged fingerprint restores byte-identical declared outputs while unrelated tracked/untracked bytes remain untouched; a changed fingerprint creates one new retained generation, and a collision changes nothing before an explicit decision.
-- [ ] Implementation manifests round-trip add/modify/delete/rename, binary content, tree modes, canonical post-attributes regular-file OIDs, unconverted symlink OIDs, retained restore/untracked payloads, before/after identities, parent outputs, and exact diff digest; only commit-reachable outputs use Git objects, while uncommitted/index-only bytes remain restorable after aggressive object pruning.
-- [ ] Representative payload growth reaches but never exceeds 25 MiB per result or 250 MiB per task; either excess returns non-advancing `SNAPSHOT_LIMIT` with counts/guidance, writes no partial/truncated payload, and creates no hidden authority.
-- [ ] Every current authoritative generation and all decision/review/checkpoint evidence remain reachable. Human-approved maintenance prunes only unreferenced diagnostic attempts or superseded non-authoritative payloads, writes an immutable deleted-digest/bytes/reason record, and cannot break rerun, restore, or checkpoint chains.
-- [ ] Secret fixtures in any candidate Git-tracked snapshot/checkpoint projection fail before projection with safe remediation warning that later `.archflow/` deletion cannot erase branch history; clean binary/text fixtures pass without logging secret values.
-- [ ] Snapshot/projection/restore fault injection preserves prior/next authority or exact repair, and the three `restore-collision` outcomes are representable without silent overwrite.
+- [x] An unchanged fingerprint restores byte-identical declared outputs while unrelated tracked/untracked bytes remain untouched; a changed fingerprint creates one new retained generation, and a collision changes nothing before an explicit decision.
+- [x] Implementation manifests round-trip add/modify/delete/rename, binary content, tree modes, canonical post-attributes regular-file OIDs, unconverted symlink OIDs, retained restore/untracked payloads, before/after identities, parent outputs, and exact diff digest; only commit-reachable outputs use Git objects, while uncommitted/index-only bytes remain restorable after aggressive object pruning.
+- [x] Representative payload growth reaches but never exceeds 25 MiB per result or 250 MiB per task; either excess returns non-advancing `SNAPSHOT_LIMIT` with counts/guidance, writes no partial/truncated payload, and creates no hidden authority.
+- [x] Every current authoritative generation and all decision/review/checkpoint evidence remain reachable. Human-approved maintenance prunes only unreferenced diagnostic attempts or superseded non-authoritative payloads, writes an immutable deleted-digest/bytes/reason record, and cannot break rerun, restore, or checkpoint chains.
+- [x] Secret fixtures in any candidate Git-tracked snapshot/checkpoint projection fail before projection with safe remediation warning that later `.archflow/` deletion cannot erase branch history; clean binary/text fixtures pass without logging secret values.
+- [x] Snapshot/projection/restore fault injection preserves prior/next authority or exact repair, and the three `restore-collision` outcomes are representable without silent overwrite.
 
 ### Phase 12: Durable Gates, Waivers, and Manual Decisions
 
@@ -869,7 +871,7 @@ The full suite passed 1,163 of 1,166 tests. The three failures are exactly the i
 | 8 | Manual Checkpoint Chain and Import | COMPLETE (2026-07-28) |
 | 9 | Transaction Substrate and Exact Replay | COMPLETE (2026-07-29) |
 | 10 | Adoption, Reconciliation, and Recovery | COMPLETE (2026-07-29) |
-| 11 | Snapshots, Implementation Manifests, and Restore | Not Started |
+| 11 | Snapshots, Implementation Manifests, and Restore | COMPLETE (2026-07-29) |
 | 12 | Durable Gates, Waivers, and Manual Decisions | Not Started |
 | 13 | Host Identity, Sandbox, and CLI Dispatch | Not Started |
 | 14 | Constitution Adjudication, Drift, and Review Fixed Point | Not Started |

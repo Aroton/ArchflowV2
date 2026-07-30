@@ -1,5 +1,5 @@
 import { createServer } from "vite";
-import { link, open, rename, unlink } from "node:fs/promises";
+import { link, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 const [, , action, target, intentId, expectedRevisionText, cutPoint] = process.argv;
@@ -30,13 +30,13 @@ try {
       });
     });
     process.send({ type: "released", pid: process.pid });
-  } else if (action === "run-transaction" || action === "run-crash-transaction") {
+  } else if (["run-transaction", "run-crash-transaction", "run-result-transaction", "run-crash-result-transaction"].includes(action)) {
     if (intentId === undefined || expectedRevisionText === undefined) {
       throw new Error("run-transaction requires repository, intent id, and expected revision");
     }
     const taskId = target.split("/").at(-1);
     const repository = target.slice(0, -(`/.archflow/tasks/${taskId}`).length);
-    const [canonical, evidence, fingerprints, tools, git, identity, authorityModule, atomic, lock, read, transaction] = await Promise.all([
+    const [canonical, evidence, fingerprints, tools, git, identity, authorityModule, atomic, lock, read, transaction, requestModule, snapshots] = await Promise.all([
       vite.ssrLoadModule("/src/contracts/canonical.ts"),
       vite.ssrLoadModule("/src/contracts/evidence.ts"),
       vite.ssrLoadModule("/src/contracts/fingerprints.ts"),
@@ -48,6 +48,8 @@ try {
       vite.ssrLoadModule("/src/state/lock.ts"),
       vite.ssrLoadModule("/src/state/read.ts"),
       vite.ssrLoadModule("/src/state/transaction.ts"),
+      vite.ssrLoadModule("/src/state/request.ts"),
+      vite.ssrLoadModule("/src/state/snapshots.ts"),
     ]);
     const context = {
       task_id: taskId,
@@ -81,6 +83,40 @@ try {
       declared_inputs: [],
     };
     const inputFingerprint = fingerprints.computeInputFingerprint(subject);
+    const resultMode = action.includes("result");
+    const retainedBytes = new TextEncoder().encode("retained-result\n");
+    const outputPath = `.archflow/tasks/${taskId}/phases/result.md`;
+    const contentDigest = canonical.sha256Bytes(retainedBytes);
+    const output = {
+      path: outputPath, path_class: "document", operation: "add", storage: "raw-payload",
+      payload_bytes: retainedBytes.byteLength, payload_digest: contentDigest, file_type: "regular",
+      after: { oid: canonical.gitBlobOid(retainedBytes), mode: "100644", size_bytes: retainedBytes.byteLength },
+    };
+    const projections = [{ path: outputPath, content_digest: contentDigest }];
+    const snapshotDigest = snapshots.deriveDeclaredSnapshotDigest([output], projections);
+    const artifact = {
+      schema_version: "1", artifact_kind: "document", task_id: taskId,
+      phase_instance: "phase-impl-9", step: "produce", document_path: "phases/result.md",
+      path_class: "document", byte_count: retainedBytes.byteLength, content_digest: contentDigest, declared_inputs: [],
+      input_fingerprint: inputFingerprint, snapshot_digest: snapshotDigest,
+      projection_target: outputPath,
+    };
+    const resultId = `result-${intentId}`;
+    const resultManifest = canonical.canonicalDocument({
+      schema_version: "1", task_id: taskId,
+      repository_identity_digest: authority.value.repository_identity_digest,
+      result_id: resultId, phase_instance: "phase-impl-9", step: "produce",
+      artifact_digest: canonical.canonicalJsonDigest(artifact), source_artifact: artifact,
+      input_fingerprint: inputFingerprint, snapshot_digest: snapshotDigest,
+      outputs: [output], projections,
+      accounting: {
+        schema_version: "1", result_bytes: retainedBytes.byteLength, task_bytes: retainedBytes.byteLength,
+        result_byte_cap: 26_214_400, task_byte_cap: 262_144_000,
+        counted_entries: [{ path: outputPath, storage: "raw-payload", stored_bytes: retainedBytes.byteLength }],
+        measured_at_revision: stateRead.document.value.revision,
+      },
+      secret_scan: { schema_version: "1", outcome: "clean", detector_set_id: "test", scanned_paths: [outputPath] },
+    });
     const call = tools.parseToolCall("archflow_state", {
       schema_version: "1",
       task_id: taskId,
@@ -90,16 +126,9 @@ try {
       phase_instance: "phase-impl-9",
       step: "produce",
       status: "succeeded",
+      ...(resultMode ? { artifact } : {}),
     });
-    const requestDigest = fingerprints.computeRequestDigest({
-      schema_version: "1",
-      tool: "archflow_state",
-      repository_identity_digest: authority.value.repository_identity_digest,
-      task_identity_digest: authority.value.task_identity_digest,
-      operation: "record-state-boundary",
-      operation_fields: { phase_instance: "phase-impl-9", step: "produce", status: "succeeded" },
-      input_fingerprint: inputFingerprint,
-    });
+    const requestDigest = requestModule.identifyTransactionRequest(call, authority.value, inputFingerprint).request_digest;
     const killAtCut = async (point, path) => {
       await new Promise((resolve, reject) => {
         process.send({ type: "cut", point, path, pid: process.pid }, (error) => {
@@ -120,19 +149,24 @@ try {
         await handle.close();
       }
     };
-    const atomicWriter = action === "run-crash-transaction"
+    const atomicWriter = action.startsWith("run-crash-")
       ? {
           createExclusive: async (path, bytes) => {
+            await mkdir(dirname(path.absolute), { recursive: true });
             const temporary = join(dirname(path.absolute), `.${basename(path.absolute)}.${process.pid}.crash.tmp`);
             await writeTemporary(temporary, bytes);
-            if (cutPoint === "receipt-temp") await killAtCut(cutPoint, temporary);
+            if (cutPoint === "receipt-temp" && path.path_class === "intent") await killAtCut(cutPoint, temporary);
             try {
               await link(temporary, path.absolute);
             } catch (error) {
               if (error?.code === "EEXIST") return "exists";
               throw error;
             }
-            if (cutPoint === "receipt-link") await killAtCut(cutPoint, temporary);
+            if (
+              (cutPoint === "receipt-link" && path.path_class === "intent") ||
+              (cutPoint === "result-payload-link" && path.path_class === "result-payload") ||
+              (cutPoint === "result-manifest-link" && path.path_class === "result-manifest")
+            ) await killAtCut(cutPoint, path.absolute);
             await unlink(temporary);
             return "created";
           },
@@ -145,6 +179,18 @@ try {
           },
         }
       : atomic.createAtomicWriter();
+    const manifestClaim = `.archflow/tasks/${taskId}/results/sha256/${resultManifest.digest}/manifest.json`;
+    const payloadClaim = `.archflow/tasks/${taskId}/results/sha256/${resultManifest.digest}/payload/${outputPath}`;
+    const manifestTarget = { absolute: join(repository, manifestClaim), repositoryRelative: manifestClaim, path_class: "result-manifest" };
+    const payloadTarget = { absolute: join(repository, payloadClaim), repositoryRelative: payloadClaim, path_class: "result-payload" };
+    const installation = {
+      prepared: { manifest: resultManifest, result_digest: resultManifest.digest,
+        payloads: [{ path: outputPath, bytes: retainedBytes, target: payloadTarget }] },
+      manifest_target: manifestTarget,
+      projection_plan: { entries: [], collisions: [], collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"] },
+      worktree_root: discovered.value.location.worktreeRoot,
+    };
+    if (resultMode) await mkdir(dirname(payloadTarget.absolute), { recursive: true });
     let prepareCalls = 0;
     const result = await transaction.runStateTransaction({
       runner: discovered.value,
@@ -155,10 +201,25 @@ try {
       read_state: read.readTaskState,
       read_config: read.readTaskConfig,
       read_receipt: read.readIntentReceipt,
+      projection_writer: atomic.createProjectionWriter(),
+      read_retained_task_bytes: async () => 0,
+      load_retained_result: async (reference) => {
+        const bytes = new Uint8Array(await readFile(payloadTarget.absolute));
+        if (canonical.sha256Bytes(bytes) !== resultManifest.value.outputs[0].payload_digest) throw new Error("retained payload changed");
+        return { schema_version: "1", ok: true, value: {
+          ...installation,
+          prepared: { ...installation.prepared, payloads: [{ path: outputPath, bytes, target: payloadTarget }] },
+        } };
+      },
     }, { call, authority: authority.value }, async (current) => {
       prepareCalls += 1;
       const { revision: _revision, committed_intent: _committedIntent, ...nextState } = current.value;
       const success = { path: "state.json", revision: current.value.revision + 1, status: "succeeded" };
+      const reference = {
+        phase_instance: current.value.phase_instance, step: current.value.step,
+        result_digest: resultManifest.digest, result_id: resultId,
+        input_fingerprint: inputFingerprint, manifest_path: manifestClaim,
+      };
       return {
         schema_version: "1",
         ok: true,
@@ -170,12 +231,14 @@ try {
             intent_id: intentId,
             input_fingerprint: inputFingerprint,
             request_digest: requestDigest,
-            result_id: `result-${intentId}`,
+            result_id: resultId,
             resulting_revision: success.revision,
             success,
           }),
           result: tools.validateProjectResultStructure(call, { schema_version: "1", ok: true, value: success }),
-          next_state: { ...nextState, status: "succeeded" },
+          next_state: { ...nextState, status: "succeeded",
+            ...(resultMode ? { authoritative_results: [reference] } : {}) },
+          ...(resultMode ? { result_installation: transaction.prepareResultInstallation({ reference, ...installation }) } : {}),
         },
       };
     });
