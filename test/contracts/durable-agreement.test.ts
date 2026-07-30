@@ -523,10 +523,10 @@ describe("the pinned $def inventory resolves", () => {
 });
 
 describe("registry invariants after phase 9 receipt registration", () => {
-  it("SCHEMA_IDS holds 37 entries in exact bijection with the schema directory", () => {
-    expect(Object.keys(SCHEMA_IDS)).toHaveLength(37);
-    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(37);
-    expect(schemaFileNames()).toHaveLength(37);
+  it("SCHEMA_IDS holds 40 entries in exact bijection with the schema directory", () => {
+    expect(Object.keys(SCHEMA_IDS)).toHaveLength(40);
+    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(40);
+    expect(schemaFileNames()).toHaveLength(40);
 
     const idsInFiles = [...ALL_SCHEMAS.values()].map((document) => document.$id as string).sort();
     expect(idsInFiles).toEqual([...Object.values(SCHEMA_IDS)].sort());
@@ -566,11 +566,11 @@ describe("registry invariants after phase 9 receipt registration", () => {
     expect(errorsAt).toBeGreaterThanOrEqual(0);
     const expectedModules = NEW_MODULES
       .map((module) => module.replace(/\.ts$/u, ".js"))
-      .toSpliced(8, 0, "durable-result-manifest.js");
+      .toSpliced(8, 0, "durable-result-manifest.js", "durable-gate.js");
     expect(starExports.slice(errorsAt + 1, errorsAt + 1 + expectedModules.length)).toEqual(expectedModules);
 
     // `durable-checkpoint.ts` carries two schemas while `durable.ts` carries none, so the offsets cancel.
-    expect(expectedModules).toHaveLength(NEW_SCHEMA_STEMS.length + 1);
+    expect(expectedModules).toHaveLength(NEW_SCHEMA_STEMS.length + 2);
     for (const line of lines) expect(line.trim()).not.toBe('export * from "./durable.js"; export * from "./durable.js";');
   });
 });

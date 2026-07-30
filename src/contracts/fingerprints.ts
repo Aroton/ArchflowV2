@@ -2,7 +2,8 @@ import type { GitOid, GitTreeMode } from "./canonical.js";
 import { canonicalJsonDigest, sha256Bytes } from "./canonical.js";
 import type { ProjectResult } from "./errors.js";
 import { createProjectError } from "./errors.js";
-import type { SafeId, Sha256Digest } from "./evidence.js";
+import type { PathSafeId, SafeId, Sha256Digest } from "./evidence.js";
+import type { GateContext, GateKind, WaiverOriginRef } from "./gates.js";
 import type { AdjudicateInput, CommonToolInput, CounterReviewInput, GateInput, StateInput, ToolInput, WaiverInput } from "./mcp-tools.js";
 import type { RepositoryPathClaim } from "./path-claims.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
@@ -84,7 +85,7 @@ type SelectorKeys = {
   readonly archflow_state: "phase_instance" | "step" | "status" | "artifact";
   readonly archflow_counter_review: "artifact_path" | "rubric";
   readonly archflow_adjudicate: "artifact_path" | "upstream_paths";
-  readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "supersedes" | "kind" | "context";
+  readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "supersedes" | "supplemental_outcome" | "kind" | "context";
   readonly archflow_waiver: "origin" | "rationale";
 };
 type ExactSelectorCoverage = {
@@ -274,6 +275,33 @@ export function computeRequestDigest(subject: RequestDigestSubject): Sha256Diges
     operation_fields: operationFields,
     input_fingerprint: snapshot.input_fingerprint,
   });
+}
+
+export function computeGateId(subject: {
+  readonly task_identity_digest: Sha256Digest;
+  readonly intent_id: PathSafeId;
+  readonly request_digest: Sha256Digest;
+}): PathSafeId {
+  const snapshot = materialize(subject, "gate identity subject");
+  return `g-${canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "gate-identity",
+    task_identity_digest: snapshot.task_identity_digest,
+    intent_id: snapshot.intent_id,
+    request_digest: snapshot.request_digest,
+  })}` as PathSafeId;
+}
+
+export function computeGateContextDigest<K extends GateKind>(kind: K, context: GateContext<K>): Sha256Digest;
+export function computeGateContextDigest(kind: "waiver", context: { readonly origin: WaiverOriginRef; readonly rationale: string }): Sha256Digest;
+export function computeGateContextDigest(
+  kind: GateKind | "waiver",
+  context: GateContext<GateKind> | { readonly origin: WaiverOriginRef; readonly rationale: string },
+): Sha256Digest {
+  const snapshot = materialize(context, "gate context digest subject");
+  return kind === "waiver"
+    ? canonicalJsonDigest({ schema_version: "1", digest_kind: "waiver-context", ...snapshot })
+    : canonicalJsonDigest({ schema_version: "1", digest_kind: "gate-context", kind, context: snapshot });
 }
 
 /**

@@ -100,4 +100,16 @@ describe("task state contract", () => {
   it("rejects an open_gate supplied as an array — a nested gate is unrepresentable, not merely rejected", async () => {
     await rejects((state) => ({ ...state, open_gate: [state.open_gate] }));
   });
+
+  it("requires waiver scope and accepts the optional waiver-origin gate marker", async () => {
+    const validator = await taskStateValidator();
+    const state = await validState();
+    const [waiver] = state.waivers as Record<string, unknown>[];
+    const { scope: _scope, ...withoutScope } = waiver!;
+    expect(validator.validate({ ...state, waivers: [withoutScope] })).toBe(false);
+    expect(validator.validate({
+      ...state,
+      open_gate: { ...(state.open_gate as Record<string, unknown>), waiver_origin_gate_id: "gate-origin" },
+    }), JSON.stringify(validator.validate.errors)).toBe(true);
+  });
 });

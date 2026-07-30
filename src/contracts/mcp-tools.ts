@@ -14,7 +14,7 @@ import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { taskPathClaimV1Schema, type TaskPathClaim } from "./path-claims.js";
 import { rubricV1Schema, type RubricV1 } from "./rubric.js";
-import type { GateSupersessionRef } from "./supplemental.js";
+import { parseSupplementalReviewOutcome, type GateSupersessionRef, type SupplementalReviewOutcome } from "./supplemental.js";
 import { TOOL_NAMES, type ToolName } from "./tool-names.js";
 import { parseCurrentEvidenceSetRef, type CurrentEvidenceSetRef } from "./trust.js";
 
@@ -42,7 +42,7 @@ export interface CounterReviewInput extends CommonToolInput { readonly artifact_
 export interface CounterReviewSuccess { readonly path: TaskPathClaim; readonly verdict: "pass" | "advisory" | "fail"; readonly blocking_count: number; readonly revision: number }
 export interface AdjudicateInput extends CommonToolInput { readonly artifact_path: TaskPathClaim; readonly upstream_paths: readonly TaskPathClaim[] }
 export interface AdjudicateSuccess { readonly path: TaskPathClaim; readonly constitution: ConstitutionResult; readonly drift: DriftResult; readonly triggers: readonly RuleVersionRef[]; readonly revision: number }
-export type GateInput = { readonly [K in GateKind]: CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly summary: string; readonly subject_digest: Sha256Digest; readonly current_evidence: CurrentEvidenceSetRef; readonly supersedes?: GateSupersessionRef; readonly kind: K; readonly context: GateContext<K> } }[GateKind];
+export type GateInput = { readonly [K in GateKind]: CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly summary: string; readonly subject_digest: Sha256Digest; readonly current_evidence: CurrentEvidenceSetRef; readonly supersedes?: GateSupersessionRef; readonly supplemental_outcome?: SupplementalReviewOutcome; readonly kind: K; readonly context: GateContext<K> } }[GateKind];
 export type GateSuccess = { readonly [K in GateKind]: { readonly kind: K; readonly decision: GateDecisionEnvelope<K>; readonly notes: string; readonly revision: number } }[GateKind];
 export interface WaiverInput extends CommonToolInput { readonly origin: WaiverOriginRef; readonly rationale: string }
 export interface WaiverDecisionBinding { readonly origin_gate_id: PathSafeId; readonly waiver_gate_id: PathSafeId; readonly task_id: TaskSlug; readonly rule_id: string; readonly rule_version: number; readonly subject_digest: Sha256Digest; readonly current_evidence_set_digest: Sha256Digest; readonly scope: WaiverScope; readonly human_provenance: HumanDecisionProvenance }
@@ -69,13 +69,13 @@ const stateInput = z.object({ ...common, phase_instance: phase, step: z.enum(["p
 const counterInput = z.object({ ...common, artifact_path: taskPathClaimV1Schema, rubric: rubricV1Schema }).strict();
 const adjudicateInput = z.object({ ...common, artifact_path: taskPathClaimV1Schema, upstream_paths: z.array(taskPathClaimV1Schema) }).strict();
 const supersedes = z.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest, old_subject_digest: digest }).strict();
-const gateInput = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), supersedes: supersedes.optional(), kind: z.enum(GATE_KINDS), context: z.unknown() }).strict();
+const gateInput = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), supersedes: supersedes.optional(), supplemental_outcome: z.unknown().optional(), kind: z.enum(GATE_KINDS), context: z.unknown() }).strict();
 const waiverOrigin = z.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest, origin_context_digest: digest, task_id: taskSlugV1Schema, phase_instance: phase, subject_digest: digest, current_evidence_set_digest: digest, rule, scope }).strict();
 const waiverInput = z.object({ ...common, origin: waiverOrigin, rationale: text }).strict();
 
 function inputFor<K extends ToolName>(name: K, value: unknown): ToolInput<K> {
   const parsed = name === "archflow_state" ? stateInput.parse(value) : name === "archflow_counter_review" ? counterInput.parse(value) : name === "archflow_adjudicate" ? adjudicateInput.parse(value) : name === "archflow_waiver" ? waiverInput.parse(value) : gateInput.parse(value);
-  if (name === "archflow_gate") { const v = parsed as z.infer<typeof gateInput>; parseGateContext(v.kind, v.context); return { ...v, current_evidence: parseCurrentEvidenceSetRef(v.current_evidence) } as ToolInput<K>; }
+  if (name === "archflow_gate") { const v = parsed as z.infer<typeof gateInput>; parseGateContext(v.kind, v.context); return { ...v, current_evidence: parseCurrentEvidenceSetRef(v.current_evidence), ...(v.supplemental_outcome === undefined ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) }) } as ToolInput<K>; }
   if (name === "archflow_waiver") { const v = parsed as z.infer<typeof waiverInput>; if (v.task_id !== v.origin.task_id) throw new TypeError("waiver task_id must match origin task_id"); }
   return parsed as ToolInput<K>;
 }

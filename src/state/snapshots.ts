@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import {
   canonicalDocument,
+  canonicalJsonDigest,
   parseCanonicalDocument,
   sha256Bytes,
   type CanonicalDocument,
@@ -429,6 +430,8 @@ export type ProjectionPlanEntry = Readonly<{
   observed_before: ProjectionObservation;
   desired: ProjectionDesired;
   rollback?: ProjectionDesired;
+  /** Preserved from the authenticated source so a restore gate can re-run projection preparation. */
+  git_tracked?: boolean;
   disposition: "exact" | "restore-ready" | "collision";
   rename_pair?: Readonly<{ role: "source" | "destination"; peer_path: RepositoryPathClaim }>;
 }>;
@@ -439,21 +442,46 @@ export type ProjectionPlan = Readonly<{
   collision_choices: readonly ["discard-and-restore", "adopt-as-new-generation", "abort"];
 }>;
 
-async function observe(path: ResolvedPath): Promise<ProjectionObservation> {
+export type CapturedProjectionTarget = Readonly<{
+  observation: ProjectionObservation;
+  rollback: ProjectionDesired;
+}>;
+
+/** Captures one target generation once, retaining the exact bytes needed for safe rollback. */
+export async function captureProjectionTarget(path: ResolvedPath): Promise<CapturedProjectionTarget> {
   try {
     const stat = await lstat(path.absolute);
     if (stat.isSymbolicLink()) {
       const bytes = Buffer.from(await readlink(path.absolute), "utf8");
-      return Object.freeze({ state: "present", file_type: "symlink", mode: "120000", size_bytes: bytes.byteLength, content_digest: sha256Bytes(bytes) });
+      return Object.freeze({
+        observation: Object.freeze({ state: "present", file_type: "symlink", mode: "120000", size_bytes: bytes.byteLength, content_digest: sha256Bytes(bytes) }),
+        rollback: Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes }),
+      });
     }
     if (!stat.isFile()) throw new TypeError("declared target is not a regular file or symlink");
     const handle = await openResolved(path.absolute, 0);
     const bytes = new Uint8Array(await handle.readFile().finally(() => handle.close()));
-    return Object.freeze({ state: "present", file_type: "regular", mode: (stat.mode & 0o111) === 0 ? "100644" : "100755", size_bytes: bytes.byteLength, content_digest: sha256Bytes(bytes) });
+    const mode = (stat.mode & 0o111) === 0 ? "100644" as const : "100755" as const;
+    return Object.freeze({
+      observation: Object.freeze({ state: "present", file_type: "regular", mode, size_bytes: bytes.byteLength, content_digest: sha256Bytes(bytes) }),
+      rollback: Object.freeze({ state: "present", file_type: "regular", mode, bytes }),
+    });
   } catch (error) {
-    if ((error as { code?: unknown }).code === "ENOENT") return Object.freeze({ state: "absent" });
+    if ((error as { code?: unknown }).code === "ENOENT") {
+      const absent = Object.freeze({ state: "absent" } as const);
+      return Object.freeze({ observation: absent, rollback: absent });
+    }
     throw error;
   }
+}
+
+/** Domain-separated identity of the complete present/absent projection generation. */
+export function projectionGenerationDigest(observation: ProjectionObservation): Sha256Digest {
+  return canonicalJsonDigest({ schema_version: "1", digest_kind: "projection-generation", observation });
+}
+
+async function observe(path: ResolvedPath): Promise<ProjectionObservation> {
+  return (await captureProjectionTarget(path)).observation;
 }
 
 function desiredObservation(value: ProjectionDesired): ProjectionObservation {
@@ -574,6 +602,7 @@ export async function prepareProjectionPlan(
     entries.push(Object.freeze({
       path: source.path, target: source.target, observed_before: observed, desired: source.desired,
       ...(source.rollback === undefined ? {} : { rollback: source.rollback }),
+      git_tracked: source.git_tracked,
       ...(source.rename_pair === undefined ? {} : { rename_pair: source.rename_pair }),
       disposition: exact ? "exact" : before && !renameDestinationBlocked ? "restore-ready" : "collision",
     }));

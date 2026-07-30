@@ -110,6 +110,7 @@ describe("revision-0 state initialization", () => {
         events.push("state");
         state = parseCanonicalDocument<TaskStateV1>(bytes);
       },
+      removeGateInterface: async () => undefined,
     };
     const dependencies: TransactionDependencies = {
       runner: discovered.value,

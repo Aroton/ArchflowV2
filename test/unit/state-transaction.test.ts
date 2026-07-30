@@ -183,6 +183,7 @@ async function harness(): Promise<Harness> {
         throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: true, collision: false });
       }
     },
+    removeGateInterface: async () => undefined,
   };
   value.dependencies = {
     runner: value.runner,
@@ -825,19 +826,50 @@ describe("mature state transaction kernel", () => {
     const h = await harness();
     const parsed = call(7);
     const base = preparer(h, parsed);
-    const approvals = Array.from({ length: 6_000 }, (_, index) => ({
-      gate_id: parsePathSafeId(`gate-${String(index).padStart(6, "0")}`),
-      gate_kind: "artifact-approval" as const,
-      subject_digest: D("1"),
-      decision_digest: D("2"),
-      resolved_at_revision: parseSafeInteger(7),
-    }));
+    const authoritativeResults = Array.from({ length: 6_000 }, (_, index) => ({
+      phase_instance: encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(index + 1) }),
+      step: "produce" as const,
+      result_digest: D("1"),
+      result_id: parseSafeId(`result-${String(index).padStart(6, "0")}`),
+      input_fingerprint: D("2"),
+      manifest_path: parseRepositoryPathClaim(`.archflow/tasks/${TASK}/results/result-${String(index).padStart(6, "0")}/manifest.json`),
+    })).sort((left, right) => left.phase_instance.localeCompare(right.phase_instance));
 
     await expect(runStateTransaction(h.dependencies, request(h.authority, parsed), async (current, identified) => {
       const prepared = await base(current, identified);
       if (!prepared.ok) return prepared;
-      return { ...prepared, value: { ...prepared.value, next_state: { ...prepared.value.next_state, approvals } } };
+      return { ...prepared, value: { ...prepared.value, next_state: { ...prepared.value.next_state, authoritative_results: authoritativeResults } } };
     })).rejects.toThrow(/exceeds the 1 MiB limit/u);
+    expect(h.events).not.toContain("receipt-create");
+    expect(h.events).not.toContain("state-replace");
+  });
+
+  it.each([
+    ["open_gate", {
+      gate_id: parsePathSafeId("gate-1"), gate_kind: "artifact-approval" as const,
+      subject_digest: D("1"), context_digest: D("2"), opened_at_revision: parseSafeInteger(7),
+    }],
+    ["approvals", [{
+      gate_id: parsePathSafeId("gate-1"), gate_kind: "artifact-approval" as const,
+      subject_digest: D("1"), decision_digest: D("2"), resolved_at_revision: parseSafeInteger(7),
+    }]],
+    ["waivers", [{
+      gate_id: parsePathSafeId("gate-1"), rule_id: parseSafeId("Rule:1"), rule_version: parseSafeInteger(1),
+      subject_digest: D("1"), scope: { operation: "review-trigger" as const, boundary: "subject" as const },
+      granted: true, expires: "task-complete" as const, granted_at_revision: parseSafeInteger(7),
+    }]],
+  ] as const)("rejects an unauthenticated %s change", async (field, changed) => {
+    const h = await harness();
+    const parsed = call(7);
+    const base = preparer(h, parsed);
+    await expect(runStateTransaction(h.dependencies, request(h.authority, parsed), async (current, identified) => {
+      const prepared = await base(current, identified);
+      if (!prepared.ok) return prepared;
+      return {
+        ...prepared,
+        value: { ...prepared.value, next_state: { ...prepared.value.next_state, [field]: changed } },
+      } as typeof prepared;
+    })).rejects.toThrow(/authentic planner-minted preparation/u);
     expect(h.events).not.toContain("receipt-create");
     expect(h.events).not.toContain("state-replace");
   });

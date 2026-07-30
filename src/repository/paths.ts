@@ -16,8 +16,10 @@ import {
   type ProjectError,
   type ProjectResult,
 } from "../contracts/errors.js";
-import { parseTaskSlug, type TaskSlug } from "../contracts/evidence.js";
+import { parseTaskSlug, type PathSafeId, type TaskSlug } from "../contracts/evidence.js";
+import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import {
+  parseTaskPathClaim,
   toRepositoryPathClaim,
   type PathClass,
   type RepositoryPathClaim,
@@ -44,6 +46,21 @@ export interface ResolvedPath {
   readonly path_class: PathClass;
   readonly repositoryRelative: RepositoryPathClaim;
   readonly absolute: ResolvedTaskPath;
+}
+
+export function gateRequestClaim(gateId: PathSafeId): TaskPathClaim {
+  return parseTaskPathClaim(`decisions/${gateId}/request.json`);
+}
+
+export function gateDecisionClaim(gateId: PathSafeId): TaskPathClaim {
+  return parseTaskPathClaim(`decisions/${gateId}/decision.json`);
+}
+
+export function gateCounterReviewClaim(
+  phaseInstance: PhaseInstanceId,
+  gateId: PathSafeId,
+): TaskPathClaim {
+  return parseTaskPathClaim(`reviews/${phaseInstance}.gate-counter.${gateId}.md`);
 }
 
 // ---------------------------------------------------------------------------

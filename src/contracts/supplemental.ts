@@ -4,9 +4,9 @@ import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type Sha256Diges
 import { assertPlainJson } from "./plain-json.js";
 import type { ReviewEvidenceSlot } from "./trust.js";
 
-export interface SupplementalGateRef { readonly prior_gate_id: PathSafeId; readonly task_id: TaskSlug; readonly phase_instance: string; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest }
-export interface SupplementalReviewRef extends SupplementalGateRef { readonly evidence_slot: Extract<ReviewEvidenceSlot, { role: "gate-counter-review" }> }
-export interface GateSupersessionRef { readonly superseded_gate_id: PathSafeId; readonly accepted_triage_digest: Sha256Digest; readonly old_subject_digest: Sha256Digest }
+export type SupplementalGateRef = { readonly prior_gate_id: PathSafeId; readonly task_id: TaskSlug; readonly phase_instance: string; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest };
+export type SupplementalReviewRef = SupplementalGateRef & { readonly evidence_slot: Extract<ReviewEvidenceSlot, { role: "gate-counter-review" }> };
+export type GateSupersessionRef = { readonly superseded_gate_id: PathSafeId; readonly accepted_triage_digest: Sha256Digest; readonly old_subject_digest: Sha256Digest };
 export type SupplementalReviewOutcome =
   | { readonly action: "decline"; readonly gate: SupplementalGateRef; readonly reason: string }
   | { readonly action: "ingest"; readonly review: SupplementalReviewRef; readonly reason: string }

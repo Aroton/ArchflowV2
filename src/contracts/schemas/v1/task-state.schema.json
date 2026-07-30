@@ -72,7 +72,7 @@
       "x-archflow-sorted-unique-by": "gate_id"
     },
     "open_gate": {
-      "$comment": "A single optional object, NEVER an array: a nested or concurrent gate is unrepresentable rather than merely rejected. Phase 11 owns the one-active-gate lifecycle — when this may be set, cleared, or superseded.",
+      "$comment": "A single optional object, NEVER an array: a nested or concurrent gate is unrepresentable rather than merely rejected. Phase 12 owns the one-active-gate lifecycle — when this may be set, cleared, or superseded.",
       "$ref": "#/$defs/openGateRef"
     },
     "committed_intent": { "$ref": "#/$defs/committedIntentRef" },
@@ -129,15 +129,24 @@
       }
     },
     "waiverRef": {
-      "$comment": "D21. `expires` is the const `task-complete` — the narrowest representation of the only expiry this project has. That is a FORMAT decision; waiver scope and expiry POLICY are Phase 11's. `rule_version` and `granted_at_revision` pin their own minimums (D8).",
+      "$comment": "D21. `expires` is the const `task-complete` — the narrowest representation of the only expiry this project has. Phase 12 records waiver scope; Phase 14 owns expiry policy enforcement. `rule_version` and `granted_at_revision` pin their own minimums (D8).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["gate_id", "rule_id", "rule_version", "subject_digest", "granted", "expires", "granted_at_revision"],
+      "required": ["gate_id", "rule_id", "rule_version", "subject_digest", "scope", "granted", "expires", "granted_at_revision"],
       "properties": {
         "gate_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
         "rule_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" },
         "rule_version": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
         "subject_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation", "boundary"],
+          "properties": {
+            "operation": { "enum": ["review-trigger", "adjudication-failure"] },
+            "boundary": { "enum": ["subject", "phase", "task"] }
+          }
+        },
         "granted": { "type": "boolean" },
         "expires": { "const": "task-complete" },
         "granted_at_revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
@@ -147,12 +156,14 @@
       "$comment": "D21. `opened_at_revision` pins its own minimum (D8).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["gate_id", "gate_kind", "subject_digest", "context_digest", "opened_at_revision"],
+      "required": ["gate_id", "gate_kind", "subject_digest", "context_digest", "frozen_state_digest", "opened_at_revision"],
       "properties": {
         "gate_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
         "gate_kind": { "$ref": "#/$defs/gateKind" },
         "subject_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
         "context_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "frozen_state_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "waiver_origin_gate_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
         "opened_at_revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
       }
     },

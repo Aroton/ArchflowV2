@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+
 import { z } from "zod";
 
 import type { Sha256Digest } from "./evidence.js";
@@ -8,18 +10,18 @@ import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { taskPathClaimV1Schema, type PathClass, type TaskPathClaim } from "./path-claims.js";
 import { PIPELINE_STEPS, type PipelineStep } from "./vocabulary.js";
 
-export interface RuleVersionRef { readonly rule_id: string; readonly rule_version: number }
+export type RuleVersionRef = { readonly rule_id: string; readonly rule_version: number };
 export type EvidenceIdentityKind = "prd" | "architecture" | "phase-design" | "implementation-result" | "review" | "adjudication" | "constitution" | "workflow" | "import";
-export interface EvidenceIdentityRef { readonly kind: EvidenceIdentityKind; readonly digest: Sha256Digest }
+export type EvidenceIdentityRef = { readonly kind: EvidenceIdentityKind; readonly digest: Sha256Digest };
 export type WaivableOperation = "review-trigger" | "adjudication-failure";
-export interface WaiverScope { readonly operation: WaivableOperation; readonly boundary: "subject" | "phase" | "task" }
-export interface HumanRuleResolution { readonly rule: RuleVersionRef; readonly resolution: string }
+export type WaiverScope = { readonly operation: WaivableOperation; readonly boundary: "subject" | "phase" | "task" };
+export type HumanRuleResolution = { readonly rule: RuleVersionRef; readonly resolution: string };
 
 export type HumanDecisionProvenance =
   | Readonly<{ schema_version: "1"; actor_class: "human" | "archforge"; assurance: "declared-local-trace"; channel: "connected-host"; decision_event_id: string; connection_id: string; request_id_digest: Sha256Digest; recorded_at: string }>
   | Readonly<{ schema_version: "1"; actor_class: "human" | "archforge"; assurance: "declared-local-trace"; channel: "archflow-local"; decision_event_id: string; helper_invocation_id: string; recorded_at: string }>;
 
-export interface AuthorityLinkRef {
+export type AuthorityLinkRef = {
   readonly link_digest: Sha256Digest;
   readonly purpose: "restore-adoption";
   readonly proposed_generation_digest: Sha256Digest;
@@ -44,11 +46,11 @@ export type GateContext<K extends GateKind> = GateContractByKind[K]["context"];
 export type GateDecisionPayload<K extends GateKind> = GateContractByKind[K]["decision"];
 export type GateEffect = "advance" | "retry" | "redirect-waiver" | "redirect-upstream" | "non-advancing";
 
-export interface GateDecisionEnvelopeBase { readonly schema_version: "1"; readonly gate_id: PathSafeId; readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly context_digest: Sha256Digest; readonly human_provenance: HumanDecisionProvenance }
+export type GateDecisionEnvelopeBase = { readonly schema_version: "1"; readonly gate_id: PathSafeId; readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly context_digest: Sha256Digest; readonly human_provenance: HumanDecisionProvenance };
 export type GateDecisionEnvelope<K extends GateKind = GateKind> = { readonly [P in K]: GateDecisionEnvelopeBase & { readonly kind: P; readonly payload: GateDecisionPayload<P> } }[K];
 
 /** Exact archived origin binding consumed by the later waiver owner. */
-export interface WaiverOriginRef {
+export type WaiverOriginRef = {
   readonly origin_gate_id: PathSafeId;
   readonly origin_decision_digest: Sha256Digest;
   readonly origin_context_digest: Sha256Digest;
@@ -187,7 +189,7 @@ export function validateGateDecision<K extends GateKind>(kind: K, context: GateC
   if (kind === "restore-collision" && parsed.decision === "adopt-as-new-generation") {
     const candidate = (context as GateContext<"restore-collision">).adoption_candidate;
     const adoptionPayload = parsed as Extract<GateDecisionPayload<"restore-collision">, { decision: "adopt-as-new-generation" }>;
-    if (candidate === undefined || JSON.stringify(candidate) !== JSON.stringify(adoptionPayload.adoption_authority)) throw new TypeError("restore adoption authority must exactly match the context candidate");
+    if (candidate === undefined || !isDeepStrictEqual(candidate, adoptionPayload.adoption_authority)) throw new TypeError("restore adoption authority must exactly match the context candidate");
   }
   return parsed;
 }

@@ -40,12 +40,12 @@ describe("reconcileCurrentAuthority", () => {
   });
 
   it("compares an active gate and adopted checkpoint independently when both exist", () => {
-    const gate = { gate_id: parsePathSafeId("gate-1"), gate_kind: "commit-authorization" as const, subject_digest: D("a"), context_digest: D("b"), opened_at_revision: parseSafeInteger(4) };
+    const gate = { gate_id: parsePathSafeId("gate-1"), gate_kind: "commit-authorization" as const, subject_digest: D("a"), context_digest: D("b"), frozen_state_digest: D("f"), opened_at_revision: parseSafeInteger(4) };
     const checkpoint = { revision: parseSafeInteger(3), checkpoint_digest: D("c") };
     const state = { ...STATE, open_gate: gate, adopted_checkpoint: checkpoint };
     const result = reconcileCurrentAuthority({
       state: canonicalDocument(state), recorded_projections: [], current_projections: [],
-      active_heads: { gate: { gate_id: gate.gate_id, subject_digest: gate.subject_digest }, checkpoint },
+      active_heads: { gate: { gate_id: gate.gate_id, subject_digest: gate.subject_digest, context_digest: gate.context_digest }, checkpoint },
     });
     expect(result).toEqual({ classification: "consistent", findings: [] });
   });

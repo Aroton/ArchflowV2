@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:active-gate",
+  "title": "ArchFlow Active Gate Interface v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "gate_id", "intent_id", "request_digest", "task_id", "phase_instance", "summary", "subject_digest", "context_digest", "current_evidence", "kind", "context", "allowed_decisions", "opened_at_revision", "status", "decision_template", "supplemental"],
+  "properties": {
+    "schema_version": { "$ref": "urn:archflow:schema:v1:gate-request#/properties/schema_version" },
+    "gate_id": { "$ref": "urn:archflow:schema:v1:gate-request#/properties/gate_id" },
+    "intent_id": { "$ref": "urn:archflow:schema:v1:gate-request#/properties/intent_id" },
+    "request_digest": { "$ref": "urn:archflow:schema:v1:gate-request#/properties/request_digest" },
+    "task_id": { "$ref": "urn:archflow:schema:v1:gate-request#/properties/task_id" },
+    "phase_instance": { "$ref": "urn:archflow:schema:v1:gate-request#/properties/phase_instance" },
+    "summary": { "$ref": "urn:archflow:schema:v1:gate-request#/properties/summary" },
+    "subject_digest": { "$ref": "urn:archflow:schema:v1:gate-request#/properties/subject_digest" },
+    "context_digest": { "$ref": "urn:archflow:schema:v1:gate-request#/properties/context_digest" },
+    "current_evidence": { "$ref": "urn:archflow:schema:v1:gate-request#/properties/current_evidence" },
+    "supersedes": { "$ref": "urn:archflow:schema:v1:gate-request#/$defs/supersession" },
+    "kind": { "$ref": "urn:archflow:schema:v1:gate-request#/properties/kind" },
+    "context": { "type": "object" },
+    "allowed_decisions": { "$ref": "urn:archflow:schema:v1:gate-request#/properties/allowed_decisions" },
+    "opened_at_revision": { "$ref": "urn:archflow:schema:v1:gate-request#/properties/opened_at_revision" },
+    "status": { "const": "awaiting-human" },
+    "decision_template": { "$ref": "#/$defs/decisionTemplate" },
+    "supplemental": { "$ref": "urn:archflow:schema:v1:gate-decision-record#/$defs/supplemental" }
+  },
+  "oneOf": [
+    { "$ref": "urn:archflow:schema:v1:gate-request#/$defs/artifactApproval" },
+    { "$ref": "urn:archflow:schema:v1:gate-request#/$defs/reviewTrigger" },
+    { "$ref": "urn:archflow:schema:v1:gate-request#/$defs/materialDrift" },
+    { "$ref": "urn:archflow:schema:v1:gate-request#/$defs/adjudicationFailure" },
+    { "$ref": "urn:archflow:schema:v1:gate-request#/$defs/attemptsExhausted" },
+    { "$ref": "urn:archflow:schema:v1:gate-request#/$defs/constitutionEdit" },
+    { "$ref": "urn:archflow:schema:v1:gate-request#/$defs/commitAuthorization" },
+    { "$ref": "urn:archflow:schema:v1:gate-request#/$defs/restoreCollision" },
+    { "$ref": "urn:archflow:schema:v1:gate-request#/$defs/migrationAudit" },
+    { "$ref": "urn:archflow:schema:v1:gate-request#/$defs/reviewWaiver" },
+    { "$ref": "urn:archflow:schema:v1:gate-request#/$defs/adjudicationWaiver" }
+  ],
+  "$defs": {
+    "decisionTemplate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "gate_id", "task_id", "phase_instance", "kind", "subject_digest", "context_digest", "required_fields", "cancellation_fields"],
+      "properties": {
+        "schema_version": { "const": "1" },
+        "gate_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
+        "task_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
+        "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
+        "kind": { "$ref": "urn:archflow:schema:v1:gate-request#/properties/kind" },
+        "subject_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "context_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "required_fields": {
+          "oneOf": [
+            { "type": "array", "prefixItems": [{ "const": "payload" }, { "const": "human_provenance" }], "items": false, "minItems": 2, "maxItems": 2 },
+            { "type": "array", "prefixItems": [{ "const": "granted" }, { "const": "scope" }, { "const": "origin" }, { "const": "notes" }, { "const": "human_provenance" }], "items": false, "minItems": 5, "maxItems": 5 }
+          ]
+        },
+        "cancellation_fields": { "type": "array", "prefixItems": [{ "const": "cancelled" }, { "const": "reason" }, { "const": "human_provenance" }], "items": false, "minItems": 3, "maxItems": 3 }
+      }
+    }
+  }
+}

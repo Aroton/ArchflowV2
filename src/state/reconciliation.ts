@@ -3,13 +3,31 @@ import { createCommittedIntentSubject, createPreparedIntentSubject, validateDura
 import { intentOutcomeDigest, intentReceiptDigest, parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
 import type { ProjectionDigestRef } from "../contracts/durable-checkpoint.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
-import type { Sha256Digest } from "../contracts/evidence.js";
+import type { ActiveGateV1, GateRequestV1 } from "../contracts/durable-gate.js";
+import { parsePathSafeId, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
 import { assertPlainJson } from "../contracts/plain-json.js";
 
 export type ActiveAuthorityHeads = Readonly<{
-  gate?: Readonly<{ gate_id: string; subject_digest: Sha256Digest }>;
+  gate?: Readonly<{ gate_id: PathSafeId; subject_digest: Sha256Digest; context_digest: Sha256Digest }>;
   checkpoint?: Readonly<{ revision: number; checkpoint_digest: Sha256Digest }>;
 }>;
+
+/** Produces the gate reconciliation head only from the mutable projection and its immutable request. */
+export function activeGateHead(
+  active: ActiveGateV1,
+  request: GateRequestV1,
+): NonNullable<ActiveAuthorityHeads["gate"]> {
+  if (
+    active.gate_id !== request.gate_id || active.task_id !== request.task_id ||
+    active.phase_instance !== request.phase_instance || active.kind !== request.kind ||
+    active.subject_digest !== request.subject_digest || active.context_digest !== request.context_digest
+  ) throw new TypeError("active gate projection does not bind its archived request");
+  return Object.freeze({
+    gate_id: parsePathSafeId(request.gate_id),
+    subject_digest: request.subject_digest,
+    context_digest: request.context_digest,
+  });
+}
 
 export type ReconciliationIntent = Readonly<{
   request_digest: Sha256Digest;
@@ -139,7 +157,9 @@ export function reconcileCurrentAuthority(value: ReconciliationInput): Reconcili
   const state = input.state.value;
   const gateMatches = heads.gate === undefined
     ? state.open_gate === undefined
-    : state.open_gate?.gate_id === heads.gate.gate_id && state.open_gate.subject_digest === heads.gate.subject_digest;
+    : state.open_gate?.gate_id === heads.gate.gate_id &&
+      state.open_gate.subject_digest === heads.gate.subject_digest &&
+      state.open_gate.context_digest === heads.gate.context_digest;
   if (!gateMatches) {
     findings.push(Object.freeze({ kind: "active-gate-mismatch", ...(heads.gate === undefined ? {} : { head: heads.gate }), next_action: "resolve-current-authority" }));
   }

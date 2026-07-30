@@ -32,7 +32,11 @@ const fixture = async <T>(name: string): Promise<T> =>
     await readFile(new URL(`../fixtures/contracts/durable/${name}.valid.json`, import.meta.url), "utf8")
   ) as T;
 
-const state = async (): Promise<TaskStateV1> => fixture<TaskStateV1>("task-state");
+const state = async (): Promise<TaskStateV1> => {
+  const value = await fixture<TaskStateV1>("task-state");
+  const { open_gate: _openGate, ...withoutOpenGate } = value;
+  return withoutOpenGate;
+};
 const taskInitialization = async (): Promise<TaskInitializationV1> =>
   fixture<TaskInitializationV1>("task-initialization");
 const legacyImport = async (): Promise<LegacyImportInitializationV1> =>

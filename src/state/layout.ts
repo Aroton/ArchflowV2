@@ -2,6 +2,7 @@ import { constants as fsConstants } from "node:fs";
 import { lstat, mkdir } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
 
+import { parsePathSafeId, type PathSafeId } from "../contracts/evidence.js";
 import { openResolved, type ResolvedTaskPath } from "../repository/paths.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
 
@@ -16,6 +17,13 @@ export class ResultLayoutError extends Error {
   public constructor(public readonly stage: "create" | "verify") {
     super(`result layout ${stage} failed`);
     this.name = "ResultLayoutError";
+  }
+}
+
+export class DecisionLayoutError extends Error {
+  public constructor(public readonly stage: "create" | "verify") {
+    super(`decision layout ${stage} failed`);
+    this.name = "DecisionLayoutError";
   }
 }
 
@@ -53,6 +61,40 @@ export async function ensureIntentDirectory(authority: TransactionAuthority): Pr
   } finally {
     await handle?.close().catch(() => undefined);
   }
+}
+
+async function ensureDecisionChild(path: ResolvedTaskPath): Promise<void> {
+  try {
+    await mkdir(path);
+  } catch (error) {
+    if (errnoOf(error) !== "EEXIST") throw new DecisionLayoutError("create");
+  }
+  const directoryFlag = (fsConstants as { O_DIRECTORY?: number }).O_DIRECTORY ?? 0;
+  let handle;
+  try {
+    const metadata = await lstat(path);
+    if (metadata.isSymbolicLink() || !metadata.isDirectory()) throw new DecisionLayoutError("verify");
+    handle = await openResolved(path, fsConstants.O_RDONLY | directoryFlag);
+    if (!(await handle.stat()).isDirectory()) throw new DecisionLayoutError("verify");
+  } catch (error) {
+    if (error instanceof DecisionLayoutError) throw error;
+    throw new DecisionLayoutError("verify");
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+/** Creates and verifies `decisions/` and one validated caller-named gate child. */
+export async function ensureDecisionDirectory(
+  authority: TransactionAuthority,
+  gateId: PathSafeId,
+): Promise<void> {
+  assertInternalTransactionAuthority(authority);
+  const validatedGateId = parsePathSafeId(gateId);
+  const decisions = join(authority.task_root, "decisions") as ResolvedTaskPath;
+  const gate = join(decisions, validatedGateId) as ResolvedTaskPath;
+  await ensureDecisionChild(decisions);
+  await ensureDecisionChild(gate);
 }
 
 

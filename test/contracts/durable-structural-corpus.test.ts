@@ -265,6 +265,7 @@ const taskStateTwoWaivers: JsonObject = at(taskState.sample, "waivers", (value) 
     rule_id: "constitution:no-vendored-code",
     rule_version: 1,
     subject_digest: "b".repeat(64),
+    scope: { operation: "review-trigger", boundary: "subject" },
     granted: true,
     expires: "task-complete",
     granted_at_revision: 4,

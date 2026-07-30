@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:gate-request",
+  "title": "ArchFlow Archived Gate Request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "gate_id", "intent_id", "request_digest", "task_id", "phase_instance", "summary", "subject_digest", "context_digest", "current_evidence", "kind", "context", "allowed_decisions", "opened_at_revision"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "gate_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
+    "intent_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
+    "request_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "task_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
+    "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 4096, "pattern": "\\S" },
+    "subject_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "context_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+    "current_evidence": { "$ref": "#/$defs/currentEvidence" },
+    "supersedes": { "$ref": "#/$defs/supersession" },
+    "kind": { "enum": ["artifact-approval", "review-trigger", "material-drift", "adjudication-failure", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"] },
+    "context": { "type": "object" },
+    "allowed_decisions": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "enum": ["approve", "revise", "reject", "waiver-requested", "amend-upstream", "revise-current", "retry-once", "abort", "revert-edit", "start-base-amendment", "authorize-commit", "discard-and-restore", "adopt-as-new-generation", "accept-import-audit", "grant", "deny", "cancel"] }
+    },
+    "opened_at_revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/artifactApproval" },
+    { "$ref": "#/$defs/reviewTrigger" },
+    { "$ref": "#/$defs/materialDrift" },
+    { "$ref": "#/$defs/adjudicationFailure" },
+    { "$ref": "#/$defs/attemptsExhausted" },
+    { "$ref": "#/$defs/constitutionEdit" },
+    { "$ref": "#/$defs/commitAuthorization" },
+    { "$ref": "#/$defs/restoreCollision" },
+    { "$ref": "#/$defs/migrationAudit" },
+    { "$ref": "#/$defs/reviewWaiver" },
+    { "$ref": "#/$defs/adjudicationWaiver" }
+  ],
+  "$defs": {
+    "currentEvidence": {
+      "type": "object", "additionalProperties": false, "required": ["set_digest", "slots"],
+      "properties": {
+        "set_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "slots": { "$ref": "urn:archflow:schema:v1:evidence-slots" }
+      }
+    },
+    "supersession": {
+      "type": "object", "additionalProperties": false,
+      "required": ["superseded_gate_id", "accepted_triage_digest", "old_subject_digest"],
+      "properties": {
+        "superseded_gate_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
+        "accepted_triage_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "old_subject_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" }
+      }
+    },
+    "origin": {
+      "type": "object", "additionalProperties": false,
+      "required": ["origin_gate_id", "origin_decision_digest", "origin_context_digest", "task_id", "phase_instance", "subject_digest", "current_evidence_set_digest", "rule", "scope"],
+      "properties": {
+        "origin_gate_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
+        "origin_decision_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "origin_context_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "task_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
+        "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
+        "subject_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "current_evidence_set_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "rule": { "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/rule" },
+        "scope": { "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/waiverScope" }
+      }
+    },
+    "waiverContext": {
+      "type": "object", "additionalProperties": false, "required": ["origin", "rationale"],
+      "properties": { "origin": { "$ref": "#/$defs/origin" }, "rationale": { "type": "string", "minLength": 1, "maxLength": 4096, "pattern": "\\S" } }
+    },
+    "artifactApproval": { "type": "object", "properties": { "kind": { "const": "artifact-approval" }, "context": { "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/artifactApproval/properties/context" }, "allowed_decisions": { "const": ["approve", "revise", "reject", "cancel"] } }, "required": ["kind", "context", "allowed_decisions"] },
+    "reviewTrigger": { "type": "object", "properties": { "kind": { "const": "review-trigger" }, "context": { "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/reviewTrigger/properties/context" }, "allowed_decisions": { "const": ["approve", "revise", "reject", "waiver-requested", "cancel"] } }, "required": ["kind", "context", "allowed_decisions"] },
+    "materialDrift": { "type": "object", "properties": { "kind": { "const": "material-drift" }, "context": { "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/materialDrift/properties/context" }, "allowed_decisions": { "const": ["amend-upstream", "revise-current", "reject", "cancel"] } }, "required": ["kind", "context", "allowed_decisions"] },
+    "adjudicationFailure": { "type": "object", "properties": { "kind": { "const": "adjudication-failure" }, "context": { "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/adjudicationFailure/properties/context" }, "allowed_decisions": { "const": ["approve", "revise", "reject", "waiver-requested", "cancel"] } }, "required": ["kind", "context", "allowed_decisions"] },
+    "attemptsExhausted": { "type": "object", "properties": { "kind": { "const": "attempts-exhausted" }, "context": { "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/attemptsExhausted/properties/context" }, "allowed_decisions": { "const": ["retry-once", "revise", "abort", "cancel"] } }, "required": ["kind", "context", "allowed_decisions"] },
+    "constitutionEdit": { "type": "object", "properties": { "kind": { "const": "constitution-edit" }, "context": { "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/constitutionEdit/properties/context" }, "allowed_decisions": { "const": ["revert-edit", "start-base-amendment", "abort", "cancel"] } }, "required": ["kind", "context", "allowed_decisions"] },
+    "commitAuthorization": { "type": "object", "properties": { "kind": { "const": "commit-authorization" }, "context": { "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/commitAuthorization/properties/context" }, "allowed_decisions": { "const": ["authorize-commit", "revise", "abort", "cancel"] } }, "required": ["kind", "context", "allowed_decisions"] },
+    "restoreCollision": { "type": "object", "properties": { "kind": { "const": "restore-collision" }, "context": { "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/restoreCollision/properties/context" }, "allowed_decisions": { "const": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"] } }, "required": ["kind", "context", "allowed_decisions"] },
+    "migrationAudit": { "type": "object", "properties": { "kind": { "const": "migration-audit" }, "context": { "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/migrationAudit/properties/context" }, "allowed_decisions": { "const": ["accept-import-audit", "revise", "abort", "cancel"] } }, "required": ["kind", "context", "allowed_decisions"] },
+    "reviewWaiver": { "type": "object", "properties": { "kind": { "const": "review-trigger" }, "context": { "$ref": "#/$defs/waiverContext" }, "allowed_decisions": { "const": ["grant", "deny", "cancel"] } }, "required": ["kind", "context", "allowed_decisions"] },
+    "adjudicationWaiver": { "type": "object", "properties": { "kind": { "const": "adjudication-failure" }, "context": { "$ref": "#/$defs/waiverContext" }, "allowed_decisions": { "const": ["grant", "deny", "cancel"] } }, "required": ["kind", "context", "allowed_decisions"] }
+  }
+}

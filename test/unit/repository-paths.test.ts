@@ -13,7 +13,7 @@ import { join, relative, sep } from "node:path";
 
 import { afterAll, describe, expect, it, vi } from "vitest";
 
-import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parsePathSafeId, parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
 import {
   encodePhaseInstance,
   parsePositiveSafePhaseNumber,
@@ -34,6 +34,9 @@ import { discoverWorktree, type RootBoundGitRunner } from "../../src/repository/
 import {
   classifyRepositoryPath,
   classifyTaskPath,
+  gateCounterReviewClaim,
+  gateDecisionClaim,
+  gateRequestClaim,
   openResolved,
   resolveRepositoryPath,
   resolveTaskRoot,
@@ -42,6 +45,16 @@ import {
 } from "../../src/repository/paths.js";
 
 const TASK_ID = parseTaskSlug("demo-task");
+
+describe("gate path constructors", () => {
+  it("constructs deterministic decision and gate-counter claims", () => {
+    const gateId = parsePathSafeId("gate-1");
+    const phase = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(6) });
+    expect(gateRequestClaim(gateId)).toBe("decisions/gate-1/request.json");
+    expect(gateDecisionClaim(gateId)).toBe("decisions/gate-1/decision.json");
+    expect(gateCounterReviewClaim(phase, gateId)).toBe("reviews/phase-impl-6.gate-counter.gate-1.md");
+  });
+});
 
 const context: RepositoryOperationContext = {
   task_id: TASK_ID,

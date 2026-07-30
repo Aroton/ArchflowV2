@@ -6,12 +6,12 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parsePathSafeId, parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { createGitRunner, preflightGit, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "../../src/state/authority.js";
-import { ensureIntentDirectory, type IntentLayoutError } from "../../src/state/layout.js";
+import { ensureDecisionDirectory, ensureIntentDirectory, type DecisionLayoutError, type IntentLayoutError } from "../../src/state/layout.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -80,5 +80,29 @@ describe("intent directory layout", () => {
     const sibling = join(value.task_root, "..", "other-task", "intents");
     await expect(ensureIntentDirectory({ ...value } as TransactionAuthority)).rejects.toThrow(/authentic/u);
     await expect(lstat(sibling)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+describe("decision directory layout", () => {
+  it("creates and idempotently verifies the root and validated gate child", async () => {
+    const { value } = await authority();
+    await ensureDecisionDirectory(value, parsePathSafeId("gate-1"));
+    await ensureDecisionDirectory(value, parsePathSafeId("gate-1"));
+    expect((await lstat(join(value.task_root, "decisions", "gate-1"))).isDirectory()).toBe(true);
+  });
+
+  it("rejects symlink substitutions at either directory level", async () => {
+    const external = realpathSync(mkdtempSync(join(tmpdir(), "archflow-decision-layout-target-")));
+    roots.push(external);
+    const first = await authority();
+    symlinkSync(external, join(first.value.task_root, "decisions"), "dir");
+    await expect(ensureDecisionDirectory(first.value, parsePathSafeId("gate-1")))
+      .rejects.toMatchObject({ stage: "verify" } satisfies Partial<DecisionLayoutError>);
+
+    const second = await authority();
+    mkdirSync(join(second.value.task_root, "decisions"));
+    symlinkSync(external, join(second.value.task_root, "decisions", "gate-1"), "dir");
+    await expect(ensureDecisionDirectory(second.value, parsePathSafeId("gate-1")))
+      .rejects.toMatchObject({ stage: "verify" } satisfies Partial<DecisionLayoutError>);
   });
 });

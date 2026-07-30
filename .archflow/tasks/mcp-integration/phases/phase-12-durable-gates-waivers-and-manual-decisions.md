@@ -1,6 +1,6 @@
 # Phase 12: Durable Gates, Waivers, and Manual Decisions
 
-**Status**: DESIGNED
+**Status**: COMPLETE
 **Task**: mcp-integration
 **Goal**: Persist every human authority boundary independently of a live MCP request.
 **Requirements**: REQ-09, REQ-13, REQ-18, REQ-20, REQ-21, REQ-22, REQ-23, REQ-24, REQ-36, REQ-37, REQ-38, REQ-39, REQ-40, REQ-41, REQ-50
@@ -92,15 +92,15 @@ Gate lifecycle is the *only* writer of `open_gate`, `approvals`, and `waivers`. 
 
 ## Success Criteria
 
-- [ ] A call blocks until a schema-valid exact decision or an explicit cancellation/failure, and never returns pending as success; killing the process or aborting mid-wait leaves exactly one pending gate that a later call with the same intent resumes.
-- [ ] Partial, malformed, non-canonical, stale, wrong-task, wrong-phase, wrong-gate-ID, wrong-subject-digest, wrong-context-digest, duplicated, and approval-shaped constitution-edit decisions all fail to resolve or advance the gate; one valid decision resolves it exactly once, a replayed call returns the recorded outcome instead of re-opening, and no second `ApprovalRef` for one gate ID is ever appended.
-- [ ] Two processes cannot open or resolve conflicting gates or waivers on one task; the loser writes nothing and receives a classified non-advancing failure; two tasks wait concurrently with neither holding a lock.
-- [ ] No non-advancing decision reaches `approvals` or `waivers`: every arm of the decision vocabulary lands where `gateDecisionEffect` says it does, and a `revise`, `reject`, or `abort` archives a closure without granting authority.
-- [ ] A decision a human writes into a live `gate.json` window that state does not yet name survives the retry instead of being deleted as stale, and a decision replaced between the wait's signal and the resolve lock is archived as the human last left it.
-- [ ] Manual files record several non-colliding gates, one waiver, supplemental review and decline, and commit authorization; a server-opened gate is resolved from its manual `decision.json` before adoption, and import then adopts only complete records, skips gate IDs already in state, and is idempotent across repeated runs.
-- [ ] A `SUPPLEMENTAL_REVIEW_REQUIRED` retry after an intervening transition reuses the same intent and request digest with a refreshed `expected_revision` and unchanged `current_evidence`, and resolves the same gate ID; an accepted-change supersession closes the old gate, records no approval, and forces a fresh intent and gate ID.
-- [ ] `waiver-requested` advances nothing and archives its origin gate before the sole waiver gate opens; a grant resumes only the recorded rule and scope, a denial advances nothing, and no state is reachable in which two gates are open. `restore-collision` exposes only `discard-and-restore`, `adopt-as-new-generation` with changed inputs and a rationale, and `abort`.
-- [ ] An aborted invocation standing in for a host timeout leaves one pending gate, and a later in-process invocation resumes and resolves it exactly once — timeout-then-resume is the tested normal path, with real-host timing proved in Phase 21.
+- [x] A call blocks until a schema-valid exact decision or an explicit cancellation/failure, and never returns pending as success; killing the process or aborting mid-wait leaves exactly one pending gate that a later call with the same intent resumes.
+- [x] Partial, malformed, non-canonical, stale, wrong-task, wrong-phase, wrong-gate-ID, wrong-subject-digest, wrong-context-digest, duplicated, and approval-shaped constitution-edit decisions all fail to resolve or advance the gate; one valid decision resolves it exactly once, a replayed call returns the recorded outcome instead of re-opening, and no second `ApprovalRef` for one gate ID is ever appended.
+- [x] Two processes cannot open or resolve conflicting gates or waivers on one task; the loser writes nothing and receives a classified non-advancing failure; two tasks wait concurrently with neither holding a lock.
+- [x] No non-advancing decision reaches `approvals` or `waivers`: every arm of the decision vocabulary lands where `gateDecisionEffect` says it does, and a `revise`, `reject`, or `abort` archives a closure without granting authority.
+- [x] A decision a human writes into a live `gate.json` window that state does not yet name survives the retry instead of being deleted as stale, and a decision replaced between the wait's signal and the resolve lock is archived as the human last left it.
+- [x] Manual files record several non-colliding gates, one waiver, supplemental review and decline, and commit authorization; a server-opened gate is resolved from its manual `decision.json` before adoption, and import then adopts only complete records, skips gate IDs already in state, and is idempotent across repeated runs.
+- [x] A `SUPPLEMENTAL_REVIEW_REQUIRED` retry after an intervening transition reuses the same intent and request digest with a refreshed `expected_revision` and unchanged `current_evidence`, and resolves the same gate ID; an accepted-change supersession closes the old gate, records no approval, and forces a fresh intent and gate ID.
+- [x] `waiver-requested` advances nothing and archives its origin gate before the sole waiver gate opens; a grant resumes only the recorded rule and scope, a denial advances nothing, and no state is reachable in which two gates are open. `restore-collision` exposes only `discard-and-restore`, `adopt-as-new-generation` with changed inputs and a rationale, and `abort`.
+- [x] An aborted invocation standing in for a host timeout leaves one pending gate, and a later in-process invocation resumes and resolves it exactly once — timeout-then-resume is the tested normal path, with real-host timing proved in Phase 21.
 
 ## Verification Steps
 
@@ -114,5 +114,36 @@ Run `npm run typecheck`, the affected Vitest files, `npm test`, `npm run test:co
 
 **Human judgement only**: whether the `gate.json` template is actually fillable by a human in a second terminal without reading the source, and whether the `SUPPLEMENTAL_REVIEW_REQUIRED` prose amendment (the registry's `retryable: false` is correct — the same intent is retryable only *after* triage, which is what `next_action` already says) should instead change the registry.
 
+## Implementation Log
+
+**Completed**: 2026-07-30
+**Human verdict**: approved after Claude Code implementation counter-review and post-fix verification.
+
+### Delivered
+
+- Added canonical durable request, decision-record, and active-gate roots with registered JSON Schemas, parsers, fingerprint derivations, checkpoint mirrors, and semantic binding checks.
+- Implemented the locked gate lifecycle: deterministic open, poll-only wait, exact under-lock decision binding, immutable closure archive, receipt/state ordering, replay cleanup, cancellation, supersession, waiver origin authentication, manual creation/import, and reconciliation heads.
+- Added state-owned `open_gate.frozen_state_digest`, including the required absence of `committed_intent`, so the open revision is stable without introducing a digest cycle.
+- Applied restore-collision decisions against retained Phase 11 authority, including fresh destination collisions, source-first and destination-first partial rename recovery, exact replay, and refusal of third generations.
+- Added kind-aware human decision templates. Ordinary gates advertise envelope fields, waiver gates advertise their parallel decision fields, every gate advertises cancellation, and a missing or invalid `gate.json` is reconstructed from immutable `request.json` rather than becoming authority.
+- Added contract, unit, integration, two-process, and real-SIGKILL coverage for the decision vocabulary, exactly-once authority, independent waits, crash recovery, interface races, supplemental review, waiver sequencing, and restore behavior.
+
+### Documented deviations and limitations
+
+- The planned request-owned opened-state digest became `OpenGateRef.frozen_state_digest`. Request creation can precede state publication and survive an unrelated retry revision; placing the digest in state avoids making the immutable request depend on a state revision that may legitimately change before publication.
+- Supplemental ledger authority is reconstructed from the exact caller-supplied `supplemental_outcome` plus the observable review artifact rather than trusting mutable `gate.json`. Phase 13 consumers must replay that outcome on each triaged retry. A decline has no artifact and therefore must also be replayed after an aborted resolving invocation.
+- Restore rename recovery authenticates both members against the gated before or exact desired generation, then applies remaining members source-first as independently authenticated projections. This permits an explicitly approved destination overwrite while retaining per-path revalidation and rollback.
+- Reusing an intent after a cancelled or superseded gate with a changed request digest can open a fresh gate because no durable intent-to-gate index survives that non-success closure. This is classification hygiene only: the fresh gate still requires its own human decision.
+
+### Verification
+
+- `npm run typecheck`, `npm run test:contracts` (453/453), `npm run test:mcp-runtime` (101/101), `npm run build:temp`, dependency/notices checks, Phase 4 boundary checks, and `git diff --check` passed.
+- Focused Phase 12 lifecycle tests passed 27/27; real two-process/SIGKILL tests passed 11/11; the final independent blocker/major review reported no findings.
+- Two consecutive `npm test` runs and the final aggregate `npm run check` each passed 1,329/1,332 tests. The only failures were the same three inherited `test/integration/release-offline.test.ts` assertions documented by Phase 11: stale tracked release input and residual runtime loader checks.
+
+### Durable project guidance
+
+- Added permanent `CLAUDE.md` guidance that disposable interface projections must be reconstructible from durable authority and that a sole human renderer must enumerate every resolver-supported decision shape.
+
 ---
-*Designed: 2026-07-30; revised after sub-agent review and cross-client counter-review: 2026-07-30*
+*Designed: 2026-07-30; revised after sub-agent review and cross-client counter-review: 2026-07-30; implemented and approved: 2026-07-30*

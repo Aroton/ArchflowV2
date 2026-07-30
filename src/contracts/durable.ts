@@ -15,7 +15,9 @@ import type { MaintenanceRecordV1 } from "./durable-maintenance.js";
 import type { IntentReceiptV1 } from "./durable-intent.js";
 import type { TaskStateV1 } from "./durable-state.js";
 import type { TaskInitializationV1 } from "./durable-task-initialization.js";
+import type { GateDecisionRecordV1, GateRequestV1, WaiverGateContext } from "./durable-gate.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "./errors.js";
+import { validateGateDecision, type GateContext, type GateKind } from "./gates.js";
 import type { Sha256Digest } from "./evidence.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
@@ -49,6 +51,8 @@ export type DurableSemanticSubject = {
   readonly artifact?: CanonicalDocument<DurableArtifact>;
   readonly maintenance?: CanonicalDocument<MaintenanceRecordV1>;
   readonly result_manifest?: CanonicalDocument<ResultManifestV1>;
+  readonly gate_request?: CanonicalDocument<GateRequestV1>;
+  readonly gate_decision?: CanonicalDocument<GateDecisionRecordV1>;
   readonly intent_relation?: DurableIntentRelation;
 };
 
@@ -80,6 +84,12 @@ export function createCommittedIntentSubject(
   materialize<TaskStateV1>(state, "committed intent state document");
   materialize<IntentReceiptV1>(receipt, "committed intent receipt document");
   return Object.freeze({ intent_relation: Object.freeze({ mode: "committed", state, receipt }) });
+}
+
+/** Binds every field frozen by an open gate without introducing a digest cycle through `open_gate`. */
+export function openGateFrozenStateDigest(state: TaskStateV1): Sha256Digest {
+  const { open_gate: _open, ...shell } = state;
+  return canonicalJsonDigest({ schema_version: "1", digest_kind: "open-gate-frozen-state", state: shell });
 }
 
 /**
@@ -167,6 +177,16 @@ export const DURABLE_ISSUE_CODES = Object.freeze({
   /** result */ resultManifestProjectionsMismatch: "result-manifest-projections-mismatch",
   /** result */ resultManifestAccountingMismatch: "result-manifest-accounting-mismatch",
   /** result */ resultManifestSecretScanMismatch: "result-manifest-secret-scan-mismatch",
+  /** gate */ gateDecisionGateIdMismatch: "gate-decision-gate-id-mismatch",
+  /** gate */ gateDecisionTaskMismatch: "gate-decision-task-mismatch",
+  /** gate */ gateDecisionPhaseMismatch: "gate-decision-phase-mismatch",
+  /** gate */ gateDecisionKindMismatch: "gate-decision-kind-mismatch",
+  /** gate */ gateDecisionSubjectMismatch: "gate-decision-subject-mismatch",
+  /** gate */ gateDecisionContextMismatch: "gate-decision-context-mismatch",
+  /** gate */ gateDecisionEnvelopeMismatch: "gate-decision-envelope-mismatch",
+  /** gate */ gateDecisionPayloadInvalid: "gate-decision-payload-invalid",
+  /** gate */ waiverDecisionOriginMismatch: "waiver-decision-origin-mismatch",
+  /** gate */ openGateFrozenStateMismatch: "open-gate-frozen-state-mismatch",
 } as const);
 
 type IssueCode = (typeof DURABLE_ISSUE_CODES)[keyof typeof DURABLE_ISSUE_CODES];
@@ -321,6 +341,8 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   const artifactDocument = ownDataSlot(subject, "artifact");
   const maintenanceDocument = ownDataSlot(subject, "maintenance");
   const resultManifestDocument = ownDataSlot(subject, "result_manifest");
+  const gateRequestDocument = ownDataSlot(subject, "gate_request");
+  const gateDecisionDocument = ownDataSlot(subject, "gate_decision");
   const relationValue = ownDataSlot(subject, "intent_relation");
 
   const stateSlot =
@@ -337,6 +359,8 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     resultManifestDocument === undefined
       ? undefined
       : materialize<ResultManifestV1>(resultManifestDocument, "durable result manifest document");
+  const gateRequestSlot = gateRequestDocument === undefined ? undefined : materialize<GateRequestV1>(gateRequestDocument, "durable gate request document");
+  const gateDecisionSlot = gateDecisionDocument === undefined ? undefined : materialize<GateDecisionRecordV1>(gateDecisionDocument, "durable gate decision document");
 
   let relation: { readonly mode: "prepared" | "committed"; readonly state: Materialized<TaskStateV1>; readonly receipt: Materialized<IntentReceiptV1> } | undefined;
   if (relationValue !== undefined) {
@@ -363,6 +387,8 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   const artifact = artifactSlot?.value;
   const maintenance = maintenanceSlot?.value;
   const resultManifest = resultManifestSlot?.value;
+  const gateRequest = gateRequestSlot?.value;
+  const gateDecision = gateDecisionSlot?.value;
   const intentState = relation?.state.value;
   const receipt = relation?.receipt.value;
 
@@ -398,8 +424,44 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   if (resultManifest !== undefined && canonicalJsonDigest(resultManifest) !== resultManifestSlot?.digest) {
     return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.documentDigestMismatch));
   }
+  if (gateRequest !== undefined && canonicalJsonDigest(gateRequest) !== gateRequestSlot?.digest) {
+    return fail(contractInvalid(DURABLE_ISSUE_CODES.documentDigestMismatch));
+  }
+  if (gateDecision !== undefined && canonicalJsonDigest(gateDecision) !== gateDecisionSlot?.digest) {
+    return fail(contractInvalid(DURABLE_ISSUE_CODES.documentDigestMismatch));
+  }
+  if (state?.open_gate !== undefined && openGateFrozenStateDigest(state) !== state.open_gate.frozen_state_digest) {
+    return fail(stateInvalid(state, DURABLE_ISSUE_CODES.openGateFrozenStateMismatch));
+  }
   if (receipt !== undefined && canonicalJsonDigest(receipt) !== relation?.receipt.digest) {
     return fail(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptSelfDigestMismatch));
+  }
+
+  if (gateRequest !== undefined && gateDecision !== undefined) {
+    if (gateDecision.gate_id !== gateRequest.gate_id) return fail(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionGateIdMismatch));
+    if (gateDecision.task_id !== gateRequest.task_id) return fail(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionTaskMismatch));
+    if (gateDecision.phase_instance !== gateRequest.phase_instance) return fail(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPhaseMismatch));
+    if (gateDecision.kind !== gateRequest.kind) return fail(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionKindMismatch));
+    if (gateDecision.subject_digest !== gateRequest.subject_digest) return fail(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionSubjectMismatch));
+    if (gateDecision.context_digest !== gateRequest.context_digest) return fail(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionContextMismatch));
+
+    if (gateDecision.outcome === "decided") {
+      const envelope = gateDecision.envelope;
+      if (envelope.gate_id !== gateRequest.gate_id || envelope.task_id !== gateRequest.task_id || envelope.phase_instance !== gateRequest.phase_instance || envelope.kind !== gateRequest.kind || envelope.subject_digest !== gateRequest.subject_digest || envelope.context_digest !== gateRequest.context_digest) {
+        return fail(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionEnvelopeMismatch));
+      }
+      if ("origin" in gateRequest.context) return fail(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPayloadInvalid));
+      try {
+        validateGateDecision(gateRequest.kind, gateRequest.context as GateContext<GateKind>, envelope.payload);
+      } catch {
+        return fail(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPayloadInvalid));
+      }
+    } else if (gateDecision.outcome === "waiver-decided") {
+      const waiverContext = gateRequest.context as WaiverGateContext;
+      if (!("origin" in waiverContext) || !isDeepStrictEqual(gateDecision.origin, waiverContext.origin) || !isDeepStrictEqual(gateDecision.scope, waiverContext.origin.scope) || gateDecision.kind !== waiverContext.origin.scope.operation) {
+        return fail(contractInvalid(DURABLE_ISSUE_CODES.waiverDecisionOriginMismatch));
+      }
+    }
   }
 
   /*

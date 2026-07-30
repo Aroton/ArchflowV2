@@ -34,6 +34,7 @@ const expectedSchemaDocuments = [
   "rubric",
   "gate-contract",
   "gate-decision",
+  "supplemental-review",
   "project-error",
   "durable-primitives",
   "task-state",

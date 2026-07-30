@@ -297,6 +297,7 @@
               "old_subject_digest": { "$ref": "#/$defs/digest" }
             }
           },
+          "supplemental_outcome": { "$ref": "urn:archflow:schema:v1:supplemental-review" },
           "kind": {
             "enum": [
               "artifact-approval",

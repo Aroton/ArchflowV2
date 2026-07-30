@@ -6,14 +6,15 @@ import gateDecisionSchema from "../../src/contracts/schemas/v1/gate-decision.sch
 import projectErrorSchema from "../../src/contracts/schemas/v1/project-error.schema.json" with { type: "json" };
 import protocolErrorSchema from "../../src/contracts/schemas/v1/protocol-error.schema.json" with { type: "json" };
 import primitivesSchema from "../../src/contracts/schemas/v1/primitives.schema.json" with { type: "json" };
+import pathClaimSchema from "../../src/contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
 import supplementalSchema from "../../src/contracts/schemas/v1/supplemental-review.schema.json" with { type: "json" };
 import { createProjectError, createProtocolError, parseProjectError } from "../../src/contracts/errors.js";
 import { parseGateContract } from "../../src/contracts/gates.js";
 import { parseSupplementalReviewOutcome } from "../../src/contracts/supplemental.js";
 
 const D = "a".repeat(64);
-const gateValidator = createJsonSchemaValidator(gateContractSchema, [primitivesSchema]);
-const decisionValidator = createJsonSchemaValidator(gateDecisionSchema, [primitivesSchema, gateContractSchema]);
+const gateValidator = createJsonSchemaValidator(gateContractSchema, [primitivesSchema, pathClaimSchema]);
+const decisionValidator = createJsonSchemaValidator(gateDecisionSchema, [primitivesSchema, pathClaimSchema, gateContractSchema]);
 const projectValidator = createJsonSchemaValidator(projectErrorSchema);
 const protocolValidator = createJsonSchemaValidator(protocolErrorSchema);
 const supplementalValidator = createJsonSchemaValidator(supplementalSchema, [primitivesSchema]);

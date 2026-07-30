@@ -314,7 +314,7 @@
             "current_generation_digest"
           ],
           "properties": {
-            "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+            "path": { "$ref": "urn:archflow:schema:v1:path-claim" },
             "recorded_generation_digest": { "$ref": "#/$defs/digest" },
             "current_generation_digest": { "$ref": "#/$defs/digest" },
             "adoption_candidate": { "$ref": "#/$defs/authorityLink" }

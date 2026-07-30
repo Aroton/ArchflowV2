@@ -134,6 +134,10 @@
       "rule_id": "constitution:no-broad-refactor",
       "rule_version": 1,
       "subject_digest": "cdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab",
+      "scope": {
+        "operation": "review-trigger",
+        "boundary": "subject"
+      },
       "granted": true,
       "expires": "task-complete",
       "granted_at_revision": 1
@@ -143,6 +147,10 @@
       "rule_id": "workflow:checkpoint-scope",
       "rule_version": 1,
       "subject_digest": "def0123456789abcdef0123456789abcdef0123456789abcdef0123456789abc",
+      "scope": {
+        "operation": "adjudication-failure",
+        "boundary": "phase"
+      },
       "granted": false,
       "expires": "task-complete",
       "granted_at_revision": 1
@@ -153,6 +161,7 @@
     "gate_kind": "commit-authorization",
     "subject_digest": "ef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd",
     "context_digest": "f0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde",
+    "frozen_state_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     "opened_at_revision": 1
   }
 }

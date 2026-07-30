@@ -61,6 +61,10 @@
       "rule_id": "constitution:no-broad-refactor",
       "rule_version": 2,
       "subject_digest": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+      "scope": {
+        "operation": "review-trigger",
+        "boundary": "subject"
+      },
       "granted": true,
       "expires": "task-complete",
       "granted_at_revision": 6
@@ -71,6 +75,7 @@
     "gate_kind": "commit-authorization",
     "subject_digest": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
     "context_digest": "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
+    "frozen_state_digest": "51ae34ac632d452ba5080e0156da7707d7a2e02642e575f361b8e73812584d5c",
     "opened_at_revision": 7
   },
   "committed_intent": {

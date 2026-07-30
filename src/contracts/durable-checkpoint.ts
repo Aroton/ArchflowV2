@@ -21,6 +21,7 @@ import {
   taskSlugV1Schema,
 } from "./evidence.js";
 import { GATE_KINDS } from "./gates.js";
+import type { WaiverScope } from "./gates.js";
 import type { RepositoryPathClaim } from "./path-claims.js";
 import { repositoryPathClaimV1Schema } from "./path-claims.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
@@ -165,6 +166,10 @@ export type ManualCheckpointImportV1 = InitialImportV1 | StateAnchoredImportV1 |
 
 const digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
 const positiveSafeInteger = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER) as unknown as z.ZodType<SafeInteger>;
+const waiverScopeV1Schema = z.object({
+  operation: z.enum(["review-trigger", "adjudication-failure"]),
+  boundary: z.enum(["subject", "phase", "task"]),
+}).strict() as unknown as z.ZodType<WaiverScope>;
 
 export const authoritativeResultRefV1Schema = z.object({
   phase_instance: phaseInstanceIdV1Schema,
@@ -188,6 +193,7 @@ export const waiverRefV1Schema = z.object({
   rule_id: safeIdV1Schema,
   rule_version: positiveSafeInteger,
   subject_digest: digest,
+  scope: waiverScopeV1Schema,
   granted: z.boolean(),
   expires: z.literal("task-complete"),
   granted_at_revision: positiveSafeInteger,
@@ -198,6 +204,8 @@ export const openGateRefV1Schema = z.object({
   gate_kind: z.enum(GATE_KINDS),
   subject_digest: digest,
   context_digest: digest,
+  frozen_state_digest: digest,
+  waiver_origin_gate_id: pathSafeIdV1Schema.optional(),
   opened_at_revision: positiveSafeInteger,
 }).strict() as unknown as z.ZodType<OpenGateRef>;
 

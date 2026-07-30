@@ -1,6 +1,6 @@
 import type { GitOid } from "./canonical.js";
 import type { PathSafeId, SafeId, SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
-import type { GateKind } from "./gates.js";
+import type { GateKind, WaiverScope } from "./gates.js";
 import type { RepositoryPathClaim } from "./path-claims.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import type { PipelineStep } from "./vocabulary.js";
@@ -64,13 +64,18 @@ export type OpenGateRef = {
   readonly gate_kind: GateKind;
   readonly subject_digest: Sha256Digest;
   readonly context_digest: Sha256Digest;
+  /** Domain-separated digest of this open revision excluding `open_gate` and `committed_intent`. */
+  readonly frozen_state_digest: Sha256Digest;
+  /** Present only for a waiver gate and names the gate whose decision requested the waiver. */
+  readonly waiver_origin_gate_id?: PathSafeId;
   /** `>= 1` (D8). */
   readonly opened_at_revision: SafeInteger;
 };
 
 /**
  * `expires` is the const `"task-complete"` — the narrowest representation of the only expiry this
- * project has. That is a *format* decision. Waiver scope and expiry *policy* are Phase 11's.
+ * project has. That is a *format* decision. Phase 12 records waiver scope; Phase 14 owns expiry
+ * policy enforcement.
  */
 export type WaiverRef = {
   readonly gate_id: PathSafeId;
@@ -78,6 +83,7 @@ export type WaiverRef = {
   /** `>= 1` (D8). */
   readonly rule_version: SafeInteger;
   readonly subject_digest: Sha256Digest;
+  readonly scope: WaiverScope;
   readonly granted: boolean;
   readonly expires: "task-complete";
   /** `>= 1` (D8). */
@@ -147,7 +153,7 @@ export type TaskStateV1 = {
   readonly waivers: readonly WaiverRef[];
   /**
    * At most one, and a single optional object rather than an array: a nested or concurrent gate is
-   * *unrepresentable* rather than merely rejected. Phase 11 owns the one-active-gate lifecycle —
+   * *unrepresentable* rather than merely rejected. Phase 12 owns the one-active-gate lifecycle —
    * when this may be set, cleared, or superseded. Phase 7 owns only the shape.
    */
   readonly open_gate?: OpenGateRef;

@@ -5,6 +5,7 @@ import { gateDecisionEffect, parseGateContract, parseGateDecisionEnvelope, type 
 import gateContractSchema from "../../src/contracts/schemas/v1/gate-contract.schema.json" with { type: "json" };
 import gateDecisionSchema from "../../src/contracts/schemas/v1/gate-decision.schema.json" with { type: "json" };
 import primitivesSchema from "../../src/contracts/schemas/v1/primitives.schema.json" with { type: "json" };
+import pathClaimSchema from "../../src/contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
 import projectErrorSchema from "../../src/contracts/schemas/v1/project-error.schema.json" with { type: "json" };
 import protocolErrorSchema from "../../src/contracts/schemas/v1/protocol-error.schema.json" with { type: "json" };
 import supplementalSchema from "../../src/contracts/schemas/v1/supplemental-review.schema.json" with { type: "json" };
@@ -17,8 +18,8 @@ type ErrorDefinition = { readonly owner: string; readonly retryable: boolean; re
 const D = (character = "a"): string => character.repeat(64);
 const RULE = { rule_id: "trust-boundary", rule_version: 1 };
 const AUTHORITY = { link_digest: D("a"), purpose: "restore-adoption", proposed_generation_digest: D("b"), changed_input_fingerprint: D("c") };
-const gateValidator = createJsonSchemaValidator(gateContractSchema, [primitivesSchema]);
-const decisionValidator = createJsonSchemaValidator(gateDecisionSchema, [primitivesSchema, gateContractSchema]);
+const gateValidator = createJsonSchemaValidator(gateContractSchema, [primitivesSchema, pathClaimSchema]);
+const decisionValidator = createJsonSchemaValidator(gateDecisionSchema, [primitivesSchema, pathClaimSchema, gateContractSchema]);
 const projectValidator = createJsonSchemaValidator(projectErrorSchema);
 const protocolValidator = createJsonSchemaValidator(protocolErrorSchema);
 const supplementalValidator = createJsonSchemaValidator(supplementalSchema, [primitivesSchema]);

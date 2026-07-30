@@ -11,6 +11,7 @@ import {
 } from "../../src/contracts/canonical.js";
 import {
   DURABLE_ISSUE_CODES,
+  openGateFrozenStateDigest,
   validateDurableSemantics,
   type DurableArtifact,
   type DurableSemanticSubject,
@@ -59,7 +60,12 @@ const load = (name: string): Json =>
     readFileSync(new URL(`../fixtures/contracts/durable/${name}.valid.json`, import.meta.url), "utf8")
   ) as Json;
 
-const STATE = load("task-state");
+const OPEN_GATE_STATE = load("task-state");
+const STATE = (() => {
+  const state = structuredClone(OPEN_GATE_STATE);
+  delete state.open_gate;
+  return state;
+})();
 const TASK_INIT = load("task-initialization");
 const LEGACY_INIT = load("legacy-import-initialization");
 const DOCUMENT = load("document-artifact");
@@ -76,8 +82,12 @@ const copy = (value: Json): Json => structuredClone(value);
 const patch = (base: Json, changes: Json): Json => ({ ...structuredClone(base), ...changes });
 const list = (value: Json, key: string): Json[] => value[key] as Json[];
 
-const stateDoc = (value: Json): CanonicalDocument<TaskStateV1> =>
-  canonicalDocument(value as unknown as TaskStateV1);
+const withValidOpenGateDigest = (value: Json): TaskStateV1 => {
+  const state = structuredClone(value) as unknown as TaskStateV1;
+  if (state.open_gate === undefined) return state;
+  return { ...state, open_gate: { ...state.open_gate, frozen_state_digest: openGateFrozenStateDigest(state) } };
+};
+const stateDoc = (value: Json): CanonicalDocument<TaskStateV1> => canonicalDocument(withValidOpenGateDigest(value));
 const artifactDoc = (value: Json): CanonicalDocument<DurableArtifact> =>
   canonicalDocument(value as unknown as DurableArtifact);
 const maintenanceDoc = (value: Json): CanonicalDocument<MaintenanceRecordV1> =>
@@ -325,6 +335,30 @@ describe("rank 2 — state.phase_instance carriability precedes every rank that 
         issue_code: DURABLE_ISSUE_CODES.statePhaseInstanceUndecodable,
       })
     ).toThrow(z.ZodError);
+  });
+});
+
+describe("rank 3 — an open gate freezes its state shell", () => {
+  it("accepts the bound shell and rejects a committed-intent injection", () => {
+    const valid = withValidOpenGateDigest(OPEN_GATE_STATE);
+    expectAccept({ state: canonicalDocument(valid) });
+    const injected = {
+      ...valid,
+      committed_intent: {
+        intent_id: "injected-intent",
+        request_digest: FORGED_DIGEST,
+        receipt_digest: "1".repeat(64),
+        outcome_digest: "2".repeat(64),
+        prior_revision: 1,
+        resulting_revision: 2,
+        result_id: "injected-result",
+      },
+    } as unknown as TaskStateV1;
+    expectReject(
+      { state: canonicalDocument(injected) },
+      "STATE_INVALID",
+      { phase_instance: valid.phase_instance, issue_code: DURABLE_ISSUE_CODES.openGateFrozenStateMismatch },
+    );
   });
 });
 
@@ -1420,7 +1454,7 @@ describe("the validator claims nothing its durable subject cannot receive", () =
   });
 
   it("resolves no approvals[*].gate_id, open_gate.gate_id, or waivers[*].gate_id", () => {
-    const state = copy(STATE);
+    const state = copy(OPEN_GATE_STATE);
     for (const approval of list(state, "approvals")) approval.gate_id = "gate-that-does-not-exist";
     for (const waiver of list(state, "waivers")) waiver.gate_id = "gate-that-does-not-exist";
     (state.open_gate as Json).gate_id = "gate-that-does-not-exist";
@@ -1480,6 +1514,7 @@ describe("the pinned issue_code literals", () => {
     expect({ ...DURABLE_ISSUE_CODES }).toEqual({
       statePhaseInstanceUndecodable: "state-phase-instance-undecodable",
       documentDigestMismatch: "document-digest-mismatch",
+      openGateFrozenStateMismatch: "open-gate-frozen-state-mismatch",
       phaseInstanceUndecodable: "phase-instance-undecodable",
       implementationOutputPhaseKind: "implementation-output-phase-kind",
       renamePreviousPathEqualsPath: "rename-previous-path-equals-path",
@@ -1555,12 +1590,21 @@ describe("the pinned issue_code literals", () => {
       resultManifestProjectionsMismatch: "result-manifest-projections-mismatch",
       resultManifestAccountingMismatch: "result-manifest-accounting-mismatch",
       resultManifestSecretScanMismatch: "result-manifest-secret-scan-mismatch",
+      gateDecisionGateIdMismatch: "gate-decision-gate-id-mismatch",
+      gateDecisionTaskMismatch: "gate-decision-task-mismatch",
+      gateDecisionPhaseMismatch: "gate-decision-phase-mismatch",
+      gateDecisionKindMismatch: "gate-decision-kind-mismatch",
+      gateDecisionSubjectMismatch: "gate-decision-subject-mismatch",
+      gateDecisionContextMismatch: "gate-decision-context-mismatch",
+      gateDecisionEnvelopeMismatch: "gate-decision-envelope-mismatch",
+      gateDecisionPayloadInvalid: "gate-decision-payload-invalid",
+      waiverDecisionOriginMismatch: "waiver-decision-origin-mismatch",
     });
   });
 
   it("are all SafeCode, and rank 8 has none", () => {
     for (const code of Object.values(DURABLE_ISSUE_CODES)) expect(code).toMatch(SAFE_CODE);
-    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(77);
+    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(87);
     expect(Object.values(DURABLE_ISSUE_CODES)).not.toContain("input-fingerprint-mismatch");
   });
 });

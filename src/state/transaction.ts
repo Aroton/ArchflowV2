@@ -267,7 +267,12 @@ function assertPreserved(current: TaskStateV1, next: NextStateDraft, preparedVal
   ) {
     throw new TypeError("next state draft changed a transaction-substrate identity or pin");
   }
-  if (!sameCheckpoint(next.adopted_checkpoint, current.adopted_checkpoint)) {
+  if (
+    !sameCheckpoint(next.adopted_checkpoint, current.adopted_checkpoint) ||
+    !isDeepStrictEqual(next.open_gate, current.open_gate) ||
+    !isDeepStrictEqual(next.approvals, current.approvals) ||
+    !isDeepStrictEqual(next.waivers, current.waivers)
+  ) {
     assertInternalCheckpointAdoptionPlan(preparedValue);
   }
 }

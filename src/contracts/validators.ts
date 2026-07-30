@@ -5,6 +5,7 @@ import type { FormatsPlugin } from "ajv-formats";
 import type { IntentReceiptV1 } from "./durable-intent.js";
 import type { HandoffRecordV1 } from "./durable-handoff.js";
 import type { ResultManifestV1 } from "./durable-result-manifest.js";
+import type { ActiveGateV1, GateDecisionRecordV1, GateRequestV1 } from "./durable-gate.js";
 import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
 import intentReceiptSchema from "./schemas/v1/intent-receipt.schema.json" with { type: "json" };
 import handoffRecordSchema from "./schemas/v1/handoff-record.schema.json" with { type: "json" };
@@ -15,6 +16,13 @@ import implementationOutputSchema from "./schemas/v1/implementation-output.schem
 import pathClaimSchema from "./schemas/v1/path-claim.schema.json" with { type: "json" };
 import primitivesSchema from "./schemas/v1/primitives.schema.json" with { type: "json" };
 import taskStateSchema from "./schemas/v1/task-state.schema.json" with { type: "json" };
+import activeGateSchema from "./schemas/v1/active-gate.schema.json" with { type: "json" };
+import gateContractSchema from "./schemas/v1/gate-contract.schema.json" with { type: "json" };
+import gateDecisionSchema from "./schemas/v1/gate-decision.schema.json" with { type: "json" };
+import gateDecisionRecordSchema from "./schemas/v1/gate-decision-record.schema.json" with { type: "json" };
+import gateRequestSchema from "./schemas/v1/gate-request.schema.json" with { type: "json" };
+import supplementalReviewSchema from "./schemas/v1/supplemental-review.schema.json" with { type: "json" };
+import evidenceSlotsSchema from "./schemas/v1/evidence-slots.schema.json" with { type: "json" };
 import secretScanResultSchema from "./schemas/v1/secret-scan-result.schema.json" with { type: "json" };
 
 export interface JsonSchemaValidator<T> {
@@ -330,6 +338,26 @@ export const resultManifestV1Validator = createJsonSchemaValidator<ResultManifes
   documentArtifactSchema,
   implementationOutputSchema,
 ]);
+
+const gateSchemaReferences = [
+  primitivesSchema,
+  pathClaimSchema,
+  gateContractSchema,
+  gateDecisionSchema,
+  evidenceSlotsSchema,
+  supplementalReviewSchema,
+  gateRequestSchema,
+  gateDecisionRecordSchema,
+] as const;
+
+/** Compiled normative authority for the immutable archived gate request. */
+export const gateRequestV1Validator = createJsonSchemaValidator<GateRequestV1>(gateRequestSchema, gateSchemaReferences.filter((schema) => schema !== gateRequestSchema));
+
+/** Compiled normative authority paired with the decision record's Zod mirror. */
+export const gateDecisionRecordV1Validator = createJsonSchemaValidator<GateDecisionRecordV1>(gateDecisionRecordSchema, gateSchemaReferences.filter((schema) => schema !== gateDecisionRecordSchema));
+
+/** Compiled normative authority for the replaceable active-gate interface. */
+export const activeGateV1Validator = createJsonSchemaValidator<ActiveGateV1>(activeGateSchema, [...gateSchemaReferences, activeGateSchema].filter((schema) => schema !== activeGateSchema));
 
 export function assertValidJsonSchema<T>(
   validator: JsonSchemaValidator<T> | ValidateFunction<T>,

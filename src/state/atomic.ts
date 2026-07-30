@@ -11,6 +11,7 @@ export type ExclusiveCreateResult = "created" | "exists";
 export type AtomicWriter = Readonly<{
   createExclusive(path: ResolvedPath, bytes: Uint8Array): Promise<ExclusiveCreateResult>;
   replace(path: ResolvedPath, bytes: Uint8Array): Promise<void>;
+  removeGateInterface(path: ResolvedPath): Promise<void>;
 }>;
 
 /** Narrow mutable-file primitives used by snapshot projection after collision checks. */
@@ -56,7 +57,8 @@ async function writeAll(handle: FileHandle, bytes: Uint8Array): Promise<void> {
 async function createExclusive(path: ResolvedPath, bytes: Uint8Array): Promise<ExclusiveCreateResult> {
   if (
     path.path_class !== "intent" && path.path_class !== "maintenance-record" &&
-    path.path_class !== "result-manifest" && path.path_class !== "result-payload"
+    path.path_class !== "result-manifest" && path.path_class !== "result-payload" &&
+    path.path_class !== "decision"
   ) {
     throw new TypeError("createExclusive requires an immutable resolved path");
   }
@@ -100,8 +102,8 @@ async function createExclusive(path: ResolvedPath, bytes: Uint8Array): Promise<E
 }
 
 async function replace(path: ResolvedPath, bytes: Uint8Array): Promise<void> {
-  if (path.path_class !== "task-state") {
-    throw new TypeError("replace requires a task-state resolved path");
+  if (path.path_class !== "task-state" && path.path_class !== "gate-interface") {
+    throw new TypeError("replace requires a task-state or gate-interface resolved path");
   }
 
   try {
@@ -115,8 +117,25 @@ async function replace(path: ResolvedPath, bytes: Uint8Array): Promise<void> {
   }
 }
 
+async function removeGateInterface(path: ResolvedPath): Promise<void> {
+  if (path.path_class !== "gate-interface") {
+    throw new TypeError("removeGateInterface requires a gate-interface resolved path");
+  }
+  try {
+    await unlink(path.absolute);
+  } catch (error) {
+    if (errnoOf(error) !== "ENOENT") {
+      throw new AtomicReplaceError({
+        operation: "replace",
+        target_may_have_changed: false,
+        collision: false,
+      });
+    }
+  }
+}
+
 export function createAtomicWriter(): AtomicWriter {
-  return Object.freeze({ createExclusive, replace });
+  return Object.freeze({ createExclusive, replace, removeGateInterface });
 }
 
 const PROJECTABLE = new Set([

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
-import { parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parsePathSafeId, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import { planStateTransition } from "../../src/state/transitions.js";
@@ -112,6 +112,31 @@ describe("planStateTransition", () => {
       recomputed_input_fingerprint: D("8"),
     });
     expect(result.ok ? undefined : result.error.code).toBe("INPUT_FINGERPRINT_MISMATCH");
+  });
+
+  it("freezes every workflow movement while an open gate exists", () => {
+    const current = state({
+      open_gate: {
+        gate_id: parsePathSafeId("gate-1"),
+        gate_kind: "artifact-approval",
+        subject_digest: D("7"),
+        context_digest: D("8"),
+        frozen_state_digest: D("f"),
+        opened_at_revision: parseSafeInteger(4),
+      },
+    });
+    const result = planStateTransition({
+      current,
+      target: {
+        phase_instance: current.phase_instance,
+        step: current.step,
+        status: "succeeded",
+        attempt: current.attempt,
+        input_fingerprint: D("9"),
+      },
+      recomputed_input_fingerprint: D("9"),
+    });
+    expect(result.ok ? undefined : result.error.code).toBe("TRANSITION_INVALID");
   });
 
   it("rejects initialization artifacts on mature state", () => {

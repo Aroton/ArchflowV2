@@ -73,6 +73,16 @@ describe("createAtomicWriter.createExclusive", () => {
     expect(await readdir(intents)).toEqual(["intent-1.json"]);
   });
 
+  it("admits immutable decision records", async () => {
+    const root = await temporaryRoot();
+    const target = join(root, "decision.json");
+    await expect(createAtomicWriter().createExclusive(
+      resolved(target, "decision"),
+      new TextEncoder().encode("decision"),
+    )).resolves.toBe("created");
+    expect(await readFile(target, "utf8")).toBe("decision");
+  });
+
   it("rejects a class mismatch before touching the filesystem", async () => {
     const root = await temporaryRoot();
     const target = join(root, "state.json");
@@ -146,5 +156,17 @@ describe("createAtomicWriter.replace", () => {
       target_may_have_changed: true,
       collision: false,
     });
+  });
+
+  it("replaces and narrowly removes gate interfaces", async () => {
+    const root = await temporaryRoot();
+    const target = join(root, "gate.decision");
+    const writer = createAtomicWriter();
+    await writer.replace(resolved(target, "gate-interface"), new TextEncoder().encode("decision"));
+    expect(await readFile(target, "utf8")).toBe("decision");
+    await writer.removeGateInterface(resolved(target, "gate-interface"));
+    await writer.removeGateInterface(resolved(target, "gate-interface"));
+    await expect(readFile(target)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(writer.removeGateInterface(resolved(target, "task-state"))).rejects.toThrow(TypeError);
   });
 });
