@@ -424,11 +424,11 @@ var require_codegen = __commonJS({
         const rhs = this.rhs === void 0 ? "" : ` = ${this.rhs}`;
         return `${varKind} ${this.name}${rhs};` + _n;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         if (!names[this.name.str])
           return;
         if (this.rhs)
-          this.rhs = optimizeExpr(this.rhs, names, constants);
+          this.rhs = optimizeExpr(this.rhs, names, constants2);
         return this;
       }
       get names() {
@@ -445,10 +445,10 @@ var require_codegen = __commonJS({
       render({ _n }) {
         return `${this.lhs} = ${this.rhs};` + _n;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         if (this.lhs instanceof code_1.Name && !names[this.lhs.str] && !this.sideEffects)
           return;
-        this.rhs = optimizeExpr(this.rhs, names, constants);
+        this.rhs = optimizeExpr(this.rhs, names, constants2);
         return this;
       }
       get names() {
@@ -509,8 +509,8 @@ var require_codegen = __commonJS({
       optimizeNodes() {
         return `${this.code}` ? this : void 0;
       }
-      optimizeNames(names, constants) {
-        this.code = optimizeExpr(this.code, names, constants);
+      optimizeNames(names, constants2) {
+        this.code = optimizeExpr(this.code, names, constants2);
         return this;
       }
       get names() {
@@ -539,12 +539,12 @@ var require_codegen = __commonJS({
         }
         return nodes.length > 0 ? this : void 0;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         const { nodes } = this;
         let i = nodes.length;
         while (i--) {
           const n = nodes[i];
-          if (n.optimizeNames(names, constants))
+          if (n.optimizeNames(names, constants2))
             continue;
           subtractNames(names, n.names);
           nodes.splice(i, 1);
@@ -597,12 +597,12 @@ var require_codegen = __commonJS({
           return void 0;
         return this;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         var _a3;
-        this.else = (_a3 = this.else) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants);
-        if (!(super.optimizeNames(names, constants) || this.else))
+        this.else = (_a3 = this.else) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants2);
+        if (!(super.optimizeNames(names, constants2) || this.else))
           return;
-        this.condition = optimizeExpr(this.condition, names, constants);
+        this.condition = optimizeExpr(this.condition, names, constants2);
         return this;
       }
       get names() {
@@ -625,10 +625,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.iteration})` + super.render(opts);
       }
-      optimizeNames(names, constants) {
-        if (!super.optimizeNames(names, constants))
+      optimizeNames(names, constants2) {
+        if (!super.optimizeNames(names, constants2))
           return;
-        this.iteration = optimizeExpr(this.iteration, names, constants);
+        this.iteration = optimizeExpr(this.iteration, names, constants2);
         return this;
       }
       get names() {
@@ -664,10 +664,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.varKind} ${this.name} ${this.loop} ${this.iterable})` + super.render(opts);
       }
-      optimizeNames(names, constants) {
-        if (!super.optimizeNames(names, constants))
+      optimizeNames(names, constants2) {
+        if (!super.optimizeNames(names, constants2))
           return;
-        this.iterable = optimizeExpr(this.iterable, names, constants);
+        this.iterable = optimizeExpr(this.iterable, names, constants2);
         return this;
       }
       get names() {
@@ -709,11 +709,11 @@ var require_codegen = __commonJS({
         (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNodes();
         return this;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         var _a3, _b;
-        super.optimizeNames(names, constants);
-        (_a3 = this.catch) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants);
-        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants);
+        super.optimizeNames(names, constants2);
+        (_a3 = this.catch) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants2);
+        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants2);
         return this;
       }
       get names() {
@@ -1014,7 +1014,7 @@ var require_codegen = __commonJS({
     function addExprNames(names, from) {
       return from instanceof code_1._CodeOrName ? addNames(names, from.names) : names;
     }
-    function optimizeExpr(expr, names, constants) {
+    function optimizeExpr(expr, names, constants2) {
       if (expr instanceof code_1.Name)
         return replaceName(expr);
       if (!canOptimize(expr))
@@ -1029,14 +1029,14 @@ var require_codegen = __commonJS({
         return items;
       }, []));
       function replaceName(n) {
-        const c = constants[n.str];
+        const c = constants2[n.str];
         if (c === void 0 || names[n.str] !== 1)
           return n;
         delete names[n.str];
         return c;
       }
       function canOptimize(e) {
-        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants[c.str] !== void 0);
+        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants2[c.str] !== void 0);
       }
     }
     function subtractNames(names, from) {
@@ -2998,7 +2998,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve.call(this, root, ref);
+      let _sch = resolve2.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3025,7 +3025,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve(root, ref) {
+    function resolve2(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3656,55 +3656,55 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve(baseURI, relativeURI, options) {
+    function resolve2(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base2, relative4, options, skipNormalization) {
+    function resolveComponent(base2, relative5, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base2 = parse3(serialize(base2, options), options);
-        relative4 = parse3(serialize(relative4, options), options);
+        relative5 = parse3(serialize(relative5, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative4.scheme) {
-        target.scheme = relative4.scheme;
-        target.userinfo = relative4.userinfo;
-        target.host = relative4.host;
-        target.port = relative4.port;
-        target.path = removeDotSegments(relative4.path || "");
-        target.query = relative4.query;
+      if (!options.tolerant && relative5.scheme) {
+        target.scheme = relative5.scheme;
+        target.userinfo = relative5.userinfo;
+        target.host = relative5.host;
+        target.port = relative5.port;
+        target.path = removeDotSegments(relative5.path || "");
+        target.query = relative5.query;
       } else {
-        if (relative4.userinfo !== void 0 || relative4.host !== void 0 || relative4.port !== void 0) {
-          target.userinfo = relative4.userinfo;
-          target.host = relative4.host;
-          target.port = relative4.port;
-          target.path = removeDotSegments(relative4.path || "");
-          target.query = relative4.query;
+        if (relative5.userinfo !== void 0 || relative5.host !== void 0 || relative5.port !== void 0) {
+          target.userinfo = relative5.userinfo;
+          target.host = relative5.host;
+          target.port = relative5.port;
+          target.path = removeDotSegments(relative5.path || "");
+          target.query = relative5.query;
         } else {
-          if (!relative4.path) {
+          if (!relative5.path) {
             target.path = base2.path;
-            if (relative4.query !== void 0) {
-              target.query = relative4.query;
+            if (relative5.query !== void 0) {
+              target.query = relative5.query;
             } else {
               target.query = base2.query;
             }
           } else {
-            if (relative4.path[0] === "/") {
-              target.path = removeDotSegments(relative4.path);
+            if (relative5.path[0] === "/") {
+              target.path = removeDotSegments(relative5.path);
             } else {
               if ((base2.userinfo !== void 0 || base2.host !== void 0 || base2.port !== void 0) && !base2.path) {
-                target.path = "/" + relative4.path;
+                target.path = "/" + relative5.path;
               } else if (!base2.path) {
-                target.path = relative4.path;
+                target.path = relative5.path;
               } else {
-                target.path = base2.path.slice(0, base2.path.lastIndexOf("/") + 1) + relative4.path;
+                target.path = base2.path.slice(0, base2.path.lastIndexOf("/") + 1) + relative5.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative4.query;
+            target.query = relative5.query;
           }
           target.userinfo = base2.userinfo;
           target.host = base2.host;
@@ -3712,7 +3712,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base2.scheme;
       }
-      target.fragment = relative4.fragment;
+      target.fragment = relative5.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -3920,7 +3920,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve,
+      resolve: resolve2,
       resolveComponent,
       equal,
       serialize,
@@ -8048,7 +8048,7 @@ var require_cjs = __commonJS({
 var require_lib = __commonJS({
   "node_modules/write-file-atomic/lib/index.js"(exports, module) {
     "use strict";
-    module.exports = writeFile;
+    module.exports = writeFile3;
     module.exports.sync = writeFileSync;
     module.exports._getTmpname = getTmpname;
     module.exports._cleanupOnExit = cleanupOnExit;
@@ -8079,13 +8079,13 @@ var require_lib = __commonJS({
       };
     }
     function serializeActiveFile(absoluteName) {
-      return new Promise((resolve) => {
+      return new Promise((resolve2) => {
         if (!activeFiles[absoluteName]) {
           activeFiles[absoluteName] = [];
         }
-        activeFiles[absoluteName].push(resolve);
+        activeFiles[absoluteName].push(resolve2);
         if (activeFiles[absoluteName].length === 1) {
-          resolve();
+          resolve2();
         }
       });
     }
@@ -8173,7 +8173,7 @@ var require_lib = __commonJS({
         }
       }
     }
-    async function writeFile(filename, data, options, callback) {
+    async function writeFile3(filename, data, options, callback) {
       if (options instanceof Function) {
         callback = options;
         options = {};
@@ -13060,8 +13060,8 @@ var require_resolve_flow_scalar = __commonJS({
     };
     function parseCharCode(source, offset, length, onError) {
       const cc = source.substr(offset, length);
-      const ok12 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
-      const code = ok12 ? parseInt(cc, 16) : NaN;
+      const ok15 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
+      const code = ok15 ? parseInt(cc, 16) : NaN;
       try {
         return String.fromCodePoint(code);
       } catch {
@@ -16488,7 +16488,7 @@ var init_renderers = __esm({
 });
 
 // src/local/main.ts
-import { readFile as readFile2 } from "node:fs/promises";
+import { readFile as readFile5 } from "node:fs/promises";
 import process3 from "node:process";
 import { parseArgs } from "node:util";
 
@@ -31152,8 +31152,8 @@ function parseCanonicalDocument(bytes, label = "JSON document") {
 }
 
 // src/local/commands.ts
-import { mkdir as mkdir3 } from "node:fs/promises";
-import { join as join7 } from "node:path";
+import { mkdir as mkdir7 } from "node:fs/promises";
+import { join as join12 } from "node:path";
 
 // src/contracts/gates.ts
 import { isDeepStrictEqual } from "node:util";
@@ -31231,6 +31231,10 @@ var phaseInstanceIdV1Schema = external_exports.string().refine((value) => {
     return false;
   }
 });
+function parsePhaseInstanceId(value) {
+  assertPlainJson(value, "phase instance id");
+  return phaseInstanceIdV1Schema.parse(value);
+}
 
 // src/contracts/path-claims.ts
 var utf8Length = (value) => Buffer.byteLength(value, "utf8");
@@ -36382,6 +36386,9 @@ function computePinnedConstitutionDigest(files) {
     )
   });
 }
+function computePinnedConfigDigest(configBytes) {
+  return sha256Bytes(configBytes);
+}
 
 // src/repository/identity.ts
 import { realpath } from "node:fs/promises";
@@ -36417,7 +36424,7 @@ var GIT_MINOR_FLOOR = 25;
 var fatalDecoder = new TextDecoder("utf-8", { fatal: true });
 var lossyDecoder = new TextDecoder("utf-8");
 function execGit(gitPath, spec, options) {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     const child = execFile(
       gitPath,
       [...spec.argv],
@@ -36429,7 +36436,7 @@ function execGit(gitPath, spec, options) {
         windowsHide: true
       },
       (failure2, stdout, stderr) => {
-        resolve({
+        resolve2({
           failure: failure2 ?? void 0,
           stdout: Buffer.from(stdout),
           stderr: Buffer.from(stderr)
@@ -36528,6 +36535,7 @@ var HASH_OBJECT_OPERATION = "git-hash-object";
 var ANCESTOR_OPERATION = "git-ancestor";
 var TREE_ENTRY_OPERATION = "git-tree-entry";
 var TREE_LIST_OPERATION = "git-tree-list";
+var HEAD_COMMIT_OPERATION = "git-head-commit";
 var OBJECT_SIZE_OPERATION = "git-object-size";
 var OBJECT_READ_OPERATION = "git-object-read";
 var GIT_OID = /^[0-9a-f]{40}$/u;
@@ -36588,6 +36596,14 @@ async function readCommitTreeEntries(runner, commit, directory) {
   });
   entries.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
   return Object.freeze(entries);
+}
+async function readHeadCommit(runner) {
+  const oid = await runner.runText({
+    argv: ["rev-parse", "--verify", "HEAD^{commit}"],
+    operation: HEAD_COMMIT_OPERATION
+  });
+  if (!GIT_OID.test(oid)) throw new TypeError("git rev-parse returned an invalid HEAD commit");
+  return oid;
 }
 async function readGitBlobSize(runner, oid) {
   if (!GIT_OID.test(oid)) throw new TypeError("Git blob object id is invalid");
@@ -37467,6 +37483,13 @@ var WORKFLOW_V1 = {
 };
 function sameJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+function parseWorkflowV1(value) {
+  assertPlainJson(value, "workflow");
+  return workflowV1Schema.parse(value);
+}
+function parseWorkflowYaml(source, label = "workflow.yaml") {
+  return parseWorkflowV1(parseSingleYamlDocument(source, label));
 }
 
 // src/state/lock.ts
@@ -42574,18 +42597,18 @@ async function readSnapshotPayload(input) {
 }
 async function captureProjectionTarget(path2) {
   try {
-    const stat = await lstat3(path2.absolute);
-    if (stat.isSymbolicLink()) {
+    const stat4 = await lstat3(path2.absolute);
+    if (stat4.isSymbolicLink()) {
       const bytes2 = Buffer.from(await readlink(path2.absolute), "utf8");
       return Object.freeze({
         observation: Object.freeze({ state: "present", file_type: "symlink", mode: "120000", size_bytes: bytes2.byteLength, content_digest: sha256Bytes(bytes2) }),
         rollback: Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes: bytes2 })
       });
     }
-    if (!stat.isFile()) throw new TypeError("declared target is not a regular file or symlink");
+    if (!stat4.isFile()) throw new TypeError("declared target is not a regular file or symlink");
     const handle = await openResolved(path2.absolute, 0);
     const bytes = new Uint8Array(await handle.readFile().finally(() => handle.close()));
-    const mode = (stat.mode & 73) === 0 ? "100644" : "100755";
+    const mode = (stat4.mode & 73) === 0 ? "100644" : "100755";
     return Object.freeze({
       observation: Object.freeze({ state: "present", file_type: "regular", mode, size_bytes: bytes.byteLength, content_digest: sha256Bytes(bytes) }),
       rollback: Object.freeze({ state: "present", file_type: "regular", mode, bytes })
@@ -43690,8 +43713,8 @@ async function identitiesFor(input, claims, missingIssue) {
   for (const path2 of resolved) {
     let bytes;
     try {
-      const stat = await lstat4(path2.absolute);
-      if (!stat.isFile()) return fail10(stateIssue(input, missingIssue));
+      const stat4 = await lstat4(path2.absolute);
+      if (!stat4.isFile()) return fail10(stateIssue(input, missingIssue));
       bytes = new Uint8Array(await readFile(path2.absolute));
     } catch (error51) {
       if (error51.code === "ENOENT") {
@@ -43809,16 +43832,16 @@ async function readRetainedResult(runner, authority, reference) {
     }) : resolveRepositoryPath({ runner, claim, context: authority.context });
   };
   const beforeImage = async (identity, path2) => {
-    const symlink2 = identity.mode === "120000";
-    const bytes = symlink2 ? await readGitBlobBytes(runner, identity.oid) : await readGitBlobProjectedBytes(runner, identity.oid, path2);
+    const symlink3 = identity.mode === "120000";
+    const bytes = symlink3 ? await readGitBlobBytes(runner, identity.oid) : await readGitBlobProjectedBytes(runner, identity.oid, path2);
     const observation = Object.freeze({
       state: "present",
-      file_type: symlink2 ? "symlink" : "regular",
+      file_type: symlink3 ? "symlink" : "regular",
       mode: identity.mode,
       size_bytes: bytes.byteLength,
       content_digest: sha256Bytes(bytes)
     });
-    const desired = symlink2 ? Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes }) : Object.freeze({ state: "present", file_type: "regular", mode: identity.mode, bytes });
+    const desired = symlink3 ? Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes }) : Object.freeze({ state: "present", file_type: "regular", mode: identity.mode, bytes });
     return Object.freeze({ observation, desired });
   };
   const sources = [];
@@ -44135,6 +44158,1268 @@ function reconcileCurrentAuthority(value) {
   });
 }
 
+// src/init/assets.ts
+import { constants } from "node:fs";
+import { access, mkdir as mkdir3, open as open4, readFile as readFile2 } from "node:fs/promises";
+import { dirname as dirname4, join as join7 } from "node:path";
+import { fileURLToPath } from "node:url";
+var ARCHFLOW_GITATTRIBUTES_LINE = ".archflow/** -text merge=binary";
+var ASSETS = Object.freeze([
+  ["workflow.yaml", ".archflow/workflow.yaml"],
+  ["constitution/README.md", ".archflow/constitution/README.md"],
+  ["constitution/00-process.md", ".archflow/constitution/00-process.md"],
+  ["constitution/10-architecture.md", ".archflow/constitution/10-architecture.md"],
+  ["constitution/20-data.md", ".archflow/constitution/20-data.md"],
+  ["constitution/30-product.md", ".archflow/constitution/30-product.md"],
+  ["config.template.yaml", ".archflow/config.yaml"]
+]);
+var ok12 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail12 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+function errno(error51, code) {
+  return error51 instanceof Error && error51.code === code;
+}
+function ioFailure2() {
+  return fail12(createProjectError("IO_ERROR", {
+    operation: "scaffold-repository-assets",
+    attempt: 1
+  }));
+}
+async function assetRoot() {
+  const candidates = [
+    fileURLToPath(new URL("../assets/", import.meta.url)),
+    fileURLToPath(new URL("../../assets/", import.meta.url))
+  ];
+  for (const candidate of candidates) {
+    try {
+      await access(join7(candidate, "workflow.yaml"), constants.R_OK);
+      return candidate;
+    } catch (error51) {
+      if (!errno(error51, "ENOENT")) throw error51;
+    }
+  }
+  throw Object.assign(new Error("installed ArchFlow assets are missing"), { code: "ENOENT" });
+}
+async function appendGitAttributes(workingDirectory) {
+  const path2 = join7(workingDirectory, ".gitattributes");
+  let current;
+  try {
+    current = new Uint8Array(await readFile2(path2));
+  } catch (error51) {
+    if (!errno(error51, "ENOENT")) throw error51;
+    const handle2 = await open4(path2, "wx");
+    try {
+      await handle2.writeFile(`${ARCHFLOW_GITATTRIBUTES_LINE}
+`);
+    } finally {
+      await handle2.close();
+    }
+    return true;
+  }
+  const text3 = new TextDecoder("utf-8", { fatal: true }).decode(current);
+  if (text3.split(/\r?\n/u).includes(ARCHFLOW_GITATTRIBUTES_LINE)) return false;
+  const prefix = current.byteLength === 0 || text3.endsWith("\n") ? "" : "\n";
+  const handle = await open4(path2, "a");
+  try {
+    await handle.writeFile(`${prefix}${ARCHFLOW_GITATTRIBUTES_LINE}
+`);
+  } finally {
+    await handle.close();
+  }
+  return true;
+}
+async function scaffoldRepositoryAssets(input) {
+  try {
+    const sourceRoot = await assetRoot();
+    const sources = await Promise.all(ASSETS.map(async ([source, destination]) => Object.freeze({ source: new Uint8Array(await readFile2(join7(sourceRoot, source))), destination })));
+    const created = [];
+    const unchanged = [];
+    for (const asset of sources) {
+      const destination = join7(input.working_directory, asset.destination);
+      try {
+        const existing = new Uint8Array(await readFile2(destination));
+        if (!Buffer.from(existing).equals(Buffer.from(asset.source))) {
+          process.stderr.write(
+            `ArchFlow scaffold differs at ${asset.destination}. Review or delete that file, then re-run archflow-local init.
+`
+          );
+          return fail12(createProjectError("CONFIG_INVALID", { issue_code: "scaffold-diverged" }));
+        }
+        unchanged.push(asset.destination);
+      } catch (error51) {
+        if (!errno(error51, "ENOENT")) throw error51;
+      }
+    }
+    for (const asset of sources) {
+      if (unchanged.includes(asset.destination)) continue;
+      const destination = join7(input.working_directory, asset.destination);
+      await mkdir3(dirname4(destination), { recursive: true });
+      const handle = await open4(destination, "wx");
+      try {
+        await handle.writeFile(asset.source);
+      } finally {
+        await handle.close();
+      }
+      created.push(asset.destination);
+    }
+    const gitattributesUpdated = await appendGitAttributes(input.working_directory);
+    return ok12(Object.freeze({
+      schema_version: "1",
+      created: Object.freeze(created),
+      unchanged: Object.freeze(unchanged),
+      gitattributes_updated: gitattributesUpdated
+    }));
+  } catch {
+    return ioFailure2();
+  }
+}
+
+// src/init/diagnostics.ts
+import { stat as stat3 } from "node:fs/promises";
+
+// src/dispatch/cli.ts
+import { stat as stat2, writeFile } from "node:fs/promises";
+import { join as join8 } from "node:path";
+
+// src/dispatch/process.ts
+import { spawn } from "node:child_process";
+import { open as open5, stat } from "node:fs/promises";
+var DISPATCH_TIMEOUT_MS = 3e5;
+var DISPATCH_OUTPUT_BYTE_CAP = 8 * 1024 * 1024;
+var TERMINATION_GRACE_MS = 250;
+var DispatchProcessError = class extends Error {
+  constructor(project_error) {
+    super(project_error.code);
+    this.project_error = project_error;
+    this.name = "DispatchProcessError";
+  }
+  project_error;
+};
+var fail13 = (error51) => {
+  throw new DispatchProcessError(error51);
+};
+function checkedPositiveInteger(value, label) {
+  if (!Number.isSafeInteger(value) || value <= 0) throw new TypeError(`${label} must be a positive safe integer`);
+  return value;
+}
+function terminateChild(child) {
+  const send = (signal) => {
+    if (child.pid === void 0 || child.exitCode !== null || child.signalCode !== null) return;
+    if (process.platform !== "win32") {
+      try {
+        process.kill(-child.pid, signal);
+        return;
+      } catch {
+      }
+    }
+    try {
+      child.kill(signal);
+    } catch {
+    }
+  };
+  send("SIGTERM");
+  const escalation = setTimeout(() => send("SIGKILL"), TERMINATION_GRACE_MS);
+  escalation.unref();
+  return escalation;
+}
+function classifySpawnError(adapter2, error51) {
+  if (error51.code === "ENOENT") return fail13(createProjectError("CLI_MISSING", { adapter: adapter2 }));
+  if (error51.code === "EACCES" || error51.code === "EPERM") {
+    return fail13(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "not-executable" }));
+  }
+  return fail13(createProjectError("IO_ERROR", { operation: "dispatch-spawn", attempt: 1 }));
+}
+async function readBoundedFinalOutput(adapter2, path2, byteCap) {
+  let metadata2;
+  try {
+    metadata2 = await stat(path2, { bigint: true });
+  } catch (error51) {
+    if (error51.code === "ENOENT") return void 0;
+    return fail13(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
+  }
+  if (!metadata2.isFile()) {
+    return fail13(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
+  }
+  if (metadata2.size > BigInt(byteCap)) {
+    const byteCount = Number(metadata2.size);
+    if (!Number.isSafeInteger(byteCount)) {
+      return fail13(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
+    }
+    return fail13(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
+  }
+  let handle;
+  try {
+    handle = await open5(path2, "r");
+    const chunks = [];
+    let byteCount = 0;
+    while (true) {
+      const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, byteCap + 1 - byteCount));
+      const { bytesRead } = await handle.read(buffer, 0, buffer.byteLength, null);
+      if (bytesRead === 0) break;
+      byteCount += bytesRead;
+      if (byteCount > byteCap) {
+        return fail13(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
+      }
+      chunks.push(buffer.subarray(0, bytesRead));
+    }
+    return Buffer.concat(chunks, byteCount);
+  } catch (error51) {
+    if (error51 instanceof DispatchProcessError) throw error51;
+    return fail13(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
+  } finally {
+    await handle?.close().catch(() => void 0);
+  }
+}
+async function runDispatchChild(spec) {
+  const timeoutMs = checkedPositiveInteger(spec.timeout_ms ?? DISPATCH_TIMEOUT_MS, "dispatch timeout");
+  const byteCap = checkedPositiveInteger(spec.byte_cap ?? DISPATCH_OUTPUT_BYTE_CAP, "dispatch byte cap");
+  const cancellationSource = spec.cancellation_source ?? "client";
+  if (spec.signal.aborted) {
+    return fail13(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
+  }
+  const spawnOptions = {
+    cwd: spec.cwd,
+    env: { ...spec.env },
+    shell: false,
+    windowsHide: true,
+    detached: process.platform !== "win32",
+    stdio: ["pipe", "pipe", "pipe"]
+  };
+  const child = spawn(spec.command, [...spec.argv], spawnOptions);
+  const stdoutChunks = [];
+  const stderrChunks = [];
+  let stdoutBytes = 0;
+  let stderrBytes = 0;
+  let termination;
+  let overflowBytes;
+  let ioOperation;
+  let spawnError;
+  let escalation;
+  const stop = (reason2) => {
+    if (termination !== void 0) return;
+    termination = reason2;
+    escalation = terminateChild(child);
+  };
+  const append = (channel, chunk) => {
+    if (termination !== void 0) return;
+    const nextCount = (channel === "stdout" ? stdoutBytes : stderrBytes) + chunk.byteLength;
+    if (nextCount > byteCap) {
+      overflowBytes = nextCount;
+      stop("overflow");
+      return;
+    }
+    if (channel === "stdout") {
+      stdoutBytes = nextCount;
+      stdoutChunks.push(chunk);
+    } else {
+      stderrBytes = nextCount;
+      stderrChunks.push(chunk);
+    }
+  };
+  child.stdout.on("data", (chunk) => append("stdout", Buffer.from(chunk)));
+  child.stderr.on("data", (chunk) => append("stderr", Buffer.from(chunk)));
+  child.stdout.on("error", () => {
+    ioOperation = "dispatch-stdout";
+    stop("io");
+  });
+  child.stderr.on("error", () => {
+    ioOperation = "dispatch-stderr";
+    stop("io");
+  });
+  child.on("error", (error51) => {
+    spawnError = error51;
+  });
+  const abort = () => stop("cancelled");
+  spec.signal.addEventListener("abort", abort, { once: true });
+  const timeout = setTimeout(() => stop("timeout"), timeoutMs);
+  timeout.unref();
+  child.stdin.on("error", (error51) => {
+    if (error51.code === "EPIPE" || error51.code === "ERR_STREAM_DESTROYED") return;
+    ioOperation = "dispatch-stdin";
+    stop("io");
+  });
+  child.stdin.end(spec.stdin === void 0 ? void 0 : Buffer.from(spec.stdin));
+  const closed = await new Promise((resolve2) => {
+    child.once("close", (code, signal) => resolve2({ code, signal }));
+  });
+  clearTimeout(timeout);
+  if (escalation !== void 0) clearTimeout(escalation);
+  spec.signal.removeEventListener("abort", abort);
+  if (spawnError !== void 0) return classifySpawnError(spec.adapter, spawnError);
+  if (termination === "cancelled") {
+    return fail13(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
+  }
+  if (termination === "timeout") {
+    return fail13(createProjectError("TIMEOUT", { adapter: spec.adapter, attempt: 1, limit_ms: timeoutMs }));
+  }
+  if (termination === "overflow") {
+    return fail13(createProjectError("OUTPUT_OVERFLOW", {
+      adapter: spec.adapter,
+      byte_count: overflowBytes,
+      byte_cap: byteCap
+    }));
+  }
+  if (termination === "io") {
+    return fail13(createProjectError("IO_ERROR", { operation: ioOperation, attempt: 1 }));
+  }
+  const stdout = Buffer.concat(stdoutChunks, stdoutBytes);
+  const stderr = Buffer.concat(stderrChunks, stderrBytes);
+  const finalOutput = spec.final_output_path === void 0 ? void 0 : await readBoundedFinalOutput(spec.adapter, spec.final_output_path, byteCap);
+  return Object.freeze({
+    exit_code: closed.code,
+    signal: closed.signal,
+    stdout,
+    stderr,
+    ...finalOutput === void 0 ? {} : { final_output: finalOutput }
+  });
+}
+
+// src/dispatch/cli.ts
+var CLAUDE_MINIMUM_VERSION = "2.1.205";
+var CODEX_MINIMUM_VERSION = "0.122.0";
+var CLAUDE_MANAGED_POLICY_PATHS = Object.freeze([
+  "/etc/claude-code/managed-settings.json",
+  "/etc/claude-code/managed-settings.d",
+  "/etc/claude-code/managed-mcp.json",
+  "/Library/Application Support/ClaudeCode/managed-settings.json",
+  "/Library/Application Support/ClaudeCode/managed-settings.d",
+  "/Library/Application Support/ClaudeCode/managed-mcp.json"
+]);
+var CODEX_MANAGED_POLICY_PATHS = Object.freeze([
+  "/etc/codex/config.toml",
+  "/etc/codex/requirements.toml",
+  "/etc/codex/rules"
+]);
+var CODEX_DISABLED_FEATURES = Object.freeze([
+  "shell_tool",
+  "unified_exec",
+  "multi_agent",
+  "browser_use",
+  "browser_use_full_cdp_access",
+  "computer_use",
+  "image_generation",
+  "apps",
+  "hooks",
+  "in_app_browser",
+  "plugins",
+  "remote_plugin",
+  "plugin_sharing",
+  "skill_search"
+]);
+var dispatchQueue = Promise.resolve();
+var CliAdapterError = class extends Error {
+  constructor(project_error, cli_version) {
+    super(project_error.code);
+    this.project_error = project_error;
+    this.cli_version = cli_version;
+    this.name = "CliAdapterError";
+  }
+  project_error;
+  cli_version;
+};
+var fail14 = (error51, cliVersion) => {
+  throw new CliAdapterError(error51, cliVersion);
+};
+function decodeJson2(bytes, adapter2, issueCode) {
+  let text3;
+  try {
+    text3 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    const value = JSON.parse(text3);
+    assertPlainJson(value, "CLI JSON output");
+    return value;
+  } catch {
+    return fail14(createProjectError("MODEL_OUTPUT_INVALID", {
+      adapter: adapter2,
+      attempt: 1,
+      issue_code: issueCode
+    }));
+  }
+}
+function compareVersions(left, right) {
+  const a = left.split(".").map(Number);
+  const b = right.split(".").map(Number);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const difference = (a[index] ?? 0) - (b[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
+}
+function exactVersion(adapter2, output) {
+  const text3 = Buffer.from(output).toString("utf8").trim();
+  const match = adapter2 === "claude-cli" ? /^(\d+\.\d+\.\d+) \(Claude Code\)$/u.exec(text3) : /^codex-cli (\d+\.\d+\.\d+)$/u.exec(text3);
+  return match?.[1] ?? "unrecognized";
+}
+async function existingPaths(paths) {
+  const observations = await Promise.all(paths.map(async (path2) => {
+    try {
+      await stat2(path2);
+      return path2;
+    } catch (error51) {
+      if (error51.code === "ENOENT") return void 0;
+      return path2;
+    }
+  }));
+  return Object.freeze(observations.filter((path2) => path2 !== void 0));
+}
+async function runPreflightCommand(adapter2, command, argv, workspace, signal, cancellationSource) {
+  return runDispatchChild({
+    adapter: adapter2,
+    command,
+    argv,
+    cwd: workspace.root,
+    env: workspace.env,
+    signal,
+    cancellation_source: cancellationSource
+  });
+}
+async function preflight(adapter2, command, versionArgv, authArgv, minimumVersion, policyPaths, workspace, signal, cancellationSource) {
+  const versionResult = await runPreflightCommand(
+    adapter2,
+    command,
+    versionArgv,
+    workspace,
+    signal,
+    cancellationSource
+  );
+  const version2 = exactVersion(adapter2, versionResult.stdout);
+  if (versionResult.exit_code !== 0 || version2 === "unrecognized" || compareVersions(version2, minimumVersion) < 0) {
+    return fail14(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version2 }));
+  }
+  const authResult = await runPreflightCommand(
+    adapter2,
+    command,
+    authArgv,
+    workspace,
+    signal,
+    cancellationSource
+  );
+  let loggedIn = false;
+  if (adapter2 === "claude-cli" && authResult.exit_code === 0) {
+    try {
+      const auth = JSON.parse(authResult.stdout.toString("utf8"));
+      loggedIn = auth !== null && typeof auth === "object" && Object.getOwnPropertyDescriptor(auth, "loggedIn")?.value === true;
+    } catch {
+      loggedIn = false;
+    }
+  } else if (adapter2 === "codex-cli" && authResult.exit_code === 0) {
+    loggedIn = /^Logged in(?:\s|$)/u.test(authResult.stdout.toString("utf8").trim());
+  }
+  if (!loggedIn) return fail14(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version2);
+  const managedPolicyPaths = await existingPaths(policyPaths);
+  return Object.freeze({
+    cli_version: version2,
+    managed_policy_present: managedPolicyPaths.length > 0,
+    managed_policy_paths: managedPolicyPaths
+  });
+}
+function assertRoute(adapter2, route) {
+  const expectedFamily = adapter2 === "claude-cli" ? "claude" : "codex";
+  if (route.adapter !== adapter2 || route.family !== expectedFamily) {
+    fail14(createProjectError("FAMILY_MISMATCH", {
+      expected_family: expectedFamily,
+      observed_family: route.family
+    }));
+  }
+  if (!safeIdV1Schema.safeParse(route.model).success) {
+    fail14(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
+  }
+}
+function exitClass(result) {
+  if (result.exit_code !== null) return `exit-${String(result.exit_code)}`;
+  if (result.signal !== null) return `signal-${result.signal.toLowerCase()}`;
+  return "unknown-exit";
+}
+function modelFromMessage(message) {
+  const quoted = /(?:model|deployment)(?:\s+named)?\s+["'`](?<model>[A-Za-z0-9][A-Za-z0-9._:-]{0,127})["'`]/iu.exec(message)?.groups?.model;
+  if (quoted !== void 0 && safeIdV1Schema.safeParse(quoted).success) return quoted;
+  const slug = /(?<![A-Za-z0-9/_.:-])(?<model>(?:claude-(?:opus|sonnet|haiku)-[A-Za-z0-9.-]+|gpt-[A-Za-z0-9.-]+))(?![A-Za-z0-9/_.:-])/iu.exec(message)?.groups?.model;
+  return slug !== void 0 && safeIdV1Schema.safeParse(slug).success ? slug : void 0;
+}
+function classifyMessage(adapter2, message) {
+  if (/\b(?:rate[ -]?limit(?:ed)?|too many requests|usage limit|quota (?:exceeded|reached))\b/iu.test(message)) {
+    return createProjectError("RATE_LIMITED", { adapter: adapter2, attempt: 1 });
+  }
+  if (/\b(?:not logged in|login required|authentication (?:failed|required)|unauthorized|invalid credentials?)\b/iu.test(message)) {
+    return createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 });
+  }
+  if (/\b(?:model|deployment)\b.*\b(?:not found|unsupported|does not exist|unknown|invalid)\b/iu.test(message) || /\b(?:not found|unsupported|does not exist|unknown|invalid)\b.*\b(?:model|deployment)\b/iu.test(message)) {
+    const model = modelFromMessage(message);
+    if (model !== void 0) return createProjectError("UNSUPPORTED_MODEL", { model });
+  }
+  return void 0;
+}
+function claudeFailureMessage(result) {
+  try {
+    const value = JSON.parse(result.stdout.toString("utf8"));
+    if (value === null || typeof value !== "object") return void 0;
+    const record3 = value;
+    if (record3.is_error !== true && record3.type !== "error") return void 0;
+    return typeof record3.result === "string" ? record3.result : typeof record3.error === "string" ? record3.error : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function codexFailureMessages(stdout) {
+  const messages2 = [];
+  for (const line of Buffer.from(stdout).toString("utf8").split(/\r?\n/u)) {
+    if (line.trim() === "") continue;
+    try {
+      const value = JSON.parse(line);
+      if (value === null || typeof value !== "object" || Array.isArray(value)) continue;
+      const event = value;
+      let message;
+      if (event.type === "error") message = event.message;
+      if (event.type === "turn.failed" && event.error !== null && typeof event.error === "object") {
+        message = event.error.message;
+      }
+      if (typeof message === "string" && !messages2.includes(message)) messages2.push(message);
+    } catch {
+    }
+  }
+  return Object.freeze(messages2);
+}
+function classifyNonzero(adapter2, result, messages2) {
+  if (result.exit_code === 0 && result.signal === null) return void 0;
+  for (const message of messages2) {
+    const classified = classifyMessage(adapter2, message);
+    if (classified !== void 0) return classified;
+  }
+  return createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: exitClass(result) });
+}
+var claudeAdapter = Object.freeze({
+  id: "claude-cli",
+  family: "claude",
+  preflight: (workspace, signal = new AbortController().signal, cancellationSource = "client") => preflight(
+    "claude-cli",
+    "claude",
+    ["--version"],
+    ["auth", "status"],
+    CLAUDE_MINIMUM_VERSION,
+    CLAUDE_MANAGED_POLICY_PATHS,
+    workspace,
+    signal,
+    cancellationSource
+  ),
+  async buildInvocation(envelope, route, workspace, outputSchema) {
+    assertRoute("claude-cli", route);
+    assertPlainJson(outputSchema, "CLI output schema");
+    const schema = structuredClone(outputSchema);
+    if (route.effort === "ultra") {
+      return fail14(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
+    }
+    const mcpConfigPath = join8(workspace.root, "empty-mcp.json");
+    await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
+    return Object.freeze({
+      adapter: "claude-cli",
+      command: "claude",
+      argv: Object.freeze([
+        "-p",
+        "--safe-mode",
+        "--tools",
+        "",
+        "--disable-slash-commands",
+        "--strict-mcp-config",
+        "--mcp-config",
+        mcpConfigPath,
+        "--no-session-persistence",
+        "--setting-sources",
+        "",
+        "--output-format",
+        "json",
+        "--json-schema",
+        JSON.stringify(schema),
+        "--model",
+        route.model,
+        "--effort",
+        route.effort
+      ]),
+      cwd: workspace.root,
+      env: workspace.env,
+      stdin: envelope.bytes
+    });
+  },
+  parseOutput(result) {
+    const wrapper = decodeJson2(result.stdout, "claude-cli", "claude-wrapper-invalid");
+    if (wrapper === null || typeof wrapper !== "object" || Array.isArray(wrapper)) {
+      return fail14(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "claude-cli",
+        attempt: 1,
+        issue_code: "structured-output-missing"
+      }));
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(wrapper, "structured_output");
+    if (descriptor === void 0 || descriptor.enumerable !== true || !("value" in descriptor)) {
+      return fail14(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "claude-cli",
+        attempt: 1,
+        issue_code: "structured-output-missing"
+      }));
+    }
+    try {
+      assertPlainJson(descriptor.value, "Claude structured output");
+      return canonicalJsonBytes(descriptor.value);
+    } catch {
+      return fail14(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "claude-cli",
+        attempt: 1,
+        issue_code: "structured-output-invalid"
+      }));
+    }
+  },
+  classifyFailure(result) {
+    const message = claudeFailureMessage(result);
+    return classifyNonzero("claude-cli", result, message === void 0 ? [] : [message]);
+  }
+});
+var codexAdapter = Object.freeze({
+  id: "codex-cli",
+  family: "codex",
+  preflight: (workspace, signal = new AbortController().signal, cancellationSource = "client") => preflight(
+    "codex-cli",
+    "codex",
+    ["--version"],
+    ["login", "status"],
+    CODEX_MINIMUM_VERSION,
+    CODEX_MANAGED_POLICY_PATHS,
+    workspace,
+    signal,
+    cancellationSource
+  ),
+  async buildInvocation(envelope, route, workspace, outputSchema) {
+    assertRoute("codex-cli", route);
+    assertPlainJson(outputSchema, "CLI output schema");
+    const schema = structuredClone(outputSchema);
+    const schemaPath = join8(workspace.root, `${envelope.result_kind}.schema.json`);
+    const outputPath = join8(workspace.root, "final-output.json");
+    await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}
+`, { encoding: "utf8", mode: 384 });
+    const disabled = CODEX_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]);
+    return Object.freeze({
+      adapter: "codex-cli",
+      command: "codex",
+      argv: Object.freeze([
+        "exec",
+        "--ephemeral",
+        "--ignore-user-config",
+        "--ignore-rules",
+        "--skip-git-repo-check",
+        "--strict-config",
+        "-s",
+        "read-only",
+        "-C",
+        workspace.root,
+        "--json",
+        "--output-schema",
+        schemaPath,
+        "-o",
+        outputPath,
+        "-m",
+        route.model,
+        "-c",
+        "skills.include_instructions=false",
+        "-c",
+        "project_doc_max_bytes=0",
+        "-c",
+        `model_reasoning_effort=${JSON.stringify(route.effort)}`,
+        ...disabled
+      ]),
+      cwd: workspace.root,
+      env: workspace.env,
+      stdin: envelope.bytes,
+      final_output_path: outputPath
+    });
+  },
+  parseOutput(result) {
+    if (result.final_output === void 0) {
+      return fail14(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "codex-cli",
+        attempt: 1,
+        issue_code: "final-output-missing"
+      }));
+    }
+    decodeJson2(result.final_output, "codex-cli", "final-output-invalid");
+    return Uint8Array.from(result.final_output);
+  },
+  classifyFailure(result) {
+    return classifyNonzero("codex-cli", result, codexFailureMessages(result.stdout));
+  }
+});
+function preflightAdapter(adapterId, workspace) {
+  return adapterId === "claude-cli" ? claudeAdapter.preflight(workspace) : codexAdapter.preflight(workspace);
+}
+
+// src/dispatch/workspace.ts
+import { mkdir as mkdir4, mkdtemp, realpath as realpath4, rm, symlink as symlink2 } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import { isAbsolute as isAbsolute3, join as join9, relative as relative4, resolve } from "node:path";
+var FORWARDED_ENVIRONMENT = Object.freeze([
+  "PATH",
+  "LANG",
+  "LC_ALL",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "NODE_EXTRA_CA_CERTS"
+]);
+function isInside(parent, candidate) {
+  const fromParent = relative4(parent, candidate);
+  return fromParent === "" || !fromParent.startsWith("..") && !isAbsolute3(fromParent);
+}
+function credentialPaths(adapter2, sourceHome, generatedHome) {
+  if (adapter2 === "claude-cli") {
+    return {
+      source: join9(sourceHome, ".claude", ".credentials.json"),
+      destination: join9(generatedHome, ".claude", ".credentials.json")
+    };
+  }
+  return {
+    source: join9(sourceHome, ".codex", "auth.json"),
+    destination: join9(generatedHome, ".codex", "auth.json")
+  };
+}
+async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd()) {
+  const [realTemporaryRoot, realRepositoryRoot] = await Promise.all([
+    realpath4(tmpdir()),
+    realpath4(repositoryRoot)
+  ]);
+  if (isInside(realRepositoryRoot, realTemporaryRoot)) {
+    throw new Error("dispatch temporary directory must be outside the repository");
+  }
+  const root = await mkdtemp(join9(realTemporaryRoot, "archflow-dispatch-"));
+  try {
+    const home = join9(root, "home");
+    const codexHome = join9(home, ".codex");
+    const sourceHome = resolve(process.env.HOME ?? homedir());
+    const credential = credentialPaths(adapter2, sourceHome, home);
+    await mkdir4(resolve(credential.destination, ".."), { recursive: true });
+    await symlink2(credential.source, credential.destination, "file");
+    const env = {
+      HOME: home,
+      TMPDIR: root,
+      CODEX_HOME: codexHome
+    };
+    for (const name of FORWARDED_ENVIRONMENT) {
+      const value = process.env[name];
+      if (value !== void 0) env[name] = value;
+    }
+    let disposal;
+    const dispose = () => {
+      disposal ??= rm(root, { recursive: true, force: true });
+      return disposal;
+    };
+    return Object.freeze({ root, home, env: Object.freeze(env), dispose });
+  } catch (error51) {
+    await rm(root, { recursive: true, force: true });
+    throw error51;
+  }
+}
+
+// src/init/diagnostics.ts
+async function presentPaths(paths) {
+  const found = await Promise.all(paths.map(async (path2) => {
+    try {
+      await stat3(path2);
+      return path2;
+    } catch (error51) {
+      return error51.code === "ENOENT" ? void 0 : path2;
+    }
+  }));
+  return Object.freeze(found.filter((path2) => path2 !== void 0));
+}
+function preflightError(error51) {
+  if (error51 instanceof CliAdapterError || error51 instanceof DispatchProcessError) return error51.project_error;
+  return void 0;
+}
+function unsupportedVersion(error51) {
+  if (error51.code !== "CLI_VERSION_UNSUPPORTED") return null;
+  return error51.diagnostic.parameters.version;
+}
+async function diagnoseAdapter(adapter2, repository) {
+  const policyTable = adapter2 === "claude-cli" ? CLAUDE_MANAGED_POLICY_PATHS : CODEX_MANAGED_POLICY_PATHS;
+  const pathsPromise = presentPaths(policyTable);
+  let workspace;
+  try {
+    workspace = await createDispatchWorkspace(adapter2, repository);
+    const result = await preflightAdapter(adapter2, workspace);
+    return Object.freeze({
+      adapter: adapter2,
+      version: result.cli_version,
+      authenticated: true,
+      managed_policy_present: result.managed_policy_present,
+      managed_policy_paths: result.managed_policy_paths,
+      error: null
+    });
+  } catch (caught) {
+    const error51 = preflightError(caught);
+    const paths = await pathsPromise;
+    const version2 = caught instanceof CliAdapterError ? caught.cli_version ?? unsupportedVersion(caught.project_error) : null;
+    return Object.freeze({
+      adapter: adapter2,
+      version: version2,
+      authenticated: error51?.code === "AUTH_UNAVAILABLE" ? false : null,
+      managed_policy_present: paths.length > 0,
+      managed_policy_paths: paths,
+      error: error51 ?? createProjectError("IO_ERROR", { operation: "init-preflight", attempt: 1 })
+    });
+  } finally {
+    await workspace?.dispose();
+  }
+}
+async function collectInitDiagnostics(input) {
+  const [claude, codex] = await Promise.all([
+    diagnoseAdapter("claude-cli", input.working_directory),
+    diagnoseAdapter("codex-cli", input.working_directory)
+  ]);
+  return Object.freeze({
+    schema_version: "1",
+    node_version: process.versions.node,
+    claude,
+    codex,
+    claude_pending_approval: input.claude_registration?.pending_approval ?? null,
+    claude_masked_by_higher_precedence: input.claude_registration?.masked_by_higher_precedence ?? null,
+    codex_project_trusted: input.codex_registration?.project_trusted ?? null,
+    codex_masked_by_higher_precedence: input.codex_registration?.masked_by_higher_precedence ?? null,
+    limitations: Object.freeze([
+      "Dispatch context hygiene uses a generated home and scrubbed environment, but it is best-effort and is not an enforced isolation boundary.",
+      "Claude project MCP registration may remain pending until a human approves it; reset choices with `claude mcp reset-project-choices` when needed.",
+      "Codex project MCP configuration is active only after a human trusts the repository in Codex; init never writes trust_level.",
+      "A one-hour host tool timeout bounds a call, not a durable gate decision; retrying the resumable gate is safe."
+    ]),
+    recovery_guidance: Object.freeze([
+      "Repair any reported Node, CLI, authentication, policy, trust, approval, or command-collision issue, then re-run archflow-local init.",
+      "Initialization is idempotent: re-running the full command is the supported recovery path after any interrupted step."
+    ])
+  });
+}
+
+// src/init/registration.ts
+import { spawn as spawn2 } from "node:child_process";
+import { mkdir as mkdir5, readFile as readFile3, writeFile as writeFile2 } from "node:fs/promises";
+import { dirname as dirname5, join as join10 } from "node:path";
+var CLAUDE_MCP_TIMEOUT_MS = 36e5;
+var CODEX_TOOL_TIMEOUT_SEC = 3600;
+var CODEX_STARTUP_TIMEOUT_SEC = 30;
+var CODEX_BLOCK_BEGIN = "# >>> archflow managed MCP server >>>";
+var CODEX_BLOCK_END = "# <<< archflow managed MCP server <<<";
+var CODEX_MANAGED_BLOCK = `${CODEX_BLOCK_BEGIN}
+[mcp_servers.archflow]
+command = "archflow-mcp"
+args = []
+startup_timeout_sec = ${CODEX_STARTUP_TIMEOUT_SEC}
+tool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SEC}
+${CODEX_BLOCK_END}
+`;
+var CLAUDE_MANUAL_ENTRY = `"archflow": {
+  "type": "stdio",
+  "command": "archflow-mcp",
+  "args": [],
+  "timeout": ${CLAUDE_MCP_TIMEOUT_MS}
+}`;
+var CLAUDE_PASTE_GUIDANCE = `Add this exact entry under "mcpServers" in .mcp.json after resolving the conflicting content:
+${CLAUDE_MANUAL_ENTRY}
+`;
+var CODEX_PASTE_GUIDANCE = `Add this exact ArchFlow-owned block to .codex/config.toml after resolving the conflicting content:
+${CODEX_MANAGED_BLOCK}`;
+var ok13 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail15 = (issueCode) => Object.freeze({
+  schema_version: "1",
+  ok: false,
+  error: createProjectError("CONFIG_INVALID", { issue_code: issueCode })
+});
+function refuse(issueCode, guidance) {
+  process.stderr.write(guidance);
+  return fail15(issueCode);
+}
+var ioFailure3 = (operation) => Object.freeze({
+  schema_version: "1",
+  ok: false,
+  error: createProjectError("IO_ERROR", { operation, attempt: 1 })
+});
+function commandFailure(adapter2, error51) {
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: error51.code === "ENOENT" ? createProjectError("CLI_MISSING", { adapter: adapter2 }) : createProjectError("IO_ERROR", { operation: "init-host-command", attempt: 1 })
+  });
+}
+function runCommand(command, argv, cwd, environment) {
+  return new Promise((resolve2, reject) => {
+    const child = spawn2(command, [...argv], {
+      cwd,
+      env: environment === void 0 ? process.env : { ...environment },
+      shell: false,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
+    child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
+    child.once("error", reject);
+    child.once("close", (code) => resolve2({
+      exit_code: code ?? 1,
+      stdout: Buffer.concat(stdout).toString("utf8"),
+      stderr: Buffer.concat(stderr).toString("utf8")
+    }));
+  });
+}
+async function readOptional(path2) {
+  try {
+    return await readFile3(path2, "utf8");
+  } catch (error51) {
+    if (error51.code === "ENOENT") return void 0;
+    throw error51;
+  }
+}
+function parseMcpJson(source) {
+  if (source === void 0) return ok13({ mcpServers: {} });
+  let value;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    return fail15("mcp-json-foreign-keys");
+  }
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return fail15("mcp-json-foreign-keys");
+  }
+  const record3 = value;
+  if (Object.keys(record3).some((key) => key !== "mcpServers")) {
+    return fail15("mcp-json-foreign-keys");
+  }
+  const servers = record3.mcpServers;
+  if (servers === void 0) return ok13({ mcpServers: {} });
+  if (servers === null || typeof servers !== "object" || Array.isArray(servers)) {
+    return fail15("mcp-json-foreign-keys");
+  }
+  return ok13({ mcpServers: servers });
+}
+function serverCommand(server) {
+  if (server === null || typeof server !== "object" || Array.isArray(server)) return void 0;
+  const descriptor = Object.getOwnPropertyDescriptor(server, "command");
+  return descriptor !== void 0 && descriptor.enumerable && "value" in descriptor && typeof descriptor.value === "string" ? descriptor.value : void 0;
+}
+function claudeGetDiagnostic(output) {
+  const pendingApproval = /(?:pending approval|⏸)/iu.test(output);
+  const projectScope = /(?:scope\s*:\s*project|project scope|\.mcp\.json)/iu.test(output);
+  const differentCommand = /command\s*:\s*(?!archflow-mcp(?:\s|$))\S+/iu.test(output);
+  const explicitHigherScope = /(?:scope\s*:\s*(?:local|user)|(?:local|user) scope)/iu.test(output);
+  return {
+    pending_approval: pendingApproval,
+    masked_by_higher_precedence: explicitHigherScope || differentCommand || !projectScope && output.trim() !== ""
+  };
+}
+async function registerClaudeProject(input) {
+  const path2 = join10(input.working_directory, ".mcp.json");
+  try {
+    const beforeSource = await readOptional(path2);
+    const before = parseMcpJson(beforeSource);
+    if (!before.ok) return refuse("mcp-json-foreign-keys", CLAUDE_PASTE_GUIDANCE);
+    const existing = before.value.mcpServers.archflow;
+    if (existing !== void 0 && serverCommand(existing) !== "archflow-mcp") {
+      return refuse("server-command-collision", CLAUDE_PASTE_GUIDANCE);
+    }
+    let registration = "unchanged";
+    if (existing === void 0) {
+      let add;
+      try {
+        add = await runCommand(
+          "claude",
+          ["mcp", "add", "--scope", "project", "archflow", "--", "archflow-mcp"],
+          input.working_directory,
+          input.environment
+        );
+      } catch (error51) {
+        return commandFailure("claude-cli", error51);
+      }
+      if (add.exit_code !== 0 && add.exit_code !== 1) return ioFailure3("claude-mcp-add");
+      registration = "created";
+    }
+    const after = parseMcpJson(await readOptional(path2));
+    if (!after.ok) return refuse("mcp-json-foreign-keys", CLAUDE_PASTE_GUIDANCE);
+    const projectEntry = after.value.mcpServers.archflow;
+    if (projectEntry === void 0) return ioFailure3("claude-mcp-add-readback");
+    if (serverCommand(projectEntry) !== "archflow-mcp") return refuse("server-command-collision", CLAUDE_PASTE_GUIDANCE);
+    const entry = projectEntry;
+    if (entry.timeout !== CLAUDE_MCP_TIMEOUT_MS) registration = registration === "created" ? "created" : "updated";
+    entry.timeout = CLAUDE_MCP_TIMEOUT_MS;
+    const serialized = `${JSON.stringify({ mcpServers: after.value.mcpServers }, null, 2)}
+`;
+    if (serialized !== beforeSource) await writeFile2(path2, serialized, "utf8");
+    let get;
+    try {
+      get = await runCommand("claude", ["mcp", "get", "archflow"], input.working_directory, input.environment);
+    } catch (error51) {
+      return commandFailure("claude-cli", error51);
+    }
+    const text3 = `${get.stdout}
+${get.stderr}`;
+    const diagnostic = claudeGetDiagnostic(text3);
+    return ok13(Object.freeze({
+      schema_version: "1",
+      host: "claude",
+      registration,
+      command: "archflow-mcp",
+      pending_approval: diagnostic.pending_approval,
+      project_trusted: null,
+      masked_by_higher_precedence: diagnostic.masked_by_higher_precedence,
+      diagnostic: get.exit_code === 0 ? text3.trim() : "Project registration written; Claude runtime approval remains to be completed."
+    }));
+  } catch {
+    return ioFailure3("claude-registration");
+  }
+}
+function managedBlockRange(source) {
+  const begin = source.indexOf(CODEX_BLOCK_BEGIN);
+  const end = source.indexOf(CODEX_BLOCK_END);
+  if (begin === -1 && end === -1) return ok13(void 0);
+  if (begin === -1 || end === -1 || end < begin || source.indexOf(CODEX_BLOCK_BEGIN, begin + 1) !== -1 || source.indexOf(CODEX_BLOCK_END, end + 1) !== -1) {
+    return fail15("codex-config-foreign");
+  }
+  return ok13({ start: begin, end: end + CODEX_BLOCK_END.length + (source[end + CODEX_BLOCK_END.length] === "\n" ? 1 : 0) });
+}
+function outsideCodexConflict(source) {
+  const lines = source.split(/\r?\n/u);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (line.startsWith("#")) continue;
+    if (/^\[\s*mcp_servers\.archflow\s*\]$/u.test(line)) {
+      for (let next = index + 1; next < lines.length && !/^\s*\[/u.test(lines[next]); next += 1) {
+        const match = /^\s*command\s*=\s*["']([^"']+)["']/u.exec(lines[next]);
+        if (match !== null) return match[1] === "archflow-mcp" ? "codex-config-foreign" : "server-command-collision";
+      }
+      return "codex-config-foreign";
+    }
+    if (/^\[\s*mcp_servers\s*\]$/u.test(line)) {
+      for (let next = index + 1; next < lines.length && !/^\s*\[/u.test(lines[next]); next += 1) {
+        const entry = /^\s*archflow\s*=\s*(.*)$/u.exec(lines[next]);
+        if (entry === null) continue;
+        const command = /\bcommand\s*=\s*["']([^"']+)["']/u.exec(entry[1] ?? "");
+        return command !== null && command[1] !== "archflow-mcp" ? "server-command-collision" : "codex-config-foreign";
+      }
+      continue;
+    }
+    if (/\bmcp_servers(?:\.archflow|\s*=.*\barchflow\b)/u.test(line)) return "codex-config-foreign";
+  }
+  return void 0;
+}
+function codexGetDiagnostic(output) {
+  try {
+    const value = JSON.parse(output);
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return void 0;
+    const record3 = value;
+    let command = typeof record3.command === "string" ? record3.command : void 0;
+    const transport = record3.transport;
+    if (transport !== null && typeof transport === "object" && !Array.isArray(transport)) {
+      const transportCommand = transport.command;
+      if (typeof transportCommand === "string") command = transportCommand;
+    }
+    const startupTimeout = record3.startup_timeout_sec;
+    const toolTimeout = record3.tool_timeout_sec;
+    return {
+      command,
+      startup_timeout_sec: typeof startupTimeout === "number" || startupTimeout === null ? startupTimeout : void 0,
+      tool_timeout_sec: typeof toolTimeout === "number" || toolTimeout === null ? toolTimeout : void 0
+    };
+  } catch {
+    return void 0;
+  }
+}
+async function registerCodexProject(input) {
+  const path2 = join10(input.working_directory, ".codex", "config.toml");
+  try {
+    const before = await readOptional(path2) ?? "";
+    const range = managedBlockRange(before);
+    if (!range.ok) return refuse("codex-config-foreign", CODEX_PASTE_GUIDANCE);
+    const outside = range.value === void 0 ? before : `${before.slice(0, range.value.start)}${before.slice(range.value.end)}`;
+    const conflict = outsideCodexConflict(outside);
+    if (conflict !== void 0) return refuse(conflict, CODEX_PASTE_GUIDANCE);
+    let registration;
+    let next;
+    if (range.value === void 0) {
+      registration = "created";
+      next = before === "" ? CODEX_MANAGED_BLOCK : `${before}${before.endsWith("\n") ? "" : "\n"}${CODEX_MANAGED_BLOCK}`;
+    } else {
+      next = `${before.slice(0, range.value.start)}${CODEX_MANAGED_BLOCK}${before.slice(range.value.end)}`;
+      registration = next === before ? "unchanged" : "updated";
+    }
+    if (next !== before) {
+      await mkdir5(dirname5(path2), { recursive: true });
+      await writeFile2(path2, next, "utf8");
+    }
+    let get;
+    try {
+      get = await runCommand("codex", ["mcp", "get", "archflow", "--json"], input.working_directory, input.environment);
+    } catch (error51) {
+      return commandFailure("codex-cli", error51);
+    }
+    const resolved = get.exit_code === 0 ? codexGetDiagnostic(get.stdout) : void 0;
+    const resolvedCommand = resolved?.command;
+    const trusted = get.exit_code === 0 && resolvedCommand === "archflow-mcp" && resolved?.startup_timeout_sec === CODEX_STARTUP_TIMEOUT_SEC && resolved?.tool_timeout_sec === CODEX_TOOL_TIMEOUT_SEC;
+    return ok13(Object.freeze({
+      schema_version: "1",
+      host: "codex",
+      registration,
+      command: "archflow-mcp",
+      pending_approval: false,
+      project_trusted: trusted,
+      masked_by_higher_precedence: get.exit_code === 0 && resolvedCommand !== void 0 && resolvedCommand !== "archflow-mcp",
+      diagnostic: trusted ? get.stdout.trim() : "Codex project config is written but remains inactive until the repository is trusted in Codex."
+    }));
+  } catch {
+    return ioFailure3("codex-registration");
+  }
+}
+
+// src/init/index.ts
+async function runInit(input) {
+  const context2 = Object.freeze({
+    task_id: parseTaskSlug("init"),
+    phase_instance: parsePhaseInstanceId("prd"),
+    operation: parseSafeCode("initialize-repository"),
+    attempt: parseSafeInteger(1)
+  });
+  const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), context2);
+  if (!discovered.ok) return discovered;
+  const rootInput = Object.freeze({ working_directory: discovered.value.location.worktreeRoot });
+  const assets = await scaffoldRepositoryAssets(rootInput);
+  if (!assets.ok) return assets;
+  const claude = await registerClaudeProject(rootInput);
+  if (!claude.ok && claude.error.code === "CONFIG_INVALID") return claude;
+  const codex = await registerCodexProject(rootInput);
+  if (!codex.ok && codex.error.code === "CONFIG_INVALID") return codex;
+  const diagnostics = await collectInitDiagnostics({
+    working_directory: rootInput.working_directory,
+    ...claude.ok ? { claude_registration: claude.value } : {},
+    ...codex.ok ? { codex_registration: codex.value } : {}
+  });
+  return Object.freeze({
+    schema_version: "1",
+    ok: true,
+    value: Object.freeze({
+      schema_version: "1",
+      assets: assets.value,
+      claude_registration: claude.ok ? claude.value : null,
+      claude_registration_error: claude.ok ? null : claude.error,
+      codex_registration: codex.ok ? codex.value : null,
+      codex_registration_error: codex.ok ? null : codex.error,
+      diagnostics,
+      creates_task_state: false,
+      creates_commit: false
+    })
+  });
+}
+
+// src/init/task-initialization.ts
+import { mkdir as mkdir6, open as open6, readFile as readFile4 } from "node:fs/promises";
+import { dirname as dirname6, join as join11 } from "node:path";
+var decoder4 = new TextDecoder("utf-8", { fatal: true });
+var ok14 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail16 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+function errno2(error51, code) {
+  return error51 instanceof Error && error51.code === code;
+}
+function policyBaseInvalid(commit) {
+  return createProjectError("POLICY_BASE_INVALID", {
+    expected_digest: canonicalJsonDigest({
+      schema_version: "1",
+      digest_kind: "policy-base-commit",
+      commit
+    })
+  });
+}
+async function createTaskConfig(root, taskId) {
+  const taskConfig = join11(root, ".archflow", "tasks", taskId, "config.yaml");
+  try {
+    return new Uint8Array(await readFile4(taskConfig));
+  } catch (error51) {
+    if (!errno2(error51, "ENOENT")) throw error51;
+  }
+  const template = new Uint8Array(await readFile4(join11(root, ".archflow", "config.yaml")));
+  await mkdir6(dirname6(taskConfig), { recursive: true });
+  try {
+    const handle = await open6(taskConfig, "wx");
+    try {
+      await handle.writeFile(template);
+    } finally {
+      await handle.close();
+    }
+    return template;
+  } catch (error51) {
+    if (!errno2(error51, "EEXIST")) throw error51;
+    return new Uint8Array(await readFile4(taskConfig));
+  }
+}
+async function stageTaskInitialization(input) {
+  const taskId = parseTaskSlug(input.task_id);
+  const context2 = Object.freeze({
+    task_id: taskId,
+    phase_instance: parsePhaseInstanceId("prd"),
+    operation: parseSafeCode("stage-task-initialization"),
+    attempt: parseSafeInteger(1)
+  });
+  const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), context2);
+  if (!discovered.ok) return discovered;
+  const runner = discovered.value;
+  const environment = await preflightGit(runner, context2);
+  if (!environment.ok) return environment;
+  const repository = await resolveRepositoryIdentity(runner, environment.value, context2);
+  if (!repository.ok) return repository;
+  let configBytes;
+  try {
+    configBytes = await createTaskConfig(runner.location.worktreeRoot, taskId);
+  } catch {
+    return fail16(createProjectError("IO_ERROR", {
+      operation: context2.operation,
+      attempt: context2.attempt
+    }));
+  }
+  try {
+    parseConfigYaml(decoder4.decode(configBytes), "task config");
+  } catch {
+    return fail16(createProjectError("CONFIG_INVALID", { issue_code: "task-config-invalid" }));
+  }
+  try {
+    const head = parseGitOid(await readHeadCommit(runner));
+    const constitution = await resolvePinnedConstitution(runner, head, context2);
+    if (!constitution.ok) return constitution;
+    const workflowEntry = await readCommitTreeBlob(runner, head, PINNED_WORKFLOW_PATH);
+    if (workflowEntry === void 0) return fail16(policyBaseInvalid(head));
+    const workflowBytes = await readGitBlobBytes(runner, workflowEntry.oid);
+    try {
+      parseWorkflowYaml(decoder4.decode(workflowBytes), "pinned workflow");
+    } catch {
+      return fail16(policyBaseInvalid(head));
+    }
+    const taskRoot = `.archflow/tasks/${taskId}`;
+    return ok14(Object.freeze({
+      schema_version: "1",
+      artifact_kind: "task-initialization",
+      task_id: taskId,
+      repository_identity_digest: repository.value.digest,
+      code_baseline_commit: head,
+      policy_base_commit: head,
+      constitution_digest: constitution.value.digest,
+      workflow_digest: sha256Bytes(workflowBytes),
+      config_digest: computePinnedConfigDigest(configBytes),
+      canonical_paths: Object.freeze({
+        task_root: parseRepositoryPathClaim(taskRoot),
+        config: parseRepositoryPathClaim(`${taskRoot}/config.yaml`),
+        state: parseRepositoryPathClaim(`${taskRoot}/state.json`),
+        workflow: PINNED_WORKFLOW_PATH,
+        constitution_root: parseRepositoryPathClaim(".archflow/constitution")
+      })
+    }));
+  } catch (error51) {
+    if (error51 instanceof GitInvocationError) {
+      return fail16(projectErrorForGitFailure(error51, runner, context2));
+    }
+    if (error51 instanceof TypeError || error51 instanceof RangeError) {
+      const head = parseGitOid(await readHeadCommit(runner));
+      return fail16(policyBaseInvalid(head));
+    }
+    throw error51;
+  }
+}
+
 // src/local/commands.ts
 var LOCAL_COMMANDS = Object.freeze([
   "validate",
@@ -44148,7 +45433,9 @@ var LOCAL_COMMANDS = Object.freeze([
   "status",
   "reconcile",
   "import",
-  "checkpoint"
+  "checkpoint",
+  "init",
+  "task-init"
 ]);
 var maintenanceRecordV1Validator = createJsonSchemaValidator(maintenance_record_schema_default, [primitives_schema_default, path_claim_schema_default]);
 function requireValue(input) {
@@ -44261,7 +45548,7 @@ async function maintain(input) {
   if (proof.permitted_deletions.length === 0) return { deleted: 0, reachability_proof_digest: proof.digest };
   const maintenanceId = parsePathSafeId(value.maintenance_id);
   const reason2 = String(value.human_reason ?? "");
-  await mkdir3(join7(authority.task_root, "maintenance"), { recursive: false }).catch((error51) => {
+  await mkdir7(join12(authority.task_root, "maintenance"), { recursive: false }).catch((error51) => {
     if (error51.code !== "EEXIST") throw error51;
   });
   const target = await resolveTaskPath({ runner, taskId: authority.task_id, claim: parseTaskPathClaim(`maintenance/${maintenanceId}.json`), expectedClass: "maintenance-record", context: authority.context });
@@ -44281,6 +45568,13 @@ async function maintain(input) {
 }
 async function runLocalCommand(input) {
   if (!LOCAL_COMMANDS.includes(input.command)) throw new TypeError(`unknown local command: ${input.command}`);
+  if (input.command === "init") return runInit({ working_directory: input.working_directory });
+  if (input.command === "task-init") {
+    return stageTaskInitialization({
+      working_directory: input.working_directory,
+      task_id: parseTaskSlug(input.task_id)
+    });
+  }
   if (input.command === "validate") return validateArtifact(recordValue(input));
   if (input.command === "hash") return { digest: canonicalJsonDigest(requireValue(input)) };
   if (input.command === "render") {
@@ -44367,13 +45661,14 @@ async function runLocalCommand(input) {
 }
 
 // src/local/main.ts
+var INPUT_FREE_COMMANDS = /* @__PURE__ */ new Set(["status", "init", "task-init"]);
 async function readInput(path2) {
-  const bytes = path2 === void 0 ? await new Promise((resolve, reject) => {
+  const bytes = path2 === void 0 ? await new Promise((resolve2, reject) => {
     const chunks = [];
     process3.stdin.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-    process3.stdin.once("end", () => resolve(Buffer.concat(chunks)));
+    process3.stdin.once("end", () => resolve2(Buffer.concat(chunks)));
     process3.stdin.once("error", reject);
-  }) : await readFile2(path2);
+  }) : await readFile5(path2);
   if (bytes.byteLength === 0) return void 0;
   return JSON.parse(bytes.toString("utf8"));
 }
@@ -44392,7 +45687,7 @@ commands: ${LOCAL_COMMANDS.join(", ")}
   }
   if (parsed.positionals.length !== 1 || !LOCAL_COMMANDS.includes(parsed.positionals[0])) throw new TypeError("unknown archflow-local command");
   const command = parsed.positionals[0];
-  const value = command === "status" ? void 0 : await readInput(parsed.values.input);
+  const value = INPUT_FREE_COMMANDS.has(command) ? void 0 : await readInput(parsed.values.input);
   const result = await runLocalCommand({ command, working_directory: process3.cwd(), ...parsed.values.task === void 0 ? {} : { task_id: parsed.values.task }, ...value === void 0 ? {} : { value } });
   assertPlainJson(result, "local command result");
   process3.stdout.write(canonicalJsonBytes(result));

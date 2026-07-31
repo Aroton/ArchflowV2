@@ -6,6 +6,8 @@ import { canonicalJsonBytes } from "../contracts/canonical.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { LOCAL_COMMANDS, runLocalCommand, type LocalCommand } from "./commands.js";
 
+const INPUT_FREE_COMMANDS = new Set<LocalCommand>(["status", "init", "task-init"]);
+
 async function readInput(path: string | undefined): Promise<unknown> {
   const bytes = path === undefined
     ? await new Promise<Buffer>((resolve, reject) => {
@@ -30,7 +32,7 @@ async function main(): Promise<void> {
   }
   if (parsed.positionals.length !== 1 || !LOCAL_COMMANDS.includes(parsed.positionals[0] as LocalCommand)) throw new TypeError("unknown archflow-local command");
   const command = parsed.positionals[0] as LocalCommand;
-  const value = command === "status" ? undefined : await readInput(parsed.values.input);
+  const value = INPUT_FREE_COMMANDS.has(command) ? undefined : await readInput(parsed.values.input);
   const result = await runLocalCommand({ command, working_directory: process.cwd(), ...(parsed.values.task === undefined ? {} : { task_id: parsed.values.task }), ...(value === undefined ? {} : { value }) });
   assertPlainJson(result, "local command result");
   process.stdout.write(canonicalJsonBytes(result as PlainJsonValue));

@@ -68,6 +68,10 @@ const createManifest = (): Record<string, unknown> => ({
     { path: "package-lock.json", size: 10, digest: digest("e") },
     { path: "package.json", size: 20, digest: digest("f") },
   ],
+  runtime_assets: [
+    { path: "assets/config.template.yaml", size: 10, digest: digest("7") },
+    { path: "assets/workflow.yaml", size: 20, digest: digest("8") },
+  ],
   dependency_provenance_inputs: [
     {
       package_name: "example",
@@ -297,6 +301,12 @@ describe("release manifest structural authority", () => {
       structuredClone((duplicate.release_control_inputs as unknown[])[0]),
     );
     expect(() => validator.assert(duplicate)).toThrow(/x-archflow-unique-by/iu);
+
+    const duplicateRuntimeAsset = structuredClone(createManifest());
+    (duplicateRuntimeAsset.runtime_assets as unknown[]).push(
+      structuredClone((duplicateRuntimeAsset.runtime_assets as unknown[])[0]),
+    );
+    expect(() => validator.assert(duplicateRuntimeAsset)).toThrow(/x-archflow-unique-by/iu);
   });
 
   it("enumerates the manifest without requiring an impossible self-digest", async () => {

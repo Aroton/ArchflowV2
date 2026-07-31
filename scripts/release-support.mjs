@@ -113,6 +113,7 @@ const REQUIRED_CONTROLS = Object.freeze([
 ]);
 
 const DECLARED_ASSETS = Object.freeze([
+  "assets/config.template.yaml",
   "assets/constitution/00-process.md",
   "assets/constitution/10-architecture.md",
   "assets/constitution/20-data.md",
@@ -845,10 +846,11 @@ export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, ma
 
   const bundleInputs = manifestField(manifest.value, "bundle_inputs");
   const controls = manifestField(manifest.value, "release_control_inputs");
+  const runtimeAssets = manifestField(manifest.value, "runtime_assets");
   const dependencyInputs = manifestField(manifest.value, "dependency_provenance_inputs");
   const contributing = manifestField(manifest.value, "contributing_inputs");
   const artifacts = manifestField(manifest.value, "artifacts", "generated_artifacts");
-  invariant(Array.isArray(bundleInputs) && Array.isArray(controls) && Array.isArray(dependencyInputs), "manifest input collections are required");
+  invariant(Array.isArray(bundleInputs) && Array.isArray(controls) && Array.isArray(runtimeAssets) && Array.isArray(dependencyInputs), "manifest input collections are required");
   invariant(Array.isArray(contributing) && Array.isArray(artifacts), "manifest closure collections are required");
   assertSortedUnique(bundleInputs.map((record) => record.key), "bundle inputs");
   for (const record of bundleInputs) {
@@ -863,6 +865,8 @@ export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, ma
   await assertRecords(repository, controls, "release controls");
   const exactControls = await expectedControls(repository, bundleInputs);
   assertEqualPathSet(recordPaths(controls), recordPaths(exactControls), "release controls");
+  await assertRecords(repository, runtimeAssets, "runtime assets");
+  assertEqualPathSet(recordPaths(runtimeAssets), [...DECLARED_ASSETS].sort(ordinal), "runtime assets");
   await verifyDependencyRecords(repository, dependencyInputs);
   const owners = [
     ...bundleInputs.filter((record) => record.origin.kind === "repository").map((record) => ({ path: record.origin.path })),
@@ -1030,6 +1034,10 @@ async function createControlRecords(repositoryRoot, bundleInputs) {
   return records;
 }
 
+async function createRuntimeAssetRecords(repositoryRoot) {
+  return Promise.all([...DECLARED_ASSETS].sort(ordinal).map((path) => fileRecord(repositoryRoot, path)));
+}
+
 async function copyLegal(repositoryRoot, files) {
   files.set("legal/review.json", await readRegularFile(repositoryRoot, "release/legal-review.json"));
   const upstreamRoot = resolve(repositoryRoot, "release/legal/upstream");
@@ -1186,6 +1194,7 @@ export async function buildReleasePayload({ repositoryRoot, stageRoot }) {
 
   const { bundleInputs, contributing } = await buildRecords(repository, result.metafile);
   const controls = await createControlRecords(repository, bundleInputs);
+  const runtimeAssets = await createRuntimeAssetRecords(repository);
   const dependency = await collectDependencyProvenance(repository, result.metafile, contributing);
   const dependencyInputs = dependency.records;
   const legalBytes = await readRegularFile(repository, "release/legal-review.json");
@@ -1217,6 +1226,7 @@ export async function buildReleasePayload({ repositoryRoot, stageRoot }) {
     bundle_inputs: bundleInputs,
     contributing_inputs: contributing,
     release_control_inputs: controls,
+    runtime_assets: runtimeAssets,
     dependency_provenance_inputs: dependencyInputs,
     adjacent_map_expectations: dependency.expectations,
     declared_content: {

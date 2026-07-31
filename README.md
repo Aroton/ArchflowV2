@@ -28,12 +28,22 @@ cd ArchflowV2
 ./install.sh
 ```
 
-This installs both integrations:
+This verifies the tracked offline payload, installs the server and local-helper bundle under
+`${ARCHFLOW_HOME:-$HOME/.archflow}/bundle/`, creates `archflow-mcp` and `archflow-local`
+launchers under `${ARCHFLOW_BIN:-$HOME/.local/bin}/`, and installs both skill integrations:
 
 - Claude Code skills in `~/.claude/skills/`
 - Codex skills in `~/.agents/skills/`
 
-Install just one with `./install.sh --claude` or `./install.sh --codex`. Restart Codex after installing if the skills are not listed yet.
+The launcher directory must already be on `PATH`; otherwise the installer prints the exact
+`export PATH=...` line and stops. Install just one skill integration with
+`./install.sh --claude` or `./install.sh --codex`. Restart Codex after installing if the skills
+are not listed yet.
+
+From the repository you want to initialize, run `/archflow-init` in Claude Code or
+`$archflow-init` in Codex. Initialization scaffolds the repository-owned ArchFlow assets and
+project MCP registrations, then reports the host approval/trust steps that still require you.
+It does not create a task, commit changes, or claim that host approval has completed.
 
 ## Usage
 

@@ -34,10 +34,12 @@ import { reconcileCurrentAuthority } from "../state/reconciliation.js";
 import type { ProjectResult } from "../contracts/errors.js";
 import type { GateRequestV1 } from "../contracts/durable-gate.js";
 import type { SupplementalReviewRecordV1 } from "../contracts/supplemental-record.js";
+import { runInit } from "../init/index.js";
+import { stageTaskInitialization } from "../init/task-initialization.js";
 
 export const LOCAL_COMMANDS = Object.freeze([
   "validate", "hash", "render", "snapshot", "restore", "maintain", "decide",
-  "gate-counter", "status", "reconcile", "import", "checkpoint",
+  "gate-counter", "status", "reconcile", "import", "checkpoint", "init", "task-init",
 ] as const);
 export type LocalCommand = typeof LOCAL_COMMANDS[number];
 const maintenanceRecordV1Validator = createJsonSchemaValidator<MaintenanceRecordV1>(maintenanceRecordSchema, [primitivesSchema, pathClaimSchema]);
@@ -187,6 +189,13 @@ async function maintain(input: CommandInput): Promise<PlainJsonValue | ProjectRe
 
 export async function runLocalCommand(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
   if (!LOCAL_COMMANDS.includes(input.command)) throw new TypeError(`unknown local command: ${input.command}`);
+  if (input.command === "init") return runInit({ working_directory: input.working_directory });
+  if (input.command === "task-init") {
+    return stageTaskInitialization({
+      working_directory: input.working_directory,
+      task_id: parseTaskSlug(input.task_id),
+    });
+  }
   if (input.command === "validate") return validateArtifact(recordValue(input));
   if (input.command === "hash") return { digest: canonicalJsonDigest(requireValue(input)) };
   if (input.command === "render") {

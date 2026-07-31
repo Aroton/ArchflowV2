@@ -31,7 +31,7 @@ import type { DispatchWorkspace } from "./workspace.js";
 const CLAUDE_MINIMUM_VERSION = "2.1.205";
 const CODEX_MINIMUM_VERSION = "0.122.0";
 
-const CLAUDE_MANAGED_POLICY_PATHS = Object.freeze([
+export const CLAUDE_MANAGED_POLICY_PATHS = Object.freeze([
   "/etc/claude-code/managed-settings.json",
   "/etc/claude-code/managed-settings.d",
   "/etc/claude-code/managed-mcp.json",
@@ -40,7 +40,7 @@ const CLAUDE_MANAGED_POLICY_PATHS = Object.freeze([
   "/Library/Application Support/ClaudeCode/managed-mcp.json",
 ] as const);
 
-const CODEX_MANAGED_POLICY_PATHS = Object.freeze([
+export const CODEX_MANAGED_POLICY_PATHS = Object.freeze([
   "/etc/codex/config.toml",
   "/etc/codex/requirements.toml",
   "/etc/codex/rules",
@@ -128,14 +128,17 @@ export type AdjudicationObservationMint = Readonly<{
 }>;
 
 export class CliAdapterError extends Error {
-  public constructor(public readonly project_error: ProjectError) {
+  public constructor(
+    public readonly project_error: ProjectError,
+    public readonly cli_version?: string,
+  ) {
     super(project_error.code);
     this.name = "CliAdapterError";
   }
 }
 
-const fail = (error: ProjectError): never => {
-  throw new CliAdapterError(error);
+const fail = (error: ProjectError, cliVersion?: string): never => {
+  throw new CliAdapterError(error, cliVersion);
 };
 
 function decodeJson(bytes: Uint8Array, adapter: AdapterId, issueCode: string): unknown {
@@ -238,7 +241,7 @@ async function preflight(
   } else if (adapter === "codex-cli" && authResult.exit_code === 0) {
     loggedIn = /^Logged in(?:\s|$)/u.test(authResult.stdout.toString("utf8").trim());
   }
-  if (!loggedIn) return fail(createProjectError("AUTH_UNAVAILABLE", { adapter }));
+  if (!loggedIn) return fail(createProjectError("AUTH_UNAVAILABLE", { adapter }), version);
 
   const managedPolicyPaths = await existingPaths(policyPaths);
   return Object.freeze({
@@ -490,6 +493,16 @@ const codexAdapter: CliAdapter = Object.freeze({
     return classifyNonzero("codex-cli", result, codexFailureMessages(result.stdout));
   },
 });
+
+/** Runs the exact dispatch version/auth/policy preflight for one named adapter. */
+export function preflightAdapter(
+  adapterId: AdapterId,
+  workspace: DispatchWorkspace,
+): Promise<CliPreflight> {
+  return adapterId === "claude-cli"
+    ? claudeAdapter.preflight(workspace)
+    : codexAdapter.preflight(workspace);
+}
 
 /** Selects the opposite-family reviewer in two compile-time-known arms, before any child launch. */
 export function selectCliAdapter(

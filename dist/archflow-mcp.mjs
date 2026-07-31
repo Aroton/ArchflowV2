@@ -63054,15 +63054,17 @@ function serializeDispatch(operation) {
   return result;
 }
 var CliAdapterError = class extends Error {
-  constructor(project_error) {
+  constructor(project_error, cli_version) {
     super(project_error.code);
     this.project_error = project_error;
+    this.cli_version = cli_version;
     this.name = "CliAdapterError";
   }
   project_error;
+  cli_version;
 };
-var fail10 = (error51) => {
-  throw new CliAdapterError(error51);
+var fail10 = (error51, cliVersion) => {
+  throw new CliAdapterError(error51, cliVersion);
 };
 function decodeJson2(bytes, adapter2, issueCode) {
   let text4;
@@ -63148,7 +63150,7 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
   } else if (adapter2 === "codex-cli" && authResult.exit_code === 0) {
     loggedIn = /^Logged in(?:\s|$)/u.test(authResult.stdout.toString("utf8").trim());
   }
-  if (!loggedIn) return fail10(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }));
+  if (!loggedIn) return fail10(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version3);
   const managedPolicyPaths = await existingPaths(policyPaths);
   return Object.freeze({
     cli_version: version3,

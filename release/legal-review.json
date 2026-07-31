@@ -773,9 +773,9 @@
         "digest": "6282adc7c1d1304f245ff5877a2824b05b53f9842dc658282610c981505f0caf",
         "path": "release/evidence/advisory-snapshot.json"
       },
-      "bundle_digest": "4455e40a945629dd6f8b9abcd70581eb4948b6234c24531fcc7c3e948eebd94a",
-      "decision_digest": "3d3ef6b0472919b61b3059a1f45f8b154bf735b1c38672f689ad93f42cefd34d",
-      "dependency_inventory_digest": "6677620768abebd348e730d751d892539a59b67a3d1f133bf9482f6281e31e76",
+      "bundle_digest": "c9a8fcc5883b9b980d0d51bd380b363038dd79bb0aeca12b416a2ce1d34b8a25",
+      "decision_digest": "2135cb30029e99ebbba28d67a4d77320dbfb8b5e6d145804ff83e40d48c5c963",
+      "dependency_inventory_digest": "8ead1e3c66890ec554a96365625df6efe859b2eaa50ade4e9e69e87a0b381398",
       "entry_bindings": [
         {
           "handler_authority": "mcp-tool-handler",
@@ -796,7 +796,7 @@
         "path": "release/evidence/patched-artifact-availability.json"
       },
       "reachability_evidence": {
-        "digest": "3c535479247fca6bc36a8dc594f2e50a8767d71b01b2e30659a6103c620f5c8d",
+        "digest": "e43cc9eebb8f338660c2b04ec4b6430d36e3ea26f1e2c2b6478e5e737437c979",
         "path": "release/evidence/focused-inert-reachability.json"
       },
       "scope": {
@@ -813,7 +813,7 @@
       },
       "status": "accepted",
       "user_acceptance": {
-        "digest": "be97174ff56cdeb5609109f536d327e8d140924e5d051574278465e4591093d3",
+        "digest": "3aee7f6c0d104b3d650fb96ea86c16845f425a2dca4a154847169d2ac111ec02",
         "path": "release/evidence/user-risk-acceptance.json"
       }
     }
