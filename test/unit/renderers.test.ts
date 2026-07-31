@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
-import { createTestAuthorityLink, createTestCurrentReviewSetAuthority, createTestVerifiedReferencedEvidence } from "../../src/contracts/internal/test-capabilities.js";
+import { createTestAuthorityLink, createTestCurrentReviewSetAuthority, createTestVerifiedReferencedEvidence, createVerifiedEvidenceReference } from "../../src/contracts/internal/test-capabilities.js";
 import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import { renderAdjudicationEvidence, renderReviewEvidence, renderTriage } from "../../src/contracts/renderers.js";
 import type { AgentDeclaredReview, DegradedReview } from "../../src/contracts/review.js";
@@ -41,8 +41,10 @@ describe("anti-spoofing renderers", () => {
     expect(rendered.startsWith("# ArchFlow Review Evidence\nschema_version:")).toBe(true);
     expect(rendered).toContain("\\u000a"); expect(rendered).toContain("\\u0060"); expect(rendered).toContain("\\u003c"); expect(rendered).toContain("\\u202e");
     expect(rendered.endsWith("\n")).toBe(true); expect(rendered.endsWith("\n\n")).toBe(false); expect(rendered).not.toContain("\r");
-    expect(() => renderReviewEvidence({ ...value } as never)).toThrow(/qualified review/);
-    expect(() => renderReviewEvidence({ evidence_digest: digest("2"), evidence: value.evidence, authority: value.authority } as never)).toThrow(/qualified review/);
+    const verified = createVerifiedEvidenceReference(value.evidence);
+    expect(new TextDecoder().decode(renderReviewEvidence(verified))).toContain(`evidence_digest: ${JSON.stringify(verified.evidence_digest)}`);
+    expect(() => renderReviewEvidence({ ...value } as never)).toThrow(/authenticated review/);
+    expect(() => renderReviewEvidence({ evidence_digest: digest("2"), evidence: value.evidence, authority: value.authority } as never)).toThrow(/authenticated review/);
   });
 
   it("rejects forged and spread-cloned adjudication evidence", async () => {
@@ -52,8 +54,10 @@ describe("anti-spoofing renderers", () => {
     const link = createTestAuthorityLink({ schema_version: "1", evidence_kind: "adjudication", assurance: "degraded", role: "adjudication", task_id: parseTaskSlug("mcp-integration"), phase_instance: phase, subject_digest: digest("a"), input_fingerprint: digest("b"), evidence_digest: digest("4"), authority: { kind: "degraded", checkpoint_digest: digest("8"), checkpoint_revision: 1 } });
     const qualified = authorityQualifier.qualifyAdjudication(link, verified) as QualifiedAdjudicationEvidence;
     expect(new TextDecoder().decode(renderAdjudicationEvidence(qualified))).toMatch(/^# ArchFlow Adjudication Evidence/mu);
-    expect(() => renderAdjudicationEvidence({ ...qualified } as never)).toThrow(/qualified adjudication/);
-    expect(() => renderAdjudicationEvidence({ evidence_digest: digest("4"), evidence, authority: link } as never)).toThrow(/qualified adjudication/);
+    const derived = createVerifiedEvidenceReference(qualified.evidence);
+    expect(new TextDecoder().decode(renderAdjudicationEvidence(derived))).toContain(`evidence_digest: ${JSON.stringify(derived.evidence_digest)}`);
+    expect(() => renderAdjudicationEvidence({ ...qualified } as never)).toThrow(/authenticated adjudication/);
+    expect(() => renderAdjudicationEvidence({ evidence_digest: digest("4"), evidence, authority: link } as never)).toThrow(/authenticated adjudication/);
   });
 
   it("renders only identity-authenticated validated triage", () => {

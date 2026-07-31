@@ -30,6 +30,8 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
           document: "record-document-artifact",
           "implementation-output": "record-implementation-output",
           "manual-checkpoint-import": "adopt-manual-checkpoint-import",
+          "review-evidence": "record-self-review",
+          triage: "record-triage",
         } satisfies Readonly<Record<typeof call.input.artifact.artifact_kind, StateArtifactOperation>>)[call.input.artifact.artifact_kind],
         operation_fields: {
           phase_instance: call.input.phase_instance,

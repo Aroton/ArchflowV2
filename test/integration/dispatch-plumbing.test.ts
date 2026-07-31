@@ -4,6 +4,7 @@ import { delimiter, dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
 import { selectCliAdapter, type CliAdapter } from "../../src/dispatch/cli.js";
 import {
   DispatchProcessError,
@@ -43,7 +44,12 @@ afterEach(async () => {
 
 function envelope(text = '{"schema_version":"1"}\n'): DispatchEnvelope {
   const bytes = Buffer.from(text);
-  return Object.freeze({ bytes, digest: "d".repeat(64) as never, byte_count: bytes.byteLength });
+  return Object.freeze({
+    result_kind: "review",
+    bytes,
+    digest: "d".repeat(64) as never,
+    byte_count: bytes.byteLength,
+  });
 }
 
 function route(adapter: AdapterId): DispatchRoute {
@@ -102,7 +108,7 @@ async function dispatch(
   byteCap?: number,
 ): Promise<DispatchChildResult> {
   await adapter.preflight(workspace);
-  const invocation = await adapter.buildInvocation(input, route(adapter.id), workspace);
+  const invocation = await adapter.buildInvocation(input, route(adapter.id), workspace, reviewSchema);
   return runDispatchChild({ ...invocation, signal, ...(byteCap === undefined ? {} : { byte_cap: byteCap }) });
 }
 

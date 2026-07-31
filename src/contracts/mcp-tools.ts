@@ -5,6 +5,7 @@ import { manualCheckpointImportV1Schema } from "./durable-checkpoint.js";
 import { documentArtifactV1Schema } from "./durable-document.js";
 import { implementationOutputV1Schema } from "./durable-implementation-output.js";
 import { legacyImportInitializationV1Schema } from "./durable-legacy-import.js";
+import type { ReviewEvidenceArtifactV1, TriageArtifactV1 } from "./durable-result-manifest.js";
 import { taskInitializationV1Schema } from "./durable-task-initialization.js";
 import type { DurableArtifact } from "./durable.js";
 import { parseProjectError, type ProjectResult } from "./errors.js";
@@ -14,9 +15,11 @@ import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { taskPathClaimV1Schema, type TaskPathClaim } from "./path-claims.js";
 import { rubricV1Schema, type RubricV1 } from "./rubric.js";
+import { reviewEvidenceSchema } from "./review.js";
 import { parseSupplementalReviewOutcome, type GateSupersessionRef, type SupplementalReviewOutcome } from "./supplemental.js";
 import { TOOL_NAMES, type ToolName } from "./tool-names.js";
 import { parseCurrentEvidenceSetRef, type CurrentEvidenceSetRef } from "./trust.js";
+import { triageCandidateSchema } from "./triage.js";
 
 const parsedToolInputBrand: unique symbol = Symbol("ParsedToolInput");
 const structuralResultBrand: unique symbol = Symbol("StructurallyValidProjectResult");
@@ -64,6 +67,16 @@ const durableArtifact = z.union([
   documentArtifactV1Schema,
   implementationOutputV1Schema,
   manualCheckpointImportV1Schema,
+  z.object({
+    schema_version: z.literal("1"),
+    artifact_kind: z.literal("review-evidence"),
+    evidence: reviewEvidenceSchema,
+  }).strict() as z.ZodType<ReviewEvidenceArtifactV1>,
+  z.object({
+    schema_version: z.literal("1"),
+    artifact_kind: z.literal("triage"),
+    evidence: triageCandidateSchema,
+  }).strict() as z.ZodType<TriageArtifactV1>,
 ]) as unknown as z.ZodType<DurableArtifact>;
 const stateInput = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "self_review", "counter_review", "triage", "adjudicate"]), status: z.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
 const counterInput = z.object({ ...common, artifact_path: taskPathClaimV1Schema, rubric: rubricV1Schema }).strict();

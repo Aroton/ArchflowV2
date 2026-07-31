@@ -1,0 +1,103 @@
+{
+  "schema_version": "1",
+  "scenarios": [
+    {
+      "name": "claude-producer-seeded-defect",
+      "producer_family": "claude",
+      "expected_verdict": "fail",
+      "output": {
+        "schema_version": "1",
+        "task_id": "mcp-integration",
+        "phase_instance": "phase-impl-14",
+        "step": "counter_review",
+        "role": "counter-review",
+        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "rubric_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "producer_family": "claude",
+        "findings": [
+          {
+            "finding_id": "seeded-defect",
+            "severity": "blocker",
+            "blocking": true,
+            "summary": "The seeded defect remains.",
+            "evidence": "The artifact contains DEFECT-SEED.",
+            "suggested_resolution": "Remove DEFECT-SEED."
+          }
+        ],
+        "matched_rule_versions": [],
+        "verdict": "fail",
+        "blocking_count": 1
+      }
+    },
+    {
+      "name": "claude-producer-clean-control",
+      "producer_family": "claude",
+      "expected_verdict": "pass",
+      "output": {
+        "schema_version": "1",
+        "task_id": "mcp-integration",
+        "phase_instance": "phase-impl-14",
+        "step": "counter_review",
+        "role": "counter-review",
+        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "rubric_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "producer_family": "claude",
+        "findings": [],
+        "matched_rule_versions": [],
+        "verdict": "pass",
+        "blocking_count": 0
+      }
+    },
+    {
+      "name": "codex-producer-seeded-defect",
+      "producer_family": "codex",
+      "expected_verdict": "fail",
+      "output": {
+        "schema_version": "1",
+        "task_id": "mcp-integration",
+        "phase_instance": "phase-impl-14",
+        "step": "counter_review",
+        "role": "counter-review",
+        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "rubric_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "producer_family": "codex",
+        "findings": [
+          {
+            "finding_id": "seeded-defect",
+            "severity": "blocker",
+            "blocking": true,
+            "summary": "The seeded defect remains.",
+            "evidence": "The artifact contains DEFECT-SEED.",
+            "suggested_resolution": "Remove DEFECT-SEED."
+          }
+        ],
+        "matched_rule_versions": [],
+        "verdict": "fail",
+        "blocking_count": 1
+      }
+    },
+    {
+      "name": "codex-producer-clean-control",
+      "producer_family": "codex",
+      "expected_verdict": "pass",
+      "output": {
+        "schema_version": "1",
+        "task_id": "mcp-integration",
+        "phase_instance": "phase-impl-14",
+        "step": "counter_review",
+        "role": "counter-review",
+        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "rubric_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "producer_family": "codex",
+        "findings": [],
+        "matched_rule_versions": [],
+        "verdict": "pass",
+        "blocking_count": 0
+      }
+    }
+  ]
+}

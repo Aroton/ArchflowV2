@@ -254,14 +254,24 @@ export type GitTreeBlobEntry = Readonly<{
   oid: string;
 }>;
 
+export type GitCommitTreeEntry = Readonly<{
+  path: string;
+  mode: "100644" | "100755" | "120000";
+  oid: string;
+}>;
+
 const HASH_OBJECT_OPERATION = "git-hash-object" as SafeCode;
 const ANCESTOR_OPERATION = "git-ancestor" as SafeCode;
 const TREE_ENTRY_OPERATION = "git-tree-entry" as SafeCode;
+const TREE_LIST_OPERATION = "git-tree-list" as SafeCode;
+const TREE_DIFF_OPERATION = "git-tree-diff-paths" as SafeCode;
+const HEAD_COMMIT_OPERATION = "git-head-commit" as SafeCode;
 const OBJECT_SIZE_OPERATION = "git-object-size" as SafeCode;
 const OBJECT_READ_OPERATION = "git-object-read" as SafeCode;
 const GIT_OID = /^[0-9a-f]{40}$/u;
 const BLOB_MODE = /^(?:100644|100755|120000)$/u;
 const MAX_RESULT_BLOB_BYTES = 25 * 1024 * 1024;
+const MAX_COMMIT_TREE_ENTRIES = 1_024;
 
 /** Hashes bytes as Git would for a declared path. Omit `path` for unconverted symlink targets. */
 export async function hashGitBlob(
@@ -375,6 +385,78 @@ export async function readCommitTreeBlob(
     mode: match.groups["mode"] as GitTreeBlobEntry["mode"],
     oid: match.groups["oid"] as string,
   });
+}
+
+/**
+ * Lists the blob entries below one directory in an immutable commit tree.
+ *
+ * A trailing slash makes the pathspec select the directory's contents rather than the tree entry
+ * itself. Do not add `--literal-pathspecs`: it disables the pathspec magic used by other repository
+ * readers and is unnecessary for this fixed repository-owned directory.
+ */
+export async function readCommitTreeEntries(
+  runner: GitRunner,
+  commit: string,
+  directory: string,
+): Promise<readonly GitCommitTreeEntry[]> {
+  const prefix = directory.endsWith("/") ? directory : `${directory}/`;
+  const fields = await runner.runNulFields({
+    argv: ["ls-tree", "-z", commit, "--", prefix],
+    operation: TREE_LIST_OPERATION,
+  });
+  if (fields.length > MAX_COMMIT_TREE_ENTRIES) {
+    throw new TypeError("git ls-tree exceeded the bounded commit-tree entry limit");
+  }
+  const entries = fields.map((field): GitCommitTreeEntry => {
+    const match = /^(?<mode>\d{6}) blob (?<oid>[0-9a-f]+)\t(?<path>[\s\S]+)$/u.exec(field);
+    if (
+      match?.groups === undefined ||
+      !(match.groups["path"] ?? "").startsWith(prefix) ||
+      !BLOB_MODE.test(match.groups["mode"] ?? "") ||
+      !GIT_OID.test(match.groups["oid"] ?? "")
+    ) {
+      throw new TypeError("git ls-tree returned an invalid commit-tree blob entry");
+    }
+    return Object.freeze({
+      path: match.groups["path"] as string,
+      mode: match.groups["mode"] as GitCommitTreeEntry["mode"],
+      oid: match.groups["oid"] as string,
+    });
+  });
+  entries.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
+  return Object.freeze(entries);
+}
+
+/** Lists paths changed between a policy-base commit and HEAD below one repository directory. */
+export async function readCommitRangeChangedPaths(
+  runner: GitRunner,
+  baseCommit: string,
+  directory: string,
+): Promise<readonly string[]> {
+  const prefix = directory.endsWith("/") ? directory : `${directory}/`;
+  const fields = await runner.runNulFields({
+    argv: ["diff", "--name-only", "-z", `${baseCommit}..HEAD`, "--", prefix],
+    operation: TREE_DIFF_OPERATION,
+  });
+  if (fields.length > MAX_COMMIT_TREE_ENTRIES) {
+    throw new TypeError("git diff exceeded the bounded changed-path limit");
+  }
+  const unique = [...new Set(fields)];
+  if (unique.some((path) => !path.startsWith(prefix))) {
+    throw new TypeError("git diff returned a path outside the requested directory");
+  }
+  unique.sort();
+  return Object.freeze(unique);
+}
+
+/** Resolves the current HEAD commit through the shared bounded Git command boundary. */
+export async function readHeadCommit(runner: GitRunner): Promise<string> {
+  const oid = await runner.runText({
+    argv: ["rev-parse", "--verify", "HEAD^{commit}"],
+    operation: HEAD_COMMIT_OPERATION,
+  });
+  if (!GIT_OID.test(oid)) throw new TypeError("git rev-parse returned an invalid HEAD commit");
+  return oid;
 }
 
 /** Reads the byte size of a blob already named by an authenticated tree entry. */

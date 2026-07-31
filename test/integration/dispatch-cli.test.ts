@@ -4,6 +4,7 @@ import { delimiter, dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
 import { CliAdapterError, selectCliAdapter } from "../../src/dispatch/cli.js";
 import { runDispatchChild } from "../../src/dispatch/process.js";
 import type { DispatchRoute } from "../../src/dispatch/routing.js";
@@ -67,11 +68,12 @@ describe("CLI adapter preflight", () => {
       ? selectCliAdapter("codex", { allow_claude_dispatch: true })
       : selectCliAdapter("claude");
     const envelope: DispatchEnvelope = Object.freeze({
+      result_kind: "review",
       bytes: Buffer.from('{"schema_version":"1"}\n'),
       digest: "d".repeat(64) as never,
       byte_count: 23,
     });
-    const invocation = await adapter.buildInvocation(envelope, route as DispatchRoute, target);
+    const invocation = await adapter.buildInvocation(envelope, route as DispatchRoute, target, reviewSchema);
     const child = await runDispatchChild({ ...invocation, signal: new AbortController().signal });
     expect(child.exit_code).toBe(0);
     expect(adapter.classifyFailure(child)).toBeUndefined();

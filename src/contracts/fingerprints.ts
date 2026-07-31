@@ -48,7 +48,14 @@ export type StateArtifactOperation =
   | "adopt-legacy-import-initialization"
   | "record-document-artifact"
   | "record-implementation-output"
-  | "adopt-manual-checkpoint-import";
+  | "adopt-manual-checkpoint-import"
+  | "record-self-review"
+  | "record-triage";
+
+export type PinnedConstitutionFile = Readonly<{
+  path: RepositoryPathClaim;
+  oid: GitOid;
+}>;
 
 export type StateArtifactOperationFields = Pick<StateInput, "phase_instance" | "step" | "status"> & {
   readonly artifact_kind: NonNullable<StateInput["artifact"]>["artifact_kind"];
@@ -179,6 +186,23 @@ export function computeInputFingerprint(subject: InputFingerprintSubject): Sha25
   });
 }
 
+/**
+ * Identifies the immutable constitution registry by commit-tree membership and blob identity.
+ * Callers must supply the complete pinned tree listing; worktree discovery is not an input.
+ */
+export function computePinnedConstitutionDigest(
+  files: readonly PinnedConstitutionFile[],
+): Sha256Digest {
+  const snapshot = materialize(files, "pinned constitution files");
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "pinned-constitution",
+    files: sortedSet(snapshot, (file) => file.path, "pinned constitution files").map(
+      ({ path, oid }) => ({ path, oid }),
+    ),
+  });
+}
+
 const exactFields = (value: object, expected: readonly string[]): void => {
   const actual = Object.keys(value).sort();
   const wanted = [...expected].sort();
@@ -202,6 +226,8 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
         document: "record-document-artifact",
         "implementation-output": "record-implementation-output",
         "manual-checkpoint-import": "adopt-manual-checkpoint-import",
+        "review-evidence": "record-self-review",
+        triage: "record-triage",
       };
       if (operationForKind[artifactFields.artifact_kind] !== subject.operation) {
         throw new TypeError("invalid archflow_state operation for artifact_kind");

@@ -7,5 +7,5 @@
     "overrides": { "type": "object", "additionalProperties": false, "properties": { "explore": { "$ref": "#/$defs/roles" }, "prd": { "$ref": "#/$defs/roles" }, "design": { "$ref": "#/$defs/roles" }, "phase-design": { "$ref": "#/$defs/roles" }, "phase-impl": { "$ref": "#/$defs/roles" } } }
   },
   "type": "object", "additionalProperties": false, "required": ["schema_version", "roles"],
-  "properties": { "schema_version": { "const": "1" }, "roles": { "$ref": "#/$defs/roles" }, "overrides": { "$ref": "#/$defs/overrides" } }
+  "properties": { "schema_version": { "const": "1" }, "roles": { "$ref": "#/$defs/roles" }, "overrides": { "$ref": "#/$defs/overrides" }, "max_attempts": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 } }
 }

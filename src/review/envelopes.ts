@@ -36,13 +36,47 @@ export type ReviewEnvelopeInput = {
   readonly subject: DispatchSubject;
 };
 
-export type DispatchEnvelope = {
+export type DispatchEnvelope = Readonly<{
+  readonly result_kind: "review" | "adjudication";
   readonly bytes: Uint8Array;
   readonly digest: Sha256Digest;
   readonly byte_count: number;
+}>;
+
+export type AdjudicationSubject = {
+  readonly task_id: TaskSlug;
+  readonly phase_instance: PhaseInstanceId;
+  readonly role: "adjudication";
+  readonly step: "adjudicate";
+  readonly subject_digest: Sha256Digest;
+  readonly input_fingerprint: Sha256Digest;
+  readonly pinned_constitution_digest: Sha256Digest;
+  readonly approved_upstream_digests: readonly Sha256Digest[];
+  readonly source_evidence_set_digest: Sha256Digest;
+  readonly invocation_id: string;
+  readonly result_id: string;
 };
 
-/** Phase 14 adds a result-kind discriminator to DispatchEnvelope; Phase 13 is review-only. */
+export type AdjudicationRuleInput = {
+  readonly id: string;
+  readonly version: number;
+  readonly text: string;
+  readonly review_trigger?: string;
+  readonly enforced_by: readonly string[];
+};
+
+export type AdjudicationUpstreamInput = {
+  readonly upstream_digest: Sha256Digest;
+  readonly artifact: string;
+};
+
+export type AdjudicationEnvelopeInput = {
+  readonly artifact: string;
+  readonly rules: readonly AdjudicationRuleInput[];
+  readonly approved_upstreams: readonly AdjudicationUpstreamInput[];
+  readonly source_evidence_set_digest: Sha256Digest;
+  readonly subject: AdjudicationSubject;
+};
 
 export class ReviewEnvelopeError extends Error {
   public readonly project_error: ProjectError;
@@ -110,6 +144,109 @@ function validateSubject(value: DispatchSubject): DispatchSubject {
   };
 }
 
+function validateAdjudicationSubject(value: AdjudicationSubject): AdjudicationSubject {
+  exactFields(value, [
+    "task_id",
+    "phase_instance",
+    "role",
+    "step",
+    "subject_digest",
+    "input_fingerprint",
+    "pinned_constitution_digest",
+    "approved_upstream_digests",
+    "source_evidence_set_digest",
+    "invocation_id",
+    "result_id",
+  ], "adjudication subject");
+  if (value.role !== "adjudication" || value.step !== "adjudicate") {
+    throw new TypeError("adjudication subject must bind the adjudication step");
+  }
+  const approvedUpstreamDigests = value.approved_upstream_digests.map(parseSha256Digest);
+  if (new Set(approvedUpstreamDigests).size !== approvedUpstreamDigests.length ||
+      approvedUpstreamDigests.some((digest, index) => index > 0 && approvedUpstreamDigests[index - 1]! >= digest)) {
+    throw new TypeError("approved_upstream_digests must be sorted and unique");
+  }
+  return {
+    task_id: parseTaskSlug(value.task_id),
+    phase_instance: parsePhaseInstanceId(value.phase_instance),
+    role: value.role,
+    step: value.step,
+    subject_digest: parseSha256Digest(value.subject_digest),
+    input_fingerprint: parseSha256Digest(value.input_fingerprint),
+    pinned_constitution_digest: parseSha256Digest(value.pinned_constitution_digest),
+    approved_upstream_digests: approvedUpstreamDigests,
+    source_evidence_set_digest: parseSha256Digest(value.source_evidence_set_digest),
+    invocation_id: parseEvidenceId(value.invocation_id, "invocation_id"),
+    result_id: parseEvidenceId(value.result_id, "result_id"),
+  };
+}
+
+function parseNonBlank(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new TypeError(`${label} must contain text`);
+  }
+  return value;
+}
+
+function validateRules(values: readonly AdjudicationRuleInput[]): readonly AdjudicationRuleInput[] {
+  const rules = values.map((value) => {
+    const expected = value.review_trigger === undefined
+      ? ["id", "version", "text", "enforced_by"]
+      : ["id", "version", "text", "review_trigger", "enforced_by"];
+    exactFields(value, expected, "adjudication rule");
+    if (!EVIDENCE_ID.test(value.id)) throw new TypeError("rule id must use the evidence identifier vocabulary");
+    if (!Number.isSafeInteger(value.version) || value.version < 1) {
+      throw new TypeError("rule version must be a positive safe integer");
+    }
+    const enforcedBy = value.enforced_by.map((mechanism) => parseNonBlank(mechanism, "enforced_by entry"));
+    if (new Set(enforcedBy).size !== enforcedBy.length) throw new TypeError("enforced_by entries must be unique");
+    return {
+      id: value.id,
+      version: value.version,
+      text: parseNonBlank(value.text, "rule text"),
+      ...(value.review_trigger === undefined
+        ? {}
+        : { review_trigger: parseNonBlank(value.review_trigger, "review_trigger") }),
+      enforced_by: enforcedBy,
+    };
+  });
+  const keys = rules.map((rule) => `${rule.id}:${String(rule.version)}`);
+  if (new Set(keys).size !== keys.length || keys.some((key, index) => index > 0 && keys[index - 1]! >= key)) {
+    throw new TypeError("adjudication rules must be sorted and unique");
+  }
+  return rules;
+}
+
+function validateUpstreams(values: readonly AdjudicationUpstreamInput[]): readonly AdjudicationUpstreamInput[] {
+  const upstreams = values.map((value) => {
+    exactFields(value, ["upstream_digest", "artifact"], "approved upstream");
+    if (typeof value.artifact !== "string") throw new TypeError("approved upstream artifact must be text");
+    return { upstream_digest: parseSha256Digest(value.upstream_digest), artifact: value.artifact };
+  });
+  const digests = upstreams.map((upstream) => upstream.upstream_digest);
+  if (new Set(digests).size !== digests.length ||
+      digests.some((digest, index) => index > 0 && digests[index - 1]! >= digest)) {
+    throw new TypeError("approved upstreams must be sorted and unique");
+  }
+  return upstreams;
+}
+
+function finishEnvelope(
+  resultKind: DispatchEnvelope["result_kind"],
+  envelope: PlainJsonValue,
+  digestKind: "dispatch-envelope" | "adjudication-envelope",
+): DispatchEnvelope {
+  const bytes = utf8.encode(`${JSON.stringify(envelope, null, 2)}\n`);
+  if (bytes.byteLength > REVIEW_ENVELOPE_BYTE_CAP) {
+    throw new ReviewEnvelopeError(createProjectError("CONTRACT_INVALID", { issue_code: "envelope-byte-cap" }));
+  }
+  const digest = canonicalJsonDigest({
+    ...(envelope as Readonly<Record<string, PlainJsonValue>>),
+    digest_kind: digestKind,
+  });
+  return Object.freeze({ result_kind: resultKind, bytes, digest, byte_count: bytes.byteLength });
+}
+
 /**
  * Builds the sole Phase 13 child input. The closed input and subject shells deliberately make
  * producer history, findings, triage, repository context, and agent instructions unrepresentable.
@@ -140,19 +277,46 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
   // object keys ordinally (putting `artifact` first), so this boundary uses the already validated,
   // explicitly constructed insertion order. The digest below remains canonical and independently
   // domain-separated.
-  const bytes = utf8.encode(`${JSON.stringify(envelope, null, 2)}\n`);
-  if (bytes.byteLength > REVIEW_ENVELOPE_BYTE_CAP) {
-    throw new ReviewEnvelopeError(createProjectError("CONTRACT_INVALID", { issue_code: "envelope-byte-cap" }));
-  }
-
-  const digest = canonicalJsonDigest({
-    schema_version: "1",
-    digest_kind: "dispatch-envelope",
-    artifact: envelope.artifact,
-    rubric: envelope.rubric,
-    subject: envelope.subject,
-  });
-  return Object.freeze({ bytes, digest, byte_count: bytes.byteLength });
+  return finishEnvelope("review", envelope, "dispatch-envelope");
 }
 
-/** Phase 14 supplies an output-schema input to buildInvocation; this module implements neither. */
+/**
+ * Builds the adjudicator's complete child-visible authority. Instructions deliberately mention
+ * only values present in these bytes; envelope_input_digest is server-side provenance.
+ */
+export function buildAdjudicationEnvelope(value: AdjudicationEnvelopeInput): DispatchEnvelope {
+  const snapshot = materialize(value);
+  exactFields(
+    snapshot,
+    ["artifact", "rules", "approved_upstreams", "source_evidence_set_digest", "subject"],
+    "adjudication envelope input",
+  );
+  if (typeof snapshot.artifact !== "string") throw new TypeError("adjudication envelope artifact must be text");
+  const rules = validateRules(snapshot.rules);
+  const approvedUpstreams = validateUpstreams(snapshot.approved_upstreams);
+  const subject = validateAdjudicationSubject(snapshot.subject);
+  const sourceEvidenceSetDigest = parseSha256Digest(snapshot.source_evidence_set_digest);
+  if (sourceEvidenceSetDigest !== subject.source_evidence_set_digest) {
+    throw new TypeError("source_evidence_set_digest must match the adjudication subject");
+  }
+  const upstreamDigests = approvedUpstreams.map((upstream) => upstream.upstream_digest);
+  if (upstreamDigests.length !== subject.approved_upstream_digests.length ||
+      upstreamDigests.some((digest, index) => digest !== subject.approved_upstream_digests[index])) {
+    throw new TypeError("approved upstreams must match the adjudication subject");
+  }
+
+  const envelope = {
+    schema_version: "1",
+    artifact: snapshot.artifact,
+    rules,
+    approved_upstreams: approvedUpstreams,
+    source_evidence_set_digest: sourceEvidenceSetDigest,
+    instructions: {
+      rule_coverage: "Return exactly one rule finding for every supplied rule, using its id as rule_id and version as rule_version.",
+      mechanism_evidence: "For a rule with declared enforced_by labels, return uncertain compliance and one unknown-state entry for each declared mechanism. Do not claim current mechanical evidence.",
+      undeclared_mechanisms: "For a rule with no declared enforced_by labels, return an empty enforced_by list.",
+    },
+    subject,
+  } as const satisfies PlainJsonValue;
+  return finishEnvelope("adjudication", envelope, "adjudication-envelope");
+}

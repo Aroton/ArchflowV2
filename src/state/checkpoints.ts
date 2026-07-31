@@ -111,6 +111,12 @@ export function planCheckpointAdoption(
   let cursor = currentDocument.value;
   for (let index = 0; index < selected.chain.length; index += 1) {
     const checkpoint = selected.chain[index]!;
+    const resultReference = checkpoint.status === "succeeded"
+      ? checkpoint.authoritative_results.find((reference) =>
+          reference.phase_instance === checkpoint.phase_instance &&
+          reference.step === checkpoint.step &&
+          reference.input_fingerprint === checkpoint.input_fingerprint)
+      : undefined;
     const transition = planStateTransition({
       current: cursor,
       target: {
@@ -122,6 +128,7 @@ export function planCheckpointAdoption(
       },
       recomputed_input_fingerprint: checkpoint.input_fingerprint,
       artifact,
+      ...(resultReference === undefined ? {} : { result_reference: resultReference }),
     });
     if (!transition.ok) return transition;
     cursor = { ...transition.value, revision: cursor.revision };

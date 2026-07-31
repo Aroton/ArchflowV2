@@ -61,7 +61,11 @@ export function authenticQualifiedEvidence(value: object, kind: EvidenceKind, as
   return actual?.kind === kind && (assurance === undefined || actual.assurance === assurance);
 }
 
-export function registerCurrentReviewSet(value: object): void { currentReviewSets.add(value); }
+export function registerCurrentReviewSet<T extends object>(
+  value: T,
+): asserts value is T & { readonly [currentReviewSetBrand]: true } {
+  currentReviewSets.add(value);
+}
 export function authenticCurrentReviewSet(value: object): boolean { return currentReviewSets.has(value); }
 export function registerValidatedTriage(value: object): void { validatedTriages.add(value); }
 export function authenticValidatedTriage(value: object): boolean { return validatedTriages.has(value); }

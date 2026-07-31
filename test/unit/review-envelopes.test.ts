@@ -6,7 +6,10 @@ import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.j
 import {
   REVIEW_ENVELOPE_BYTE_CAP,
   ReviewEnvelopeError,
+  buildAdjudicationEnvelope,
   buildReviewEnvelope,
+  type AdjudicationEnvelopeInput,
+  type AdjudicationSubject,
   type DispatchSubject,
   type ReviewEnvelopeInput,
 } from "../../src/review/envelopes.js";
@@ -37,6 +40,37 @@ const input = (): ReviewEnvelopeInput => ({
   subject: subject(),
 });
 
+const adjudicationSubject = (): AdjudicationSubject => ({
+  task_id: parseTaskSlug("mcp-integration"),
+  phase_instance: parsePhaseInstanceId("phase-impl-14"),
+  role: "adjudication",
+  step: "adjudicate",
+  subject_digest: digest("a"),
+  input_fingerprint: digest("b"),
+  pinned_constitution_digest: digest("c"),
+  approved_upstream_digests: [digest("d")],
+  source_evidence_set_digest: digest("e"),
+  invocation_id: "invocation-14",
+  result_id: "result-14",
+});
+
+const adjudicationInput = (): AdjudicationEnvelopeInput => ({
+  artifact: "# Phase 14\n\nImplemented artifact.\n",
+  rules: [{
+    id: "safe-paths",
+    version: 2,
+    text: "Only mutate declared safe paths.",
+    review_trigger: "A declared path is violated.",
+    enforced_by: ["path-contract"],
+  }],
+  approved_upstreams: [{
+    upstream_digest: digest("d"),
+    artifact: "# Approved architecture\n",
+  }],
+  source_evidence_set_digest: digest("e"),
+  subject: adjudicationSubject(),
+});
+
 const json = (bytes: Uint8Array): Record<string, unknown> =>
   JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
 
@@ -47,6 +81,7 @@ describe("review dispatch envelopes", () => {
     const text = new TextDecoder().decode(first.bytes);
 
     expect(first.bytes).toEqual(second.bytes);
+    expect(first.result_kind).toBe("review");
     expect(first.digest).toBe(second.digest);
     expect(first.byte_count).toBe(first.bytes.byteLength);
     expect(text).toMatch(/^\{\n  "schema_version": "1",/u);
@@ -59,6 +94,61 @@ describe("review dispatch envelopes", () => {
       rubric: visible.rubric as never,
       subject: visible.subject as never,
     }));
+  });
+
+  it("builds a domain-separated adjudication envelope with only child-visible instructions", () => {
+    const first = buildAdjudicationEnvelope(adjudicationInput());
+    const second = buildAdjudicationEnvelope(structuredClone(adjudicationInput()));
+    const text = new TextDecoder().decode(first.bytes);
+    const visible = json(first.bytes);
+
+    expect(first.result_kind).toBe("adjudication");
+    expect(first.bytes).toEqual(second.bytes);
+    expect(first.digest).toBe(second.digest);
+    expect(text).toMatch(/^\{\n  "schema_version": "1",/u);
+    expect(visible).toMatchObject({
+      artifact: adjudicationInput().artifact,
+      rules: [{ id: "safe-paths", version: 2, enforced_by: ["path-contract"] }],
+      approved_upstreams: [{ upstream_digest: digest("d"), artifact: "# Approved architecture\n" }],
+      source_evidence_set_digest: digest("e"),
+      subject: { role: "adjudication", step: "adjudicate" },
+    });
+    expect(text).not.toMatch(/echo.*envelope_input_digest/iu);
+    expect(first.digest).toBe(canonicalJsonDigest({
+      ...visible,
+      digest_kind: "adjudication-envelope",
+    } as never));
+
+    const review = buildReviewEnvelope(input());
+    expect(json(review.bytes)).not.toHaveProperty("rules");
+    expect(json(review.bytes)).not.toHaveProperty("approved_upstreams");
+    for (const digest_kind of [
+      "gate-identity",
+      "gate-context",
+      "waiver-context",
+      "open-gate-frozen-state",
+      "projection-generation",
+      "maintenance-reachability",
+      "declared-output-snapshot",
+      "implementation-diff",
+      "declared-index-identity",
+      "declared-worktree-identity",
+      "dispatch-envelope",
+    ] as const) {
+      expect(first.digest).not.toBe(canonicalJsonDigest({ ...visible, digest_kind } as never));
+    }
+  });
+
+  it("rejects adjudication subject mismatches and applies the same byte cap", () => {
+    const base = adjudicationInput();
+    expect(() => buildAdjudicationEnvelope({
+      ...base,
+      source_evidence_set_digest: digest("f"),
+    })).toThrow(/source_evidence_set_digest/u);
+    expect(() => buildAdjudicationEnvelope({
+      ...base,
+      artifact: "x".repeat(REVIEW_ENVELOPE_BYTE_CAP),
+    })).toThrow(ReviewEnvelopeError);
   });
 
   it("returns the exact contract failure above the one MiB pre-spawn cap", () => {

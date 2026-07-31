@@ -87,6 +87,11 @@ describe("SCHEMA_IDS registry", () => {
       "createTestVerifiedReferencedEvidence",
       "createTestCurrentReviewSetAuthority",
       "createTestResultExpectation",
+      "createReviewObservationCapability",
+      "createAdjudicationObservationCapability",
+      "createVerifiedEvidenceReference",
+      "createRetainedEvidenceReference",
+      "createTransactionAuthorityLink",
       "assertAuthenticParsedToolCall",
     ]));
   });

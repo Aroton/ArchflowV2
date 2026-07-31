@@ -176,7 +176,13 @@ export type QualifiedReviewEvidenceByAssurance = { readonly [A in Assurance]: Ve
 export type QualifiedReviewEvidence = QualifiedReviewEvidenceByAssurance[Assurance];
 export type QualifiedAdjudicationEvidenceByAssurance = { readonly [A in Assurance]: VerifiedReferencedEvidence<"adjudication", A> & { readonly authority: AuthorityLink<"adjudication", A>; readonly [qualifiedEvidenceBrand]: `adjudication:${A}` } };
 export type QualifiedAdjudicationEvidence = QualifiedAdjudicationEvidenceByAssurance[Assurance];
-export interface CurrentReviewSet { readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest; readonly current_evidence_set: CurrentEvidenceSetRef; readonly reviews: readonly QualifiedReviewEvidence[]; readonly [currentReviewSetBrand]: true }
+/**
+ * The set brand authenticates how the collection was assembled. The retained-result loader
+ * reconstructs verified references directly from canonical manifests and therefore has no
+ * caller-authored AuthorityLink to attach; the alternate AuthorityQualifier path still requires
+ * QualifiedReviewEvidence before it can mint the same collection brand.
+ */
+export interface CurrentReviewSet { readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest; readonly current_evidence_set: CurrentEvidenceSetRef; readonly reviews: readonly VerifiedReferencedEvidence<"review">[]; readonly [currentReviewSetBrand]: true }
 
 function assertLinkMatches<K extends EvidenceKind, A extends Assurance>(kind: K, link: AuthorityLink<K, A>, value: VerifiedReferencedEvidence<K, A>): void {
   const authenticatedAssurance = (["agent-declared", "server-attested", "degraded"] as const).find((assurance) =>
@@ -209,7 +215,16 @@ function validateSlots(slots: readonly ReviewEvidenceSlot[]): asserts slots is R
   }
   if (new Set(slots.map((slot) => slot.evidence_digest)).size !== slots.length) throw new TypeError("review slot evidence digests must be unique");
 }
-const currentSetDigest = (slots: RequiredReviewSlots): Sha256Digest => parseSha256Digest(createHash("sha256").update(JSON.stringify(slots)).digest("hex"));
+export function currentEvidenceSetRef(slots: RequiredReviewSlots): CurrentEvidenceSetRef {
+  validateSlots(slots);
+  const copied = copyFreezeJson(slots);
+  return Object.freeze({
+    set_digest: parseSha256Digest(
+      createHash("sha256").update(JSON.stringify(copied)).digest("hex"),
+    ),
+    slots: copied,
+  });
+}
 
 export interface AuthorityQualifier {
   readonly qualifyReview: <A extends Assurance>(link: AuthorityLink<"review", A>, value: NoInfer<VerifiedReferencedEvidence<"review", A>>) => QualifiedReviewEvidenceByAssurance[A];
@@ -237,8 +252,7 @@ export const authorityQualifier: AuthorityQualifier = Object.freeze({
       const review = reviews[index];
       if (review === undefined || !authenticQualifiedEvidence(review, "review") || !authenticQualifiedEvidence(review, "review", review.evidence.assurance) || review.evidence_digest !== slot.evidence_digest || review.evidence.role !== slot.role || review.evidence.assurance !== slot.assurance || review.evidence.producer_family !== slot.producer_family || review.evidence.model_family !== slot.reviewer_family || review.authority.task_id !== authority.task_id || review.authority.phase_instance !== authority.phase_instance || review.authority.subject_digest !== authority.subject_digest || review.authority.input_fingerprint !== authority.input_fingerprint || (slot.role === "gate-counter-review" && review.authority.gate_id !== slot.gate_id)) throw new TypeError(`review does not match slot ${index}`);
     });
-    const slots = copyFreezeJson(authority.slots);
-    const current = Object.freeze({ task_id: authority.task_id, phase_instance: authority.phase_instance, subject_digest: authority.subject_digest, input_fingerprint: authority.input_fingerprint, current_evidence_set: Object.freeze({ set_digest: currentSetDigest(slots), slots }), reviews: Object.freeze([...reviews]) }) as CurrentReviewSet;
+    const current = Object.freeze({ task_id: authority.task_id, phase_instance: authority.phase_instance, subject_digest: authority.subject_digest, input_fingerprint: authority.input_fingerprint, current_evidence_set: currentEvidenceSetRef(authority.slots), reviews: Object.freeze([...reviews]) });
     registerCurrentReviewSet(current);
     return current;
   },

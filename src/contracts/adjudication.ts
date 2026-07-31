@@ -17,27 +17,27 @@ export type ComplianceResult = (typeof COMPLIANCE_RESULTS)[number];
 export type TriggerResult = (typeof TRIGGER_RESULTS)[number];
 export type MechanicalEvidenceState = (typeof MECHANICAL_EVIDENCE_STATES)[number];
 
-export interface MechanicalEvidence {
+export type MechanicalEvidence = {
   readonly mechanism: string;
   readonly state: MechanicalEvidenceState;
-  readonly subject_digest?: Sha256Digest | undefined;
-  readonly evidence_digest?: Sha256Digest | undefined;
+  readonly subject_digest?: Sha256Digest;
+  readonly evidence_digest?: Sha256Digest;
   readonly details: string;
-}
-export interface ConstitutionRuleFinding extends RuleVersionRef {
+};
+export type ConstitutionRuleFinding = RuleVersionRef & {
   readonly compliance: ComplianceResult;
   readonly rationale: string;
   readonly trigger: TriggerResult;
   readonly trigger_evidence: string;
   readonly enforced_by: readonly MechanicalEvidence[];
-}
-export interface DriftFinding {
+};
+export type DriftFinding = {
   readonly upstream_digest: Sha256Digest;
   readonly drift: DriftResult;
   readonly affected_claim_ids: readonly string[];
   readonly rationale: string;
-}
-export interface RawAdjudication {
+};
+export type RawAdjudication = {
   readonly schema_version: "1";
   readonly task_id: TaskSlug;
   readonly phase_instance: string;
@@ -53,9 +53,9 @@ export interface RawAdjudication {
   readonly drift: DriftResult;
   readonly matched_rule_versions: readonly RuleVersionRef[];
   readonly uncertain_rule_versions: readonly RuleVersionRef[];
-}
+};
 /** Semantically checked adjudication data. This type intentionally carries no authority brand. */
-export interface DerivedAdjudication extends RawAdjudication {}
+export type DerivedAdjudication = RawAdjudication;
 
 const nonBlank = z.string().min(1).refine((value) => value.trim().length > 0, "must contain a non-whitespace character");
 const id = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
@@ -70,7 +70,7 @@ const mechanicalEvidenceSchema = z.object({
   const hasBindings = evidence.subject_digest !== undefined && evidence.evidence_digest !== undefined;
   if ((evidence.state === "current" || evidence.state === "stale") && !hasBindings) context.addIssue({ code: "custom", message: `${evidence.state} evidence requires subject and evidence digests` });
   if ((evidence.state === "missing" || evidence.state === "unknown") && (evidence.subject_digest !== undefined || evidence.evidence_digest !== undefined)) context.addIssue({ code: "custom", message: `${evidence.state} evidence cannot claim digests` });
-});
+}) as unknown as z.ZodType<MechanicalEvidence>;
 const constitutionRuleFindingSchema = ruleVersionRefSchema.extend({
   compliance: z.enum(COMPLIANCE_RESULTS),
   rationale: nonBlank,
@@ -115,7 +115,6 @@ function validateAdjudicationClaims(parsed: RawAdjudication): void {
   assertSortedUnique(parsed.drift_findings.map((finding) => finding.upstream_digest), "drift_findings");
   if (parsed.drift_findings.length !== parsed.approved_upstream_digests.length || parsed.drift_findings.some((finding, index) => finding.upstream_digest !== parsed.approved_upstream_digests[index])) throw new TypeError("drift_findings must exactly cover approved_upstream_digests");
   for (const finding of parsed.rule_findings) {
-    if (finding.compliance === "pass" && finding.enforced_by.length === 0) throw new TypeError(`compliance pass for ${ruleKey(finding)} requires current mechanical evidence`);
     for (const evidence of finding.enforced_by) {
       if (evidence.state === "current" && evidence.subject_digest !== parsed.subject_digest) throw new TypeError(`current mechanical evidence for ${ruleKey(finding)} binds the wrong subject`);
       if (evidence.state !== "current" && finding.compliance === "pass") throw new TypeError(`suspect mechanical evidence cannot establish compliance for ${ruleKey(finding)}`);
@@ -138,10 +137,10 @@ export function parseAndDeriveAdjudication(value: unknown): DerivedAdjudication 
   return parsed;
 }
 
-interface AdjudicationProvenanceBase extends DerivedAdjudication { readonly model_family: ModelFamily | "unknown"; readonly model: string; readonly effort: (typeof EFFORT_VALUES)[number] | "unknown" }
-export interface AgentDeclaredAdjudication extends AdjudicationProvenanceBase { readonly assurance: "agent-declared" }
-export interface ServerAttestedAdjudication extends Omit<AdjudicationProvenanceBase, "model_family" | "effort"> { readonly assurance: "server-attested"; readonly adapter: AdapterId; readonly cli_version: string; readonly model_family: ModelFamily; readonly effort: (typeof EFFORT_VALUES)[number]; readonly invocation_id: string; readonly envelope_input_digest: Sha256Digest; readonly observed_output_digest: Sha256Digest; readonly result_id: string }
-export interface DegradedAdjudication extends AdjudicationProvenanceBase { readonly assurance: "degraded"; readonly reason: string }
+type AdjudicationProvenanceBase = DerivedAdjudication & { readonly model_family: ModelFamily | "unknown"; readonly model: string; readonly effort: (typeof EFFORT_VALUES)[number] | "unknown" };
+export type AgentDeclaredAdjudication = AdjudicationProvenanceBase & { readonly assurance: "agent-declared" };
+export type ServerAttestedAdjudication = Omit<AdjudicationProvenanceBase, "model_family" | "effort"> & { readonly assurance: "server-attested"; readonly adapter: AdapterId; readonly cli_version: string; readonly model_family: ModelFamily; readonly effort: (typeof EFFORT_VALUES)[number]; readonly invocation_id: string; readonly envelope_input_digest: Sha256Digest; readonly observed_output_digest: Sha256Digest; readonly result_id: string };
+export type DegradedAdjudication = AdjudicationProvenanceBase & { readonly assurance: "degraded"; readonly reason: string };
 export type AdjudicationEvidence = AgentDeclaredAdjudication | ServerAttestedAdjudication | DegradedAdjudication;
 
 const provenanceBase = rawAdjudicationSchema.safeExtend({ model_family: z.union([z.enum(MODEL_FAMILIES), z.literal("unknown")]), model: nonBlank, effort: z.union([z.enum(EFFORT_VALUES), z.literal("unknown")]) });

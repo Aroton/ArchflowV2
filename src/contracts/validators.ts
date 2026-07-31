@@ -24,6 +24,9 @@ import gateRequestSchema from "./schemas/v1/gate-request.schema.json" with { typ
 import supplementalReviewSchema from "./schemas/v1/supplemental-review.schema.json" with { type: "json" };
 import evidenceSlotsSchema from "./schemas/v1/evidence-slots.schema.json" with { type: "json" };
 import secretScanResultSchema from "./schemas/v1/secret-scan-result.schema.json" with { type: "json" };
+import reviewEvidenceSchemaDocument from "./schemas/v1/review-evidence.schema.json" with { type: "json" };
+import triageSchemaDocument from "./schemas/v1/triage.schema.json" with { type: "json" };
+import adjudicationEvidenceSchemaDocument from "./schemas/v1/adjudication-evidence.schema.json" with { type: "json" };
 
 export interface JsonSchemaValidator<T> {
   readonly validate: ValidateFunction<T>;
@@ -131,7 +134,6 @@ function hasConsistentAdjudicationSemantics(_enabled: true, data: Record<string,
   if (driftFindings.length !== upstream.length || driftFindings.some((finding, index) => finding.upstream_digest !== upstream[index])) return false;
   for (const finding of ruleFindings) {
     if (!Array.isArray(finding.enforced_by)) return false;
-    if (finding.compliance === "pass" && finding.enforced_by.length === 0) return false;
     for (const evidence of finding.enforced_by as Record<string, unknown>[]) {
       if (evidence.state === "current" && evidence.subject_digest !== data.subject_digest) return false;
       if (evidence.state !== "current" && finding.compliance === "pass") return false;
@@ -337,6 +339,9 @@ export const resultManifestV1Validator = createJsonSchemaValidator<ResultManifes
   secretScanResultSchema,
   documentArtifactSchema,
   implementationOutputSchema,
+  reviewEvidenceSchemaDocument,
+  triageSchemaDocument,
+  adjudicationEvidenceSchemaDocument,
 ]);
 
 const gateSchemaReferences = [

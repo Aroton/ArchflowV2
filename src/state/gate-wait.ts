@@ -1,23 +1,20 @@
 import { constants as fsConstants } from "node:fs";
 import { lstat } from "node:fs/promises";
 
-import type { Sha256Digest } from "../contracts/evidence.js";
-import { sha256Bytes } from "../contracts/canonical.js";
 import { openResolved, type ResolvedPath } from "../repository/paths.js";
 
 export const GATE_POLL_INTERVAL_MS = 500;
 
 export type GateWaitOutcome =
   | Readonly<{ kind: "interface" }>
-  | Readonly<{ kind: "supplemental"; evidence_digest: Sha256Digest }>
+  | Readonly<{ kind: "supplemental" }>
   | Readonly<{ kind: "aborted" }>;
 
 export type GateWaitInput = Readonly<{
   decision_path: ResolvedPath;
   supplemental?: Readonly<{
     path: ResolvedPath;
-    evidence_digest?: Sha256Digest;
-    recorded_evidence_digests: readonly Sha256Digest[];
+    already_recorded: boolean;
   }>;
   signal: AbortSignal;
 }>;
@@ -36,19 +33,6 @@ async function isCompleteRegularProjection(path: ResolvedPath): Promise<boolean>
   } finally {
     await handle?.close().catch(() => undefined);
   }
-}
-
-async function completeProjectionDigest(path: ResolvedPath): Promise<Sha256Digest | undefined> {
-  let handle;
-  try {
-    handle = await openResolved(path.absolute, fsConstants.O_RDONLY);
-    if (!(await handle.stat()).isFile()) return undefined;
-    return sha256Bytes(new Uint8Array(await handle.readFile()));
-  } catch (error) {
-    const code = (error as { code?: unknown } | null)?.code;
-    if (code === "ENOENT" || code === "ELOOP") return undefined;
-    throw error;
-  } finally { await handle?.close().catch(() => undefined); }
 }
 
 function delayOrAbort(signal: AbortSignal): Promise<"poll" | "aborted"> {
@@ -76,18 +60,14 @@ export async function waitForGateInterface(input: GateWaitInput): Promise<GateWa
     throw new TypeError("gate wait supplemental path must be a review");
   }
 
-  const alreadyRecorded = input.supplemental === undefined
-    ? undefined
-    : new Set(input.supplemental.recorded_evidence_digests);
   for (;;) {
     if (input.signal.aborted) return Object.freeze({ kind: "aborted" });
     if (input.supplemental !== undefined) {
-      const evidenceDigest = input.supplemental.evidence_digest ?? await completeProjectionDigest(input.supplemental.path);
-      if (evidenceDigest !== undefined && !alreadyRecorded!.has(evidenceDigest)) {
-      return Object.freeze({
-        kind: "supplemental",
-        evidence_digest: evidenceDigest,
-      });
+      const complete = await isCompleteRegularProjection(input.supplemental.path);
+      if (complete && !input.supplemental.already_recorded) {
+        // Markdown is deliberately only a wake-up signal. The gate service resolves
+        // authenticated canonical evidence before using or reporting its digest.
+        return Object.freeze({ kind: "supplemental" });
       }
     }
     if (await isCompleteRegularProjection(input.decision_path)) {

@@ -4,7 +4,7 @@ import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.j
 import { createTestAuthorityLink, createTestCurrentReviewSetAuthority, createTestVerifiedReferencedEvidence } from "../../src/contracts/internal/test-capabilities.js";
 import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import { authorityQualifier, type QualifiedReviewEvidence } from "../../src/contracts/trust.js";
-import { validateTriage } from "../../src/contracts/triage.js";
+import { parseTriageCandidate, validateTriage } from "../../src/contracts/triage.js";
 
 const digest = (character: string) => parseSha256Digest(character.repeat(64));
 const phase = encodePhaseInstance({ kind: "phase-impl", phase: 2 as never });
@@ -29,6 +29,11 @@ const disposition = (reviewDigest: ReturnType<typeof digest>) => ({ review_evide
 const candidate = { schema_version: "1", task_id: TASK, phase_instance: phase, step: "triage", subject_digest: digest("a"), input_fingerprint: digest("b"), current_evidence_set_digest: current.current_evidence_set.set_digest, source_evidence_digests: [digest("1"), digest("2")], dispositions: [disposition(digest("1")), disposition(digest("2"))], accepted_count: 0, rejected_count: 2 };
 
 describe("exact-set triage", () => {
+  it("parses structure without claiming current-set coverage", () => {
+    const structurallyValid = { ...candidate, dispositions: candidate.dispositions.slice(1), rejected_count: 1 };
+    expect(parseTriageCandidate(structurallyValid).dispositions).toHaveLength(1);
+    expect(() => validateTriage(current, structurallyValid)).toThrow(/exactly cover/);
+  });
   it("uses composite finding identities", () => { expect(validateTriage(current, candidate).dispositions).toHaveLength(2); });
   it("rejects omissions, duplicates, and foreign review digests", () => {
     expect(() => validateTriage(current, { ...candidate, dispositions: candidate.dispositions.slice(1), rejected_count: 1 })).toThrow(/exactly cover/);

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:archflow:schema:v1:result-manifest",
   "title": "ArchFlow Result Manifest v1",
-  "$comment": "The sole normative structural authority for the server-internal retained result root. The exact source artifact is embedded and is not added to the MCP artifact union. Cross-field digest and source-artifact correlations are enforced by validateDurableSemantics.",
+  "$comment": "The sole normative structural authority for the server-internal retained result root. The exact source artifact is embedded; review and triage are also admitted by archflow_state, while adjudication evidence arrives only through archflow_adjudicate. Cross-field digest and source-artifact correlations are enforced by validateDurableSemantics.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -32,7 +32,10 @@
     "source_artifact": {
       "oneOf": [
         { "$ref": "urn:archflow:schema:v1:document-artifact" },
-        { "$ref": "urn:archflow:schema:v1:implementation-output" }
+        { "$ref": "urn:archflow:schema:v1:implementation-output" },
+        { "$ref": "#/$defs/reviewEvidenceArtifact" },
+        { "$ref": "#/$defs/triageArtifact" },
+        { "$ref": "#/$defs/adjudicationEvidenceArtifact" }
       ]
     },
     "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
@@ -54,6 +57,36 @@
     "secret_scan": { "$ref": "urn:archflow:schema:v1:secret-scan-result" }
   },
   "$defs": {
+    "reviewEvidenceArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_kind", "evidence"],
+      "properties": {
+        "schema_version": { "const": "1" },
+        "artifact_kind": { "const": "review-evidence" },
+        "evidence": { "$ref": "urn:archflow:schema:v1:review-evidence" }
+      }
+    },
+    "triageArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_kind", "evidence"],
+      "properties": {
+        "schema_version": { "const": "1" },
+        "artifact_kind": { "const": "triage" },
+        "evidence": { "$ref": "urn:archflow:schema:v1:triage" }
+      }
+    },
+    "adjudicationEvidenceArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_kind", "evidence"],
+      "properties": {
+        "schema_version": { "const": "1" },
+        "artifact_kind": { "const": "adjudication-evidence" },
+        "evidence": { "$ref": "urn:archflow:schema:v1:adjudication-evidence" }
+      }
+    },
     "projectionDigestRef": {
       "type": "object",
       "additionalProperties": false,

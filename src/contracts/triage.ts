@@ -7,11 +7,11 @@ import type { CurrentReviewSet } from "./trust.js";
 import { authenticCurrentReviewSet, registerValidatedTriage, validatedTriageBrand } from "./internal/trust-brands.js";
 
 
-export interface FindingRef { readonly review_evidence_digest: Sha256Digest; readonly finding_id: string }
-export interface AcceptedDisposition extends FindingRef { readonly disposition: "accepted"; readonly rationale: string; readonly revision_intent: string }
-export interface RejectedDisposition extends FindingRef { readonly disposition: "rejected"; readonly rationale: string; readonly evidence: string }
+export type FindingRef = { readonly review_evidence_digest: Sha256Digest; readonly finding_id: string };
+export type AcceptedDisposition = FindingRef & { readonly disposition: "accepted"; readonly rationale: string; readonly revision_intent: string };
+export type RejectedDisposition = FindingRef & { readonly disposition: "rejected"; readonly rationale: string; readonly evidence: string };
 export type TriageDisposition = AcceptedDisposition | RejectedDisposition;
-export interface TriageCandidate {
+export type TriageCandidate = {
   readonly schema_version: "1";
   readonly task_id: TaskSlug;
   readonly phase_instance: string;
@@ -23,7 +23,7 @@ export interface TriageCandidate {
   readonly dispositions: readonly TriageDisposition[];
   readonly accepted_count: number;
   readonly rejected_count: number;
-}
+};
 export type ValidatedTriage = TriageCandidate & { readonly [validatedTriageBrand]: true };
 
 const id = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
@@ -42,12 +42,17 @@ export const triageCandidateSchema = z.object({
   accepted_count: z.number().int().nonnegative().safe(), rejected_count: z.number().int().nonnegative().safe(),
 }).strict();
 
+/** Structural parse only; exact current-review coverage is established by {@link validateTriage}. */
+export function parseTriageCandidate(value: unknown): TriageCandidate {
+  assertPlainJson(value, "review triage candidate");
+  return triageCandidateSchema.parse(value);
+}
+
 const refKey = (value: FindingRef): string => `${value.review_evidence_digest}:${value.finding_id}`;
 
 export function validateTriage(current: CurrentReviewSet, candidate: unknown): ValidatedTriage {
   if (!authenticCurrentReviewSet(current)) throw new TypeError("an authenticated current review set is required");
-  assertPlainJson(candidate, "review triage");
-  const parsed = triageCandidateSchema.parse(candidate);
+  const parsed = parseTriageCandidate(candidate);
   if (parsed.task_id !== current.task_id || parsed.phase_instance !== current.phase_instance || parsed.subject_digest !== current.subject_digest || parsed.input_fingerprint !== current.input_fingerprint || parsed.current_evidence_set_digest !== current.current_evidence_set.set_digest) throw new TypeError("triage scope does not match current review set");
   const expectedDigests = current.current_evidence_set.slots.map((slot) => slot.evidence_digest);
   if (parsed.source_evidence_digests.length !== expectedDigests.length || parsed.source_evidence_digests.some((digestValue, index) => digestValue !== expectedDigests[index])) throw new TypeError("source_evidence_digests must exactly match canonical current slots");

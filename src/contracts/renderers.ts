@@ -1,8 +1,8 @@
 import type { AdjudicationEvidence, MechanicalEvidence } from "./adjudication.js";
 import type { ReviewEvidence, ReviewFinding, RuleVersionRef } from "./review.js";
-import type { QualifiedAdjudicationEvidence, QualifiedReviewEvidence } from "./trust.js";
+import type { QualifiedAdjudicationEvidence, QualifiedReviewEvidence, VerifiedReferencedEvidence } from "./trust.js";
 import type { TriageDisposition, ValidatedTriage } from "./triage.js";
-import { authenticQualifiedEvidence, authenticValidatedTriage } from "./internal/trust-brands.js";
+import { authenticQualifiedEvidence, authenticValidatedTriage, authenticVerifiedEvidence } from "./internal/trust-brands.js";
 
 const encoder = new TextEncoder();
 const ESCAPE = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069`<>&]/gu;
@@ -31,10 +31,14 @@ function renderReviewFinding(finding: ReviewFinding): string[] {
   return [`### Finding ${visibleJsonString(finding.finding_id)}`, `severity: ${canonical(finding.severity)}`, `blocking: ${canonical(finding.blocking)}`, prose("summary", finding.summary), prose("evidence", finding.evidence), prose("suggested_resolution", finding.suggested_resolution)];
 }
 
-export function renderReviewEvidence(value: QualifiedReviewEvidence): Uint8Array {
-  if (!authenticQualifiedEvidence(value, "review")) throw new TypeError("qualified review evidence is required");
+export function renderReviewEvidence(
+  value: QualifiedReviewEvidence | VerifiedReferencedEvidence<"review">,
+): Uint8Array {
   const evidence = value.evidence;
-  if (!authenticQualifiedEvidence(value, "review", evidence.assurance)) throw new TypeError("qualified review evidence assurance is invalid");
+  const authenticated =
+    authenticQualifiedEvidence(value, "review", evidence.assurance) ||
+    authenticVerifiedEvidence(value, { kind: "review", assurance: evidence.assurance });
+  if (!authenticated) throw new TypeError("authenticated review evidence is required");
   const lines = ["# ArchFlow Review Evidence", ...metadata([
     ["schema_version", evidence.schema_version], ["task_id", evidence.task_id], ["phase_instance", evidence.phase_instance], ["step", evidence.step], ["role", evidence.role], ["subject_digest", evidence.subject_digest], ["input_fingerprint", evidence.input_fingerprint], ["evidence_digest", value.evidence_digest], ["verdict", evidence.verdict], ["blocking_count", evidence.blocking_count], ["matched_rule_versions", evidence.matched_rule_versions.map((rule) => `${rule.rule_id}@${rule.rule_version}`)], ...provenanceMetadata(evidence),
   ]), "", "## Findings"];
@@ -61,10 +65,14 @@ export function renderTriage(value: ValidatedTriage): Uint8Array {
 function renderMechanicalEvidence(value: MechanicalEvidence): string[] {
   return [`    mechanism: ${visibleJsonString(value.mechanism)}`, `    state: ${canonical(value.state)}`, `    subject_digest: ${optional(value.subject_digest)}`, `    evidence_digest: ${optional(value.evidence_digest)}`, prose("details", value.details, "    ")];
 }
-export function renderAdjudicationEvidence(value: QualifiedAdjudicationEvidence): Uint8Array {
-  if (!authenticQualifiedEvidence(value, "adjudication")) throw new TypeError("qualified adjudication evidence is required");
+export function renderAdjudicationEvidence(
+  value: QualifiedAdjudicationEvidence | VerifiedReferencedEvidence<"adjudication">,
+): Uint8Array {
   const evidence = value.evidence;
-  if (!authenticQualifiedEvidence(value, "adjudication", evidence.assurance)) throw new TypeError("qualified adjudication evidence assurance is invalid");
+  const authenticated =
+    authenticQualifiedEvidence(value, "adjudication", evidence.assurance) ||
+    authenticVerifiedEvidence(value, { kind: "adjudication", assurance: evidence.assurance });
+  if (!authenticated) throw new TypeError("authenticated adjudication evidence is required");
   const lines = ["# ArchFlow Adjudication Evidence", ...metadata([
     ["schema_version", evidence.schema_version], ["task_id", evidence.task_id], ["phase_instance", evidence.phase_instance], ["step", evidence.step], ["subject_digest", evidence.subject_digest], ["input_fingerprint", evidence.input_fingerprint], ["evidence_digest", value.evidence_digest], ["pinned_constitution_digest", evidence.pinned_constitution_digest], ["approved_upstream_digests", evidence.approved_upstream_digests], ["source_evidence_set_digest", evidence.source_evidence_set_digest], ["constitution", evidence.constitution], ["drift", evidence.drift], ["matched_rule_versions", evidence.matched_rule_versions.map((rule) => `${rule.rule_id}@${rule.rule_version}`)], ["uncertain_rule_versions", evidence.uncertain_rule_versions.map((rule) => `${rule.rule_id}@${rule.rule_version}`)], ...provenanceMetadata(evidence),
   ]), "", "## Constitution Findings"];

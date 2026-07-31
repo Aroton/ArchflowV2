@@ -6,9 +6,9 @@ import { describe, expect, it } from "vitest";
 import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import * as publicContracts from "../../src/contracts/index.js";
 import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
-import { mintReviewObservation } from "../../src/dispatch/cli.js";
+import { mintAdjudicationObservation, mintReviewObservation } from "../../src/dispatch/cli.js";
 import type { DispatchRoute } from "../../src/dispatch/routing.js";
-import type { DispatchSubject } from "../../src/review/envelopes.js";
+import type { AdjudicationSubject, DispatchSubject } from "../../src/review/envelopes.js";
 
 const digest = (character: string) => parseSha256Digest(character.repeat(64));
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
@@ -40,6 +40,57 @@ const rawReview = (value: DispatchSubject): Record<string, unknown> => ({
   matched_rule_versions: [],
   verdict: "pass",
   blocking_count: 0,
+});
+
+const adjudicationSubject = (): AdjudicationSubject => ({
+  task_id: parseTaskSlug("mcp-integration"),
+  phase_instance: encodePhaseInstance({ kind: "phase-impl", phase: 14 as never }),
+  role: "adjudication",
+  step: "adjudicate",
+  subject_digest: digest("a"),
+  input_fingerprint: digest("b"),
+  pinned_constitution_digest: digest("c"),
+  approved_upstream_digests: [digest("d")],
+  source_evidence_set_digest: digest("e"),
+  invocation_id: "invocation-14",
+  result_id: "result-14",
+});
+
+const rawAdjudication = (value: AdjudicationSubject): Record<string, unknown> => ({
+  schema_version: "1",
+  task_id: value.task_id,
+  phase_instance: value.phase_instance,
+  step: value.step,
+  subject_digest: value.subject_digest,
+  input_fingerprint: value.input_fingerprint,
+  pinned_constitution_digest: value.pinned_constitution_digest,
+  approved_upstream_digests: value.approved_upstream_digests,
+  source_evidence_set_digest: value.source_evidence_set_digest,
+  rule_findings: [{
+    rule_id: "safe-paths",
+    rule_version: 2,
+    compliance: "pass",
+    rationale: "The rule is satisfied.",
+    trigger: "not-matched",
+    trigger_evidence: "No trigger condition was observed.",
+    enforced_by: [{
+      mechanism: "path-contract",
+      state: "current",
+      subject_digest: value.subject_digest,
+      evidence_digest: digest("f"),
+      details: "The contract passed.",
+    }],
+  }],
+  drift_findings: [{
+    upstream_digest: value.approved_upstream_digests[0],
+    drift: "aligned",
+    affected_claim_ids: [],
+    rationale: "The approved upstream remains aligned.",
+  }],
+  constitution: "pass",
+  drift: "aligned",
+  matched_rule_versions: [],
+  uncertain_rule_versions: [],
 });
 
 const routeFor = (family: "claude" | "codex"): DispatchRoute => family === "claude"
@@ -152,5 +203,51 @@ describe("review observation attestation mint", () => {
 
   it.each(["not JSON", JSON.stringify({ schema_version: "1" })])("rejects malformed output without returning evidence", (output) => {
     expect(() => mint("claude", new TextEncoder().encode(output))).toThrow();
+  });
+});
+
+describe("adjudication observation attestation mint", () => {
+  it("binds every adjudication authority field and rejects a changed subject", () => {
+    const dispatchSubject = adjudicationSubject();
+    const route = routeFor("codex");
+    const output = bytes(rawAdjudication(dispatchSubject));
+    const result = mintAdjudicationObservation({
+      subject: dispatchSubject,
+      adapter: route.adapter,
+      cli_version: "0.146.0",
+      route,
+      envelope_input_digest: digest("0"),
+      extracted_output_bytes: output,
+    });
+
+    expect(result.observation).toMatchObject({
+      kind: "adjudication",
+      task_id: dispatchSubject.task_id,
+      phase_instance: dispatchSubject.phase_instance,
+      role: "adjudication",
+      subject_digest: dispatchSubject.subject_digest,
+      input_fingerprint: dispatchSubject.input_fingerprint,
+      pinned_constitution_digest: dispatchSubject.pinned_constitution_digest,
+      approved_upstream_digests: dispatchSubject.approved_upstream_digests,
+      source_evidence_set_digest: dispatchSubject.source_evidence_set_digest,
+      invocation_id: dispatchSubject.invocation_id,
+      result_id: dispatchSubject.result_id,
+      envelope_input_digest: digest("0"),
+      family: "codex",
+    });
+    expect(result.evidence).toMatchObject({
+      assurance: "server-attested",
+      model_family: "codex",
+      observed_output_digest: createHash("sha256").update(output).digest("hex"),
+    });
+
+    expect(() => mintAdjudicationObservation({
+      subject: { ...dispatchSubject, subject_digest: digest("1") },
+      adapter: route.adapter,
+      cli_version: "0.146.0",
+      route,
+      envelope_input_digest: digest("0"),
+      extracted_output_bytes: output,
+    })).toThrow(/subject_digest/u);
   });
 });

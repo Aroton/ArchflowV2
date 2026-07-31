@@ -6,6 +6,7 @@ import { parseGitOid, parseGitTreeMode } from "../../src/contracts/canonical.js"
 import { parseSafeId, parseSha256Digest } from "../../src/contracts/evidence.js";
 import {
   computeInputFingerprint,
+  computePinnedConstitutionDigest,
   computePinnedConfigDigest,
   computeRequestDigest,
   verifyPinnedConfig,
@@ -143,6 +144,19 @@ describe("computeInputFingerprint", () => {
   });
 });
 
+describe("computePinnedConstitutionDigest", () => {
+  it("sorts commit-tree entries, rejects duplicate paths, and binds blob identities", () => {
+    const files = [
+      { path: claim(".archflow/constitution/20-review.md"), oid: oid("2") },
+      { path: claim(".archflow/constitution/10-base.md"), oid: oid("1") },
+    ] as const;
+    const expected = computePinnedConstitutionDigest(files);
+    expect(computePinnedConstitutionDigest([...files].reverse())).toBe(expected);
+    expect(computePinnedConstitutionDigest([{ ...files[0]!, oid: oid("3") }, files[1]!])).not.toBe(expected);
+    expect(() => computePinnedConstitutionDigest([files[0]!, files[0]!])).toThrow(/set: duplicate/u);
+  });
+});
+
 describe("computeRequestDigest", () => {
   it("pins stable golden digests for every closed selector and both gate shapes", () => {
     expect(Object.fromEntries(Object.entries(requestSubjects).map(([name, value]) => [name, computeRequestDigest(value)]))).toEqual({
@@ -197,6 +211,8 @@ describe("computeRequestDigest", () => {
       ["record-document-artifact", "document"],
       ["record-implementation-output", "implementation-output"],
       ["adopt-manual-checkpoint-import", "manual-checkpoint-import"],
+      ["record-self-review", "review-evidence"],
+      ["record-triage", "triage"],
     ] as const;
     for (const [operation, artifact_kind] of cases) {
       const candidate = {

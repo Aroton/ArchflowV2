@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { canonicalJsonBytes } from "../../src/contracts/canonical.js";
+import adjudicationSchema from "../../src/contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
+import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
 import type { HostIdentity } from "../../src/contracts/hosts.js";
 import type { DispatchChildResult } from "../../src/dispatch/process.js";
 import {
@@ -24,7 +26,12 @@ const result = (value: Partial<DispatchChildResult> = {}): DispatchChildResult =
   stderr: Buffer.alloc(0),
   ...value,
 });
-const envelope: DispatchEnvelope = Object.freeze({ bytes: bytes('{"schema_version":"1"}\n'), digest: "d".repeat(64) as never, byte_count: 23 });
+const envelope: DispatchEnvelope = Object.freeze({
+  result_kind: "review",
+  bytes: bytes('{"schema_version":"1"}\n'),
+  digest: "d".repeat(64) as never,
+  byte_count: 23,
+});
 
 async function workspace(): Promise<DispatchWorkspace> {
   const root = await mkdtemp(join(tmpdir(), "archflow-cli-test-"));
@@ -105,7 +112,8 @@ describe("CLI invocation construction", () => {
   it("builds the pinned Claude argv with inline schema and no implicit defaults", async () => {
     const target = await workspace();
     const route: DispatchRoute = { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "max" };
-    const invocation = await selectCliAdapter("codex", { allow_claude_dispatch: true }).buildInvocation(envelope, route, target);
+    const invocation = await selectCliAdapter("codex", { allow_claude_dispatch: true })
+      .buildInvocation(envelope, route, target, reviewSchema);
     expect(invocation.argv.slice(0, 5)).toEqual(["-p", "--safe-mode", "--tools", "", "--disable-slash-commands"]);
     expect(invocation.argv).toContain("--setting-sources");
     expect(invocation.argv).not.toContain("--bare");
@@ -119,7 +127,7 @@ describe("CLI invocation construction", () => {
   it("builds the pinned Codex argv with schema/output paths and exact suppressions", async () => {
     const target = await workspace();
     const route: DispatchRoute = { adapter: "codex-cli", family: "codex", model: "gpt-5.3-codex", effort: "xhigh" };
-    const invocation = await selectCliAdapter("claude").buildInvocation(envelope, route, target);
+    const invocation = await selectCliAdapter("claude").buildInvocation(envelope, route, target, reviewSchema);
     expect(invocation.argv.slice(0, 6)).toEqual(["exec", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check", "--strict-config"]);
     expect(invocation.argv).toContain("--output-schema");
     expect(invocation.argv).toContain("-o");
@@ -129,6 +137,31 @@ describe("CLI invocation construction", () => {
     expect(invocation.argv.filter((item) => item === "--disable")).toHaveLength(14);
     expect(JSON.parse(await readFile(invocation.argv[invocation.argv.indexOf("--output-schema") + 1]!, "utf8"))).toMatchObject({ type: "object" });
     expect(invocation.final_output_path).toBe(invocation.argv[invocation.argv.indexOf("-o") + 1]);
+  });
+
+  it.each([
+    ["claude", "claude-cli"],
+    ["codex", "codex-cli"],
+  ] as const)("passes the adjudication schema through the %s adapter without stripping custom keywords", async (_name, id) => {
+    const target = await workspace();
+    const adapter = id === "claude-cli"
+      ? selectCliAdapter("codex", { allow_claude_dispatch: true })
+      : selectCliAdapter("claude");
+    const route: DispatchRoute = id === "claude-cli"
+      ? { adapter: id, family: "claude", model: "claude-opus-4-6", effort: "high" }
+      : { adapter: id, family: "codex", model: "gpt-5.3-codex", effort: "high" };
+    const adjudicationEnvelope: DispatchEnvelope = { ...envelope, result_kind: "adjudication" };
+    const invocation = await adapter.buildInvocation(adjudicationEnvelope, route, target, adjudicationSchema);
+    const schemaText = id === "claude-cli"
+      ? invocation.argv[invocation.argv.indexOf("--json-schema") + 1]!
+      : await readFile(invocation.argv[invocation.argv.indexOf("--output-schema") + 1]!, "utf8");
+    const parsed = JSON.parse(schemaText) as Record<string, unknown>;
+
+    expect(schemaText).toContain("x-archflow-adjudication-semantics");
+    expect(parsed).toEqual(adjudicationSchema);
+    if (id === "codex-cli") {
+      expect(invocation.argv[invocation.argv.indexOf("--output-schema") + 1]).toMatch(/adjudication\.schema\.json$/u);
+    }
   });
 });
 

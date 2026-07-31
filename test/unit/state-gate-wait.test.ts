@@ -4,8 +4,6 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { parseSha256Digest } from "../../src/contracts/evidence.js";
-import { sha256Bytes } from "../../src/contracts/canonical.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import type { ResolvedPath, ResolvedTaskPath } from "../../src/repository/paths.js";
 import { GATE_POLL_INTERVAL_MS, waitForGateInterface } from "../../src/state/gate-wait.js";
@@ -45,25 +43,24 @@ describe("waitForGateInterface", () => {
     const root = await temporaryRoot("gate-wait-supplemental");
     const review = join(root, "review.md");
     await writeFile(review, "review\n");
-    const digest = parseSha256Digest("a".repeat(64));
     const controller = new AbortController();
     await expect(waitForGateInterface({
       decision_path: resolved(join(root, "gate.decision"), "gate-interface"),
-      supplemental: { path: resolved(review, "review"), evidence_digest: digest, recorded_evidence_digests: [] },
+      supplemental: { path: resolved(review, "review"), already_recorded: false },
       signal: controller.signal,
-    })).resolves.toEqual({ kind: "supplemental", evidence_digest: digest });
+    })).resolves.toEqual({ kind: "supplemental" });
   });
 
-  it("derives the first supplemental projection digest when the waiter does not know it yet", async () => {
+  it("treats the first supplemental projection as a wake-up signal only", async () => {
     const root = await temporaryRoot("gate-wait-first-supplemental");
     const review = join(root, "review.md");
     const bytes = Buffer.from("first review\n");
     await writeFile(review, bytes);
     await expect(waitForGateInterface({
       decision_path: resolved(join(root, "gate.decision"), "gate-interface"),
-      supplemental: { path: resolved(review, "review"), recorded_evidence_digests: [] },
+      supplemental: { path: resolved(review, "review"), already_recorded: false },
       signal: new AbortController().signal,
-    })).resolves.toEqual({ kind: "supplemental", evidence_digest: sha256Bytes(bytes) });
+    })).resolves.toEqual({ kind: "supplemental" });
   });
 
   it("surfaces an untriaged supplemental projection before a simultaneously complete decision", async () => {
@@ -74,20 +71,19 @@ describe("waitForGateInterface", () => {
     await Promise.all([writeFile(review, bytes), writeFile(decision, "{}\n")]);
     await expect(waitForGateInterface({
       decision_path: resolved(decision, "gate-interface"),
-      supplemental: { path: resolved(review, "review"), recorded_evidence_digests: [] },
+      supplemental: { path: resolved(review, "review"), already_recorded: false },
       signal: new AbortController().signal,
-    })).resolves.toEqual({ kind: "supplemental", evidence_digest: sha256Bytes(bytes) });
+    })).resolves.toEqual({ kind: "supplemental" });
   });
 
   it("does not re-surface supplemental evidence already in the projection ledger", async () => {
     const root = await temporaryRoot("gate-wait-recorded");
     const review = join(root, "review.md");
     await writeFile(review, "review\n");
-    const digest = parseSha256Digest("b".repeat(64));
     const controller = new AbortController();
     const waiting = waitForGateInterface({
       decision_path: resolved(join(root, "gate.decision"), "gate-interface"),
-      supplemental: { path: resolved(review, "review"), evidence_digest: digest, recorded_evidence_digests: [digest] },
+      supplemental: { path: resolved(review, "review"), already_recorded: true },
       signal: controller.signal,
     });
     controller.abort();

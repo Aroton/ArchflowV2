@@ -44,7 +44,9 @@ const expectedSchemaDocuments = [
   "implementation-output",
   "manual-checkpoint",
   "manual-checkpoint-import",
-  "secret-scan-result"
+  "secret-scan-result",
+  "review-evidence",
+  "triage"
 ] as const;
 
 const schemaDocumentPaths = [
@@ -64,12 +66,15 @@ const schemaDocumentPaths = [
   "../../src/contracts/schemas/v1/implementation-output.schema.json",
   "../../src/contracts/schemas/v1/manual-checkpoint.schema.json",
   "../../src/contracts/schemas/v1/manual-checkpoint-import.schema.json",
-  "../../src/contracts/schemas/v1/secret-scan-result.schema.json"
+  "../../src/contracts/schemas/v1/secret-scan-result.schema.json",
+  "../../src/contracts/schemas/v1/review-evidence.schema.json",
+  "../../src/contracts/schemas/v1/triage.schema.json"
 ] as const;
 
 const validatingKeywordCoverage = {
   "x-archflow-max-utf8-bytes": ["path-utf8-input", "path-utf8-output", "project-error-path-utf8"],
   "x-archflow-unique-by": ["rubric-unique-by"],
+  "x-archflow-review-summary": ["review-summary"],
   "x-archflow-mcp-semantics": [
     "mcp-current-evidence",
     "mcp-waiver-origin-task",
@@ -188,6 +193,24 @@ function materialize(entry: CorpusCase): MaterializedCase {
     case "path-utf8-input": return { value: counterCall(longPath) };
     case "path-nfc-input": return { value: counterCall(nfdPath) };
     case "rubric-unique": return { value: counterCall("phases/phase-3.md", [{ id: "paths", text: "First", blocking: true }, { id: "paths", text: "Second", blocking: false }]) };
+    case "review-summary": return {
+      value: {
+        ...stateCall("succeeded"),
+        step: "self_review",
+        artifact: {
+          schema_version: "1",
+          artifact_kind: "review-evidence",
+          evidence: {
+            schema_version: "1", task_id: COMMON.task_id, phase_instance: "phase-impl-3",
+            step: "self_review", role: "self-review", subject_digest: D("b"),
+            input_fingerprint: COMMON.input_fingerprint, rubric_digest: D("c"),
+            producer_family: "claude", findings: [], matched_rule_versions: [],
+            verdict: "fail", blocking_count: 0, assurance: "agent-declared",
+            model_family: "claude", model: "claude", effort: "high",
+          },
+        },
+      },
+    };
     case "checkpoint-authoritative-result-order": {
       const checkpoint = structuredClone(MANUAL_CHECKPOINT);
       const results = checkpoint.authoritative_results as unknown[];

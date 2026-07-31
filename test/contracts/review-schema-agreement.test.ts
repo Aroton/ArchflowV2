@@ -64,14 +64,16 @@ describe("review and adjudication schema agreement", () => {
     for (const value of cases) { expect(validator.validate(value)).toBe(false); expect(reviewEvidenceSchema.safeParse(value).success).toBe(false); }
   });
 
-  it("agrees on absent, mixed, and wrong-subject mechanical pass evidence", async () => {
+  it("agrees that empty mechanical pass evidence is structural while mixed and wrong-subject evidence fail", async () => {
     const adjudication = await json(new URL("../fixtures/contracts/adjudication/valid.json", import.meta.url)) as Record<string, unknown>;
     const validator = createJsonSchemaValidator(await schema("adjudication-evidence"));
     const finding = structuredClone((adjudication.rule_findings as Array<Record<string, unknown>>)[0]!);
     const current = structuredClone((finding.enforced_by as Array<Record<string, unknown>>)[0]!);
     const base = { ...adjudication, assurance: "agent-declared", model_family: "unknown", model: "unknown", effort: "unknown" };
+    const empty = { ...base, rule_findings: [{ ...finding, enforced_by: [] }] };
+    expect(validator.validate(empty), JSON.stringify(validator.validate.errors)).toBe(true);
+    expect(adjudicationEvidenceSchema.safeParse(empty).success).toBe(true);
     const cases = [
-      { ...base, rule_findings: [{ ...finding, enforced_by: [] }] },
       { ...base, rule_findings: [{ ...finding, enforced_by: [current, { mechanism: "manual", state: "unknown", details: "Unavailable." }] }] },
       { ...base, rule_findings: [{ ...finding, enforced_by: [{ ...current, subject_digest: "0".repeat(64) }] }] },
     ];

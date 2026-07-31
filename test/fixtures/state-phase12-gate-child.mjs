@@ -43,6 +43,11 @@ try {
     phase_instance: phaseInstance, declared_inputs: [],
   };
   const inputFingerprint = fingerprints.computeInputFingerprint(subject);
+  const reentryKind = action.startsWith("reentry")
+    ? "review-trigger"
+    : action.startsWith("exhaustion")
+      ? "attempts-exhausted"
+      : undefined;
   const input = {
     authority: authority.value, expected_revision: 7, intent_id: evidence.parseSafeId(intentId),
     request_digest: evidence.parseSha256Digest(digestByte.repeat(64)), input_fingerprint: inputFingerprint,
@@ -54,7 +59,26 @@ try {
         { role: "counter-review", evidence_digest: evidence.parseSha256Digest("c".repeat(64)), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       ],
     },
-    kind: "artifact-approval", context: { artifact_kind: "phase-implementation" },
+    ...(reentryKind === "review-trigger"
+      ? {
+          kind: reentryKind,
+          context: {
+            matched_rules: [{ rule_id: "review-required", rule_version: 1 }],
+            uncertain_rules: [],
+            eligible_waiver_rules: [],
+            waiver_scope: { operation: "review-trigger", boundary: "subject" },
+          },
+        }
+      : reentryKind === "attempts-exhausted"
+        ? {
+            kind: reentryKind,
+            context: {
+              step: state.document.value.step,
+              attempts: state.document.value.attempt,
+              maximum_attempts: state.document.value.attempt,
+            },
+          }
+        : { kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } }),
   };
   const realAtomic = atomicModule.createAtomicWriter();
   let stateReplacements = 0;
@@ -97,9 +121,14 @@ try {
   const dependencies = {
     runner: discovered.value, environment: environment.value, atomic: wrappedAtomic, lock: lockModule.createTaskLock(),
     resolve_input_fingerprint: async () => ({ schema_version: "1", ok: true, value: subject }),
+    resolve_gate_reentry_fingerprint: async () => ({
+      schema_version: "1",
+      ok: true,
+      value: evidence.parseSha256Digest("e".repeat(64)),
+    }),
     read_state: read.readTaskState, read_config: read.readTaskConfig, read_receipt: read.readIntentReceipt,
   };
-  const result = action.startsWith("open")
+  const result = action.includes("open")
     ? await gates.openDurableGate(dependencies, input)
     : await gates.runDurableGate(dependencies, { ...input, signal: new AbortController().signal });
   process.send({ type: "result", result });

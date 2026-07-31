@@ -19,8 +19,12 @@ import {
 import { parseTaskSlug, type PathSafeId, type TaskSlug } from "../contracts/evidence.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import {
+  adjudicationReviewClaim,
+  counterReviewClaim,
   parseTaskPathClaim,
+  selfReviewClaim,
   toRepositoryPathClaim,
+  triageReviewClaim,
   type PathClass,
   type RepositoryPathClaim,
   type RepositoryPathClass,
@@ -32,6 +36,13 @@ import type { RepositoryOperationContext } from "./git.js";
 import type { RootBoundGitRunner } from "./identity.js";
 
 declare const resolvedTaskPathBrand: unique symbol;
+
+export {
+  adjudicationReviewClaim,
+  counterReviewClaim,
+  selfReviewClaim,
+  triageReviewClaim,
+};
 
 /**
  * A path proven contained under the worktree root by `realpath` **at resolution time**.

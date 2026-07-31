@@ -5,6 +5,7 @@ import { parseSingleYamlDocument } from "./yaml.js";
 
 export const ROUTING_ROLES = ["producer", "self-reviewer", "counter-reviewer", "adjudicator"] as const;
 export const REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"] as const;
+export const DEFAULT_MAX_ATTEMPTS = 3;
 
 const routeSchema = z.object({
   model: z.string().min(1).refine((value) => value.trim().length > 0, "model must contain a non-whitespace character"),
@@ -30,6 +31,7 @@ export const configV1Schema = z.object({
   schema_version: z.literal("1"),
   roles: rolesSchema,
   overrides: overridesSchema.optional(),
+  max_attempts: z.number().int().positive().safe().optional(),
 }).strict();
 
 export type ModelRouteV1 = z.infer<typeof routeSchema>;

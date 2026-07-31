@@ -33,10 +33,19 @@ function state(overrides: Partial<TaskStateV1> = {}): TaskStateV1 {
 describe("planStateTransition", () => {
   it("plans the exact running-to-succeeded lifecycle move", () => {
     const current = state({ step: "self_review" });
+    const reference = {
+      phase_instance: current.phase_instance,
+      step: "self_review" as const,
+      result_digest: D("9"),
+      result_id: parseSafeId("self-review-result"),
+      input_fingerprint: D("8"),
+      manifest_path: parseRepositoryPathClaim(".archflow/tasks/task-1/results/sha256/" + "9".repeat(64) + "/manifest.json"),
+    };
     const result = planStateTransition({
       current,
       target: { phase_instance: current.phase_instance, step: "self_review", status: "succeeded", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
       recomputed_input_fingerprint: D("8"),
+      result_reference: reference,
     });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toMatchObject({ status: "succeeded", input_fingerprint: D("8") });
@@ -88,7 +97,7 @@ describe("planStateTransition", () => {
   });
 
   it("moves only through the fixed pipeline and fixed phase sequence", () => {
-    const current = state({ status: "succeeded", step: "adjudicate" });
+    const current = state({ status: "succeeded", step: "adjudicate", attempt: parseSafeInteger(3) });
     const result = planStateTransition({
       current,
       target: { phase_instance: phase("phase-impl", 2), step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
@@ -102,6 +111,55 @@ describe("planStateTransition", () => {
       recomputed_input_fingerprint: D("8"),
     });
     expect(skipped.ok ? undefined : skipped.error.code).toBe("TRANSITION_INVALID");
+  });
+
+  it("carries the phase-instance attempt across steps and increments retries and re-entry", () => {
+    const across = state({
+      step: "self_review",
+      status: "succeeded",
+      attempt: parseSafeInteger(3),
+    });
+    const next = planStateTransition({
+      current: across,
+      target: {
+        phase_instance: across.phase_instance,
+        step: "counter_review",
+        status: "running",
+        attempt: parseSafeInteger(3),
+        input_fingerprint: D("8"),
+      },
+      recomputed_input_fingerprint: D("8"),
+    });
+    expect(next.ok).toBe(true);
+
+    const retry = planStateTransition({
+      current: state({ status: "failed", attempt: parseSafeInteger(3) }),
+      target: {
+        phase_instance: across.phase_instance,
+        step: "produce",
+        status: "running",
+        attempt: parseSafeInteger(4),
+        input_fingerprint: D("8"),
+      },
+      recomputed_input_fingerprint: D("8"),
+    });
+    expect(retry.ok).toBe(true);
+
+    for (const step of ["triage", "adjudicate"] as const) {
+      const current = state({ step, status: "succeeded", attempt: parseSafeInteger(4) });
+      const reentry = planStateTransition({
+        current,
+        target: {
+          phase_instance: current.phase_instance,
+          step: "produce",
+          status: "running",
+          attempt: parseSafeInteger(5),
+          input_fingerprint: D("9"),
+        },
+        recomputed_input_fingerprint: D("9"),
+      });
+      expect(reentry.ok, step).toBe(true);
+    }
   });
 
   it("rejects a stale fingerprint before planning", () => {

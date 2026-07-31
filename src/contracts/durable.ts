@@ -9,7 +9,12 @@ import {
 } from "./durable-checkpoint.js";
 import type { DocumentArtifactV1 } from "./durable-document.js";
 import type { ImplementationOutputV1 } from "./durable-implementation-output.js";
-import type { ResultManifestV1 } from "./durable-result-manifest.js";
+import type {
+  EvidenceArtifactV1,
+  ResultManifestV1,
+  ReviewEvidenceArtifactV1,
+  TriageArtifactV1,
+} from "./durable-result-manifest.js";
 import type { LegacyImportInitializationV1 } from "./durable-legacy-import.js";
 import type { MaintenanceRecordV1 } from "./durable-maintenance.js";
 import type { IntentReceiptV1 } from "./durable-intent.js";
@@ -44,7 +49,9 @@ export type DurableArtifact =
   | LegacyImportInitializationV1
   | DocumentArtifactV1
   | ImplementationOutputV1
-  | ManualCheckpointImportV1;
+  | ManualCheckpointImportV1
+  | ReviewEvidenceArtifactV1
+  | TriageArtifactV1;
 
 export type DurableSemanticSubject = {
   readonly state?: CanonicalDocument<TaskStateV1>;
@@ -269,7 +276,12 @@ function stateInvalid(state: TaskStateV1, issue_code: IssueCode): ProjectError {
 function artifactInvalid(artifact: DurableArtifact, issue_code: IssueCode): ProjectError {
   return artifact.artifact_kind === "implementation-output"
     ? createProjectError("SNAPSHOT_INVALID", { snapshot_digest: artifact.snapshot_digest, issue_code })
-    : createProjectError("TASK_INVALID", { task_id: artifact.task_id, issue_code });
+    : createProjectError("TASK_INVALID", {
+        task_id: artifact.artifact_kind === "review-evidence" || artifact.artifact_kind === "triage"
+          ? artifact.evidence.task_id
+          : artifact.task_id,
+        issue_code,
+      });
 }
 
 function maintenanceInvalid(maintenance: MaintenanceRecordV1, issue_code: IssueCode): ProjectError {
@@ -314,6 +326,30 @@ type SteppedArtifact = DocumentArtifactV1 | ImplementationOutputV1;
 
 function isStepped(artifact: DurableArtifact): artifact is SteppedArtifact {
   return artifact.artifact_kind === "document" || artifact.artifact_kind === "implementation-output";
+}
+
+function durableArtifactTaskId(artifact: DurableArtifact): TaskInitializationV1["task_id"] {
+  return artifact.artifact_kind === "review-evidence" || artifact.artifact_kind === "triage"
+    ? artifact.evidence.task_id
+    : artifact.task_id;
+}
+
+function durableSteppedPayload(
+  artifact: DurableArtifact,
+): DocumentArtifactV1 | ImplementationOutputV1 | ReviewEvidenceArtifactV1["evidence"] | TriageArtifactV1["evidence"] | undefined {
+  return artifact.artifact_kind === "review-evidence" || artifact.artifact_kind === "triage"
+    ? artifact.evidence
+    : isStepped(artifact)
+      ? artifact
+      : undefined;
+}
+
+function isEvidenceArtifact(
+  artifact: ResultManifestV1["source_artifact"],
+): artifact is EvidenceArtifactV1 {
+  return artifact.artifact_kind === "review-evidence" ||
+    artifact.artifact_kind === "triage" ||
+    artifact.artifact_kind === "adjudication-evidence";
 }
 
 /* ------------------------------------------------------------------------------- the validator */
@@ -478,7 +514,8 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     }
   }
   if (artifact !== undefined) {
-    if (isStepped(artifact) && !decodable(artifact.phase_instance)) {
+    const stepped = durableSteppedPayload(artifact);
+    if (stepped !== undefined && !decodable(stepped.phase_instance as PhaseInstanceId)) {
       return fail(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
     }
     if (artifact.artifact_kind === "legacy-import-initialization") {
@@ -532,24 +569,27 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
 
   if (resultManifest !== undefined) {
     const source = resultManifest.source_artifact;
-    const sourceSemantics = validateDurableSemantics({ artifact: canonicalDocument(source) });
-    if (!sourceSemantics.ok) return sourceSemantics;
-    if (resultManifest.artifact_digest !== canonicalJsonDigest(source)) {
+    if (!isEvidenceArtifact(source)) {
+      const sourceSemantics = validateDurableSemantics({ artifact: canonicalDocument(source) });
+      if (!sourceSemantics.ok) return sourceSemantics;
+    }
+    const correlatedSource = isEvidenceArtifact(source) ? source.evidence : source;
+    if (resultManifest.artifact_digest !== canonicalJsonDigest(correlatedSource)) {
       return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestArtifactDigestMismatch));
     }
-    if (resultManifest.task_id !== source.task_id) {
+    if (resultManifest.task_id !== correlatedSource.task_id) {
       return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestTaskMismatch));
     }
-    if (resultManifest.phase_instance !== source.phase_instance) {
+    if (resultManifest.phase_instance !== correlatedSource.phase_instance) {
       return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestPhaseMismatch));
     }
-    if (resultManifest.step !== source.step) {
+    if (resultManifest.step !== correlatedSource.step) {
       return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestStepMismatch));
     }
-    if (resultManifest.input_fingerprint !== source.input_fingerprint) {
+    if (resultManifest.input_fingerprint !== correlatedSource.input_fingerprint) {
       return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestInputFingerprintMismatch));
     }
-    if (resultManifest.snapshot_digest !== source.snapshot_digest) {
+    if (!isEvidenceArtifact(source) && resultManifest.snapshot_digest !== source.snapshot_digest) {
       return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestSnapshotMismatch));
     }
 
@@ -577,7 +617,7 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
           return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
         }
       }
-    } else {
+    } else if (source.artifact_kind === "document") {
       const output = resultManifest.outputs[0];
       if (
         resultManifest.outputs.length !== 1 ||
@@ -596,6 +636,39 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
         resultManifest.projections.length !== 1 ||
         resultManifest.projections[0]?.path !== source.projection_target ||
         resultManifest.projections[0]?.content_digest !== source.content_digest
+      ) {
+        return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+      }
+    } else {
+      const output = resultManifest.outputs[0];
+      const roleSuffix = source.artifact_kind === "review-evidence"
+        ? source.evidence.role === "self-review"
+          ? "self"
+          : source.evidence.role === "counter-review"
+            ? "counter"
+            : undefined
+        : source.artifact_kind === "triage"
+          ? "triage"
+          : "adjudication";
+      const expectedPath = roleSuffix === undefined
+        ? undefined
+        : `.archflow/tasks/${source.evidence.task_id}/reviews/${source.evidence.phase_instance}.${roleSuffix}.md`;
+      if (
+        resultManifest.outputs.length !== 1 ||
+        expectedPath === undefined ||
+        output?.operation !== "add" ||
+        output.storage !== "raw-payload" ||
+        output.file_type !== "regular" ||
+        output.path !== expectedPath ||
+        output.path_class !== "review" ||
+        output.after.mode !== "100644"
+      ) {
+        return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestOutputsMismatch));
+      }
+      if (
+        resultManifest.projections.length !== 1 ||
+        resultManifest.projections[0]?.path !== expectedPath ||
+        resultManifest.projections[0]?.content_digest !== output.payload_digest
       ) {
         return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
       }
@@ -829,7 +902,7 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     if (initialization !== undefined && state.initialization_digest !== canonicalJsonDigest(initialization)) {
       return fail(stateInvalid(state, DURABLE_ISSUE_CODES.initializationDigestMismatch));
     }
-    if (artifact !== undefined && state.task_id !== artifact.task_id) {
+    if (artifact !== undefined && state.task_id !== durableArtifactTaskId(artifact)) {
       return fail(stateInvalid(state, DURABLE_ISSUE_CODES.artifactTaskIdMismatch));
     }
     if (maintenance !== undefined && state.task_id !== maintenance.task_id) {
@@ -868,15 +941,15 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
      * digests and `createProjectError` throws if given one. Phase 9 owns the half this guard
      * cannot supply (D19).
      */
+    const stepped = artifact === undefined ? undefined : durableSteppedPayload(artifact);
     if (
-      artifact !== undefined &&
-      isStepped(artifact) &&
-      artifact.phase_instance === state.phase_instance &&
-      artifact.step === state.step &&
-      artifact.input_fingerprint !== state.input_fingerprint
+      stepped !== undefined &&
+      stepped.phase_instance === state.phase_instance &&
+      stepped.step === state.step &&
+      stepped.input_fingerprint !== state.input_fingerprint
     ) {
       const expected: Sha256Digest = state.input_fingerprint;
-      const observed: Sha256Digest = artifact.input_fingerprint;
+      const observed: Sha256Digest = stepped.input_fingerprint;
       return fail(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: expected, observed_digest: observed }));
     }
   }

@@ -12,10 +12,12 @@ import pathClaimSchema from "../contracts/schemas/v1/path-claim.schema.json" wit
 import primitivesSchema from "../contracts/schemas/v1/primitives.schema.json" with { type: "json" };
 import projectErrorSchema from "../contracts/schemas/v1/project-error.schema.json" with { type: "json" };
 import rubricSchema from "../contracts/schemas/v1/rubric.schema.json" with { type: "json" };
+import reviewEvidenceSchema from "../contracts/schemas/v1/review-evidence.schema.json" with { type: "json" };
 import secretScanResultSchema from "../contracts/schemas/v1/secret-scan-result.schema.json" with { type: "json" };
 import supplementalReviewSchema from "../contracts/schemas/v1/supplemental-review.schema.json" with { type: "json" };
 import taskInitializationSchema from "../contracts/schemas/v1/task-initialization.schema.json" with { type: "json" };
 import taskStateSchema from "../contracts/schemas/v1/task-state.schema.json" with { type: "json" };
+import triageSchema from "../contracts/schemas/v1/triage.schema.json" with { type: "json" };
 import { TOOL_NAMES, type ToolName } from "../contracts/tool-names.js";
 
 export interface AdvertisedToolDescriptor {
@@ -47,7 +49,9 @@ const schemaDocuments = Object.freeze([
   Object.freeze({ key: "implementation-output", id: "urn:archflow:schema:v1:implementation-output", schema: implementationOutputSchema }),
   Object.freeze({ key: "manual-checkpoint", id: "urn:archflow:schema:v1:manual-checkpoint", schema: manualCheckpointSchema }),
   Object.freeze({ key: "manual-checkpoint-import", id: "urn:archflow:schema:v1:manual-checkpoint-import", schema: manualCheckpointImportSchema }),
-  Object.freeze({ key: "secret-scan-result", id: "urn:archflow:schema:v1:secret-scan-result", schema: secretScanResultSchema })
+  Object.freeze({ key: "secret-scan-result", id: "urn:archflow:schema:v1:secret-scan-result", schema: secretScanResultSchema }),
+  Object.freeze({ key: "review-evidence", id: "urn:archflow:schema:v1:review-evidence", schema: reviewEvidenceSchema }),
+  Object.freeze({ key: "triage", id: "urn:archflow:schema:v1:triage", schema: triageSchema })
 ] as const);
 
 const documentKeysById = new Map<string, string>(schemaDocuments.map(({ id, key }) => [id, key]));

@@ -26,7 +26,27 @@
         { "$ref": "urn:archflow:schema:v1:legacy-import-initialization" },
         { "$ref": "urn:archflow:schema:v1:document-artifact" },
         { "$ref": "urn:archflow:schema:v1:implementation-output" },
-        { "$ref": "urn:archflow:schema:v1:manual-checkpoint-import" }
+        { "$ref": "urn:archflow:schema:v1:manual-checkpoint-import" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "artifact_kind", "evidence"],
+          "properties": {
+            "schema_version": { "const": "1" },
+            "artifact_kind": { "const": "review-evidence" },
+            "evidence": { "$ref": "urn:archflow:schema:v1:review-evidence" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "artifact_kind", "evidence"],
+          "properties": {
+            "schema_version": { "const": "1" },
+            "artifact_kind": { "const": "triage" },
+            "evidence": { "$ref": "urn:archflow:schema:v1:triage" }
+          }
+        }
       ]
     },
     "rule": {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { endsWithDotOrSpace, isReservedDeviceName, type TaskSlug } from "./evidence.js";
+import type { PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson } from "./plain-json.js";
 
 declare const taskPathClaimBrand: unique symbol;
@@ -66,6 +67,22 @@ export function parseRepositoryPathClaim(value: unknown): RepositoryPathClaim {
  */
 export function toRepositoryPathClaim(taskId: TaskSlug, claim: TaskPathClaim): RepositoryPathClaim {
   return parseRepositoryPathClaim(`.archflow/tasks/${taskId}/${claim}`);
+}
+
+export function selfReviewClaim(phaseInstance: PhaseInstanceId): TaskPathClaim {
+  return parseTaskPathClaim(`reviews/${phaseInstance}.self.md`);
+}
+
+export function counterReviewClaim(phaseInstance: PhaseInstanceId): TaskPathClaim {
+  return parseTaskPathClaim(`reviews/${phaseInstance}.counter.md`);
+}
+
+export function triageReviewClaim(phaseInstance: PhaseInstanceId): TaskPathClaim {
+  return parseTaskPathClaim(`reviews/${phaseInstance}.triage.md`);
+}
+
+export function adjudicationReviewClaim(phaseInstance: PhaseInstanceId): TaskPathClaim {
+  return parseTaskPathClaim(`reviews/${phaseInstance}.adjudication.md`);
 }
 
 /** Total constructor: a path is branded as Git's output without asserting anything about it. */

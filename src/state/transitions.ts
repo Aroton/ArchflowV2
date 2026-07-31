@@ -86,15 +86,27 @@ function legalMovement(current: TaskStateV1, target: TransitionTarget): boolean 
     }
     return current.status === "failed" && target.status === "running" && target.attempt === current.attempt + 1;
   }
-  if (current.status !== "succeeded" || target.status !== "running" || target.attempt !== 1) return false;
+  if (current.status !== "succeeded" || target.status !== "running") return false;
+  if (
+    target.phase_instance === current.phase_instance &&
+    (current.step === "triage" || current.step === "adjudicate") &&
+    target.step === "produce"
+  ) {
+    return target.attempt === current.attempt + 1;
+  }
   const steps = pipeline(current.phase_instance);
   const index = steps.indexOf(current.step);
   if (index < 0) return false;
   if (index + 1 < steps.length) {
-    return target.phase_instance === current.phase_instance && target.step === steps[index + 1];
+    return target.phase_instance === current.phase_instance &&
+      target.step === steps[index + 1] &&
+      target.attempt === current.attempt;
   }
   const following = nextPhase(current.phase_instance);
-  return following !== undefined && target.phase_instance === following && target.step === pipeline(following)[0];
+  return following !== undefined &&
+    target.phase_instance === following &&
+    target.step === pipeline(following)[0] &&
+    target.attempt === 1;
 }
 
 function artifactMatches(input: TransitionPlanInput): boolean {
@@ -104,7 +116,10 @@ function artifactMatches(input: TransitionPlanInput): boolean {
     // artifact. A successful `produce` step does: that is the artifact-producing boundary.
     return input.target.status !== "succeeded" || input.target.step !== "produce";
   }
-  if (artifact.task_id !== input.current.task_id) return false;
+  const artifactTaskId = artifact.artifact_kind === "review-evidence" || artifact.artifact_kind === "triage"
+    ? artifact.evidence.task_id
+    : artifact.task_id;
+  if (artifactTaskId !== input.current.task_id) return false;
   if (artifact.artifact_kind === "task-initialization" || artifact.artifact_kind === "legacy-import-initialization") {
     // Initialization is legal only through the distinct missing-state revision-0 transaction.
     return false;
@@ -113,6 +128,11 @@ function artifactMatches(input: TransitionPlanInput): boolean {
     return artifact.phase_instance === input.target.phase_instance &&
       artifact.step === input.target.step &&
       artifact.input_fingerprint === input.recomputed_input_fingerprint;
+  }
+  if (artifact.artifact_kind === "review-evidence" || artifact.artifact_kind === "triage") {
+    return artifact.evidence.phase_instance === input.target.phase_instance &&
+      artifact.evidence.step === input.target.step &&
+      artifact.evidence.input_fingerprint === input.recomputed_input_fingerprint;
   }
   if (artifact.artifact_kind === "manual-checkpoint-import") {
     return artifact.chain.some((checkpoint) => checkpoint.phase_instance === input.target.phase_instance &&
@@ -124,8 +144,15 @@ function artifactMatches(input: TransitionPlanInput): boolean {
 
 function resultReferenceMatches(input: TransitionPlanInput): boolean {
   const reference = input.result_reference;
-  const producing = input.target.status === "succeeded" && input.target.step === "produce" &&
-    (input.artifact?.artifact_kind === "document" || input.artifact?.artifact_kind === "implementation-output");
+  const sourceKind = input.artifact?.artifact_kind;
+  const evidenceStep = input.target.step === "self_review" ||
+    input.target.step === "counter_review" ||
+    input.target.step === "triage" ||
+    input.target.step === "adjudicate";
+  const producing = input.target.status === "succeeded" && (
+    (input.target.step === "produce" && (sourceKind === "document" || sourceKind === "implementation-output")) ||
+    evidenceStep
+  );
   if (!producing) return reference === undefined;
   if (reference === undefined) return false;
   return reference.phase_instance === input.target.phase_instance &&

@@ -6,7 +6,12 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../../src/contracts/canonical.js";
+import { canonicalJsonDigest, parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../../src/contracts/canonical.js";
+import {
+  checkpointSelfDigest,
+  parseManualCheckpointImport,
+  type ManualCheckpointV1,
+} from "../../src/contracts/durable-checkpoint.js";
 import type { IntentReceiptV1 } from "../../src/contracts/durable-intent.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import type { TaskInitializationV1 } from "../../src/contracts/durable-task-initialization.js";
@@ -134,5 +139,82 @@ describe("revision-0 state initialization", () => {
     expect(replayed.ok).toBe(true);
     if (replayed.ok) expect(replayed.value.replayed).toBe(true);
     expect(events).toEqual(["receipt", "state"]);
+
+    // Revision-0 manual adoption replays the same transition kernel. A retry may increment
+    // the phase-instance attempt, but the next step must carry it rather than reset to 1.
+    state = undefined;
+    receipt = undefined;
+    events.length = 0;
+    const initializationDigest = canonicalJsonDigest(artifact);
+    const common = {
+      schema_version: "1" as const,
+      task_id: taskId,
+      repository_identity_digest: authority.repository_identity_digest,
+      phase_instance: context.phase_instance,
+      input_fingerprint: fingerprint,
+      assurance: "degraded" as const,
+      initialization_digest: initializationDigest,
+      authoritative_results: [],
+      projections: [],
+      evidence_chain: [],
+      approvals: [],
+      waivers: [],
+    };
+    const firstCheckpoint = {
+      ...common, revision: 1 as const, step: "produce" as const, status: "running" as const,
+      attempt: 1 as never, initialization: artifact,
+    } as ManualCheckpointV1;
+    const continued = (
+      prior: ManualCheckpointV1,
+      revision: number,
+      step: ManualCheckpointV1["step"],
+      status: ManualCheckpointV1["status"],
+      attempt: number,
+      authoritative_results: ManualCheckpointV1["authoritative_results"] = [],
+    ): ManualCheckpointV1 => ({
+      ...common,
+      revision: revision as never,
+      step,
+      status,
+      attempt: attempt as never,
+      authoritative_results,
+      predecessor: {
+        revision: prior.revision,
+        checkpoint_digest: checkpointSelfDigest(prior),
+      },
+    } as ManualCheckpointV1);
+    const failed = continued(firstCheckpoint, 2, "produce", "failed", 1);
+    const retried = continued(failed, 3, "produce", "running", 2);
+    const producedReference = {
+      phase_instance: context.phase_instance,
+      step: "produce" as const,
+      result_digest: "8".repeat(64) as never,
+      result_id: "initial-checkpoint-produce" as never,
+      input_fingerprint: fingerprint,
+      manifest_path: `.archflow/tasks/${taskId}/results/sha256/${"8".repeat(64)}/manifest.json` as never,
+    };
+    const succeeded = continued(retried, 4, "produce", "succeeded", 2, [producedReference]);
+    const reset = continued(succeeded, 5, "self_review", "running", 1, [producedReference]);
+    const manual = parseManualCheckpointImport({
+      schema_version: "1",
+      artifact_kind: "manual-checkpoint-import",
+      task_id: taskId,
+      repository_identity_digest: authority.repository_identity_digest,
+      import_mode: "initial",
+      chain: [firstCheckpoint, failed, retried, succeeded, reset],
+    });
+    const resetCall = parseToolCall("archflow_state", {
+      schema_version: "1", task_id: taskId, intent_id: "initial-attempt-reset",
+      expected_revision: 0, input_fingerprint: fingerprint,
+      phase_instance: reset.phase_instance, step: reset.step, status: reset.status,
+      artifact: manual,
+    });
+    const rejected = await runStateInitialization(
+      dependencies,
+      { authority, call: resetCall },
+    );
+    expect(rejected.ok).toBe(false);
+    if (!rejected.ok) expect(rejected.error.code).toBe("TRANSITION_INVALID");
+    expect(events).toEqual([]);
   });
 });

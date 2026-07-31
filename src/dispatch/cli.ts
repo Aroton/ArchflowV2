@@ -1,19 +1,25 @@
 import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import reviewSchema from "../contracts/schemas/v1/review.schema.json" with { type: "json" };
 import { canonicalJsonBytes } from "../contracts/canonical.js";
 import { createProjectError, type ProjectError } from "../contracts/errors.js";
 import type { HostIdentity } from "../contracts/hosts.js";
 import { safeIdV1Schema } from "../contracts/evidence.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import type { AdapterId, ModelFamily } from "../contracts/review.js";
-import { createReviewObservationCapability } from "../contracts/internal/test-capabilities.js";
+import {
+  createAdjudicationObservationCapability,
+  createReviewObservationCapability,
+} from "../contracts/internal/test-capabilities.js";
 import {
   observationSource,
   type ObservationBindingByKind,
 } from "../contracts/trust.js";
-import type { DispatchEnvelope, DispatchSubject } from "../review/envelopes.js";
+import type {
+  AdjudicationSubject,
+  DispatchEnvelope,
+  DispatchSubject,
+} from "../review/envelopes.js";
 import {
   runDispatchChild,
   type DispatchChildResult,
@@ -73,6 +79,7 @@ export interface CliAdapter {
     envelope: DispatchEnvelope,
     route: DispatchRoute,
     workspace: DispatchWorkspace,
+    outputSchema: PlainJsonValue,
   ): Promise<CliInvocation>;
   parseOutput(result: DispatchChildResult): Uint8Array;
   classifyFailure(result: DispatchChildResult): ProjectError | undefined;
@@ -103,6 +110,15 @@ export type ReviewObservationMint = Readonly<{
   cli_version: string;
   route: DispatchRoute;
   envelope_input_digest: ObservationBindingByKind["review"]["envelope_input_digest"];
+  extracted_output_bytes: Uint8Array;
+}>;
+
+export type AdjudicationObservationMint = Readonly<{
+  subject: AdjudicationSubject;
+  adapter: AdapterId;
+  cli_version: string;
+  route: DispatchRoute;
+  envelope_input_digest: ObservationBindingByKind["adjudication"]["envelope_input_digest"];
   extracted_output_bytes: Uint8Array;
 }>;
 
@@ -319,8 +335,15 @@ const claudeAdapter: CliAdapter = Object.freeze({
     CLAUDE_MANAGED_POLICY_PATHS,
     workspace,
   ),
-  async buildInvocation(envelope: DispatchEnvelope, route: DispatchRoute, workspace: DispatchWorkspace) {
+  async buildInvocation(
+    envelope: DispatchEnvelope,
+    route: DispatchRoute,
+    workspace: DispatchWorkspace,
+    outputSchema: PlainJsonValue,
+  ) {
     assertRoute("claude-cli", route);
+    assertPlainJson(outputSchema, "CLI output schema");
+    const schema = structuredClone(outputSchema);
     if (route.effort === "ultra") {
       return fail(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
@@ -339,7 +362,7 @@ const claudeAdapter: CliAdapter = Object.freeze({
         "--no-session-persistence",
         "--setting-sources", "",
         "--output-format", "json",
-        "--json-schema", JSON.stringify(reviewSchema),
+        "--json-schema", JSON.stringify(schema),
         "--model", route.model,
         "--effort", route.effort,
       ]),
@@ -388,11 +411,18 @@ const codexAdapter: CliAdapter = Object.freeze({
     CODEX_MANAGED_POLICY_PATHS,
     workspace,
   ),
-  async buildInvocation(envelope: DispatchEnvelope, route: DispatchRoute, workspace: DispatchWorkspace) {
+  async buildInvocation(
+    envelope: DispatchEnvelope,
+    route: DispatchRoute,
+    workspace: DispatchWorkspace,
+    outputSchema: PlainJsonValue,
+  ) {
     assertRoute("codex-cli", route);
-    const schemaPath = join(workspace.root, "review.schema.json");
+    assertPlainJson(outputSchema, "CLI output schema");
+    const schema = structuredClone(outputSchema);
+    const schemaPath = join(workspace.root, `${envelope.result_kind}.schema.json`);
     const outputPath = join(workspace.root, "final-output.json");
-    await writeFile(schemaPath, `${JSON.stringify(reviewSchema, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     const disabled = CODEX_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]);
     return Object.freeze({
       adapter: "codex-cli",
@@ -471,4 +501,32 @@ export function mintReviewObservation(input: ReviewObservationMint): ReturnType<
   };
   const capability = createReviewObservationCapability(binding);
   return observationSource.observeReview(capability, input.extracted_output_bytes);
+}
+
+/** Binds extracted adjudicator output to the complete server-derived adjudication subject. */
+export function mintAdjudicationObservation(
+  input: AdjudicationObservationMint,
+): ReturnType<typeof observationSource.observeAdjudication> {
+  assertRoute(input.adapter, input.route);
+  const binding: ObservationBindingByKind["adjudication"] = {
+    kind: "adjudication",
+    task_id: input.subject.task_id,
+    phase_instance: input.subject.phase_instance,
+    role: input.subject.role,
+    subject_digest: input.subject.subject_digest,
+    input_fingerprint: input.subject.input_fingerprint,
+    invocation_id: input.subject.invocation_id,
+    envelope_input_digest: input.envelope_input_digest,
+    result_id: input.subject.result_id,
+    adapter: input.adapter,
+    cli_version: input.cli_version,
+    family: input.route.family,
+    model: input.route.model,
+    effort: input.route.effort,
+    pinned_constitution_digest: input.subject.pinned_constitution_digest,
+    approved_upstream_digests: input.subject.approved_upstream_digests,
+    source_evidence_set_digest: input.subject.source_evidence_set_digest,
+  };
+  const capability = createAdjudicationObservationCapability(binding);
+  return observationSource.observeAdjudication(capability, input.extracted_output_bytes);
 }

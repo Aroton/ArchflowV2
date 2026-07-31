@@ -76,8 +76,8 @@ const forgedReview = {
   },
   authority: {}
 };
-assert.throws(() => contracts.renderReviewEvidence(forgedReview), /qualified review evidence/u);
-assert.throws(() => contracts.renderAdjudicationEvidence({ evidence_digest: digest, evidence: {}, authority: {} }), /qualified adjudication evidence/u);
+assert.throws(() => contracts.renderReviewEvidence(forgedReview), /authenticated review evidence/u);
+assert.throws(() => contracts.renderAdjudicationEvidence({ evidence_digest: digest, evidence: {}, authority: {} }), /authenticated adjudication evidence/u);
 assert.throws(() => contracts.renderTriage({ schema_version: "1" }), /validated triage/u);
 
 assert.equal(Object.keys(contracts.PROJECT_ERROR_DEFINITIONS).length, 53);

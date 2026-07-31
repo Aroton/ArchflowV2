@@ -154,6 +154,12 @@ function initialState(call: StateCall, artifact: DurableArtifact): ProjectResult
       ...(first.terminal === undefined ? {} : { terminal: first.terminal }),
     };
     for (const checkpoint of selected.chain.slice(1)) {
+      const resultReference = checkpoint.status === "succeeded"
+        ? checkpoint.authoritative_results.find((reference) =>
+            reference.phase_instance === checkpoint.phase_instance &&
+            reference.step === checkpoint.step &&
+            reference.input_fingerprint === checkpoint.input_fingerprint)
+        : undefined;
       const transition = planStateTransition({
         current: cursor,
         target: {
@@ -165,6 +171,7 @@ function initialState(call: StateCall, artifact: DurableArtifact): ProjectResult
         },
         recomputed_input_fingerprint: checkpoint.input_fingerprint,
         artifact,
+        ...(resultReference === undefined ? {} : { result_reference: resultReference }),
       });
       if (!transition.ok) return transition;
       cursor = { ...transition.value, revision: cursor.revision };

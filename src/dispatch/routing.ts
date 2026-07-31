@@ -69,7 +69,7 @@ export function resolveDispatchRoute(
   assertAdapterFamily(adapter, family);
   assertSupportedEffort(adapter, configured.effort);
 
-  if (role === "counter-reviewer" && family === producer_family) {
+  if ((role === "counter-reviewer" || role === "adjudicator") && family === producer_family) {
     const expected_family: ModelFamily = producer_family === "claude" ? "codex" : "claude";
     return fail(createProjectError("FAMILY_MISMATCH", { expected_family, observed_family: family }));
   }

@@ -7,9 +7,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest, gitBlobOid, parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../../src/contracts/canonical.js";
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
-import type { ResultManifestV1 } from "../../src/contracts/durable-result-manifest.js";
+import type { ResultManifestV1, ReviewEvidenceArtifactV1 } from "../../src/contracts/durable-result-manifest.js";
 import type { IntentReceiptV1 } from "../../src/contracts/durable-intent.js";
-import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
+import type { AuthoritativeResultRef, TaskStateV1 } from "../../src/contracts/durable-state.js";
 import {
   parsePathSafeId,
   parseSafeCode,
@@ -37,6 +37,7 @@ import { identifyTransactionRequest } from "../../src/state/request.js";
 import { TaskLockError } from "../../src/state/lock.js";
 import { deriveDeclaredSnapshotDigest, TASK_BYTE_CAP, type PreparedSnapshot, type ProjectionPlan } from "../../src/state/snapshots.js";
 import {
+  assertAuthenticTransactionOutcome,
   runStateTransaction,
   prepareResultInstallation,
   type PreparedTransaction,
@@ -262,6 +263,119 @@ function documentResultFixture(h: Harness, bytes: Uint8Array): Readonly<{
   };
 }
 
+type ResultFixture = ReturnType<typeof documentResultFixture>;
+
+function reviewResultFixture(h: Harness, source: ReviewEvidenceArtifactV1): ResultFixture {
+  const bytes = new TextEncoder().encode("# Self review\n");
+  const outputPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/reviews/${PHASE}.self.md`);
+  const renderedDigest = sha256Bytes(bytes);
+  const byteCount = parseSafeInteger(bytes.byteLength);
+  const output = {
+    path: outputPath, path_class: "review" as const, operation: "add" as const,
+    storage: "raw-payload" as const, payload_bytes: byteCount, payload_digest: renderedDigest,
+    file_type: "regular" as const, after: { oid: gitBlobOid(bytes), mode: "100644" as const, size_bytes: byteCount },
+  };
+  const projections = [{ path: outputPath, content_digest: renderedDigest }];
+  const snapshotDigest = deriveDeclaredSnapshotDigest([output], projections);
+  const manifestValue: ResultManifestV1 = {
+    schema_version: "1", task_id: TASK, repository_identity_digest: h.authority.repository_identity_digest,
+    result_id: parseSafeId("state:8"), phase_instance: PHASE, step: "self_review",
+    artifact_digest: canonicalJsonDigest(source.evidence), source_artifact: source,
+    input_fingerprint: FINGERPRINT, snapshot_digest: snapshotDigest, outputs: [output], projections,
+    accounting: {
+      schema_version: "1", result_bytes: byteCount, task_bytes: byteCount,
+      result_byte_cap: 26_214_400, task_byte_cap: 262_144_000,
+      counted_entries: [{ path: outputPath, storage: "raw-payload", stored_bytes: byteCount }],
+      measured_at_revision: parseSafeInteger(7),
+    },
+    secret_scan: {
+      schema_version: "1", outcome: "clean", detector_set_id: parseSafeId("test"),
+      scanned_paths: [outputPath],
+    },
+  };
+  const manifest = canonicalDocument(manifestValue);
+  const manifestPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/results/sha256/${manifest.digest}/manifest.json`);
+  const payloadPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/results/sha256/${manifest.digest}/payload/${outputPath}`);
+  return {
+    prepared: {
+      manifest,
+      result_digest: manifest.digest,
+      payloads: [{
+        path: outputPath,
+        bytes,
+        target: {
+          absolute: join(h.root, payloadPath) as ResolvedTaskPath,
+          repositoryRelative: payloadPath,
+          path_class: "result-payload",
+        },
+      }],
+    },
+    manifestPath,
+    manifestTarget: {
+      absolute: join(h.root, manifestPath) as ResolvedTaskPath,
+      repositoryRelative: manifestPath,
+      path_class: "result-manifest",
+    },
+  };
+}
+
+function remanifest(
+  h: Harness,
+  fixture: ResultFixture,
+  transform: (value: ResultManifestV1) => ResultManifestV1,
+): ResultFixture {
+  const manifest = canonicalDocument(transform(structuredClone(fixture.prepared.manifest.value)));
+  const manifestPath = parseRepositoryPathClaim(
+    `.archflow/tasks/${TASK}/results/sha256/${manifest.digest}/manifest.json`,
+  );
+  const payloads = fixture.prepared.payloads.map((payload) => {
+    const payloadPath = parseRepositoryPathClaim(
+      `.archflow/tasks/${TASK}/results/sha256/${manifest.digest}/payload/${payload.path}`,
+    );
+    return {
+      ...payload,
+      target: {
+        absolute: join(h.root, payloadPath) as ResolvedTaskPath,
+        repositoryRelative: payloadPath,
+        path_class: "result-payload" as const,
+      },
+    };
+  });
+  return {
+    prepared: { manifest, result_digest: manifest.digest, payloads },
+    manifestPath,
+    manifestTarget: {
+      absolute: join(h.root, manifestPath) as ResolvedTaskPath,
+      repositoryRelative: manifestPath,
+      path_class: "result-manifest",
+    },
+  };
+}
+
+const selfReviewArtifact = (): ReviewEvidenceArtifactV1 => ({
+  schema_version: "1",
+  artifact_kind: "review-evidence",
+  evidence: {
+    schema_version: "1",
+    task_id: TASK,
+    phase_instance: PHASE,
+    step: "self_review",
+    role: "self-review",
+    subject_digest: D("1"),
+    input_fingerprint: FINGERPRINT,
+    rubric_digest: D("2"),
+    producer_family: "claude",
+    findings: [],
+    matched_rule_versions: [],
+    verdict: "pass",
+    blocking_count: 0,
+    assurance: "agent-declared",
+    model_family: "claude",
+    model: "claude-test",
+    effort: "high",
+  },
+});
+
 function call(expected_revision: number, status: "running" | "succeeded" | "failed" = "succeeded", intent = "intent-1", withArtifact = false): StateCall {
   return parseToolCall("archflow_state", {
     schema_version: "1",
@@ -279,6 +393,20 @@ function call(expected_revision: number, status: "running" | "succeeded" | "fail
       input_fingerprint: FINGERPRINT, snapshot_digest: D("b"),
       projection_target: `.archflow/tasks/${TASK}/phases/phase-9-output.md`,
     } } : {}),
+  });
+}
+
+function selfReviewCall(expected_revision: number, artifact?: ReviewEvidenceArtifactV1): StateCall {
+  return parseToolCall("archflow_state", {
+    schema_version: "1",
+    task_id: TASK,
+    intent_id: "self-review-intent",
+    expected_revision,
+    input_fingerprint: FINGERPRINT,
+    phase_instance: PHASE,
+    step: "self_review",
+    status: "succeeded",
+    ...(artifact === undefined ? {} : { artifact }),
   });
 }
 
@@ -322,6 +450,55 @@ function preparer(h: Harness, parsed: StateCall) {
   };
 }
 
+type InstallationOverrides = Readonly<{
+  reference?: AuthoritativeResultRef;
+  next_state?: PreparedTransaction<"archflow_state">["next_state"];
+  manifest_target?: ResolvedPath;
+  projection_plan?: ProjectionPlan;
+  worktree_root?: ResolvedTaskPath;
+}>;
+
+async function runInstallation(
+  h: Harness,
+  parsed: StateCall,
+  retained: ResultFixture,
+  overrides: InstallationOverrides = {},
+) {
+  const base = preparer(h, parsed);
+  return runStateTransaction(h.dependencies, request(h.authority, parsed), async (current, identified) => {
+    const prepared = await base(current, identified);
+    if (!prepared.ok) return prepared;
+    const reference = overrides.reference ?? {
+      phase_instance: retained.prepared.manifest.value.phase_instance,
+      step: retained.prepared.manifest.value.step,
+      result_digest: retained.prepared.result_digest,
+      result_id: parseSafeId("state:8"),
+      input_fingerprint: FINGERPRINT,
+      manifest_path: retained.manifestPath,
+    };
+    const capability = prepareResultInstallation({
+      reference,
+      prepared: retained.prepared,
+      manifest_target: overrides.manifest_target ?? retained.manifestTarget,
+      projection_plan: overrides.projection_plan ??
+        { entries: [], collisions: [], collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"] },
+      worktree_root: overrides.worktree_root ?? h.runner.location.worktreeRoot as ResolvedTaskPath,
+    });
+    return {
+      ...prepared,
+      value: {
+        ...prepared.value,
+        next_state: overrides.next_state ?? {
+          ...prepared.value.next_state,
+          step: reference.step,
+          authoritative_results: [reference],
+        },
+        result_installation: capability,
+      },
+    };
+  });
+}
+
 describe("mature state transaction kernel", () => {
   it("writes one receipt before state and returns the authenticated committed state", async () => {
     const h = await harness();
@@ -332,6 +509,10 @@ describe("mature state transaction kernel", () => {
     expect(result.value.replayed).toBe(false);
     expect(result.value.state.value.revision).toBe(8);
     expect(result.value.state.value.committed_intent?.receipt_digest).toBe(h.receipt?.digest);
+    expect(() => assertAuthenticTransactionOutcome(result.value)).not.toThrow();
+    expect(() => assertAuthenticTransactionOutcome({
+      ...result.value,
+    })).toThrow(/not minted/u);
     expect(h.events).toEqual(["lock", "config", "fingerprint", "prepare", "receipt-create", "state-replace"]);
     expect(h.counts.prepare).toBe(1);
   });
@@ -372,6 +553,290 @@ describe("mature state transaction kernel", () => {
     expect(result.ok).toBe(true);
     expect(h.events).toEqual(["lock", "config", "fingerprint", "prepare", "result-payload", "result-manifest", "receipt-create", "state-replace"]);
     expect(h.state.value.authoritative_results).toHaveLength(1);
+  });
+
+  it("requires an evidence installation to carry the exact archflow_state artifact", async () => {
+    const missing = await harness();
+    missing.state = canonicalDocument({ ...missing.state.value, step: "self_review", status: "running" });
+    const source = selfReviewArtifact();
+    await expect(runInstallation(
+      missing,
+      selfReviewCall(7),
+      reviewResultFixture(missing, source),
+    )).rejects.toThrow(/requires an archflow_state artifact/u);
+    expect(missing.events).not.toContain("receipt-create");
+
+    const changed = await harness();
+    changed.state = canonicalDocument({ ...changed.state.value, step: "self_review", status: "running" });
+    await expect(runInstallation(
+      changed,
+      selfReviewCall(7, {
+        ...source,
+        evidence: { ...source.evidence, model: "different-model" },
+      }),
+      reviewResultFixture(changed, source),
+    )).rejects.toThrow(/source does not match the archflow_state artifact/u);
+    expect(changed.events).not.toContain("receipt-create");
+  });
+
+  it("accepts an evidence installation only when the request and retained source are identical", async () => {
+    const h = await harness();
+    h.state = canonicalDocument({ ...h.state.value, step: "self_review", status: "running" });
+    const source = selfReviewArtifact();
+    const result = await runInstallation(h, selfReviewCall(7, source), reviewResultFixture(h, source));
+    expect(result.ok).toBe(true);
+    expect(h.receipt?.value.operation).toBe("record-self-review");
+    expect(h.state.value.authoritative_results).toHaveLength(1);
+  });
+
+  it("throws each result-installation programmer-invariant violation before writing", async () => {
+    const wrongTool = await harness();
+    wrongTool.state = canonicalDocument({ ...wrongTool.state.value, step: "counter_review", status: "running" });
+    const counterCall = parseToolCall("archflow_counter_review", {
+      schema_version: "1",
+      task_id: TASK,
+      intent_id: "wrong-tool",
+      expected_revision: 7,
+      input_fingerprint: FINGERPRINT,
+      artifact_path: "phases/phase-9-output.md",
+      rubric: {
+        schema_version: "1",
+        kind: "implementation",
+        mode: "adversarial",
+        criteria: [{ id: "binding", text: "Check exact binding", blocking: true }],
+      },
+    });
+    const wrongToolFixture = documentResultFixture(wrongTool, new TextEncoder().encode("retained"));
+    await expect(runStateTransaction(
+      wrongTool.dependencies,
+      { authority: wrongTool.authority, call: counterCall },
+      async (current, identified) => {
+        const revision = parseSafeInteger(current.value.revision + 1);
+        const success = {
+          path: parseTaskPathClaim(`reviews/${PHASE}.counter.md`),
+          verdict: "pass" as const,
+          blocking_count: 0,
+          revision,
+        };
+        const { revision: _revision, committed_intent: _intent, ...draft } = current.value;
+        const reference = {
+          phase_instance: PHASE,
+          step: "produce" as const,
+          result_digest: wrongToolFixture.prepared.result_digest,
+          result_id: parseSafeId("state:8"),
+          input_fingerprint: FINGERPRINT,
+          manifest_path: wrongToolFixture.manifestPath,
+        };
+        return {
+          schema_version: "1" as const,
+          ok: true as const,
+          value: {
+            expectation: createInternalResultExpectation({
+              schema_version: "1",
+              tool: "archflow_counter_review",
+              task_id: TASK,
+              intent_id: counterCall.input.intent_id,
+              input_fingerprint: FINGERPRINT,
+              request_digest: identifyTransactionRequest(counterCall, wrongTool.authority, FINGERPRINT).request_digest,
+              result_id: "state:8",
+              resulting_revision: revision,
+              success,
+            }),
+            result: validateProjectResultStructure(identified, {
+              schema_version: "1",
+              ok: true,
+              value: success,
+            }),
+            next_state: { ...draft, status: "succeeded", authoritative_results: [reference] },
+            result_installation: prepareResultInstallation({
+              reference,
+              prepared: wrongToolFixture.prepared,
+              manifest_target: wrongToolFixture.manifestTarget,
+              projection_plan: {
+                entries: [],
+                collisions: [],
+                collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"],
+              },
+              worktree_root: wrongTool.runner.location.worktreeRoot as ResolvedTaskPath,
+            }),
+          },
+        };
+      },
+    )).rejects.toThrow(/tool and source kind do not match/u);
+
+    const wrongSource = await harness();
+    wrongSource.state = canonicalDocument({ ...wrongSource.state.value, step: "self_review", status: "running" });
+    await expect(runInstallation(
+      wrongSource,
+      selfReviewCall(7, selfReviewArtifact()),
+      documentResultFixture(wrongSource, new TextEncoder().encode("retained")),
+    )).rejects.toThrow(/source kind is not legal/u);
+
+    const wrongBoundary = await harness();
+    wrongBoundary.state = canonicalDocument({ ...wrongBoundary.state.value, step: "self_review", status: "running" });
+    const boundarySource = selfReviewArtifact();
+    const boundaryFixture = reviewResultFixture(wrongBoundary, boundarySource);
+    const { revision: _boundaryRevision, committed_intent: _boundaryIntent, ...boundaryDraft } =
+      wrongBoundary.state.value;
+    await expect(runInstallation(
+      wrongBoundary,
+      selfReviewCall(7, boundarySource),
+      boundaryFixture,
+      { next_state: { ...boundaryDraft, status: "running", authoritative_results: [{
+        phase_instance: PHASE,
+        step: "self_review",
+        result_digest: boundaryFixture.prepared.result_digest,
+        result_id: parseSafeId("state:8"),
+        input_fingerprint: FINGERPRINT,
+        manifest_path: boundaryFixture.manifestPath,
+      }] } },
+    )).rejects.toThrow(/only at its successful evidence boundary/u);
+
+    const wrongReference = await harness();
+    wrongReference.state = canonicalDocument({ ...wrongReference.state.value, step: "self_review", status: "running" });
+    const referenceSource = selfReviewArtifact();
+    const referenceFixture = reviewResultFixture(wrongReference, referenceSource);
+    const { revision: _revision, committed_intent: _intent, ...referenceDraft } = wrongReference.state.value;
+    await expect(runInstallation(
+      wrongReference,
+      selfReviewCall(7, referenceSource),
+      referenceFixture,
+      { next_state: { ...referenceDraft, status: "succeeded", authoritative_results: [] } },
+    )).rejects.toThrow(/reference does not match the prepared transaction/u);
+
+    for (const h of [wrongTool, wrongSource, wrongBoundary, wrongReference]) {
+      expect(h.events).not.toContain("receipt-create");
+    }
+  });
+
+  it("classifies every result-installation caller-data binding mismatch before writing", async () => {
+    const cases: readonly Readonly<{
+      label: string;
+      expectedCode: string;
+      issueCode: string;
+      arrange: (h: Harness) => Readonly<{ fixture: ResultFixture; overrides?: InstallationOverrides }>;
+    }>[] = [
+      {
+        label: "task",
+        expectedCode: "TASK_INVALID",
+        issueCode: "result-installation-task-mismatch",
+        arrange: (h) => ({
+          fixture: remanifest(h, documentResultFixture(h, new Uint8Array([1])), (value) => {
+            if (value.source_artifact.artifact_kind !== "document") throw new TypeError("expected document");
+            const source = { ...value.source_artifact, task_id: parseTaskSlug("task-2") };
+            return { ...value, task_id: source.task_id, artifact_digest: canonicalJsonDigest(source), source_artifact: source };
+          }),
+        }),
+      },
+      {
+        label: "repository",
+        expectedCode: "STATE_INVALID",
+        issueCode: "result-installation-repository-mismatch",
+        arrange: (h) => ({
+          fixture: remanifest(h, documentResultFixture(h, new Uint8Array([1])), (value) => ({
+            ...value,
+            repository_identity_digest: D("9"),
+          })),
+        }),
+      },
+      {
+        label: "state",
+        expectedCode: "STATE_INVALID",
+        issueCode: "result-installation-state-mismatch",
+        arrange: (h) => ({
+          fixture: remanifest(h, documentResultFixture(h, new Uint8Array([1])), (value) => {
+            if (value.source_artifact.artifact_kind !== "document") throw new TypeError("expected document");
+            const otherPhase = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(9) });
+            const source = { ...value.source_artifact, phase_instance: otherPhase };
+            return {
+              ...value,
+              phase_instance: otherPhase,
+              artifact_digest: canonicalJsonDigest(source),
+              source_artifact: source,
+            };
+          }),
+        }),
+      },
+      {
+        label: "manifest target",
+        expectedCode: "CONTRACT_INVALID",
+        issueCode: "result-installation-target-mismatch",
+        arrange: (h) => ({
+          fixture: documentResultFixture(h, new Uint8Array([1])),
+          overrides: { worktree_root: join(h.root, "other-worktree") as ResolvedTaskPath },
+        }),
+      },
+      {
+        label: "payload target",
+        expectedCode: "CONTRACT_INVALID",
+        issueCode: "result-installation-payload-target-mismatch",
+        arrange: (h) => {
+          const original = documentResultFixture(h, new Uint8Array([1]));
+          const wrongPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/unexpected/payload`);
+          return {
+            fixture: {
+              ...original,
+              prepared: {
+                ...original.prepared,
+                payloads: original.prepared.payloads.map((payload) => ({
+                  ...payload,
+                  target: {
+                    absolute: join(h.root, wrongPath) as ResolvedTaskPath,
+                    repositoryRelative: wrongPath,
+                    path_class: "result-payload" as const,
+                  },
+                })),
+              },
+            },
+          };
+        },
+      },
+      {
+        label: "projection target",
+        expectedCode: "CONTRACT_INVALID",
+        issueCode: "result-installation-projection-target-mismatch",
+        arrange: (h) => {
+          const fixture = documentResultFixture(h, new Uint8Array([1]));
+          const output = fixture.prepared.manifest.value.outputs[0]!;
+          return {
+            fixture,
+            overrides: {
+              projection_plan: {
+                entries: [{
+                  path: output.path,
+                  target: {
+                    absolute: join(h.root, output.path) as ResolvedTaskPath,
+                    repositoryRelative: output.path,
+                    path_class: "implementation-output",
+                  },
+                  observed_before: { state: "absent" },
+                  desired: { state: "absent" },
+                  disposition: "already-correct",
+                }],
+                collisions: [],
+                collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"],
+              },
+            },
+          };
+        },
+      },
+    ];
+
+    for (const testCase of cases) {
+      const h = await harness();
+      const { fixture, overrides } = testCase.arrange(h);
+      const result = await runInstallation(
+        h,
+        call(7, "succeeded", `intent-${testCase.label.replaceAll(" ", "-")}`, true),
+        fixture,
+        overrides,
+      );
+      expect(result.ok, testCase.label).toBe(false);
+      if (result.ok) continue;
+      expect(result.error.code, testCase.label).toBe(testCase.expectedCode);
+      expect(result.error.diagnostic.parameters, testCase.label).toMatchObject({ issue_code: testCase.issueCode });
+      expect(h.events, testCase.label).not.toContain("receipt-create");
+    }
   });
 
   it("rejects an installation capability whose reference does not bind its manifest bytes or target", async () => {

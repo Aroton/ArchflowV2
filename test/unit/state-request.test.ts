@@ -134,16 +134,63 @@ describe("internal transaction request identity", () => {
   });
 
   it("selects every artifact operation and binds the exact canonical artifact digest", () => {
+    const reviewArtifact = {
+      schema_version: "1",
+      artifact_kind: "review-evidence",
+      evidence: {
+        schema_version: "1",
+        task_id: taskId,
+        phase_instance: phase,
+        step: "self_review",
+        role: "self-review",
+        subject_digest: "1".repeat(64),
+        input_fingerprint: "2".repeat(64),
+        rubric_digest: "3".repeat(64),
+        producer_family: "claude",
+        findings: [],
+        matched_rule_versions: [],
+        verdict: "pass",
+        blocking_count: 0,
+        assurance: "agent-declared",
+        model_family: "claude",
+        model: "claude-test",
+        effort: "high",
+      },
+    } as const;
+    const triageArtifact = {
+      schema_version: "1",
+      artifact_kind: "triage",
+      evidence: {
+        schema_version: "1",
+        task_id: taskId,
+        phase_instance: phase,
+        step: "triage",
+        subject_digest: "1".repeat(64),
+        input_fingerprint: "2".repeat(64),
+        current_evidence_set_digest: "3".repeat(64),
+        source_evidence_digests: [],
+        dispositions: [],
+        accepted_count: 0,
+        rejected_count: 0,
+      },
+    } as const;
     const cases = [
-      ["task-initialization", "adopt-task-initialization"],
-      ["legacy-import-initialization", "adopt-legacy-import-initialization"],
-      ["document-artifact", "record-document-artifact"],
-      ["implementation-output", "record-implementation-output"],
-      ["manual-checkpoint-import", "adopt-manual-checkpoint-import"],
+      ["task-initialization", durableFixture("task-initialization"), "adopt-task-initialization"],
+      ["legacy-import-initialization", durableFixture("legacy-import-initialization"), "adopt-legacy-import-initialization"],
+      ["document-artifact", durableFixture("document-artifact"), "record-document-artifact"],
+      ["implementation-output", durableFixture("implementation-output"), "record-implementation-output"],
+      ["manual-checkpoint-import", durableFixture("manual-checkpoint-import"), "adopt-manual-checkpoint-import"],
+      ["review-evidence", reviewArtifact, "record-self-review"],
+      ["triage", triageArtifact, "record-triage"],
     ] as const;
-    for (const [fixtureName, operation] of cases) {
-      const artifact = durableFixture(fixtureName);
-      const call = parseToolCall("archflow_state", { ...rawInputs().archflow_state, artifact });
+    for (const [label, artifact, operation] of cases) {
+      const call = parseToolCall("archflow_state", {
+        ...rawInputs().archflow_state,
+        step: label === "review-evidence"
+          ? "self_review"
+          : label === "triage" ? "triage" : "produce",
+        artifact,
+      });
       const identified = identifyTransactionRequest(call, authority, fingerprint);
       const expected = computeRequestDigest({
         schema_version: "1",
@@ -153,14 +200,14 @@ describe("internal transaction request identity", () => {
         operation,
         operation_fields: {
           phase_instance: phase,
-          step: "produce",
+          step: call.input.step,
           status: "succeeded",
           artifact_kind: call.input.artifact!.artifact_kind,
           artifact_digest: canonicalJsonDigest(call.input.artifact!),
         },
         input_fingerprint: fingerprint,
       });
-      expect(identified.request_digest, fixtureName).toBe(expected);
+      expect(identified.request_digest, label).toBe(expected);
     }
   });
 

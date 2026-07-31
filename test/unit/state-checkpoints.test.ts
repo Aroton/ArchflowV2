@@ -49,8 +49,19 @@ async function fixture(): Promise<{
     status: "succeeded",
     attempt: state.attempt,
     input_fingerprint: state.input_fingerprint,
+    authoritative_results: [
+      ...state.authoritative_results,
+      {
+        phase_instance: state.phase_instance,
+        step: state.step,
+        result_digest: "d".repeat(64),
+        result_id: "checkpoint-self-review",
+        input_fingerprint: state.input_fingerprint,
+        manifest_path: `.archflow/tasks/${state.task_id}/results/sha256/${"d".repeat(64)}/manifest.json`,
+      },
+    ],
     state_anchor: stateAnchor,
-  } as ManualCheckpointV1;
+  } as unknown as ManualCheckpointV1;
   const second = {
     ...structuredClone(initial.chain[1]!),
     task_id: state.task_id,
@@ -60,8 +71,9 @@ async function fixture(): Promise<{
     phase_instance: state.phase_instance,
     step: "counter_review",
     status: "running",
-    attempt: 1,
+    attempt: state.attempt,
     input_fingerprint: state.input_fingerprint,
+    authoritative_results: structuredClone(first.authoritative_results),
     predecessor: { revision: first.revision, checkpoint_digest: checkpointSelfDigest(first) },
   } as ManualCheckpointV1;
   return {
@@ -147,5 +159,59 @@ describe("whole-chain checkpoint adoption planner", () => {
     const planned = planCheckpointAdoption({ current: canonicalDocument(state), call, expectation, result });
     expect(planned.ok).toBe(false);
     if (!planned.ok) expect(planned.error.diagnostic.parameters).toMatchObject({ issue_code: "import-state-digest-mismatch" });
+  });
+
+  it("rejects the old per-step attempt reset during state-anchored adoption", async () => {
+    const { state, artifact } = await fixture();
+    const first = artifact.chain[0]!;
+    const resetHead = {
+      ...artifact.chain[1]!,
+      attempt: 1,
+      predecessor: {
+        revision: first.revision,
+        checkpoint_digest: checkpointSelfDigest(first),
+      },
+    } as ManualCheckpointV1;
+    const reset = parseManualCheckpointImport({
+      ...artifact,
+      chain: [first, resetHead],
+    });
+    const call = parseToolCall("archflow_state", {
+      schema_version: "1", task_id: state.task_id, intent_id: "attempt-reset-adoption",
+      expected_revision: state.revision, input_fingerprint: resetHead.input_fingerprint,
+      phase_instance: resetHead.phase_instance, step: resetHead.step,
+      status: resetHead.status, artifact: reset,
+    });
+    const success = {
+      path: parseTaskPathClaim("state.json"),
+      revision: state.revision + 1,
+      status: resetHead.status,
+    };
+    const expectation = createInternalResultExpectation({
+      schema_version: "1", tool: "archflow_state", task_id: state.task_id,
+      intent_id: call.input.intent_id, input_fingerprint: call.input.input_fingerprint,
+      request_digest: "c".repeat(64) as never, result_id: "attempt-reset-adoption",
+      resulting_revision: success.revision, success,
+    });
+    const result = validateProjectResultStructure(
+      call,
+      { schema_version: "1", ok: true, value: success },
+    );
+    const planned = planCheckpointAdoption({
+      current: canonicalDocument(state), call, expectation, result,
+    });
+    expect(planned.ok).toBe(false);
+    if (!planned.ok) {
+      expect(planned.error).toMatchObject({
+        code: "TRANSITION_INVALID",
+        diagnostic: {
+          parameters: {
+            phase_instance: state.phase_instance,
+            from: "self_review-succeeded",
+            to: "counter_review-running",
+          },
+        },
+      });
+    }
   });
 });

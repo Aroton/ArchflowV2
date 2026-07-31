@@ -58,8 +58,36 @@ describe("correlated MCP tool contracts", () => {
     const source = structuredClone(taskInitialization);
     const call = parseToolCall("archflow_state", { ...stateInput, artifact: source });
     source.task_id = "mutated";
-    expect(call.input.artifact?.task_id).toBe(taskInitialization.task_id);
+    expect(call.input.artifact?.artifact_kind).toBe("task-initialization");
+    if (call.input.artifact?.artifact_kind !== "task-initialization") throw new TypeError("expected initialization fixture");
+    expect(call.input.artifact.task_id).toBe(taskInitialization.task_id);
     expect(Object.isFrozen(call.input.artifact)).toBe(true);
+    const reviewEvidence = {
+      schema_version: "1", task_id: "task-1", phase_instance: "phase-impl-2",
+      step: "self_review", role: "self-review", subject_digest: digest,
+      input_fingerprint: digest, rubric_digest: digest, producer_family: "claude",
+      findings: [], matched_rule_versions: [], verdict: "pass", blocking_count: 0,
+      model_family: "claude", model: "claude", effort: "high", assurance: "agent-declared",
+    } as const;
+    const review = parseToolCall("archflow_state", {
+      ...stateInput, step: "self_review",
+      artifact: { schema_version: "1", artifact_kind: "review-evidence", evidence: reviewEvidence },
+    });
+    expect(review.input.artifact?.artifact_kind).toBe("review-evidence");
+    expect(Object.isFrozen(review.input.artifact && "evidence" in review.input.artifact ? review.input.artifact.evidence : undefined)).toBe(true);
+    const triage = parseToolCall("archflow_state", {
+      ...stateInput, step: "triage",
+      artifact: {
+        schema_version: "1", artifact_kind: "triage",
+        evidence: {
+          schema_version: "1", task_id: "task-1", phase_instance: "phase-impl-2",
+          step: "triage", subject_digest: digest, input_fingerprint: digest,
+          current_evidence_set_digest: digest, source_evidence_digests: [],
+          dispositions: [], accepted_count: 0, rejected_count: 0,
+        },
+      },
+    });
+    expect(triage.input.artifact?.artifact_kind).toBe("triage");
     expect(() => parseToolCall("archflow_state", { ...stateInput, artifact: null })).toThrow();
     expect(() => parseToolCall("archflow_state", { ...stateInput, artifact: { ...taskInitialization, artifact_kind: "unknown" } })).toThrow();
   });

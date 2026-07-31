@@ -220,4 +220,49 @@ describe("Phase 12 gate process and SIGKILL boundaries", { timeout: 20_000 }, ()
       expect(existsSync(join(input.taskRoot, "gate.decision"))).toBe(false);
     });
   }
+
+  it.each([
+    ["reentry", "revise", 2],
+    ["exhaustion", "retry-once", 3],
+  ] as const)(
+    "resumes an already archived Phase 14 %s decision onto exactly one enacted retry",
+    async (kind, choice, attempt) => {
+      const input = await fixture(`gate-crash-${kind}`);
+      const before = await readTaskState(input.authority.state);
+      if (before.kind !== "canonical") throw new Error("fixture state unavailable");
+      await writeFile(input.authority.state.absolute, canonicalDocument({
+        ...before.document.value,
+        step: "adjudicate",
+        status: "succeeded",
+        attempt: parseSafeInteger(attempt),
+      } as TaskStateV1).bytes);
+
+      expect((await event(start(input, `${kind}-open`), "result")).result.ok).toBe(true);
+      const gateId = await decision(input, choice);
+      const killed = start(input, `${kind}-run-kill`, "archive-created");
+      await event(killed, "cut");
+      await new Promise<void>((resolve) => killed.once("exit", () => resolve()));
+      await repair(input);
+
+      expect((await event(start(input, `${kind}-run`), "result")).result).toMatchObject({
+        ok: true,
+        value: { effect: "retry" },
+      });
+      const after = await readTaskState(input.authority.state);
+      expect(after).toMatchObject({
+        kind: "canonical",
+        document: {
+          value: {
+            step: "produce",
+            status: "running",
+            attempt: attempt + 1,
+            input_fingerprint: D("e"),
+          },
+        },
+      });
+      expect(existsSync(join(input.taskRoot, "decisions", gateId, "decision.json"))).toBe(true);
+      expect(existsSync(join(input.taskRoot, "gate.json"))).toBe(false);
+      expect(existsSync(join(input.taskRoot, "gate.decision"))).toBe(false);
+    },
+  );
 });

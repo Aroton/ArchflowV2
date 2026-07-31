@@ -18,21 +18,21 @@ export type ModelFamily = (typeof MODEL_FAMILIES)[number];
 export type AdapterId = (typeof ADAPTER_IDS)[number];
 export type DeclaredEffort = (typeof EFFORT_VALUES)[number] | "unknown";
 
-export interface RuleVersionRef {
+export type RuleVersionRef = {
   readonly rule_id: string;
   readonly rule_version: number;
-}
+};
 
-export interface ReviewFinding {
+export type ReviewFinding = {
   readonly finding_id: string;
   readonly severity: ReviewFindingSeverity;
   readonly blocking: boolean;
   readonly summary: string;
   readonly evidence: string;
   readonly suggested_resolution: string;
-}
+};
 
-export interface RawReview {
+export type RawReview = {
   readonly schema_version: "1";
   readonly task_id: TaskSlug;
   readonly phase_instance: string;
@@ -46,10 +46,10 @@ export interface RawReview {
   readonly matched_rule_versions: readonly RuleVersionRef[];
   readonly verdict: ReviewVerdict;
   readonly blocking_count: number;
-}
+};
 
 /** Semantically checked review data. This type intentionally carries no authority brand. */
-export interface DerivedReview extends RawReview {}
+export type DerivedReview = RawReview;
 
 const nonBlank = z.string().min(1).refine((value) => value.trim().length > 0, "must contain a non-whitespace character");
 const id = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
@@ -121,16 +121,16 @@ export function parseAndDeriveReview(value: unknown): DerivedReview {
   return parsed;
 }
 
-interface ReviewProvenanceBase extends DerivedReview {
+type ReviewProvenanceBase = DerivedReview & {
   readonly model_family: ModelFamily | "unknown";
   readonly model: string;
   readonly effort: DeclaredEffort;
-}
+};
 
-export interface AgentDeclaredReview extends ReviewProvenanceBase {
+export type AgentDeclaredReview = ReviewProvenanceBase & {
   readonly assurance: "agent-declared";
-}
-export interface ServerAttestedReview extends Omit<ReviewProvenanceBase, "model_family" | "effort"> {
+};
+export type ServerAttestedReview = Omit<ReviewProvenanceBase, "model_family" | "effort"> & {
   readonly assurance: "server-attested";
   readonly adapter: AdapterId;
   readonly cli_version: string;
@@ -140,11 +140,11 @@ export interface ServerAttestedReview extends Omit<ReviewProvenanceBase, "model_
   readonly envelope_input_digest: Sha256Digest;
   readonly observed_output_digest: Sha256Digest;
   readonly result_id: string;
-}
-export interface DegradedReview extends ReviewProvenanceBase {
+};
+export type DegradedReview = ReviewProvenanceBase & {
   readonly assurance: "degraded";
   readonly reason: string;
-}
+};
 export type ReviewEvidence = AgentDeclaredReview | ServerAttestedReview | DegradedReview;
 
 const provenanceBase = rawReviewSchema.safeExtend({

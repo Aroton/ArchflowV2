@@ -37,6 +37,7 @@ import {
 import { parseTaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import type { ToolName } from "../contracts/tool-names.js";
+import type { PipelineStep } from "../contracts/vocabulary.js";
 import type { GitEnvironment } from "../repository/git.js";
 import { verifyRepositoryIdentity, type RootBoundGitRunner } from "../repository/identity.js";
 import { resolveTaskPath, type ResolvedPath, type ResolvedTaskPath } from "../repository/paths.js";
@@ -161,6 +162,17 @@ export type TransactionOutcome<K extends ToolName> = Readonly<{
   replayed: boolean;
 }>;
 
+const authenticTransactionOutcomes = new WeakSet<object>();
+
+/** Trust-boundary assertion for consumers deriving authority from a completed kernel transaction. */
+export function assertAuthenticTransactionOutcome(
+  value: TransactionOutcome<ToolName>,
+): asserts value is TransactionOutcome<ToolName> {
+  if (value === null || typeof value !== "object" || !authenticTransactionOutcomes.has(value)) {
+    throw new TypeError("transaction outcome was not minted by the state transaction kernel");
+  }
+}
+
 type Identified<K extends ToolName> = ReturnType<typeof identifyTransactionRequest<K>>;
 
 type PlannedCommit<K extends ToolName> = Readonly<{
@@ -209,6 +221,8 @@ function operationFor(call: ParsedToolCall): IntentReceiptV1["operation"] {
         case "legacy-import-initialization": return "adopt-legacy-import-initialization" as IntentReceiptV1["operation"];
         case "document": return "record-document-artifact" as IntentReceiptV1["operation"];
         case "implementation-output": return "record-implementation-output" as IntentReceiptV1["operation"];
+        case "review-evidence": return "record-self-review" as IntentReceiptV1["operation"];
+        case "triage": return "record-triage" as IntentReceiptV1["operation"];
         case "manual-checkpoint-import": return "adopt-manual-checkpoint-import" as IntentReceiptV1["operation"];
       }
     }
@@ -282,7 +296,9 @@ function outcomeResult<K extends ToolName>(
   outcome: ToolSuccess<K>,
   replayed: boolean,
 ): ProjectResult<TransactionOutcome<K>> {
-  return ok(Object.freeze({ state, outcome, replayed }));
+  const value = Object.freeze({ state, outcome, replayed });
+  authenticTransactionOutcomes.add(value);
+  return ok(value);
 }
 
 async function resolveIntentTarget<K extends ToolName>(
@@ -514,11 +530,113 @@ function materializePlan<K extends ToolName>(value: unknown): PreparedTransactio
   return { expectation, result, next_state: nextState, result_installation: facts };
 }
 
+function expectedInstallationSource(
+  call: ParsedToolCall,
+  source: ReturnType<typeof parseResultManifest>["source_artifact"],
+): PipelineStep {
+  if (call.name === "archflow_state") {
+    const step = call.input.step;
+    const matches =
+      (step === "produce" &&
+        (source.artifact_kind === "document" || source.artifact_kind === "implementation-output")) ||
+      (step === "self_review" && source.artifact_kind === "review-evidence" &&
+        source.evidence.role === "self-review" && source.evidence.step === "self_review") ||
+      (step === "triage" && source.artifact_kind === "triage");
+    if (!matches) throw new TypeError("result source kind is not legal for the archflow_state step");
+    if (source.artifact_kind === "review-evidence" || source.artifact_kind === "triage") {
+      if (call.input.artifact === undefined) {
+        throw new TypeError("evidence result installation requires an archflow_state artifact");
+      }
+      if (canonicalJsonDigest(call.input.artifact) !== canonicalJsonDigest(source)) {
+        throw new TypeError("evidence result installation source does not match the archflow_state artifact");
+      }
+    }
+    return step;
+  }
+  if (
+    call.name === "archflow_counter_review" &&
+    source.artifact_kind === "review-evidence" &&
+    source.evidence.role === "counter-review" &&
+    source.evidence.step === "counter_review"
+  ) return "counter_review";
+  if (call.name === "archflow_adjudicate" && source.artifact_kind === "adjudication-evidence") {
+    return "adjudicate";
+  }
+  throw new TypeError("result installation tool and source kind do not match");
+}
+
+function targetIsInside(root: string, target: ResolvedPath): boolean {
+  const rel = relative(root, target.absolute);
+  return rel !== "" && rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel);
+}
+
+function validateResultInstallationBinding<K extends ToolName>(
+  request: TransactionRequest<K>,
+  current: CanonicalDocument<TaskStateV1>,
+  identified: Identified<K>,
+  plan: PreparedTransaction<K> & { result_installation?: ResultInstallationFacts },
+  authenticatedWorktreeRoot: string,
+): ProjectResult<void> {
+  const installation = plan.result_installation;
+  if (installation === undefined) return ok(undefined);
+  const facts = installation.plan;
+  const manifest = facts.prepared.manifest.value;
+  const expectedStep = expectedInstallationSource(request.call, manifest.source_artifact);
+  if (plan.next_state.status !== "succeeded" || plan.next_state.step !== expectedStep) {
+    throw new TypeError("result installation is permitted only at its successful evidence boundary");
+  }
+  const reference = facts.reference;
+  const nextReference = plan.next_state.authoritative_results.find((entry) =>
+    entry.phase_instance === reference.phase_instance && entry.step === reference.step);
+  if (!isDeepStrictEqual(nextReference, reference) || reference.result_id !== plan.expectation.result_id) {
+    throw new TypeError("result installation reference does not match the prepared transaction");
+  }
+  if (reference.input_fingerprint !== identified.input_fingerprint) {
+    return fingerprintMismatch(identified.input_fingerprint, reference.input_fingerprint);
+  }
+  if (
+    manifest.task_id !== request.authority.task_id ||
+    manifest.task_id !== current.value.task_id
+  ) return taskIssue(request.authority.task_id, "result-installation-task-mismatch");
+  if (
+    manifest.repository_identity_digest !== request.authority.repository_identity_digest ||
+    manifest.repository_identity_digest !== current.value.repository_identity_digest
+  ) return stateIssue(current.value, "result-installation-repository-mismatch");
+  if (
+    manifest.phase_instance !== plan.next_state.phase_instance ||
+    manifest.step !== expectedStep ||
+    manifest.input_fingerprint !== identified.input_fingerprint
+  ) return stateIssue(current.value, "result-installation-state-mismatch");
+  const expectedManifestPath =
+    `.archflow/tasks/${request.authority.task_id}/results/sha256/${facts.prepared.result_digest}/manifest.json`;
+  if (
+    facts.worktree_root !== authenticatedWorktreeRoot ||
+    facts.manifest_target.repositoryRelative !== expectedManifestPath ||
+    !targetIsInside(request.authority.task_root, facts.manifest_target)
+  ) return issue("CONTRACT_INVALID", "result-installation-target-mismatch");
+  const payloadRoot =
+    `.archflow/tasks/${request.authority.task_id}/results/sha256/${facts.prepared.result_digest}/payload/`;
+  if (facts.prepared.payloads.some((payload) =>
+    !payload.target.repositoryRelative.startsWith(payloadRoot) ||
+    !targetIsInside(request.authority.task_root, payload.target)
+  )) return issue("CONTRACT_INVALID", "result-installation-payload-target-mismatch");
+  const outputs = new Map(manifest.outputs.map((output) => [output.path, output.path_class]));
+  if (
+    outputs.size !== manifest.outputs.length ||
+    facts.projection_plan.entries.some((entry) =>
+      outputs.get(entry.path) !== entry.target.path_class ||
+      entry.target.repositoryRelative !== entry.path ||
+      !targetIsInside(request.authority.task_root, entry.target))
+  ) return issue("CONTRACT_INVALID", "result-installation-projection-target-mismatch");
+  return ok(undefined);
+}
+
 function buildPlan<K extends ToolName>(
   request: TransactionRequest<K>,
   current: CanonicalDocument<TaskStateV1>,
   identified: Identified<K>,
   preparedValue: unknown,
+  authenticatedWorktreeRoot: string,
 ): ProjectResult<PlannedCommit<K>> {
   const resultingRevision = parseSafeInteger(current.value.revision + 1);
   const plan = materializePlan<K>(preparedValue);
@@ -528,22 +646,10 @@ function buildPlan<K extends ToolName>(
     throw new TypeError("prepared transaction revision is not the immediate successor");
   }
   assertPreserved(current.value, plan.next_state, preparedValue as object);
-  if (plan.result_installation !== undefined) {
-    const stateCall = request.call.name === "archflow_state"
-      ? request.call as Extract<ParsedToolCall, { readonly name: "archflow_state" }>
-      : undefined;
-    const artifact = stateCall?.input.artifact;
-    const producing = stateCall?.input.step === "produce" && stateCall.input.status === "succeeded" &&
-      (artifact?.artifact_kind === "document" || artifact?.artifact_kind === "implementation-output");
-    if (!producing) throw new TypeError("result installation is permitted only at a successful producing boundary");
-    const reference = plan.result_installation.plan.reference;
-    const nextReference = plan.next_state.authoritative_results.find((entry) =>
-      entry.phase_instance === reference.phase_instance && entry.step === reference.step);
-    if (!isDeepStrictEqual(nextReference, reference) || reference.result_id !== plan.expectation.result_id ||
-        reference.input_fingerprint !== identified.input_fingerprint) {
-      throw new TypeError("result installation reference does not match the prepared transaction");
-    }
-  }
+  const installation = validateResultInstallationBinding(
+    request, current, identified, plan, authenticatedWorktreeRoot,
+  );
+  if (!installation.ok) return installation;
   if (
     !sameCheckpoint(plan.next_state.adopted_checkpoint, current.value.adopted_checkpoint) &&
     operationFor(request.call) !== "adopt-manual-checkpoint-import"
@@ -721,7 +827,11 @@ async function installPlan<K extends ToolName>(
   receiptAlreadyExists: boolean,
 ): Promise<ProjectResult<TransactionOutcome<K>>> {
   const resumesResult = plan.receipt.value.operation === "record-document-artifact" ||
-    plan.receipt.value.operation === "record-implementation-output";
+    plan.receipt.value.operation === "record-implementation-output" ||
+    plan.receipt.value.operation === "record-self-review" ||
+    plan.receipt.value.operation === "record-triage" ||
+    plan.receipt.value.operation === "counter-review" ||
+    plan.receipt.value.operation === "adjudicate";
   if (receiptAlreadyExists && resumesResult) {
     const reference = plan.final.value.authoritative_results.find((entry) => entry.result_id === plan.receipt.value.result_id);
     if (reference !== undefined) {
@@ -891,7 +1001,13 @@ async function executeLocked<K extends ToolName>(
   if (!identified.ok) return identified;
   const prepared = await prepare(current, identified.value.call);
   if (!prepared.ok) return prepared;
-  const plan = buildPlan(request, current, identified.value, ownDataField(prepared, "value", "prepare result"));
+  const plan = buildPlan(
+    request,
+    current,
+    identified.value,
+    ownDataField(prepared, "value", "prepare result"),
+    dependencies.runner.location.worktreeRoot,
+  );
   if (!plan.ok) return plan;
   onPlan(current, plan.value);
   return installPlan(dependencies, request, intentPath, current, plan.value, false);

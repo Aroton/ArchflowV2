@@ -10,6 +10,7 @@ const load = async (path: string) => JSON.parse(await readFile(new URL(path, imp
 const durableReferences = async () => Promise.all([
   "durable-primitives", "task-state", "task-initialization", "legacy-import-initialization",
   "document-artifact", "implementation-output", "manual-checkpoint", "manual-checkpoint-import", "secret-scan-result",
+  "review-evidence", "triage",
 ].map((name) => load(`../../src/contracts/schemas/v1/${name}.schema.json`)));
 
 describe("MCP contract schema agreement", () => {

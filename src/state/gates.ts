@@ -29,6 +29,7 @@ import {
   type WaiverScope,
 } from "../contracts/gates.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
+import { parseReviewEvidence, type ReviewEvidence } from "../contracts/review.js";
 import { parseSupplementalReviewOutcome, type GateSupersessionRef, type SupplementalReviewOutcome } from "../contracts/supplemental.js";
 import { gateCounterReviewClaim, gateDecisionClaim, gateRequestClaim, openResolved, resolveTaskPath, type ResolvedPath } from "../repository/paths.js";
 import { parseTaskPathClaim } from "../contracts/path-claims.js";
@@ -38,6 +39,7 @@ import { waitForGateInterface } from "./gate-wait.js";
 import { ensureDecisionDirectory, ensureIntentDirectory } from "./layout.js";
 import { TaskLockError } from "./lock.js";
 import type { TransactionDependencies } from "./transaction.js";
+import { planStateTransition } from "./transitions.js";
 import { applyProjectionPlan, captureProjectionTarget, prepareProjectionPlan, projectionGenerationDigest, type ProjectionSource } from "./snapshots.js";
 import type { SecretScanner } from "../contracts/secret-scan.js";
 
@@ -53,7 +55,62 @@ const DECISIONS: Readonly<Record<GateKind, readonly string[]>> = Object.freeze({
   "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"],
 });
 
-export type GateLifecycleDependencies = Readonly<TransactionDependencies & { gate_secret_scanner?: SecretScanner }>;
+const authenticatedGateApprovals = new WeakSet<object>();
+const authenticatedGateApprovalBrand: unique symbol = Symbol("AuthenticatedGateApproval");
+
+/**
+ * A durable approval reloaded from the state and decision archive by this module.
+ * The public fields let state-owned decision functions check the immutable binding;
+ * membership in the private WeakSet prevents callers from fabricating the authority.
+ */
+export type AuthenticatedGateApproval = Readonly<{
+  approval: ApprovalRef;
+  request: GateRequestV1;
+  decision: Extract<GateDecisionRecordV1, { readonly outcome: "decided" }>;
+}> & { readonly [authenticatedGateApprovalBrand]: true };
+
+export function assertAuthenticatedGateApproval(
+  value: AuthenticatedGateApproval,
+): void {
+  if (!authenticatedGateApprovals.has(value)) {
+    throw new TypeError("an authenticated gate approval is required");
+  }
+}
+
+function deepFreezeGateJson<T>(value: T): T {
+  if (value !== null && typeof value === "object") {
+    for (const nested of Object.values(value)) deepFreezeGateJson(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+export type GateReentryFingerprintResolver = (
+  input: Readonly<{
+    authority: TransactionAuthority;
+    request: GateRequestV1;
+    current: CanonicalDocument<TaskStateV1>;
+  }>,
+) => Promise<ProjectResult<Sha256Digest>>;
+
+export type GateLifecycleDependencies = Readonly<TransactionDependencies & {
+  gate_secret_scanner?: SecretScanner;
+  resolve_gate_reentry_fingerprint?: GateReentryFingerprintResolver;
+  resolve_supplemental_review?: (
+    input: Readonly<{
+      authority: TransactionAuthority;
+      request: GateRequestV1;
+      outcome?: Exclude<SupplementalReviewOutcome, { action: "decline" }>;
+    }>,
+  ) => Promise<ProjectResult<Readonly<{
+    evidence: ReviewEvidence;
+    gate_id: PathSafeId;
+  }>>>;
+}>;
+export type GateApprovalLoaderDependencies = Pick<
+  GateLifecycleDependencies,
+  "runner" | "environment" | "read_state"
+>;
 export type GateOpenInput = Readonly<{
   authority: TransactionAuthority;
   expected_revision: number;
@@ -93,7 +150,7 @@ const io = (authority: TransactionAuthority, operation: string): ProjectResult<n
   fail(createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt }));
 
 async function resolvePath(
-  dependencies: GateLifecycleDependencies,
+  dependencies: Pick<GateLifecycleDependencies, "runner">,
   authority: TransactionAuthority,
   claim: ReturnType<typeof gateRequestClaim> | ReturnType<typeof gateDecisionClaim> | "gate.json" | "gate.decision",
   expectedClass: "decision" | "gate-interface",
@@ -125,16 +182,6 @@ async function readCanonical<T extends PlainJsonValue>(
   } finally {
     await handle?.close().catch(() => undefined);
   }
-}
-
-async function exactFileDigest(path: ResolvedPath): Promise<Sha256Digest | undefined> {
-  let handle;
-  try {
-    handle = await openResolved(path.absolute, fsConstants.O_RDONLY);
-    if (!(await handle.stat()).isFile()) return undefined;
-    return sha256Bytes(new Uint8Array(await handle.readFile()));
-  } catch { return undefined; }
-  finally { await handle?.close().catch(() => undefined); }
 }
 
 function supplementalGate(outcome: SupplementalReviewOutcome): Readonly<{ prior_gate_id: PathSafeId; task_id: GateRequestV1["task_id"]; phase_instance: string; subject_digest: Sha256Digest; input_fingerprint: Sha256Digest }> {
@@ -233,9 +280,102 @@ function parseInterface(value: unknown, request: GateRequestV1, supplemental: Su
   return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, supplemental, outcome: "decided", envelope });
 }
 
-async function stateOrFailure(dependencies: GateLifecycleDependencies, authority: TransactionAuthority): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
+async function stateOrFailure(
+  dependencies: Pick<GateLifecycleDependencies, "read_state">,
+  authority: TransactionAuthority,
+): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
   const read = await dependencies.read_state(authority.state);
   return read.kind === "canonical" ? ok(read.document) : read.kind === "unreadable" ? io(authority, "gate-state-read") : issue("CONTRACT_INVALID", undefined, `gate-state-${read.kind}`);
+}
+
+/**
+ * Reloads an ApprovalRef's current durable authority. Nothing supplied by the caller other
+ * than the exact ref is trusted: state, request, and decision are all read from canonical
+ * task-owned paths before an in-memory capability is minted.
+ */
+export async function loadAuthenticatedGateApproval(
+  dependencies: GateApprovalLoaderDependencies,
+  authority: TransactionAuthority,
+  approval: ApprovalRef,
+): Promise<ProjectResult<AuthenticatedGateApproval>> {
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment,
+  });
+  assertPlainJson(approval, "approval reference");
+  const claimed = structuredClone(approval);
+  const current = await stateOrFailure(dependencies, authority);
+  if (!current.ok) return current;
+  if (
+    current.value.value.task_id !== authority.task_id ||
+    !verifyRepositoryIdentity(
+      current.value.value.repository_identity_digest,
+      authority.repository_identity,
+    ).ok
+  ) return issue("STATE_INVALID", current.value.value, "gate-approval-state-authority-mismatch");
+  const durable = current.value.value.approvals.find((entry) =>
+    entry.gate_id === claimed.gate_id);
+  if (durable === undefined || !isDeepStrictEqual(durable, claimed)) {
+    return issue("STATE_INVALID", current.value.value, "gate-approval-not-current");
+  }
+  const requestPath = await resolvePath(
+    dependencies,
+    authority,
+    gateRequestClaim(claimed.gate_id),
+    "decision",
+  );
+  const decisionPath = await resolvePath(
+    dependencies,
+    authority,
+    gateDecisionClaim(claimed.gate_id),
+    "decision",
+  );
+  if (!requestPath.ok) return requestPath;
+  if (!decisionPath.ok) return decisionPath;
+  const request = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+  const decision = await readCanonical(
+    decisionPath.value,
+    "gate decision record",
+    parseGateDecisionRecord,
+  );
+  if (request === "missing" || request === "invalid") {
+    return issue("STATE_INVALID", current.value.value, "gate-approval-request-invalid");
+  }
+  if (decision === "missing" || decision === "invalid") {
+    return issue("STATE_INVALID", current.value.value, "gate-approval-decision-invalid");
+  }
+  if (
+    decision.digest !== claimed.decision_digest ||
+    !validateDurableSemantics({
+      gate_request: request,
+      gate_decision: decision,
+    }).ok ||
+    decision.value.outcome !== "decided" ||
+    gateDecisionEffect(decision.value.envelope.payload) !== "advance" ||
+    request.value.task_id !== authority.task_id ||
+    request.value.gate_id !== claimed.gate_id ||
+    request.value.kind !== claimed.gate_kind ||
+    request.value.subject_digest !== claimed.subject_digest ||
+    decision.value.gate_id !== claimed.gate_id ||
+    decision.value.task_id !== authority.task_id ||
+    decision.value.kind !== claimed.gate_kind ||
+    decision.value.subject_digest !== claimed.subject_digest
+  ) return issue("STATE_INVALID", current.value.value, "gate-approval-binding-invalid");
+
+  const authenticated = {
+    approval: deepFreezeGateJson(structuredClone(durable)),
+    request: deepFreezeGateJson(structuredClone(request.value)),
+    decision: deepFreezeGateJson(structuredClone(decision.value)),
+  } as unknown as AuthenticatedGateApproval;
+  Object.defineProperty(authenticated, authenticatedGateApprovalBrand, {
+    value: true,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  Object.freeze(authenticated);
+  authenticatedGateApprovals.add(authenticated);
+  return ok(authenticated);
 }
 
 async function validateLiveGateState(
@@ -321,11 +461,43 @@ async function currentSupplementalLedger(
       derived.push(entry);
       continue;
     }
-    const review = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: gateCounterReviewClaim(request.phase_instance, request.gate_id), expectedClass: "review", context: authority.context });
-    if (!review.ok) return undefined;
-    if (await exactFileDigest(review.value) === entry.review.evidence_slot.evidence_digest) derived.push(entry);
+    if (!await authenticSupplementalReview(
+      dependencies, authority, request, inputFingerprint, entry,
+    )) continue;
+    derived.push(entry);
   }
   return Object.freeze(derived);
+}
+
+async function authenticSupplementalReview(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  request: GateRequestV1,
+  inputFingerprint: Sha256Digest,
+  outcome: Exclude<SupplementalReviewOutcome, { action: "decline" }>,
+): Promise<boolean> {
+  const resolver = dependencies.resolve_supplemental_review;
+  if (resolver === undefined) return false;
+  const resolved = await resolver({ authority, request, outcome });
+  if (!resolved.ok) return false;
+  let evidence: ReviewEvidence;
+  try {
+    evidence = parseReviewEvidence(structuredClone(resolved.value.evidence));
+  } catch {
+    return false;
+  }
+  const slot = outcome.review.evidence_slot;
+  return resolved.value.gate_id === request.gate_id &&
+    slot.gate_id === request.gate_id &&
+    canonicalJsonDigest(evidence) === slot.evidence_digest &&
+    evidence.role === "gate-counter-review" &&
+    evidence.task_id === request.task_id &&
+    evidence.phase_instance === request.phase_instance &&
+    evidence.subject_digest === request.subject_digest &&
+    evidence.input_fingerprint === inputFingerprint &&
+    evidence.assurance === slot.assurance &&
+    evidence.producer_family === slot.producer_family &&
+    evidence.model_family === slot.reviewer_family;
 }
 
 export async function openDurableGate(
@@ -338,7 +510,12 @@ export async function openDurableGate(
       const stateResult = await stateOrFailure(dependencies, input.authority);
       if (!stateResult.ok) return stateResult;
       const current = stateResult.value;
-      const live = await validateLiveGateState(dependencies, input.authority, current, input.input_fingerprint);
+      // Archive replay may legitimately observe the new produce-entry fingerprint after an
+      // atomically enacted retry. Authenticate repository/config first and compare the caller's
+      // fingerprint only after ruling out that completed replay.
+      const live = await validateLiveGateState(
+        dependencies, input.authority, current, current.value.input_fingerprint,
+      );
       if (!live.ok) return live;
       const gateId = computeGateId({ task_identity_digest: input.authority.task_identity_digest, intent_id: input.intent_id, request_digest: input.request_digest });
       await ensureDecisionDirectory(input.authority, gateId);
@@ -351,6 +528,15 @@ export async function openDurableGate(
       if (archived !== "missing") {
         if (archived === "invalid" || requestRead === "missing" || requestRead === "invalid") return issue("STATE_INVALID", current.value, "gate-archive-invalid");
         if (!validateDurableSemantics({ gate_request: requestRead, gate_decision: archived }).ok) return issue("STATE_INVALID", current.value, "gate-archive-binding-invalid");
+        if (
+          !enactsReentry(archived.value) &&
+          input.input_fingerprint !== current.value.input_fingerprint
+        ) {
+          return fail(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
+            expected_digest: current.value.input_fingerprint,
+            observed_digest: input.input_fingerprint,
+          }));
+        }
         if (current.value.open_gate?.gate_id === gateId) {
           return ok({ gate_id: gateId, state: current, request: requestRead, replay: archived });
         }
@@ -367,7 +553,24 @@ export async function openDurableGate(
           return ok({ gate_id: gateId, state: current, request: requestRead, replay: archived });
         }
         if (archived.value.outcome === "cancelled" && requestRead.value.intent_id === input.intent_id && requestRead.value.request_digest === input.request_digest) return ok({ gate_id: gateId, state: current, request: requestRead, replay: archived });
+        if (
+          enactsReentry(archived.value) &&
+          requestRead.value.intent_id === input.intent_id &&
+          requestRead.value.request_digest === input.request_digest
+        ) {
+          const replay = await validateCompletedReentry(
+            dependencies, input.authority, current, requestRead.value, archived.value,
+          );
+          if (!replay.ok) return replay;
+          return ok({ gate_id: gateId, state: current, request: requestRead, replay: archived });
+        }
         return fail(createProjectError("INTENT_NOT_CURRENT", { intent_id: input.intent_id, receipt_revision: requestRead.value.opened_at_revision, current_revision: current.value.revision }));
+      }
+      if (input.input_fingerprint !== current.value.input_fingerprint) {
+        return fail(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
+          expected_digest: current.value.input_fingerprint,
+          observed_digest: input.input_fingerprint,
+        }));
       }
       if (current.value.open_gate !== undefined) {
         const activeRequestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(current.value.open_gate.gate_id), "decision");
@@ -393,7 +596,13 @@ export async function openDurableGate(
           if (supplemental.action !== "decline") {
             const resolvedReview = await resolveTaskPath({ runner: dependencies.runner, taskId: input.authority.task_id, claim: gateCounterReviewClaim(input.phase_instance, gateId), expectedClass: "review", context: input.authority.context });
             if (!resolvedReview.ok) return resolvedReview;
-            if (await exactFileDigest(resolvedReview.value) !== supplemental.review.evidence_slot.evidence_digest) return fail(createProjectError("SUPPLEMENTAL_REVIEW_REQUIRED", { gate_id: gateId, evidence_digest: supplemental.review.evidence_slot.evidence_digest }));
+            if (!await authenticSupplementalReview(
+              dependencies,
+              input.authority,
+              activeRequest.value,
+              input.input_fingerprint,
+              supplemental,
+            )) return issue("STATE_INVALID", current.value, "supplemental-review-authority-invalid");
           }
           if (supplemental.action === "supersede") {
             const ledger = await currentSupplementalLedger(dependencies, input.authority, activeRequest.value, input.input_fingerprint, supplemental);
@@ -510,6 +719,133 @@ function nextStateForRecord(state: TaskStateV1, record: GateDecisionRecordV1, di
   return canonicalDocument({ ...base, revision, approvals, waivers } as TaskStateV1);
 }
 
+function enactsReentry(record: GateDecisionRecordV1): boolean {
+  if (record.outcome !== "decided") return false;
+  const decision = record.envelope.payload.decision;
+  return (record.kind === "review-trigger" && decision === "revise") ||
+    (record.kind === "adjudication-failure" && decision === "revise") ||
+    (record.kind === "material-drift" && decision === "revise-current") ||
+    (record.kind === "attempts-exhausted" && (decision === "retry-once" || decision === "revise"));
+}
+
+function exactOpenGateMatches(state: TaskStateV1, request: GateRequestV1): boolean {
+  const open = state.open_gate;
+  if (
+    open === undefined ||
+    open.gate_id !== request.gate_id ||
+    open.gate_kind !== request.kind ||
+    open.subject_digest !== request.subject_digest ||
+    open.context_digest !== request.context_digest ||
+    open.opened_at_revision !== request.opened_at_revision ||
+    state.revision !== request.opened_at_revision ||
+    state.phase_instance !== request.phase_instance
+  ) return false;
+  const { open_gate: _open, committed_intent: _intent, ...base } = state;
+  return open.frozen_state_digest === openGateFrozenStateDigest(base as TaskStateV1);
+}
+
+async function planGateAuthorizedReentry(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  current: CanonicalDocument<TaskStateV1>,
+  request: GateRequestV1,
+  record: GateDecisionRecordV1,
+): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
+  if (!enactsReentry(record)) throw new TypeError("gate record does not authorize re-entry");
+  if (!exactOpenGateMatches(current.value, request)) {
+    return issue("STATE_INVALID", current.value, "gate-reentry-predecessor-mismatch");
+  }
+  if (
+    current.value.status !== "succeeded" ||
+    (current.value.step !== "triage" && current.value.step !== "adjudicate")
+  ) return issue("STATE_INVALID", current.value, "gate-reentry-predecessor-mismatch");
+  if (request.kind === "attempts-exhausted") {
+    if (
+      request.context.step !== current.value.step ||
+      request.context.attempts !== current.value.attempt ||
+      request.context.maximum_attempts > request.context.attempts
+    ) return issue("STATE_INVALID", current.value, "gate-reentry-attempt-context-mismatch");
+  } else if (current.value.step !== "adjudicate") {
+    return issue("STATE_INVALID", current.value, "gate-reentry-step-mismatch");
+  }
+  if (dependencies.resolve_gate_reentry_fingerprint === undefined) {
+    return issue("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");
+  }
+  const fingerprint = await dependencies.resolve_gate_reentry_fingerprint({
+    authority,
+    request,
+    current,
+  });
+  if (!fingerprint.ok) return fingerprint;
+  const { open_gate: _open, committed_intent: _intent, ...predecessor } = current.value;
+  const transition = planStateTransition({
+    current: predecessor as TaskStateV1,
+    target: {
+      phase_instance: current.value.phase_instance,
+      step: "produce",
+      status: "running",
+      attempt: parseSafeInteger(current.value.attempt + 1),
+      input_fingerprint: fingerprint.value,
+    },
+    recomputed_input_fingerprint: fingerprint.value,
+  });
+  if (!transition.ok) return transition;
+  return ok(canonicalDocument({
+    ...transition.value,
+    revision: parseSafeInteger(current.value.revision + 1),
+  } as TaskStateV1));
+}
+
+async function closedStateForRecord(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  current: CanonicalDocument<TaskStateV1>,
+  request: GateRequestV1,
+  record: GateDecisionRecordV1,
+  digest: Sha256Digest,
+): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
+  return enactsReentry(record)
+    ? planGateAuthorizedReentry(dependencies, authority, current, request, record)
+    : ok(nextStateForRecord(current.value, record, digest));
+}
+
+async function validateCompletedReentry(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  current: CanonicalDocument<TaskStateV1>,
+  request: GateRequestV1,
+  record: GateDecisionRecordV1,
+): Promise<ProjectResult<void>> {
+  if (
+    !enactsReentry(record) ||
+    current.value.revision <= request.opened_at_revision
+  ) return issue("STATE_INVALID", current.value, "gate-reentry-replay-state-mismatch");
+  // At the first post-closure revision the exact enacted landing state and its freshly derived
+  // fingerprint are still observable and must agree. Later revisions may have advanced steps,
+  // phase instances, attempts, and fingerprints; the immutable archived record plus the fact
+  // that durable state moved beyond its opened revision is then the replay authority.
+  if (current.value.revision > request.opened_at_revision + 1) return ok(undefined);
+  if (
+    current.value.phase_instance !== request.phase_instance ||
+    current.value.step !== "produce" ||
+    current.value.status !== "running" ||
+    (request.kind === "attempts-exhausted" &&
+      current.value.attempt !== request.context.attempts + 1)
+  ) return issue("STATE_INVALID", current.value, "gate-reentry-replay-state-mismatch");
+  if (dependencies.resolve_gate_reentry_fingerprint === undefined) {
+    return issue("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");
+  }
+  const fingerprint = await dependencies.resolve_gate_reentry_fingerprint({
+    authority,
+    request,
+    current,
+  });
+  if (!fingerprint.ok) return fingerprint;
+  return current.value.input_fingerprint === fingerprint.value
+    ? ok(undefined)
+    : issue("STATE_INVALID", current.value, "gate-reentry-replay-fingerprint-mismatch");
+}
+
 function earnsReceipt(record: GateDecisionRecordV1): boolean {
   return record.outcome === "decided"
     ? gateDecisionEffect(record.envelope.payload) === "advance"
@@ -601,8 +937,20 @@ export async function resolveDurableGate(
         if (archived === "invalid") return issue("STATE_INVALID", current.value, "gate-decision-record-invalid");
         if (!validateDurableSemantics({ gate_request: request, gate_decision: archived }).ok) return issue("STATE_INVALID", current.value, "gate-archive-binding-invalid");
         const effect = archived.value.outcome === "decided" ? gateDecisionEffect(archived.value.envelope.payload) : "non-advancing";
-        if (current.value.open_gate?.gate_id !== gateId) return ok({ state: current, record: archived, effect, replayed: true });
-        const prepared = nextStateForRecord(current.value, archived.value, archived.digest);
+        if (current.value.open_gate?.gate_id !== gateId) {
+          if (enactsReentry(archived.value)) {
+            const replay = await validateCompletedReentry(
+              dependencies, authority, current, request.value, archived.value,
+            );
+            if (!replay.ok) return replay;
+          }
+          return ok({ state: current, record: archived, effect, replayed: true });
+        }
+        const closure = await closedStateForRecord(
+          dependencies, authority, current, request.value, archived.value, archived.digest,
+        );
+        if (!closure.ok) return closure;
+        const prepared = closure.value;
         // A closure-before-receipt crash resumes through the same ordering. The archived request
         // carries no fingerprint field, so only non-success closures can be resumed here; success
         // receipt recovery is driven by runDurableGate, which supplies the authenticated fingerprint.
@@ -635,10 +983,14 @@ export async function resolveDurableGate(
       catch { return fail(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request.value.kind, issue_code: "decision-binding-invalid" })); }
       const document = canonicalDocument(record);
       if (!validateDurableSemantics({ gate_request: request, gate_decision: document }).ok) return issue("STATE_INVALID", current.value, "gate-archive-binding-invalid");
+      const closure = await closedStateForRecord(
+        dependencies, authority, current, request.value, record, document.digest,
+      );
+      if (!closure.ok) return closure;
       const created = await dependencies.atomic.createExclusive(archivePath.value, document.bytes);
       if (created !== "created") return issue("STATE_INVALID", current.value, "gate-resolution-race");
       const effect = record.outcome === "decided" ? gateDecisionEffect(record.envelope.payload) : "non-advancing";
-      const final = nextStateForRecord(current.value, record, document.digest);
+      const final = closure.value;
       if (earnsReceipt(record)) return issue("STATE_INVALID", current.value, "gate-success-requires-run-service");
       await dependencies.atomic.replace(authority.state, final.bytes);
       const gateJson = await resolvePath(dependencies, authority, "gate.json", "gate-interface");
@@ -676,10 +1028,40 @@ export async function runDurableGate(
   if (!review.ok) return review;
   const authenticatedLedger = await currentSupplementalLedger(dependencies, input.authority, opened.value.request.value, input.input_fingerprint, input.supplemental_outcome);
   if (authenticatedLedger === undefined) return issue("STATE_INVALID", opened.value.state.value, "supplemental-ledger-invalid");
-  const recorded = authenticatedLedger.flatMap((entry) => entry.action === "decline" ? [] : [entry.review.evidence_slot.evidence_digest]);
-  const wait = await waitForGateInterface({ decision_path: decision.value, supplemental: { path: review.value, recorded_evidence_digests: recorded }, signal: input.signal });
+  const recorded = authenticatedLedger.some((entry) => entry.action !== "decline");
+  const wait = await waitForGateInterface({
+    decision_path: decision.value,
+    supplemental: { path: review.value, already_recorded: recorded },
+    signal: input.signal,
+  });
   if (wait.kind === "aborted") return fail(createProjectError("CANCELLED", { source: "client", attempt: input.authority.context.attempt }));
-  if (wait.kind === "supplemental") return fail(createProjectError("SUPPLEMENTAL_REVIEW_REQUIRED", { gate_id: opened.value.gate_id, evidence_digest: wait.evidence_digest }));
+  if (wait.kind === "supplemental") {
+    const resolver = dependencies.resolve_supplemental_review;
+    if (resolver === undefined) return issue("STATE_INVALID", opened.value.state.value, "supplemental-review-authority-unavailable");
+    const resolved = await resolver({
+      authority: input.authority,
+      request: opened.value.request.value,
+    });
+    if (!resolved.ok) return resolved;
+    let evidence: ReviewEvidence;
+    try {
+      evidence = parseReviewEvidence(structuredClone(resolved.value.evidence));
+    } catch {
+      return issue("STATE_INVALID", opened.value.state.value, "supplemental-review-authority-invalid");
+    }
+    if (
+      resolved.value.gate_id !== opened.value.gate_id ||
+      evidence.role !== "gate-counter-review" ||
+      evidence.task_id !== opened.value.request.value.task_id ||
+      evidence.phase_instance !== opened.value.request.value.phase_instance ||
+      evidence.subject_digest !== opened.value.request.value.subject_digest ||
+      evidence.input_fingerprint !== input.input_fingerprint
+    ) return issue("STATE_INVALID", opened.value.state.value, "supplemental-review-authority-invalid");
+    return fail(createProjectError("SUPPLEMENTAL_REVIEW_REQUIRED", {
+      gate_id: opened.value.gate_id,
+      evidence_digest: canonicalJsonDigest(evidence),
+    }));
+  }
   // Resolve inline so advancing decisions can write archive -> receipt -> state while the
   // authenticated request fingerprint is still available. The lower-level resolver deliberately
   // refuses to manufacture success receipts without it.

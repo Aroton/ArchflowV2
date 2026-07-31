@@ -95,6 +95,19 @@ describe("dispatch routing", () => {
     );
   });
 
+  it("refuses automatic same-family adjudication before dispatch", () => {
+    expectRoutingError(
+      () => resolveDispatchRoute(
+        config({ adjudicator: { model: "gpt-5.4", effort: "high" } }),
+        "design",
+        "adjudicator",
+        "codex",
+      ),
+      "FAMILY_MISMATCH",
+      { expected_family: "claude", observed_family: "codex" },
+    );
+  });
+
   it("guards error construction for unsafe and unsupported configured models", () => {
     expectRoutingError(
       () => resolveDispatchRoute(config({ adjudicator: { model: "openai/gpt-5", effort: "high" } }), "design", "adjudicator", "claude"),

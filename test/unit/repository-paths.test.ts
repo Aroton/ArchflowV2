@@ -21,8 +21,12 @@ import {
 import {
   REPOSITORY_PATH_CLASSES,
   TASK_PATH_CLASSES,
+  adjudicationReviewClaim,
+  counterReviewClaim,
   parseRepositoryPathClaim,
   parseTaskPathClaim,
+  selfReviewClaim,
+  triageReviewClaim,
   type PathClass,
   type RepositoryPathClaim,
   type RepositoryPathClass,
@@ -53,6 +57,25 @@ describe("gate path constructors", () => {
     expect(gateRequestClaim(gateId)).toBe("decisions/gate-1/request.json");
     expect(gateDecisionClaim(gateId)).toBe("decisions/gate-1/decision.json");
     expect(gateCounterReviewClaim(phase, gateId)).toBe("reviews/phase-impl-6.gate-counter.gate-1.md");
+  });
+
+  it("constructs every fixed-point review projection and round-trips the review classifier", () => {
+    const phase = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(6) });
+    const claims = [
+      selfReviewClaim(phase),
+      counterReviewClaim(phase),
+      triageReviewClaim(phase),
+      adjudicationReviewClaim(phase),
+    ];
+    expect(claims).toEqual([
+      "reviews/phase-impl-6.self.md",
+      "reviews/phase-impl-6.counter.md",
+      "reviews/phase-impl-6.triage.md",
+      "reviews/phase-impl-6.adjudication.md",
+    ]);
+    for (const claim of claims) {
+      expect(classifyTaskPath(TASK_ID, claim)).toMatchObject({ ok: true, value: "review" });
+    }
   });
 });
 

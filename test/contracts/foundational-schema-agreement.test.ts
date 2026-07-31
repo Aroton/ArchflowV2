@@ -43,11 +43,14 @@ describe("normative foundational JSON Schemas agree with Zod mirrors", () => {
     const validator = createJsonSchemaValidator(await schema("config"));
     const valid = { schema_version: "1", roles: { "counter-reviewer": { model: "example", effort: "high" } }, overrides: { design: { adjudicator: { model: "other", effort: "xhigh" } } } };
     expect(assertZodAgreement(valid, validator, configV1Schema)).toEqual(valid);
+    expect(assertZodAgreement({ ...valid, max_attempts: 5 }, validator, configV1Schema)).toEqual({ ...valid, max_attempts: 5 });
     for (const invalid of [
       { ...valid, repository: "/tmp/repo" },
       { ...valid, roles: { producer: { model: "x", effort: "high", family: "codex" } } },
       { ...valid, roles: { producer: { model: "   ", effort: "high" } } },
       { ...valid, overrides: { unknown: {} } },
+      { ...valid, max_attempts: 0 },
+      { ...valid, max_attempts: Number.MAX_SAFE_INTEGER + 1 },
     ]) expect(() => assertZodAgreement(invalid, validator, configV1Schema)).toThrow(/schema validation failed|additional properties/);
   });
 
