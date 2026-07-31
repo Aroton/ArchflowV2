@@ -105,6 +105,8 @@ export type GateLifecycleDependencies = Readonly<TransactionDependencies & {
   ) => Promise<ProjectResult<Readonly<{
     evidence: ReviewEvidence;
     gate_id: PathSafeId;
+    triage_digest?: Sha256Digest;
+    triage_outcome?: "no-change" | "accepted-change";
   }>>>;
 }>;
 export type GateApprovalLoaderDependencies = Pick<
@@ -487,7 +489,18 @@ async function authenticSupplementalReview(
     return false;
   }
   const slot = outcome.review.evidence_slot;
-  return resolved.value.gate_id === request.gate_id &&
+  const producerFamilies = new Set(request.current_evidence.slots.map((candidate) => candidate.producer_family));
+  const triageAuthentic = outcome.action === "ingest" || (
+    resolved.value.triage_digest === (
+      outcome.action === "triage-no-change"
+        ? outcome.triage_digest
+        : outcome.accepted_triage_digest
+    ) && resolved.value.triage_outcome === (
+      outcome.action === "triage-no-change" ? "no-change" : "accepted-change"
+    )
+  );
+  return triageAuthentic &&
+    resolved.value.gate_id === request.gate_id &&
     slot.gate_id === request.gate_id &&
     canonicalJsonDigest(evidence) === slot.evidence_digest &&
     evidence.role === "gate-counter-review" &&
@@ -495,6 +508,10 @@ async function authenticSupplementalReview(
     evidence.phase_instance === request.phase_instance &&
     evidence.subject_digest === request.subject_digest &&
     evidence.input_fingerprint === inputFingerprint &&
+    evidence.assurance === "degraded" &&
+    producerFamilies.size === 1 &&
+    producerFamilies.has(evidence.producer_family) &&
+    evidence.model_family !== evidence.producer_family &&
     evidence.assurance === slot.assurance &&
     evidence.producer_family === slot.producer_family &&
     evidence.model_family === slot.reviewer_family;
@@ -1028,7 +1045,7 @@ export async function runDurableGate(
   if (!review.ok) return review;
   const authenticatedLedger = await currentSupplementalLedger(dependencies, input.authority, opened.value.request.value, input.input_fingerprint, input.supplemental_outcome);
   if (authenticatedLedger === undefined) return issue("STATE_INVALID", opened.value.state.value, "supplemental-ledger-invalid");
-  const recorded = authenticatedLedger.some((entry) => entry.action !== "decline");
+  const recorded = authenticatedLedger.length !== 0;
   const wait = await waitForGateInterface({
     decision_path: decision.value,
     supplemental: { path: review.value, already_recorded: recorded },
@@ -1055,7 +1072,11 @@ export async function runDurableGate(
       evidence.task_id !== opened.value.request.value.task_id ||
       evidence.phase_instance !== opened.value.request.value.phase_instance ||
       evidence.subject_digest !== opened.value.request.value.subject_digest ||
-      evidence.input_fingerprint !== input.input_fingerprint
+      evidence.input_fingerprint !== input.input_fingerprint ||
+      evidence.assurance !== "degraded" ||
+      evidence.model_family === evidence.producer_family ||
+      new Set(opened.value.request.value.current_evidence.slots.map((slot) => slot.producer_family)).size !== 1 ||
+      opened.value.request.value.current_evidence.slots.some((slot) => slot.producer_family !== evidence.producer_family)
     ) return issue("STATE_INVALID", opened.value.state.value, "supplemental-review-authority-invalid");
     return fail(createProjectError("SUPPLEMENTAL_REVIEW_REQUIRED", {
       gate_id: opened.value.gate_id,

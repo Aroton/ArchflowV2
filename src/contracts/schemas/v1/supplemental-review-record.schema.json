@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:supplemental-review-record",
+  "title": "ArchFlow Supplemental Review Record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "gate_id", "request_digest", "task_id", "phase_instance", "kind", "subject_digest", "context_digest", "input_fingerprint", "current_evidence_set_digest", "evidence_digest", "projection_digest", "review", "triage_digest", "triage", "outcome"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "gate_id": { "$ref": "#/$defs/pathSafeId" },
+    "request_digest": { "$ref": "#/$defs/digest" },
+    "task_id": { "$ref": "#/$defs/taskSlug" },
+    "phase_instance": { "type": "string", "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" },
+    "kind": { "enum": ["artifact-approval", "review-trigger", "material-drift", "adjudication-failure", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"] },
+    "subject_digest": { "$ref": "#/$defs/digest" },
+    "context_digest": { "$ref": "#/$defs/digest" },
+    "input_fingerprint": { "$ref": "#/$defs/digest" },
+    "current_evidence_set_digest": { "$ref": "#/$defs/digest" },
+    "evidence_digest": { "$ref": "#/$defs/digest" },
+    "projection_digest": { "$ref": "#/$defs/digest" },
+    "review": { "$ref": "urn:archflow:schema:v1:review-evidence" },
+    "triage_digest": { "$ref": "#/$defs/digest" },
+    "triage": { "$ref": "urn:archflow:schema:v1:triage" },
+    "outcome": { "enum": ["no-change", "accepted-change"] }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "pathSafeId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+    "taskSlug": { "type": "string", "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$" }
+  }
+}

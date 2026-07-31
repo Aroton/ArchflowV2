@@ -47,7 +47,7 @@ describe("offline release payload", () => {
 
     expect(checked).toHaveProperty("bundle_digest");
     expect(smoked).toMatchObject({
-      bundle: "archflow-mcp.mjs",
+      bundles: ["archflow-mcp.mjs", "archflow-local.mjs"],
       fixture_sequences: ["initialize-and-calls", "malformed-json", "partial-json", "invalid-utf8"],
       modes: ["exact-copy", "guarded-copy"],
       module_canary_control: "resolved-via-NODE_PATH",

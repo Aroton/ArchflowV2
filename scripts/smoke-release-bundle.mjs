@@ -122,7 +122,7 @@ function assertCleanExit(result, label) {
   assert.deepEqual({ code: result.code, signal: result.signal }, { code: 0, signal: null }, `${label} did not exit cleanly`);
 }
 
-function assertCallTranscript(bytes, initialize, calls) {
+function assertCallTranscript(bytes, initialize, calls, workingDirectory) {
   const lines = bytes.toString("utf8").trimEnd().split("\n").map((line) => JSON.parse(line));
   assert.equal(lines.length, 7, "complete initialize/calls sequence must emit seven frames");
   assert.deepEqual(lines[0], initialize.malformed_response);
@@ -164,24 +164,18 @@ function assertCallTranscript(bytes, initialize, calls) {
     assert.equal(frame.result?.structuredContent?.error?.diagnostic?.parameters?.issue_code, "input-not-object");
     assert.equal(frame.result?.content?.[0]?.text, JSON.stringify(frame.result.structuredContent));
   }
-  assert.deepEqual(lines[6], {
-    jsonrpc: "2.0",
-    id: calls.valid_disabled.id,
-    error: {
-      code: -32002,
-      message: "TOOL_DISABLED",
-      data: {
-        schema_version: "1",
-        code: "TOOL_DISABLED",
-        owner: "protocol",
-        retryable: false,
-        diagnostic: {
-          template_id: "TOOL_DISABLED",
-          parameters: { tool: "archflow_state", lifecycle_state: "inert-no-handler" },
-        },
-        next_action: "wait-for-tool-enable",
-      },
+  const projectError = {
+    schema_version: "1", code: "REPOSITORY_NOT_FOUND", owner: "repository", retryable: false,
+    diagnostic: {
+      template_id: "REPOSITORY_NOT_FOUND",
+      parameters: { repository_candidate_digest: createHash("sha256").update(`archflow:repository-candidate:v1:${workingDirectory}`).digest("hex") },
     },
+    next_action: "open-repository",
+  };
+  const structuredContent = { schema_version: "1", ok: false, error: projectError };
+  assert.deepEqual(lines[6], {
+    jsonrpc: "2.0", id: calls.valid_disabled.id,
+    result: { content: [{ type: "text", text: JSON.stringify(structuredContent) }], isError: true, structuredContent },
   });
 }
 
@@ -194,7 +188,7 @@ async function exerciseProtocolFixtures({ copiedBundle, copiedPayload, env, guar
   ].join(""));
   const exact = await runChild({ argv: [copiedBundle], cwd: copiedPayload, env, input: callInput });
   assertCleanExit(exact, "exact copied payload call sequence");
-  assertCallTranscript(exact.stdout, initialize, calls);
+  assertCallTranscript(exact.stdout, initialize, calls, copiedPayload);
 
   const guarded = await runChild({
     argv: ["--require", guard, copiedBundle],
@@ -260,7 +254,9 @@ async function proveModuleCanaryIsolation({ copiedPayload, ambientRoot, env, gua
 
 export async function smokeReleasePayload(payloadRoot) {
   const bundle = resolve(payloadRoot, "archflow-mcp.mjs");
+  const localBundle = resolve(payloadRoot, "archflow-local.mjs");
   assert.equal((await stat(bundle)).isFile(), true, "payload must contain archflow-mcp.mjs");
+  assert.equal((await stat(localBundle)).isFile(), true, "payload must contain archflow-local.mjs");
   const temporaryRoot = await mkdtemp(resolve(tmpdir(), "archflow-release-hostile-"));
   try {
     const copiedPayload = resolve(temporaryRoot, "payload");
@@ -279,6 +275,7 @@ export async function smokeReleasePayload(payloadRoot) {
     const adversarial = JSON.parse(await readFile(resolve(fixturesRoot, "adversarial-bytes.json"), "utf8"));
     const env = minimalEnvironment(ambientRoot);
     const copiedBundle = resolve(copiedPayload, "archflow-mcp.mjs");
+    const copiedLocalBundle = resolve(copiedPayload, "archflow-local.mjs");
     const { guarded, guardedTranscriptBytes } = await exerciseProtocolFixtures({
       copiedBundle,
       copiedPayload,
@@ -293,9 +290,12 @@ export async function smokeReleasePayload(payloadRoot) {
     }
 
     const moduleCanary = await proveModuleCanaryIsolation({ copiedPayload, ambientRoot, env, guard });
+    const localHelp = await runChild({ argv: ["--require", guard, copiedLocalBundle, "--help"], cwd: copiedPayload, env, input: Buffer.alloc(0) });
+    assertCleanExit(localHelp, "guarded local helper help");
+    assert.match(localHelp.stdout.toString("utf8"), /commands: validate, hash, render, snapshot, restore, maintain, decide, gate-counter, status, reconcile, import, checkpoint/u);
     await assertGuardNegative({ cwd: copiedPayload, env, guard });
     return {
-      bundle: "archflow-mcp.mjs",
+      bundles: ["archflow-mcp.mjs", "archflow-local.mjs"],
       fixture_sequences: ["initialize-and-calls", "malformed-json", "partial-json", "invalid-utf8"],
       guarded_transcript_bytes: guardedTranscriptBytes,
       modes: ["exact-copy", "guarded-copy"],

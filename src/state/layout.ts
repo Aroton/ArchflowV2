@@ -3,6 +3,7 @@ import { lstat, mkdir } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
 
 import { parsePathSafeId, type PathSafeId } from "../contracts/evidence.js";
+import { parsePhaseInstanceId, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import { openResolved, type ResolvedTaskPath } from "../repository/paths.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
 
@@ -95,6 +96,26 @@ export async function ensureDecisionDirectory(
   const gate = join(decisions, validatedGateId) as ResolvedTaskPath;
   await ensureDecisionChild(decisions);
   await ensureDecisionChild(gate);
+}
+
+/** Creates and verifies the fixed `manual/checkpoints/` hierarchy. */
+export async function ensureManualCheckpointDirectory(
+  authority: TransactionAuthority,
+): Promise<void> {
+  assertInternalTransactionAuthority(authority);
+  await ensureRealDirectory(join(authority.task_root, "manual") as ResolvedTaskPath);
+  await ensureRealDirectory(join(authority.task_root, "manual", "checkpoints") as ResolvedTaskPath);
+}
+
+/** Creates and verifies `attempts/<phase-instance>/` for diagnostic dispatch records. */
+export async function ensureAttemptDirectory(
+  authority: TransactionAuthority,
+  phaseInstance: PhaseInstanceId,
+): Promise<void> {
+  assertInternalTransactionAuthority(authority);
+  const validated = parsePhaseInstanceId(phaseInstance);
+  await ensureRealDirectory(join(authority.task_root, "attempts") as ResolvedTaskPath);
+  await ensureRealDirectory(join(authority.task_root, "attempts", validated) as ResolvedTaskPath);
 }
 
 

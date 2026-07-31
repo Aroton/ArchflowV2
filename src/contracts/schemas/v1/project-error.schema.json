@@ -1743,6 +1743,58 @@
         }
       ]
     },
+    "E_GATE_SUPERSEDED": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/errorBase"
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "GATE_SUPERSEDED"
+            },
+            "owner": {
+              "const": "gate"
+            },
+            "retryable": {
+              "const": false
+            },
+            "diagnostic": {
+              "properties": {
+                "template_id": {
+                  "const": "GATE_SUPERSEDED"
+                },
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "gate_id",
+                    "old_subject_digest",
+                    "new_subject_digest"
+                  ],
+                  "properties": {
+                    "gate_id": {
+                      "$ref": "#/$defs/pathSafeId"
+                    },
+                    "old_subject_digest": {
+                      "$ref": "#/$defs/digest"
+                    },
+                    "new_subject_digest": {
+                      "$ref": "#/$defs/digest"
+                    }
+                  }
+                }
+              },
+              "type": "object"
+            },
+            "next_action": {
+              "const": "retry-with-superseding-subject"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
     "gateParams": {
       "type": "object",
       "additionalProperties": false,
@@ -2660,6 +2712,9 @@
     },
     {
       "$ref": "#/$defs/E_GATE_CANCELLED"
+    },
+    {
+      "$ref": "#/$defs/E_GATE_SUPERSEDED"
     },
     {
       "$ref": "#/$defs/E_UNSUPPORTED_HOST"

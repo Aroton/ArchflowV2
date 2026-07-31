@@ -3,6 +3,7 @@ import { PassThrough } from "node:stream";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { createProjectError } from "../../src/contracts/errors.js";
 import {
   runMcpProcess,
   type ProcessBindings,
@@ -12,6 +13,7 @@ import type {
   McpRuntimeHandle,
   RuntimeTermination,
 } from "../../src/mcp/sdk-adapter.js";
+import { startMcpRuntime } from "../../src/mcp/sdk-adapter.js";
 
 interface Deferred<T> {
   readonly promise: Promise<T>;
@@ -85,6 +87,115 @@ describe("MCP process runner", () => {
     expect(exits).toEqual([1]);
     expect(signals.listenerCount("SIGINT")).toBe(0);
     expect(signals.listenerCount("SIGTERM")).toBe(0);
+  });
+
+  it("forwards a non-empty handler registry into the runtime seam", async () => {
+    const base = harness();
+    const handlers: NonNullable<ProcessBindings["handlers"]> = Object.freeze({
+      archflow_state: async () => ({ schema_version: "1", ok: false }),
+    }) as NonNullable<ProcessBindings["handlers"]>;
+    const bindings: ProcessBindings = { ...base.bindings, handlers };
+    const start = vi.fn<RuntimeStarter>().mockResolvedValue(
+      runtime(Promise.resolve({ reason: "input-eof", close_failed: false })),
+    );
+
+    await runMcpProcess(bindings, start);
+
+    expect(start).toHaveBeenCalledWith({
+      input: bindings.input,
+      output: bindings.output,
+      workingDirectory: "/workspace/project",
+      handlers,
+    });
+  });
+
+  it("drives a registered handler through the real runtime instead of returning TOOL_DISABLED", async () => {
+    const signals = new EventEmitter();
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const diagnostic = new PassThrough();
+    const outputChunks: Buffer[] = [];
+    const diagnosticChunks: Buffer[] = [];
+    output.on("data", (chunk: Buffer) => outputChunks.push(Buffer.from(chunk)));
+    diagnostic.on("data", (chunk: Buffer) => diagnosticChunks.push(Buffer.from(chunk)));
+    const exits: number[] = [];
+    const failure = {
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("CONTRACT_INVALID", {
+        tool: "archflow_state",
+        issue_code: "handler-seam-test",
+      }),
+    } as const;
+    const handlers: NonNullable<ProcessBindings["handlers"]> = Object.freeze({
+      archflow_state: async () => failure,
+    });
+    const call = {
+      jsonrpc: "2.0",
+      id: "call",
+      method: "tools/call",
+      params: {
+        name: "archflow_state",
+        arguments: {
+          schema_version: "1",
+          task_id: "task-1",
+          intent_id: "intent-1",
+          expected_revision: 2,
+          input_fingerprint: "a".repeat(64),
+          phase_instance: "phase-impl-2",
+          step: "produce",
+          status: "succeeded",
+        },
+      },
+    };
+    const initialize = JSON.stringify({
+        jsonrpc: "2.0",
+        id: "init",
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-11-25",
+          capabilities: {},
+          clientInfo: { name: "codex-mcp-client", version: "0.146.0" },
+        },
+      });
+    const bindings: ProcessBindings = {
+      input,
+      output,
+      diagnostic,
+      workingDirectory: "/workspace/project",
+      handlers,
+      signals,
+      setExitCode: (code) => exits.push(code),
+    };
+    const task = runMcpProcess(bindings, startMcpRuntime);
+    const waitForLines = async (count: number): Promise<void> => {
+      const current = (): number => Buffer.concat(outputChunks).toString("utf8").split("\n").length - 1;
+      if (current() >= count) return;
+      await new Promise<void>((resolve) => {
+        const onData = (): void => {
+          if (current() >= count) {
+            output.off("data", onData);
+            resolve();
+          }
+        };
+        output.on("data", onData);
+      });
+    };
+    input.write(`${initialize}\n`);
+    await waitForLines(1);
+    input.write(
+      `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n` +
+      `${JSON.stringify(call)}\n`,
+    );
+    await waitForLines(2);
+    input.end();
+    await task;
+
+    const responses = Buffer.concat(outputChunks).toString("utf8");
+    expect(responses).toContain("handler-seam-test");
+    expect(responses).not.toContain("TOOL_DISABLED");
+    expect(Buffer.concat(diagnosticChunks)).toEqual(Buffer.alloc(0));
+    expect(exits).toEqual([0]);
   });
 
   it.each([

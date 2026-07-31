@@ -16,6 +16,7 @@
     "proof_inputs",
     "declared_content",
     "build_entries",
+    "entry_provenance",
     "launch_profile",
     "legal_review",
     "artifacts"
@@ -59,6 +60,13 @@
       "type": "array",
       "minItems": 1,
       "items": { "$ref": "#/$defs/build_entry" },
+      "x-archflow-unique-by": "id"
+    },
+    "entry_provenance": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/entry_provenance" },
       "x-archflow-unique-by": "id"
     },
     "launch_profile": { "$ref": "#/$defs/launch_profile" },
@@ -250,7 +258,29 @@
         "role": { "enum": ["mcp-stdio", "local-cli"] },
         "entry_point": { "$ref": "#/$defs/portable_path" },
         "output_path": { "$ref": "#/$defs/portable_path" },
-        "handler_authority": { "enum": ["inert-no-handler", "local-cli-handler"] }
+        "handler_authority": { "enum": ["inert-no-handler", "mcp-tool-handler", "local-cli-handler"] }
+      }
+    },
+    "entry_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "entry_point", "output_path", "output_digest", "contributing_inputs", "allowed_imports"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "entry_point": { "$ref": "#/$defs/portable_path" },
+        "output_path": { "$ref": "#/$defs/portable_path" },
+        "output_digest": { "$ref": "#/$defs/digest" },
+        "contributing_inputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/metafile_key" },
+          "x-archflow-sorted-unique": true
+        },
+        "allowed_imports": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "x-archflow-sorted-unique": true
+        }
       }
     },
     "launch_profile": {
@@ -310,7 +340,9 @@
           "x-archflow-unique-by": "path"
         },
         "allowed_imports": {
-          "const": ["node:buffer", "node:crypto", "node:module", "node:process", "node:util"]
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "x-archflow-sorted-unique": true
         }
       }
     },

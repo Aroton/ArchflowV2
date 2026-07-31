@@ -11,7 +11,7 @@ import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/con
 import { createGitRunner, preflightGit, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "../../src/state/authority.js";
-import { ensureDecisionDirectory, ensureIntentDirectory, type DecisionLayoutError, type IntentLayoutError } from "../../src/state/layout.js";
+import { ensureAttemptDirectory, ensureDecisionDirectory, ensureIntentDirectory, ensureManualCheckpointDirectory, type DecisionLayoutError, type IntentLayoutError } from "../../src/state/layout.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -104,5 +104,17 @@ describe("decision directory layout", () => {
     symlinkSync(external, join(second.value.task_root, "decisions", "gate-1"), "dir");
     await expect(ensureDecisionDirectory(second.value, parsePathSafeId("gate-1")))
       .rejects.toMatchObject({ stage: "verify" } satisfies Partial<DecisionLayoutError>);
+  });
+});
+
+describe("phase 15 directory layouts", () => {
+  it("creates verified manual-checkpoint and phase-attempt hierarchies idempotently", async () => {
+    const { value } = await authority();
+    await ensureManualCheckpointDirectory(value);
+    await ensureManualCheckpointDirectory(value);
+    await ensureAttemptDirectory(value, context.phase_instance);
+    await ensureAttemptDirectory(value, context.phase_instance);
+    expect((await lstat(join(value.task_root, "manual", "checkpoints"))).isDirectory()).toBe(true);
+    expect((await lstat(join(value.task_root, "attempts", context.phase_instance))).isDirectory()).toBe(true);
   });
 });

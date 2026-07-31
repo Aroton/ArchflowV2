@@ -127,14 +127,17 @@ async function complete(
 }
 
 function projectFailure(issueCode: string): Record<string, unknown> {
-  const result = {
+  return projectErrorResult({
     schema_version: "1",
     ok: false,
     error: createProjectError("CONTRACT_INVALID", {
       tool: "archflow_state",
       issue_code: issueCode,
     }),
-  } as const;
+  } as const);
+}
+
+function projectErrorResult(result: Readonly<Record<string, unknown>>): Record<string, unknown> {
   return {
     structuredContent: result,
     content: [{ type: "text", text: JSON.stringify(result) }],
@@ -209,7 +212,7 @@ describe("bundled MCP stdio runtime", () => {
       await runtime.waitForLines(1);
       expect(Buffer.concat(runtime.stdout)).toEqual(Buffer.from(jsonLine(initialize.response)));
 
-      runtime.child.stdin.end([
+      runtime.child.stdin.write([
         jsonLine(initialize.initialized),
         jsonLine(calls.list),
         jsonLine(calls.unknown),
@@ -217,14 +220,17 @@ describe("bundled MCP stdio runtime", () => {
         jsonLine(calls.non_object_arguments),
         jsonLine(calls.valid_disabled),
       ].join(""));
+      await runtime.waitForLines(6);
+      runtime.child.stdin.end();
       const exit = await runtime.waitForExit();
 
       const unknownError = createProtocolError("TOOL_NOT_FOUND", {
         tool_name_digest: createHash("sha256").update("unknown_tool").digest("hex"),
       });
-      const disabledError = createProtocolError("TOOL_DISABLED", {
-        tool: "archflow_state",
-        lifecycle_state: "inert-no-handler",
+      const liveHandlerFailure = projectErrorResult({
+        schema_version: "1",
+        ok: false,
+        error: createProjectError("CONFIG_INVALID", { issue_code: "config-missing" }),
       });
       const expected = [
         initialize.response,
@@ -232,7 +238,7 @@ describe("bundled MCP stdio runtime", () => {
         { jsonrpc: "2.0", id: "call-unknown", error: { code: -32001, message: "TOOL_NOT_FOUND", data: unknownError } },
         { jsonrpc: "2.0", id: "call-missing", result: projectFailure("input-not-object") },
         { jsonrpc: "2.0", id: "call-non-object", result: projectFailure("input-not-object") },
-        { jsonrpc: "2.0", id: "call-disabled", error: { code: -32002, message: "TOOL_DISABLED", data: disabledError } },
+        { jsonrpc: "2.0", id: "call-disabled", result: liveHandlerFailure },
       ].map(jsonLine).join("");
 
       expectExactBytes(Buffer.concat(runtime.stdout), Buffer.from(expected));

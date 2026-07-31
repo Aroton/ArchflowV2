@@ -158,7 +158,7 @@
       "properties": {
         "id": { "$ref": "#/$defs/stable_id" },
         "role": { "enum": ["mcp-stdio", "local-cli"] },
-        "handler_authority": { "enum": ["inert-no-handler", "local-cli-handler"] }
+        "handler_authority": { "enum": ["inert-no-handler", "mcp-tool-handler", "local-cli-handler"] }
       }
     },
     "advisory": {
@@ -261,7 +261,7 @@
         "deployment": { "const": "local-only" },
         "operators": { "const": "user-owned-agents" },
         "production": { "const": false },
-        "handler_authority": { "const": "inert-no-handler" },
+        "handler_authority": { "enum": ["inert-no-handler", "mcp-tool-handler"] },
         "invalidated_by": {
           "type": "array",
           "minItems": 4,

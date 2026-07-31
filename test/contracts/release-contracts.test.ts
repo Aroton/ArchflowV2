@@ -55,8 +55,15 @@ const createManifest = (): Record<string, unknown> => ({
       digest: digest("d"),
       bytes_in_output: 0,
     },
+    {
+      key: "src/local/main.ts",
+      origin: { kind: "repository", path: "src/local/main.ts" },
+      size: 42,
+      digest: digest("e"),
+      bytes_in_output: 42,
+    },
   ],
-  contributing_inputs: ["node_modules/example/prebundle.mjs"],
+  contributing_inputs: ["node_modules/example/prebundle.mjs", "src/local/main.ts"],
   release_control_inputs: [
     { path: "package-lock.json", size: 10, digest: digest("e") },
     { path: "package.json", size: 20, digest: digest("f") },
@@ -108,7 +115,32 @@ const createManifest = (): Record<string, unknown> => ({
       role: "mcp-stdio",
       entry_point: "src/main.ts",
       output_path: "archflow-mcp.mjs",
-      handler_authority: "inert-no-handler",
+      handler_authority: "mcp-tool-handler",
+    },
+    {
+      id: "local-cli",
+      role: "local-cli",
+      entry_point: "src/local/main.ts",
+      output_path: "archflow-local.mjs",
+      handler_authority: "local-cli-handler",
+    },
+  ],
+  entry_provenance: [
+    {
+      id: "mcp-stdio",
+      entry_point: "src/main.ts",
+      output_path: "archflow-mcp.mjs",
+      output_digest: digest("a"),
+      contributing_inputs: ["node_modules/example/prebundle.mjs"],
+      allowed_imports: ["node:crypto"],
+    },
+    {
+      id: "local-cli",
+      entry_point: "src/local/main.ts",
+      output_path: "archflow-local.mjs",
+      output_digest: digest("b"),
+      contributing_inputs: ["src/local/main.ts"],
+      allowed_imports: ["node:fs"],
     },
   ],
   launch_profile: {
@@ -134,6 +166,7 @@ const createManifest = (): Record<string, unknown> => ({
     digest: digest("4"),
   },
   artifacts: [
+    { path: "archflow-local.mjs", role: "executable", size: 180, digest: digest("b") },
     { path: "archflow-mcp.mjs", role: "executable", size: 200, digest: digest("a") },
     { path: "legal/review.json", role: "legal-review", size: 60, digest: digest("4") },
     { path: "manifest.json", role: "manifest" },
@@ -205,7 +238,8 @@ const createLegalReview = (): Record<string, unknown> => ({
       ],
       bundle_digest: digest("a"),
       entry_bindings: [
-        { id: "mcp-stdio", role: "mcp-stdio", handler_authority: "inert-no-handler" },
+        { id: "mcp-stdio", role: "mcp-stdio", handler_authority: "mcp-tool-handler" },
+        { id: "local-cli", role: "local-cli", handler_authority: "local-cli-handler" },
       ],
       dependency_inventory_digest: digest("b"),
       advisory_snapshot: { path: "release/evidence/advisory-snapshot.json", digest: digest("7") },
@@ -241,7 +275,7 @@ describe("release manifest structural authority", () => {
     const validator = createJsonSchemaValidator(await loadSchema("release-manifest"));
     const manifest = createManifest();
     expect(validator.assert(manifest)).toEqual(expect.any(Object));
-    expect(manifest.contributing_inputs).toEqual(["node_modules/example/prebundle.mjs"]);
+    expect(manifest.contributing_inputs).toEqual(["node_modules/example/prebundle.mjs", "src/local/main.ts"]);
   });
 
   it("rejects unknown nested data, non-portable paths, malformed digests, and duplicate authorities", async () => {
@@ -348,7 +382,7 @@ describe("release legal-review structural authority", () => {
     const expanded = createLegalReview();
     const expandedScope = ((expanded.dependency_gate_decisions as Array<Record<string, unknown>>)[0]!.scope) as Record<string, unknown>;
     expandedScope.handler_authority = "local-cli-handler";
-    expect(() => validator.assert(expanded)).toThrow(/constant/iu);
+    expect(() => validator.assert(expanded)).toThrow(/allowed values/iu);
 
     const unknown = createLegalReview();
     (unknown.current_components as Array<Record<string, unknown>>)[0]!.exact_physical_bytes = true;

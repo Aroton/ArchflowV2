@@ -1,6 +1,6 @@
 {
-  "acceptance_text": "go ahead and move forward. This isn't used in production/local only and only with my own agents",
-  "accepted_on": "2026-07-27",
+  "acceptance_text": "approve all 4",
+  "accepted_on": "2026-07-31",
   "advisory_ids": [
     "GHSA-4c8g-83qw-93j6",
     "GHSA-q3j6-qgpj-74h6",
@@ -13,7 +13,7 @@
   "schema_version": "1",
   "scope": {
     "deployment": "local-only",
-    "handler_authority": "inert-no-handler",
+    "handler_authority": "mcp-tool-handler",
     "invalidated_by": [
       "bundle-change",
       "dependency-change",

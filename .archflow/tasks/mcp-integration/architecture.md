@@ -15,7 +15,7 @@
 | YAML contracts | `yaml` `2.9.0` | Parses workflow/config files with actionable source locations. |
 | Persistence | Repository files, core SHA-256, `write-file-atomic` `8.0.0`, and a core `mkdir` task lock behind internal adapters | Keeps authority inspectable and branch-shareable. Lock acquisition is atomic and never performs stale takeover; an abandoned lock stops for explicit repair rather than risking an unfenced writer. |
 | Child processes | `node:child_process` with `shell: false`, explicit cancellation/timeout/output bounds, and best-effort process termination | Phase 13 does not adopt `execa` 10.0.0: its descendant termination does not contain a child that calls `setsid()`, which a local spike confirmed, so its 16 transitive packages and v9-to-v10 migration do not buy the required guarantee. Real process-tree containment remains an unmet release concern rather than a library claim. |
-| Packaging | esbuild `0.28.1`, exact npm lockfile, single host-neutral server/local-helper bundle | `install.sh` installs both `archflow-mcp` and `archflow-local` without an unpinned startup download. |
+| Packaging | esbuild `0.28.1`, exact npm lockfile, one deterministic payload with separate host-neutral server and local-helper entries | `install.sh` installs both `archflow-mcp` and `archflow-local` without an unpinned startup download. |
 | Verification | Vitest `4.1.10` with direct dev pin Vite `7.3.6`, fixture CLIs, fault injection, protocol fixtures, and black-box host/sandbox suites | The exact Vite 7 pin constrains Vitest to its supported permissive line; the lock must prove no `lightningcss` or other copyleft dependency before acceptance. Critical persistence, host, process, protocol, and manual-mode behavior is exercised at its real boundaries. |
 
 All runtime and development dependencies are exact lockfile pins. An update deliberately regenerates the lockfile, runs schema/protocol/CLI fixtures, verifies licenses, and records any format migration; beta, model, and CLI versions never float at startup. Direct pins are permissively licensed, and the complete lock must independently prove a permissive-only graph. The repository currently has no project license, which release packaging records alongside dependency notices. Phase 13 adopts no sandbox dependency. `@anthropic-ai/sandbox-runtime` does not vendor the LGPL-2.0-or-later bubblewrap or GPL-2.0-only socat programs; it resolves them from `PATH`, so the relationship is aggregation rather than derivation. It is nevertheless rejected because its `0.0.x` line is self-described as a beta research preview with evolving configuration, socat is a hard install-time prerequisite absent on the development machine, its macOS path has no process reaper, and its prebuilt vendored binaries have no NOTICE file. The npm Landlock bindings are also unsuitable (`landlock@0.0.1` is abandoned; `@landstrip/landstrip` is `Apache-2.0 AND LGPL-2.1-or-later`), while `tree-kill`/`ps-tree` are PPID walkers defeated by double-fork, `pidtree` only enumerates, and `terminate@2.8.0` is GPL-2.0. A future containment design must be evaluated independently rather than inferred from one of these packages.
@@ -49,7 +49,7 @@ archflow-local (same installed bundle, no MCP transport)
         +--> validate / hash / canonical render
         +--> snapshot / collision-safe restore
         +--> atomic decision creation / degraded status
-        +--> reconcile/import / legacy upgrade staging
+        +--> reconcile/import
 
 Git task branch
   records workflow state, evidence, decisions, and authoritative snapshots
@@ -311,7 +311,7 @@ The Claude adapter uses explicit safe-mode/tool/MCP/slash-command/settings/persi
 
 Init cannot set an environment variable inherited by the already-running host. If Claude has no persistent per-server timeout, init emits this exact shell-profile line and restart instruction: `export MCP_TOOL_TIMEOUT=3600000` followed by “add this line to the shell profile that launches Claude Code, start a new terminal, then restart Claude Code.” It launches/verifies a newly started host and fails closed until the `archflow-mcp` child inherits the parsed value `3600000`. It detects registration collisions, invalid/untrusted configuration, unsupported runtime/CLI versions, and missing launcher capability, and reports managed-instruction and unenforced-isolation limitations without claiming Phase 13 excluded them. Machine-specific executable locations stay only in installation/PATH resolution and never enter `.mcp.json` or portable task state.
 
-`archflow-local` exposes local operations for validate, hash, canonical render, snapshot/restore, human-approved maintenance, atomic decision creation, degraded status, reconcile/import, upgrade staging, and `checkpoint`. These are CLI/library functions from the same installed bundle, not MCP tools. “Server unavailable” means this helper remains available. If both server and helper are unavailable, skills fail non-advancing with installation/repair instructions rather than improvising file formats.
+`archflow-local` exposes local operations for validate, hash, canonical render, snapshot/restore, human-approved maintenance, atomic decision creation, degraded status, reconcile/import, and `checkpoint`. These are CLI/library functions from the same installed payload, not MCP tools. Legacy upgrade staging and orchestration remain Phase 19 work. “Server unavailable” means this helper remains available. If both server and helper are unavailable, skills fail non-advancing with installation/repair instructions rather than improvising file formats.
 
 Manual mode never fabricates `state.json`. `archflow-local checkpoint` first reconciles and validates, then atomically writes the next immutable `manual/checkpoints/<revision>-<digest>.json` bound to its predecessor. Only snapshots and projections referenced by the greatest valid chain checkpoint are authoritative; prepared files not checkpointed remain non-authoritative. Initial normal and legacy checkpoints commit the corresponding task-initialization or legacy-import manifest and approved policy basis. Counter-review emits a self-contained opposite-client prompt and stops. Same-family adjudication is degraded and gates uncertainty. Status is labeled degraded; collision, chain gap, or ambiguity stops. When the server returns, it adopts only the greatest valid chain through `manual-checkpoint-import`, without replaying decisions or inferring missing revisions.
 
@@ -386,7 +386,7 @@ Release is blocked unless all applicable tests pass and the supported matrix is 
 | Repository and task isolation | REQ-26 | VAL-07, VAL-10, VAL-11, VAL-13 | 6, 7, 8, 9, 10, 11, 13, 19, 20, 21 | Path guards and narrow pre-init legacy reads are enforced. Phase 13 dispatch adds hygiene only and does not prove a reviewer child cannot read undeclared paths; full VAL-07 isolation remains open. |
 | Fixed MCP boundary and local service | REQ-27, REQ-28 | VAL-08, VAL-13 | 2, 3, 4, 5, 15, 16, 20, 21 | Correlated five-tool contracts, v2 fixtures, and the license-complete deterministic offline payload expose only the stdio boundary; the separate offline helper is not an MCP tool. |
 | Host identity and routing | REQ-29, REQ-30, REQ-31 | VAL-07, VAL-08 | 13, 15, 20, 21 | Real handshakes and exact CLI fixtures bind immutable host/opposite family; defaults are supplied by the Phase 16 config template, not source constants. Managed context is recorded as an unresolved limitation. |
-| Fresh structured dispatch | REQ-32, REQ-33 | VAL-02, VAL-07, VAL-08, VAL-13 | 2, 3, 4, 5, 13, 14, 15, 20, 21 | Phase 13 proves the fresh-process adapter and counter-review envelope with best-effort hygiene. Phase 14 adds the bounded adjudication envelope, explicit output-schema seam, structured attestation, and automatic same-family refusal. Live MCP wiring and OS-proven isolation remain uncovered, so REQ-32/VAL-07 are partial. |
+| Fresh structured dispatch | REQ-32, REQ-33 | VAL-02, VAL-07, VAL-08, VAL-13 | 2, 3, 4, 5, 13, 14, 15, 20, 21 | Phase 13 proves the fresh-process adapter and counter-review envelope with best-effort hygiene. Phase 14 adds the bounded adjudication envelope, explicit output-schema seam, structured attestation, and automatic same-family refusal. Phase 15 wires both producer directions through the live MCP handlers and retained attempt telemetry. OS-proven isolation remains uncovered, so REQ-32/VAL-07 are partial. |
 | Authentication and child lifecycle | REQ-34, REQ-35 | VAL-07, VAL-08, VAL-13, VAL-14 | 13, 16, 20, 21, 22 | A logged-in bit under the scrubbed child environment, version/error fixtures, environment sentinels, bounded lifecycle handling, and the legal release gate cover the adopted envelope. Escaped descendant containment is not proven. |
 | Durable gate semantics | REQ-36, REQ-37 | VAL-01, VAL-03, VAL-09, VAL-10 | 2, 12, 15, 18, 20, 21 | Deterministic IDs, pre-block publication, supplemental-review retry, cancellation, and CAS resolution prove exactly-once decisions. |
 | Degraded/manual terminal completion | REQ-38, REQ-39, REQ-40 | VAL-06, VAL-09, VAL-12 | 8, 10, 15, 16, 18, 19, 21 | `archflow-local` and exact fallback templates advance only from validating evidence; loss of both paths stops for repair. |
@@ -703,23 +703,27 @@ The full suite passed 1,163 of 1,166 tests. The three failures are exactly the i
 
 ### Phase 15: Five-Tool MCP Assembly and Offline Local CLI
 
+**Status**: COMPLETE (2026-07-31)
+
 **Goal**: Assemble persistence, dispatch, adjudication, and decisions behind the complete and only MCP workflow surface.
 
 **Depends on**: Phases 1–14
 
 **Requirements**: REQ-07, REQ-08, REQ-11, REQ-13, REQ-21, REQ-23, REQ-27, REQ-28, REQ-29, REQ-30, REQ-31, REQ-32, REQ-33, REQ-35, REQ-36, REQ-37, REQ-38, REQ-39, REQ-40
 
-**Scope**: Wire exactly five handlers through the v2 adapter and implement `archflow-local` for validate, hash, render, snapshot/restore, human-approved maintenance with immutable records, atomic decisions, degraded status, reconcile/import, upgrade staging, and immutable checkpoint creation/chain validation. Bind the Phase 14 service callbacks for dispatch, evidence preparation, approved-upstream derivation, gate publication, produce-entry re-entry fingerprints, and server-owned supplemental retained-evidence resolution; use the fixed-point `"adjudication-gate"` action to recreate/resume any result-commit/gate-publication obligation. Persist Phase 13 managed-policy telemetry with dispatch attempts. Connect mutation/replay, cancellation, protocol-only stdout, and public errors. Rebuild the Phase 5 tracked bundle and `dist/manifest.json` for the full server/helper assembly, resolving the three inherited stale-bundle/`__require` release checks. Init, the shared constitution-digest initialization call, and upgrade remain outside the tool list.
+**Scope**: Wire exactly five handlers through the v2 adapter and implement `archflow-local` for validate, hash, render, snapshot/restore, human-approved maintenance with immutable records, atomic decisions, degraded status, reconcile/import, and immutable checkpoint creation/chain validation. Bind the Phase 14 service callbacks for dispatch, evidence preparation, approved-upstream derivation, gate publication, produce-entry re-entry fingerprints, and server-owned supplemental retained-evidence resolution; use the fixed-point `"adjudication-gate"` action to recreate/resume any result-commit/gate-publication obligation. Persist Phase 13 managed-policy telemetry with dispatch attempts. Connect mutation/replay, cancellation, protocol-only stdout, and public errors. Rebuild the Phase 5 tracked bundle and `dist/manifest.json` for the full server/helper assembly, resolving the three inherited stale-bundle/`__require` release checks. Init, the shared constitution-digest initialization call, and all upgrade staging/orchestration remain Phase 16 and Phase 19 work outside the tool list.
+
+**Implemented 2026-07-31.** The live registry exposes exactly five tools; `archflow-local` is a second release entry and never an MCP tool. Production binds both dispatch directions with `allow_claude_dispatch: true`, retained supplemental authority, gate re-entry, result preparation, replay, and cancellation. This implementation choice does not satisfy `VAL-14`: the tracked payload may be verified and consumed by later installer work, but distribution authorization for the Claude subscription-dispatch path remains blocked pending written Anthropic clarification or a qualified legal determination. The user separately approved the embedded `fast-uri@3.1.0` local-only live-handler risk; the installed `3.1.4` copy is patched. Release provenance/imports and the 24-component legal closure are derived across both entries. The obsolete loader-helper policy and contradictory HEAD byte-baseline were removed while digest, evidence, legal, mutation, hostile-startup, and reproducibility checks remain enforced.
 
 **Success Criteria**:
 
-- [ ] Live `tools/list` returns exactly `archflow_state`, `archflow_counter_review`, `archflow_adjudicate`, `archflow_gate`, and `archflow_waiver`, with the normative schemas and no sixth workflow tool.
-- [ ] Valid and invalid calls exhibit replay, mismatch, conflict, family, host, path, child, and blocking semantics without partial success side effects.
-- [ ] MCP cancellation leaves durable truth and kills active descendants; reconnect/resume observes existing state/gate rather than duplicating work.
-- [ ] The bundled server emits only MCP traffic on stdout and opens no network listener.
-- [ ] The offline helper performs its named local operations without MCP, shares schemas/renderers with the server, and is absent from `tools/list`.
-- [ ] `archflow-local checkpoint` atomically extends only a valid reconciled chain, and server adoption imports only its greatest valid checkpoint via the closed union tag.
-- [ ] The updated tracked manifest binds the complete server/helper bundle to current package/lock/source/schema/assets digests and passes clean-checkout offline startup before installer work.
+- [x] Live `tools/list` returns exactly `archflow_state`, `archflow_counter_review`, `archflow_adjudicate`, `archflow_gate`, and `archflow_waiver`, with the normative schemas and no sixth workflow tool.
+- [x] Valid and invalid calls exhibit replay, mismatch, conflict, family, host, path, child, and blocking semantics without partial success side effects.
+- [x] MCP cancellation leaves durable truth and kills active descendants; reconnect/resume observes existing state/gate rather than duplicating work.
+- [x] The bundled server emits only MCP traffic on stdout and opens no network listener.
+- [x] The offline helper performs its named local operations without MCP, shares schemas/renderers with the server, and is absent from `tools/list`.
+- [x] `archflow-local checkpoint` atomically extends only a valid reconciled chain, and server adoption imports only its greatest valid checkpoint via the closed union tag.
+- [x] The updated tracked manifest binds the complete server/helper bundle to current package/lock/source/schema/assets digests and passes clean-checkout offline startup before installer work.
 
 ### Phase 16: Installer, Initialization, and Host Registration
 
@@ -874,7 +878,7 @@ The full suite passed 1,163 of 1,166 tests. The three failures are exactly the i
 | 12 | Durable Gates, Waivers, and Manual Decisions | COMPLETE (2026-07-30) |
 | 13 | Host Identity, Sandbox, and CLI Dispatch | COMPLETE (2026-07-30) |
 | 14 | Constitution Adjudication, Drift, and Review Fixed Point | COMPLETE (2026-07-30) |
-| 15 | Five-Tool MCP Assembly and Offline Local CLI | Not Started |
+| 15 | Five-Tool MCP Assembly and Offline Local CLI | COMPLETE (2026-07-31) |
 | 16 | Installer, Initialization, and Host Registration | Not Started |
 | 17 | Normal-Mode Thin Phase Skills and Truthful Status | Not Started |
 | 18 | Manual and Degraded Recovery Workflow | Not Started |

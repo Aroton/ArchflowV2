@@ -110,12 +110,17 @@ async function harness(): Promise<Harness> {
     read_state: readTaskState,
     read_config: async () => ({ kind: "valid", snapshot: { bytes: new Uint8Array(), digest: D("4") } }),
     read_receipt: readIntentReceipt,
-    resolve_supplemental_review: async ({ request }) => ({
+    resolve_supplemental_review: async ({ request, outcome }) => ({
       schema_version: "1",
       ok: true,
       value: {
         evidence: supplementalEvidence(request),
         gate_id: request.gate_id,
+        ...(outcome?.action === "triage-no-change"
+          ? { triage_digest: outcome.triage_digest, triage_outcome: "no-change" as const }
+          : outcome?.action === "supersede"
+            ? { triage_digest: outcome.accepted_triage_digest, triage_outcome: "accepted-change" as const }
+            : {}),
       },
     }),
   };
@@ -167,13 +172,8 @@ function supplementalEvidence(request: GateRequestV1) {
     model_family: "codex",
     model: "gpt-test",
     effort: "medium",
-    assurance: "server-attested",
-    adapter: "codex-cli",
-    cli_version: "1.0.0",
-    invocation_id: "gate-counter-invocation",
-    envelope_input_digest: D("1"),
-    observed_output_digest: D("2"),
-    result_id: "gate-counter-result",
+    assurance: "degraded",
+    reason: "Offline supplemental review",
   } as const;
 }
 
@@ -216,7 +216,7 @@ function waiverInterface(request: GateRequestV1, granted: boolean): PlainJsonVal
 function supplementalFor(h: Harness, gateId: GateOpenInput["intent_id"], evidenceDigest: ReturnType<typeof D>, action: "ingest" | "triage-no-change" | "supersede"): SupplementalReviewOutcome {
   const review = {
     prior_gate_id: gateId, task_id: TASK, phase_instance: PHASE, subject_digest: D("9"), input_fingerprint: FINGERPRINT,
-    evidence_slot: { role: "gate-counter-review" as const, evidence_digest: evidenceDigest, assurance: "server-attested" as const,
+    evidence_slot: { role: "gate-counter-review" as const, evidence_digest: evidenceDigest, assurance: "degraded" as const,
       producer_family: "claude" as const, reviewer_family: "codex" as const, independence: "opposite-family" as const, gate_id: gateId },
   };
   if (action === "ingest") return { action, review, reason: "Review ingested" };
@@ -989,6 +989,31 @@ describe("Phase 12 durable gate lifecycle", () => {
     const resolved = await resolveDurableGate(h.dependencies, h.authority, opened.value.gate_id, FINGERPRINT, decline);
     expect(resolved.ok).toBe(true);
     if (resolved.ok) expect(resolved.value.record.value.supplemental).toEqual([decline]);
+  });
+
+  it("does not re-wake on an exact decline before resolving a visible decision", async () => {
+    const h = await harness();
+    const input = gateInput(h, "supplemental-decline-run");
+    const opened = await openDurableGate(h.dependencies, input);
+    if (!opened.ok) throw new Error("gate open failed");
+    mkdirSync(join(h.authority.task_root, "reviews"), { recursive: true });
+    writeFileSync(reviewPath(h, opened.value.gate_id), "declined gate counter-review\n");
+    const decline: SupplementalReviewOutcome = {
+      action: "decline", reason: "Proceed with the reviewed decision",
+      gate: { prior_gate_id: opened.value.gate_id, task_id: TASK, phase_instance: PHASE, subject_digest: input.subject_digest, input_fingerprint: FINGERPRINT },
+    };
+    const recorded = await openDurableGate(h.dependencies, { ...input, supplemental_outcome: decline });
+    expect(recorded.ok).toBe(true);
+    writeFileSync(decisionPath(h), canonicalDocument(envelope(opened.value.request.value, "revise")).bytes);
+    const resolved = await runDurableGate(h.dependencies, {
+      ...input,
+      supplemental_outcome: decline,
+      signal: new AbortController().signal,
+    });
+    expect(resolved.ok).toBe(true);
+    if (resolved.ok && "record" in resolved.value) {
+      expect(resolved.value.record.value.supplemental).toEqual([decline]);
+    }
   });
 
   it("gives an unrecorded gate-counter review precedence when review and decision are simultaneously visible", async () => {

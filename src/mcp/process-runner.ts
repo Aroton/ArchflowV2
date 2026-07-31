@@ -5,6 +5,7 @@ import type {
   McpRuntimeOptions,
   RuntimeTermination,
 } from "./sdk-adapter.js";
+import type { ToolHandlerRegistry } from "./server.js";
 
 export interface SignalSource {
   readonly on: (signal: "SIGINT" | "SIGTERM", listener: () => void) => void;
@@ -16,6 +17,7 @@ export interface ProcessBindings {
   readonly output: Writable;
   readonly diagnostic: Writable;
   readonly workingDirectory: string;
+  readonly handlers?: ToolHandlerRegistry;
   readonly signals: SignalSource;
   readonly setExitCode: (code: number) => void;
 }
@@ -116,6 +118,7 @@ export async function runMcpProcess(
         input: bindings.input,
         output: bindings.output,
         workingDirectory: bindings.workingDirectory,
+        ...(bindings.handlers === undefined ? {} : { handlers: bindings.handlers }),
       }).then(
         (startedRuntime): StartupResult => ({
           kind: "started",

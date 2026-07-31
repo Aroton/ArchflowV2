@@ -45,7 +45,12 @@ import { AtomicReplaceError, type AtomicWriter, type ProjectionWriter } from "./
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
 import type { InputFingerprintResolver } from "./fingerprint.js";
 import { identifyTransactionRequest } from "./request.js";
-import { IntentLayoutError, ensureIntentDirectory } from "./layout.js";
+import {
+  IntentLayoutError,
+  ensureIntentDirectory,
+  ensurePayloadParent,
+  ensureResultDirectory,
+} from "./layout.js";
 import { assertInternalCheckpointAdoptionPlan } from "./checkpoints.js";
 import type {
   ConfigReadResult,
@@ -761,6 +766,7 @@ function copiedResultBytes(prepared: PreparedSnapshot): number {
 
 async function installResultFacts(
   dependencies: TransactionDependencies,
+  authority: TransactionAuthority,
   current: CanonicalDocument<TaskStateV1>,
   facts: ResultInstallationFacts,
   replay: boolean,
@@ -801,6 +807,21 @@ async function installResultFacts(
     validate_manifest: parseResultManifest,
   });
   if (!revalidated.ok) return revalidated;
+  try {
+    await ensureResultDirectory(authority, revalidated.value.result_digest);
+    for (const payload of revalidated.value.payloads) {
+      await ensurePayloadParent(
+        authority,
+        revalidated.value.result_digest,
+        payload.target.absolute,
+      );
+    }
+  } catch {
+    return fail(createProjectError("SNAPSHOT_INVALID", {
+      snapshot_digest: revalidated.value.manifest.value.snapshot_digest,
+      issue_code: "immutable-install-disagreement",
+    }));
+  }
   const installed = await installSnapshot(
     dependencies.atomic,
     revalidated.value,
@@ -838,7 +859,7 @@ async function installPlan<K extends ToolName>(
       if (dependencies.load_retained_result === undefined) return stateIssue(current.value, "result-resume-unavailable");
       const loaded = await dependencies.load_retained_result(reference);
       if (!loaded.ok) return loaded;
-      const resumed = await installResultFacts(dependencies, current, materializeResultInstallation({
+      const resumed = await installResultFacts(dependencies, request.authority, current, materializeResultInstallation({
         reference,
         prepared: loaded.value.prepared,
         manifest_target: loaded.value.manifest_target,
@@ -848,7 +869,7 @@ async function installPlan<K extends ToolName>(
       if (!resumed.ok) return resumed;
     }
   } else if (plan.result_installation !== undefined) {
-    const installed = await installResultFacts(dependencies, current, plan.result_installation, false);
+    const installed = await installResultFacts(dependencies, request.authority, current, plan.result_installation, false);
     if (!installed.ok) return installed;
   }
   try {

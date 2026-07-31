@@ -58,7 +58,7 @@ async function createExclusive(path: ResolvedPath, bytes: Uint8Array): Promise<E
   if (
     path.path_class !== "intent" && path.path_class !== "maintenance-record" &&
     path.path_class !== "result-manifest" && path.path_class !== "result-payload" &&
-    path.path_class !== "decision"
+    path.path_class !== "decision" && path.path_class !== "manual-checkpoint"
   ) {
     throw new TypeError("createExclusive requires an immutable resolved path");
   }
@@ -139,7 +139,7 @@ export function createAtomicWriter(): AtomicWriter {
 }
 
 const PROJECTABLE = new Set([
-  "document", "import", "manual-checkpoint", "repository-source", "result-payload", "review",
+  "attempt", "document", "import", "manual-checkpoint", "repository-source", "result-payload", "review",
   "task-branch-constitution",
 ]);
 

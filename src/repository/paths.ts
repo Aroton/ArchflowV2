@@ -67,6 +67,10 @@ export function gateDecisionClaim(gateId: PathSafeId): TaskPathClaim {
   return parseTaskPathClaim(`decisions/${gateId}/decision.json`);
 }
 
+export function gateSupplementalReviewClaim(gateId: PathSafeId): TaskPathClaim {
+  return parseTaskPathClaim(`decisions/${gateId}/supplemental-review.json`);
+}
+
 export function gateCounterReviewClaim(
   phaseInstance: PhaseInstanceId,
   gateId: PathSafeId,
@@ -115,7 +119,7 @@ const anchored = (body: string): RegExp => new RegExp(`^${body}$`, "u");
  * | `gate-interface`    | `gate.json` \| `gate.decision`                                                              | —                               |
  * | `document`          | `prd.md` \| `design.md` \| `phases/<n>/design.md` \| `phases/<n>/impl-notes.md`             | positive phase number           |
  * | `review`            | `reviews/<phase-instance>.{self,counter,triage,adjudication}.md` \| `reviews/<phase-instance>.gate-counter.<gate-id>.md` | phase instance; gate ID for the last form |
- * | `decision`          | `decisions/<gate-id>/request.json` \| `decisions/<gate-id>/decision.json`                   | gate ID                         |
+ * | `decision`          | `decisions/<gate-id>/request.json` \| `decisions/<gate-id>/decision.json` \| `decisions/<gate-id>/supplemental-review.json` | gate ID |
  * | `result-manifest`   | `results/sha256/<result-digest>/manifest.json`                                              | result digest                   |
  * | `result-payload`    | `results/sha256/<result-digest>/payload/<declared-output-path>`                              | result digest; declared output claim |
  * | `intent`            | `intents/<intent-id>.json`                                                                  | intent ID                       |
@@ -146,7 +150,7 @@ const TASK_CLASS_RULES: readonly ClassRule<TaskPathClass>[] = [
   },
   {
     path_class: "decision",
-    pattern: anchored(`decisions/${PATH_SAFE_ID}/(?:request|decision)\\.json`),
+    pattern: anchored(`decisions/${PATH_SAFE_ID}/(?:request|decision|supplemental-review)\\.json`),
   },
   { path_class: "result-manifest", pattern: anchored(`results/sha256/${SHA256}/manifest\\.json`) },
   { path_class: "result-payload", pattern: anchored(`results/sha256/${SHA256}/payload/.+`) },

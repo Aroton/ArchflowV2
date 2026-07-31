@@ -16,6 +16,7 @@ export const SCHEMA_IDS = {
   evidenceSlots: "urn:archflow:schema:v1:evidence-slots",
   triage: "urn:archflow:schema:v1:triage",
   supplementalReview: "urn:archflow:schema:v1:supplemental-review",
+  supplementalReviewRecord: "urn:archflow:schema:v1:supplemental-review-record",
   gateContract: "urn:archflow:schema:v1:gate-contract",
   gateDecision: "urn:archflow:schema:v1:gate-decision",
   gateRequest: "urn:archflow:schema:v1:gate-request",

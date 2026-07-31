@@ -41,6 +41,7 @@ import {
   gateCounterReviewClaim,
   gateDecisionClaim,
   gateRequestClaim,
+  gateSupplementalReviewClaim,
   openResolved,
   resolveRepositoryPath,
   resolveTaskRoot,
@@ -56,6 +57,7 @@ describe("gate path constructors", () => {
     const phase = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(6) });
     expect(gateRequestClaim(gateId)).toBe("decisions/gate-1/request.json");
     expect(gateDecisionClaim(gateId)).toBe("decisions/gate-1/decision.json");
+    expect(gateSupplementalReviewClaim(gateId)).toBe("decisions/gate-1/supplemental-review.json");
     expect(gateCounterReviewClaim(phase, gateId)).toBe("reviews/phase-impl-6.gate-counter.gate-1.md");
   });
 

@@ -16,6 +16,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { builtinModules } from "node:module";
 import {
   dirname,
   basename,
@@ -30,7 +31,6 @@ import { isDeepStrictEqual, promisify } from "node:util";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { build } from "esbuild";
-import { LanguageVariant, SyntaxKind, createScanner } from "typescript/unstable/ast";
 
 const execFileAsync = promisify(execFile);
 const encoder = new TextEncoder();
@@ -43,6 +43,7 @@ const DIST_TRANSACTION = Object.freeze({
 });
 
 export const RELEASE_FILES = Object.freeze([
+  "archflow-local.mjs",
   "archflow-mcp.mjs",
   "legal/THIRD_PARTY_NOTICES.md",
   "legal/review.json",
@@ -51,8 +52,10 @@ export const RELEASE_FILES = Object.freeze([
 ]);
 
 export const RELEASE_BUILD_PROFILE = Object.freeze({
-  entry: "src/main.ts",
-  output: "archflow-mcp.mjs",
+  entries: Object.freeze([
+    Object.freeze({ id: "mcp-stdio", role: "mcp-stdio", entryPoint: "src/main.ts", output: "archflow-mcp.mjs", handlerAuthority: "mcp-tool-handler" }),
+    Object.freeze({ id: "local-cli", role: "local-cli", entryPoint: "src/local/main.ts", output: "archflow-local.mjs", handlerAuthority: "local-cli-handler" }),
+  ]),
   platform: "node",
   format: "esm",
   target: "node24",
@@ -64,13 +67,6 @@ export const RELEASE_BUILD_PROFILE = Object.freeze({
   banner:
     'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
   tsconfigRaw: Object.freeze({ compilerOptions: Object.freeze({}) }),
-  allowedImports: Object.freeze([
-    "node:buffer",
-    "node:crypto",
-    "node:module",
-    "node:process",
-    "node:util",
-  ]),
 });
 
 const PROOF_INPUTS = Object.freeze([
@@ -146,53 +142,38 @@ function invariant(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-export function assertReleaseLoaderPolicy(source) {
-  invariant(typeof source === "string", "release loader policy requires JavaScript source");
-  invariant(source.startsWith(RELEASE_BUILD_PROFILE.banner), "release bundle is missing the exact createRequire banner");
-  const remainder = source.slice(RELEASE_BUILD_PROFILE.banner.length);
-  const scanner = createScanner(true, LanguageVariant.Standard, remainder);
-  const forbidden = [];
-  let previous = SyntaxKind.Unknown;
-  let previousText = "";
-  let previousEnd = -1;
-  const templateBraces = [];
-  for (let token = scanner.scan(); token !== SyntaxKind.EndOfFile; token = scanner.scan()) {
-    if (token === SyntaxKind.SlashToken && (
-      previous === SyntaxKind.Unknown
-      || ["=", "(", "[", "{", ",", ":", ";", "return", "=>", "case", "throw", "else", "do", "typeof", "void", "delete", "in", "of", "!", "&&", "||", "??", "?"].includes(previousText)
-    )) token = scanner.reScanSlashToken();
-    const tokenEnd = scanner.getTokenEnd();
-    invariant(tokenEnd > previousEnd, `release loader scanner made no progress at byte ${scanner.getTokenStart()}`);
-    previousEnd = tokenEnd;
-    const text = scanner.getTokenText();
-    if (token === SyntaxKind.OpenParenToken && previous === SyntaxKind.ImportKeyword) forbidden.push("dynamic import");
-    if (text === "require" || text.startsWith("__require") || text === "createRequire" || text === "getBuiltinModule") {
-      forbidden.push(text);
-    }
-    if (token === SyntaxKind.TemplateHead) templateBraces.push(0);
-    else if (templateBraces.length > 0 && token === SyntaxKind.OpenBraceToken) {
-      templateBraces[templateBraces.length - 1] += 1;
-    } else if (templateBraces.length > 0 && token === SyntaxKind.CloseBraceToken) {
-      const index = templateBraces.length - 1;
-      if (templateBraces[index] > 0) templateBraces[index] -= 1;
-      else {
-        const templateToken = scanner.reScanTemplateToken(false);
-        invariant(scanner.getTokenEnd() > previousEnd, `release loader template scanner made no progress at byte ${scanner.getTokenStart()}`);
-        previousEnd = scanner.getTokenEnd();
-        if (templateToken === SyntaxKind.TemplateTail) templateBraces.pop();
-        previous = templateToken;
-        previousText = scanner.getTokenText();
-        continue;
-      }
-    }
-    previous = token;
-    previousText = text;
-  }
-  invariant(forbidden.length === 0, `residual runtime loader is forbidden: ${[...new Set(forbidden)].join(", ")}`);
-}
-
 function ordinal(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+const REVIEWED_BARE_EXTERNALS = new Set(["supports-color"]);
+const BUILTIN_IMPORTS = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
+
+function assertReviewedExternalImport(path) {
+  invariant(
+    BUILTIN_IMPORTS.has(path) || REVIEWED_BARE_EXTERNALS.has(path),
+    `unreviewed external release import: ${path}`,
+  );
+}
+
+function buildEntries() {
+  return RELEASE_BUILD_PROFILE.entries.map((entry) => ({
+    id: entry.id,
+    role: entry.role,
+    entry_point: entry.entryPoint,
+    output_path: entry.output,
+    handler_authority: entry.handlerAuthority,
+  }));
+}
+
+function resolveMetafileOutput(metafile, outputPath) {
+  return metafile.outputs[outputPath] ?? metafile.outputs[`dist/${outputPath}`];
+}
+
+function deriveExternalImports(output) {
+  const imports = [...new Set(output.imports.map((record) => record.path))].sort(ordinal);
+  for (const path of imports) assertReviewedExternalImport(path);
+  return imports;
 }
 
 export function sha256(bytes) {
@@ -401,7 +382,7 @@ async function collectEvidencePaths(repositoryRoot) {
   }
 }
 
-async function deriveLaunchProfile(repositoryRoot) {
+async function deriveLaunchProfile(repositoryRoot, allowedImports) {
   return {
     node_major: 24,
     executable: "process.execPath",
@@ -416,7 +397,7 @@ async function deriveLaunchProfile(repositoryRoot) {
       path,
       digest: sha256(await readRegularFile(repositoryRoot, path)),
     }))),
-    allowed_imports: [...RELEASE_BUILD_PROFILE.allowedImports],
+    allowed_imports: [...allowedImports],
   };
 }
 
@@ -507,7 +488,7 @@ async function collectDependencyProvenance(repositoryRoot, metafile, contributin
   for (const packageName of packageNames) {
     const packageRoot = `node_modules/${packageName}`;
     const version = await readPackageVersion(repositoryRoot, packageName);
-    for (const packagePath of ["package.json", "LICENSE", "NOTICE"]) {
+    for (const packagePath of ["package.json", "LICENSE", "LICENSE.md", "license.md", "LICENSE.txt", "LICENSE.BSD", "NOTICE"]) {
       try {
         const bytes = await readRegularFile(repositoryRoot, `${packageRoot}/${packagePath}`);
         records.set(`${packageName}:${packagePath}`, {
@@ -803,7 +784,7 @@ async function validateLegalCorrelation(repositoryRoot, manifestValue, legalValu
     invariant(decision.bundle_digest === manifestValue.bundle_digest, `risk decision bundle binding is stale: ${decision.id}`);
     invariant(decision.dependency_inventory_digest === manifestValue.dependency_inventory_digest, `risk decision inventory binding is stale: ${decision.id}`);
     invariant(Buffer.from(canonicalJsonBytes(decision.entry_bindings)).equals(Buffer.from(canonicalJsonBytes(entryBindings))), `risk decision entry binding is stale: ${decision.id}`);
-    invariant(decision.scope.handler_authority === "inert-no-handler", `risk decision handler scope expanded: ${decision.id}`);
+    invariant(["inert-no-handler", "mcp-tool-handler"].includes(decision.scope.handler_authority), `risk decision handler scope is unknown: ${decision.id}`);
     const invalidators = ["bundle-change", "dependency-change", "entry-change", "handler-authority-change"];
     invariant(JSON.stringify(decision.scope.invalidated_by) === JSON.stringify(invalidators), `risk decision invalidators are incomplete: ${decision.id}`);
     const withoutDigest = { ...decision };
@@ -923,20 +904,32 @@ export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, ma
   invariant(Buffer.from(sourceLegal).equals(Buffer.from(legalReview.bytes)), "release legal source differs from payload");
   const bundleBytes = await readRegularFile(payload, "archflow-mcp.mjs");
   invariant(sha256(bundleBytes) === manifest.value.bundle_digest, "bundle digest mismatch");
-  assertReleaseLoaderPolicy(decoder.decode(bundleBytes));
   const metafileDocument = parseCanonicalDocument(await readRegularFile(payload, "metafile.json"), "release metafile");
   const metafileInputs = metafileDocument.value.inputs;
   const metafileOutputs = metafileDocument.value.outputs;
-  invariant(metafileInputs && metafileOutputs && Object.keys(metafileOutputs).length === 1, "release metafile must describe one output");
-  const metafileOutput = metafileOutputs[RELEASE_BUILD_PROFILE.output];
-  invariant(metafileOutput?.entryPoint === RELEASE_BUILD_PROFILE.entry, "release metafile entry/output differs");
+  invariant(metafileInputs && metafileOutputs && Object.keys(metafileOutputs).length === RELEASE_BUILD_PROFILE.entries.length, "release metafile output count differs");
   assertEqualPathSet(Object.keys(metafileInputs).sort(ordinal), bundleInputs.map((record) => record.key), "metafile inputs");
   for (const record of bundleInputs) {
     invariant(metafileInputs[record.key]?.bytes === record.size, `metafile scanned size differs: ${record.key}`);
-    invariant((metafileOutput.inputs[record.key]?.bytesInOutput ?? 0) === record.bytes_in_output, `metafile byte contribution differs: ${record.key}`);
+    const contributedBytes = RELEASE_BUILD_PROFILE.entries.reduce((total, entry) => total + (resolveMetafileOutput(metafileDocument.value, entry.output)?.inputs[record.key]?.bytesInOutput ?? 0), 0);
+    invariant(contributedBytes === record.bytes_in_output, `metafile byte contribution differs: ${record.key}`);
   }
-  const actualImports = [...new Set(metafileOutput.imports.map((record) => record.path))].sort(ordinal);
-  invariant(actualImports.every((path) => RELEASE_BUILD_PROFILE.allowedImports.includes(path) && path !== "node:module"), "metafile contains a forbidden import");
+  const expectedProvenance = [];
+  for (const entry of RELEASE_BUILD_PROFILE.entries) {
+    const outputMeta = resolveMetafileOutput(metafileDocument.value, entry.output);
+    invariant(outputMeta?.entryPoint === entry.entryPoint, `release metafile entry/output differs: ${entry.id}`);
+    const outputBytes = await readRegularFile(payload, entry.output);
+    expectedProvenance.push({
+      id: entry.id,
+      entry_point: entry.entryPoint,
+      output_path: entry.output,
+      output_digest: sha256(outputBytes),
+      contributing_inputs: Object.entries(outputMeta.inputs).filter(([, record]) => record.bytesInOutput > 0).map(([path]) => path).sort(ordinal),
+      allowed_imports: deriveExternalImports(outputMeta),
+    });
+  }
+  invariant(isDeepStrictEqual(manifest.value.entry_provenance, expectedProvenance), "per-entry release provenance differs from metafile and output bytes");
+  const derivedAllowedImports = [...new Set(expectedProvenance.flatMap((entry) => entry.allowed_imports).concat("node:module"))].sort(ordinal);
   const derivedDependency = await collectDependencyProvenance(repository, metafileDocument.value, contributing);
   invariant(isDeepStrictEqual(dependencyInputs, derivedDependency.records), "dependency provenance inputs are not the exact derived closure");
   invariant(isDeepStrictEqual(manifest.value.adjacent_map_expectations, derivedDependency.expectations), "adjacent source-map expectations differ from derived evidence");
@@ -949,9 +942,8 @@ export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, ma
   }));
   invariant(dependencyInventoryDigest === manifest.value.dependency_inventory_digest, "dependency inventory digest mismatch");
   invariant(legalReview.value.dependency_inventory_digest === undefined || legalReview.value.dependency_inventory_digest === dependencyInventoryDigest, "legal dependency inventory digest mismatch");
-  const expectedEntry = { id: "mcp-stdio", role: "mcp-stdio", entry_point: "src/main.ts", output_path: "archflow-mcp.mjs", handler_authority: "inert-no-handler" };
-  invariant(manifest.value.build_entries.length === 1 && Buffer.from(canonicalJsonBytes(manifest.value.build_entries[0])).equals(Buffer.from(canonicalJsonBytes(expectedEntry))), "release has an unexpected build entry");
-  invariant(isDeepStrictEqual(manifest.value.launch_profile, await deriveLaunchProfile(repository)), "release launch profile differs from derived proof inputs");
+  invariant(isDeepStrictEqual(manifest.value.build_entries, buildEntries()), "release has unexpected build entries");
+  invariant(isDeepStrictEqual(manifest.value.launch_profile, await deriveLaunchProfile(repository, derivedAllowedImports)), "release launch profile differs from derived proof inputs");
   invariant(manifest.value.legal_review.digest === legalReview.digest, "manifest legal review binding is stale");
   await validateLegalCorrelation(repository, manifest.value, legalReview.value, ownerPaths, validators);
 
@@ -990,15 +982,18 @@ function normalizedMetafile(metafile) {
 }
 
 async function buildRecords(repositoryRoot, metafile) {
-  const soleOutput = metafile.outputs[RELEASE_BUILD_PROFILE.output] ?? metafile.outputs[`dist/${RELEASE_BUILD_PROFILE.output}`];
-  invariant(soleOutput, "esbuild metafile has no sole release output");
-  invariant(Object.keys(metafile.outputs).length === 1, "release build must have exactly one output");
+  const outputs = RELEASE_BUILD_PROFILE.entries.map((entry) => {
+    const output = resolveMetafileOutput(metafile, entry.output);
+    invariant(output?.entryPoint === entry.entryPoint, `esbuild metafile has no stable output for ${entry.id}`);
+    return output;
+  });
+  invariant(Object.keys(metafile.outputs).length === outputs.length, "release build emitted unexpected outputs");
   const inputs = [];
   for (const path of Object.keys(metafile.inputs).sort(ordinal)) {
     assertPortablePath(path, "esbuild input path");
     const bytes = await readRegularFile(repositoryRoot, path);
     const identity = packageIdentity(path);
-    const bytesInOutput = soleOutput.inputs[path]?.bytesInOutput ?? 0;
+    const bytesInOutput = outputs.reduce((total, output) => total + (output.inputs[path]?.bytesInOutput ?? 0), 0);
     const origin = identity
       ? {
           kind: "dependency",
@@ -1015,10 +1010,7 @@ async function buildRecords(repositoryRoot, metafile) {
       bytes_in_output: bytesInOutput,
     });
   }
-  const contributing = Object.entries(soleOutput.inputs)
-    .filter(([, record]) => record.bytesInOutput > 0)
-    .map(([path]) => path)
-    .sort(ordinal);
+  const contributing = inputs.filter((record) => record.bytes_in_output > 0).map((record) => record.key).sort(ordinal);
   return { bundleInputs: inputs, contributing };
 }
 
@@ -1157,8 +1149,9 @@ export async function buildReleasePayload({ repositoryRoot, stageRoot }) {
   const stage = await prepareEmptyRoot(stageRoot, "stage root", [["repository root", repository]]);
   const result = await build({
     absWorkingDir: repository,
-    entryPoints: [RELEASE_BUILD_PROFILE.entry],
-    outfile: RELEASE_BUILD_PROFILE.output,
+    entryPoints: Object.fromEntries(RELEASE_BUILD_PROFILE.entries.map((entry) => [entry.output.replace(/\.mjs$/u, ""), entry.entryPoint])),
+    outdir: ".",
+    outExtension: { ".js": ".mjs" },
     write: false,
     metafile: true,
     bundle: true,
@@ -1173,15 +1166,23 @@ export async function buildReleasePayload({ repositoryRoot, stageRoot }) {
     banner: { js: RELEASE_BUILD_PROFILE.banner },
     tsconfigRaw: RELEASE_BUILD_PROFILE.tsconfigRaw,
   });
-  invariant(result.outputFiles.length === 1, "release build emitted an unexpected file");
-  const output = result.outputFiles[0].contents;
-  const outputMeta = result.metafile.outputs[RELEASE_BUILD_PROFILE.output];
-  invariant(outputMeta, "release output has an unstable logical path");
-  const imports = new Set(outputMeta.imports.map((record) => record.path));
-  imports.add("node:module");
-  for (const path of imports) invariant(RELEASE_BUILD_PROFILE.allowedImports.includes(path), `forbidden release import: ${path}`);
-  const source = decoder.decode(output);
-  assertReleaseLoaderPolicy(source);
+  invariant(result.outputFiles.length === RELEASE_BUILD_PROFILE.entries.length, "release build emitted an unexpected file count");
+  const outputFiles = new Map(result.outputFiles.map((file) => [basename(file.path), file.contents]));
+  const entryProvenance = [];
+  for (const entry of RELEASE_BUILD_PROFILE.entries) {
+    const output = outputFiles.get(entry.output);
+    const outputMeta = resolveMetafileOutput(result.metafile, entry.output);
+    invariant(output && outputMeta?.entryPoint === entry.entryPoint, `release output has an unstable logical path: ${entry.id}`);
+    entryProvenance.push({
+      id: entry.id,
+      entry_point: entry.entryPoint,
+      output_path: entry.output,
+      output_digest: sha256(output),
+      contributing_inputs: Object.entries(outputMeta.inputs).filter(([, record]) => record.bytesInOutput > 0).map(([path]) => path).sort(ordinal),
+      allowed_imports: deriveExternalImports(outputMeta),
+    });
+  }
+  const allowedImports = [...new Set(entryProvenance.flatMap((entry) => entry.allowed_imports).concat("node:module"))].sort(ordinal);
 
   const { bundleInputs, contributing } = await buildRecords(repository, result.metafile);
   const controls = await createControlRecords(repository, bundleInputs);
@@ -1196,13 +1197,10 @@ export async function buildReleasePayload({ repositoryRoot, stageRoot }) {
     current_components: legalReview.value.current_components,
   }));
   const metafileBytes = canonicalJsonBytes(normalizedMetafile(result.metafile));
-  const files = new Map([
-    ["archflow-mcp.mjs", output],
-    ["metafile.json", metafileBytes],
-  ]);
+  const files = new Map([...outputFiles, ["metafile.json", metafileBytes]]);
   await copyLegal(repository, files);
   files.set("legal/THIRD_PARTY_NOTICES.md", legalProjection(legalReview.value));
-  const artifactRole = (path) => path === "archflow-mcp.mjs" ? "executable"
+  const artifactRole = (path) => path.endsWith(".mjs") ? "executable"
     : path === "metafile.json" ? "metafile"
     : path === "legal/review.json" ? "legal-review"
     : path === "legal/THIRD_PARTY_NOTICES.md" ? "legal-notice"
@@ -1214,7 +1212,7 @@ export async function buildReleasePayload({ repositoryRoot, stageRoot }) {
   const declaredPaths = await collectDeclaredPaths(repository);
   const manifestValue = {
     schema_version: "1",
-    bundle_digest: sha256(output),
+    bundle_digest: entryProvenance.find((entry) => entry.id === "mcp-stdio").output_digest,
     dependency_inventory_digest: dependencyInventoryDigest,
     bundle_inputs: bundleInputs,
     contributing_inputs: contributing,
@@ -1227,8 +1225,9 @@ export async function buildReleasePayload({ repositoryRoot, stageRoot }) {
       constitution: declaredPaths.filter((path) => path.startsWith("assets/constitution/")),
     },
     proof_inputs: [...PROOF_INPUTS],
-    build_entries: [{ id: "mcp-stdio", role: "mcp-stdio", entry_point: "src/main.ts", output_path: "archflow-mcp.mjs", handler_authority: "inert-no-handler" }],
-    launch_profile: await deriveLaunchProfile(repository),
+    build_entries: buildEntries(),
+    entry_provenance: entryProvenance,
+    launch_profile: await deriveLaunchProfile(repository, allowedImports),
     legal_review: { source_path: "release/legal-review.json", payload_path: "legal/review.json", digest: legalReview.digest },
     artifacts,
   };
@@ -1372,7 +1371,12 @@ async function verifyHeadLegalBaseline(repositoryRoot, candidateLegal) {
   invariant(source && output, "HEAD legal source/output baseline is inconsistent");
   invariant(Buffer.from(source).equals(Buffer.from(output)), "HEAD legal source/output bytes differ");
   const prior = parseCanonicalDocument(source, "HEAD legal review").value;
-  for (const collection of ["dependency_gate_decisions", "amendments", "supersessions"]) {
+  const currentDecisions = new Map((candidateLegal.value.dependency_gate_decisions ?? []).map((record) => [record.id, record]));
+  for (const priorDecision of prior.dependency_gate_decisions ?? []) {
+    const current = currentDecisions.get(priorDecision.id);
+    invariant(current?.status === "accepted", `HEAD dependency decision disappeared without explicit re-authorization: ${priorDecision.id}`);
+  }
+  for (const collection of ["amendments", "supersessions"]) {
     const priorRecords = new Map((prior[collection] ?? []).map((record) => [record.id, canonicalJsonBytes(record)]));
     const currentRecords = new Map((candidateLegal.value[collection] ?? []).map((record) => [record.id, canonicalJsonBytes(record)]));
     for (const [id, bytes] of priorRecords) {

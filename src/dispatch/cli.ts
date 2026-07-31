@@ -70,11 +70,16 @@ export type CliPreflight = Readonly<{
 }>;
 
 export type CliInvocation = Omit<DispatchChildSpec, "signal" | "cancellation_source">;
+type CancellationSource = NonNullable<DispatchChildSpec["cancellation_source"]>;
 
 export interface CliAdapter {
   readonly id: AdapterId;
   readonly family: ModelFamily;
-  preflight(workspace: DispatchWorkspace): Promise<CliPreflight>;
+  preflight(
+    workspace: DispatchWorkspace,
+    signal?: AbortSignal,
+    cancellationSource?: CancellationSource,
+  ): Promise<CliPreflight>;
   buildInvocation(
     envelope: DispatchEnvelope,
     route: DispatchRoute,
@@ -185,6 +190,8 @@ async function runPreflightCommand(
   command: string,
   argv: readonly string[],
   workspace: DispatchWorkspace,
+  signal: AbortSignal,
+  cancellationSource: CancellationSource,
 ): Promise<DispatchChildResult> {
   return runDispatchChild({
     adapter,
@@ -192,7 +199,8 @@ async function runPreflightCommand(
     argv,
     cwd: workspace.root,
     env: workspace.env,
-    signal: new AbortController().signal,
+    signal,
+    cancellation_source: cancellationSource,
   });
 }
 
@@ -204,14 +212,20 @@ async function preflight(
   minimumVersion: string,
   policyPaths: readonly string[],
   workspace: DispatchWorkspace,
+  signal: AbortSignal,
+  cancellationSource: CancellationSource,
 ): Promise<CliPreflight> {
-  const versionResult = await runPreflightCommand(adapter, command, versionArgv, workspace);
+  const versionResult = await runPreflightCommand(
+    adapter, command, versionArgv, workspace, signal, cancellationSource,
+  );
   const version = exactVersion(adapter, versionResult.stdout);
   if (versionResult.exit_code !== 0 || version === "unrecognized" || compareVersions(version, minimumVersion) < 0) {
     return fail(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter, version }));
   }
 
-  const authResult = await runPreflightCommand(adapter, command, authArgv, workspace);
+  const authResult = await runPreflightCommand(
+    adapter, command, authArgv, workspace, signal, cancellationSource,
+  );
   let loggedIn = false;
   if (adapter === "claude-cli" && authResult.exit_code === 0) {
     try {
@@ -326,7 +340,11 @@ function classifyNonzero(
 const claudeAdapter: CliAdapter = Object.freeze({
   id: "claude-cli",
   family: "claude",
-  preflight: (workspace: DispatchWorkspace) => preflight(
+  preflight: (
+    workspace: DispatchWorkspace,
+    signal = new AbortController().signal,
+    cancellationSource: CancellationSource = "client",
+  ) => preflight(
     "claude-cli",
     "claude",
     ["--version"],
@@ -334,6 +352,8 @@ const claudeAdapter: CliAdapter = Object.freeze({
     CLAUDE_MINIMUM_VERSION,
     CLAUDE_MANAGED_POLICY_PATHS,
     workspace,
+    signal,
+    cancellationSource,
   ),
   async buildInvocation(
     envelope: DispatchEnvelope,
@@ -402,7 +422,11 @@ const claudeAdapter: CliAdapter = Object.freeze({
 const codexAdapter: CliAdapter = Object.freeze({
   id: "codex-cli",
   family: "codex",
-  preflight: (workspace: DispatchWorkspace) => preflight(
+  preflight: (
+    workspace: DispatchWorkspace,
+    signal = new AbortController().signal,
+    cancellationSource: CancellationSource = "client",
+  ) => preflight(
     "codex-cli",
     "codex",
     ["--version"],
@@ -410,6 +434,8 @@ const codexAdapter: CliAdapter = Object.freeze({
     CODEX_MINIMUM_VERSION,
     CODEX_MANAGED_POLICY_PATHS,
     workspace,
+    signal,
+    cancellationSource,
   ),
   async buildInvocation(
     envelope: DispatchEnvelope,

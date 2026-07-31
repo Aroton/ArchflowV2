@@ -1,18 +1,23 @@
 {
-  "bundle_digest": "16faf6365bc502ec0c0e00f150b43c300e65dfa9dcace1cce3d98d850b8cbbd0",
+  "bundle_digest": "4455e40a945629dd6f8b9abcd70581eb4948b6234c24531fcc7c3e948eebd94a",
   "entry_bindings": [
     {
-      "handler_authority": "inert-no-handler",
+      "handler_authority": "mcp-tool-handler",
       "id": "mcp-stdio",
       "role": "mcp-stdio"
+    },
+    {
+      "handler_authority": "local-cli-handler",
+      "id": "local-cli",
+      "role": "local-cli"
     }
   ],
-  "finding": "Vulnerable URI routines are runtime-reachable during trusted SDK schema compilation, but the inert handler-free runtime exposes no identified route from untrusted JSON-RPC input to URI normalization.",
+  "finding": "The live MCP tool handlers accept untrusted JSON-RPC values, but schemas remain bundled trusted inputs and no route from request data to fast-uri URI normalization was identified.",
   "limitations": [
-    "This focused result does not remediate the vulnerable dependency.",
-    "This result is invalidated by any bundle, dependency, entry, or handler-authority change."
+    "Focused source review is not a general proof of absence.",
+    "Live handler behavior may change when bundled schemas or validation paths change."
   ],
-  "observed_on": "2026-07-27",
+  "observed_on": "2026-07-31",
   "record_type": "focused-inert-reachability",
   "schema_version": "1",
   "trusted_schema_compilation_reachable": true,

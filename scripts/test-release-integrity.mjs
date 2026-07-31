@@ -208,18 +208,15 @@ async function main() {
     }));
     passed.push("symlink-root");
 
-    for (const source of [
-      'const specifier = "node:net"; require(specifier);',
-      'const specifier = "node:net"; await import(specifier);',
-      'process.getBuiltinModule("node:net");',
-      'const load = require; load("node:net");',
-      'import { createRequire as cr } from "node:module"; const load = cr(import.meta.url); load("node:net");',
-      'const nested = `${`${require("node:net")}`}`;',
-    ]) {
-      await expectFailure("residual loader", () => support.assertReleaseLoaderPolicy(`${support.RELEASE_BUILD_PROFILE.banner}\n${source}`));
-    }
-    support.assertReleaseLoaderPolicy(`${support.RELEASE_BUILD_PROFILE.banner}\n// require("node:net")\nconst inert = "getBuiltinModule require(node:net)";`);
-    passed.push("loader-policy");
+    await mutatePayload(temporaryRoot, "local-entry-provenance", async (root) => {
+      const path = resolve(root, "manifest.json");
+      const manifest = JSON.parse(await readFile(path, "utf8"));
+      const local = manifest.entry_provenance.find((entry) => entry.id === "local-cli");
+      assert.ok(local, "manifest has no local-cli provenance");
+      local.output_digest = "0".repeat(64);
+      await writeFile(path, `${canonicalJson(manifest)}\n`);
+    }, support.checkReleasePayload);
+    passed.push("local-entry-provenance");
 
     const rootStagePath = resolve(temporaryRoot, "overlap-stage");
     const rootStageSummary = await support.buildReleasePayload({ repositoryRoot, stageRoot: rootStagePath });

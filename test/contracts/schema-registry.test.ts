@@ -22,6 +22,7 @@ const SCHEMA_FILES = {
   evidenceSlots: "evidence-slots",
   triage: "triage",
   supplementalReview: "supplemental-review",
+  supplementalReviewRecord: "supplemental-review-record",
   gateContract: "gate-contract",
   gateDecision: "gate-decision",
   gateRequest: "gate-request",
