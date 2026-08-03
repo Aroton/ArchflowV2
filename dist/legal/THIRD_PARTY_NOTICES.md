@@ -22,9 +22,7 @@ It does not grant a license to ArchFlow itself.
 - @secretlint/core@13.0.4 — MIT
 - @secretlint/profiler@13.0.4 — MIT
 - @secretlint/secretlint-rule-preset-recommend@13.0.4 — MIT
-- signal-exit@4.1.0 — ISC
 - structured-source@4.0.0 — BSD-2-Clause
-- write-file-atomic@8.0.0 — ISC
 - yaml@2.9.0 — ISC
 - zod@4.4.3 — MIT
 

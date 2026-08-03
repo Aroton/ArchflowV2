@@ -166,3 +166,19 @@ export async function ensurePayloadParent(
   if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new TypeError("payload parent escaped result directory");
   await mkdir(parent, { recursive: true });
 }
+
+/** Materializes task-local projection parents one verified real directory at a time. */
+export async function ensureTaskProjectionParent(
+  authority: TransactionAuthority,
+  target: ResolvedTaskPath,
+): Promise<void> {
+  assertInternalTransactionAuthority(authority);
+  const parent = join(target, "..");
+  const rel = relative(authority.task_root, parent);
+  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return;
+  let current = authority.task_root as string;
+  for (const part of rel.split(sep).filter((candidate) => candidate !== "" && candidate !== ".")) {
+    current = join(current, part);
+    await ensureRealDirectory(current as ResolvedTaskPath);
+  }
+}

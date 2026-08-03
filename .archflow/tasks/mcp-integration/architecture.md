@@ -8,12 +8,12 @@
 
 | Layer | Choice | Rationale |
 |-------|--------|-----------|
-| Runtime and language | Node.js `24.15.0` functional minimum; TypeScript `7.0.2`; `@types/node` `24.13.3`; ECMAScript modules | `write-file-atomic` 8 sets the functional Node floor. Release and CI use the current Node 24 LTS security patch (`24.18.0` at design time), while `@types/node` `24.13.3` is the current compatible Node-24 major typing line pinned independently; runtime and typings patch numbers need not match. |
+| Runtime and language | Node.js `24.15.0` functional minimum; TypeScript `7.0.2`; `@types/node` `24.13.3`; ECMAScript modules | The package engine declares the functional Node floor. Release and CI use the current Node 24 LTS security patch (`24.18.0` at design time), while `@types/node` `24.13.3` is the current compatible Node-24 major typing line pinned independently; runtime and typings patch numbers need not match. |
 | MCP | Protocol `2025-11-25`; exact `@modelcontextprotocol/server@2.0.0` with locked `@modelcontextprotocol/core@2.0.0` | Stable server/core were published `2026-07-27T23:55Z`; the completed currency review found unchanged consumed public signatures, legacy runtime behavior, MIT metadata, and transition-license text. The hand-built low-level `Server` remains on the 2025-era path without modern opt-in, so protocol `2026-07-28` adoption is deferred. The SDK is isolated behind the adapter; production imports of core/internal paths are prohibited, there is no `@modelcontextprotocol/node` dependency, and SDK v1 is not a fallback. |
 | Tool schemas | Zod `4.4.3` | MCP-facing schemas are derived or wrapped from the normative durable contracts wherever shapes overlap, with only transport-specific wrappers defined locally. |
 | Durable schemas | JSON Schema 2020-12 with Ajv `8.20.0` in strict mode | The versioned durable JSON Schema is normative for every persisted shape and every overlapping MCP/persisted shape; files remain independently readable and fail closed on unknown or contradictory data. |
 | YAML contracts | `yaml` `2.9.0` | Parses workflow/config files with actionable source locations. |
-| Persistence | Repository files, core SHA-256, `write-file-atomic` `8.0.0`, and a core `mkdir` task lock behind internal adapters | Keeps authority inspectable and branch-shareable. Lock acquisition is atomic and never performs stale takeover; an abandoned lock stops for explicit repair rather than risking an unfenced writer. |
+| Persistence | Repository files, core SHA-256, explicit same-directory temporary write/fsync/rename, and a core `mkdir` task lock behind internal adapters | Keeps authority inspectable and branch-shareable. Atomic replacement does not rely on process-exit cleanup state; lock acquisition is atomic and never performs stale takeover, so an abandoned lock stops for explicit repair rather than risking an unfenced writer. |
 | Child processes | `node:child_process` with `shell: false`, explicit cancellation/timeout/output bounds, and best-effort process termination | Phase 13 does not adopt `execa` 10.0.0: its descendant termination does not contain a child that calls `setsid()`, which a local spike confirmed, so its 16 transitive packages and v9-to-v10 migration do not buy the required guarantee. Real process-tree containment remains an unmet release concern rather than a library claim. |
 | Packaging | esbuild `0.28.1`, exact npm lockfile, one deterministic payload with separate host-neutral server and local-helper entries | `install.sh` installs both `archflow-mcp` and `archflow-local` without an unpinned startup download. |
 | Verification | Vitest `4.1.10` with direct dev pin Vite `7.3.6`, fixture CLIs, fault injection, protocol fixtures, and black-box host/sandbox suites | The exact Vite 7 pin constrains Vitest to its supported permissive line; the lock must prove no `lightningcss` or other copyleft dependency before acceptance. Critical persistence, host, process, protocol, and manual-mode behavior is exercised at its real boundaries. |
@@ -771,6 +771,8 @@ The full suite passed 1,163 of 1,166 tests. The three failures are exactly the i
 
 ### Phase 18: Manual and Degraded Recovery Workflow
 
+**Status**: COMPLETE (2026-08-03)
+
 **Goal**: Complete and recover the workflow conservatively when individual MCP tools or the server are unavailable.
 
 **Depends on**: Phases 1–17
@@ -779,13 +781,15 @@ The full suite passed 1,163 of 1,166 tests. The three failures are exactly the i
 
 **Scope**: Add exact per-tool fallback templates and skill flows using `archflow-local` for reconciliation, validation/hashing/rendering, snapshots/restores, atomic decisions, immutable manual milestone checkpoints, degraded status, and greatest-valid-chain import. Define initial normal/legacy checkpoints, one-writer handoff, and both-server-and-helper repair behavior.
 
+**Implemented 2026-08-03.** The offline helper now classifies normal, degraded, and repair-required authority; constructs initial, state-anchored, and continuation checkpoints from authenticated facts; emits exact fallbacks for the existing five tools; imports closed manual chains through an archive-authenticated reducer; and preserves routine clean handoff as a human commit/push/pull protocol rather than fabricating divergence evidence. Manual gates, waivers, retained results, committed implementation transitions, and final completion use the same durable contracts as normal mode. Counter-review fixes unified the manual state projection and revision space, retained a chain-derived planned final phase, restored full normal-mode status facts, rejected mixed gate/result and unknown-tool inputs, and derived final projections from the authoritative final result references. After explicit bundle-bound risk acceptance, tracked release staging, writing, and reproduction passed for MCP digest `1f83196572e000c09d3c185b3b2c7f91e334fda474a10e2b6cb2e294288936a0`.
+
 **Success Criteria**:
 
-- [ ] Removing each MCP capability and then the whole server still yields validating non-colliding artifacts, explicit decisions, retained exact results, and degraded truthful status through a multi-phase task.
-- [ ] Prepared receipts/results never become manual success; collision, ambiguity, or absent helper stops non-advancing with exact repair instructions.
-- [ ] Only snapshots/evidence/decisions reachable from the latest valid checkpoint are manual authority; server recovery adopts the greatest closed chain without replay or inferred gaps.
-- [ ] Supplemental-review arrival, rejection/resume, accepted-change supersession, explicit decline, cancellation, and restart behave identically to normal-mode milestones.
-- [ ] Manual operation never auto-commits/pushes and documents clean human-approved checkpoint handoff between writers.
+- [x] Removing each MCP capability and then the whole server still yields validating non-colliding artifacts, explicit decisions, retained exact results, and degraded truthful status through a multi-phase task.
+- [x] Prepared receipts/results never become manual success; collision, ambiguity, or absent helper stops non-advancing with exact repair instructions.
+- [x] Only snapshots/evidence/decisions reachable from the latest valid checkpoint are manual authority; server recovery adopts the greatest closed chain without replay or inferred gaps.
+- [x] Supplemental-review arrival, rejection/resume, accepted-change supersession, explicit decline, cancellation, and restart behave identically to normal-mode milestones.
+- [x] Manual operation never auto-commits/pushes and documents clean human-approved checkpoint handoff between writers.
 
 ### Phase 19: Legacy Upgrade Workflow
 
@@ -886,8 +890,8 @@ The full suite passed 1,163 of 1,166 tests. The three failures are exactly the i
 | 14 | Constitution Adjudication, Drift, and Review Fixed Point | COMPLETE (2026-07-30) |
 | 15 | Five-Tool MCP Assembly and Offline Local CLI | COMPLETE (2026-07-31) |
 | 16 | Installer, Initialization, and Host Registration | COMPLETE (2026-07-31) |
-| 17 | Normal-Mode Thin Phase Skills and Truthful Status | Not Started |
-| 18 | Manual and Degraded Recovery Workflow | Not Started |
+| 17 | Normal-Mode Thin Phase Skills and Truthful Status | COMPLETE (2026-08-03) |
+| 18 | Manual and Degraded Recovery Workflow | COMPLETE (2026-08-03) |
 | 19 | Legacy Upgrade Workflow | Not Started |
 | 20 | Reliability and Security Matrices | Not Started |
 | 21 | Real-Host E2E and Review-Quality Validation | Not Started |

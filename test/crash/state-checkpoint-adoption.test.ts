@@ -72,17 +72,19 @@ async function setup() {
   const anchor = { anchor_kind: "state" as const, state_revision: state.revision, state_digest: canonicalJsonDigest(state) };
   const firstTemplate = structuredClone(imported.chain[1]!); delete (firstTemplate as { predecessor?: unknown }).predecessor;
   const first = { ...firstTemplate, task_id: taskId, repository_identity_digest: state.repository_identity_digest,
-    revision: state.revision + 1, phase_instance: context.phase_instance, step: "produce", status: "succeeded",
-    input_fingerprint: fingerprint, initialization_digest: state.initialization_digest, state_anchor: anchor } as ManualCheckpointV1;
+    revision: state.revision + 1, phase_instance: context.phase_instance, step: "produce", status: "failed",
+    input_fingerprint: fingerprint, initialization_digest: state.initialization_digest, state_anchor: anchor,
+    authoritative_results: [], projections: [], evidence_chain: [], approvals: [], waivers: [] } as unknown as ManualCheckpointV1;
   const second = { ...structuredClone(imported.chain[1]!), task_id: taskId, repository_identity_digest: state.repository_identity_digest,
-    revision: first.revision + 1, phase_instance: context.phase_instance, step: "self_review", status: "running", attempt: 1,
+    revision: first.revision + 1, phase_instance: context.phase_instance, step: "produce", status: "running", attempt: 2,
     input_fingerprint: fingerprint, initialization_digest: state.initialization_digest,
-    predecessor: { revision: first.revision, checkpoint_digest: checkpointSelfDigest(first) } } as ManualCheckpointV1;
+    authoritative_results: [], projections: [], evidence_chain: [], approvals: [], waivers: [],
+    predecessor: { revision: first.revision, checkpoint_digest: checkpointSelfDigest(first) } } as unknown as ManualCheckpointV1;
   const artifact = parseManualCheckpointImport({ schema_version: "1", artifact_kind: "manual-checkpoint-import", task_id: taskId,
     repository_identity_digest: state.repository_identity_digest, import_mode: "state-anchored", state_anchor: anchor, chain: [first, second] });
   await writeFile(join(taskRoot, "phase10-child-input.json"), JSON.stringify({ context, subject, call: { schema_version: "1", task_id: taskId,
     intent_id: "adopt-checkpoints", expected_revision: state.revision, input_fingerprint: fingerprint, phase_instance: context.phase_instance,
-    step: "self_review", status: "running", artifact } }));
+    step: "produce", status: "running", artifact } }));
   return { taskRoot, authority: authority.value, prior: state.revision, head: second.revision };
 }
 
@@ -176,7 +178,7 @@ describe("whole-chain adoption crash cuts", () => {
     const input = JSON.parse(await readFile(inputPath, "utf8")) as {
       call: { artifact: { chain: Array<Record<string, unknown>> } };
     };
-    input.call.artifact.chain.at(-1)!.attempt = 2;
+    input.call.artifact.chain.at(-1)!.attempt = 3;
     await writeFile(inputPath, JSON.stringify(input));
     const lockPlan = await inspectAbandonedTaskLock(fixture.authority);
     await removeConfirmedAbandonedTaskLock(fixture.authority, lockPlan, true);

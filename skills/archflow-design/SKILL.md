@@ -7,6 +7,10 @@ description: Design, review, adjudicate, and obtain explicit approval for an Arc
 
 Treat the argument as `<task>`. Work only in `.archflow/tasks/<task>/` plus shared `.archflow/context/`; never read another task's files. The approved PRD is `.archflow/tasks/<task>/prd.md`, the design is `.archflow/tasks/<task>/design.md`, and durable status is the authority for whether this phase may run.
 
+## Degraded operation
+
+If any workflow tool is unavailable, run input-free `archflow-local manual-status --task <task>` and follow exactly its one `next_action`; do not infer approval or progression from documents. Supply `archflow-local manual-next --task <task>` only the complete plain-JSON selector/source artifact requested by status for the unavailable tool, then use its exact fallback prompt, decision templates, installed checkpoint, and resume action. The helper derives all authority fields and retains results before they become reachable. Manual review/adjudication remains explicitly degraded, uncertainty opens a human gate, and approval or waiver never exists until an immutable schema-valid decision is archived and checkpointed. Re-run `manual-status` after every milestone. If both server and helper are unavailable, stop, reinstall with `./install.sh`, and rerun `manual-status`; create no design milestone while authority cannot be classified.
+
 ## Stable rubric
 
 Use this exact JSON object, without editing or reordering it, both when hashing the rubric and when calling `archflow_counter_review`:
@@ -25,7 +29,7 @@ Before each pipeline step call `archflow_state` with `status: "running"`. Record
 
 Produce is two-pass. Draft `design.md`; run `archflow-local build-document --task <task>` with `phase_instance: "design"`, `step: "produce"`, `document_path: "design.md"`, and declared input `{ "input_id": "prd", "path": ".archflow/tasks/<task>/prd.md" }`. Run `envelope` over the complete `archflow_state` request, substitute its fingerprint into both request and artifact, run `envelope` again for the true request digest, then call the tool with byte-equivalent input. On a fingerprint mismatch, use only the returned expected digest and safe next action, discard the old intent, rebuild, and re-run status.
 
-If status reports initialization, reconciliation, configuration, checkpoint, or inspection work instead of this phase, surface its one safe action. Do not invent degraded or legacy behavior.
+If status reports initialization, reconciliation, configuration, checkpoint, or inspection work instead of this phase, surface its one safe action. Do not invent degraded or legacy behavior; use only the helper-classified degraded-operation path above.
 
 ## Phase work
 

@@ -19,7 +19,7 @@ const killAt = async (point, path) => {
 };
 
 try {
-  const [canonical, tools, git, identity, authorityModule, atomic, lock, read, initialization, transaction, checkpoints, requestModule] = await Promise.all([
+  const [canonical, tools, git, identity, authorityModule, atomic, lock, read, initialization, transaction, checkpoints, requestModule, manualImport] = await Promise.all([
     vite.ssrLoadModule("/src/contracts/canonical.ts"),
     vite.ssrLoadModule("/src/contracts/mcp-tools.ts"),
     vite.ssrLoadModule("/src/repository/git.ts"),
@@ -32,6 +32,7 @@ try {
     vite.ssrLoadModule("/src/state/transaction.ts"),
     vite.ssrLoadModule("/src/state/checkpoints.ts"),
     vite.ssrLoadModule("/src/state/request.ts"),
+    vite.ssrLoadModule("/src/state/manual-import.ts"),
   ]);
   const runner = git.createGitRunner({ cwd: repository });
   const discovered = await identity.discoverWorktree(runner, input.context);
@@ -75,10 +76,23 @@ try {
     read_state: read.readTaskState,
     read_config: read.readTaskConfig,
     read_receipt: read.readIntentReceipt,
+    load_retained_result: async () => { throw new Error("empty crash-test chains must not load retained results"); },
   };
+  let evidence;
+  if (call.input.artifact?.artifact_kind === "manual-checkpoint-import") {
+    const loaded = await manualImport.loadManualImportEvidence({
+      dependencies, authority: authority.value, artifact: call.input.artifact,
+    });
+    if (!loaded.ok) {
+      process.send({ type: "result", ok: false, code: loaded.error.code });
+      process.exitCode = 1;
+      throw new Error("manual import evidence failed");
+    }
+    evidence = loaded.value;
+  }
   let result;
   if (action === "initialize") {
-    result = await initialization.runStateInitialization(dependencies, { call, authority: authority.value });
+    result = await initialization.runStateInitialization(dependencies, { call, authority: authority.value }, evidence);
   } else {
     result = await transaction.runStateTransaction(dependencies, { call, authority: authority.value }, async (current) => {
       const identified = requestModule.identifyTransactionRequest(call, authority.value, call.input.input_fingerprint);
@@ -89,7 +103,7 @@ try {
         result_id: call.input.intent_id, resulting_revision: success.revision, success,
       });
       const toolResult = tools.validateProjectResultStructure(call, { schema_version: "1", ok: true, value: success });
-      return checkpoints.planCheckpointAdoption({ current, call, expectation, result: toolResult });
+      return checkpoints.planCheckpointAdoption({ current, call, expectation, result: toolResult, evidence });
     });
   }
   process.send({ type: "result", ok: result.ok, code: result.ok ? undefined : result.error.code,

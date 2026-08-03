@@ -1,4 +1,4 @@
-import { canonicalDocument, type CanonicalDocument, type GitOid } from "../contracts/canonical.js";
+import { canonicalDocument, parseCanonicalDocument, type CanonicalDocument, type GitOid } from "../contracts/canonical.js";
 import {
   checkpointLinkBreak,
   checkpointSelfBreak,
@@ -13,13 +13,16 @@ import {
   type PreservedHandoffHead,
 } from "../contracts/durable-handoff.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
+import { validateDurableSemantics } from "../contracts/durable.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeInteger } from "../contracts/evidence.js";
 import { assertPlainJson } from "../contracts/plain-json.js";
+import type { RepositoryPathClaim } from "../contracts/path-claims.js";
 import type { TransactionAuthority } from "../state/authority.js";
 import { assertInternalTransactionAuthority } from "../state/authority.js";
 import type { AtomicWriter } from "../state/atomic.js";
 import { classifyMutationReadiness, readHistoryStatus } from "./history.js";
+import { readChangedGitPaths, readCommitTreeBlob, readGitBlobBytes } from "./git.js";
 import type { ResolvedPath } from "./paths.js";
 import type { RootBoundGitRunner } from "./identity.js";
 
@@ -205,4 +208,136 @@ export async function installHandoffRecord(
 ): Promise<"created" | "exists"> {
   if (target.path_class !== "maintenance-record") throw new TypeError("handoff target must be a maintenance-record path");
   return atomic.createExclusive(target, record.bytes);
+}
+
+export type SelectedManualHandoffAuthority =
+  | Readonly<{
+      kind: "normal";
+      path: RepositoryPathClaim;
+      document: CanonicalDocument<TaskStateV1>;
+    }>
+  | Readonly<{
+      kind: "manual";
+      path: RepositoryPathClaim;
+      document: CanonicalDocument<ManualCheckpointV1>;
+    }>;
+
+export type ManualHandoffInput = Readonly<{
+  dependencies: HandoffDependencies;
+  transaction_authority: TransactionAuthority;
+  /** Opaque ManualAuthority (or the normal-state authority token) minted by the caller's loader. */
+  selected_authority: object;
+  resolve_selected_authority: (authority: object) => SelectedManualHandoffAuthority;
+  expected_head: GitOid;
+}>;
+
+export type ManualHandoffResult = Readonly<{
+  status: "ready";
+  mode: "normal" | "manual";
+  head_oid: GitOid;
+  branch: string;
+  authority_path: RepositoryPathClaim;
+  authority_digest: CanonicalDocument<TaskStateV1 | ManualCheckpointV1>["digest"];
+  authority_revision: TaskStateV1["revision"] | ManualCheckpointV1["revision"];
+  protocol: readonly [
+    "commit-authenticated-authority",
+    "push-selected-branch",
+    "clean-pull-in-next-writer",
+    "rerun-manual-status-before-mutation",
+  ];
+}>;
+
+/**
+ * Verifies readiness for the documented one-writer handoff. A successful routine handoff returns
+ * guidance only; it never fabricates `HandoffRecordV1`. Divergence remains the existing
+ * `GIT_DIVERGED` failure and is repaired through `observeDivergentHeads`/`planCleanHandoff`.
+ */
+export async function inspectManualHandoff(
+  input: ManualHandoffInput,
+): Promise<ProjectResult<ManualHandoffResult>> {
+  const { dependencies, transaction_authority: authority } = input;
+  assertInternalTransactionAuthority(authority);
+  if (input.selected_authority === null || typeof input.selected_authority !== "object") {
+    throw new TypeError("selected handoff authority must be an object");
+  }
+  let selected: SelectedManualHandoffAuthority;
+  try {
+    selected = input.resolve_selected_authority(input.selected_authority);
+  } catch {
+    return invalid(authority, "handoff-selected-authority-not-authentic");
+  }
+
+  let document: CanonicalDocument<TaskStateV1 | ManualCheckpointV1>;
+  try {
+    const suppliedValue = ownData(selected.document, "value", "selected handoff authority");
+    const suppliedDigest = ownData(selected.document, "digest", "selected handoff authority");
+    const suppliedBytes = ownData(selected.document, "bytes", "selected handoff authority");
+    if (!(suppliedBytes instanceof Uint8Array)) throw new TypeError("authority bytes must be Uint8Array");
+    const parsed = selected.kind === "normal"
+      ? parseCanonicalDocument<TaskStateV1>(suppliedBytes, "selected handoff state")
+      : parseCanonicalDocument<ManualCheckpointV1>(suppliedBytes, "selected handoff checkpoint");
+    assertPlainJson(suppliedValue, "selected handoff authority value");
+    if (parsed.digest !== suppliedDigest) throw new TypeError("authority digest does not bind bytes");
+    if (selected.kind === "manual") {
+      parseManualCheckpoint(parsed.value);
+      if (checkpointSelfBreak(parsed.value as ManualCheckpointV1) !== undefined) {
+        throw new TypeError("manual authority checkpoint self digest is invalid");
+      }
+    } else if (!validateDurableSemantics({ state: parsed as CanonicalDocument<TaskStateV1> }).ok) {
+      throw new TypeError("normal authority state is invalid");
+    }
+    document = parsed as CanonicalDocument<TaskStateV1 | ManualCheckpointV1>;
+  } catch {
+    return invalid(authority, "handoff-selected-authority-invalid");
+  }
+  if (document.value.task_id !== authority.task_id ||
+      document.value.repository_identity_digest !== authority.repository_identity_digest) {
+    return invalid(authority, "handoff-authority-mismatch");
+  }
+
+  const status = await readHistoryStatus(dependencies.runner, authority.context);
+  if (!status.ok) return status;
+  const readiness = classifyMutationReadiness(status.value, authority.context);
+  if (!readiness.ok) return readiness;
+  if (status.value.head === undefined || status.value.head !== input.expected_head) {
+    return invalid(authority, "handoff-clean-head-mismatch");
+  }
+  if (status.value.upstream.kind !== "tracked" || status.value.upstream.ahead !== 0 ||
+      status.value.upstream.behind !== 0 || status.value.upstream.upstreamOid !== status.value.head) {
+    return fail(createProjectError("HANDOFF_REQUIRED", { phase_instance: authority.context.phase_instance }));
+  }
+
+  try {
+    const changed = await readChangedGitPaths(dependencies.runner);
+    if (changed.paths.length !== 0 || changed.unrepresentable_count !== 0) {
+      return fail(createProjectError("HANDOFF_REQUIRED", { phase_instance: authority.context.phase_instance }));
+    }
+    const committed = await readCommitTreeBlob(dependencies.runner, status.value.head, selected.path);
+    if (committed === undefined || committed.mode !== "100644") {
+      return invalid(authority, "handoff-authority-not-committed");
+    }
+    const committedBytes = await readGitBlobBytes(dependencies.runner, committed.oid);
+    if (!Buffer.from(committedBytes).equals(Buffer.from(document.bytes))) {
+      return invalid(authority, "handoff-authority-commit-mismatch");
+    }
+  } catch {
+    return invalid(authority, "handoff-authority-commit-unreadable");
+  }
+
+  const protocol: ManualHandoffResult["protocol"] = Object.freeze([
+    "commit-authenticated-authority",
+    "push-selected-branch",
+    "clean-pull-in-next-writer",
+    "rerun-manual-status-before-mutation",
+  ]);
+  return ok<ManualHandoffResult>(Object.freeze({
+    status: "ready",
+    mode: selected.kind,
+    head_oid: status.value.head,
+    branch: status.value.branch,
+    authority_path: selected.path,
+    authority_digest: document.digest,
+    authority_revision: document.value.revision,
+    protocol,
+  }));
 }

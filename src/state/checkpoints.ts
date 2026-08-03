@@ -3,14 +3,13 @@ import { isDeepStrictEqual } from "node:util";
 import { canonicalDocument, type CanonicalDocument } from "../contracts/canonical.js";
 import {
   chainAnchor,
-  checkpointSelfDigest,
   selectGreatestValidChain,
   type ManualCheckpointImportV1,
 } from "../contracts/durable-checkpoint.js";
 import { validateDurableSemantics } from "../contracts/durable.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
-import { parseSafeInteger, type Sha256Digest } from "../contracts/evidence.js";
+import type { Sha256Digest } from "../contracts/evidence.js";
 import type {
   ParsedToolCall,
   ResultExpectation,
@@ -18,7 +17,10 @@ import type {
 } from "../contracts/mcp-tools.js";
 import { assertPlainJson } from "../contracts/plain-json.js";
 import type { NextStateDraft, PreparedTransaction } from "./transaction.js";
-import { planStateTransition } from "./transitions.js";
+import {
+  reduceAuthenticatedManualChain,
+  type AuthenticatedManualImportEvidence,
+} from "./manual-import.js";
 
 const authenticAdoptionPlans = new WeakMap<object, Sha256Digest>();
 
@@ -59,6 +61,7 @@ export type CheckpointAdoptionPlanInput = Readonly<{
   call: Extract<ParsedToolCall, { readonly name: "archflow_state" }>;
   expectation: ResultExpectation<"archflow_state">;
   result: StructurallyValidProjectResult<"archflow_state">;
+  evidence?: AuthenticatedManualImportEvidence;
 }>;
 
 /**
@@ -69,13 +72,18 @@ export type CheckpointAdoptionPlanInput = Readonly<{
 export function planCheckpointAdoption(
   value: CheckpointAdoptionPlanInput,
 ): ProjectResult<PreparedTransaction<"archflow_state">> {
-  if (!isDeepStrictEqual(Object.keys(value).sort(), ["call", "current", "expectation", "result"])) {
+  const keys = Object.keys(value).sort();
+  if (!isDeepStrictEqual(keys, ["call", "current", "expectation", "result"]) &&
+      !isDeepStrictEqual(keys, ["call", "current", "evidence", "expectation", "result"])) {
     throw new TypeError("checkpoint adoption input has unexpected or missing fields");
   }
   const currentDocument = ownField(value, "current") as CanonicalDocument<TaskStateV1>;
   const call = ownField(value, "call") as CheckpointAdoptionPlanInput["call"];
   const expectation = ownField(value, "expectation") as ResultExpectation<"archflow_state">;
   const result = ownField(value, "result") as StructurallyValidProjectResult<"archflow_state">;
+  const evidence = keys.includes("evidence")
+    ? ownField(value, "evidence") as AuthenticatedManualImportEvidence
+    : undefined;
   const artifactValue = call.input.artifact;
   if (artifactValue?.artifact_kind !== "manual-checkpoint-import") {
     throw new TypeError("checkpoint adoption requires a manual-checkpoint-import artifact");
@@ -84,6 +92,9 @@ export function planCheckpointAdoption(
   const artifact = structuredClone(artifactValue) as ManualCheckpointImportV1;
   if (artifact.import_mode === "initial") {
     return invalid(currentDocument.value.phase_instance, "checkpoint-initial-import-requires-missing-state");
+  }
+  if (evidence === undefined) {
+    return invalid(currentDocument.value.phase_instance, "manual-import-evidence-required");
   }
 
   const artifactDocument = canonicalDocument(artifact);
@@ -108,57 +119,9 @@ export function planCheckpointAdoption(
     return invalid(currentDocument.value.phase_instance, "checkpoint-chain-head-request-mismatch");
   }
 
-  let cursor = currentDocument.value;
-  for (let index = 0; index < selected.chain.length; index += 1) {
-    const checkpoint = selected.chain[index]!;
-    const resultReference = checkpoint.status === "succeeded"
-      ? checkpoint.authoritative_results.find((reference) =>
-          reference.phase_instance === checkpoint.phase_instance &&
-          reference.step === checkpoint.step &&
-          reference.input_fingerprint === checkpoint.input_fingerprint)
-      : undefined;
-    const transition = planStateTransition({
-      current: cursor,
-      target: {
-        phase_instance: checkpoint.phase_instance,
-        step: checkpoint.step,
-        status: checkpoint.status,
-        attempt: checkpoint.attempt,
-        input_fingerprint: checkpoint.input_fingerprint,
-      },
-      recomputed_input_fingerprint: checkpoint.input_fingerprint,
-      artifact,
-      ...(resultReference === undefined ? {} : { result_reference: resultReference }),
-    });
-    if (!transition.ok) return transition;
-    cursor = { ...transition.value, revision: cursor.revision };
-  }
-
-  const current = currentDocument.value;
-  const {
-    revision: _revision,
-    committed_intent: _committed,
-    open_gate: _openGate,
-    terminal: _terminal,
-    ...preserved
-  } = current;
-  const next: NextStateDraft = {
-    ...preserved,
-    phase_instance: head.phase_instance,
-    step: head.step,
-    status: head.status,
-    attempt: head.attempt,
-    input_fingerprint: head.input_fingerprint,
-    authoritative_results: structuredClone(head.authoritative_results),
-    approvals: structuredClone(head.approvals),
-    waivers: structuredClone(head.waivers),
-    adopted_checkpoint: {
-      revision: parseSafeInteger(head.revision),
-      checkpoint_digest: checkpointSelfDigest(head),
-    },
-    ...(head.open_gate === undefined ? {} : { open_gate: structuredClone(head.open_gate) }),
-    ...(head.terminal === undefined ? {} : { terminal: head.terminal }),
-  };
+  const reduced = reduceAuthenticatedManualChain({ artifact, evidence, current: currentDocument.value });
+  if (!reduced.ok) return reduced;
+  const next = reduced.value.next_state;
 
   const prepared: PreparedTransaction<"archflow_state"> = Object.freeze({
     expectation,

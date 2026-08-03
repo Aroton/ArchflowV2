@@ -7,6 +7,10 @@ description: Define, review, adjudicate, and obtain explicit approval for an Arc
 
 Treat the argument as `<task>`. This is a normal-mode phase skill: durable state and every server-checked value come from the local helper and the five workflow tools. Work only in `.archflow/tasks/<task>/` plus shared `.archflow/context/`; never read another task's files.
 
+## Degraded operation
+
+If any workflow tool is unavailable, do not substitute an informal file edit or infer progress. Run input-free `archflow-local manual-status --task <task>`, report its `normal`, `degraded`, or `repair-required` mode, and perform exactly its single `next_action`. For an unavailable `archflow_state`, `archflow_counter_review`, `archflow_adjudicate`, `archflow_gate`, or `archflow_waiver`, pass only the complete plain-JSON selector and source artifact requested by status to `archflow-local manual-next --task <task>`; use the returned fallback artifact, prompt, decision templates, checkpoint result, and resume action verbatim. The helper derives every digest, anchor, result reference, evidence binding, and gate fact, retains outputs before checkpointing them, and stops for schema-valid review or an explicit human decision where required. Re-run `manual-status` after every manual milestone. If both server and helper are unavailable, stop non-advancing, reinstall with `./install.sh`, and rerun `manual-status`; never create a purported PRD milestone from conversation or filenames.
+
 ## Stable rubric
 
 Use this exact JSON object, without editing or reordering it, both when hashing the rubric and when calling `archflow_counter_review`:
@@ -21,7 +25,7 @@ Compute `rubric_digest` by passing that literal to `archflow-local hash`. Use th
 
 Run `archflow-local status --task <task>`, inspect the JSON result's `ok` field rather than relying on the process exit code, perform exactly its `next_action`, then run status again. Continue until status requests human judgment or reports that the phase advanced. Do not infer state, approval, or evidence currency from Markdown, filenames, conversation, or an absent gate.
 
-If `next_action` is `initialize-repository`, stop and direct the user to `archflow-init`. If it is `create-task`, run `archflow-local task-init --task <task>`, use that returned initialization artifact in the first `archflow_state` request, and obtain its exact fingerprint and request digest from `archflow-local envelope --task <task>`. For reconciliation, configuration, checkpoint, or inspection actions, report the helper's one safe action and do not improvise repair or a manual fallback.
+If `next_action` is `initialize-repository`, stop and direct the user to `archflow-init`. If it is `create-task`, run `archflow-local task-init --task <task>`, use that returned initialization artifact in the first `archflow_state` request, and obtain its exact fingerprint and request digest from `archflow-local envelope --task <task>`. For reconciliation, configuration, checkpoint, or inspection actions, report the helper's one safe action. Never improvise repair; use only the degraded-operation path above when a capability is actually unavailable.
 
 For each pipeline step, call `archflow_state` with `status: "running"` before doing its work. The skill records the terminal `succeeded` or `failed` state for `produce`, `self_review`, and `triage`. `archflow_counter_review` and `archflow_adjudicate` install their own successful terminal state; do not send a second successful state transition after either tool returns.
 

@@ -41,11 +41,18 @@ import type { SupplementalReviewRecordV1 } from "../contracts/supplemental-recor
 import { runInit } from "../init/index.js";
 import { stageTaskInitialization } from "../init/task-initialization.js";
 import { computeCallEnvelope } from "./envelope.js";
+import {
+  classifyManualWorkflowStatus,
+  runManualHandoff,
+  runManualNext,
+  type ManualNextValue,
+} from "./manual-workflow.js";
 
 export const LOCAL_COMMANDS = Object.freeze([
   "validate", "hash", "render", "snapshot", "restore", "maintain", "decide",
   "gate-counter", "status", "reconcile", "import", "checkpoint", "init", "task-init",
   "envelope", "build-document", "build-implementation-output",
+  "manual-status", "manual-next", "manual-handoff",
 ] as const);
 export type LocalCommand = typeof LOCAL_COMMANDS[number];
 const maintenanceRecordV1Validator = createJsonSchemaValidator<MaintenanceRecordV1>(maintenanceRecordSchema, [primitivesSchema, pathClaimSchema]);
@@ -227,6 +234,20 @@ export async function runLocalCommand(input: CommandInput): Promise<PlainJsonVal
   }
   const created = await services(input);
   if (!created.ok) return created;
+  if (input.command === "manual-status") {
+    return classifyManualWorkflowStatus({ services: created.value });
+  }
+  if (input.command === "manual-next") {
+    return runManualNext({ services: created.value, value: requireValue(input) as unknown as ManualNextValue });
+  }
+  if (input.command === "manual-handoff") {
+    const value = recordValue(input);
+    return runManualHandoff({
+      services: created.value,
+      expected_head: String(value.expected_head) as never,
+      ...(value.initialization === undefined ? {} : { initialization: value.initialization as never }),
+    });
+  }
   if (input.command === "status") return computeTaskStatus(created.value.dependencies, created.value.authority);
   if (input.command === "envelope") return computeCallEnvelope(created.value, requireValue(input));
   if (input.command === "build-document") {

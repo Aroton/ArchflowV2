@@ -21,6 +21,10 @@ import {
   type PreparedEvidenceResult,
 } from "../../state/evidence-results.js";
 import { runStateInitialization } from "../../state/initialization.js";
+import {
+  loadManualImportEvidence,
+  type AuthenticatedManualImportEvidence,
+} from "../../state/manual-import.js";
 import { identifyTransactionRequest } from "../../state/request.js";
 import { loadCurrentProduceSubject } from "../../state/produce-subject.js";
 import { implementationOutputCommittedAtCurrentTarget } from "../../state/implementation-manifest.js";
@@ -54,17 +58,27 @@ export async function handleState(
     const session = await openHandlerSession(call, context);
     if (!session.ok) return session;
     const { services } = session.value;
+    const artifact = call.input.artifact;
+    let manualEvidence: AuthenticatedManualImportEvidence | undefined;
+    if (artifact?.artifact_kind === "manual-checkpoint-import") {
+      const loaded = await loadManualImportEvidence({
+        dependencies: services.dependencies,
+        authority: services.authority,
+        artifact,
+      });
+      if (!loaded.ok) return loaded;
+      manualEvidence = loaded.value;
+    }
     if (services.state === undefined) {
       const initialized = await runStateInitialization(services.dependencies, {
         authority: services.authority,
         call,
-      });
+      }, manualEvidence);
       return initialized.ok
         ? Object.freeze({ schema_version: "1", ok: true, value: initialized.value.outcome })
         : initialized;
     }
 
-    const artifact = call.input.artifact;
     const identified = identifyTransactionRequest(
       call,
       services.authority,
@@ -161,7 +175,8 @@ export async function handleState(
           value: success,
         });
         if (artifact?.artifact_kind === "manual-checkpoint-import") {
-          return planCheckpointAdoption({ current, call: identifiedCall, expectation, result });
+          if (manualEvidence === undefined) throw new TypeError("manual import evidence was not loaded");
+          return planCheckpointAdoption({ current, call: identifiedCall, expectation, result, evidence: manualEvidence });
         }
         let completionSubjectDigest;
         let commitObserved = false;

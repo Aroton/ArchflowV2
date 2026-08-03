@@ -2,8 +2,6 @@ import { randomUUID } from "node:crypto";
 import { link, open, rename, symlink, unlink, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
-import writeFileAtomic from "write-file-atomic";
-
 import type { ResolvedPath } from "../repository/paths.js";
 
 export type ExclusiveCreateResult = "created" | "exists";
@@ -106,15 +104,7 @@ async function replace(path: ResolvedPath, bytes: Uint8Array): Promise<void> {
     throw new TypeError("replace requires a task-state or gate-interface resolved path");
   }
 
-  try {
-    await writeFileAtomic(path.absolute, bytes);
-  } catch {
-    throw new AtomicReplaceError({
-      operation: "replace",
-      target_may_have_changed: true,
-      collision: false,
-    });
-  }
+  await replaceRegularBytes(path.absolute, bytes, 0o644);
 }
 
 async function removeGateInterface(path: ResolvedPath): Promise<void> {
@@ -147,13 +137,29 @@ function requireProjectable(path: ResolvedPath): void {
   if (!PROJECTABLE.has(path.path_class)) throw new TypeError("projection requires a declared output path");
 }
 
+async function replaceRegularBytes(target: string, bytes: Uint8Array, mode: number): Promise<void> {
+  const temporary = join(dirname(target), `.${basename(target)}.${process.pid}.${randomUUID()}.tmp`);
+  let handle: FileHandle | undefined;
+  let renameAttempted = false;
+  try {
+    handle = await open(temporary, "wx", mode);
+    await writeAll(handle, bytes);
+    await handle.sync();
+    await handle.close();
+    handle = undefined;
+    renameAttempted = true;
+    await rename(temporary, target);
+  } catch {
+    throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: renameAttempted, collision: false });
+  } finally {
+    await handle?.close().catch(() => undefined);
+    await unlink(temporary).catch(() => undefined);
+  }
+}
+
 async function replaceRegular(path: ResolvedPath, bytes: Uint8Array, executable: boolean): Promise<void> {
   requireProjectable(path);
-  try {
-    await writeFileAtomic(path.absolute, bytes, { mode: executable ? 0o755 : 0o644 });
-  } catch {
-    throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: true, collision: false });
-  }
+  await replaceRegularBytes(path.absolute, bytes, executable ? 0o755 : 0o644);
 }
 
 async function replaceSymlink(path: ResolvedPath, target: string): Promise<void> {

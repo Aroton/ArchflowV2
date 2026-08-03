@@ -26,9 +26,9 @@ var __commonJS = (cb, mod) => function __require2() {
     throw mod = 0, e;
   }
 };
-var __export = (target, all) => {
+var __export = (target2, all) => {
   for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+    __defProp(target2, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -38,12 +38,12 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+var __toESM = (mod, isNodeMode, target2) => (target2 = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
   // If the importer is in node compatibility mode or this is not an ESM
   // file that has been converted to a CommonJS file using a Babel-
   // compatible transform (i.e. "__esModule" has not been set), then set
   // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target2, "default", { value: mod, enumerable: true }) : target2,
   mod
 ));
 
@@ -3663,57 +3663,57 @@ var require_fast_uri = __commonJS({
       return serialize(resolved, schemelessOptions);
     }
     function resolveComponent(base2, relative5, options, skipNormalization) {
-      const target = {};
+      const target2 = {};
       if (!skipNormalization) {
         base2 = parse3(serialize(base2, options), options);
         relative5 = parse3(serialize(relative5, options), options);
       }
       options = options || {};
       if (!options.tolerant && relative5.scheme) {
-        target.scheme = relative5.scheme;
-        target.userinfo = relative5.userinfo;
-        target.host = relative5.host;
-        target.port = relative5.port;
-        target.path = removeDotSegments(relative5.path || "");
-        target.query = relative5.query;
+        target2.scheme = relative5.scheme;
+        target2.userinfo = relative5.userinfo;
+        target2.host = relative5.host;
+        target2.port = relative5.port;
+        target2.path = removeDotSegments(relative5.path || "");
+        target2.query = relative5.query;
       } else {
         if (relative5.userinfo !== void 0 || relative5.host !== void 0 || relative5.port !== void 0) {
-          target.userinfo = relative5.userinfo;
-          target.host = relative5.host;
-          target.port = relative5.port;
-          target.path = removeDotSegments(relative5.path || "");
-          target.query = relative5.query;
+          target2.userinfo = relative5.userinfo;
+          target2.host = relative5.host;
+          target2.port = relative5.port;
+          target2.path = removeDotSegments(relative5.path || "");
+          target2.query = relative5.query;
         } else {
           if (!relative5.path) {
-            target.path = base2.path;
+            target2.path = base2.path;
             if (relative5.query !== void 0) {
-              target.query = relative5.query;
+              target2.query = relative5.query;
             } else {
-              target.query = base2.query;
+              target2.query = base2.query;
             }
           } else {
             if (relative5.path[0] === "/") {
-              target.path = removeDotSegments(relative5.path);
+              target2.path = removeDotSegments(relative5.path);
             } else {
               if ((base2.userinfo !== void 0 || base2.host !== void 0 || base2.port !== void 0) && !base2.path) {
-                target.path = "/" + relative5.path;
+                target2.path = "/" + relative5.path;
               } else if (!base2.path) {
-                target.path = relative5.path;
+                target2.path = relative5.path;
               } else {
-                target.path = base2.path.slice(0, base2.path.lastIndexOf("/") + 1) + relative5.path;
+                target2.path = base2.path.slice(0, base2.path.lastIndexOf("/") + 1) + relative5.path;
               }
-              target.path = removeDotSegments(target.path);
+              target2.path = removeDotSegments(target2.path);
             }
-            target.query = relative5.query;
+            target2.query = relative5.query;
           }
-          target.userinfo = base2.userinfo;
-          target.host = base2.host;
-          target.port = base2.port;
+          target2.userinfo = base2.userinfo;
+          target2.host = base2.host;
+          target2.port = base2.port;
         }
-        target.scheme = base2.scheme;
+        target2.scheme = base2.scheme;
       }
-      target.fragment = relative5.fragment;
-      return target;
+      target2.fragment = relative5.fragment;
+      return target2;
     }
     function equal(uriA, uriB, options) {
       const normalizedA = normalizeComparableURI(uriA, options);
@@ -4764,8 +4764,8 @@ var require_multipleOf = __commonJS({
         const { gen, data, schemaCode, it } = cxt;
         const prec = it.opts.multipleOfPrecision;
         const res = gen.let("res");
-        const invalid2 = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
-        cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid2}))`);
+        const invalid5 = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
+        cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid5}))`);
       }
     };
     exports.default = def2;
@@ -7762,6 +7762,12 @@ function authenticQualifiedEvidence(value, kind, assurance) {
 function registerCurrentReviewSet(value) {
   currentReviewSets.add(value);
 }
+function authenticCurrentReviewSet(value) {
+  return currentReviewSets.has(value);
+}
+function registerValidatedTriage(value) {
+  validatedTriages.add(value);
+}
 function authenticValidatedTriage(value) {
   return validatedTriages.has(value);
 }
@@ -7778,492 +7784,778 @@ var init_trust_brands = __esm({
   }
 });
 
-// node_modules/signal-exit/dist/cjs/signals.js
-var require_signals = __commonJS({
-  "node_modules/signal-exit/dist/cjs/signals.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.signals = void 0;
-    exports.signals = [];
-    exports.signals.push("SIGHUP", "SIGINT", "SIGTERM");
-    if (process.platform !== "win32") {
-      exports.signals.push(
-        "SIGALRM",
-        "SIGABRT",
-        "SIGVTALRM",
-        "SIGXCPU",
-        "SIGXFSZ",
-        "SIGUSR2",
-        "SIGTRAP",
-        "SIGSYS",
-        "SIGQUIT",
-        "SIGIOT"
-        // should detect profiler and enable/disable accordingly.
-        // see #21
-        // 'SIGPROF'
-      );
-    }
-    if (process.platform === "linux") {
-      exports.signals.push("SIGIO", "SIGPOLL", "SIGPWR", "SIGSTKFLT");
-    }
-  }
-});
-
-// node_modules/signal-exit/dist/cjs/index.js
-var require_cjs = __commonJS({
-  "node_modules/signal-exit/dist/cjs/index.js"(exports) {
-    "use strict";
-    var _a3;
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.unload = exports.load = exports.onExit = exports.signals = void 0;
-    var signals_js_1 = require_signals();
-    Object.defineProperty(exports, "signals", { enumerable: true, get: function() {
-      return signals_js_1.signals;
-    } });
-    var processOk = (process5) => !!process5 && typeof process5 === "object" && typeof process5.removeListener === "function" && typeof process5.emit === "function" && typeof process5.reallyExit === "function" && typeof process5.listeners === "function" && typeof process5.kill === "function" && typeof process5.pid === "number" && typeof process5.on === "function";
-    var kExitEmitter = /* @__PURE__ */ Symbol.for("signal-exit emitter");
-    var global2 = globalThis;
-    var ObjectDefineProperty = Object.defineProperty.bind(Object);
-    var Emitter = class {
-      emitted = {
-        afterExit: false,
-        exit: false
-      };
-      listeners = {
-        afterExit: [],
-        exit: []
-      };
-      count = 0;
-      id = Math.random();
-      constructor() {
-        if (global2[kExitEmitter]) {
-          return global2[kExitEmitter];
-        }
-        ObjectDefineProperty(global2, kExitEmitter, {
-          value: this,
-          writable: false,
-          enumerable: false,
-          configurable: false
-        });
-      }
-      on(ev, fn) {
-        this.listeners[ev].push(fn);
-      }
-      removeListener(ev, fn) {
-        const list = this.listeners[ev];
-        const i = list.indexOf(fn);
-        if (i === -1) {
-          return;
-        }
-        if (i === 0 && list.length === 1) {
-          list.length = 0;
-        } else {
-          list.splice(i, 1);
-        }
-      }
-      emit(ev, code, signal) {
-        if (this.emitted[ev]) {
-          return false;
-        }
-        this.emitted[ev] = true;
-        let ret = false;
-        for (const fn of this.listeners[ev]) {
-          ret = fn(code, signal) === true || ret;
-        }
-        if (ev === "exit") {
-          ret = this.emit("afterExit", code, signal) || ret;
-        }
-        return ret;
-      }
-    };
-    var SignalExitBase = class {
-    };
-    var signalExitWrap = (handler) => {
-      return {
-        onExit(cb, opts) {
-          return handler.onExit(cb, opts);
-        },
-        load() {
-          return handler.load();
-        },
-        unload() {
-          return handler.unload();
-        }
-      };
-    };
-    var SignalExitFallback = class extends SignalExitBase {
-      onExit() {
-        return () => {
-        };
-      }
-      load() {
-      }
-      unload() {
-      }
-    };
-    var SignalExit = class extends SignalExitBase {
-      // "SIGHUP" throws an `ENOSYS` error on Windows,
-      // so use a supported signal instead
-      /* c8 ignore start */
-      #hupSig = process4.platform === "win32" ? "SIGINT" : "SIGHUP";
-      /* c8 ignore stop */
-      #emitter = new Emitter();
-      #process;
-      #originalProcessEmit;
-      #originalProcessReallyExit;
-      #sigListeners = {};
-      #loaded = false;
-      constructor(process5) {
-        super();
-        this.#process = process5;
-        this.#sigListeners = {};
-        for (const sig of signals_js_1.signals) {
-          this.#sigListeners[sig] = () => {
-            const listeners = this.#process.listeners(sig);
-            let { count } = this.#emitter;
-            const p = process5;
-            if (typeof p.__signal_exit_emitter__ === "object" && typeof p.__signal_exit_emitter__.count === "number") {
-              count += p.__signal_exit_emitter__.count;
-            }
-            if (listeners.length === count) {
-              this.unload();
-              const ret = this.#emitter.emit("exit", null, sig);
-              const s = sig === "SIGHUP" ? this.#hupSig : sig;
-              if (!ret)
-                process5.kill(process5.pid, s);
-            }
-          };
-        }
-        this.#originalProcessReallyExit = process5.reallyExit;
-        this.#originalProcessEmit = process5.emit;
-      }
-      onExit(cb, opts) {
-        if (!processOk(this.#process)) {
-          return () => {
-          };
-        }
-        if (this.#loaded === false) {
-          this.load();
-        }
-        const ev = opts?.alwaysLast ? "afterExit" : "exit";
-        this.#emitter.on(ev, cb);
-        return () => {
-          this.#emitter.removeListener(ev, cb);
-          if (this.#emitter.listeners["exit"].length === 0 && this.#emitter.listeners["afterExit"].length === 0) {
-            this.unload();
-          }
-        };
-      }
-      load() {
-        if (this.#loaded) {
-          return;
-        }
-        this.#loaded = true;
-        this.#emitter.count += 1;
-        for (const sig of signals_js_1.signals) {
-          try {
-            const fn = this.#sigListeners[sig];
-            if (fn)
-              this.#process.on(sig, fn);
-          } catch (_) {
-          }
-        }
-        this.#process.emit = (ev, ...a) => {
-          return this.#processEmit(ev, ...a);
-        };
-        this.#process.reallyExit = (code) => {
-          return this.#processReallyExit(code);
-        };
-      }
-      unload() {
-        if (!this.#loaded) {
-          return;
-        }
-        this.#loaded = false;
-        signals_js_1.signals.forEach((sig) => {
-          const listener = this.#sigListeners[sig];
-          if (!listener) {
-            throw new Error("Listener not defined for signal: " + sig);
-          }
-          try {
-            this.#process.removeListener(sig, listener);
-          } catch (_) {
-          }
-        });
-        this.#process.emit = this.#originalProcessEmit;
-        this.#process.reallyExit = this.#originalProcessReallyExit;
-        this.#emitter.count -= 1;
-      }
-      #processReallyExit(code) {
-        if (!processOk(this.#process)) {
-          return 0;
-        }
-        this.#process.exitCode = code || 0;
-        this.#emitter.emit("exit", this.#process.exitCode, null);
-        return this.#originalProcessReallyExit.call(this.#process, this.#process.exitCode);
-      }
-      #processEmit(ev, ...args) {
-        const og = this.#originalProcessEmit;
-        if (ev === "exit" && processOk(this.#process)) {
-          if (typeof args[0] === "number") {
-            this.#process.exitCode = args[0];
-          }
-          const ret = og.call(this.#process, ev, ...args);
-          this.#emitter.emit("exit", this.#process.exitCode, null);
-          return ret;
-        } else {
-          return og.call(this.#process, ev, ...args);
-        }
-      }
-    };
-    var process4 = globalThis.process;
-    _a3 = signalExitWrap(processOk(process4) ? new SignalExit(process4) : new SignalExitFallback()), /**
-     * Called when the process is exiting, whether via signal, explicit
-     * exit, or running out of stuff to do.
-     *
-     * If the global process object is not suitable for instrumentation,
-     * then this will be a no-op.
-     *
-     * Returns a function that may be used to unload signal-exit.
-     */
-    exports.onExit = _a3.onExit, /**
-     * Load the listeners.  Likely you never need to call this, unless
-     * doing a rather deep integration with signal-exit functionality.
-     * Mostly exposed for the benefit of testing.
-     *
-     * @internal
-     */
-    exports.load = _a3.load, /**
-     * Unload the listeners.  Likely you never need to call this, unless
-     * doing a rather deep integration with signal-exit functionality.
-     * Mostly exposed for the benefit of testing.
-     *
-     * @internal
-     */
-    exports.unload = _a3.unload;
-  }
-});
-
-// node_modules/write-file-atomic/lib/index.js
+// node_modules/boundary/lib/index.js
 var require_lib = __commonJS({
-  "node_modules/write-file-atomic/lib/index.js"(exports, module) {
+  "node_modules/boundary/lib/index.js"(exports) {
     "use strict";
-    module.exports = writeFile3;
-    module.exports.sync = writeFileSync;
-    module.exports._getTmpname = getTmpname;
-    module.exports._cleanupOnExit = cleanupOnExit;
-    var fs = __require("fs");
-    var crypto = __require("node:crypto");
-    var { onExit } = require_cjs();
-    var path2 = __require("path");
-    var { promisify } = __require("util");
-    var activeFiles = {};
-    var threadId = (function getId() {
-      try {
-        const workerThreads = __require("worker_threads");
-        return workerThreads.threadId;
-      } catch (e) {
-        return 0;
-      }
-    })();
-    var invocations = 0;
-    function getTmpname(filename) {
-      return filename + "." + crypto.createHash("sha1").update(__filename).update(String(process.pid)).update(String(threadId)).update(String(++invocations)).digest().readUInt32BE(0);
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.binarySearch = exports.upperBound = exports.lowerBound = exports.compare = void 0;
+    function compare(v1, v2) {
+      return v1 < v2;
     }
-    function cleanupOnExit(tmpfile) {
+    exports.compare = compare;
+    function upperBound(array2, value, comp = compare) {
+      let len = array2.length;
+      let i = 0;
+      while (len) {
+        let diff = len >>> 1;
+        let cursor = i + diff;
+        if (comp(value, array2[cursor])) {
+          len = diff;
+        } else {
+          i = cursor + 1;
+          len -= diff + 1;
+        }
+      }
+      return i;
+    }
+    exports.upperBound = upperBound;
+    function lowerBound(array2, value, comp = compare) {
+      let len = array2.length;
+      let i = 0;
+      while (len) {
+        let diff = len >>> 1;
+        let cursor = i + diff;
+        if (comp(array2[cursor], value)) {
+          i = cursor + 1;
+          len -= diff + 1;
+        } else {
+          len = diff;
+        }
+      }
+      return i;
+    }
+    exports.lowerBound = lowerBound;
+    function binarySearch(array2, value, comp = compare) {
+      let cursor = lowerBound(array2, value, comp);
+      return cursor !== array2.length && !comp(value, array2[cursor]);
+    }
+    exports.binarySearch = binarySearch;
+  }
+});
+
+// node_modules/structured-source/lib/structured-source.js
+var require_structured_source = __commonJS({
+  "node_modules/structured-source/lib/structured-source.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.StructuredSource = void 0;
+    var boundary_1 = require_lib();
+    var StructuredSource2 = class {
+      /**
+       * @constructs StructuredSource
+       * @param {string} source - source code text.
+       */
+      constructor(source) {
+        this.indice = [0];
+        let regexp = /[\r\n\u2028\u2029]/g;
+        const length = source.length;
+        regexp.lastIndex = 0;
+        while (true) {
+          let result = regexp.exec(source);
+          if (!result) {
+            break;
+          }
+          let index = result.index;
+          if (source.charCodeAt(index) === 13 && source.charCodeAt(index + 1) === 10) {
+            index += 1;
+          }
+          let nextIndex = index + 1;
+          if (length < nextIndex) {
+            break;
+          }
+          this.indice.push(nextIndex);
+          regexp.lastIndex = nextIndex;
+        }
+      }
+      get line() {
+        return this.indice.length;
+      }
+      /**
+       * @param {SourceLocation} loc - location indicator.
+       * @return {[ number, number ]} range.
+       */
+      locationToRange(loc) {
+        return [this.positionToIndex(loc.start), this.positionToIndex(loc.end)];
+      }
+      /**
+       * @param {[ number, number ]} range - pair of indice.
+       * @return {SourceLocation} location.
+       */
+      rangeToLocation(range) {
+        return {
+          start: this.indexToPosition(range[0]),
+          end: this.indexToPosition(range[1])
+        };
+      }
+      /**
+       * @param {SourcePosition} pos - position indicator.
+       * @return {number} index.
+       */
+      positionToIndex(pos) {
+        let start = this.indice[pos.line - 1];
+        return start + pos.column;
+      }
+      /**
+       * @param {number} index - index to the source code.
+       * @return {SourcePosition} position.
+       */
+      indexToPosition(index) {
+        const startLine = (0, boundary_1.upperBound)(this.indice, index);
+        return {
+          line: startLine,
+          column: index - this.indice[startLine - 1]
+        };
+      }
+    };
+    exports.StructuredSource = StructuredSource2;
+  }
+});
+
+// node_modules/ms/index.js
+var require_ms = __commonJS({
+  "node_modules/ms/index.js"(exports, module) {
+    var s = 1e3;
+    var m = s * 60;
+    var h = m * 60;
+    var d = h * 24;
+    var w = d * 7;
+    var y = d * 365.25;
+    module.exports = function(val, options) {
+      options = options || {};
+      var type = typeof val;
+      if (type === "string" && val.length > 0) {
+        return parse3(val);
+      } else if (type === "number" && isFinite(val)) {
+        return options.long ? fmtLong(val) : fmtShort(val);
+      }
+      throw new Error(
+        "val is not a non-empty string or a valid number. val=" + JSON.stringify(val)
+      );
+    };
+    function parse3(str) {
+      str = String(str);
+      if (str.length > 100) {
+        return;
+      }
+      var match = /^(-?(?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)?$/i.exec(
+        str
+      );
+      if (!match) {
+        return;
+      }
+      var n = parseFloat(match[1]);
+      var type = (match[2] || "ms").toLowerCase();
+      switch (type) {
+        case "years":
+        case "year":
+        case "yrs":
+        case "yr":
+        case "y":
+          return n * y;
+        case "weeks":
+        case "week":
+        case "w":
+          return n * w;
+        case "days":
+        case "day":
+        case "d":
+          return n * d;
+        case "hours":
+        case "hour":
+        case "hrs":
+        case "hr":
+        case "h":
+          return n * h;
+        case "minutes":
+        case "minute":
+        case "mins":
+        case "min":
+        case "m":
+          return n * m;
+        case "seconds":
+        case "second":
+        case "secs":
+        case "sec":
+        case "s":
+          return n * s;
+        case "milliseconds":
+        case "millisecond":
+        case "msecs":
+        case "msec":
+        case "ms":
+          return n;
+        default:
+          return void 0;
+      }
+    }
+    function fmtShort(ms) {
+      var msAbs = Math.abs(ms);
+      if (msAbs >= d) {
+        return Math.round(ms / d) + "d";
+      }
+      if (msAbs >= h) {
+        return Math.round(ms / h) + "h";
+      }
+      if (msAbs >= m) {
+        return Math.round(ms / m) + "m";
+      }
+      if (msAbs >= s) {
+        return Math.round(ms / s) + "s";
+      }
+      return ms + "ms";
+    }
+    function fmtLong(ms) {
+      var msAbs = Math.abs(ms);
+      if (msAbs >= d) {
+        return plural(ms, msAbs, d, "day");
+      }
+      if (msAbs >= h) {
+        return plural(ms, msAbs, h, "hour");
+      }
+      if (msAbs >= m) {
+        return plural(ms, msAbs, m, "minute");
+      }
+      if (msAbs >= s) {
+        return plural(ms, msAbs, s, "second");
+      }
+      return ms + " ms";
+    }
+    function plural(ms, msAbs, n, name) {
+      var isPlural = msAbs >= n * 1.5;
+      return Math.round(ms / n) + " " + name + (isPlural ? "s" : "");
+    }
+  }
+});
+
+// node_modules/debug/src/common.js
+var require_common = __commonJS({
+  "node_modules/debug/src/common.js"(exports, module) {
+    function setup(env) {
+      createDebug.debug = createDebug;
+      createDebug.default = createDebug;
+      createDebug.coerce = coerce;
+      createDebug.disable = disable;
+      createDebug.enable = enable;
+      createDebug.enabled = enabled;
+      createDebug.humanize = require_ms();
+      createDebug.destroy = destroy;
+      Object.keys(env).forEach((key) => {
+        createDebug[key] = env[key];
+      });
+      createDebug.names = [];
+      createDebug.skips = [];
+      createDebug.formatters = {};
+      function selectColor(namespace) {
+        let hash2 = 0;
+        for (let i = 0; i < namespace.length; i++) {
+          hash2 = (hash2 << 5) - hash2 + namespace.charCodeAt(i);
+          hash2 |= 0;
+        }
+        return createDebug.colors[Math.abs(hash2) % createDebug.colors.length];
+      }
+      createDebug.selectColor = selectColor;
+      function createDebug(namespace) {
+        let prevTime;
+        let enableOverride = null;
+        let namespacesCache;
+        let enabledCache;
+        function debug2(...args) {
+          if (!debug2.enabled) {
+            return;
+          }
+          const self2 = debug2;
+          const curr = Number(/* @__PURE__ */ new Date());
+          const ms = curr - (prevTime || curr);
+          self2.diff = ms;
+          self2.prev = prevTime;
+          self2.curr = curr;
+          prevTime = curr;
+          args[0] = createDebug.coerce(args[0]);
+          if (typeof args[0] !== "string") {
+            args.unshift("%O");
+          }
+          let index = 0;
+          args[0] = args[0].replace(/%([a-zA-Z%])/g, (match, format) => {
+            if (match === "%%") {
+              return "%";
+            }
+            index++;
+            const formatter = createDebug.formatters[format];
+            if (typeof formatter === "function") {
+              const val = args[index];
+              match = formatter.call(self2, val);
+              args.splice(index, 1);
+              index--;
+            }
+            return match;
+          });
+          createDebug.formatArgs.call(self2, args);
+          const logFn = self2.log || createDebug.log;
+          logFn.apply(self2, args);
+        }
+        debug2.namespace = namespace;
+        debug2.useColors = createDebug.useColors();
+        debug2.color = createDebug.selectColor(namespace);
+        debug2.extend = extend2;
+        debug2.destroy = createDebug.destroy;
+        Object.defineProperty(debug2, "enabled", {
+          enumerable: true,
+          configurable: false,
+          get: () => {
+            if (enableOverride !== null) {
+              return enableOverride;
+            }
+            if (namespacesCache !== createDebug.namespaces) {
+              namespacesCache = createDebug.namespaces;
+              enabledCache = createDebug.enabled(namespace);
+            }
+            return enabledCache;
+          },
+          set: (v) => {
+            enableOverride = v;
+          }
+        });
+        if (typeof createDebug.init === "function") {
+          createDebug.init(debug2);
+        }
+        return debug2;
+      }
+      function extend2(namespace, delimiter) {
+        const newDebug = createDebug(this.namespace + (typeof delimiter === "undefined" ? ":" : delimiter) + namespace);
+        newDebug.log = this.log;
+        return newDebug;
+      }
+      function enable(namespaces) {
+        createDebug.save(namespaces);
+        createDebug.namespaces = namespaces;
+        createDebug.names = [];
+        createDebug.skips = [];
+        const split = (typeof namespaces === "string" ? namespaces : "").trim().replace(/\s+/g, ",").split(",").filter(Boolean);
+        for (const ns of split) {
+          if (ns[0] === "-") {
+            createDebug.skips.push(ns.slice(1));
+          } else {
+            createDebug.names.push(ns);
+          }
+        }
+      }
+      function matchesTemplate(search, template) {
+        let searchIndex = 0;
+        let templateIndex = 0;
+        let starIndex = -1;
+        let matchIndex = 0;
+        while (searchIndex < search.length) {
+          if (templateIndex < template.length && (template[templateIndex] === search[searchIndex] || template[templateIndex] === "*")) {
+            if (template[templateIndex] === "*") {
+              starIndex = templateIndex;
+              matchIndex = searchIndex;
+              templateIndex++;
+            } else {
+              searchIndex++;
+              templateIndex++;
+            }
+          } else if (starIndex !== -1) {
+            templateIndex = starIndex + 1;
+            matchIndex++;
+            searchIndex = matchIndex;
+          } else {
+            return false;
+          }
+        }
+        while (templateIndex < template.length && template[templateIndex] === "*") {
+          templateIndex++;
+        }
+        return templateIndex === template.length;
+      }
+      function disable() {
+        const namespaces = [
+          ...createDebug.names,
+          ...createDebug.skips.map((namespace) => "-" + namespace)
+        ].join(",");
+        createDebug.enable("");
+        return namespaces;
+      }
+      function enabled(name) {
+        for (const skip of createDebug.skips) {
+          if (matchesTemplate(name, skip)) {
+            return false;
+          }
+        }
+        for (const ns of createDebug.names) {
+          if (matchesTemplate(name, ns)) {
+            return true;
+          }
+        }
+        return false;
+      }
+      function coerce(val) {
+        if (val instanceof Error) {
+          return val.stack || val.message;
+        }
+        return val;
+      }
+      function destroy() {
+        console.warn("Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.");
+      }
+      createDebug.enable(createDebug.load());
+      return createDebug;
+    }
+    module.exports = setup;
+  }
+});
+
+// node_modules/debug/src/browser.js
+var require_browser = __commonJS({
+  "node_modules/debug/src/browser.js"(exports, module) {
+    exports.formatArgs = formatArgs;
+    exports.save = save;
+    exports.load = load;
+    exports.useColors = useColors;
+    exports.storage = localstorage();
+    exports.destroy = /* @__PURE__ */ (() => {
+      let warned = false;
       return () => {
-        try {
-          fs.unlinkSync(typeof tmpfile === "function" ? tmpfile() : tmpfile);
-        } catch {
+        if (!warned) {
+          warned = true;
+          console.warn("Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.");
         }
       };
-    }
-    function serializeActiveFile(absoluteName) {
-      return new Promise((resolve2) => {
-        if (!activeFiles[absoluteName]) {
-          activeFiles[absoluteName] = [];
-        }
-        activeFiles[absoluteName].push(resolve2);
-        if (activeFiles[absoluteName].length === 1) {
-          resolve2();
-        }
-      });
-    }
-    function isChownErrOk(err) {
-      if (err.code === "ENOSYS") {
+    })();
+    exports.colors = [
+      "#0000CC",
+      "#0000FF",
+      "#0033CC",
+      "#0033FF",
+      "#0066CC",
+      "#0066FF",
+      "#0099CC",
+      "#0099FF",
+      "#00CC00",
+      "#00CC33",
+      "#00CC66",
+      "#00CC99",
+      "#00CCCC",
+      "#00CCFF",
+      "#3300CC",
+      "#3300FF",
+      "#3333CC",
+      "#3333FF",
+      "#3366CC",
+      "#3366FF",
+      "#3399CC",
+      "#3399FF",
+      "#33CC00",
+      "#33CC33",
+      "#33CC66",
+      "#33CC99",
+      "#33CCCC",
+      "#33CCFF",
+      "#6600CC",
+      "#6600FF",
+      "#6633CC",
+      "#6633FF",
+      "#66CC00",
+      "#66CC33",
+      "#9900CC",
+      "#9900FF",
+      "#9933CC",
+      "#9933FF",
+      "#99CC00",
+      "#99CC33",
+      "#CC0000",
+      "#CC0033",
+      "#CC0066",
+      "#CC0099",
+      "#CC00CC",
+      "#CC00FF",
+      "#CC3300",
+      "#CC3333",
+      "#CC3366",
+      "#CC3399",
+      "#CC33CC",
+      "#CC33FF",
+      "#CC6600",
+      "#CC6633",
+      "#CC9900",
+      "#CC9933",
+      "#CCCC00",
+      "#CCCC33",
+      "#FF0000",
+      "#FF0033",
+      "#FF0066",
+      "#FF0099",
+      "#FF00CC",
+      "#FF00FF",
+      "#FF3300",
+      "#FF3333",
+      "#FF3366",
+      "#FF3399",
+      "#FF33CC",
+      "#FF33FF",
+      "#FF6600",
+      "#FF6633",
+      "#FF9900",
+      "#FF9933",
+      "#FFCC00",
+      "#FFCC33"
+    ];
+    function useColors() {
+      if (typeof window !== "undefined" && window.process && (window.process.type === "renderer" || window.process.__nwjs)) {
         return true;
       }
-      const nonroot = !process.getuid || process.getuid() !== 0;
-      if (nonroot) {
-        if (err.code === "EINVAL" || err.code === "EPERM") {
-          return true;
-        }
+      if (typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/(edge|trident)\/(\d+)/)) {
+        return false;
       }
-      return false;
+      let m;
+      return typeof document !== "undefined" && document.documentElement && document.documentElement.style && document.documentElement.style.WebkitAppearance || // Is firebug? http://stackoverflow.com/a/398120/376773
+      typeof window !== "undefined" && window.console && (window.console.firebug || window.console.exception && window.console.table) || // Is firefox >= v31?
+      // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
+      typeof navigator !== "undefined" && navigator.userAgent && (m = navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/)) && parseInt(m[1], 10) >= 31 || // Double check webkit in userAgent just in case we are in a worker
+      typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/);
     }
-    async function writeFileAsync(filename, data, options = {}) {
-      if (typeof options === "string") {
-        options = { encoding: options };
+    function formatArgs(args) {
+      args[0] = (this.useColors ? "%c" : "") + this.namespace + (this.useColors ? " %c" : " ") + args[0] + (this.useColors ? "%c " : " ") + "+" + module.exports.humanize(this.diff);
+      if (!this.useColors) {
+        return;
       }
-      let fd;
-      let tmpfile;
-      const removeOnExitHandler = onExit(cleanupOnExit(() => tmpfile));
-      const absoluteName = path2.resolve(filename);
+      const c = "color: " + this.color;
+      args.splice(1, 0, c, "color: inherit");
+      let index = 0;
+      let lastC = 0;
+      args[0].replace(/%[a-zA-Z%]/g, (match) => {
+        if (match === "%%") {
+          return;
+        }
+        index++;
+        if (match === "%c") {
+          lastC = index;
+        }
+      });
+      args.splice(lastC, 0, c);
+    }
+    exports.log = console.debug || console.log || (() => {
+    });
+    function save(namespaces) {
       try {
-        await serializeActiveFile(absoluteName);
-        const truename = await promisify(fs.realpath)(filename).catch(() => filename);
-        tmpfile = getTmpname(truename);
-        if (!options.mode || !options.chown) {
-          const stats = await promisify(fs.stat)(truename).catch(() => {
-          });
-          if (stats) {
-            if (options.mode == null) {
-              options.mode = stats.mode;
-            }
-            if (options.chown == null && process.getuid) {
-              options.chown = { uid: stats.uid, gid: stats.gid };
-            }
-          }
-        }
-        fd = await promisify(fs.open)(tmpfile, "w", options.mode);
-        if (options.tmpfileCreated) {
-          await options.tmpfileCreated(tmpfile);
-        }
-        if (ArrayBuffer.isView(data)) {
-          await promisify(fs.write)(fd, data, 0, data.length, 0);
-        } else if (data != null) {
-          await promisify(fs.write)(fd, String(data), 0, String(options.encoding || "utf8"));
-        }
-        if (options.fsync !== false) {
-          await promisify(fs.fsync)(fd);
-        }
-        await promisify(fs.close)(fd);
-        fd = null;
-        if (options.chown) {
-          await promisify(fs.chown)(tmpfile, options.chown.uid, options.chown.gid).catch((err) => {
-            if (!isChownErrOk(err)) {
-              throw err;
-            }
-          });
-        }
-        if (options.mode) {
-          await promisify(fs.chmod)(tmpfile, options.mode).catch((err) => {
-            if (!isChownErrOk(err)) {
-              throw err;
-            }
-          });
-        }
-        await promisify(fs.rename)(tmpfile, truename);
-      } finally {
-        if (fd) {
-          await promisify(fs.close)(fd).catch(
-            /* istanbul ignore next */
-            () => {
-            }
-          );
-        }
-        removeOnExitHandler();
-        await promisify(fs.unlink)(tmpfile).catch(() => {
-        });
-        activeFiles[absoluteName].shift();
-        if (activeFiles[absoluteName].length > 0) {
-          activeFiles[absoluteName][0]();
+        if (namespaces) {
+          exports.storage.setItem("debug", namespaces);
         } else {
-          delete activeFiles[absoluteName];
+          exports.storage.removeItem("debug");
         }
+      } catch (error51) {
       }
     }
-    async function writeFile3(filename, data, options, callback) {
-      if (options instanceof Function) {
-        callback = options;
-        options = {};
+    function load() {
+      let r;
+      try {
+        r = exports.storage.getItem("debug") || exports.storage.getItem("DEBUG");
+      } catch (error51) {
       }
-      const promise2 = writeFileAsync(filename, data, options);
-      if (callback) {
-        try {
-          const result = await promise2;
-          return callback(result);
-        } catch (err) {
-          return callback(err);
-        }
+      if (!r && typeof process !== "undefined" && "env" in process) {
+        r = process.env.DEBUG;
       }
-      return promise2;
+      return r;
     }
-    function writeFileSync(filename, data, options) {
-      if (typeof options === "string") {
-        options = { encoding: options };
-      } else if (!options) {
-        options = {};
-      }
+    function localstorage() {
       try {
-        filename = fs.realpathSync(filename);
-      } catch (ex) {
+        return localStorage;
+      } catch (error51) {
       }
-      const tmpfile = getTmpname(filename);
-      if (!options.mode || !options.chown) {
-        try {
-          const stats = fs.statSync(filename);
-          options = Object.assign({}, options);
-          if (!options.mode) {
-            options.mode = stats.mode;
-          }
-          if (!options.chown && process.getuid) {
-            options.chown = { uid: stats.uid, gid: stats.gid };
-          }
-        } catch (ex) {
-        }
-      }
-      let fd;
-      const cleanup = cleanupOnExit(tmpfile);
-      const removeOnExitHandler = onExit(cleanup);
-      let threw = true;
+    }
+    module.exports = require_common()(exports);
+    var { formatters } = module.exports;
+    formatters.j = function(v) {
       try {
-        fd = fs.openSync(tmpfile, "w", options.mode || 438);
-        if (options.tmpfileCreated) {
-          options.tmpfileCreated(tmpfile);
-        }
-        if (ArrayBuffer.isView(data)) {
-          fs.writeSync(fd, data, 0, data.length, 0);
-        } else if (data != null) {
-          fs.writeSync(fd, String(data), 0, String(options.encoding || "utf8"));
-        }
-        if (options.fsync !== false) {
-          fs.fsyncSync(fd);
-        }
-        fs.closeSync(fd);
-        fd = null;
-        if (options.chown) {
-          try {
-            fs.chownSync(tmpfile, options.chown.uid, options.chown.gid);
-          } catch (err) {
-            if (!isChownErrOk(err)) {
-              throw err;
-            }
-          }
-        }
-        if (options.mode) {
-          try {
-            fs.chmodSync(tmpfile, options.mode);
-          } catch (err) {
-            if (!isChownErrOk(err)) {
-              throw err;
-            }
-          }
-        }
-        fs.renameSync(tmpfile, filename);
-        threw = false;
-      } finally {
-        if (fd) {
-          try {
-            fs.closeSync(fd);
-          } catch (ex) {
-          }
-        }
-        removeOnExitHandler();
-        if (threw) {
-          cleanup();
-        }
+        return JSON.stringify(v);
+      } catch (error51) {
+        return "[UnexpectedJSONParseError]: " + error51.message;
       }
+    };
+  }
+});
+
+// node_modules/debug/src/node.js
+var require_node = __commonJS({
+  "node_modules/debug/src/node.js"(exports, module) {
+    var tty = __require("tty");
+    var util = __require("util");
+    exports.init = init;
+    exports.log = log;
+    exports.formatArgs = formatArgs;
+    exports.save = save;
+    exports.load = load;
+    exports.useColors = useColors;
+    exports.destroy = util.deprecate(
+      () => {
+      },
+      "Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`."
+    );
+    exports.colors = [6, 2, 3, 4, 5, 1];
+    try {
+      const supportsColor = __require("supports-color");
+      if (supportsColor && (supportsColor.stderr || supportsColor).level >= 2) {
+        exports.colors = [
+          20,
+          21,
+          26,
+          27,
+          32,
+          33,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          56,
+          57,
+          62,
+          63,
+          68,
+          69,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          92,
+          93,
+          98,
+          99,
+          112,
+          113,
+          128,
+          129,
+          134,
+          135,
+          148,
+          149,
+          160,
+          161,
+          162,
+          163,
+          164,
+          165,
+          166,
+          167,
+          168,
+          169,
+          170,
+          171,
+          172,
+          173,
+          178,
+          179,
+          184,
+          185,
+          196,
+          197,
+          198,
+          199,
+          200,
+          201,
+          202,
+          203,
+          204,
+          205,
+          206,
+          207,
+          208,
+          209,
+          214,
+          215,
+          220,
+          221
+        ];
+      }
+    } catch (error51) {
+    }
+    exports.inspectOpts = Object.keys(process.env).filter((key) => {
+      return /^debug_/i.test(key);
+    }).reduce((obj, key) => {
+      const prop = key.substring(6).toLowerCase().replace(/_([a-z])/g, (_, k) => {
+        return k.toUpperCase();
+      });
+      let val = process.env[key];
+      if (/^(yes|on|true|enabled)$/i.test(val)) {
+        val = true;
+      } else if (/^(no|off|false|disabled)$/i.test(val)) {
+        val = false;
+      } else if (val === "null") {
+        val = null;
+      } else {
+        val = Number(val);
+      }
+      obj[prop] = val;
+      return obj;
+    }, {});
+    function useColors() {
+      return "colors" in exports.inspectOpts ? Boolean(exports.inspectOpts.colors) : tty.isatty(process.stderr.fd);
+    }
+    function formatArgs(args) {
+      const { namespace: name, useColors: useColors2 } = this;
+      if (useColors2) {
+        const c = this.color;
+        const colorCode = "\x1B[3" + (c < 8 ? c : "8;5;" + c);
+        const prefix = `  ${colorCode};1m${name} \x1B[0m`;
+        args[0] = prefix + args[0].split("\n").join("\n" + prefix);
+        args.push(colorCode + "m+" + module.exports.humanize(this.diff) + "\x1B[0m");
+      } else {
+        args[0] = getDate() + name + " " + args[0];
+      }
+    }
+    function getDate() {
+      if (exports.inspectOpts.hideDate) {
+        return "";
+      }
+      return (/* @__PURE__ */ new Date()).toISOString() + " ";
+    }
+    function log(...args) {
+      return process.stderr.write(util.formatWithOptions(exports.inspectOpts, ...args) + "\n");
+    }
+    function save(namespaces) {
+      if (namespaces) {
+        process.env.DEBUG = namespaces;
+      } else {
+        delete process.env.DEBUG;
+      }
+    }
+    function load() {
+      return process.env.DEBUG;
+    }
+    function init(debug2) {
+      debug2.inspectOpts = {};
+      const keys = Object.keys(exports.inspectOpts);
+      for (let i = 0; i < keys.length; i++) {
+        debug2.inspectOpts[keys[i]] = exports.inspectOpts[keys[i]];
+      }
+    }
+    module.exports = require_common()(exports);
+    var { formatters } = module.exports;
+    formatters.o = function(v) {
+      this.inspectOpts.colors = this.useColors;
+      return util.inspect(v, this.inspectOpts).split("\n").map((str) => str.trim()).join(" ");
+    };
+    formatters.O = function(v) {
+      this.inspectOpts.colors = this.useColors;
+      return util.inspect(v, this.inspectOpts);
+    };
+  }
+});
+
+// node_modules/debug/src/index.js
+var require_src = __commonJS({
+  "node_modules/debug/src/index.js"(exports, module) {
+    if (typeof process === "undefined" || process.type === "renderer" || process.browser === true || process.__nwjs) {
+      module.exports = require_browser();
+    } else {
+      module.exports = require_node();
     }
   }
 });
@@ -13060,8 +13352,8 @@ var require_resolve_flow_scalar = __commonJS({
     };
     function parseCharCode(source, offset, length, onError) {
       const cc = source.substr(offset, length);
-      const ok22 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
-      const code = ok22 ? parseInt(cc, 16) : NaN;
+      const ok27 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
+      const code = ok27 ? parseInt(cc, 16) : NaN;
       try {
         return String.fromCodePoint(code);
       } catch {
@@ -14643,12 +14935,12 @@ var require_parser = __commonJS({
       }
       return prev.splice(i, prev.length);
     }
-    function arrayPushArray(target, source) {
+    function arrayPushArray(target2, source) {
       if (source.length < 1e5)
-        Array.prototype.push.apply(target, source);
+        Array.prototype.push.apply(target2, source);
       else
         for (let i = 0; i < source.length; ++i)
-          target.push(source[i]);
+          target2.push(source[i]);
     }
     function fixFlowSeqItems(fc) {
       if (fc.start.type === "flow-seq-start") {
@@ -15595,782 +15887,6 @@ var require_dist2 = __commonJS({
   }
 });
 
-// node_modules/boundary/lib/index.js
-var require_lib2 = __commonJS({
-  "node_modules/boundary/lib/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.binarySearch = exports.upperBound = exports.lowerBound = exports.compare = void 0;
-    function compare(v1, v2) {
-      return v1 < v2;
-    }
-    exports.compare = compare;
-    function upperBound(array2, value, comp = compare) {
-      let len = array2.length;
-      let i = 0;
-      while (len) {
-        let diff = len >>> 1;
-        let cursor = i + diff;
-        if (comp(value, array2[cursor])) {
-          len = diff;
-        } else {
-          i = cursor + 1;
-          len -= diff + 1;
-        }
-      }
-      return i;
-    }
-    exports.upperBound = upperBound;
-    function lowerBound(array2, value, comp = compare) {
-      let len = array2.length;
-      let i = 0;
-      while (len) {
-        let diff = len >>> 1;
-        let cursor = i + diff;
-        if (comp(array2[cursor], value)) {
-          i = cursor + 1;
-          len -= diff + 1;
-        } else {
-          len = diff;
-        }
-      }
-      return i;
-    }
-    exports.lowerBound = lowerBound;
-    function binarySearch(array2, value, comp = compare) {
-      let cursor = lowerBound(array2, value, comp);
-      return cursor !== array2.length && !comp(value, array2[cursor]);
-    }
-    exports.binarySearch = binarySearch;
-  }
-});
-
-// node_modules/structured-source/lib/structured-source.js
-var require_structured_source = __commonJS({
-  "node_modules/structured-source/lib/structured-source.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.StructuredSource = void 0;
-    var boundary_1 = require_lib2();
-    var StructuredSource2 = class {
-      /**
-       * @constructs StructuredSource
-       * @param {string} source - source code text.
-       */
-      constructor(source) {
-        this.indice = [0];
-        let regexp = /[\r\n\u2028\u2029]/g;
-        const length = source.length;
-        regexp.lastIndex = 0;
-        while (true) {
-          let result = regexp.exec(source);
-          if (!result) {
-            break;
-          }
-          let index = result.index;
-          if (source.charCodeAt(index) === 13 && source.charCodeAt(index + 1) === 10) {
-            index += 1;
-          }
-          let nextIndex = index + 1;
-          if (length < nextIndex) {
-            break;
-          }
-          this.indice.push(nextIndex);
-          regexp.lastIndex = nextIndex;
-        }
-      }
-      get line() {
-        return this.indice.length;
-      }
-      /**
-       * @param {SourceLocation} loc - location indicator.
-       * @return {[ number, number ]} range.
-       */
-      locationToRange(loc) {
-        return [this.positionToIndex(loc.start), this.positionToIndex(loc.end)];
-      }
-      /**
-       * @param {[ number, number ]} range - pair of indice.
-       * @return {SourceLocation} location.
-       */
-      rangeToLocation(range) {
-        return {
-          start: this.indexToPosition(range[0]),
-          end: this.indexToPosition(range[1])
-        };
-      }
-      /**
-       * @param {SourcePosition} pos - position indicator.
-       * @return {number} index.
-       */
-      positionToIndex(pos) {
-        let start = this.indice[pos.line - 1];
-        return start + pos.column;
-      }
-      /**
-       * @param {number} index - index to the source code.
-       * @return {SourcePosition} position.
-       */
-      indexToPosition(index) {
-        const startLine = (0, boundary_1.upperBound)(this.indice, index);
-        return {
-          line: startLine,
-          column: index - this.indice[startLine - 1]
-        };
-      }
-    };
-    exports.StructuredSource = StructuredSource2;
-  }
-});
-
-// node_modules/ms/index.js
-var require_ms = __commonJS({
-  "node_modules/ms/index.js"(exports, module) {
-    var s = 1e3;
-    var m = s * 60;
-    var h = m * 60;
-    var d = h * 24;
-    var w = d * 7;
-    var y = d * 365.25;
-    module.exports = function(val, options) {
-      options = options || {};
-      var type = typeof val;
-      if (type === "string" && val.length > 0) {
-        return parse3(val);
-      } else if (type === "number" && isFinite(val)) {
-        return options.long ? fmtLong(val) : fmtShort(val);
-      }
-      throw new Error(
-        "val is not a non-empty string or a valid number. val=" + JSON.stringify(val)
-      );
-    };
-    function parse3(str) {
-      str = String(str);
-      if (str.length > 100) {
-        return;
-      }
-      var match = /^(-?(?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)?$/i.exec(
-        str
-      );
-      if (!match) {
-        return;
-      }
-      var n = parseFloat(match[1]);
-      var type = (match[2] || "ms").toLowerCase();
-      switch (type) {
-        case "years":
-        case "year":
-        case "yrs":
-        case "yr":
-        case "y":
-          return n * y;
-        case "weeks":
-        case "week":
-        case "w":
-          return n * w;
-        case "days":
-        case "day":
-        case "d":
-          return n * d;
-        case "hours":
-        case "hour":
-        case "hrs":
-        case "hr":
-        case "h":
-          return n * h;
-        case "minutes":
-        case "minute":
-        case "mins":
-        case "min":
-        case "m":
-          return n * m;
-        case "seconds":
-        case "second":
-        case "secs":
-        case "sec":
-        case "s":
-          return n * s;
-        case "milliseconds":
-        case "millisecond":
-        case "msecs":
-        case "msec":
-        case "ms":
-          return n;
-        default:
-          return void 0;
-      }
-    }
-    function fmtShort(ms) {
-      var msAbs = Math.abs(ms);
-      if (msAbs >= d) {
-        return Math.round(ms / d) + "d";
-      }
-      if (msAbs >= h) {
-        return Math.round(ms / h) + "h";
-      }
-      if (msAbs >= m) {
-        return Math.round(ms / m) + "m";
-      }
-      if (msAbs >= s) {
-        return Math.round(ms / s) + "s";
-      }
-      return ms + "ms";
-    }
-    function fmtLong(ms) {
-      var msAbs = Math.abs(ms);
-      if (msAbs >= d) {
-        return plural(ms, msAbs, d, "day");
-      }
-      if (msAbs >= h) {
-        return plural(ms, msAbs, h, "hour");
-      }
-      if (msAbs >= m) {
-        return plural(ms, msAbs, m, "minute");
-      }
-      if (msAbs >= s) {
-        return plural(ms, msAbs, s, "second");
-      }
-      return ms + " ms";
-    }
-    function plural(ms, msAbs, n, name) {
-      var isPlural = msAbs >= n * 1.5;
-      return Math.round(ms / n) + " " + name + (isPlural ? "s" : "");
-    }
-  }
-});
-
-// node_modules/debug/src/common.js
-var require_common = __commonJS({
-  "node_modules/debug/src/common.js"(exports, module) {
-    function setup(env) {
-      createDebug.debug = createDebug;
-      createDebug.default = createDebug;
-      createDebug.coerce = coerce;
-      createDebug.disable = disable;
-      createDebug.enable = enable;
-      createDebug.enabled = enabled;
-      createDebug.humanize = require_ms();
-      createDebug.destroy = destroy;
-      Object.keys(env).forEach((key) => {
-        createDebug[key] = env[key];
-      });
-      createDebug.names = [];
-      createDebug.skips = [];
-      createDebug.formatters = {};
-      function selectColor(namespace) {
-        let hash2 = 0;
-        for (let i = 0; i < namespace.length; i++) {
-          hash2 = (hash2 << 5) - hash2 + namespace.charCodeAt(i);
-          hash2 |= 0;
-        }
-        return createDebug.colors[Math.abs(hash2) % createDebug.colors.length];
-      }
-      createDebug.selectColor = selectColor;
-      function createDebug(namespace) {
-        let prevTime;
-        let enableOverride = null;
-        let namespacesCache;
-        let enabledCache;
-        function debug2(...args) {
-          if (!debug2.enabled) {
-            return;
-          }
-          const self2 = debug2;
-          const curr = Number(/* @__PURE__ */ new Date());
-          const ms = curr - (prevTime || curr);
-          self2.diff = ms;
-          self2.prev = prevTime;
-          self2.curr = curr;
-          prevTime = curr;
-          args[0] = createDebug.coerce(args[0]);
-          if (typeof args[0] !== "string") {
-            args.unshift("%O");
-          }
-          let index = 0;
-          args[0] = args[0].replace(/%([a-zA-Z%])/g, (match, format) => {
-            if (match === "%%") {
-              return "%";
-            }
-            index++;
-            const formatter = createDebug.formatters[format];
-            if (typeof formatter === "function") {
-              const val = args[index];
-              match = formatter.call(self2, val);
-              args.splice(index, 1);
-              index--;
-            }
-            return match;
-          });
-          createDebug.formatArgs.call(self2, args);
-          const logFn = self2.log || createDebug.log;
-          logFn.apply(self2, args);
-        }
-        debug2.namespace = namespace;
-        debug2.useColors = createDebug.useColors();
-        debug2.color = createDebug.selectColor(namespace);
-        debug2.extend = extend2;
-        debug2.destroy = createDebug.destroy;
-        Object.defineProperty(debug2, "enabled", {
-          enumerable: true,
-          configurable: false,
-          get: () => {
-            if (enableOverride !== null) {
-              return enableOverride;
-            }
-            if (namespacesCache !== createDebug.namespaces) {
-              namespacesCache = createDebug.namespaces;
-              enabledCache = createDebug.enabled(namespace);
-            }
-            return enabledCache;
-          },
-          set: (v) => {
-            enableOverride = v;
-          }
-        });
-        if (typeof createDebug.init === "function") {
-          createDebug.init(debug2);
-        }
-        return debug2;
-      }
-      function extend2(namespace, delimiter) {
-        const newDebug = createDebug(this.namespace + (typeof delimiter === "undefined" ? ":" : delimiter) + namespace);
-        newDebug.log = this.log;
-        return newDebug;
-      }
-      function enable(namespaces) {
-        createDebug.save(namespaces);
-        createDebug.namespaces = namespaces;
-        createDebug.names = [];
-        createDebug.skips = [];
-        const split = (typeof namespaces === "string" ? namespaces : "").trim().replace(/\s+/g, ",").split(",").filter(Boolean);
-        for (const ns of split) {
-          if (ns[0] === "-") {
-            createDebug.skips.push(ns.slice(1));
-          } else {
-            createDebug.names.push(ns);
-          }
-        }
-      }
-      function matchesTemplate(search, template) {
-        let searchIndex = 0;
-        let templateIndex = 0;
-        let starIndex = -1;
-        let matchIndex = 0;
-        while (searchIndex < search.length) {
-          if (templateIndex < template.length && (template[templateIndex] === search[searchIndex] || template[templateIndex] === "*")) {
-            if (template[templateIndex] === "*") {
-              starIndex = templateIndex;
-              matchIndex = searchIndex;
-              templateIndex++;
-            } else {
-              searchIndex++;
-              templateIndex++;
-            }
-          } else if (starIndex !== -1) {
-            templateIndex = starIndex + 1;
-            matchIndex++;
-            searchIndex = matchIndex;
-          } else {
-            return false;
-          }
-        }
-        while (templateIndex < template.length && template[templateIndex] === "*") {
-          templateIndex++;
-        }
-        return templateIndex === template.length;
-      }
-      function disable() {
-        const namespaces = [
-          ...createDebug.names,
-          ...createDebug.skips.map((namespace) => "-" + namespace)
-        ].join(",");
-        createDebug.enable("");
-        return namespaces;
-      }
-      function enabled(name) {
-        for (const skip of createDebug.skips) {
-          if (matchesTemplate(name, skip)) {
-            return false;
-          }
-        }
-        for (const ns of createDebug.names) {
-          if (matchesTemplate(name, ns)) {
-            return true;
-          }
-        }
-        return false;
-      }
-      function coerce(val) {
-        if (val instanceof Error) {
-          return val.stack || val.message;
-        }
-        return val;
-      }
-      function destroy() {
-        console.warn("Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.");
-      }
-      createDebug.enable(createDebug.load());
-      return createDebug;
-    }
-    module.exports = setup;
-  }
-});
-
-// node_modules/debug/src/browser.js
-var require_browser = __commonJS({
-  "node_modules/debug/src/browser.js"(exports, module) {
-    exports.formatArgs = formatArgs;
-    exports.save = save;
-    exports.load = load;
-    exports.useColors = useColors;
-    exports.storage = localstorage();
-    exports.destroy = /* @__PURE__ */ (() => {
-      let warned = false;
-      return () => {
-        if (!warned) {
-          warned = true;
-          console.warn("Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.");
-        }
-      };
-    })();
-    exports.colors = [
-      "#0000CC",
-      "#0000FF",
-      "#0033CC",
-      "#0033FF",
-      "#0066CC",
-      "#0066FF",
-      "#0099CC",
-      "#0099FF",
-      "#00CC00",
-      "#00CC33",
-      "#00CC66",
-      "#00CC99",
-      "#00CCCC",
-      "#00CCFF",
-      "#3300CC",
-      "#3300FF",
-      "#3333CC",
-      "#3333FF",
-      "#3366CC",
-      "#3366FF",
-      "#3399CC",
-      "#3399FF",
-      "#33CC00",
-      "#33CC33",
-      "#33CC66",
-      "#33CC99",
-      "#33CCCC",
-      "#33CCFF",
-      "#6600CC",
-      "#6600FF",
-      "#6633CC",
-      "#6633FF",
-      "#66CC00",
-      "#66CC33",
-      "#9900CC",
-      "#9900FF",
-      "#9933CC",
-      "#9933FF",
-      "#99CC00",
-      "#99CC33",
-      "#CC0000",
-      "#CC0033",
-      "#CC0066",
-      "#CC0099",
-      "#CC00CC",
-      "#CC00FF",
-      "#CC3300",
-      "#CC3333",
-      "#CC3366",
-      "#CC3399",
-      "#CC33CC",
-      "#CC33FF",
-      "#CC6600",
-      "#CC6633",
-      "#CC9900",
-      "#CC9933",
-      "#CCCC00",
-      "#CCCC33",
-      "#FF0000",
-      "#FF0033",
-      "#FF0066",
-      "#FF0099",
-      "#FF00CC",
-      "#FF00FF",
-      "#FF3300",
-      "#FF3333",
-      "#FF3366",
-      "#FF3399",
-      "#FF33CC",
-      "#FF33FF",
-      "#FF6600",
-      "#FF6633",
-      "#FF9900",
-      "#FF9933",
-      "#FFCC00",
-      "#FFCC33"
-    ];
-    function useColors() {
-      if (typeof window !== "undefined" && window.process && (window.process.type === "renderer" || window.process.__nwjs)) {
-        return true;
-      }
-      if (typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/(edge|trident)\/(\d+)/)) {
-        return false;
-      }
-      let m;
-      return typeof document !== "undefined" && document.documentElement && document.documentElement.style && document.documentElement.style.WebkitAppearance || // Is firebug? http://stackoverflow.com/a/398120/376773
-      typeof window !== "undefined" && window.console && (window.console.firebug || window.console.exception && window.console.table) || // Is firefox >= v31?
-      // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
-      typeof navigator !== "undefined" && navigator.userAgent && (m = navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/)) && parseInt(m[1], 10) >= 31 || // Double check webkit in userAgent just in case we are in a worker
-      typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/);
-    }
-    function formatArgs(args) {
-      args[0] = (this.useColors ? "%c" : "") + this.namespace + (this.useColors ? " %c" : " ") + args[0] + (this.useColors ? "%c " : " ") + "+" + module.exports.humanize(this.diff);
-      if (!this.useColors) {
-        return;
-      }
-      const c = "color: " + this.color;
-      args.splice(1, 0, c, "color: inherit");
-      let index = 0;
-      let lastC = 0;
-      args[0].replace(/%[a-zA-Z%]/g, (match) => {
-        if (match === "%%") {
-          return;
-        }
-        index++;
-        if (match === "%c") {
-          lastC = index;
-        }
-      });
-      args.splice(lastC, 0, c);
-    }
-    exports.log = console.debug || console.log || (() => {
-    });
-    function save(namespaces) {
-      try {
-        if (namespaces) {
-          exports.storage.setItem("debug", namespaces);
-        } else {
-          exports.storage.removeItem("debug");
-        }
-      } catch (error51) {
-      }
-    }
-    function load() {
-      let r;
-      try {
-        r = exports.storage.getItem("debug") || exports.storage.getItem("DEBUG");
-      } catch (error51) {
-      }
-      if (!r && typeof process !== "undefined" && "env" in process) {
-        r = process.env.DEBUG;
-      }
-      return r;
-    }
-    function localstorage() {
-      try {
-        return localStorage;
-      } catch (error51) {
-      }
-    }
-    module.exports = require_common()(exports);
-    var { formatters } = module.exports;
-    formatters.j = function(v) {
-      try {
-        return JSON.stringify(v);
-      } catch (error51) {
-        return "[UnexpectedJSONParseError]: " + error51.message;
-      }
-    };
-  }
-});
-
-// node_modules/debug/src/node.js
-var require_node = __commonJS({
-  "node_modules/debug/src/node.js"(exports, module) {
-    var tty = __require("tty");
-    var util = __require("util");
-    exports.init = init;
-    exports.log = log;
-    exports.formatArgs = formatArgs;
-    exports.save = save;
-    exports.load = load;
-    exports.useColors = useColors;
-    exports.destroy = util.deprecate(
-      () => {
-      },
-      "Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`."
-    );
-    exports.colors = [6, 2, 3, 4, 5, 1];
-    try {
-      const supportsColor = __require("supports-color");
-      if (supportsColor && (supportsColor.stderr || supportsColor).level >= 2) {
-        exports.colors = [
-          20,
-          21,
-          26,
-          27,
-          32,
-          33,
-          38,
-          39,
-          40,
-          41,
-          42,
-          43,
-          44,
-          45,
-          56,
-          57,
-          62,
-          63,
-          68,
-          69,
-          74,
-          75,
-          76,
-          77,
-          78,
-          79,
-          80,
-          81,
-          92,
-          93,
-          98,
-          99,
-          112,
-          113,
-          128,
-          129,
-          134,
-          135,
-          148,
-          149,
-          160,
-          161,
-          162,
-          163,
-          164,
-          165,
-          166,
-          167,
-          168,
-          169,
-          170,
-          171,
-          172,
-          173,
-          178,
-          179,
-          184,
-          185,
-          196,
-          197,
-          198,
-          199,
-          200,
-          201,
-          202,
-          203,
-          204,
-          205,
-          206,
-          207,
-          208,
-          209,
-          214,
-          215,
-          220,
-          221
-        ];
-      }
-    } catch (error51) {
-    }
-    exports.inspectOpts = Object.keys(process.env).filter((key) => {
-      return /^debug_/i.test(key);
-    }).reduce((obj, key) => {
-      const prop = key.substring(6).toLowerCase().replace(/_([a-z])/g, (_, k) => {
-        return k.toUpperCase();
-      });
-      let val = process.env[key];
-      if (/^(yes|on|true|enabled)$/i.test(val)) {
-        val = true;
-      } else if (/^(no|off|false|disabled)$/i.test(val)) {
-        val = false;
-      } else if (val === "null") {
-        val = null;
-      } else {
-        val = Number(val);
-      }
-      obj[prop] = val;
-      return obj;
-    }, {});
-    function useColors() {
-      return "colors" in exports.inspectOpts ? Boolean(exports.inspectOpts.colors) : tty.isatty(process.stderr.fd);
-    }
-    function formatArgs(args) {
-      const { namespace: name, useColors: useColors2 } = this;
-      if (useColors2) {
-        const c = this.color;
-        const colorCode = "\x1B[3" + (c < 8 ? c : "8;5;" + c);
-        const prefix = `  ${colorCode};1m${name} \x1B[0m`;
-        args[0] = prefix + args[0].split("\n").join("\n" + prefix);
-        args.push(colorCode + "m+" + module.exports.humanize(this.diff) + "\x1B[0m");
-      } else {
-        args[0] = getDate() + name + " " + args[0];
-      }
-    }
-    function getDate() {
-      if (exports.inspectOpts.hideDate) {
-        return "";
-      }
-      return (/* @__PURE__ */ new Date()).toISOString() + " ";
-    }
-    function log(...args) {
-      return process.stderr.write(util.formatWithOptions(exports.inspectOpts, ...args) + "\n");
-    }
-    function save(namespaces) {
-      if (namespaces) {
-        process.env.DEBUG = namespaces;
-      } else {
-        delete process.env.DEBUG;
-      }
-    }
-    function load() {
-      return process.env.DEBUG;
-    }
-    function init(debug2) {
-      debug2.inspectOpts = {};
-      const keys = Object.keys(exports.inspectOpts);
-      for (let i = 0; i < keys.length; i++) {
-        debug2.inspectOpts[keys[i]] = exports.inspectOpts[keys[i]];
-      }
-    }
-    module.exports = require_common()(exports);
-    var { formatters } = module.exports;
-    formatters.o = function(v) {
-      this.inspectOpts.colors = this.useColors;
-      return util.inspect(v, this.inspectOpts).split("\n").map((str) => str.trim()).join(" ");
-    };
-    formatters.O = function(v) {
-      this.inspectOpts.colors = this.useColors;
-      return util.inspect(v, this.inspectOpts);
-    };
-  }
-});
-
-// node_modules/debug/src/index.js
-var require_src = __commonJS({
-  "node_modules/debug/src/index.js"(exports, module) {
-    if (typeof process === "undefined" || process.type === "renderer" || process.browser === true || process.__nwjs) {
-      module.exports = require_browser();
-    } else {
-      module.exports = require_node();
-    }
-  }
-});
-
 // src/contracts/renderers.ts
 var renderers_exports = {};
 __export(renderers_exports, {
@@ -17242,8 +16758,8 @@ function defineLazy(object3, key, getter) {
 function objectClone(obj) {
   return Object.create(Object.getPrototypeOf(obj), Object.getOwnPropertyDescriptors(obj));
 }
-function assignProp(target, prop, value) {
-  Object.defineProperty(target, prop, {
+function assignProp(target2, prop, value) {
+  Object.defineProperty(target2, prop, {
     value,
     writable: true,
     enumerable: true,
@@ -17426,35 +16942,35 @@ function normalizeParams(_params) {
   return params;
 }
 function createTransparentProxy(getter) {
-  let target;
+  let target2;
   return new Proxy({}, {
     get(_, prop, receiver) {
-      target ?? (target = getter());
-      return Reflect.get(target, prop, receiver);
+      target2 ?? (target2 = getter());
+      return Reflect.get(target2, prop, receiver);
     },
     set(_, prop, value, receiver) {
-      target ?? (target = getter());
-      return Reflect.set(target, prop, value, receiver);
+      target2 ?? (target2 = getter());
+      return Reflect.set(target2, prop, value, receiver);
     },
     has(_, prop) {
-      target ?? (target = getter());
-      return Reflect.has(target, prop);
+      target2 ?? (target2 = getter());
+      return Reflect.has(target2, prop);
     },
     deleteProperty(_, prop) {
-      target ?? (target = getter());
-      return Reflect.deleteProperty(target, prop);
+      target2 ?? (target2 = getter());
+      return Reflect.deleteProperty(target2, prop);
     },
     ownKeys(_) {
-      target ?? (target = getter());
-      return Reflect.ownKeys(target);
+      target2 ?? (target2 = getter());
+      return Reflect.ownKeys(target2);
     },
     getOwnPropertyDescriptor(_, prop) {
-      target ?? (target = getter());
-      return Reflect.getOwnPropertyDescriptor(target, prop);
+      target2 ?? (target2 = getter());
+      return Reflect.getOwnPropertyDescriptor(target2, prop);
     },
     defineProperty(_, prop, descriptor) {
-      target ?? (target = getter());
-      return Reflect.defineProperty(target, prop, descriptor);
+      target2 ?? (target2 = getter());
+      return Reflect.defineProperty(target2, prop, descriptor);
     }
   });
 }
@@ -27906,15 +27422,15 @@ function _stringFormat(Class2, format, fnOrRegex, _params = {}) {
 
 // node_modules/zod/v4/core/to-json-schema.js
 function initializeContext(params) {
-  let target = params?.target ?? "draft-2020-12";
-  if (target === "draft-4")
-    target = "draft-04";
-  if (target === "draft-7")
-    target = "draft-07";
+  let target2 = params?.target ?? "draft-2020-12";
+  if (target2 === "draft-4")
+    target2 = "draft-04";
+  if (target2 === "draft-7")
+    target2 = "draft-07";
   return {
     processors: params.processors ?? {},
     metadataRegistry: params?.metadata ?? globalRegistry,
-    target,
+    target: target2,
     unrepresentable: params?.unrepresentable ?? "throw",
     override: params?.override ?? (() => {
     }),
@@ -28255,9 +27771,9 @@ var createToJSONSchemaMethod = (schema, processors = {}) => (params) => {
   extractDefs(ctx, schema);
   return finalize(ctx, schema);
 };
-var createStandardJSONSchemaMethod = (schema, io3, processors = {}) => (params) => {
-  const { libraryOptions, target } = params ?? {};
-  const ctx = initializeContext({ ...libraryOptions ?? {}, target, io: io3, processors });
+var createStandardJSONSchemaMethod = (schema, io4, processors = {}) => (params) => {
+  const { libraryOptions, target: target2 } = params ?? {};
+  const ctx = initializeContext({ ...libraryOptions ?? {}, target: target2, io: io4, processors });
   process2(schema, ctx);
   extractDefs(ctx, schema);
   return finalize(ctx, schema);
@@ -29316,8 +28832,8 @@ var ZodType = /* @__PURE__ */ $constructor("ZodType", (inst, def2) => {
     catch(params) {
       return _catch2(this, params);
     },
-    pipe(target) {
-      return pipe(this, target);
+    pipe(target2) {
+      return pipe(this, target2);
     },
     readonly() {
       return readonly(this);
@@ -31133,6 +30649,9 @@ function gitBlobOid(content) {
   const header = Buffer.from(`blob ${String(content.byteLength)}\0`, "ascii");
   return createHash("sha1").update(header).update(content).digest("hex");
 }
+function historyIdentityDigest(oid) {
+  return sha256Bytes(encoder.encode(`archflow:history-identity:v1:${oid}`));
+}
 function repositoryCandidateDigest(absoluteCwd) {
   return sha256Bytes(encoder.encode(`archflow:repository-candidate:v1:${absoluteCwd}`));
 }
@@ -31164,7 +30683,7 @@ function parseCanonicalDocument(bytes, label = "JSON document") {
 
 // src/local/commands.ts
 import { mkdir as mkdir7 } from "node:fs/promises";
-import { join as join14 } from "node:path";
+import { join as join15 } from "node:path";
 
 // src/contracts/gates.ts
 import { isDeepStrictEqual } from "node:util";
@@ -31269,8 +30788,24 @@ function parseRepositoryPathClaim(value) {
 function toRepositoryPathClaim(taskId, claim) {
   return parseRepositoryPathClaim(`.archflow/tasks/${taskId}/${claim}`);
 }
+function selfReviewClaim(phaseInstance3) {
+  return parseTaskPathClaim(`reviews/${phaseInstance3}.self.md`);
+}
+function counterReviewClaim(phaseInstance3) {
+  return parseTaskPathClaim(`reviews/${phaseInstance3}.counter.md`);
+}
+function triageReviewClaim(phaseInstance3) {
+  return parseTaskPathClaim(`reviews/${phaseInstance3}.triage.md`);
+}
+function adjudicationReviewClaim(phaseInstance3) {
+  return parseTaskPathClaim(`reviews/${phaseInstance3}.adjudication.md`);
+}
 function rawGitPath(value) {
   return value;
+}
+function tryRepositoryPathClaim(value) {
+  const result = repositoryPathClaimV1Schema.safeParse(value);
+  return result.success ? result.data : void 0;
 }
 var TASK_PATH_CLASSES = [
   "task-config",
@@ -34539,6 +34074,10 @@ var legacyImportInitializationV1Schema = external_exports.object({
   mapping: external_exports.array(legacyMappingEntryV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("destination_path")), "mapping must be sorted by destination_path with no duplicates"),
   staged_payload_refs: external_exports.array(stagedPayloadRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("legacy_path")), "staged_payload_refs must be sorted by legacy_path with no duplicates")
 }).strict();
+function parseLegacyImportInitialization(value) {
+  assertPlainJson(value, "legacy import initialization");
+  return legacyImportInitializationV1Schema.parse(value);
+}
 
 // src/contracts/durable-task-initialization.ts
 var sha256Digest3 = sha256DigestV1Schema;
@@ -34554,6 +34093,10 @@ var taskInitializationV1Schema = external_exports.object({
   config_digest: sha256Digest3,
   canonical_paths: canonicalTaskPathsV1Schema
 }).strict();
+function parseTaskInitialization(value) {
+  assertPlainJson(value, "task initialization");
+  return taskInitializationV1Schema.parse(value);
+}
 
 // src/contracts/trust.ts
 import { createHash as createHash2 } from "node:crypto";
@@ -35257,6 +34800,10 @@ var secretScanResultV1Schema = external_exports.discriminatedUnion("outcome", [
     reason: safeCodeV1Schema
   }).strict()
 ]);
+function parseSecretScanResult(value) {
+  assertPlainJson(value, "secret scan result");
+  return secretScanResultV1Schema.parse(value);
+}
 
 // src/contracts/durable-implementation-output.ts
 var sha256Digest4 = sha256DigestV1Schema;
@@ -35402,8 +34949,8 @@ function parser(schema) {
     return schema.parse(value);
   } });
 }
-function defineError(owner, retryable, schema, action2, projection) {
-  return Object.freeze({ owner, retryable, parameter_parser: parser(schema), action: action2, projection });
+function defineError(owner, retryable, schema, action3, projection) {
+  return Object.freeze({ owner, retryable, parameter_parser: parser(schema), action: action3, projection });
 }
 var PROJECT_ERROR_DEFINITIONS = Object.freeze({
   CONTRACT_INVALID: defineError("contracts", false, PROJECT_PARAMETER_SCHEMAS.CONTRACT_INVALID, "correct-contract", "project"),
@@ -36070,18 +35617,18 @@ function validateDurableSemantics(subject) {
       }
     }
     const declaredPaths = new Set(artifact.outputs.map((output) => output.path));
-    for (const target of artifact.restore_targets) {
-      if (!declaredPaths.has(target)) {
+    for (const target2 of artifact.restore_targets) {
+      if (!declaredPaths.has(target2)) {
         return fail2(artifactInvalid(artifact, DURABLE_ISSUE_CODES.restoreTargetNotDeclared));
       }
     }
-    const accounting = artifact.accounting;
+    const accounting2 = artifact.accounting;
     let storedTotal = 0;
-    for (const entry of accounting.counted_entries) storedTotal += entry.stored_bytes;
-    if (accounting.result_bytes !== storedTotal) {
+    for (const entry of accounting2.counted_entries) storedTotal += entry.stored_bytes;
+    if (accounting2.result_bytes !== storedTotal) {
       return fail2(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingResultBytesSum));
     }
-    if (accounting.task_bytes < accounting.result_bytes) {
+    if (accounting2.task_bytes < accounting2.result_bytes) {
       return fail2(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingTaskBytesBelowResult));
     }
     const outputsByPath = /* @__PURE__ */ new Map();
@@ -36091,12 +35638,12 @@ function validateDurableSemantics(subject) {
       else bucket.push(output);
     }
     const entriesByPath = /* @__PURE__ */ new Map();
-    for (const entry of accounting.counted_entries) {
+    for (const entry of accounting2.counted_entries) {
       const bucket = entriesByPath.get(entry.path);
       if (bucket === void 0) entriesByPath.set(entry.path, [entry]);
       else bucket.push(entry);
     }
-    for (const entry of accounting.counted_entries) {
+    for (const entry of accounting2.counted_entries) {
       if (outputsByPath.get(entry.path)?.length !== 1) {
         return fail2(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingEntryUnmatched));
       }
@@ -36106,13 +35653,13 @@ function validateDurableSemantics(subject) {
         return fail2(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingOutputUnmatched));
       }
     }
-    for (const entry of accounting.counted_entries) {
+    for (const entry of accounting2.counted_entries) {
       const output = outputsByPath.get(entry.path)[0];
       if (output.storage !== entry.storage) {
         return fail2(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStorageMismatch));
       }
     }
-    for (const entry of accounting.counted_entries) {
+    for (const entry of accounting2.counted_entries) {
       const output = outputsByPath.get(entry.path)[0];
       if (entry.storage === "raw-payload" && output.storage === "raw-payload") {
         if (entry.stored_bytes !== output.payload_bytes) {
@@ -36286,6 +35833,37 @@ var triageCandidateSchema = external_exports.object({
 function parseTriageCandidate(value) {
   assertPlainJson(value, "review triage candidate");
   return triageCandidateSchema.parse(value);
+}
+var refKey = (value) => `${value.review_evidence_digest}:${value.finding_id}`;
+function validateTriage(current, candidate) {
+  if (!authenticCurrentReviewSet(current)) throw new TypeError("an authenticated current review set is required");
+  const parsed = parseTriageCandidate(candidate);
+  if (parsed.task_id !== current.task_id || parsed.phase_instance !== current.phase_instance || parsed.subject_digest !== current.subject_digest || parsed.input_fingerprint !== current.input_fingerprint || parsed.current_evidence_set_digest !== current.current_evidence_set.set_digest) throw new TypeError("triage scope does not match current review set");
+  const expectedDigests = current.current_evidence_set.slots.map((slot) => slot.evidence_digest);
+  if (parsed.source_evidence_digests.length !== expectedDigests.length || parsed.source_evidence_digests.some((digestValue, index) => digestValue !== expectedDigests[index])) throw new TypeError("source_evidence_digests must exactly match canonical current slots");
+  const expected = /* @__PURE__ */ new Set();
+  for (const review of current.reviews) {
+    const localIds = /* @__PURE__ */ new Set();
+    for (const finding of review.evidence.findings) {
+      if (localIds.has(finding.finding_id)) throw new TypeError(`review ${review.evidence_digest} has duplicate finding_id ${finding.finding_id}`);
+      localIds.add(finding.finding_id);
+      expected.add(refKey({ review_evidence_digest: review.evidence_digest, finding_id: finding.finding_id }));
+    }
+  }
+  const actual = /* @__PURE__ */ new Set();
+  for (const disposition of parsed.dispositions) {
+    const key = refKey(disposition);
+    if (actual.has(key)) throw new TypeError(`duplicate triage disposition ${key}`);
+    if (!expected.has(key)) throw new TypeError(`foreign or stale triage disposition ${key}`);
+    actual.add(key);
+  }
+  if (actual.size !== expected.size || [...expected].some((key) => !actual.has(key))) throw new TypeError("triage dispositions must exactly cover every current finding");
+  const accepted = parsed.dispositions.filter((value) => value.disposition === "accepted").length;
+  const rejected = parsed.dispositions.length - accepted;
+  if (parsed.accepted_count !== accepted || parsed.rejected_count !== rejected) throw new TypeError("triage disposition counts are contradictory");
+  const validated = Object.freeze({ ...parsed, source_evidence_digests: Object.freeze([...parsed.source_evidence_digests]), dispositions: Object.freeze(parsed.dispositions.map((value) => Object.freeze({ ...value }))) });
+  registerValidatedTriage(validated);
+  return validated;
 }
 
 // src/contracts/mcp-tools.ts
@@ -37377,7 +36955,6 @@ async function openResolved(path2, flags) {
 }
 
 // src/state/atomic.ts
-var import_write_file_atomic = __toESM(require_lib(), 1);
 import { randomUUID } from "node:crypto";
 import { link, open as open2, rename, symlink, unlink } from "node:fs/promises";
 import { basename as basename2, dirname as dirname2, join as join2 } from "node:path";
@@ -37408,10 +36985,10 @@ async function createExclusive(path2, bytes) {
   if (path2.path_class !== "intent" && path2.path_class !== "maintenance-record" && path2.path_class !== "result-manifest" && path2.path_class !== "result-payload" && path2.path_class !== "decision" && path2.path_class !== "manual-checkpoint") {
     throw new TypeError("createExclusive requires an immutable resolved path");
   }
-  const target = path2.absolute;
+  const target2 = path2.absolute;
   const temporary = join2(
-    dirname2(target),
-    `.${basename2(target)}.${process.pid}.${randomUUID()}.tmp`
+    dirname2(target2),
+    `.${basename2(target2)}.${process.pid}.${randomUUID()}.tmp`
   );
   let handle;
   let linkAttempted = false;
@@ -37423,7 +37000,7 @@ async function createExclusive(path2, bytes) {
     handle = void 0;
     linkAttempted = true;
     try {
-      await link(temporary, target);
+      await link(temporary, target2);
     } catch (error51) {
       if (errnoOf2(error51) === "EEXIST") return "exists";
       throw error51;
@@ -37447,15 +37024,7 @@ async function replace(path2, bytes) {
   if (path2.path_class !== "task-state" && path2.path_class !== "gate-interface") {
     throw new TypeError("replace requires a task-state or gate-interface resolved path");
   }
-  try {
-    await (0, import_write_file_atomic.default)(path2.absolute, bytes);
-  } catch {
-    throw new AtomicReplaceError({
-      operation: "replace",
-      target_may_have_changed: true,
-      collision: false
-    });
-  }
+  await replaceRegularBytes(path2.absolute, bytes, 420);
 }
 async function removeGateInterface(path2) {
   if (path2.path_class !== "gate-interface") {
@@ -37489,20 +37058,35 @@ var PROJECTABLE = /* @__PURE__ */ new Set([
 function requireProjectable(path2) {
   if (!PROJECTABLE.has(path2.path_class)) throw new TypeError("projection requires a declared output path");
 }
-async function replaceRegular(path2, bytes, executable) {
-  requireProjectable(path2);
+async function replaceRegularBytes(target2, bytes, mode) {
+  const temporary = join2(dirname2(target2), `.${basename2(target2)}.${process.pid}.${randomUUID()}.tmp`);
+  let handle;
+  let renameAttempted = false;
   try {
-    await (0, import_write_file_atomic.default)(path2.absolute, bytes, { mode: executable ? 493 : 420 });
+    handle = await open2(temporary, "wx", mode);
+    await writeAll(handle, bytes);
+    await handle.sync();
+    await handle.close();
+    handle = void 0;
+    renameAttempted = true;
+    await rename(temporary, target2);
   } catch {
-    throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: true, collision: false });
+    throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: renameAttempted, collision: false });
+  } finally {
+    await handle?.close().catch(() => void 0);
+    await unlink(temporary).catch(() => void 0);
   }
 }
-async function replaceSymlink(path2, target) {
+async function replaceRegular(path2, bytes, executable) {
+  requireProjectable(path2);
+  await replaceRegularBytes(path2.absolute, bytes, executable ? 493 : 420);
+}
+async function replaceSymlink(path2, target2) {
   requireProjectable(path2);
   const temporary = join2(dirname2(path2.absolute), `.${basename2(path2.absolute)}.${process.pid}.${randomUUID()}.tmp`);
   let created = false;
   try {
-    await symlink(target, temporary);
+    await symlink(target2, temporary);
     created = true;
     await rename(temporary, path2.absolute);
     created = false;
@@ -37740,169 +37324,33 @@ async function ensureResultDirectory(authority, digest11) {
     await ensureRealDirectory(current);
   }
 }
-async function ensurePayloadParent(authority, digest11, target) {
+async function ensurePayloadParent(authority, digest11, target2) {
   assertInternalTransactionAuthority(authority);
   if (!/^[0-9a-f]{64}$/u.test(digest11)) throw new TypeError("result digest must be lowercase SHA-256");
   const root = join3(authority.task_root, "results", "sha256", digest11, "payload");
-  const parent = join3(target, "..");
+  const parent = join3(target2, "..");
   const rel = relative2(root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) throw new TypeError("payload parent escaped result directory");
   await mkdir(parent, { recursive: true });
 }
-
-// src/state/transitions.ts
-import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
-
-// src/contracts/yaml.ts
-var import_yaml = __toESM(require_dist2(), 1);
-function locatedMessage(label, error51) {
-  const position2 = error51.linePos?.[0];
-  return position2 === void 0 ? `${label}: ${error51.message}` : `${label}:${position2.line}:${position2.col}: ${error51.message}`;
-}
-function parseSingleYamlDocument(source, label) {
-  if (typeof source !== "string") throw new TypeError(`${label}: YAML source must be a string`);
-  const lineCounter = new import_yaml.LineCounter();
-  const documents = (0, import_yaml.parseAllDocuments)(source, {
-    version: "1.2",
-    schema: "core",
-    strict: true,
-    uniqueKeys: true,
-    merge: false,
-    customTags: [],
-    lineCounter,
-    prettyErrors: true
-  });
-  if (documents.length !== 1) throw new SyntaxError(`${label}: expected exactly one YAML document, found ${documents.length}`);
-  const document2 = documents[0];
-  if (document2.errors.length > 0) throw new SyntaxError(locatedMessage(label, document2.errors[0]));
-  if (document2.warnings.length > 0) throw new SyntaxError(locatedMessage(label, document2.warnings[0]));
-  let aliasOffset;
-  (0, import_yaml.visit)(document2, (_key, node) => {
-    if ((0, import_yaml.isAlias)(node)) {
-      aliasOffset = node.range?.[0];
-      return import_yaml.visit.BREAK;
-    }
-    return void 0;
-  });
-  if (aliasOffset !== void 0) {
-    const position2 = lineCounter.linePos(aliasOffset);
-    throw new SyntaxError(`${label}:${position2.line}:${position2.col}: YAML aliases are not allowed`);
+async function ensureTaskProjectionParent(authority, target2) {
+  assertInternalTransactionAuthority(authority);
+  const parent = join3(target2, "..");
+  const rel = relative2(authority.task_root, parent);
+  if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) return;
+  let current = authority.task_root;
+  for (const part of rel.split(sep2).filter((candidate) => candidate !== "" && candidate !== ".")) {
+    current = join3(current, part);
+    await ensureRealDirectory(current);
   }
-  const value = document2.toJS({ maxAliasCount: 0 });
-  assertPlainJson(value, label);
-  return value;
 }
 
-// src/contracts/workflow.ts
-var phaseSchema2 = external_exports.object({
-  id: external_exports.enum(PHASE_IDS),
-  skill: external_exports.string().min(1),
-  requires: external_exports.array(external_exports.enum(PHASE_IDS)).min(1).optional(),
-  iterates: external_exports.enum(ITERATION_POLICIES).optional(),
-  pipeline: external_exports.array(external_exports.enum(PIPELINE_STEPS)).min(1),
-  gate: external_exports.enum(GATE_POLICIES),
-  optional: external_exports.boolean().optional()
-}).strict();
-var workflowV1Schema = external_exports.object({ phases: external_exports.array(phaseSchema2) }).strict().superRefine((workflow, context2) => {
-  if (!sameJson(workflow, WORKFLOW_V1)) context2.addIssue({ code: "custom", message: "Workflow must match the fixed ArchFlow v1 graph exactly" });
-});
-var WORKFLOW_V1 = {
-  phases: [
-    { id: "explore", skill: "archflow-explore", pipeline: ["produce"], gate: "never", optional: true },
-    { id: "prd", skill: "archflow-prd", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "always" },
-    { id: "design", skill: "archflow-design", requires: ["prd"], pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "always" },
-    { id: "phase-design", skill: "archflow-phase-design", requires: ["design"], iterates: "per_phase", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "on_trigger" },
-    { id: "phase-impl", skill: "archflow-phase-impl", requires: ["phase-design"], iterates: "per_phase", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "on_trigger" }
-  ]
-};
-function sameJson(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-function parseWorkflowV1(value) {
-  assertPlainJson(value, "workflow");
-  return workflowV1Schema.parse(value);
-}
-function parseWorkflowYaml(source, label = "workflow.yaml") {
-  return parseWorkflowV1(parseSingleYamlDocument(source, label));
-}
-
-// src/state/gates.ts
-import { constants as fsConstants3 } from "node:fs";
-import { randomUUID as randomUUID2 } from "node:crypto";
-import { isDeepStrictEqual as isDeepStrictEqual6 } from "node:util";
-
-// src/state/lock.ts
-import { AsyncLocalStorage } from "node:async_hooks";
-import { lstat as lstat2, mkdir as mkdir2, open as open3, readdir, realpath as realpath3, rename as rename2, rmdir } from "node:fs/promises";
-import { join as join4 } from "node:path";
-import { performance } from "node:perf_hooks";
-import { setTimeout as delay } from "node:timers/promises";
-var TaskLockError = class extends Error {
-  constructor(stage, cause) {
-    super(`task lock ${stage} failed`, cause === void 0 ? void 0 : { cause });
-    this.stage = stage;
-    this.name = "TaskLockError";
-  }
-  stage;
-};
-var TASK_LOCK_POLICY = Object.freeze({
-  directoryName: ".transaction-lock",
-  pollIntervalMs: 10,
-  deadlineMs: 250
-});
-function errnoOf4(error51) {
-  return error51 !== null && typeof error51 === "object" && "code" in error51 ? String(error51.code) : void 0;
-}
-function createTaskLock() {
-  const heldRoots = new AsyncLocalStorage();
-  async function acquire(lockPath) {
-    const deadline = performance.now() + TASK_LOCK_POLICY.deadlineMs;
-    for (; ; ) {
-      try {
-        await mkdir2(lockPath);
-        return;
-      } catch (error51) {
-        if (errnoOf4(error51) !== "EEXIST") throw new TaskLockError("acquire");
-      }
-      const remaining = deadline - performance.now();
-      if (remaining <= 0) throw new TaskLockError("acquire");
-      await delay(Math.min(TASK_LOCK_POLICY.pollIntervalMs, remaining));
-    }
-  }
-  async function runExclusive(taskRoot, work) {
-    const inheritedRoots = heldRoots.getStore() ?? /* @__PURE__ */ new Set();
-    if (inheritedRoots.has(taskRoot)) throw new TaskLockError("acquire");
-    const lockPath = join4(taskRoot, TASK_LOCK_POLICY.directoryName);
-    await acquire(lockPath);
-    const scopedRoots = /* @__PURE__ */ new Set([...inheritedRoots, taskRoot]);
-    let workResult;
-    let workError;
-    let workThrew = false;
-    try {
-      workResult = await heldRoots.run(scopedRoots, work);
-    } catch (error51) {
-      workThrew = true;
-      workError = error51;
-    }
-    scopedRoots.delete(taskRoot);
-    try {
-      await rmdir(lockPath);
-    } catch {
-      throw new TaskLockError("release", workThrew ? workError : void 0);
-    }
-    if (workThrew) throw workError;
-    return workResult;
-  }
-  return Object.freeze({ runExclusive });
-}
-
-// src/state/snapshots.ts
-import { chmod, lstat as lstat4, readlink as readlink2 } from "node:fs/promises";
-import { resolve as resolvePath5 } from "node:path";
-import { isDeepStrictEqual as isDeepStrictEqual5 } from "node:util";
+// src/state/manual-import.ts
+import { constants as fsConstants4 } from "node:fs";
+import { isDeepStrictEqual as isDeepStrictEqual8 } from "node:util";
 
 // src/state/implementation-manifest.ts
-import { lstat as lstat3, readFile, readlink } from "node:fs/promises";
+import { lstat as lstat2, readFile, readlink } from "node:fs/promises";
 import { resolve as resolvePath4 } from "node:path";
 import { isDeepStrictEqual as isDeepStrictEqual4 } from "node:util";
 
@@ -42865,9 +42313,9 @@ function sameIdentity(observed, expected) {
 }
 async function observePath(runner, resolved) {
   const lexicalPath = resolvePath4(runner.location.worktreeRoot, resolved.repositoryRelative);
-  let stat4;
+  let stat5;
   try {
-    stat4 = await lstat3(lexicalPath);
+    stat5 = await lstat2(lexicalPath);
   } catch (error51) {
     if (error51.code === "ENOENT") {
       return { observation: Object.freeze({ path: resolved.repositoryRelative, path_class: resolved.path_class, state: "absent" }) };
@@ -42878,12 +42326,12 @@ async function observePath(runner, resolved) {
   let fileType;
   let mode;
   let oid;
-  if (stat4.isSymbolicLink()) {
+  if (stat5.isSymbolicLink()) {
     bytes = new Uint8Array(await readlink(lexicalPath, { encoding: "buffer" }));
     fileType = "symlink";
     mode = "120000";
     oid = gitBlobOid(bytes);
-  } else if (stat4.isFile()) {
+  } else if (stat5.isFile()) {
     const handle = await openResolved(lexicalPath, 0);
     try {
       bytes = new Uint8Array(await handle.readFile());
@@ -42891,7 +42339,7 @@ async function observePath(runner, resolved) {
       await handle.close();
     }
     fileType = "regular";
-    mode = (stat4.mode & 73) === 0 ? "100644" : "100755";
+    mode = (stat5.mode & 73) === 0 ? "100644" : "100755";
     const identity = await hashGitBlobIdentity(runner, bytes, resolved.repositoryRelative);
     oid = parseGitOid(identity.oid);
     return {
@@ -42985,8 +42433,8 @@ async function resolveReadablePath(dependencies, authority, path2) {
   });
 }
 async function readRegularBytes(path2, label) {
-  const stat4 = await lstat3(path2.absolute);
-  if (!stat4.isFile()) throw new TypeError(`${label} is not a regular file`);
+  const stat5 = await lstat2(path2.absolute);
+  if (!stat5.isFile()) throw new TypeError(`${label} is not a regular file`);
   return new Uint8Array(await readFile(path2.absolute));
 }
 async function readRenameSources(runner, baseCommit) {
@@ -43298,9 +42746,9 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
   const resolved = await resolveAll(runner, output, context2);
   const observed = /* @__PURE__ */ new Map();
   for (const path2 of scope3) {
-    const target = resolved.get(path2);
-    if (target === void 0) throw new TypeError("declared scope path was not resolved");
-    observed.set(path2, await observePath(runner, target));
+    const target2 = resolved.get(path2);
+    if (target2 === void 0) throw new TypeError("declared scope path was not resolved");
+    observed.set(path2, await observePath(runner, target2));
   }
   const ancestryRetained = await isCommitAncestorOfHead(runner, output.base_commit);
   const rawPayloads = /* @__PURE__ */ new Map();
@@ -43379,7 +42827,156 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
   return facts;
 }
 
+// src/state/transitions.ts
+import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
+
+// src/contracts/yaml.ts
+var import_yaml = __toESM(require_dist2(), 1);
+function locatedMessage(label, error51) {
+  const position2 = error51.linePos?.[0];
+  return position2 === void 0 ? `${label}: ${error51.message}` : `${label}:${position2.line}:${position2.col}: ${error51.message}`;
+}
+function parseSingleYamlDocument(source, label) {
+  if (typeof source !== "string") throw new TypeError(`${label}: YAML source must be a string`);
+  const lineCounter = new import_yaml.LineCounter();
+  const documents = (0, import_yaml.parseAllDocuments)(source, {
+    version: "1.2",
+    schema: "core",
+    strict: true,
+    uniqueKeys: true,
+    merge: false,
+    customTags: [],
+    lineCounter,
+    prettyErrors: true
+  });
+  if (documents.length !== 1) throw new SyntaxError(`${label}: expected exactly one YAML document, found ${documents.length}`);
+  const document2 = documents[0];
+  if (document2.errors.length > 0) throw new SyntaxError(locatedMessage(label, document2.errors[0]));
+  if (document2.warnings.length > 0) throw new SyntaxError(locatedMessage(label, document2.warnings[0]));
+  let aliasOffset;
+  (0, import_yaml.visit)(document2, (_key, node) => {
+    if ((0, import_yaml.isAlias)(node)) {
+      aliasOffset = node.range?.[0];
+      return import_yaml.visit.BREAK;
+    }
+    return void 0;
+  });
+  if (aliasOffset !== void 0) {
+    const position2 = lineCounter.linePos(aliasOffset);
+    throw new SyntaxError(`${label}:${position2.line}:${position2.col}: YAML aliases are not allowed`);
+  }
+  const value = document2.toJS({ maxAliasCount: 0 });
+  assertPlainJson(value, label);
+  return value;
+}
+
+// src/contracts/workflow.ts
+var phaseSchema2 = external_exports.object({
+  id: external_exports.enum(PHASE_IDS),
+  skill: external_exports.string().min(1),
+  requires: external_exports.array(external_exports.enum(PHASE_IDS)).min(1).optional(),
+  iterates: external_exports.enum(ITERATION_POLICIES).optional(),
+  pipeline: external_exports.array(external_exports.enum(PIPELINE_STEPS)).min(1),
+  gate: external_exports.enum(GATE_POLICIES),
+  optional: external_exports.boolean().optional()
+}).strict();
+var workflowV1Schema = external_exports.object({ phases: external_exports.array(phaseSchema2) }).strict().superRefine((workflow, context2) => {
+  if (!sameJson(workflow, WORKFLOW_V1)) context2.addIssue({ code: "custom", message: "Workflow must match the fixed ArchFlow v1 graph exactly" });
+});
+var WORKFLOW_V1 = {
+  phases: [
+    { id: "explore", skill: "archflow-explore", pipeline: ["produce"], gate: "never", optional: true },
+    { id: "prd", skill: "archflow-prd", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "always" },
+    { id: "design", skill: "archflow-design", requires: ["prd"], pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "always" },
+    { id: "phase-design", skill: "archflow-phase-design", requires: ["design"], iterates: "per_phase", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "on_trigger" },
+    { id: "phase-impl", skill: "archflow-phase-impl", requires: ["phase-design"], iterates: "per_phase", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "on_trigger" }
+  ]
+};
+function sameJson(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+function parseWorkflowV1(value) {
+  assertPlainJson(value, "workflow");
+  return workflowV1Schema.parse(value);
+}
+function parseWorkflowYaml(source, label = "workflow.yaml") {
+  return parseWorkflowV1(parseSingleYamlDocument(source, label));
+}
+
+// src/state/gates.ts
+import { constants as fsConstants3 } from "node:fs";
+import { randomUUID as randomUUID2 } from "node:crypto";
+import { isDeepStrictEqual as isDeepStrictEqual6 } from "node:util";
+
+// src/state/lock.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+import { lstat as lstat3, mkdir as mkdir2, open as open3, readdir, realpath as realpath3, rename as rename2, rmdir } from "node:fs/promises";
+import { join as join4 } from "node:path";
+import { performance } from "node:perf_hooks";
+import { setTimeout as delay } from "node:timers/promises";
+var TaskLockError = class extends Error {
+  constructor(stage, cause) {
+    super(`task lock ${stage} failed`, cause === void 0 ? void 0 : { cause });
+    this.stage = stage;
+    this.name = "TaskLockError";
+  }
+  stage;
+};
+var TASK_LOCK_POLICY = Object.freeze({
+  directoryName: ".transaction-lock",
+  pollIntervalMs: 10,
+  deadlineMs: 250
+});
+function errnoOf4(error51) {
+  return error51 !== null && typeof error51 === "object" && "code" in error51 ? String(error51.code) : void 0;
+}
+function createTaskLock() {
+  const heldRoots = new AsyncLocalStorage();
+  async function acquire(lockPath) {
+    const deadline = performance.now() + TASK_LOCK_POLICY.deadlineMs;
+    for (; ; ) {
+      try {
+        await mkdir2(lockPath);
+        return;
+      } catch (error51) {
+        if (errnoOf4(error51) !== "EEXIST") throw new TaskLockError("acquire");
+      }
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) throw new TaskLockError("acquire");
+      await delay(Math.min(TASK_LOCK_POLICY.pollIntervalMs, remaining));
+    }
+  }
+  async function runExclusive(taskRoot, work) {
+    const inheritedRoots = heldRoots.getStore() ?? /* @__PURE__ */ new Set();
+    if (inheritedRoots.has(taskRoot)) throw new TaskLockError("acquire");
+    const lockPath = join4(taskRoot, TASK_LOCK_POLICY.directoryName);
+    await acquire(lockPath);
+    const scopedRoots = /* @__PURE__ */ new Set([...inheritedRoots, taskRoot]);
+    let workResult;
+    let workError;
+    let workThrew = false;
+    try {
+      workResult = await heldRoots.run(scopedRoots, work);
+    } catch (error51) {
+      workThrew = true;
+      workError = error51;
+    }
+    scopedRoots.delete(taskRoot);
+    try {
+      await rmdir(lockPath);
+    } catch {
+      throw new TaskLockError("release", workThrew ? workError : void 0);
+    }
+    if (workThrew) throw workError;
+    return workResult;
+  }
+  return Object.freeze({ runExclusive });
+}
+
 // src/state/snapshots.ts
+import { chmod, lstat as lstat4, readlink as readlink2 } from "node:fs/promises";
+import { resolve as resolvePath5 } from "node:path";
+import { isDeepStrictEqual as isDeepStrictEqual5 } from "node:util";
 var RESULT_BYTE_CAP2 = 25 * 1024 * 1024;
 var TASK_BYTE_CAP2 = 250 * 1024 * 1024;
 var ok5 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
@@ -43447,12 +43044,12 @@ function prepareSnapshot(input) {
   const payloads = rawPayloads.map((item, index) => {
     if (item === null || typeof item !== "object") throw new TypeError(`payloads[${index}] must be an object`);
     const path2 = ownEnumerableData2(item, "path");
-    const target = ownEnumerableData2(item, "target");
+    const target2 = ownEnumerableData2(item, "target");
     const bytes = cloneBytes(ownEnumerableData2(item, "bytes"), `payloads[${index}].bytes`);
-    if (typeof path2 !== "string" || target === null || typeof target !== "object") {
+    if (typeof path2 !== "string" || target2 === null || typeof target2 !== "object") {
       throw new TypeError(`payloads[${index}] has invalid path or target`);
     }
-    return Object.freeze({ path: path2, target, bytes });
+    return Object.freeze({ path: path2, target: target2, bytes });
   });
   const byPath = new Map(payloads.map((payload) => [payload.path, payload]));
   if (byPath.size !== payloads.length) return snapshotInvalid(manifest.snapshot_digest, "duplicate-payload-path");
@@ -43493,12 +43090,38 @@ function prepareSnapshot(input) {
   }
   return ok5(Object.freeze({ manifest: document2, result_digest: document2.digest, payloads: Object.freeze(payloads) }));
 }
-async function installOne(atomic, target, bytes) {
-  const created = await atomic.createExclusive(target, bytes);
+async function prepareDocumentSnapshot(input) {
+  const manifestValue = ownEnumerableData2(input, "manifest");
+  const payloadValue = ownEnumerableData2(input, "payloads");
+  if (manifestValue === null || typeof manifestValue !== "object" || !Array.isArray(payloadValue)) {
+    throw new TypeError("document snapshot input is invalid");
+  }
+  const prepared = prepareSnapshot({
+    manifest: manifestValue,
+    payloads: payloadValue,
+    retained_task_bytes: input.retained_task_bytes,
+    validate_manifest: parseResultManifest
+  });
+  if (!prepared.ok) return prepared;
+  const manifest = prepared.value.manifest.value;
+  if (manifest.source_artifact.artifact_kind !== "document") throw new TypeError("document snapshot requires a document artifact");
+  const output = manifest.outputs[0];
+  const payload = prepared.value.payloads[0];
+  if (manifest.outputs.length !== 1 || prepared.value.payloads.length !== 1 || output === void 0 || output.operation === "delete" || payload === void 0) {
+    return snapshotInvalid(manifest.snapshot_digest, "document-output-shape-mismatch");
+  }
+  const identity = await hashGitBlobIdentity(input.runner, payload.bytes, manifest.source_artifact.projection_target);
+  if (output.after.oid !== identity.oid || output.after.size_bytes !== identity.size_bytes) {
+    return snapshotInvalid(manifest.snapshot_digest, "document-git-identity-mismatch");
+  }
+  return prepared;
+}
+async function installOne(atomic, target2, bytes) {
+  const created = await atomic.createExclusive(target2, bytes);
   if (created === "created") return "created";
   let existing;
   try {
-    const handle = await openResolved(target.absolute, 0);
+    const handle = await openResolved(target2.absolute, 0);
     existing = new Uint8Array(await handle.readFile().finally(() => handle.close()));
   } catch {
     throw new TypeError("immutable snapshot target became unreadable");
@@ -43626,18 +43249,18 @@ async function readSnapshotPayload(input) {
 }
 async function captureProjectionTarget(path2) {
   try {
-    const stat4 = await lstat4(path2.absolute);
-    if (stat4.isSymbolicLink()) {
+    const stat5 = await lstat4(path2.absolute);
+    if (stat5.isSymbolicLink()) {
       const bytes2 = Buffer.from(await readlink2(path2.absolute), "utf8");
       return Object.freeze({
         observation: Object.freeze({ state: "present", file_type: "symlink", mode: "120000", size_bytes: bytes2.byteLength, content_digest: sha256Bytes(bytes2) }),
         rollback: Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes: bytes2 })
       });
     }
-    if (!stat4.isFile()) throw new TypeError("declared target is not a regular file or symlink");
+    if (!stat5.isFile()) throw new TypeError("declared target is not a regular file or symlink");
     const handle = await openResolved(path2.absolute, 0);
     const bytes = new Uint8Array(await handle.readFile().finally(() => handle.close()));
-    const mode = (stat4.mode & 73) === 0 ? "100644" : "100755";
+    const mode = (stat5.mode & 73) === 0 ? "100644" : "100755";
     return Object.freeze({
       observation: Object.freeze({ state: "present", file_type: "regular", mode, size_bytes: bytes.byteLength, content_digest: sha256Bytes(bytes) }),
       rollback: Object.freeze({ state: "present", file_type: "regular", mode, bytes })
@@ -43678,7 +43301,7 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
     assertPlainJson(targetValue, `projection source ${index} target`);
     const suppliedTarget = structuredClone(targetValue);
     if (suppliedTarget.repositoryRelative !== path2) throw new TypeError(`projection source ${index} target path disagrees`);
-    const target = Object.freeze({
+    const target2 = Object.freeze({
       ...suppliedTarget,
       absolute: resolvePath5(worktreeRoot, suppliedTarget.repositoryRelative)
     });
@@ -43694,19 +43317,19 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
       else throw new TypeError(`projection source ${index} has invalid desired identity`);
     }
     const rollbackDescriptor = Object.getOwnPropertyDescriptor(source, "rollback");
-    let rollback;
+    let rollback2;
     if (rollbackDescriptor !== void 0) {
       if (!("value" in rollbackDescriptor) || !rollbackDescriptor.enumerable) throw new TypeError("rollback must be an own enumerable data property");
       const value = rollbackDescriptor.value;
       if (value === null || typeof value !== "object") throw new TypeError("rollback must be a projection image");
       const state = ownEnumerableData2(value, "state");
-      if (state === "absent") rollback = Object.freeze({ state: "absent" });
+      if (state === "absent") rollback2 = Object.freeze({ state: "absent" });
       else {
         const fileType = ownEnumerableData2(value, "file_type");
         const mode = ownEnumerableData2(value, "mode");
         const bytes = cloneBytes(ownEnumerableData2(value, "bytes"), `projection source ${index} rollback bytes`);
-        if (fileType === "regular" && (mode === "100644" || mode === "100755")) rollback = Object.freeze({ state: "present", file_type: fileType, mode, bytes });
-        else if (fileType === "symlink" && mode === "120000") rollback = Object.freeze({ state: "present", file_type: fileType, mode, bytes });
+        if (fileType === "regular" && (mode === "100644" || mode === "100755")) rollback2 = Object.freeze({ state: "present", file_type: fileType, mode, bytes });
+        else if (fileType === "symlink" && mode === "120000") rollback2 = Object.freeze({ state: "present", file_type: fileType, mode, bytes });
         else throw new TypeError(`projection source ${index} has invalid rollback identity`);
       }
     }
@@ -43723,11 +43346,11 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
     }
     return Object.freeze({
       path: path2,
-      target,
+      target: target2,
       desired,
       authenticated_before: structuredClone(beforeValue),
       git_tracked: tracked,
-      ...rollback === void 0 ? {} : { rollback },
+      ...rollback2 === void 0 ? {} : { rollback: rollback2 },
       ...renamePair === void 0 ? {} : { rename_pair: renamePair }
     });
   });
@@ -43779,6 +43402,44 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
     collisions: Object.freeze(collisions),
     collision_choices: Object.freeze(["discard-and-restore", "adopt-as-new-generation", "abort"])
   }));
+}
+async function applyDesired(writer, entry) {
+  if (entry.desired.state === "absent") return writer.remove(entry.target);
+  if (entry.desired.file_type === "symlink") return writer.replaceSymlink(entry.target, new TextDecoder().decode(entry.desired.bytes));
+  await writer.replaceRegular(entry.target, entry.desired.bytes, entry.desired.mode === "100755");
+  await chmod(entry.target.absolute, entry.desired.mode === "100755" ? 493 : 420);
+}
+async function applyProjectionPlan(writer, plan) {
+  if (plan.collisions.length !== 0) return Object.freeze({ outcome: "collision", path: plan.collisions[0].path, writes: 0 });
+  for (const entry of plan.entries) {
+    if (!isDeepStrictEqual5(await observe(entry.target), entry.observed_before)) {
+      return Object.freeze({ outcome: "collision", path: entry.path, writes: 0 });
+    }
+  }
+  const applied = [];
+  for (const entry of plan.entries) {
+    if (entry.disposition === "exact") continue;
+    if (!isDeepStrictEqual5(await observe(entry.target), entry.observed_before)) {
+      return rollback(writer, applied, entry.path);
+    }
+    if (entry.rename_pair?.role === "destination" && (await observe(entry.target)).state !== "absent") {
+      return rollback(writer, applied, entry.path);
+    }
+    await applyDesired(writer, entry);
+    applied.push(entry);
+  }
+  return Object.freeze({ outcome: "applied" });
+}
+async function rollback(writer, applied, collisionPath) {
+  for (const entry of [...applied].reverse()) {
+    if (!isDeepStrictEqual5(await observe(entry.target), desiredObservation(entry.desired))) {
+      return Object.freeze({ outcome: "repair-required", path: entry.path });
+    }
+    if (entry.observed_before.state === "absent") await writer.remove(entry.target);
+    else if (entry.rollback !== void 0) await applyDesired(writer, { ...entry, desired: entry.rollback });
+    else return Object.freeze({ outcome: "repair-required", path: entry.path });
+  }
+  return Object.freeze({ outcome: "rolled-back", path: collisionPath });
 }
 
 // src/state/gates.ts
@@ -43834,6 +43495,28 @@ async function readCanonical(path2, label, parse3) {
   } finally {
     await handle?.close().catch(() => void 0);
   }
+}
+function supplementalGate(outcome) {
+  return outcome.action === "decline" ? outcome.gate : outcome.review;
+}
+function activeProjection(request) {
+  const waiver = waiverContext(request.context);
+  return {
+    ...structuredClone(request),
+    status: "awaiting-human",
+    decision_template: {
+      schema_version: "1",
+      gate_id: request.gate_id,
+      task_id: request.task_id,
+      phase_instance: request.phase_instance,
+      kind: request.kind,
+      subject_digest: request.subject_digest,
+      context_digest: request.context_digest,
+      required_fields: waiver === void 0 ? ["payload", "human_provenance"] : ["granted", "scope", "origin", "notes", "human_provenance"],
+      cancellation_fields: ["cancelled", "reason", "human_provenance"]
+    },
+    supplemental: []
+  };
 }
 function waiverContext(value) {
   return value !== null && typeof value === "object" && "origin" in value ? value : void 0;
@@ -44078,14 +43761,660 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
   authenticatedGateApprovals.add(authenticated);
   return ok6(authenticated);
 }
+async function authenticSupplementalReview(dependencies, authority, request, inputFingerprint, outcome) {
+  const resolver = dependencies.resolve_supplemental_review;
+  if (resolver === void 0) return false;
+  const resolved = await resolver({ authority, request, outcome });
+  if (!resolved.ok) return false;
+  let evidence;
+  try {
+    evidence = parseReviewEvidence(structuredClone(resolved.value.evidence));
+  } catch {
+    return false;
+  }
+  const slot = outcome.review.evidence_slot;
+  const producerFamilies = new Set(request.current_evidence.slots.map((candidate) => candidate.producer_family));
+  const triageAuthentic = outcome.action === "ingest" || resolved.value.triage_digest === (outcome.action === "triage-no-change" ? outcome.triage_digest : outcome.accepted_triage_digest) && resolved.value.triage_outcome === (outcome.action === "triage-no-change" ? "no-change" : "accepted-change");
+  return triageAuthentic && resolved.value.gate_id === request.gate_id && slot.gate_id === request.gate_id && canonicalJsonDigest(evidence) === slot.evidence_digest && evidence.role === "gate-counter-review" && evidence.task_id === request.task_id && evidence.phase_instance === request.phase_instance && evidence.subject_digest === request.subject_digest && evidence.input_fingerprint === inputFingerprint && evidence.assurance === "degraded" && producerFamilies.size === 1 && producerFamilies.has(evidence.producer_family) && evidence.model_family !== evidence.producer_family && evidence.assurance === slot.assurance && evidence.producer_family === slot.producer_family && evidence.model_family === slot.reviewer_family;
+}
+function nextStateForRecord(state, record3, digest11, plannedFinalPhase) {
+  const revision = parseSafeInteger(state.revision + 1);
+  const approvals = [...state.approvals];
+  const waivers = [...state.waivers];
+  if (record3.outcome === "decided" && gateDecisionEffect(record3.envelope.payload) === "advance") {
+    approvals.push({ gate_id: record3.gate_id, gate_kind: record3.kind, subject_digest: record3.subject_digest, decision_digest: digest11, resolved_at_revision: revision });
+    approvals.sort((a, b) => a.gate_id.localeCompare(b.gate_id));
+  }
+  if (record3.outcome === "waiver-decided") {
+    waivers.push({ gate_id: record3.gate_id, rule_id: record3.origin.rule.rule_id, rule_version: record3.origin.rule.rule_version, subject_digest: record3.origin.subject_digest, scope: record3.scope, granted: record3.granted, expires: "task-complete", granted_at_revision: revision });
+    waivers.sort((a, b) => a.gate_id.localeCompare(b.gate_id));
+  }
+  const { open_gate: _open, committed_intent: _intent, ...base2 } = state;
+  const { planned_final_phase: existingPlannedFinalPhase, ...withoutPlannedFinalPhase } = base2;
+  const preserved = plannedFinalPhase === void 0 ? { ...withoutPlannedFinalPhase, ...existingPlannedFinalPhase === void 0 ? {} : { planned_final_phase: existingPlannedFinalPhase } } : { ...withoutPlannedFinalPhase, ...plannedFinalPhase === null ? {} : { planned_final_phase: parseSafeInteger(plannedFinalPhase) } };
+  return canonicalDocument({ ...preserved, revision, approvals, waivers });
+}
+function plannedFinalPhaseFromDesign(bytes) {
+  let source;
+  try {
+    source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new TypeError("approved design is not UTF-8");
+  }
+  const openEndedMarker = "<!-- archflow:phase-plan:open-ended -->";
+  const lines = source.split(/\r?\n/u);
+  const exactMarkers = lines.filter((line) => line === openEndedMarker);
+  const markerLikeLines = lines.filter((line) => /archflow:phase-plan:/u.test(line));
+  const exactHeading = /^### Phase ([1-9][0-9]*): \S(?:.*\S)?$/u;
+  const exactHeadings = lines.filter((line) => exactHeading.test(line));
+  const phasePlanLikeLines = lines.filter(
+    (line) => /^\s*#{1,6}\s+Phase\s+[0-9]+(?:\s|:|[-\u2013\u2014]|$)/u.test(line) || /^\s*\|\s*Phase\s*\|/iu.test(line)
+  );
+  if (exactMarkers.length === 1 && markerLikeLines.length === 1 && phasePlanLikeLines.length === 0) return null;
+  if (markerLikeLines.length !== 0 || exactHeadings.length === 0 || phasePlanLikeLines.length !== exactHeadings.length) {
+    throw new TypeError("approved design requires an exact phase plan or the open-ended marker");
+  }
+  const phases = exactHeadings.map((heading) => Number(exactHeading.exec(heading)[1]));
+  if (phases.some((phase4) => !Number.isSafeInteger(phase4)) || phases.some((phase4, index) => phase4 !== index + 1)) {
+    throw new TypeError("approved design phase headings are not consecutive from phase 1");
+  }
+  return phases.length;
+}
+async function loadApprovedDesignFinalPhase(dependencies, current, record3) {
+  if (record3.outcome !== "decided" || record3.kind !== "artifact-approval" || record3.phase_instance !== "design" || record3.envelope.payload.decision !== "approve") return ok6(void 0);
+  const reference = current.authoritative_results.find((entry) => entry.phase_instance === "design" && entry.step === "produce");
+  if (reference === void 0 || dependencies.load_retained_result === void 0) {
+    return issue2("STATE_INVALID", current, "approved-design-result-missing");
+  }
+  const retained = await dependencies.load_retained_result(reference);
+  if (!retained.ok) return retained;
+  const manifest = retained.value.prepared.manifest.value;
+  const artifact = manifest.source_artifact;
+  if (artifact.artifact_kind !== "document" || artifact.phase_instance !== "design" || artifact.step !== "produce" || artifact.document_path !== "design.md" || manifest.artifact_digest !== record3.subject_digest) return issue2("STATE_INVALID", current, "approved-design-authority-mismatch");
+  const payload = retained.value.prepared.payloads.find((candidate) => candidate.path === artifact.projection_target);
+  if (payload === void 0 || sha256Bytes(payload.bytes) !== artifact.content_digest) {
+    return issue2("STATE_INVALID", current, "approved-design-authority-mismatch");
+  }
+  try {
+    return ok6(plannedFinalPhaseFromDesign(payload.bytes));
+  } catch {
+    return issue2("STATE_INVALID", current, "approved-design-phase-count-invalid");
+  }
+}
+function enactsReentry(record3) {
+  if (record3.outcome !== "decided") return false;
+  const decision2 = record3.envelope.payload.decision;
+  return record3.kind === "review-trigger" && decision2 === "revise" || record3.kind === "adjudication-failure" && decision2 === "revise" || record3.kind === "material-drift" && decision2 === "revise-current" || record3.kind === "attempts-exhausted" && (decision2 === "retry-once" || decision2 === "revise");
+}
+function exactOpenGateMatches(state, request) {
+  const open7 = state.open_gate;
+  if (open7 === void 0 || open7.gate_id !== request.gate_id || open7.gate_kind !== request.kind || open7.subject_digest !== request.subject_digest || open7.context_digest !== request.context_digest || open7.opened_at_revision !== request.opened_at_revision || state.revision !== request.opened_at_revision || state.phase_instance !== request.phase_instance) return false;
+  const { open_gate: _open, committed_intent: _intent, ...base2 } = state;
+  return open7.frozen_state_digest === openGateFrozenStateDigest(base2);
+}
+async function planGateAuthorizedReentry(dependencies, authority, current, request, record3) {
+  if (!enactsReentry(record3)) throw new TypeError("gate record does not authorize re-entry");
+  if (!exactOpenGateMatches(current.value, request)) {
+    return issue2("STATE_INVALID", current.value, "gate-reentry-predecessor-mismatch");
+  }
+  if (current.value.status !== "succeeded" || current.value.step !== "triage" && current.value.step !== "adjudicate") return issue2("STATE_INVALID", current.value, "gate-reentry-predecessor-mismatch");
+  if (request.kind === "attempts-exhausted") {
+    if (request.context.step !== current.value.step || request.context.attempts !== current.value.attempt || request.context.maximum_attempts > request.context.attempts) return issue2("STATE_INVALID", current.value, "gate-reentry-attempt-context-mismatch");
+  } else if (current.value.step !== "adjudicate") {
+    return issue2("STATE_INVALID", current.value, "gate-reentry-step-mismatch");
+  }
+  if (dependencies.resolve_gate_reentry_fingerprint === void 0) {
+    return issue2("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");
+  }
+  const fingerprint = await dependencies.resolve_gate_reentry_fingerprint({
+    authority,
+    request,
+    current
+  });
+  if (!fingerprint.ok) return fingerprint;
+  const { open_gate: _open, committed_intent: _intent, ...predecessor } = current.value;
+  const transition = planStateTransition({
+    current: predecessor,
+    target: {
+      phase_instance: current.value.phase_instance,
+      step: "produce",
+      status: "running",
+      attempt: parseSafeInteger(current.value.attempt + 1),
+      input_fingerprint: fingerprint.value
+    },
+    recomputed_input_fingerprint: fingerprint.value
+  });
+  if (!transition.ok) return transition;
+  return ok6(canonicalDocument({
+    ...transition.value,
+    revision: parseSafeInteger(current.value.revision + 1)
+  }));
+}
+async function closedStateForRecord(dependencies, authority, current, request, record3, digest11) {
+  if (enactsReentry(record3)) {
+    return planGateAuthorizedReentry(dependencies, authority, current, request, record3);
+  }
+  const plannedFinalPhase = await loadApprovedDesignFinalPhase(dependencies, current.value, record3);
+  return plannedFinalPhase.ok ? ok6(nextStateForRecord(current.value, record3, digest11, plannedFinalPhase.value)) : plannedFinalPhase;
+}
 async function createManualGateFile(dependencies, authority, kind, value) {
   assertInternalTransactionAuthority(authority, { runner: dependencies.runner, environment: dependencies.environment });
   const parsed = kind === "request" ? parseGateRequest(value) : parseGateDecisionRecord(value);
   await ensureDecisionDirectory(authority, parsed.gate_id);
-  const target = await resolvePath6(dependencies, authority, kind === "request" ? gateRequestClaim(parsed.gate_id) : gateDecisionClaim(parsed.gate_id), "decision");
-  if (!target.ok) return target;
+  const target2 = await resolvePath6(dependencies, authority, kind === "request" ? gateRequestClaim(parsed.gate_id) : gateDecisionClaim(parsed.gate_id), "decision");
+  if (!target2.ok) return target2;
   const document2 = canonicalDocument(parsed);
-  return await dependencies.atomic.createExclusive(target.value, document2.bytes) === "created" ? ok6(document2) : issue2("CONTRACT_INVALID", void 0, `manual-gate-${kind}-exists`);
+  return await dependencies.atomic.createExclusive(target2.value, document2.bytes) === "created" ? ok6(document2) : issue2("CONTRACT_INVALID", void 0, `manual-gate-${kind}-exists`);
+}
+function importGateDecisions(state, pairs) {
+  if (state.open_gate !== void 0) throw new TypeError("manual gate import requires no live gate");
+  const approvals = [...state.approvals];
+  const waivers = [...state.waivers];
+  const present = new Set([...approvals, ...waivers].map((entry) => entry.gate_id));
+  for (const pair of pairs) {
+    const request = parseGateRequest(pair.request);
+    const decision2 = parseGateDecisionRecord(pair.decision);
+    if (request.task_id !== state.task_id) throw new TypeError("manual gate pair is foreign to current task");
+    if (present.has(request.gate_id)) continue;
+    if (request.gate_id !== decision2.gate_id || request.task_id !== decision2.task_id || request.phase_instance !== decision2.phase_instance || request.kind !== decision2.kind || request.subject_digest !== decision2.subject_digest || request.context_digest !== decision2.context_digest) throw new TypeError("manual gate pair does not bind");
+    const digest11 = canonicalJsonDigest(decision2);
+    const revision = state.revision + 1;
+    if (decision2.outcome === "decided") {
+      bindEnvelope(request, decision2.envelope);
+      if (gateDecisionEffect(decision2.envelope.payload) === "advance") approvals.push({ gate_id: decision2.gate_id, gate_kind: decision2.kind, subject_digest: decision2.subject_digest, decision_digest: digest11, resolved_at_revision: revision });
+    } else if (decision2.outcome === "waiver-decided") {
+      const context2 = request.context;
+      if (!("origin" in context2) || !isDeepStrictEqual6(context2.origin, decision2.origin) || !isDeepStrictEqual6(context2.origin.scope, decision2.scope)) throw new TypeError("manual waiver pair does not bind");
+      waivers.push({ gate_id: decision2.gate_id, rule_id: decision2.origin.rule.rule_id, rule_version: decision2.origin.rule.rule_version, subject_digest: decision2.origin.subject_digest, scope: decision2.scope, granted: decision2.granted, expires: "task-complete", granted_at_revision: revision });
+    }
+    present.add(request.gate_id);
+  }
+  approvals.sort((a, b) => a.gate_id.localeCompare(b.gate_id));
+  waivers.sort((a, b) => a.gate_id.localeCompare(b.gate_id));
+  return Object.freeze({ approvals: Object.freeze(approvals), waivers: Object.freeze(waivers) });
+}
+var authenticatedManualGateFacts = /* @__PURE__ */ new WeakMap();
+var authenticatedManualGateFactsBrand = /* @__PURE__ */ Symbol("AuthenticatedManualGateFacts");
+function resolveAuthenticatedManualGateFacts(facts, expectedAuthorityBinding) {
+  const resolved = authenticatedManualGateFacts.get(facts);
+  if (resolved === void 0 || expectedAuthorityBinding !== void 0 && resolved.authority_binding !== expectedAuthorityBinding) {
+    throw new TypeError("authenticated manual gate facts are required");
+  }
+  return resolved;
+}
+function mintArchivedApproval(approval, request, decision2) {
+  const authenticated = {
+    approval: deepFreezeGateJson(structuredClone(approval)),
+    request: deepFreezeGateJson(structuredClone(request)),
+    decision: deepFreezeGateJson(structuredClone(decision2))
+  };
+  Object.defineProperty(authenticated, authenticatedGateApprovalBrand, {
+    value: true,
+    enumerable: false,
+    writable: false,
+    configurable: false
+  });
+  Object.freeze(authenticated);
+  authenticatedGateApprovals.add(authenticated);
+  return authenticated;
+}
+async function loadAuthenticatedManualGateFacts(input) {
+  const { dependencies, transaction_authority: authority } = input;
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  if (input.authority_binding === null || typeof input.authority_binding !== "object") {
+    throw new TypeError("manual gate authority binding must be an object");
+  }
+  assertPlainJson({ state: input.state, gate_ids: input.gate_ids }, "manual gate archive input");
+  const state = structuredClone(input.state);
+  if (state.task_id !== authority.task_id || !verifyRepositoryIdentity(state.repository_identity_digest, authority.repository_identity).ok || !validateDurableSemantics({ state: canonicalDocument(state) }).ok) {
+    return issue2("STATE_INVALID", state, "manual-gate-state-authority-invalid");
+  }
+  if (new Set(input.gate_ids).size !== input.gate_ids.length) {
+    return issue2("STATE_INVALID", state, "manual-gate-id-duplicate");
+  }
+  const pairs = [];
+  for (const gateId of input.gate_ids) {
+    const requestPath = await resolvePath6(dependencies, authority, gateRequestClaim(gateId), "decision");
+    const decisionPath = await resolvePath6(dependencies, authority, gateDecisionClaim(gateId), "decision");
+    if (!requestPath.ok) return requestPath;
+    if (!decisionPath.ok) return decisionPath;
+    const request = await readCanonical(requestPath.value, "manual gate request", parseGateRequest);
+    const decision2 = await readCanonical(decisionPath.value, "manual gate decision", parseGateDecisionRecord);
+    if (request === "missing" || request === "invalid") {
+      return issue2("STATE_INVALID", state, "manual-gate-request-invalid");
+    }
+    if (decision2 === "missing" || decision2 === "invalid") {
+      return issue2("STATE_INVALID", state, "manual-gate-decision-invalid");
+    }
+    if (request.value.gate_id !== gateId || request.value.task_id !== authority.task_id || !validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok) {
+      return issue2("STATE_INVALID", state, "manual-gate-archive-binding-invalid");
+    }
+    if (decision2.value.outcome === "superseded") {
+      const resolver = dependencies.resolve_supplemental_review;
+      if (resolver === void 0) return issue2("STATE_INVALID", state, "manual-gate-supplemental-archive-invalid");
+      const resolved = await resolver({ authority, request: request.value });
+      if (!resolved.ok) return resolved;
+      let evidence;
+      try {
+        evidence = parseReviewEvidence(structuredClone(resolved.value.evidence));
+      } catch {
+        return issue2("STATE_INVALID", state, "manual-gate-supplemental-archive-invalid");
+      }
+      const producerFamilies = new Set(request.value.current_evidence.slots.map((candidate) => candidate.producer_family));
+      if (resolved.value.gate_id !== request.value.gate_id || resolved.value.triage_outcome !== "accepted-change" || resolved.value.triage_digest !== decision2.value.supersession.accepted_triage_digest || evidence.role !== "gate-counter-review" || evidence.assurance !== "degraded" || evidence.task_id !== request.value.task_id || evidence.phase_instance !== request.value.phase_instance || evidence.subject_digest !== request.value.subject_digest || evidence.model_family === evidence.producer_family || producerFamilies.size !== 1 || !producerFamilies.has(evidence.producer_family)) {
+        return issue2("STATE_INVALID", state, "manual-gate-supplemental-archive-invalid");
+      }
+    }
+    for (const supplemental2 of decision2.value.supplemental) {
+      const binding = supplementalGate(supplemental2);
+      if (binding.prior_gate_id !== request.value.gate_id || binding.task_id !== request.value.task_id || binding.phase_instance !== request.value.phase_instance || binding.subject_digest !== request.value.subject_digest) {
+        return issue2("STATE_INVALID", state, "manual-gate-supplemental-binding-invalid");
+      }
+      if (supplemental2.action !== "decline" && !await authenticSupplementalReview(dependencies, authority, request.value, binding.input_fingerprint, supplemental2)) {
+        return issue2("STATE_INVALID", state, "manual-gate-supplemental-archive-invalid");
+      }
+    }
+    pairs.push(Object.freeze({
+      request: deepFreezeGateJson(structuredClone(request.value)),
+      decision: deepFreezeGateJson(structuredClone(decision2.value))
+    }));
+  }
+  let importState = state;
+  if (state.open_gate !== void 0) {
+    const pair = pairs.find((candidate) => candidate.request.gate_id === state.open_gate.gate_id);
+    if (pair === void 0 || pair.request.kind !== state.open_gate.gate_kind || pair.request.subject_digest !== state.open_gate.subject_digest || pair.request.context_digest !== state.open_gate.context_digest) {
+      return issue2("STATE_INVALID", state, "manual-gate-open-binding-invalid");
+    }
+    const { open_gate: _open, ...closed } = state;
+    importState = closed;
+  }
+  for (const pair of pairs) {
+    const existingApproval = state.approvals.find((candidate) => candidate.gate_id === pair.request.gate_id);
+    const existingWaiver = state.waivers.find((candidate) => candidate.gate_id === pair.request.gate_id);
+    if (pair.decision.outcome === "decided" && gateDecisionEffect(pair.decision.envelope.payload) === "advance") {
+      if (existingWaiver !== void 0 || existingApproval !== void 0 && (existingApproval.gate_kind !== pair.request.kind || existingApproval.subject_digest !== pair.request.subject_digest || existingApproval.decision_digest !== canonicalJsonDigest(pair.decision) || existingApproval.resolved_at_revision > state.revision)) return issue2("STATE_INVALID", state, "manual-gate-approval-binding-invalid");
+    } else if (pair.decision.outcome === "waiver-decided") {
+      if (existingApproval !== void 0 || existingWaiver !== void 0 && (existingWaiver.rule_id !== pair.decision.origin.rule.rule_id || existingWaiver.rule_version !== pair.decision.origin.rule.rule_version || existingWaiver.subject_digest !== pair.decision.origin.subject_digest || existingWaiver.granted !== pair.decision.granted || !isDeepStrictEqual6(existingWaiver.scope, pair.decision.scope) || existingWaiver.granted_at_revision > state.revision)) return issue2("STATE_INVALID", state, "manual-gate-waiver-binding-invalid");
+    } else if (existingApproval !== void 0 || existingWaiver !== void 0) {
+      return issue2("STATE_INVALID", state, "manual-gate-nonauthorizing-record-has-authority");
+    }
+  }
+  let imported;
+  try {
+    imported = importGateDecisions(importState, pairs);
+  } catch {
+    return issue2("STATE_INVALID", state, "manual-gate-import-invalid");
+  }
+  const approvals = [];
+  for (const pair of pairs) {
+    if (pair.decision.outcome !== "decided" || gateDecisionEffect(pair.decision.envelope.payload) !== "advance") continue;
+    const decisionDigest = canonicalJsonDigest(pair.decision);
+    const approval = imported.approvals.find((candidate) => candidate.gate_id === pair.request.gate_id && candidate.decision_digest === decisionDigest);
+    if (approval === void 0) return issue2("STATE_INVALID", state, "manual-gate-approval-binding-invalid");
+    approvals.push(mintArchivedApproval(approval, pair.request, pair.decision));
+  }
+  const closingPair = state.open_gate === void 0 ? void 0 : pairs.find((pair) => pair.request.gate_id === state.open_gate.gate_id);
+  let postDecisionState;
+  if (closingPair !== void 0) {
+    const closed = await closedStateForRecord(
+      dependencies,
+      authority,
+      canonicalDocument(state),
+      closingPair.request,
+      closingPair.decision,
+      canonicalJsonDigest(closingPair.decision)
+    );
+    if (!closed.ok) return closed;
+    postDecisionState = deepFreezeGateJson(structuredClone(closed.value.value));
+  }
+  const lastDecision = pairs.at(-1)?.decision;
+  const effect = lastDecision?.outcome === "decided" ? gateDecisionEffect(lastDecision.envelope.payload) : "non-advancing";
+  const publicCapability = { gate_ids: Object.freeze([...input.gate_ids]) };
+  Object.defineProperty(publicCapability, authenticatedManualGateFactsBrand, {
+    value: true,
+    enumerable: false,
+    writable: false,
+    configurable: false
+  });
+  Object.freeze(publicCapability);
+  authenticatedManualGateFacts.set(publicCapability, Object.freeze({
+    authority_binding: input.authority_binding,
+    approvals: imported.approvals,
+    waivers: imported.waivers,
+    pairs: Object.freeze(pairs),
+    authenticated_gate_approvals: Object.freeze(approvals),
+    effect,
+    ...postDecisionState === void 0 ? {} : { post_decision_state: postDecisionState }
+  }));
+  return ok6(publicCapability);
+}
+async function loadManualRequest(dependencies, authority, gateId, state) {
+  const target2 = await resolvePath6(dependencies, authority, gateRequestClaim(gateId), "decision");
+  if (!target2.ok) return target2;
+  const request = await readCanonical(target2.value, "manual gate request", parseGateRequest);
+  if (request === "missing" || request === "invalid" || request.value.task_id !== authority.task_id) {
+    return issue2("STATE_INVALID", state, "manual-gate-request-invalid");
+  }
+  return ok6(request);
+}
+async function projectManualActiveGate(dependencies, authority, request) {
+  const target2 = await resolvePath6(dependencies, authority, "gate.json", "gate-interface");
+  if (!target2.ok) return target2;
+  const desired = activeProjection(request);
+  const existing = await readCanonical(target2.value, "active manual gate", parseActiveGate);
+  if (existing !== "missing" && existing !== "invalid" && existing.value.gate_id !== request.gate_id) {
+    return fail8(createProjectError("GATE_ACTIVE", {
+      gate_id: existing.value.gate_id,
+      gate_kind: existing.value.kind
+    }));
+  }
+  await dependencies.atomic.replace(target2.value, canonicalDocument(desired).bytes);
+  return ok6(desired);
+}
+async function deriveManualGateRequest(input, state, selector) {
+  const { dependencies, transaction_authority: authority } = input;
+  if (selector === null || typeof selector !== "object" || Array.isArray(selector)) {
+    return issue2("STATE_INVALID", state, "manual-gate-publish-selector-invalid");
+  }
+  const selectorKeys = Object.keys(selector).sort();
+  const expectedSelectorKeys = selector?.kind === "gate" ? [
+    ...selector.gate_kind === "commit-authorization" ? [] : ["context"],
+    "gate_kind",
+    "kind",
+    "summary",
+    ...selector.supersedes_gate_id === void 0 ? [] : ["supersedes_gate_id"]
+  ].sort() : selector?.kind === "waiver" ? ["kind", "origin_gate_id", "rationale", "summary"].sort() : [];
+  if (!isDeepStrictEqual6(selectorKeys, expectedSelectorKeys)) {
+    return issue2("STATE_INVALID", state, "manual-gate-publish-selector-invalid");
+  }
+  const resolver = input.resolve_publish_material;
+  if (resolver === void 0) return issue2("STATE_INVALID", state, "manual-gate-publish-material-unavailable");
+  const material = resolver({ manual_authority: input.manual_authority, state });
+  if (!material.ok) return material;
+  let gateKind2;
+  let summary;
+  let context2;
+  let supersedes2;
+  if (selector.kind === "gate") {
+    gateKind2 = selector.gate_kind;
+    summary = selector.summary;
+    if (selector.gate_kind === "commit-authorization") {
+      const reference = [...state.authoritative_results].reverse().find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "produce");
+      if (reference === void 0 || dependencies.load_retained_result === void 0) {
+        return issue2("STATE_INVALID", state, "manual-commit-authorization-result-missing");
+      }
+      const retained = await dependencies.load_retained_result(reference);
+      if (!retained.ok) return retained;
+      const manifest = retained.value.prepared.manifest.value;
+      const artifact = manifest.source_artifact;
+      if (artifact.artifact_kind !== "implementation-output" || manifest.artifact_digest !== material.value.subject_digest || artifact.phase_instance !== state.phase_instance || artifact.step !== "produce" || artifact.input_fingerprint !== state.input_fingerprint) {
+        return issue2("STATE_INVALID", state, "manual-commit-authorization-manifest-mismatch");
+      }
+      let targetRef = "HEAD";
+      try {
+        const observed = await dependencies.runner.runText({
+          argv: ["symbolic-ref", "--quiet", "HEAD"],
+          operation: parseSafeCode("manual-gate-target-ref"),
+          expectedAbsence: [{ code: 1, stderrIncludes: "" }]
+        });
+        if (observed !== "") targetRef = observed;
+      } catch {
+      }
+      context2 = {
+        target_ref: targetRef,
+        diff_digest: artifact.diff_digest,
+        current_artifact_digests: Object.freeze([manifest.artifact_digest]),
+        parent_document_digests: Object.freeze(artifact.parent_documents.map((parent) => parent.content_digest).sort())
+      };
+    } else {
+      context2 = structuredClone(selector.context);
+    }
+    computeGateContextDigest(gateKind2, context2);
+    if (selector.supersedes_gate_id !== void 0) {
+      const priorRequest = await loadManualRequest(dependencies, authority, selector.supersedes_gate_id, state);
+      if (!priorRequest.ok) return priorRequest;
+      const priorPath = await resolvePath6(dependencies, authority, gateDecisionClaim(selector.supersedes_gate_id), "decision");
+      if (!priorPath.ok) return priorPath;
+      const priorDecision = await readCanonical(priorPath.value, "superseded manual gate decision", parseGateDecisionRecord);
+      if (priorDecision === "missing" || priorDecision === "invalid" || priorDecision.value.outcome !== "superseded" || priorRequest.value.value.task_id !== state.task_id || priorRequest.value.value.phase_instance !== state.phase_instance) {
+        return issue2("STATE_INVALID", state, "manual-gate-supersession-invalid");
+      }
+      supersedes2 = structuredClone(priorDecision.value.supersession);
+    }
+  } else {
+    const originRequest = await loadManualRequest(dependencies, authority, selector.origin_gate_id, state);
+    if (!originRequest.ok) return originRequest;
+    const originPath = await resolvePath6(dependencies, authority, gateDecisionClaim(selector.origin_gate_id), "decision");
+    if (!originPath.ok) return originPath;
+    const originDecision = await readCanonical(originPath.value, "manual waiver origin decision", parseGateDecisionRecord);
+    if (originDecision === "missing" || originDecision === "invalid" || originDecision.value.outcome !== "decided" || originDecision.value.envelope.payload.decision !== "waiver-requested" || !("waiver_scope" in originRequest.value.value.context)) {
+      return issue2("STATE_INVALID", state, "manual-waiver-origin-invalid");
+    }
+    const payload = originDecision.value.envelope.payload;
+    gateKind2 = originRequest.value.value.kind;
+    summary = selector.summary;
+    context2 = {
+      origin: {
+        origin_gate_id: originRequest.value.value.gate_id,
+        origin_decision_digest: originDecision.digest,
+        origin_context_digest: originRequest.value.value.context_digest,
+        task_id: originRequest.value.value.task_id,
+        phase_instance: originRequest.value.value.phase_instance,
+        subject_digest: originRequest.value.value.subject_digest,
+        current_evidence_set_digest: originRequest.value.value.current_evidence.set_digest,
+        rule: payload.rule,
+        scope: originRequest.value.value.context.waiver_scope
+      },
+      rationale: selector.rationale
+    };
+  }
+  const contextDigest = computeGateContextDigest(gateKind2, context2);
+  const openedAtRevision = parseSafeInteger(state.revision + 1);
+  const requestDigest = canonicalJsonDigest({
+    schema_version: "1",
+    repository_identity_digest: authority.repository_identity_digest,
+    task_identity_digest: authority.task_identity_digest,
+    input_fingerprint: state.input_fingerprint,
+    tool: selector.kind === "waiver" ? "archflow_waiver" : "archflow_gate",
+    operation: selector.kind === "waiver" ? "waiver" : "gate",
+    operation_fields: selector.kind === "waiver" ? { origin: context2.origin, rationale: selector.rationale } : {
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: material.value.subject_digest,
+      current_evidence: material.value.current_evidence,
+      ...supersedes2 === void 0 ? {} : { supersedes: supersedes2 },
+      kind: gateKind2,
+      context: context2
+    }
+  });
+  const intentId = parsePathSafeId(canonicalJsonDigest({
+    schema_version: "1",
+    intent_kind: "manual-gate",
+    task_identity_digest: authority.task_identity_digest,
+    prior_revision: state.revision,
+    request_digest: requestDigest
+  }));
+  const gateId = computeGateId({
+    task_identity_digest: authority.task_identity_digest,
+    intent_id: intentId,
+    request_digest: requestDigest
+  });
+  try {
+    return ok6(parseGateRequest({
+      schema_version: "1",
+      gate_id: gateId,
+      intent_id: intentId,
+      request_digest: requestDigest,
+      task_id: state.task_id,
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: material.value.subject_digest,
+      context_digest: contextDigest,
+      current_evidence: material.value.current_evidence,
+      ...supersedes2 === void 0 ? {} : { supersedes: supersedes2 },
+      kind: gateKind2,
+      context: context2,
+      allowed_decisions: selector.kind === "waiver" ? ["grant", "deny", "cancel"] : DECISIONS[gateKind2],
+      opened_at_revision: openedAtRevision
+    }));
+  } catch {
+    return issue2("STATE_INVALID", state, "manual-gate-derived-request-invalid");
+  }
+}
+async function advanceManualGate(input) {
+  const { dependencies, transaction_authority: authority, action: action3 } = input;
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  if (input.manual_authority === null || typeof input.manual_authority !== "object") {
+    throw new TypeError("manual authority must be an object");
+  }
+  assertPlainJson({ state: input.state, action: action3 }, "manual gate lifecycle input");
+  const state = structuredClone(input.state);
+  if (state.task_id !== authority.task_id || !verifyRepositoryIdentity(state.repository_identity_digest, authority.repository_identity).ok || !validateDurableSemantics({ state: canonicalDocument(state) }).ok) {
+    return issue2("STATE_INVALID", state, "manual-gate-state-authority-invalid");
+  }
+  try {
+    return await dependencies.lock.runExclusive(authority.task_root, async () => {
+      if (action3.kind === "publish") {
+        if (!isDeepStrictEqual6(Object.keys(action3).sort(), ["kind", "selector"])) {
+          return issue2("STATE_INVALID", state, "manual-gate-publish-action-invalid");
+        }
+        const derived = await deriveManualGateRequest(input, state, action3.selector);
+        if (!derived.ok) return derived;
+        const request2 = derived.value;
+        await ensureDecisionDirectory(authority, request2.gate_id);
+        const requestPath = await resolvePath6(dependencies, authority, gateRequestClaim(request2.gate_id), "decision");
+        if (!requestPath.ok) return requestPath;
+        let archived = await readCanonical(requestPath.value, "manual gate request", parseGateRequest);
+        if (archived === "invalid") return issue2("STATE_INVALID", state, "manual-gate-request-invalid");
+        if (archived === "missing") {
+          const created = await createManualGateFile(dependencies, authority, "request", request2);
+          if (!created.ok) return created;
+          archived = created.value;
+        } else if (!isDeepStrictEqual6(archived.value, request2)) {
+          return issue2("STATE_INVALID", state, "manual-gate-request-collision");
+        }
+        const active = await projectManualActiveGate(dependencies, authority, archived.value);
+        if (!active.ok) return active;
+        return ok6({
+          status: "awaiting-human",
+          gate_id: archived.value.gate_id,
+          request: archived,
+          decision_templates: buildGateDecisionTemplates(active.value),
+          request_path: requestPath.value.repositoryRelative,
+          decision_interface_path: "gate.decision"
+        });
+      }
+      const requestResult = await loadManualRequest(dependencies, authority, action3.gate_id, state);
+      if (!requestResult.ok) return requestResult;
+      const request = requestResult.value;
+      const archivePath = await resolvePath6(dependencies, authority, gateDecisionClaim(action3.gate_id), "decision");
+      if (!archivePath.ok) return archivePath;
+      let decision2 = await readCanonical(archivePath.value, "manual gate decision", parseGateDecisionRecord);
+      if (decision2 === "invalid") return issue2("STATE_INVALID", state, "manual-gate-decision-invalid");
+      if (decision2 === "missing") {
+        if (action3.kind === "reload") {
+          const active = await projectManualActiveGate(dependencies, authority, request.value);
+          if (!active.ok) return active;
+          return ok6({
+            status: "awaiting-human",
+            gate_id: request.value.gate_id,
+            request,
+            decision_templates: buildGateDecisionTemplates(active.value),
+            request_path: (await resolvePath6(dependencies, authority, gateRequestClaim(action3.gate_id), "decision")).value.repositoryRelative,
+            decision_interface_path: "gate.decision"
+          });
+        }
+        const supplemental2 = action3.supplemental_outcome;
+        const ledger = [];
+        if (supplemental2 !== void 0) {
+          const binding = supplementalGate(supplemental2);
+          if (binding.prior_gate_id !== request.value.gate_id || binding.task_id !== request.value.task_id || binding.phase_instance !== request.value.phase_instance || binding.subject_digest !== request.value.subject_digest || binding.input_fingerprint !== action3.input_fingerprint) {
+            return issue2("STATE_INVALID", state, "manual-gate-supplemental-binding-invalid");
+          }
+          if (supplemental2.action !== "decline" && !await authenticSupplementalReview(dependencies, authority, request.value, action3.input_fingerprint, supplemental2)) {
+            return issue2("STATE_INVALID", state, "manual-gate-supplemental-archive-invalid");
+          }
+          if (supplemental2.action !== "supersede") ledger.push(supplemental2);
+        }
+        let record3;
+        if (action3.kind === "supersede") {
+          record3 = parseGateDecisionRecord({
+            schema_version: "1",
+            gate_id: request.value.gate_id,
+            task_id: request.value.task_id,
+            phase_instance: request.value.phase_instance,
+            kind: request.value.kind,
+            subject_digest: request.value.subject_digest,
+            context_digest: request.value.context_digest,
+            supplemental: [],
+            outcome: "superseded",
+            supersession: {
+              superseded_gate_id: request.value.gate_id,
+              accepted_triage_digest: action3.supplemental_outcome.accepted_triage_digest,
+              old_subject_digest: action3.supplemental_outcome.old_subject_digest
+            }
+          });
+        } else {
+          const interfacePath2 = await resolvePath6(dependencies, authority, "gate.decision", "gate-interface");
+          if (!interfacePath2.ok) return interfacePath2;
+          const projected = await readCanonical(interfacePath2.value, "manual gate decision interface", (value) => value);
+          if (projected === "missing" || projected === "invalid") {
+            return fail8(createProjectError("GATE_DECISION_INVALID", {
+              gate_id: request.value.gate_id,
+              gate_kind: request.value.kind,
+              issue_code: projected === "missing" ? "decision-missing" : "decision-noncanonical"
+            }));
+          }
+          try {
+            record3 = parseInterface(projected.value, request.value, Object.freeze(ledger));
+          } catch {
+            return fail8(createProjectError("GATE_DECISION_INVALID", {
+              gate_id: request.value.gate_id,
+              gate_kind: request.value.kind,
+              issue_code: "decision-binding-invalid"
+            }));
+          }
+        }
+        const created = await createManualGateFile(dependencies, authority, "decision", record3);
+        if (!created.ok) return created;
+        decision2 = created.value;
+      }
+      if (!validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok) {
+        return issue2("STATE_INVALID", state, "manual-gate-archive-binding-invalid");
+      }
+      const facts = await loadAuthenticatedManualGateFacts({
+        dependencies,
+        transaction_authority: authority,
+        authority_binding: input.manual_authority,
+        state,
+        gate_ids: [action3.gate_id]
+      });
+      if (!facts.ok) return facts;
+      const activePath = await resolvePath6(dependencies, authority, "gate.json", "gate-interface");
+      if (activePath.ok) await dependencies.atomic.removeGateInterface(activePath.value);
+      const interfacePath = await resolvePath6(dependencies, authority, "gate.decision", "gate-interface");
+      if (interfacePath.ok) await dependencies.atomic.removeGateInterface(interfacePath.value);
+      const effect = decision2.value.outcome === "decided" ? gateDecisionEffect(decision2.value.envelope.payload) : "non-advancing";
+      return ok6({
+        status: decision2.value.outcome === "cancelled" ? "cancelled" : decision2.value.outcome === "superseded" ? "superseded" : "resolved",
+        gate_id: action3.gate_id,
+        request,
+        decision: decision2,
+        effect,
+        gate_facts: facts.value,
+        request_path: (await resolvePath6(dependencies, authority, gateRequestClaim(action3.gate_id), "decision")).value.repositoryRelative,
+        decision_path: archivePath.value.repositoryRelative
+      });
+    });
+  } catch (error51) {
+    return error51 instanceof TaskLockError ? io(authority, `manual-gate-lock-${error51.stage}`) : io(authority, "manual-gate-advance");
+  }
 }
 
 // src/state/transitions.ts
@@ -44134,29 +44463,29 @@ function nextPhase(instance) {
       return encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(decoded.phase + 1) });
   }
 }
-function sameSubject(current, target) {
-  return current.phase_instance === target.phase_instance && current.step === target.step;
+function sameSubject(current, target2) {
+  return current.phase_instance === target2.phase_instance && current.step === target2.step;
 }
-function legalMovement(current, target) {
+function legalMovement(current, target2) {
   if (current.terminal !== void 0 || current.open_gate !== void 0) return false;
-  if (sameSubject(current, target)) {
+  if (sameSubject(current, target2)) {
     if (current.status === "running") {
-      return target.attempt === current.attempt && (target.status === "succeeded" || target.status === "failed");
+      return target2.attempt === current.attempt && (target2.status === "succeeded" || target2.status === "failed");
     }
-    return current.status === "failed" && target.status === "running" && target.attempt === current.attempt + 1;
+    return current.status === "failed" && target2.status === "running" && target2.attempt === current.attempt + 1;
   }
-  if (current.status !== "succeeded" || target.status !== "running") return false;
-  if (target.phase_instance === current.phase_instance && (current.step === "triage" || current.step === "adjudicate") && target.step === "produce") {
-    return target.attempt === current.attempt + 1;
+  if (current.status !== "succeeded" || target2.status !== "running") return false;
+  if (target2.phase_instance === current.phase_instance && (current.step === "triage" || current.step === "adjudicate") && target2.step === "produce") {
+    return target2.attempt === current.attempt + 1;
   }
   const steps = pipeline(current.phase_instance);
   const index = steps.indexOf(current.step);
   if (index < 0) return false;
   if (index + 1 < steps.length) {
-    return target.phase_instance === current.phase_instance && target.step === steps[index + 1] && target.attempt === current.attempt;
+    return target2.phase_instance === current.phase_instance && target2.step === steps[index + 1] && target2.attempt === current.attempt;
   }
   const following = nextPhase(current.phase_instance);
-  return following !== void 0 && target.phase_instance === following && target.step === pipeline(following)[0] && target.attempt === 1;
+  return following !== void 0 && target2.phase_instance === following && target2.step === pipeline(following)[0] && target2.attempt === 1;
 }
 function artifactMatches(input) {
   const artifact = input.artifact;
@@ -44245,6 +44574,439 @@ function planStateTransition(value) {
     throw new TypeError("transition planning changed authoritative results");
   }
   return ok7(draft);
+}
+
+// src/state/manual-import.ts
+var evidenceFacts = /* @__PURE__ */ new WeakMap();
+var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+function invalid2(phase4, issue3) {
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code: issue3 })
+  });
+}
+function io2(authority, operation) {
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt })
+  });
+}
+async function readGateDocument(dependencies, authority, gateId, kind, parse3) {
+  const target2 = await resolveTaskPath({
+    runner: dependencies.runner,
+    taskId: authority.task_id,
+    claim: kind === "request" ? gateRequestClaim(gateId) : gateDecisionClaim(gateId),
+    expectedClass: "decision",
+    context: authority.context
+  });
+  if (!target2.ok) return target2;
+  try {
+    const handle = await openResolved(target2.value.absolute, fsConstants4.O_RDONLY);
+    try {
+      const document2 = parseCanonicalDocument(new Uint8Array(await handle.readFile()), `manual gate ${kind}`);
+      return ok8(canonicalDocument(parse3(document2.value)));
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return io2(authority, `read-manual-gate-${kind}`);
+  }
+}
+function exactResultBinding(checkpoint, reference, retained) {
+  const manifest = retained.prepared.manifest;
+  return manifest.digest === reference.result_digest && manifest.value.task_id === checkpoint.task_id && manifest.value.repository_identity_digest === checkpoint.repository_identity_digest && manifest.value.result_id === reference.result_id && manifest.value.phase_instance === reference.phase_instance && manifest.value.step === reference.step && manifest.value.input_fingerprint === reference.input_fingerprint && reference.manifest_path === retained.manifest_target.repositoryRelative;
+}
+function expectedProjections(retained) {
+  const byPath = /* @__PURE__ */ new Map();
+  for (const installation of retained) {
+    for (const projection of installation.prepared.manifest.value.projections) {
+      const previous = byPath.get(projection.path);
+      if (previous !== void 0 && previous.content_digest !== projection.content_digest) {
+        throw new TypeError("reachable retained results disagree about a projection");
+      }
+      byPath.set(projection.path, projection);
+    }
+  }
+  return Object.freeze([...byPath.values()].sort((left, right) => left.path.localeCompare(right.path)));
+}
+async function loadManualImportEvidence(input) {
+  if (!isDeepStrictEqual8(Object.keys(input).sort(), ["artifact", "authority", "dependencies"])) {
+    throw new TypeError("manual import evidence input has unexpected or missing fields");
+  }
+  const { dependencies, authority } = input;
+  assertInternalTransactionAuthority(authority, { runner: dependencies.runner, environment: dependencies.environment });
+  assertPlainJson(input.artifact, "manual checkpoint import");
+  const artifact = structuredClone(input.artifact);
+  if (artifact.task_id !== authority.task_id || !verifyRepositoryIdentity(artifact.repository_identity_digest, authority.repository_identity).ok) {
+    return invalid2(authority.context.phase_instance, "manual-import-authority-mismatch");
+  }
+  const selected = selectGreatestValidChain(chainAnchor(artifact), artifact.chain);
+  if (selected.kind !== "chain" || selected.chain.length !== artifact.chain.length || !isDeepStrictEqual8(selected.chain, artifact.chain)) {
+    return invalid2(authority.context.phase_instance, selected.kind === "stop" ? `manual-import-chain-${selected.outcome}` : "manual-import-chain-not-exact");
+  }
+  if (selected.chain.some((checkpoint) => checkpoint.terminal === "abandoned")) {
+    return invalid2(authority.context.phase_instance, "manual-import-abandoned-authority-unauthenticated");
+  }
+  if (dependencies.load_retained_result === void 0) {
+    return invalid2(authority.context.phase_instance, "manual-import-result-loader-unavailable");
+  }
+  const checkpoints = /* @__PURE__ */ new Map();
+  const selectedHead = selected.chain.at(-1);
+  let planningBase;
+  const evidenceBinding = Object.freeze({});
+  if (artifact.import_mode === "initial") {
+    const first = selected.chain[0];
+    if (!("initialization" in first)) return invalid2(first.phase_instance, "manual-import-initialization-missing");
+    planningBase = initialBase(first);
+  } else {
+    const observed = await dependencies.read_state(authority.state);
+    if (observed.kind !== "canonical") return invalid2(authority.context.phase_instance, "manual-import-current-state-unavailable");
+    planningBase = observed.document.value;
+  }
+  for (const [checkpointIndex, checkpoint] of selected.chain.entries()) {
+    const priorCheckpoint = checkpointIndex === 0 ? void 0 : selected.chain[checkpointIndex - 1];
+    const closedPriorGate = priorCheckpoint?.open_gate !== void 0 && checkpoint.open_gate === void 0 ? priorCheckpoint.open_gate : void 0;
+    if (checkpoint === selectedHead && checkpoint.open_gate !== void 0) {
+      return invalid2(checkpoint.phase_instance, "manual-import-open-gate-must-close-cancel-or-supersede");
+    }
+    const retained = /* @__PURE__ */ new Map();
+    for (const reference of checkpoint.authoritative_results) {
+      const loaded = await dependencies.load_retained_result(reference);
+      if (!loaded.ok) return loaded;
+      if (!exactResultBinding(checkpoint, reference, loaded.value)) {
+        return invalid2(checkpoint.phase_instance, "manual-import-result-binding-invalid");
+      }
+      retained.set(reference.result_digest, loaded.value);
+    }
+    let projections;
+    try {
+      projections = expectedProjections(retained.values());
+    } catch {
+      return invalid2(checkpoint.phase_instance, "manual-import-projection-disagreement");
+    }
+    if (!isDeepStrictEqual8(projections, checkpoint.projections)) {
+      return invalid2(checkpoint.phase_instance, "manual-import-projection-binding-invalid");
+    }
+    for (const entry of checkpoint.evidence_chain) {
+      const produce = [...retained.values()].find((installation) => installation.prepared.manifest.value.phase_instance === entry.phase_instance && installation.prepared.manifest.value.step === "produce" && installation.prepared.manifest.value.artifact_digest === entry.subject_digest);
+      if (produce === void 0) {
+        return invalid2(checkpoint.phase_instance, "manual-import-evidence-subject-missing");
+      }
+      for (const slot of entry.current_evidence.slots) {
+        const evidenceResult = [...retained.values()].find((installation) => {
+          const manifest = installation.prepared.manifest.value;
+          const source = manifest.source_artifact;
+          return manifest.phase_instance === entry.phase_instance && manifest.artifact_digest === slot.evidence_digest && (source.artifact_kind === "review-evidence" || source.artifact_kind === "triage" || source.artifact_kind === "adjudication-evidence") && source.evidence.subject_digest === entry.subject_digest && source.evidence.input_fingerprint === entry.input_fingerprint;
+        });
+        if (evidenceResult === void 0) {
+          return invalid2(checkpoint.phase_instance, "manual-import-evidence-result-missing");
+        }
+      }
+    }
+    const gates = /* @__PURE__ */ new Map();
+    const gateRefs = [
+      ...checkpoint.approvals.map((reference) => ({ gate_id: reference.gate_id, reference })),
+      ...checkpoint.waivers.map((reference) => ({ gate_id: reference.gate_id, reference })),
+      ...checkpoint.open_gate === void 0 ? [] : [{ gate_id: checkpoint.open_gate.gate_id, reference: void 0 }],
+      ...closedPriorGate === void 0 ? [] : [{ gate_id: closedPriorGate.gate_id, reference: void 0 }]
+    ];
+    for (const gateEntry of gateRefs) {
+      const { gate_id: gateId, reference } = gateEntry;
+      if (gates.has(gateId)) continue;
+      const request = await readGateDocument(dependencies, authority, gateId, "request", parseGateRequest);
+      if (!request.ok) return request;
+      const decision2 = await readGateDocument(dependencies, authority, gateId, "decision", parseGateDecisionRecord);
+      if (!decision2.ok) return decision2;
+      const semantics = validateDurableSemantics({ gate_request: request.value, gate_decision: decision2.value });
+      if (!semantics.ok) return semantics;
+      if (request.value.value.task_id !== checkpoint.task_id || request.value.value.gate_id !== gateId || decision2.value.value.task_id !== checkpoint.task_id || decision2.value.value.gate_id !== gateId) {
+        return invalid2(checkpoint.phase_instance, "manual-import-gate-binding-invalid");
+      }
+      if (checkpoint.open_gate?.gate_id === gateId && (request.value.value.kind !== checkpoint.open_gate.gate_kind || request.value.value.subject_digest !== checkpoint.open_gate.subject_digest || request.value.value.context_digest !== checkpoint.open_gate.context_digest || request.value.value.opened_at_revision !== checkpoint.open_gate.opened_at_revision)) {
+        return invalid2(checkpoint.phase_instance, "manual-import-open-gate-request-binding-invalid");
+      }
+      if (closedPriorGate?.gate_id === gateId && (request.value.value.kind !== closedPriorGate.gate_kind || request.value.value.subject_digest !== closedPriorGate.subject_digest || request.value.value.context_digest !== closedPriorGate.context_digest || request.value.value.opened_at_revision !== closedPriorGate.opened_at_revision)) {
+        return invalid2(checkpoint.phase_instance, "manual-import-closed-gate-request-binding-invalid");
+      }
+      const expectedDigest = reference !== void 0 && "decision_digest" in reference ? reference.decision_digest : void 0;
+      if (expectedDigest !== void 0 && decision2.value.digest !== expectedDigest) {
+        return invalid2(checkpoint.phase_instance, "manual-import-gate-decision-digest-mismatch");
+      }
+      if (reference !== void 0 && "decision_digest" in reference) {
+        if (decision2.value.value.outcome !== "decided" || gateDecisionEffect(decision2.value.value.envelope.payload) !== "advance" || request.value.value.kind !== reference.gate_kind || request.value.value.subject_digest !== reference.subject_digest) {
+          return invalid2(checkpoint.phase_instance, "manual-import-approval-binding-invalid");
+        }
+      } else if (reference !== void 0) {
+        const record3 = decision2.value.value;
+        if (record3.outcome !== "waiver-decided" || record3.granted !== reference.granted || record3.origin.rule.rule_id !== reference.rule_id || record3.origin.rule.rule_version !== reference.rule_version || record3.origin.subject_digest !== reference.subject_digest || !isDeepStrictEqual8(record3.scope, reference.scope)) {
+          return invalid2(checkpoint.phase_instance, "manual-import-waiver-binding-invalid");
+        }
+      }
+      gates.set(gateId, Object.freeze({
+        request: request.value.value,
+        decision: decision2.value.value,
+        decision_digest: decision2.value.digest
+      }));
+    }
+    const committed = [];
+    for (const approval of checkpoint.approvals) {
+      if (approval.gate_kind !== "commit-authorization") continue;
+      const pair = gates.get(approval.gate_id);
+      if (pair?.decision.outcome !== "decided" || gateDecisionEffect(pair.decision.envelope.payload) !== "advance" || pair.request.kind !== "commit-authorization" || pair.request.subject_digest !== approval.subject_digest) {
+        return invalid2(checkpoint.phase_instance, "manual-import-commit-authorization-invalid");
+      }
+      const implementation = [...retained.entries()].find(([, installation]) => installation.prepared.manifest.value.artifact_digest === approval.subject_digest && installation.prepared.manifest.value.source_artifact.artifact_kind === "implementation-output");
+      if (implementation === void 0) {
+        return invalid2(checkpoint.phase_instance, "manual-import-implementation-result-missing");
+      }
+      const source = implementation[1].prepared.manifest.value.source_artifact;
+      if (source.artifact_kind !== "implementation-output" || source.phase_instance !== pair.request.phase_instance || source.phase_instance !== implementation[1].prepared.manifest.value.phase_instance || !await implementationOutputCommittedAtCurrentTarget(dependencies.runner, source, pair.request.context.target_ref)) {
+        return invalid2(checkpoint.phase_instance, "manual-import-committed-tree-proof-missing");
+      }
+      committed.push(Object.freeze({
+        result_digest: implementation[0],
+        phase_instance: source.phase_instance,
+        subject_digest: approval.subject_digest,
+        gate_id: approval.gate_id
+      }));
+    }
+    const commitGateIds = checkpoint.approvals.filter((approval) => approval.gate_kind === "commit-authorization").map((approval) => approval.gate_id);
+    let authenticatedCommitApprovals = [];
+    if (commitGateIds.length > 0) {
+      const authenticated = await loadAuthenticatedManualGateFacts({
+        dependencies,
+        transaction_authority: authority,
+        authority_binding: evidenceBinding,
+        state: checkpointState(planningBase, checkpoint),
+        gate_ids: commitGateIds
+      });
+      if (!authenticated.ok) return authenticated;
+      authenticatedCommitApprovals = resolveAuthenticatedManualGateFacts(
+        authenticated.value,
+        evidenceBinding
+      ).authenticated_gate_approvals.filter((candidate) => candidate.approval.gate_kind === "commit-authorization");
+    }
+    let plannedFinalPhase;
+    const designApproval = checkpoint.approvals.find((approval) => approval.gate_kind === "artifact-approval" && [...retained.values()].some((installation) => installation.prepared.manifest.value.phase_instance === "design" && installation.prepared.manifest.value.step === "produce" && installation.prepared.manifest.value.artifact_digest === approval.subject_digest));
+    if (designApproval !== void 0) {
+      const pair = gates.get(designApproval.gate_id);
+      if (pair === void 0) return invalid2(checkpoint.phase_instance, "manual-approved-design-authority-missing");
+      const planned = await loadApprovedDesignFinalPhase(
+        dependencies,
+        checkpointState(planningBase, checkpoint),
+        pair.decision
+      );
+      if (!planned.ok) return planned;
+      plannedFinalPhase = planned.value === void 0 || planned.value === null ? planned.value : planned.value;
+    }
+    const digest11 = checkpointSelfDigest(checkpoint);
+    checkpoints.set(digest11, Object.freeze({
+      checkpoint_digest: digest11,
+      retained,
+      gates,
+      committed_implementations: Object.freeze(committed),
+      authenticated_commit_approvals: Object.freeze(authenticatedCommitApprovals),
+      ...plannedFinalPhase === void 0 ? {} : { planned_final_phase: plannedFinalPhase }
+    }));
+    planningBase = checkpointState(planningBase, checkpoint);
+    if (plannedFinalPhase === null) {
+      const { planned_final_phase: _planned, ...withoutPlanned } = planningBase;
+      planningBase = withoutPlanned;
+    } else if (plannedFinalPhase !== void 0) {
+      planningBase = { ...planningBase, planned_final_phase: plannedFinalPhase };
+    }
+  }
+  const capability = Object.freeze({ kind: "authenticated-manual-import-evidence" });
+  evidenceFacts.set(capability, Object.freeze({ artifact_digest: canonicalDocument(artifact).digest, checkpoints }));
+  return ok8(capability);
+}
+function exactCommittedTransitionFacts(cursor, checkpoint, evidence) {
+  const decoded = decodePhaseInstance(cursor.phase_instance);
+  if (decoded.kind !== "phase-impl" || cursor.step !== "adjudicate" || cursor.status !== "succeeded") return void 0;
+  const proof = evidence.committed_implementations.find((candidate) => candidate.phase_instance === cursor.phase_instance && cursor.authoritative_results.some((reference) => reference.phase_instance === cursor.phase_instance && reference.step === "produce" && reference.result_digest === candidate.result_digest));
+  if (proof === void 0) return void 0;
+  const approval = checkpoint.approvals.find((candidate) => candidate.gate_id === proof.gate_id && candidate.gate_kind === "commit-authorization" && candidate.subject_digest === proof.subject_digest);
+  if (approval === void 0) return void 0;
+  const authenticated = evidence.authenticated_commit_approvals.find((candidate) => candidate.approval.gate_id === proof.gate_id && candidate.approval.subject_digest === proof.subject_digest && candidate.request.kind === "commit-authorization" && candidate.request.phase_instance === cursor.phase_instance);
+  if (authenticated === void 0) return void 0;
+  let legal = false;
+  if (checkpoint.terminal === "complete") {
+    legal = cursor.planned_final_phase !== void 0 && Number(decoded.phase) === Number(cursor.planned_final_phase) && checkpoint.phase_instance === cursor.phase_instance && checkpoint.step === cursor.step && checkpoint.status === cursor.status && checkpoint.attempt === cursor.attempt && checkpoint.input_fingerprint === cursor.input_fingerprint && isDeepStrictEqual8(checkpoint.authoritative_results, cursor.authoritative_results);
+  } else {
+    const target2 = decodePhaseInstance(checkpoint.phase_instance);
+    legal = (cursor.planned_final_phase === void 0 || Number(decoded.phase) < Number(cursor.planned_final_phase)) && target2.kind === "phase-design" && Number(target2.phase) === Number(decoded.phase) + 1 && checkpoint.step === "produce" && checkpoint.status === "running" && checkpoint.attempt === 1 && isDeepStrictEqual8(checkpoint.authoritative_results, cursor.authoritative_results);
+  }
+  return legal ? Object.freeze({
+    completion_subject_digest: proof.subject_digest,
+    authenticated_gate_approvals: Object.freeze([authenticated]),
+    commit_observed: true
+  }) : void 0;
+}
+function checkpointState(base2, checkpoint) {
+  return {
+    ...base2,
+    phase_instance: checkpoint.phase_instance,
+    step: checkpoint.step,
+    status: checkpoint.status,
+    attempt: checkpoint.attempt,
+    input_fingerprint: checkpoint.input_fingerprint,
+    authoritative_results: structuredClone(checkpoint.authoritative_results),
+    approvals: structuredClone(checkpoint.approvals),
+    waivers: structuredClone(checkpoint.waivers),
+    ...checkpoint.terminal === void 0 ? {} : { terminal: checkpoint.terminal }
+  };
+}
+function preservesGateRefs(current, checkpoint) {
+  return current.approvals.every((reference) => checkpoint.approvals.some((candidate) => isDeepStrictEqual8(candidate, reference))) && current.waivers.every((reference) => checkpoint.waivers.some((candidate) => isDeepStrictEqual8(candidate, reference)));
+}
+function authenticatedClosedGate(prior, checkpoint, evidence) {
+  const open7 = prior?.open_gate;
+  if (open7 === void 0 || checkpoint.open_gate !== void 0) return void 0;
+  const pair = evidence.gates.get(open7.gate_id);
+  return pair !== void 0 && pair.request.gate_id === open7.gate_id && pair.request.kind === open7.gate_kind && pair.request.subject_digest === open7.subject_digest && pair.request.context_digest === open7.context_digest && pair.request.opened_at_revision === open7.opened_at_revision && pair.decision.gate_id === open7.gate_id ? pair : void 0;
+}
+function isAuthenticatedRetryLanding(cursor, checkpoint, pair) {
+  if (pair?.decision.outcome !== "decided" || gateDecisionEffect(pair.decision.envelope.payload) !== "retry") return false;
+  const decision2 = pair.decision.envelope.payload.decision;
+  const reentry = pair.request.kind === "review-trigger" && decision2 === "revise" || pair.request.kind === "adjudication-failure" && decision2 === "revise" || pair.request.kind === "material-drift" && decision2 === "revise-current" || pair.request.kind === "attempts-exhausted" && (decision2 === "retry-once" || decision2 === "revise");
+  return reentry && cursor.status === "succeeded" && (cursor.step === "triage" || cursor.step === "adjudicate") && checkpoint.phase_instance === cursor.phase_instance && checkpoint.step === "produce" && checkpoint.status === "running" && checkpoint.attempt === cursor.attempt + 1 && checkpoint.input_fingerprint !== cursor.input_fingerprint && isDeepStrictEqual8(checkpoint.authoritative_results, cursor.authoritative_results) && isDeepStrictEqual8(checkpoint.approvals, cursor.approvals) && isDeepStrictEqual8(checkpoint.waivers, cursor.waivers);
+}
+function initialBase(checkpoint) {
+  const initialization = checkpoint.initialization;
+  return {
+    schema_version: "1",
+    task_id: initialization.task_id,
+    repository_identity_digest: initialization.repository_identity_digest,
+    revision: 1,
+    phase_instance: checkpoint.phase_instance,
+    step: checkpoint.step,
+    status: checkpoint.status,
+    attempt: checkpoint.attempt,
+    input_fingerprint: checkpoint.input_fingerprint,
+    initialization_digest: checkpoint.initialization_digest,
+    config_digest: initialization.config_digest,
+    workflow_digest: initialization.workflow_digest,
+    constitution_digest: initialization.constitution_digest,
+    policy_base_commit: initialization.policy_base_commit,
+    authoritative_results: [],
+    approvals: [],
+    waivers: []
+  };
+}
+function reduceAuthenticatedManualChain(input) {
+  const facts = evidenceFacts.get(input.evidence);
+  if (facts === void 0) throw new TypeError("authenticated manual import evidence is required");
+  assertPlainJson(input.artifact, "manual checkpoint import reduction artifact");
+  const artifact = structuredClone(input.artifact);
+  if (facts.artifact_digest !== canonicalDocument(artifact).digest) {
+    throw new TypeError("manual import evidence belongs to another artifact");
+  }
+  const selected = selectGreatestValidChain(chainAnchor(artifact), artifact.chain);
+  if (selected.kind !== "chain" || selected.chain.length !== artifact.chain.length || selected.chain.length === 0) {
+    return invalid2(input.current?.phase_instance ?? artifact.chain[0].phase_instance, "manual-import-chain-not-exact");
+  }
+  if (selected.chain.some((checkpoint) => checkpoint.terminal === "abandoned")) {
+    return invalid2(
+      input.current?.phase_instance ?? selected.chain[0].phase_instance,
+      "manual-import-abandoned-authority-unauthenticated"
+    );
+  }
+  const first = selected.chain[0];
+  let cursor;
+  if (artifact.import_mode === "initial") {
+    if (!("initialization" in first)) return invalid2(first.phase_instance, "manual-import-initialization-missing");
+    cursor = initialBase(first);
+  } else {
+    if (input.current === void 0) return invalid2(first.phase_instance, "manual-import-current-state-required");
+    cursor = structuredClone(input.current);
+  }
+  for (let index = 0; index < selected.chain.length; index += 1) {
+    const checkpoint = selected.chain[index];
+    const priorCheckpoint = index === 0 ? void 0 : selected.chain[index - 1];
+    const evidence = facts.checkpoints.get(checkpointSelfDigest(checkpoint));
+    if (evidence === void 0) throw new TypeError("manual import evidence is incomplete");
+    if (evidence.planned_final_phase === null) {
+      const { planned_final_phase: _planned, ...withoutPlanned } = cursor;
+      cursor = withoutPlanned;
+    } else if (evidence.planned_final_phase !== void 0) {
+      cursor = { ...cursor, planned_final_phase: evidence.planned_final_phase };
+    }
+    if (checkpoint.open_gate !== void 0) continue;
+    const closedGate = authenticatedClosedGate(priorCheckpoint, checkpoint, evidence);
+    const samePosition = cursor.phase_instance === checkpoint.phase_instance && cursor.step === checkpoint.step && cursor.status === checkpoint.status && cursor.attempt === checkpoint.attempt && cursor.input_fingerprint === checkpoint.input_fingerprint;
+    const terminalAdded = cursor.terminal === void 0 && checkpoint.terminal !== void 0;
+    const commitFacts = exactCommittedTransitionFacts(cursor, checkpoint, evidence);
+    if (!preservesGateRefs(cursor, checkpoint)) {
+      return invalid2(checkpoint.phase_instance, "manual-import-gate-authority-removed");
+    }
+    if (!samePosition) {
+      const resultReference = checkpoint.status === "succeeded" ? checkpoint.authoritative_results.find((reference) => reference.phase_instance === checkpoint.phase_instance && reference.step === checkpoint.step && reference.input_fingerprint === checkpoint.input_fingerprint) : void 0;
+      const retainedArtifact = resultReference === void 0 ? void 0 : evidence.retained.get(resultReference.result_digest)?.prepared.manifest.value.source_artifact;
+      if (resultReference !== void 0 && retainedArtifact === void 0) {
+        return invalid2(checkpoint.phase_instance, "manual-import-result-evidence-missing");
+      }
+      const transitionArtifact = retainedArtifact?.artifact_kind === "adjudication-evidence" ? void 0 : retainedArtifact;
+      const transition = planStateTransition({
+        current: cursor,
+        target: {
+          phase_instance: checkpoint.phase_instance,
+          step: checkpoint.step,
+          status: checkpoint.status,
+          attempt: checkpoint.attempt,
+          input_fingerprint: checkpoint.input_fingerprint
+        },
+        recomputed_input_fingerprint: checkpoint.input_fingerprint,
+        ...commitFacts === void 0 ? {
+          ...transitionArtifact === void 0 ? {} : { artifact: transitionArtifact },
+          ...resultReference === void 0 ? {} : { result_reference: resultReference }
+        } : commitFacts
+      });
+      if (!transition.ok) {
+        if (!isAuthenticatedRetryLanding(cursor, checkpoint, closedGate)) return transition;
+      } else if (!isDeepStrictEqual8(transition.value.authoritative_results, checkpoint.authoritative_results)) {
+        return invalid2(checkpoint.phase_instance, "manual-import-result-transition-mismatch");
+      }
+    } else if (!terminalAdded && isDeepStrictEqual8(cursor.approvals, checkpoint.approvals) && isDeepStrictEqual8(cursor.waivers, checkpoint.waivers) && isDeepStrictEqual8(cursor.authoritative_results, checkpoint.authoritative_results)) {
+      const authenticatedNonStateClosure = closedGate !== void 0 && (closedGate.decision.outcome === "cancelled" || closedGate.decision.outcome === "superseded" || closedGate.decision.outcome === "decided" && gateDecisionEffect(closedGate.decision.envelope.payload) !== "advance");
+      if (!(artifact.import_mode === "initial" && index === 0) && !authenticatedNonStateClosure) {
+        return invalid2(checkpoint.phase_instance, "manual-import-checkpoint-no-effect");
+      }
+    }
+    if (terminalAdded) {
+      if (checkpoint.terminal !== "complete") {
+        return invalid2(checkpoint.phase_instance, "manual-import-terminal-authority-invalid");
+      }
+      if (commitFacts === void 0) return invalid2(checkpoint.phase_instance, "manual-import-terminal-commit-proof-missing");
+      const terminal = planStateTransition({
+        current: cursor,
+        target: {
+          phase_instance: checkpoint.phase_instance,
+          step: checkpoint.step,
+          status: checkpoint.status,
+          attempt: checkpoint.attempt,
+          input_fingerprint: checkpoint.input_fingerprint
+        },
+        recomputed_input_fingerprint: checkpoint.input_fingerprint,
+        ...commitFacts
+      });
+      if (!terminal.ok || terminal.value.terminal !== "complete") {
+        return invalid2(checkpoint.phase_instance, "manual-import-terminal-commit-proof-missing");
+      }
+    }
+    cursor = checkpointState(cursor, checkpoint);
+  }
+  const head = selected.chain.at(-1);
+  const { revision: _revision, committed_intent: _intent, open_gate: _gate, ...draft } = cursor;
+  const next = {
+    ...draft,
+    adopted_checkpoint: {
+      revision: head.revision,
+      checkpoint_digest: checkpointSelfDigest(head)
+    }
+  };
+  return ok8(Object.freeze({ next_state: Object.freeze(next), head }));
 }
 
 // src/state/transaction.ts
@@ -44560,344 +45322,323 @@ async function performMaintenance(input) {
 }
 
 // src/state/maintenance-roots.ts
-import { constants as fsConstants6 } from "node:fs";
-import { readdir as readdir3 } from "node:fs/promises";
-import { join as join6, relative as relative3, sep as sep3 } from "node:path";
+import { constants as fsConstants8 } from "node:fs";
+import { readdir as readdir4 } from "node:fs/promises";
+import { join as join10, relative as relative3, sep as sep3 } from "node:path";
 
 // src/state/manual-checkpoints.ts
-import { constants as fsConstants4 } from "node:fs";
-import { readdir as readdir2 } from "node:fs/promises";
-import { join as join5 } from "node:path";
-var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var ioFailure = (authority, operation) => Object.freeze({
-  schema_version: "1",
-  ok: false,
-  error: createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt })
-});
-async function writeManualCheckpoint(dependencies, authority, checkpoint) {
-  assertInternalTransactionAuthority(authority, dependencies);
-  const parsed = parseManualCheckpoint(checkpoint);
-  if (parsed.task_id !== authority.task_id || parsed.repository_identity_digest !== authority.repository_identity_digest) {
-    return Object.freeze({
-      schema_version: "1",
-      ok: false,
-      error: createProjectError("STATE_INVALID", {
-        phase_instance: authority.context.phase_instance,
-        issue_code: "manual-checkpoint-authority-mismatch"
-      })
-    });
-  }
-  const digest11 = checkpointSelfDigest(parsed);
-  const target = await resolveTaskPath({
-    runner: dependencies.runner,
-    taskId: authority.task_id,
-    claim: parseTaskPathClaim(`manual/checkpoints/${parsed.revision}-${digest11}.json`),
-    expectedClass: "manual-checkpoint",
-    context: authority.context
-  });
-  if (!target.ok) return target;
-  const document2 = canonicalDocument(parsed);
-  try {
-    await ensureManualCheckpointDirectory(authority);
-    const installed = await dependencies.atomic.createExclusive(target.value, document2.bytes);
-    if (installed === "exists") {
-      const handle = await openResolved(target.value.absolute, fsConstants4.O_RDONLY);
-      try {
-        const existing = new Uint8Array(await handle.readFile());
-        if (!Buffer.from(existing).equals(Buffer.from(document2.bytes))) {
-          return Object.freeze({
-            schema_version: "1",
-            ok: false,
-            error: createProjectError("STATE_INVALID", {
-              phase_instance: authority.context.phase_instance,
-              issue_code: "manual-checkpoint-address-disagreement"
-            })
-          });
-        }
-      } finally {
-        await handle.close();
-      }
-    }
-    return ok8(document2);
-  } catch {
-    return ioFailure(authority, "write-manual-checkpoint");
-  }
-}
-async function readManualCheckpoints(dependencies, authority) {
-  assertInternalTransactionAuthority(authority, dependencies);
-  let names;
-  try {
-    names = await readdir2(join5(authority.task_root, "manual", "checkpoints"));
-  } catch (error51) {
-    if (error51.code === "ENOENT") return ok8(Object.freeze([]));
-    return ioFailure(authority, "read-manual-checkpoints");
-  }
-  const documents = [];
-  for (const name of names.sort()) {
-    if (!/^(?:0|[1-9][0-9]*)-[0-9a-f]{64}\.json$/u.test(name)) {
-      return Object.freeze({
-        schema_version: "1",
-        ok: false,
-        error: createProjectError("STATE_INVALID", {
-          phase_instance: authority.context.phase_instance,
-          issue_code: "manual-checkpoint-inventory-invalid"
-        })
-      });
-    }
-    const target = await resolveTaskPath({
-      runner: dependencies.runner,
-      taskId: authority.task_id,
-      claim: parseTaskPathClaim(`manual/checkpoints/${name}`),
-      expectedClass: "manual-checkpoint",
-      context: authority.context
-    });
-    if (!target.ok) return target;
-    try {
-      const handle = await openResolved(target.value.absolute, fsConstants4.O_RDONLY);
-      try {
-        const document2 = parseCanonicalDocument(
-          new Uint8Array(await handle.readFile()),
-          "manual checkpoint"
-        );
-        const checkpoint = parseManualCheckpoint(document2.value);
-        const expectedName = `${checkpoint.revision}-${checkpointSelfDigest(checkpoint)}.json`;
-        if (name !== expectedName || checkpoint.task_id !== authority.task_id || checkpoint.repository_identity_digest !== authority.repository_identity_digest) {
-          throw new TypeError("manual checkpoint authority mismatch");
-        }
-        documents.push(document2);
-      } finally {
-        await handle.close();
-      }
-    } catch {
-      return Object.freeze({
-        schema_version: "1",
-        ok: false,
-        error: createProjectError("STATE_INVALID", {
-          phase_instance: authority.context.phase_instance,
-          issue_code: "manual-checkpoint-invalid"
-        })
-      });
-    }
-  }
-  documents.sort((left, right) => left.value.revision - right.value.revision || left.digest.localeCompare(right.digest));
-  return ok8(Object.freeze(documents));
-}
+import { constants as fsConstants7 } from "node:fs";
+import { readdir as readdir3 } from "node:fs/promises";
+import { join as join9 } from "node:path";
+import { isDeepStrictEqual as isDeepStrictEqual10 } from "node:util";
 
-// src/state/read.ts
-import { constants as fsConstants5 } from "node:fs";
+// src/local/manual-workflow.ts
+import { isDeepStrictEqual as isDeepStrictEqual9 } from "node:util";
 
-// src/contracts/config.ts
-var REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"];
-var routeSchema = external_exports.object({
-  model: external_exports.string().min(1).refine((value) => value.trim().length > 0, "model must contain a non-whitespace character"),
-  effort: external_exports.enum(REASONING_EFFORTS)
-}).strict();
-var rolesSchema = external_exports.object({
-  producer: routeSchema.optional(),
-  "self-reviewer": routeSchema.optional(),
-  "counter-reviewer": routeSchema.optional(),
-  adjudicator: routeSchema.optional()
-}).strict();
-var overridesSchema = external_exports.object({
-  explore: rolesSchema.optional(),
-  prd: rolesSchema.optional(),
-  design: rolesSchema.optional(),
-  "phase-design": rolesSchema.optional(),
-  "phase-impl": rolesSchema.optional()
-}).strict();
-var configV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  roles: rolesSchema,
-  overrides: overridesSchema.optional(),
-  max_attempts: external_exports.number().int().positive().safe().optional()
-}).strict();
-function parseConfigV1(value) {
-  assertPlainJson(value, "config");
-  return configV1Schema.parse(value);
-}
-function parseConfigYaml(source, label = "config.yaml") {
-  return parseConfigV1(parseSingleYamlDocument(source, label));
-}
-
-// src/state/read.ts
-var stateValidator = createJsonSchemaValidator(task_state_schema_default, [
-  primitives_schema_default,
-  path_claim_schema_default
-]);
-var decoder2 = new TextDecoder("utf-8", { fatal: true });
-function errnoOf5(error51) {
-  return error51 !== null && typeof error51 === "object" && "code" in error51 ? String(error51.code) : void 0;
-}
-async function readBytes(path2) {
-  let handle;
-  try {
-    handle = await openResolved(path2.absolute, fsConstants5.O_RDONLY);
-    return Object.freeze({ kind: "bytes", bytes: new Uint8Array(await handle.readFile()) });
-  } catch (error51) {
-    return Object.freeze({ kind: errnoOf5(error51) === "ENOENT" ? "missing" : "unreadable" });
-  } finally {
-    await handle?.close().catch(() => void 0);
-  }
-}
-async function readTaskState(path2) {
-  if (path2.path_class !== "task-state") throw new TypeError("readTaskState requires a task-state resolved path");
-  const read = await readBytes(path2);
-  if (read.kind !== "bytes") return read;
-  try {
-    const document2 = parseCanonicalDocument(read.bytes, "task state");
-    stateValidator.assert(document2.value, "task state");
-    return Object.freeze({ kind: "canonical", document: document2 });
-  } catch {
-    return Object.freeze({ kind: "noncanonical" });
-  }
-}
-async function readIntentReceipt(path2) {
-  if (path2.path_class !== "intent") throw new TypeError("readIntentReceipt requires an intent resolved path");
-  const read = await readBytes(path2);
-  if (read.kind !== "bytes") return read;
-  try {
-    const document2 = parseCanonicalDocument(read.bytes, "intent receipt");
-    parseIntentReceipt(document2.value);
-    return Object.freeze({ kind: "canonical", document: document2 });
-  } catch {
-    return Object.freeze({ kind: "noncanonical" });
-  }
-}
-async function readTaskConfig(path2) {
-  if (path2.path_class !== "task-config") throw new TypeError("readTaskConfig requires a task-config resolved path");
-  const read = await readBytes(path2);
-  if (read.kind !== "bytes") return read;
-  try {
-    parseConfigYaml(decoder2.decode(read.bytes), "task config");
-    return Object.freeze({
-      kind: "valid",
-      snapshot: Object.freeze({ bytes: read.bytes, digest: sha256Bytes(read.bytes) })
-    });
-  } catch {
-    return Object.freeze({ kind: "invalid" });
-  }
-}
-
-// src/state/maintenance-roots.ts
+// src/state/evidence-results.ts
+init_trust_brands();
+init_renderers();
 var ok9 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail9 = (authority, operation) => Object.freeze({
-  schema_version: "1",
-  ok: false,
-  error: createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt })
-});
-async function regularFiles(root, prefix = "") {
-  let entries;
-  try {
-    entries = await readdir3(join6(root, prefix), { withFileTypes: true });
-  } catch (error51) {
-    if (error51.code === "ENOENT") return [];
-    throw error51;
-  }
-  const files = [];
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    if (entry.isSymbolicLink()) throw new TypeError("maintenance inventory contains a symlink");
-    const path2 = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) files.push(...await regularFiles(root, path2));
-    else if (entry.isFile()) files.push(path2);
-    else throw new TypeError("maintenance inventory contains a non-regular entry");
-  }
-  return files;
+function projectionClaim(phaseInstance3, value) {
+  if (value.kind === "triage") return triageReviewClaim(phaseInstance3);
+  if (value.kind === "adjudication") return adjudicationReviewClaim(phaseInstance3);
+  return value.evidence.role === "self-review" ? selfReviewClaim(phaseInstance3) : counterReviewClaim(phaseInstance3);
 }
-async function readTaskFile(authority, path2) {
-  const absolute = join6(authority.task_root, ...path2.split("/"));
-  const rel = relative3(authority.task_root, absolute);
-  if (rel === ".." || rel.startsWith(`..${sep3}`)) throw new TypeError("maintenance path escaped task root");
-  const handle = await openResolved(absolute, fsConstants6.O_RDONLY);
-  try {
-    return new Uint8Array(await handle.readFile());
-  } finally {
-    await handle.close();
-  }
-}
-function referenceRoot(value, taskId) {
-  if (value === null || Array.isArray(value) || typeof value !== "object") return void 0;
-  const candidate = value;
-  if (candidate.task_id !== taskId || !Array.isArray(candidate.authoritative_results)) return void 0;
-  return candidate;
-}
-async function enumerateMaintenanceRoots(dependencies, authority) {
-  assertInternalTransactionAuthority(authority, dependencies);
-  const stateRead = await readTaskState(authority.state);
-  if (stateRead.kind !== "canonical") return fail9(authority, "enumerate-maintenance-state");
-  const checkpoints = await readManualCheckpoints(dependencies, authority);
-  if (!checkpoints.ok) return checkpoints;
-  try {
-    const receipts = [];
-    for (const path2 of await regularFiles(join6(authority.task_root, "intents"))) {
-      if (!path2.endsWith(".json")) throw new TypeError("invalid intent inventory");
-      const document2 = parseCanonicalDocument(await readTaskFile(authority, `intents/${path2}`), "intent receipt");
-      receipts.push({ prepared_state: parseIntentReceipt(document2.value).prepared_state });
+function qualifyAndRender(value) {
+  if (value.kind === "review") {
+    const verified = createVerifiedEvidenceReference(value.evidence);
+    if (verified.evidence.role === "gate-counter-review") {
+      throw new TypeError("gate-counter-review evidence requires the gate-owned retention route");
     }
-    const decisionReviewEvidence = [];
-    for (const directory of ["decisions", "reviews"]) {
-      for (const path2 of await regularFiles(join6(authority.task_root, directory))) {
-        if (!path2.endsWith(".json")) continue;
-        const document2 = parseCanonicalDocument(await readTaskFile(authority, `${directory}/${path2}`), "decision/review evidence");
-        assertPlainJson(document2.value, "decision/review evidence");
-        const root = referenceRoot(document2.value, authority.task_id);
-        if (root !== void 0) decisionReviewEvidence.push(root);
-      }
+    return Object.freeze({
+      artifact: Object.freeze({
+        schema_version: "1",
+        artifact_kind: "review-evidence",
+        evidence: verified.evidence
+      }),
+      bytes: renderReviewEvidence(verified),
+      evidence_digest: verified.evidence_digest,
+      phase_instance: verified.evidence.phase_instance,
+      step: verified.evidence.step,
+      task_id: verified.evidence.task_id,
+      input_fingerprint: verified.evidence.input_fingerprint
+    });
+  }
+  if (value.kind === "adjudication") {
+    const verified = createVerifiedEvidenceReference(value.evidence);
+    return Object.freeze({
+      artifact: Object.freeze({
+        schema_version: "1",
+        artifact_kind: "adjudication-evidence",
+        evidence: verified.evidence
+      }),
+      bytes: renderAdjudicationEvidence(verified),
+      evidence_digest: verified.evidence_digest,
+      phase_instance: verified.evidence.phase_instance,
+      step: verified.evidence.step,
+      task_id: verified.evidence.task_id,
+      input_fingerprint: verified.evidence.input_fingerprint
+    });
+  }
+  const triage = validateTriage(value.current_reviews, value.evidence);
+  return Object.freeze({
+    artifact: Object.freeze({
+      schema_version: "1",
+      artifact_kind: "triage",
+      evidence: triage
+    }),
+    bytes: renderTriage(triage),
+    evidence_digest: canonicalJsonDigest(triage),
+    phase_instance: triage.phase_instance,
+    step: triage.step,
+    task_id: triage.task_id,
+    input_fingerprint: triage.input_fingerprint
+  });
+}
+async function resolveEvidenceTarget(input, claim, expectedClass) {
+  return resolveTaskPath({
+    runner: input.runner,
+    taskId: input.authority.task_id,
+    claim,
+    expectedClass,
+    context: input.authority.context
+  });
+}
+async function prepareEvidenceResult(input) {
+  assertInternalTransactionAuthority(input.authority);
+  const qualified = qualifyAndRender(input.value);
+  if (qualified.task_id !== input.authority.task_id || qualified.phase_instance !== input.authority.context.phase_instance) {
+    throw new TypeError("evidence scope does not match transaction authority");
+  }
+  if (input.value.kind !== "triage" && input.value.evidence.assurance === "server-attested" && input.value.evidence.result_id !== input.result_id) {
+    throw new TypeError("server-attested evidence result_id does not match prepared result");
+  }
+  const taskClaim = projectionClaim(qualified.phase_instance, input.value);
+  const repositoryClaim = toRepositoryPathClaim(input.authority.task_id, taskClaim);
+  const projectionTarget = await resolveEvidenceTarget(input, taskClaim, "review");
+  if (!projectionTarget.ok) return projectionTarget;
+  const renderedDigest = sha256Bytes(qualified.bytes);
+  const byteCount = parseSafeInteger(qualified.bytes.byteLength);
+  const gitIdentity = await hashGitBlobIdentity(
+    input.runner,
+    qualified.bytes,
+    repositoryClaim
+  );
+  const output = Object.freeze({
+    path: repositoryClaim,
+    path_class: "review",
+    operation: "add",
+    storage: "raw-payload",
+    payload_bytes: byteCount,
+    payload_digest: renderedDigest,
+    file_type: "regular",
+    after: Object.freeze({
+      oid: gitIdentity.oid,
+      mode: "100644",
+      size_bytes: parseSafeInteger(gitIdentity.size_bytes)
+    })
+  });
+  const projections = Object.freeze([
+    Object.freeze({ path: repositoryClaim, content_digest: renderedDigest })
+  ]);
+  const snapshotDigest = deriveDeclaredSnapshotDigest([output], projections);
+  const captured = await captureProjectionTarget(projectionTarget.value);
+  let secretScan;
+  const capturingScanner = Object.freeze({
+    scan: async (candidates) => {
+      const result = parseSecretScanResult(await input.scanner.scan(candidates));
+      secretScan = result;
+      return result;
     }
-    return ok9(Object.freeze({
-      inventory_complete: true,
-      current_state: stateRead.document.value,
-      checkpoints: Object.freeze(checkpoints.value.map((document2) => document2.value)),
-      resumable_receipts: Object.freeze(receipts),
-      decision_review_evidence: Object.freeze(decisionReviewEvidence)
+  });
+  const source = Object.freeze({
+    path: repositoryClaim,
+    target: projectionTarget.value,
+    desired: Object.freeze({
+      state: "present",
+      file_type: "regular",
+      mode: "100644",
+      bytes: qualified.bytes
+    }),
+    authenticated_before: captured.observation,
+    ...captured.observation.state === "present" ? { rollback: captured.rollback } : {},
+    git_tracked: true
+  });
+  const projectionPlan = await prepareProjectionPlan(
+    [source],
+    capturingScanner,
+    input.runner.location.worktreeRoot
+  );
+  if (!projectionPlan.ok) return projectionPlan;
+  if (secretScan === void 0 || secretScan.outcome !== "clean") {
+    throw new TypeError("successful evidence projection requires a clean secret scan");
+  }
+  const manifestValue = Object.freeze({
+    schema_version: "1",
+    task_id: qualified.task_id,
+    repository_identity_digest: input.authority.repository_identity_digest,
+    result_id: input.result_id,
+    phase_instance: qualified.phase_instance,
+    step: qualified.step,
+    artifact_digest: qualified.evidence_digest,
+    source_artifact: qualified.artifact,
+    input_fingerprint: qualified.input_fingerprint,
+    snapshot_digest: snapshotDigest,
+    outputs: Object.freeze([output]),
+    projections,
+    accounting: Object.freeze({
+      schema_version: "1",
+      result_bytes: byteCount,
+      task_bytes: parseSafeInteger(input.retained_task_bytes + byteCount),
+      result_byte_cap: 26214400,
+      task_byte_cap: 262144e3,
+      counted_entries: Object.freeze([
+        Object.freeze({
+          path: repositoryClaim,
+          storage: "raw-payload",
+          stored_bytes: byteCount
+        })
+      ]),
+      measured_at_revision: input.measured_at_revision
+    }),
+    secret_scan: secretScan
+  });
+  const manifest = canonicalDocument(manifestValue);
+  const manifestClaim = parseTaskPathClaim(
+    `results/sha256/${manifest.digest}/manifest.json`
+  );
+  const payloadClaim = parseTaskPathClaim(
+    `results/sha256/${manifest.digest}/payload/${repositoryClaim}`
+  );
+  const [manifestTarget, payloadTarget] = await Promise.all([
+    resolveEvidenceTarget(input, manifestClaim, "result-manifest"),
+    resolveEvidenceTarget(input, payloadClaim, "result-payload")
+  ]);
+  if (!manifestTarget.ok) return manifestTarget;
+  if (!payloadTarget.ok) return payloadTarget;
+  const prepared = prepareSnapshot({
+    manifest: manifestValue,
+    payloads: Object.freeze([
+      Object.freeze({
+        path: repositoryClaim,
+        bytes: qualified.bytes,
+        target: payloadTarget.value
+      })
+    ]),
+    retained_task_bytes: input.retained_task_bytes,
+    validate_manifest: parseResultManifest
+  });
+  if (!prepared.ok) return prepared;
+  const reference = Object.freeze({
+    phase_instance: qualified.phase_instance,
+    step: qualified.step,
+    result_digest: prepared.value.result_digest,
+    result_id: input.result_id,
+    input_fingerprint: qualified.input_fingerprint,
+    manifest_path: manifestTarget.value.repositoryRelative
+  });
+  return ok9(Object.freeze({
+    reference,
+    prepared: prepared.value,
+    manifest_target: manifestTarget.value,
+    projection_plan: projectionPlan.value,
+    evidence_digest: qualified.evidence_digest,
+    rendered_digest: renderedDigest
+  }));
+}
+function expectedSourceKind(step) {
+  if (step === "self_review" || step === "counter_review") return "review-evidence";
+  if (step === "triage") return "triage";
+  if (step === "adjudicate") return "adjudication-evidence";
+  return void 0;
+}
+function validateLoadedEvidence(reference, loaded) {
+  const document2 = canonicalDocument(parseResultManifest(loaded.prepared.manifest.value));
+  if (document2.digest !== loaded.prepared.manifest.digest || !Buffer.from(document2.bytes).equals(Buffer.from(loaded.prepared.manifest.bytes)) || loaded.prepared.result_digest !== document2.digest || reference.result_digest !== document2.digest || reference.manifest_path !== loaded.manifest_target.repositoryRelative || loaded.manifest_target.path_class !== "result-manifest") {
+    throw new TypeError("loaded evidence result identity disagrees");
+  }
+  const manifest = document2.value;
+  const expectedKind = expectedSourceKind(reference.step);
+  if (expectedKind === void 0 || manifest.source_artifact.artifact_kind !== expectedKind || manifest.result_id !== reference.result_id || manifest.phase_instance !== reference.phase_instance || manifest.step !== reference.step || manifest.input_fingerprint !== reference.input_fingerprint) {
+    throw new TypeError("loaded evidence result correlation disagrees");
+  }
+  if (manifest.source_artifact.artifact_kind === "review-evidence" && (reference.step === "self_review" && manifest.source_artifact.evidence.role !== "self-review" || reference.step === "counter_review" && manifest.source_artifact.evidence.role !== "counter-review")) {
+    throw new TypeError("loaded review evidence role disagrees with its step");
+  }
+  if (!validateDurableSemantics({ result_manifest: document2 }).ok) {
+    throw new TypeError("loaded evidence manifest semantics are invalid");
+  }
+  return manifest;
+}
+async function loadRetainedEvidence(dependencies, state, phase_instance) {
+  if (dependencies.load_retained_result === void 0) {
+    throw new TypeError("retained evidence loading is unavailable");
+  }
+  const retained = /* @__PURE__ */ new Map();
+  for (const reference of state.authoritative_results) {
+    if (reference.phase_instance !== phase_instance || expectedSourceKind(reference.step) === void 0) {
+      continue;
+    }
+    if (retained.has(reference.step)) {
+      throw new TypeError("phase has duplicate retained evidence for one step");
+    }
+    const loaded = await dependencies.load_retained_result(reference);
+    if (!loaded.ok) return loaded;
+    const manifest = validateLoadedEvidence(reference, loaded.value);
+    retained.set(reference.step, Object.freeze({
+      reference: structuredClone(reference),
+      manifest
     }));
-  } catch {
-    return fail9(authority, "enumerate-maintenance-roots");
   }
+  return ok9(retained);
 }
-async function enumerateMaintenanceManifests(dependencies, authority, roots) {
-  assertInternalTransactionAuthority(authority, dependencies);
-  const references = /* @__PURE__ */ new Map();
-  for (const root of [roots.current_state, ...roots.checkpoints, ...roots.resumable_receipts.map((item) => item.prepared_state), ...roots.decision_review_evidence]) {
-    for (const reference of root.authoritative_results) references.set(reference.result_digest, reference.manifest_path);
+function deriveCurrentEvidenceSet(retained) {
+  const selfEntry = retained.get("self_review");
+  const counterEntry = retained.get("counter_review");
+  if (selfEntry === void 0 || counterEntry === void 0) {
+    throw new TypeError("current review reconstruction requires self and counter evidence");
   }
-  try {
-    const manifests = [];
-    for (const [resultDigest, manifestPath] of [...references].sort()) {
-      const prefix = `.archflow/tasks/${authority.task_id}/`;
-      if (!manifestPath.startsWith(prefix)) throw new TypeError("manifest outside task");
-      const document2 = parseCanonicalDocument(await readTaskFile(authority, manifestPath.slice(prefix.length)), "result manifest");
-      manifests.push({ result_digest: resultDigest, manifest_path: manifestPath, manifest: document2.value });
-    }
-    return ok9(Object.freeze(manifests));
-  } catch {
-    return fail9(authority, "enumerate-maintenance-manifests");
+  const selfSource = selfEntry.manifest.source_artifact;
+  const counterSource = counterEntry.manifest.source_artifact;
+  if (selfSource.artifact_kind !== "review-evidence" || counterSource.artifact_kind !== "review-evidence") {
+    throw new TypeError("current review manifests have the wrong source kind");
   }
-}
-async function enumerateMaintenanceCandidates(dependencies, authority, roots) {
-  assertInternalTransactionAuthority(authority, dependencies);
-  const referenced = new Set([roots.current_state, ...roots.checkpoints, ...roots.resumable_receipts.map((item) => item.prepared_state), ...roots.decision_review_evidence].flatMap((root) => root.authoritative_results.map((item) => item.result_digest)));
-  try {
-    const candidates = [];
-    for (const path2 of await regularFiles(join6(authority.task_root, "attempts"))) {
-      const claim = parseTaskPathClaim(`attempts/${path2}`);
-      const target = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim, expectedClass: "attempt", context: authority.context });
-      if (!target.ok) return target;
-      const bytes = await readTaskFile(authority, claim);
-      candidates.push({ path: target.value.repositoryRelative, target: target.value, digest: sha256Bytes(bytes), byte_count: bytes.byteLength, category: "unreferenced-attempt" });
-    }
-    for (const path2 of await regularFiles(join6(authority.task_root, "results", "sha256"))) {
-      const match = path2.match(/^([0-9a-f]{64})\/payload\/(.+)$/u);
-      if (!match || referenced.has(match[1])) continue;
-      const claim = parseTaskPathClaim(`results/sha256/${path2}`);
-      const target = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim, expectedClass: "result-payload", context: authority.context });
-      if (!target.ok) return target;
-      const bytes = await readTaskFile(authority, claim);
-      candidates.push({ path: target.value.repositoryRelative, target: target.value, digest: sha256Bytes(bytes), byte_count: bytes.byteLength, category: "superseded-payload" });
-    }
-    return ok9(Object.freeze(candidates.sort((a, b) => a.digest.localeCompare(b.digest))));
-  } catch {
-    return fail9(authority, "enumerate-maintenance-candidates");
+  const self2 = selfSource.evidence;
+  const counter = counterSource.evidence;
+  if (self2.role !== "self-review" || self2.assurance !== "agent-declared" || self2.model_family !== self2.producer_family || counter.role !== "counter-review" || counter.assurance !== "server-attested" && counter.assurance !== "degraded" || counter.model_family === counter.producer_family || self2.task_id !== counter.task_id || self2.phase_instance !== counter.phase_instance || self2.subject_digest !== counter.subject_digest || self2.input_fingerprint !== counter.input_fingerprint || self2.rubric_digest !== counter.rubric_digest || self2.producer_family !== counter.producer_family) {
+    throw new TypeError("retained reviews do not form one current review set");
   }
+  const verifiedSelf = createVerifiedEvidenceReference(self2);
+  const verifiedCounter = createVerifiedEvidenceReference(counter);
+  if (verifiedSelf.evidence_digest !== selfEntry.manifest.artifact_digest || verifiedCounter.evidence_digest !== counterEntry.manifest.artifact_digest) {
+    throw new TypeError("retained review evidence digest does not match its manifest");
+  }
+  const slots = parseRequiredReviewSlots([{
+    role: "self-review",
+    evidence_digest: verifiedSelf.evidence_digest,
+    assurance: "agent-declared",
+    producer_family: self2.producer_family,
+    reviewer_family: self2.model_family,
+    independence: "same-family-self"
+  }, {
+    role: "counter-review",
+    evidence_digest: verifiedCounter.evidence_digest,
+    assurance: counter.assurance,
+    producer_family: counter.producer_family,
+    reviewer_family: counter.model_family,
+    independence: "opposite-family"
+  }]);
+  return Object.freeze({
+    task_id: self2.task_id,
+    phase_instance: self2.phase_instance,
+    subject_digest: self2.subject_digest,
+    input_fingerprint: self2.input_fingerprint,
+    current_evidence_set: currentEvidenceSetRef(slots),
+    reviews: Object.freeze([
+      verifiedSelf,
+      verifiedCounter
+    ])
+  });
 }
 
 // src/state/fingerprint-readers.ts
@@ -45017,7 +45758,7 @@ function parseConstitutionRuleFiles(files) {
 // src/state/constitution.ts
 var CONSTITUTION_DIRECTORY = ".archflow/constitution";
 var RULE_FILE = /^\.archflow\/constitution\/[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
-var decoder3 = new TextDecoder("utf-8", { fatal: true });
+var decoder2 = new TextDecoder("utf-8", { fatal: true });
 var authenticResolvedConstitutions = /* @__PURE__ */ new WeakSet();
 function assertResolvedConstitution(value) {
   if (value === null || typeof value !== "object" || !authenticResolvedConstitutions.has(value)) {
@@ -45049,7 +45790,7 @@ function immutableRegistry(rules2) {
   return registry2;
 }
 var ok10 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail10 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail9 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 async function readConstitutionTreeFiles(runner, commit) {
   const listed = await readCommitTreeEntries(runner, commit, CONSTITUTION_DIRECTORY);
   return Object.freeze(listed.filter((entry) => RULE_FILE.test(entry.path)).map((entry) => Object.freeze({
@@ -45071,18 +45812,18 @@ function invalidPolicyBase(policyBaseCommit, observed) {
 async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
   try {
     const selected = await readConstitutionTreeFiles(runner, policyBaseCommit);
-    if (selected.length === 0) return fail10(invalidPolicyBase(policyBaseCommit));
+    if (selected.length === 0) return fail9(invalidPolicyBase(policyBaseCommit));
     const sources = {};
     for (const file2 of selected) {
-      sources[file2.path] = decoder3.decode(await readGitBlobBytes(runner, file2.oid));
+      sources[file2.path] = decoder2.decode(await readGitBlobBytes(runner, file2.oid));
     }
     let rules2;
     try {
       rules2 = parseConstitutionRuleFiles(sources);
     } catch {
-      return fail10(invalidPolicyBase(policyBaseCommit));
+      return fail9(invalidPolicyBase(policyBaseCommit));
     }
-    if (rules2.size === 0) return fail10(invalidPolicyBase(policyBaseCommit));
+    if (rules2.size === 0) return fail9(invalidPolicyBase(policyBaseCommit));
     const resolved = Object.freeze({
       digest: computePinnedConstitutionDigest(selected),
       rules: immutableRegistry(rules2),
@@ -45092,10 +45833,10 @@ async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
     return ok10(resolved);
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
-      return fail10(projectErrorForGitFailure(error51, runner, context2));
+      return fail9(projectErrorForGitFailure(error51, runner, context2));
     }
     if (error51 instanceof TypeError || error51 instanceof RangeError) {
-      return fail10(invalidPolicyBase(policyBaseCommit));
+      return fail9(invalidPolicyBase(policyBaseCommit));
     }
     throw error51;
   }
@@ -45104,7 +45845,7 @@ var PINNED_WORKFLOW_PATH = parseRepositoryPathClaim(".archflow/workflow.yaml");
 
 // src/state/fingerprint-readers.ts
 var ok11 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail11 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail10 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function stateIssue(input, issueCode) {
   return createProjectError("STATE_INVALID", {
     phase_instance: input.state.value.phase_instance,
@@ -45119,7 +45860,7 @@ var readCanonicalWorkflowDigest = async (input) => {
       PINNED_WORKFLOW_PATH
     );
     if (entry === void 0) {
-      return fail11(createProjectError("POLICY_BASE_INVALID", {
+      return fail10(createProjectError("POLICY_BASE_INVALID", {
         expected_digest: input.state.value.workflow_digest
       }));
     }
@@ -45130,7 +45871,7 @@ var readCanonicalWorkflowDigest = async (input) => {
     return ok11(sha256Bytes(bytes.stdout));
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
-      return fail11(projectErrorForGitFailure(error51, input.runner, input.context));
+      return fail10(projectErrorForGitFailure(error51, input.runner, input.context));
     }
     throw error51;
   }
@@ -45166,14 +45907,14 @@ async function identitiesFor(input, claims, missingIssue) {
   for (const path2 of resolved) {
     let bytes;
     try {
-      const stat4 = await lstat5(path2.absolute);
-      if (!stat4.isFile()) return fail11(stateIssue(input, missingIssue));
+      const stat5 = await lstat5(path2.absolute);
+      if (!stat5.isFile()) return fail10(stateIssue(input, missingIssue));
       bytes = new Uint8Array(await readFile2(path2.absolute));
     } catch (error51) {
       if (error51.code === "ENOENT") {
-        return fail11(stateIssue(input, missingIssue));
+        return fail10(stateIssue(input, missingIssue));
       }
-      return fail11(createProjectError("IO_ERROR", {
+      return fail10(createProjectError("IO_ERROR", {
         operation: input.context.operation,
         attempt: input.context.attempt
       }));
@@ -45213,14 +45954,109 @@ function createProductionInputFingerprintResolver() {
   });
 }
 
+// src/state/read.ts
+import { constants as fsConstants5 } from "node:fs";
+
+// src/contracts/config.ts
+var REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"];
+var routeSchema = external_exports.object({
+  model: external_exports.string().min(1).refine((value) => value.trim().length > 0, "model must contain a non-whitespace character"),
+  effort: external_exports.enum(REASONING_EFFORTS)
+}).strict();
+var rolesSchema = external_exports.object({
+  producer: routeSchema.optional(),
+  "self-reviewer": routeSchema.optional(),
+  "counter-reviewer": routeSchema.optional(),
+  adjudicator: routeSchema.optional()
+}).strict();
+var overridesSchema = external_exports.object({
+  explore: rolesSchema.optional(),
+  prd: rolesSchema.optional(),
+  design: rolesSchema.optional(),
+  "phase-design": rolesSchema.optional(),
+  "phase-impl": rolesSchema.optional()
+}).strict();
+var configV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  roles: rolesSchema,
+  overrides: overridesSchema.optional(),
+  max_attempts: external_exports.number().int().positive().safe().optional()
+}).strict();
+function parseConfigV1(value) {
+  assertPlainJson(value, "config");
+  return configV1Schema.parse(value);
+}
+function parseConfigYaml(source, label = "config.yaml") {
+  return parseConfigV1(parseSingleYamlDocument(source, label));
+}
+
+// src/state/read.ts
+var stateValidator = createJsonSchemaValidator(task_state_schema_default, [
+  primitives_schema_default,
+  path_claim_schema_default
+]);
+var decoder3 = new TextDecoder("utf-8", { fatal: true });
+function errnoOf5(error51) {
+  return error51 !== null && typeof error51 === "object" && "code" in error51 ? String(error51.code) : void 0;
+}
+async function readBytes(path2) {
+  let handle;
+  try {
+    handle = await openResolved(path2.absolute, fsConstants5.O_RDONLY);
+    return Object.freeze({ kind: "bytes", bytes: new Uint8Array(await handle.readFile()) });
+  } catch (error51) {
+    return Object.freeze({ kind: errnoOf5(error51) === "ENOENT" ? "missing" : "unreadable" });
+  } finally {
+    await handle?.close().catch(() => void 0);
+  }
+}
+async function readTaskState(path2) {
+  if (path2.path_class !== "task-state") throw new TypeError("readTaskState requires a task-state resolved path");
+  const read = await readBytes(path2);
+  if (read.kind !== "bytes") return read;
+  try {
+    const document2 = parseCanonicalDocument(read.bytes, "task state");
+    stateValidator.assert(document2.value, "task state");
+    return Object.freeze({ kind: "canonical", document: document2 });
+  } catch {
+    return Object.freeze({ kind: "noncanonical" });
+  }
+}
+async function readIntentReceipt(path2) {
+  if (path2.path_class !== "intent") throw new TypeError("readIntentReceipt requires an intent resolved path");
+  const read = await readBytes(path2);
+  if (read.kind !== "bytes") return read;
+  try {
+    const document2 = parseCanonicalDocument(read.bytes, "intent receipt");
+    parseIntentReceipt(document2.value);
+    return Object.freeze({ kind: "canonical", document: document2 });
+  } catch {
+    return Object.freeze({ kind: "noncanonical" });
+  }
+}
+async function readTaskConfig(path2) {
+  if (path2.path_class !== "task-config") throw new TypeError("readTaskConfig requires a task-config resolved path");
+  const read = await readBytes(path2);
+  if (read.kind !== "bytes") return read;
+  try {
+    parseConfigYaml(decoder3.decode(read.bytes), "task config");
+    return Object.freeze({
+      kind: "valid",
+      snapshot: Object.freeze({ bytes: read.bytes, digest: sha256Bytes(read.bytes) })
+    });
+  } catch {
+    return Object.freeze({ kind: "invalid" });
+  }
+}
+
 // src/state/production.ts
 var ok12 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail12 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail11 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function context(input, phase4, attempt) {
   return Object.freeze({ task_id: input.task_id, phase_instance: phase4, operation: input.operation, attempt });
 }
 function stateFailure(phase4, issue3) {
-  return fail12(createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code: issue3 }));
+  return fail11(createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code: issue3 }));
 }
 async function resolvePath7(runner, authority, claim, expectedClass) {
   return resolveTaskPath({
@@ -45299,8 +46135,8 @@ async function readRetainedResult(runner, authority, reference) {
   };
   const sources = [];
   for (const output of manifest.outputs) {
-    const target = await resolveOutput(output.path, output);
-    if (!target.ok) return target;
+    const target2 = await resolveOutput(output.path, output);
+    if (!target2.ok) return target2;
     const desired = await restoreSnapshotOutput({
       target: manifestTarget.value,
       expected_result_digest: reference.result_digest,
@@ -45313,7 +46149,7 @@ async function readRetainedResult(runner, authority, reference) {
     const before = output.operation === "add" ? void 0 : await beforeImage(output.before, output.operation === "rename" ? output.previous_path : output.path);
     sources.push(Object.freeze({
       path: output.path,
-      target: target.value,
+      target: target2.value,
       desired: desired.value,
       authenticated_before: before?.observation ?? Object.freeze({ state: "absent" }),
       ...before === void 0 ? {} : { rollback: before.desired },
@@ -45347,6 +46183,113 @@ async function readRetainedResult(runner, authority, reference) {
     worktree_root: runner.location.worktreeRoot
   }));
 }
+var retainedAccounting = /* @__PURE__ */ new WeakMap();
+async function createRetainedTaskAccounting(input) {
+  let taskBytes;
+  let revision;
+  if (input.manual_authority !== void 0) {
+    const manual = resolveManualAuthority(input.manual_authority);
+    if (manual.services !== input.services) throw new TypeError("manual accounting authority belongs to another production session");
+    taskBytes = manual.retained_task_bytes;
+    revision = parseSafeInteger((manual.head ?? manual.state?.value)?.revision ?? 1);
+  } else {
+    const state = input.services.state;
+    if (state === void 0) throw new TypeError("normal retained accounting requires current state");
+    const read = input.services.dependencies.read_retained_task_bytes;
+    if (read === void 0) throw new TypeError("normal retained accounting loader is unavailable");
+    taskBytes = await read();
+    revision = state.value.revision;
+  }
+  const capability = Object.freeze({});
+  retainedAccounting.set(capability, Object.freeze({ task_bytes: taskBytes, measured_at_revision: revision }));
+  return capability;
+}
+function resolveRetainedTaskAccounting(accounting2) {
+  const facts = retainedAccounting.get(accounting2);
+  if (facts === void 0) throw new TypeError("retained task accounting capability is invalid");
+  return facts;
+}
+var installedManualResults = /* @__PURE__ */ new WeakMap();
+async function installManualRetainedResult(input) {
+  const manual = resolveManualAuthority(input.authority);
+  if (manual.services !== input.services) throw new TypeError("manual result authority belongs to another production session");
+  if (input.prepared.reference.result_digest !== input.prepared.prepared.result_digest || input.prepared.manifest_target.repositoryRelative !== input.prepared.reference.manifest_path) {
+    throw new TypeError("manual result preparation does not bind its retained reference");
+  }
+  try {
+    await ensureResultDirectory(input.services.authority, input.prepared.prepared.result_digest);
+    for (const payload of input.prepared.prepared.payloads) {
+      await ensurePayloadParent(
+        input.services.authority,
+        input.prepared.prepared.result_digest,
+        payload.target.absolute
+      );
+    }
+  } catch {
+    return fail11(createProjectError("SNAPSHOT_INVALID", {
+      snapshot_digest: input.prepared.prepared.manifest.value.snapshot_digest,
+      issue_code: "immutable-install-disagreement"
+    }));
+  }
+  const installed = await installSnapshot(
+    input.services.dependencies.atomic,
+    input.prepared.prepared,
+    input.prepared.manifest_target,
+    input.services.runner.location.worktreeRoot
+  );
+  if (!installed.ok) return installed;
+  const writer = input.services.dependencies.projection_writer;
+  if (writer === void 0) throw new TypeError("manual result projection writer is unavailable");
+  for (const entry of input.prepared.projection_plan.entries) {
+    await ensureTaskProjectionParent(input.services.authority, entry.target.absolute);
+  }
+  const projected = await applyProjectionPlan(writer, input.prepared.projection_plan);
+  if (projected.outcome !== "applied") {
+    return fail11(createProjectError("SNAPSHOT_INVALID", {
+      snapshot_digest: input.prepared.prepared.manifest.value.snapshot_digest,
+      issue_code: `projection-${projected.outcome}`
+    }));
+  }
+  const capability = Object.freeze({});
+  installedManualResults.set(capability, Object.freeze({
+    authority: input.authority,
+    reference: input.prepared.reference,
+    manifest: input.prepared.prepared.manifest,
+    projections: input.prepared.prepared.manifest.value.projections
+  }));
+  return ok12(capability);
+}
+async function remintManualRetainedResult(input) {
+  const manual = resolveManualAuthority(input.authority);
+  if (manual.services !== input.services) throw new TypeError("manual result authority belongs to another production session");
+  const retained = await readRetainedResult(input.services.runner, input.services.authority, input.reference);
+  if (!retained.ok) return retained;
+  const writer = input.services.dependencies.projection_writer;
+  if (writer === void 0) throw new TypeError("manual result projection writer is unavailable");
+  for (const entry of retained.value.projection_plan.entries) {
+    await ensureTaskProjectionParent(input.services.authority, entry.target.absolute);
+  }
+  const projected = await applyProjectionPlan(writer, retained.value.projection_plan);
+  if (projected.outcome !== "applied") {
+    return fail11(createProjectError("SNAPSHOT_INVALID", {
+      snapshot_digest: retained.value.prepared.manifest.value.snapshot_digest,
+      issue_code: `projection-${projected.outcome}`
+    }));
+  }
+  const capability = Object.freeze({});
+  installedManualResults.set(capability, Object.freeze({
+    authority: input.authority,
+    reference: input.reference,
+    manifest: retained.value.prepared.manifest,
+    projections: retained.value.prepared.manifest.value.projections
+  }));
+  return ok12(capability);
+}
+function resolveInstalledManualResult(result, authority) {
+  const facts = installedManualResults.get(result);
+  if (facts === void 0 || facts.authority !== authority) throw new TypeError("installed manual result capability is invalid or foreign");
+  return facts;
+}
 async function createProductionServices(input) {
   const provisionalPhase = input.phase_instance ?? "prd";
   const provisionalContext = context(input, provisionalPhase, parseSafeInteger(1));
@@ -45363,7 +46306,7 @@ async function createProductionServices(input) {
   if (!provisionalAuthority.ok) return provisionalAuthority;
   const observed = await readTaskState(provisionalAuthority.value.state);
   if (observed.kind === "unreadable") {
-    return fail12(createProjectError("IO_ERROR", { operation: input.operation, attempt: provisionalContext.attempt }));
+    return fail11(createProjectError("IO_ERROR", { operation: input.operation, attempt: provisionalContext.attempt }));
   }
   if (observed.kind === "noncanonical") return stateFailure(provisionalPhase, "task-state-noncanonical");
   const resolvedContext = observed.kind === "canonical" ? context(input, observed.document.value.phase_instance, observed.document.value.attempt) : provisionalContext;
@@ -45424,16 +46367,16 @@ async function createProductionServices(input) {
       return subject.ok ? ok12(computeInputFingerprint(subject.value)) : subject;
     },
     resolve_supplemental_review: async ({ request }) => {
-      const target = await resolvePath7(
+      const target2 = await resolvePath7(
         discovered.value,
         authority,
         gateSupplementalReviewClaim(request.gate_id),
         "decision"
       );
-      if (!target.ok) return target;
+      if (!target2.ok) return target2;
       let handle;
       try {
-        handle = await openResolved(target.value.absolute, 0);
+        handle = await openResolved(target2.value.absolute, 0);
         const document2 = parseCanonicalDocument(
           new Uint8Array(await handle.readFile()),
           "supplemental review record"
@@ -45465,7 +46408,7 @@ async function createProductionServices(input) {
 
 // src/state/status.ts
 import { readFile as readFile4 } from "node:fs/promises";
-import { join as join9 } from "node:path";
+import { join as join7 } from "node:path";
 
 // src/dispatch/routing.ts
 var DispatchRoutingError = class extends Error {
@@ -45476,13 +46419,13 @@ var DispatchRoutingError = class extends Error {
   }
   project_error;
 };
-var fail13 = (error51) => {
+var fail12 = (error51) => {
   throw new DispatchRoutingError(error51);
 };
 function deriveModelFamily(model) {
   if (model.startsWith("claude-")) return "claude";
   if (model.startsWith("gpt-")) return "codex";
-  return fail13(createProjectError("CONFIG_MODEL_UNSUPPORTED", { model }));
+  return fail12(createProjectError("CONFIG_MODEL_UNSUPPORTED", { model }));
 }
 function adapterForFamily(family3) {
   return family3 === "claude" ? "claude-cli" : "codex-cli";
@@ -45494,16 +46437,16 @@ var SUPPORTED_EFFORTS = Object.freeze({
 });
 function assertSupportedEffort(adapter2, effort) {
   if (!SUPPORTED_EFFORTS[adapter2].has(effort)) {
-    fail13(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
+    fail12(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
   }
 }
 function resolveDispatchRoute(config2, phaseKind2, role, producer_family) {
   const configured = config2.overrides?.[phaseKind2]?.[role] ?? config2.roles[role];
   if (configured === void 0) {
-    return fail13(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
+    return fail12(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
   }
   if (!safeIdV1Schema.safeParse(configured.model).success) {
-    return fail13(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
+    return fail12(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }
   const family3 = deriveModelFamily(configured.model);
   const adapter2 = adapterForFamily(family3);
@@ -45511,7 +46454,7 @@ function resolveDispatchRoute(config2, phaseKind2, role, producer_family) {
   assertSupportedEffort(adapter2, configured.effort);
   if ((role === "counter-reviewer" || role === "adjudicator") && family3 === producer_family) {
     const expected_family = producer_family === "claude" ? "codex" : "claude";
-    return fail13(createProjectError("FAMILY_MISMATCH", { expected_family, observed_family: family3 }));
+    return fail12(createProjectError("FAMILY_MISMATCH", { expected_family, observed_family: family3 }));
   }
   return Object.freeze({ adapter: adapter2, family: family3, model: configured.model, effort: configured.effort });
 }
@@ -45521,9 +46464,9 @@ import { readFile as readFile3 } from "node:fs/promises";
 
 // src/state/initialization.ts
 var ok13 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail14 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-var contract = (issue_code) => fail14(createProjectError("CONTRACT_INVALID", { issue_code }));
-var io2 = (request, operation) => fail14(createProjectError("IO_ERROR", { operation, attempt: request.authority.context.attempt }));
+var fail13 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var contract = (issue_code) => fail13(createProjectError("CONTRACT_INVALID", { issue_code }));
+var io3 = (request, operation) => fail13(createProjectError("IO_ERROR", { operation, attempt: request.authority.context.attempt }));
 function initializationFor(artifact) {
   if (artifact.artifact_kind === "task-initialization" || artifact.artifact_kind === "legacy-import-initialization") {
     return artifact;
@@ -45554,94 +46497,53 @@ async function validateLiveInitialization(dependencies, request, initialization)
       const resolved = new TextDecoder("utf-8", { fatal: true }).decode(observed.stdout).trim();
       if (resolved !== oid) return contract("initialization-commit-mismatch");
     } catch {
-      return io2(request, "validate-initialization-commit");
+      return io3(request, "validate-initialization-commit");
     }
   }
   return ok13(void 0);
 }
-function initialState(call, artifact) {
+function initialState(call, artifact, evidence) {
   const initialization = initializationFor(artifact);
   if (initialization === void 0) return contract("initialization-artifact-required");
-  let head;
   if (artifact.artifact_kind === "manual-checkpoint-import") {
     if (artifact.import_mode !== "initial") return contract("initialization-import-mode-invalid");
     const selected = selectGreatestValidChain(chainAnchor(artifact), artifact.chain);
     if (selected.kind !== "chain" || selected.chain.length !== artifact.chain.length) {
       return contract(selected.kind === "stop" ? `initialization-chain-${selected.outcome}` : "initialization-chain-not-exact");
     }
-    head = selected.chain.at(-1);
+    const head = selected.chain.at(-1);
     if (head === void 0) return contract("initialization-chain-empty");
-    if (head.phase_instance !== call.input.phase_instance || head.step !== call.input.step || head.status !== call.input.status || head.input_fingerprint !== call.input.input_fingerprint) return contract("initialization-chain-head-request-mismatch");
-    const first = selected.chain[0];
-    if (first === void 0 || !("initialization" in first)) return contract("initialization-chain-head-invalid");
-    let cursor = {
-      schema_version: "1",
-      task_id: initialization.task_id,
-      repository_identity_digest: initialization.repository_identity_digest,
-      revision: 1,
-      phase_instance: first.phase_instance,
-      step: first.step,
-      status: first.status,
-      attempt: first.attempt,
-      input_fingerprint: first.input_fingerprint,
-      initialization_digest: first.initialization_digest,
-      config_digest: initialization.config_digest,
-      workflow_digest: initialization.workflow_digest,
-      constitution_digest: initialization.constitution_digest,
-      policy_base_commit: initialization.policy_base_commit,
-      authoritative_results: structuredClone(first.authoritative_results),
-      approvals: structuredClone(first.approvals),
-      waivers: structuredClone(first.waivers),
-      ...first.open_gate === void 0 ? {} : { open_gate: structuredClone(first.open_gate) },
-      ...first.terminal === void 0 ? {} : { terminal: first.terminal }
-    };
-    for (const checkpoint of selected.chain.slice(1)) {
-      const resultReference = checkpoint.status === "succeeded" ? checkpoint.authoritative_results.find((reference) => reference.phase_instance === checkpoint.phase_instance && reference.step === checkpoint.step && reference.input_fingerprint === checkpoint.input_fingerprint) : void 0;
-      const transition = planStateTransition({
-        current: cursor,
-        target: {
-          phase_instance: checkpoint.phase_instance,
-          step: checkpoint.step,
-          status: checkpoint.status,
-          attempt: checkpoint.attempt,
-          input_fingerprint: checkpoint.input_fingerprint
-        },
-        recomputed_input_fingerprint: checkpoint.input_fingerprint,
-        artifact,
-        ...resultReference === void 0 ? {} : { result_reference: resultReference }
-      });
-      if (!transition.ok) return transition;
-      cursor = { ...transition.value, revision: cursor.revision };
+    if (selected.chain.some((checkpoint) => checkpoint.terminal === "abandoned")) {
+      return contract("manual-import-abandoned-authority-unauthenticated");
     }
+    if (head.phase_instance !== call.input.phase_instance || head.step !== call.input.step || head.status !== call.input.status || head.input_fingerprint !== call.input.input_fingerprint) return contract("initialization-chain-head-request-mismatch");
+    if (evidence === void 0) return contract("manual-import-evidence-required");
+    const reduced = reduceAuthenticatedManualChain({ artifact, evidence });
+    if (!reduced.ok) return reduced;
+    return ok13({ ...reduced.value.next_state, revision: 1 });
   }
-  const source = head;
   const state = {
     schema_version: "1",
     task_id: initialization.task_id,
     repository_identity_digest: initialization.repository_identity_digest,
     revision: 1,
-    phase_instance: source?.phase_instance ?? call.input.phase_instance,
-    step: source?.step ?? call.input.step,
-    status: source?.status ?? call.input.status,
-    attempt: source?.attempt ?? 1,
-    input_fingerprint: source?.input_fingerprint ?? call.input.input_fingerprint,
+    phase_instance: call.input.phase_instance,
+    step: call.input.step,
+    status: call.input.status,
+    attempt: 1,
+    input_fingerprint: call.input.input_fingerprint,
     initialization_digest: canonicalJsonDigest(initialization),
     config_digest: initialization.config_digest,
     workflow_digest: initialization.workflow_digest,
     constitution_digest: initialization.constitution_digest,
     policy_base_commit: initialization.policy_base_commit,
-    authoritative_results: structuredClone(source?.authoritative_results ?? []),
-    approvals: structuredClone(source?.approvals ?? []),
-    waivers: structuredClone(source?.waivers ?? []),
-    ...source === void 0 ? {} : {
-      adopted_checkpoint: { revision: source.revision, checkpoint_digest: checkpointSelfDigest(source) }
-    },
-    ...source?.open_gate === void 0 ? {} : { open_gate: structuredClone(source.open_gate) },
-    ...source?.terminal === void 0 ? {} : { terminal: source.terminal }
+    authoritative_results: [],
+    approvals: [],
+    waivers: []
   };
   return ok13(state);
 }
-async function identifyStateInitialization(dependencies, request) {
+async function identifyStateInitialization(dependencies, request, evidence) {
   assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
   assertAuthenticParsedToolCall(request.call);
   const artifactValue = request.call.input.artifact;
@@ -45660,7 +46562,7 @@ async function identifyStateInitialization(dependencies, request) {
   const artifactDocument = canonicalDocument(artifact);
   const artifactSemantics = validateDurableSemantics({ artifact: artifactDocument });
   if (!artifactSemantics.ok) return artifactSemantics;
-  const stateResult = initialState(request.call, artifact);
+  const stateResult = initialState(request.call, artifact, evidence);
   if (!stateResult.ok) return stateResult;
   const preparedState = canonicalDocument(stateResult.value);
   const initializationSemantics = validateDurableSemantics({
@@ -45669,9 +46571,9 @@ async function identifyStateInitialization(dependencies, request) {
   });
   if (!initializationSemantics.ok) return initializationSemantics;
   const config2 = await dependencies.read_config(request.authority.config);
-  if (config2.kind !== "valid") return config2.kind === "invalid" ? contract("task-config-invalid") : io2(request, "task-config-read");
+  if (config2.kind !== "valid") return config2.kind === "invalid" ? contract("task-config-invalid") : io3(request, "task-config-read");
   if (config2.snapshot.digest !== initialization.config_digest) {
-    return fail14(createProjectError("PINNED_CONFIG_MISMATCH", {
+    return fail13(createProjectError("PINNED_CONFIG_MISMATCH", {
       expected_digest: initialization.config_digest,
       observed_digest: config2.snapshot.digest
     }));
@@ -45698,7 +46600,7 @@ async function identifyStateInitialization(dependencies, request) {
 
 // src/local/envelope.ts
 var ok14 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail15 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail14 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function configuredProducerFamily(currentEvidence) {
   const families = new Set(currentEvidence.slots.map((slot) => slot.producer_family));
   if (families.size !== 1) throw new TypeError("gate evidence must name one configured producer family");
@@ -45757,29 +46659,29 @@ Keep the original ${retryTool} input byte-for-byte except for supplemental_outco
 If the human elects review, install the record above and let the original blocked call return SUPPLEMENTAL_REVIEW_REQUIRED. Re-run status, select its exact ingest payload, and retry the same ${retryTool} input with that supplemental_outcome. Re-run status after ingest. For a retained no-change outcome, select the exact triage-no-change payload and retry the same ${retryTool} call; the gate may then resolve only from the human's separately selected gate.decision. ${acceptedChangeGuidance} Never invent a supplemental review, triage result, subject digest, or human gate decision.`;
 }
 async function archivedWaiverRequest(services2, call) {
-  const target = await resolveTaskPath({
+  const target2 = await resolveTaskPath({
     runner: services2.runner,
     taskId: services2.authority.task_id,
     claim: gateRequestClaim(call.input.origin.origin_gate_id),
     expectedClass: "decision",
     context: services2.authority.context
   });
-  if (!target.ok) return target;
+  if (!target2.ok) return target2;
   try {
     const document2 = parseCanonicalDocument(
-      new Uint8Array(await readFile3(target.value.absolute)),
+      new Uint8Array(await readFile3(target2.value.absolute)),
       "waiver origin gate request"
     );
     return ok14(parseGateRequest(document2.value));
   } catch {
-    return fail15(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-request-invalid" }));
+    return fail14(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-request-invalid" }));
   }
 }
 async function fingerprintFor(services2, call) {
   if (services2.state === void 0) {
     if (call.name !== "archflow_state") {
       const phase4 = call.name === "archflow_waiver" ? call.input.origin.phase_instance : services2.authority.context.phase_instance;
-      return fail15(createProjectError("STATE_MISSING", { phase_instance: phase4 }));
+      return fail14(createProjectError("STATE_MISSING", { phase_instance: phase4 }));
     }
     const identified = await identifyStateInitialization(services2.dependencies, {
       authority: services2.authority,
@@ -45792,10 +46694,10 @@ async function fingerprintFor(services2, call) {
   }
   const config2 = await services2.dependencies.read_config(services2.authority.config);
   if (config2.kind !== "valid") {
-    return fail15(createProjectError("CONFIG_INVALID", { issue_code: `config-${config2.kind}` }));
+    return fail14(createProjectError("CONFIG_INVALID", { issue_code: `config-${config2.kind}` }));
   }
   if (config2.snapshot.digest !== services2.state.value.config_digest) {
-    return fail15(createProjectError("PINNED_CONFIG_MISMATCH", {
+    return fail14(createProjectError("PINNED_CONFIG_MISMATCH", {
       expected_digest: services2.state.value.config_digest,
       observed_digest: config2.snapshot.digest
     }));
@@ -45884,7 +46786,7 @@ async function computeCallEnvelope(services2, value) {
 
 // src/dispatch/cli.ts
 import { stat as stat2, writeFile } from "node:fs/promises";
-import { join as join7 } from "node:path";
+import { join as join5 } from "node:path";
 
 // src/dispatch/process.ts
 import { spawn } from "node:child_process";
@@ -45900,7 +46802,7 @@ var DispatchProcessError = class extends Error {
   }
   project_error;
 };
-var fail16 = (error51) => {
+var fail15 = (error51) => {
   throw new DispatchProcessError(error51);
 };
 function checkedPositiveInteger(value, label) {
@@ -45928,11 +46830,11 @@ function terminateChild(child) {
   return escalation;
 }
 function classifySpawnError(adapter2, error51) {
-  if (error51.code === "ENOENT") return fail16(createProjectError("CLI_MISSING", { adapter: adapter2 }));
+  if (error51.code === "ENOENT") return fail15(createProjectError("CLI_MISSING", { adapter: adapter2 }));
   if (error51.code === "EACCES" || error51.code === "EPERM") {
-    return fail16(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "not-executable" }));
+    return fail15(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "not-executable" }));
   }
-  return fail16(createProjectError("IO_ERROR", { operation: "dispatch-spawn", attempt: 1 }));
+  return fail15(createProjectError("IO_ERROR", { operation: "dispatch-spawn", attempt: 1 }));
 }
 async function readBoundedFinalOutput(adapter2, path2, byteCap) {
   let metadata2;
@@ -45940,17 +46842,17 @@ async function readBoundedFinalOutput(adapter2, path2, byteCap) {
     metadata2 = await stat(path2, { bigint: true });
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
-    return fail16(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
+    return fail15(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
   }
   if (!metadata2.isFile()) {
-    return fail16(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
+    return fail15(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
   }
   if (metadata2.size > BigInt(byteCap)) {
     const byteCount = Number(metadata2.size);
     if (!Number.isSafeInteger(byteCount)) {
-      return fail16(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
+      return fail15(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
     }
-    return fail16(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
+    return fail15(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
   }
   let handle;
   try {
@@ -45963,14 +46865,14 @@ async function readBoundedFinalOutput(adapter2, path2, byteCap) {
       if (bytesRead === 0) break;
       byteCount += bytesRead;
       if (byteCount > byteCap) {
-        return fail16(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
+        return fail15(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
       }
       chunks.push(buffer.subarray(0, bytesRead));
     }
     return Buffer.concat(chunks, byteCount);
   } catch (error51) {
     if (error51 instanceof DispatchProcessError) throw error51;
-    return fail16(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
+    return fail15(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
   } finally {
     await handle?.close().catch(() => void 0);
   }
@@ -45980,7 +46882,7 @@ async function runDispatchChild(spec) {
   const byteCap = checkedPositiveInteger(spec.byte_cap ?? DISPATCH_OUTPUT_BYTE_CAP, "dispatch byte cap");
   const cancellationSource = spec.cancellation_source ?? "client";
   if (spec.signal.aborted) {
-    return fail16(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
+    return fail15(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
   }
   const spawnOptions = {
     cwd: spec.cwd,
@@ -46052,20 +46954,20 @@ async function runDispatchChild(spec) {
   spec.signal.removeEventListener("abort", abort);
   if (spawnError !== void 0) return classifySpawnError(spec.adapter, spawnError);
   if (termination === "cancelled") {
-    return fail16(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
+    return fail15(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
   }
   if (termination === "timeout") {
-    return fail16(createProjectError("TIMEOUT", { adapter: spec.adapter, attempt: 1, limit_ms: timeoutMs }));
+    return fail15(createProjectError("TIMEOUT", { adapter: spec.adapter, attempt: 1, limit_ms: timeoutMs }));
   }
   if (termination === "overflow") {
-    return fail16(createProjectError("OUTPUT_OVERFLOW", {
+    return fail15(createProjectError("OUTPUT_OVERFLOW", {
       adapter: spec.adapter,
       byte_count: overflowBytes,
       byte_cap: byteCap
     }));
   }
   if (termination === "io") {
-    return fail16(createProjectError("IO_ERROR", { operation: ioOperation, attempt: 1 }));
+    return fail15(createProjectError("IO_ERROR", { operation: ioOperation, attempt: 1 }));
   }
   const stdout = Buffer.concat(stdoutChunks, stdoutBytes);
   const stderr = Buffer.concat(stderrChunks, stderrBytes);
@@ -46122,7 +47024,7 @@ var CliAdapterError = class extends Error {
   project_error;
   cli_version;
 };
-var fail17 = (error51, cliVersion) => {
+var fail16 = (error51, cliVersion) => {
   throw new CliAdapterError(error51, cliVersion);
 };
 function decodeJson2(bytes, adapter2, issueCode) {
@@ -46133,7 +47035,7 @@ function decodeJson2(bytes, adapter2, issueCode) {
     assertPlainJson(value, "CLI JSON output");
     return value;
   } catch {
-    return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
+    return fail16(createProjectError("MODEL_OUTPUT_INVALID", {
       adapter: adapter2,
       attempt: 1,
       issue_code: issueCode
@@ -46188,7 +47090,7 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
   );
   const version2 = exactVersion(adapter2, versionResult.stdout);
   if (versionResult.exit_code !== 0 || version2 === "unrecognized" || compareVersions(version2, minimumVersion) < 0) {
-    return fail17(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version2 }));
+    return fail16(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version2 }));
   }
   const authResult = await runPreflightCommand(
     adapter2,
@@ -46209,7 +47111,7 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
   } else if (adapter2 === "codex-cli" && authResult.exit_code === 0) {
     loggedIn = /^Logged in(?:\s|$)/u.test(authResult.stdout.toString("utf8").trim());
   }
-  if (!loggedIn) return fail17(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version2);
+  if (!loggedIn) return fail16(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version2);
   const managedPolicyPaths = await existingPaths(policyPaths);
   return Object.freeze({
     cli_version: version2,
@@ -46220,13 +47122,13 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
 function assertRoute(adapter2, route) {
   const expectedFamily = adapter2 === "claude-cli" ? "claude" : "codex";
   if (route.adapter !== adapter2 || route.family !== expectedFamily) {
-    fail17(createProjectError("FAMILY_MISMATCH", {
+    fail16(createProjectError("FAMILY_MISMATCH", {
       expected_family: expectedFamily,
       observed_family: route.family
     }));
   }
   if (!safeIdV1Schema.safeParse(route.model).success) {
-    fail17(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
+    fail16(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }
 }
 function exitClass(result) {
@@ -46310,9 +47212,9 @@ var claudeAdapter = Object.freeze({
     assertPlainJson(outputSchema, "CLI output schema");
     const schema = structuredClone(outputSchema);
     if (route.effort === "ultra") {
-      return fail17(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
+      return fail16(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
-    const mcpConfigPath = join7(workspace.root, "empty-mcp.json");
+    const mcpConfigPath = join5(workspace.root, "empty-mcp.json");
     await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
     return Object.freeze({
       adapter: "claude-cli",
@@ -46346,7 +47248,7 @@ var claudeAdapter = Object.freeze({
   parseOutput(result) {
     const wrapper = decodeJson2(result.stdout, "claude-cli", "claude-wrapper-invalid");
     if (wrapper === null || typeof wrapper !== "object" || Array.isArray(wrapper)) {
-      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail16(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "claude-cli",
         attempt: 1,
         issue_code: "structured-output-missing"
@@ -46354,7 +47256,7 @@ var claudeAdapter = Object.freeze({
     }
     const descriptor = Object.getOwnPropertyDescriptor(wrapper, "structured_output");
     if (descriptor === void 0 || descriptor.enumerable !== true || !("value" in descriptor)) {
-      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail16(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "claude-cli",
         attempt: 1,
         issue_code: "structured-output-missing"
@@ -46364,7 +47266,7 @@ var claudeAdapter = Object.freeze({
       assertPlainJson(descriptor.value, "Claude structured output");
       return canonicalJsonBytes(descriptor.value);
     } catch {
-      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail16(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "claude-cli",
         attempt: 1,
         issue_code: "structured-output-invalid"
@@ -46394,8 +47296,8 @@ var codexAdapter = Object.freeze({
     assertRoute("codex-cli", route);
     assertPlainJson(outputSchema, "CLI output schema");
     const schema = structuredClone(outputSchema);
-    const schemaPath = join7(workspace.root, `${envelope.result_kind}.schema.json`);
-    const outputPath = join7(workspace.root, "final-output.json");
+    const schemaPath = join5(workspace.root, `${envelope.result_kind}.schema.json`);
+    const outputPath = join5(workspace.root, "final-output.json");
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}
 `, { encoding: "utf8", mode: 384 });
     const disabled = CODEX_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]);
@@ -46436,7 +47338,7 @@ var codexAdapter = Object.freeze({
   },
   parseOutput(result) {
     if (result.final_output === void 0) {
-      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail16(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "codex-cli",
         attempt: 1,
         issue_code: "final-output-missing"
@@ -46455,105 +47357,6 @@ function preflightAdapter(adapterId, workspace) {
 
 // src/review/envelopes.ts
 var utf82 = new TextEncoder();
-
-// src/state/evidence-results.ts
-init_trust_brands();
-init_renderers();
-var ok15 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-function expectedSourceKind(step) {
-  if (step === "self_review" || step === "counter_review") return "review-evidence";
-  if (step === "triage") return "triage";
-  if (step === "adjudicate") return "adjudication-evidence";
-  return void 0;
-}
-function validateLoadedEvidence(reference, loaded) {
-  const document2 = canonicalDocument(parseResultManifest(loaded.prepared.manifest.value));
-  if (document2.digest !== loaded.prepared.manifest.digest || !Buffer.from(document2.bytes).equals(Buffer.from(loaded.prepared.manifest.bytes)) || loaded.prepared.result_digest !== document2.digest || reference.result_digest !== document2.digest || reference.manifest_path !== loaded.manifest_target.repositoryRelative || loaded.manifest_target.path_class !== "result-manifest") {
-    throw new TypeError("loaded evidence result identity disagrees");
-  }
-  const manifest = document2.value;
-  const expectedKind = expectedSourceKind(reference.step);
-  if (expectedKind === void 0 || manifest.source_artifact.artifact_kind !== expectedKind || manifest.result_id !== reference.result_id || manifest.phase_instance !== reference.phase_instance || manifest.step !== reference.step || manifest.input_fingerprint !== reference.input_fingerprint) {
-    throw new TypeError("loaded evidence result correlation disagrees");
-  }
-  if (manifest.source_artifact.artifact_kind === "review-evidence" && (reference.step === "self_review" && manifest.source_artifact.evidence.role !== "self-review" || reference.step === "counter_review" && manifest.source_artifact.evidence.role !== "counter-review")) {
-    throw new TypeError("loaded review evidence role disagrees with its step");
-  }
-  if (!validateDurableSemantics({ result_manifest: document2 }).ok) {
-    throw new TypeError("loaded evidence manifest semantics are invalid");
-  }
-  return manifest;
-}
-async function loadRetainedEvidence(dependencies, state, phase_instance) {
-  if (dependencies.load_retained_result === void 0) {
-    throw new TypeError("retained evidence loading is unavailable");
-  }
-  const retained = /* @__PURE__ */ new Map();
-  for (const reference of state.authoritative_results) {
-    if (reference.phase_instance !== phase_instance || expectedSourceKind(reference.step) === void 0) {
-      continue;
-    }
-    if (retained.has(reference.step)) {
-      throw new TypeError("phase has duplicate retained evidence for one step");
-    }
-    const loaded = await dependencies.load_retained_result(reference);
-    if (!loaded.ok) return loaded;
-    const manifest = validateLoadedEvidence(reference, loaded.value);
-    retained.set(reference.step, Object.freeze({
-      reference: structuredClone(reference),
-      manifest
-    }));
-  }
-  return ok15(retained);
-}
-function deriveCurrentEvidenceSet(retained) {
-  const selfEntry = retained.get("self_review");
-  const counterEntry = retained.get("counter_review");
-  if (selfEntry === void 0 || counterEntry === void 0) {
-    throw new TypeError("current review reconstruction requires self and counter evidence");
-  }
-  const selfSource = selfEntry.manifest.source_artifact;
-  const counterSource = counterEntry.manifest.source_artifact;
-  if (selfSource.artifact_kind !== "review-evidence" || counterSource.artifact_kind !== "review-evidence") {
-    throw new TypeError("current review manifests have the wrong source kind");
-  }
-  const self2 = selfSource.evidence;
-  const counter = counterSource.evidence;
-  if (self2.role !== "self-review" || self2.assurance !== "agent-declared" || self2.model_family !== self2.producer_family || counter.role !== "counter-review" || counter.assurance !== "server-attested" && counter.assurance !== "degraded" || counter.model_family === counter.producer_family || self2.task_id !== counter.task_id || self2.phase_instance !== counter.phase_instance || self2.subject_digest !== counter.subject_digest || self2.input_fingerprint !== counter.input_fingerprint || self2.rubric_digest !== counter.rubric_digest || self2.producer_family !== counter.producer_family) {
-    throw new TypeError("retained reviews do not form one current review set");
-  }
-  const verifiedSelf = createVerifiedEvidenceReference(self2);
-  const verifiedCounter = createVerifiedEvidenceReference(counter);
-  if (verifiedSelf.evidence_digest !== selfEntry.manifest.artifact_digest || verifiedCounter.evidence_digest !== counterEntry.manifest.artifact_digest) {
-    throw new TypeError("retained review evidence digest does not match its manifest");
-  }
-  const slots = parseRequiredReviewSlots([{
-    role: "self-review",
-    evidence_digest: verifiedSelf.evidence_digest,
-    assurance: "agent-declared",
-    producer_family: self2.producer_family,
-    reviewer_family: self2.model_family,
-    independence: "same-family-self"
-  }, {
-    role: "counter-review",
-    evidence_digest: verifiedCounter.evidence_digest,
-    assurance: counter.assurance,
-    producer_family: counter.producer_family,
-    reviewer_family: counter.model_family,
-    independence: "opposite-family"
-  }]);
-  return Object.freeze({
-    task_id: self2.task_id,
-    phase_instance: self2.phase_instance,
-    subject_digest: self2.subject_digest,
-    input_fingerprint: self2.input_fingerprint,
-    current_evidence_set: currentEvidenceSetRef(slots),
-    reviews: Object.freeze([
-      verifiedSelf,
-      verifiedCounter
-    ])
-  });
-}
 
 // src/review/fixed-point.ts
 var DEFAULT_MAX_ATTEMPTS = 3;
@@ -46903,17 +47706,17 @@ function expectedProduceUpstreamBindings(state) {
 async function loadProduceUpstreamSubject(dependencies, state, binding) {
   const reference = [...state.authoritative_results].reverse().find((candidate) => candidate.phase_instance === binding.phase_instance && candidate.step === "produce");
   if (reference === void 0 || dependencies.load_retained_result === void 0) {
-    return fail18(state.phase_instance, "current-upstream-produce-result-missing");
+    return fail17(state.phase_instance, "current-upstream-produce-result-missing");
   }
   const retained = await dependencies.load_retained_result(reference);
   if (!retained.ok) return retained;
   const manifest = retained.value.prepared.manifest.value;
   const artifact = manifest.source_artifact;
   if (artifact.artifact_kind !== "document" || artifact.document_path !== binding.path) {
-    return fail18(state.phase_instance, "current-upstream-produce-artifact-invalid");
+    return fail17(state.phase_instance, "current-upstream-produce-artifact-invalid");
   }
   if (canonicalJsonDigest(artifact) !== manifest.artifact_digest) {
-    return fail18(state.phase_instance, "current-upstream-produce-artifact-digest-mismatch");
+    return fail17(state.phase_instance, "current-upstream-produce-artifact-digest-mismatch");
   }
   return Object.freeze({
     schema_version: "1",
@@ -46921,7 +47724,7 @@ async function loadProduceUpstreamSubject(dependencies, state, binding) {
     value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, retained: retained.value })
   });
 }
-var fail18 = (phase4, issue_code) => Object.freeze({
+var fail17 = (phase4, issue_code) => Object.freeze({
   schema_version: "1",
   ok: false,
   error: createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code })
@@ -46929,17 +47732,17 @@ var fail18 = (phase4, issue_code) => Object.freeze({
 async function loadCurrentProduceSubject(dependencies, state) {
   const reference = state.authoritative_results.find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "produce");
   if (reference === void 0 || dependencies.load_retained_result === void 0) {
-    return fail18(state.phase_instance, "current-produce-result-missing");
+    return fail17(state.phase_instance, "current-produce-result-missing");
   }
   const retained = await dependencies.load_retained_result(reference);
   if (!retained.ok) return retained;
   const manifest = retained.value.prepared.manifest.value;
   const artifact = manifest.source_artifact;
   if (artifact.artifact_kind !== "document" && artifact.artifact_kind !== "implementation-output") {
-    return fail18(state.phase_instance, "current-produce-artifact-invalid");
+    return fail17(state.phase_instance, "current-produce-artifact-invalid");
   }
   if (canonicalJsonDigest(artifact) !== manifest.artifact_digest) {
-    return fail18(state.phase_instance, "current-produce-artifact-digest-mismatch");
+    return fail17(state.phase_instance, "current-produce-artifact-digest-mismatch");
   }
   return Object.freeze({
     schema_version: "1",
@@ -46949,9 +47752,9 @@ async function loadCurrentProduceSubject(dependencies, state) {
 }
 
 // src/state/reconciliation-discovery.ts
-import { constants as fsConstants7 } from "node:fs";
-import { lstat as lstat6, readdir as readdir4, readlink as readlink3 } from "node:fs/promises";
-import { join as join8 } from "node:path";
+import { constants as fsConstants6 } from "node:fs";
+import { lstat as lstat6, readdir as readdir2, readlink as readlink3 } from "node:fs/promises";
+import { join as join6 } from "node:path";
 
 // src/state/reconciliation.ts
 function activeGateHead(active, request) {
@@ -47068,7 +47871,7 @@ function reconcileCurrentAuthority(value) {
 }
 
 // src/state/reconciliation-discovery.ts
-var ok16 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok15 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var stateInvalid2 = (authority, issueCode) => Object.freeze({
   schema_version: "1",
   ok: false,
@@ -47077,7 +47880,7 @@ var stateInvalid2 = (authority, issueCode) => Object.freeze({
     issue_code: issueCode
   })
 });
-var ioFailure2 = (authority, operation) => Object.freeze({
+var ioFailure = (authority, operation) => Object.freeze({
   schema_version: "1",
   ok: false,
   error: createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt })
@@ -47085,7 +47888,7 @@ var ioFailure2 = (authority, operation) => Object.freeze({
 async function readCanonical2(path2, label, parse3) {
   let handle;
   try {
-    handle = await openResolved(path2.absolute, fsConstants7.O_RDONLY);
+    handle = await openResolved(path2.absolute, fsConstants6.O_RDONLY);
     const document2 = parseCanonicalDocument(new Uint8Array(await handle.readFile()), label);
     parse3(document2.value);
     return document2;
@@ -47100,7 +47903,7 @@ async function currentProjectionDigest(path2) {
     const metadata2 = await lstat6(path2.absolute);
     if (metadata2.isSymbolicLink()) return sha256Bytes(Buffer.from(await readlink3(path2.absolute), "utf8"));
     if (!metadata2.isFile()) throw new TypeError("projection is not a regular file or symlink");
-    const handle = await openResolved(path2.absolute, fsConstants7.O_RDONLY);
+    const handle = await openResolved(path2.absolute, fsConstants6.O_RDONLY);
     try {
       return sha256Bytes(new Uint8Array(await handle.readFile()));
     } finally {
@@ -47132,18 +47935,18 @@ async function discoverProjections(dependencies, authority, state) {
       for (const projection of manifest.projections) {
         const pathClass3 = outputClassFor(manifest, projection.path);
         if (pathClass3 === void 0) return stateInvalid2(authority, "reconciliation-projection-unbound");
-        const target = await resolveDeclaredOutputPath({
+        const target2 = await resolveDeclaredOutputPath({
           runner: dependencies.runner,
           taskId: authority.task_id,
           claim: projection.path,
           pathClass: pathClass3,
           context: authority.context
         });
-        if (!target.ok) return target;
+        if (!target2.ok) return target2;
         const candidate = Object.freeze({
           projection,
           measured_at_revision: manifest.accounting.measured_at_revision,
-          target: target.value
+          target: target2.value
         });
         const prior = newest.get(projection.path);
         if (prior === void 0 || candidate.measured_at_revision > prior.measured_at_revision) {
@@ -47160,9 +47963,9 @@ async function discoverProjections(dependencies, authority, state) {
         current.push(Object.freeze({ path: candidate.projection.path, content_digest: digest11 }));
       }
     }
-    return ok16(Object.freeze({ recorded: Object.freeze(recorded), current: Object.freeze(current) }));
+    return ok15(Object.freeze({ recorded: Object.freeze(recorded), current: Object.freeze(current) }));
   } catch {
-    return ioFailure2(authority, "discover-reconciliation-projections");
+    return ioFailure(authority, "discover-reconciliation-projections");
   }
 }
 async function discoverGateHead(dependencies, authority) {
@@ -47175,8 +47978,8 @@ async function discoverGateHead(dependencies, authority) {
   });
   if (!activePath.ok) return activePath;
   const active = await readCanonical2(activePath.value, "active gate", parseActiveGate);
-  if (active === "missing") return ok16(Object.freeze({}));
-  if (active === "invalid") return ok16(Object.freeze({ blocker: "active-gate-invalid" }));
+  if (active === "missing") return ok15(Object.freeze({}));
+  if (active === "invalid") return ok15(Object.freeze({ blocker: "active-gate-invalid" }));
   const requestPath = await resolveTaskPath({
     runner: dependencies.runner,
     taskId: authority.task_id,
@@ -47186,64 +47989,64 @@ async function discoverGateHead(dependencies, authority) {
   });
   if (!requestPath.ok) return requestPath;
   const request = await readCanonical2(requestPath.value, "gate request", parseGateRequest);
-  if (request === "missing") return ok16(Object.freeze({ blocker: "active-gate-request-missing" }));
-  if (request === "invalid") return ok16(Object.freeze({ blocker: "active-gate-request-invalid" }));
+  if (request === "missing") return ok15(Object.freeze({ blocker: "active-gate-request-missing" }));
+  if (request === "invalid") return ok15(Object.freeze({ blocker: "active-gate-request-invalid" }));
   try {
-    return ok16(Object.freeze({ head: activeGateHead(active.value, request.value) }));
+    return ok15(Object.freeze({ head: activeGateHead(active.value, request.value) }));
   } catch {
-    return ok16(Object.freeze({ blocker: "active-gate-request-mismatch" }));
+    return ok15(Object.freeze({ blocker: "active-gate-request-mismatch" }));
   }
 }
 async function discoverCheckpointHead(dependencies, authority, state) {
   const adopted = state.value.adopted_checkpoint;
-  if (adopted === void 0) return ok16(Object.freeze({}));
-  const target = await resolveTaskPath({
+  if (adopted === void 0) return ok15(Object.freeze({}));
+  const target2 = await resolveTaskPath({
     runner: dependencies.runner,
     taskId: authority.task_id,
     claim: parseTaskPathClaim(`manual/checkpoints/${adopted.revision}-${adopted.checkpoint_digest}.json`),
     expectedClass: "manual-checkpoint",
     context: authority.context
   });
-  if (!target.ok) return target;
-  const checkpoint = await readCanonical2(target.value, "manual checkpoint", parseManualCheckpoint);
-  if (checkpoint === "missing") return ok16(Object.freeze({ blocker: "adopted-checkpoint-missing" }));
-  if (checkpoint === "invalid") return ok16(Object.freeze({ blocker: "adopted-checkpoint-invalid" }));
+  if (!target2.ok) return target2;
+  const checkpoint = await readCanonical2(target2.value, "manual checkpoint", parseManualCheckpoint);
+  if (checkpoint === "missing") return ok15(Object.freeze({ blocker: "adopted-checkpoint-missing" }));
+  if (checkpoint === "invalid") return ok15(Object.freeze({ blocker: "adopted-checkpoint-invalid" }));
   const digest11 = checkpointSelfDigest(checkpoint.value);
   if (checkpoint.digest !== digest11 || checkpoint.value.task_id !== authority.task_id || checkpoint.value.repository_identity_digest !== authority.repository_identity_digest) {
-    return ok16(Object.freeze({ blocker: "adopted-checkpoint-invalid" }));
+    return ok15(Object.freeze({ blocker: "adopted-checkpoint-invalid" }));
   }
-  return ok16(Object.freeze({ head: Object.freeze({ revision: checkpoint.value.revision, checkpoint_digest: digest11 }) }));
+  return ok15(Object.freeze({ head: Object.freeze({ revision: checkpoint.value.revision, checkpoint_digest: digest11 }) }));
 }
 async function discoverIntent(dependencies, authority, state) {
   let names;
   try {
-    names = await readdir4(join8(authority.task_root, "intents"));
+    names = await readdir2(join6(authority.task_root, "intents"));
   } catch (error51) {
-    if (error51.code === "ENOENT") return ok16(Object.freeze({}));
-    return ioFailure2(authority, "discover-reconciliation-intents");
+    if (error51.code === "ENOENT") return ok15(Object.freeze({}));
+    return ioFailure(authority, "discover-reconciliation-intents");
   }
   const candidates = [];
   for (const name of names.sort()) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$/u.test(name)) continue;
-    const target = await resolveTaskPath({
+    const target2 = await resolveTaskPath({
       runner: dependencies.runner,
       taskId: authority.task_id,
       claim: parseTaskPathClaim(`intents/${name}`),
       expectedClass: "intent",
       context: authority.context
     });
-    if (!target.ok) return target;
-    const receipt2 = await readCanonical2(target.value, "intent receipt", parseIntentReceipt);
+    if (!target2.ok) return target2;
+    const receipt2 = await readCanonical2(target2.value, "intent receipt", parseIntentReceipt);
     if (receipt2 === "missing" || receipt2 === "invalid") continue;
     if (receipt2.value.prior_revision !== state.value.revision || receipt2.value.resulting_revision !== state.value.revision + 1 || receipt2.value.prepared_state.revision !== receipt2.value.resulting_revision) continue;
     if (!validateDurableSemantics(createPreparedIntentSubject(state, receipt2)).ok) continue;
     candidates.push(receipt2);
   }
   if (candidates.length > 1) {
-    return ok16(Object.freeze({ blocker: "retained-receipt-ambiguity" }));
+    return ok15(Object.freeze({ blocker: "retained-receipt-ambiguity" }));
   }
   const receipt = candidates[0];
-  return receipt === void 0 ? ok16(Object.freeze({})) : ok16(Object.freeze({ intent: Object.freeze({ request_digest: receipt.value.request_digest, receipt }) }));
+  return receipt === void 0 ? ok15(Object.freeze({})) : ok15(Object.freeze({ intent: Object.freeze({ request_digest: receipt.value.request_digest, receipt }) }));
 }
 async function discoverReconciliationInput(dependencies, authority, state) {
   assertInternalTransactionAuthority(authority, dependencies);
@@ -47256,7 +48059,7 @@ async function discoverReconciliationInput(dependencies, authority, state) {
   const intent = await discoverIntent(dependencies, authority, state);
   if (!intent.ok) return intent;
   const blockers = [gate.value.blocker, checkpoint.value.blocker, intent.value.blocker].filter((value) => value !== void 0);
-  return ok16(Object.freeze({
+  return ok15(Object.freeze({
     state,
     recorded_projections: projections.value.recorded,
     current_projections: projections.value.current,
@@ -47270,7 +48073,10 @@ async function discoverReconciliationInput(dependencies, authority, state) {
 }
 
 // src/state/status.ts
-var ok17 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok16 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+function manualCheckpointHeadIsPending(state, checkpointHead) {
+  return checkpointHead !== void 0 && checkpointHead > (state.adopted_checkpoint?.revision ?? state.revision);
+}
 function unavailableConfig(expected, observed, issue3) {
   return Object.freeze({
     verified: false,
@@ -47281,7 +48087,7 @@ function unavailableConfig(expected, observed, issue3) {
 }
 async function readActiveGate(authority) {
   try {
-    const bytes = new Uint8Array(await readFile4(join9(authority.task_root, "gate.json")));
+    const bytes = new Uint8Array(await readFile4(join7(authority.task_root, "gate.json")));
     return parseActiveGate(parseCanonicalDocument(bytes, "active gate").value);
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
@@ -47290,7 +48096,7 @@ async function readActiveGate(authority) {
 }
 async function readArchivedGateRequest(authority, active) {
   try {
-    const bytes = new Uint8Array(await readFile4(join9(
+    const bytes = new Uint8Array(await readFile4(join7(
       authority.task_root,
       "decisions",
       active.gate_id,
@@ -47466,7 +48272,7 @@ async function currentTargetRef(dependencies) {
     guidance: "Repository HEAD is detached or its symbolic branch ref is unavailable; confirm this target before authorizing commit."
   });
 }
-function buildCommitAuthorizationInput(subject, currentEvidence, target) {
+function buildCommitAuthorizationInput(subject, currentEvidence, target2) {
   if (subject.artifact.artifact_kind !== "implementation-output") {
     throw new TypeError("commit authorization requires retained implementation output");
   }
@@ -47479,12 +48285,12 @@ function buildCommitAuthorizationInput(subject, currentEvidence, target) {
     subject_digest: subject.artifact_digest,
     current_evidence: currentEvidence,
     context: Object.freeze({
-      target_ref: target.value,
+      target_ref: target2.value,
       diff_digest: subject.artifact.diff_digest,
       current_artifact_digests: Object.freeze([manifest.artifact_digest]),
       parent_document_digests: Object.freeze(subject.artifact.parent_documents.map((item) => item.content_digest).sort())
     }),
-    target_ref_guidance: target.guidance
+    target_ref_guidance: target2.guidance
   });
 }
 async function computeTaskStatus(dependencies, authority) {
@@ -47495,7 +48301,7 @@ async function computeTaskStatus(dependencies, authority) {
     stateRead = await readTaskState(authority.state);
   } catch {
     const next = deriveNextAction({ repository_initialized: true });
-    return ok17(Object.freeze({
+    return ok16(Object.freeze({
       task_id: authority.task_id,
       state: "missing",
       config: unavailableConfig(void 0, void 0, "status-authority-invalid"),
@@ -47506,7 +48312,7 @@ async function computeTaskStatus(dependencies, authority) {
   if (stateRead.kind !== "canonical") {
     const reason2 = stateRead.kind === "missing" ? "state-missing" : `state-${stateRead.kind}`;
     const next = deriveNextAction({ repository_initialized: true });
-    return ok17(Object.freeze({
+    return ok16(Object.freeze({
       task_id: authority.task_id,
       state: "missing",
       config: unavailableConfig(void 0, void 0, "state-unavailable"),
@@ -47586,8 +48392,29 @@ async function computeTaskStatus(dependencies, authority) {
   let checkpointHead;
   try {
     const checkpoints = await readManualCheckpoints(dependencies, authority);
-    if (checkpoints.ok) checkpointHead = checkpoints.value.at(-1)?.value.revision;
-    else blockers.push("checkpoint-inventory-unavailable");
+    if (checkpoints.ok) {
+      const checkpointAnchor = state.adopted_checkpoint === void 0 ? Object.freeze({
+        mode: "state",
+        task_id: authority.task_id,
+        repository_identity_digest: authority.repository_identity_digest,
+        state_anchor: Object.freeze({
+          anchor_kind: "state",
+          state_revision: state.revision,
+          state_digest: stateDocument.digest
+        })
+      }) : Object.freeze({
+        mode: "continuation",
+        task_id: authority.task_id,
+        repository_identity_digest: authority.repository_identity_digest,
+        predecessor: state.adopted_checkpoint
+      });
+      const selected = selectGreatestValidChain(
+        checkpointAnchor,
+        checkpoints.value.map((checkpoint) => checkpoint.value)
+      );
+      if (selected.kind === "chain") checkpointHead = selected.chain.at(-1)?.revision;
+      else blockers.push(`checkpoint-${selected.outcome}`);
+    } else blockers.push("checkpoint-inventory-unavailable");
   } catch {
     blockers.push("checkpoint-inventory-unavailable");
   }
@@ -47738,7 +48565,7 @@ async function computeTaskStatus(dependencies, authority) {
       gateBindingBlocker = "active-gate-invalid";
     }
   }
-  if (checkpointHead !== void 0 && checkpointHead > state.revision) blockers.push("checkpoint-import-available");
+  if (manualCheckpointHeadIsPending(state, checkpointHead)) blockers.push("checkpoint-import-available");
   let adjudicationGateKind;
   if (assessment?.next === "adjudication-gate" && constitution !== void 0) {
     adjudicationGateKind = pendingAdjudicationGateKind(state, constitution, retained, authenticatedApprovals);
@@ -47765,10 +48592,10 @@ async function computeTaskStatus(dependencies, authority) {
   });
   let gateInput2;
   if (nextAction.code === "open-gate" && nextAction.gate_kind === "commit-authorization" && produceSubject?.artifact.artifact_kind === "implementation-output" && evidence.available) {
-    const target = await currentTargetRef(dependencies);
-    gateInput2 = buildCommitAuthorizationInput(produceSubject, evidence.current_evidence, target);
+    const target2 = await currentTargetRef(dependencies);
+    gateInput2 = buildCommitAuthorizationInput(produceSubject, evidence.current_evidence, target2);
   }
-  return ok17(Object.freeze({
+  return ok16(Object.freeze({
     task_id: authority.task_id,
     state: state.terminal ?? "active",
     revision: state.revision,
@@ -47791,20 +48618,1897 @@ async function computeTaskStatus(dependencies, authority) {
   }));
 }
 
-// src/state/document-artifact.ts
-var ok18 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+// src/mcp/handlers/state-results.ts
+var ok17 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var contractInvalid2 = (issueCode) => Object.freeze({
+  schema_version: "1",
+  ok: false,
+  error: createProjectError("CONTRACT_INVALID", {
+    tool: "archflow_state",
+    issue_code: issueCode
+  })
+});
+async function target(services2, claim, expectedClass) {
+  return resolveTaskPath({
+    runner: services2.runner,
+    taskId: services2.authority.task_id,
+    claim: parseTaskPathClaim(claim),
+    expectedClass,
+    context: services2.authority.context
+  });
+}
+function scannerCapture(scanner) {
+  let observed;
+  return {
+    scanner: Object.freeze({
+      scan: async (candidates) => {
+        observed = parseSecretScanResult(await scanner.scan(candidates));
+        return observed;
+      }
+    }),
+    result: () => {
+      if (observed === void 0) throw new TypeError("projection scanner did not run");
+      return observed;
+    }
+  };
+}
+function accounting(outputs, retained, revision) {
+  const counted = outputs.flatMap((output) => output.storage === "raw-payload" ? [{ path: output.path, storage: "raw-payload", stored_bytes: output.payload_bytes }] : []);
+  const resultBytes = parseSafeInteger(counted.reduce((sum, entry) => sum + entry.stored_bytes, 0));
+  return Object.freeze({
+    schema_version: "1",
+    result_bytes: resultBytes,
+    task_bytes: parseSafeInteger(retained + resultBytes),
+    result_byte_cap: 26214400,
+    task_byte_cap: 262144e3,
+    counted_entries: Object.freeze(counted),
+    measured_at_revision: revision
+  });
+}
+async function prepareDocumentResult(input) {
+  const documentTarget = await target(input.services, input.artifact.document_path, "document");
+  if (!documentTarget.ok) return documentTarget;
+  if (documentTarget.value.repositoryRelative !== input.artifact.projection_target) {
+    return contractInvalid2("document-projection-target-mismatch");
+  }
+  const captured = await captureProjectionTarget(documentTarget.value);
+  if (captured.rollback.state !== "present" || captured.rollback.file_type !== "regular") {
+    return contractInvalid2("document-projection-not-regular-file");
+  }
+  const bytes = captured.rollback.bytes;
+  if (bytes.byteLength !== input.artifact.byte_count || sha256Bytes(bytes) !== input.artifact.content_digest) {
+    return contractInvalid2("document-content-mismatch");
+  }
+  const identity = await hashGitBlobIdentity(input.services.runner, bytes, input.artifact.projection_target);
+  const after = Object.freeze({
+    oid: parseGitOid(identity.oid),
+    mode: "100644",
+    size_bytes: parseSafeInteger(identity.size_bytes)
+  });
+  const output = Object.freeze({
+    path: input.artifact.projection_target,
+    path_class: "document",
+    operation: "add",
+    storage: "raw-payload",
+    payload_bytes: parseSafeInteger(bytes.byteLength),
+    payload_digest: sha256Bytes(bytes),
+    file_type: "regular",
+    after
+  });
+  const projections = Object.freeze([{ path: output.path, content_digest: output.payload_digest }]);
+  if (deriveDeclaredSnapshotDigest([output], projections) !== input.artifact.snapshot_digest) {
+    return contractInvalid2("document-snapshot-digest-mismatch");
+  }
+  const capture = scannerCapture(input.scanner);
+  const plan = await prepareProjectionPlan([{
+    path: output.path,
+    target: documentTarget.value,
+    desired: { state: "present", file_type: "regular", mode: "100644", bytes },
+    authenticated_before: captured.observation,
+    rollback: captured.rollback,
+    git_tracked: true
+  }], capture.scanner, input.services.runner.location.worktreeRoot);
+  if (!plan.ok) return plan;
+  const manifestValue = {
+    schema_version: "1",
+    task_id: input.services.authority.task_id,
+    repository_identity_digest: input.services.authority.repository_identity_digest,
+    result_id: input.result_id,
+    phase_instance: input.artifact.phase_instance,
+    step: input.artifact.step,
+    artifact_digest: canonicalJsonDigest(input.artifact),
+    source_artifact: input.artifact,
+    input_fingerprint: input.artifact.input_fingerprint,
+    snapshot_digest: input.artifact.snapshot_digest,
+    outputs: [output],
+    projections,
+    accounting: accounting([output], input.retained_task_bytes, input.measured_at_revision),
+    secret_scan: capture.result()
+  };
+  const manifest = canonicalDocument(manifestValue);
+  const manifestTarget = await target(input.services, `results/sha256/${manifest.digest}/manifest.json`, "result-manifest");
+  const payloadTarget = await target(input.services, `results/sha256/${manifest.digest}/payload/${output.path}`, "result-payload");
+  if (!manifestTarget.ok) return manifestTarget;
+  if (!payloadTarget.ok) return payloadTarget;
+  const prepared = await prepareDocumentSnapshot({
+    runner: input.services.runner,
+    manifest: manifestValue,
+    payloads: [{ path: output.path, bytes, target: payloadTarget.value }],
+    retained_task_bytes: input.retained_task_bytes
+  });
+  if (!prepared.ok) return prepared;
+  return ok17(Object.freeze({
+    reference: Object.freeze({
+      phase_instance: input.artifact.phase_instance,
+      step: input.artifact.step,
+      result_digest: prepared.value.result_digest,
+      result_id: input.result_id,
+      input_fingerprint: input.artifact.input_fingerprint,
+      manifest_path: manifestTarget.value.repositoryRelative
+    }),
+    prepared: prepared.value,
+    manifest_target: manifestTarget.value,
+    projection_plan: plan.value
+  }));
+}
+async function prepareImplementationResult(input) {
+  const facts = await verifyImplementationManifest(
+    input.services.runner,
+    input.artifact,
+    input.services.authority.context
+  );
+  const sources = [];
+  const addSource = async (path2, pathClass3, desired, tracked, renamePair) => {
+    const resolved = await resolveDeclaredOutputPath({
+      runner: input.services.runner,
+      taskId: input.services.authority.task_id,
+      claim: path2,
+      pathClass: pathClass3,
+      context: input.services.authority.context
+    });
+    if (!resolved.ok) throw resolved.error;
+    const captured = await captureProjectionTarget(resolved.value);
+    sources.push(Object.freeze({
+      path: path2,
+      target: resolved.value,
+      desired,
+      authenticated_before: captured.observation,
+      rollback: captured.rollback,
+      git_tracked: tracked,
+      ...renamePair === void 0 ? {} : { rename_pair: renamePair }
+    }));
+  };
+  for (const output of input.artifact.outputs) {
+    if (output.operation === "rename") {
+      await addSource(output.previous_path, output.path_class, { state: "absent" }, true, {
+        role: "source",
+        peer_path: output.path
+      });
+    }
+    if (output.operation === "delete") {
+      await addSource(output.path, output.path_class, { state: "absent" }, true);
+      continue;
+    }
+    const raw = facts.raw_payloads.get(output.path);
+    const resolved = await resolveDeclaredOutputPath({
+      runner: input.services.runner,
+      taskId: input.services.authority.task_id,
+      claim: output.path,
+      pathClass: output.path_class,
+      context: input.services.authority.context
+    });
+    if (!resolved.ok) return resolved;
+    const captured = await captureProjectionTarget(resolved.value);
+    const bytes = raw ?? (captured.rollback.state === "present" ? captured.rollback.bytes : void 0);
+    if (bytes === void 0) return contractInvalid2("implementation-after-image-unavailable");
+    const desired = output.file_type === "regular" ? { state: "present", file_type: "regular", mode: output.after.mode, bytes } : { state: "present", file_type: "symlink", mode: "120000", bytes };
+    await addSource(output.path, output.path_class, desired, output.operation !== "add", output.operation === "rename" ? {
+      role: "destination",
+      peer_path: output.previous_path
+    } : void 0);
+  }
+  const capture = scannerCapture(input.scanner);
+  const plan = await prepareProjectionPlan(
+    sources,
+    capture.scanner,
+    input.services.runner.location.worktreeRoot
+  );
+  if (!plan.ok) return plan;
+  const snapshotByPath = new Map(facts.snapshot_entries.map((entry) => [entry.path, entry]));
+  const projections = [];
+  for (const output of input.artifact.outputs) {
+    if (output.operation === "delete") continue;
+    const observed = snapshotByPath.get(output.path);
+    if (observed?.state !== "present") return contractInvalid2("implementation-projection-identity-missing");
+    projections.push({ path: output.path, content_digest: observed.content_digest });
+  }
+  const manifestValue = {
+    schema_version: "1",
+    task_id: input.services.authority.task_id,
+    repository_identity_digest: input.services.authority.repository_identity_digest,
+    result_id: input.result_id,
+    phase_instance: input.artifact.phase_instance,
+    step: input.artifact.step,
+    artifact_digest: canonicalJsonDigest(input.artifact),
+    source_artifact: input.artifact,
+    input_fingerprint: input.artifact.input_fingerprint,
+    snapshot_digest: input.artifact.snapshot_digest,
+    outputs: input.artifact.outputs,
+    projections,
+    accounting: input.artifact.accounting,
+    secret_scan: input.artifact.secret_scan
+  };
+  parseResultManifest(manifestValue);
+  const manifest = canonicalDocument(manifestValue);
+  const manifestTarget = await target(input.services, `results/sha256/${manifest.digest}/manifest.json`, "result-manifest");
+  if (!manifestTarget.ok) return manifestTarget;
+  const payloads = [];
+  for (const [path2, bytes] of facts.raw_payloads) {
+    const payloadTarget = await target(input.services, `results/sha256/${manifest.digest}/payload/${path2}`, "result-payload");
+    if (!payloadTarget.ok) return payloadTarget;
+    payloads.push(Object.freeze({ path: path2, bytes, target: payloadTarget.value }));
+  }
+  const prepared = prepareSnapshot({
+    manifest: manifestValue,
+    payloads,
+    retained_task_bytes: input.retained_task_bytes,
+    validate_manifest: parseResultManifest
+  });
+  if (!prepared.ok) return prepared;
+  return ok17(Object.freeze({
+    reference: Object.freeze({
+      phase_instance: input.artifact.phase_instance,
+      step: input.artifact.step,
+      result_digest: prepared.value.result_digest,
+      result_id: input.result_id,
+      input_fingerprint: input.artifact.input_fingerprint,
+      manifest_path: manifestTarget.value.repositoryRelative
+    }),
+    prepared: prepared.value,
+    manifest_target: manifestTarget.value,
+    projection_plan: plan.value
+  }));
+}
+async function prepareRetainedStateResult(input) {
+  const accounting2 = resolveRetainedTaskAccounting(input.accounting);
+  const common3 = {
+    result_id: input.result_id,
+    retained_task_bytes: accounting2.task_bytes,
+    measured_at_revision: accounting2.measured_at_revision,
+    scanner: input.scanner
+  };
+  if (input.evidence !== void 0) return prepareEvidenceResult({
+    ...common3,
+    authority: input.services.authority,
+    runner: input.services.runner,
+    value: input.evidence
+  });
+  const services2 = { ...common3, services: input.services };
+  return input.artifact.artifact_kind === "document" ? prepareDocumentResult({ ...services2, artifact: input.artifact }) : prepareImplementationResult({ ...services2, artifact: input.artifact });
+}
+
+// src/repository/history.ts
+import { stat as stat3 } from "node:fs/promises";
+import { join as join8 } from "node:path";
+var STATUS_OPERATION = "git-status";
+var UNMERGED_OPERATION = "git-diff-unmerged";
+var UPSTREAM_OID_OPERATION = "git-rev-parse-upstream";
+var AHEAD_BEHIND_OPERATION = "git-rev-list-ahead-behind";
+var PATH_MISMATCH2 = "git-path-mismatch";
+var ARCHFLOW_PREFIX2 = ".archflow/";
+var INITIAL_OID = "(initial)";
+var UNRESOLVED_REVISION = [{ code: 1, stderrIncludes: "" }];
+var NO_UPSTREAM_CONFIGURED = [
+  { code: 128, stderrIncludes: "no upstream configured" }
+];
+var IN_PROGRESS_MARKERS = [
+  ["merge", "MERGE_HEAD"],
+  ["rebase-merge", "rebase-merge"],
+  ["rebase-apply", "rebase-apply"],
+  ["cherry-pick", "CHERRY_PICK_HEAD"],
+  ["revert", "REVERT_HEAD"]
+];
+function ok18(value) {
+  return Object.freeze({ schema_version: "1", ok: true, value });
+}
+function fail18(error51) {
+  return Object.freeze({ schema_version: "1", ok: false, error: error51 });
+}
+function ioError3(context2) {
+  return createProjectError("IO_ERROR", {
+    operation: context2.operation,
+    attempt: context2.attempt
+  });
+}
+function taskInvalid2(context2, issueCode) {
+  return createProjectError("TASK_INVALID", {
+    task_id: context2.task_id,
+    issue_code: issueCode
+  });
+}
+function errnoOf6(error51) {
+  const code = error51?.code;
+  return typeof code === "string" ? code : void 0;
+}
+async function markerExists(path2) {
+  try {
+    await stat3(path2);
+    return true;
+  } catch (error51) {
+    const code = errnoOf6(error51);
+    if (code === "ENOENT" || code === "ENOTDIR") return false;
+    throw error51;
+  }
+}
+async function detectInProgress(gitDir) {
+  const found = [];
+  for (const [operation, marker] of IN_PROGRESS_MARKERS) {
+    if (await markerExists(join8(gitDir, marker))) found.push(operation);
+  }
+  return Object.freeze(found);
+}
+var AHEAD_BEHIND = /^\+(?<ahead>\d+) -(?<behind>\d+)$/u;
+function parsePorcelain(fields) {
+  let oid;
+  let head;
+  let upstream;
+  let ahead;
+  let behind;
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index] ?? "";
+    if (field === "") continue;
+    const space = field.indexOf(" ");
+    const token = space < 0 ? field : field.slice(0, space);
+    if (token === "2") {
+      index += 1;
+      continue;
+    }
+    if (token !== "#" || space < 0) continue;
+    const rest = field.slice(space + 1);
+    const separator = rest.indexOf(" ");
+    if (separator < 0) continue;
+    const key = rest.slice(0, separator);
+    const value = rest.slice(separator + 1);
+    if (key === "branch.oid") oid = value;
+    else if (key === "branch.head") head = value;
+    else if (key === "branch.upstream") upstream = value;
+    else if (key === "branch.ab") {
+      const matched = AHEAD_BEHIND.exec(value);
+      if (matched?.groups !== void 0) {
+        ahead = Number(matched.groups["ahead"]);
+        behind = Number(matched.groups["behind"]);
+      }
+    }
+  }
+  return { oid, head, upstream, ahead, behind };
+}
+async function resolveUpstream(runner, branch) {
+  const NO_UPSTREAM = Object.freeze({ kind: "no-upstream" });
+  if (branch.upstream === void 0) return NO_UPSTREAM;
+  const upstreamOidText = await runner.runText({
+    argv: ["rev-parse", "--verify", "--quiet", `${branch.upstream}^{commit}`],
+    operation: UPSTREAM_OID_OPERATION,
+    expectedAbsence: UNRESOLVED_REVISION
+  });
+  if (upstreamOidText === "") return NO_UPSTREAM;
+  let ahead = branch.ahead;
+  let behind = branch.behind;
+  if (ahead === void 0 || behind === void 0) {
+    const counts = await runner.runText({
+      argv: ["rev-list", "--left-right", "--count", "@{upstream}...HEAD"],
+      operation: AHEAD_BEHIND_OPERATION,
+      expectedAbsence: NO_UPSTREAM_CONFIGURED
+    });
+    const parts = counts.split(/\s+/u).filter((part) => part !== "");
+    if (parts.length !== 2) return NO_UPSTREAM;
+    behind = Number(parts[0]);
+    ahead = Number(parts[1]);
+    if (!Number.isInteger(ahead) || !Number.isInteger(behind)) return NO_UPSTREAM;
+  }
+  return Object.freeze({
+    kind: "tracked",
+    upstream: branch.upstream,
+    ahead,
+    behind,
+    upstreamOid: parseGitOid(upstreamOidText)
+  });
+}
+async function readHistoryStatus(runner, context2) {
+  try {
+    const inProgress = await detectInProgress(runner.location.gitDir);
+    const statusFields = await runner.runNulFields({
+      argv: ["status", "--porcelain=v2", "--branch", "-z"],
+      operation: STATUS_OPERATION
+    });
+    const branch = parsePorcelain(statusFields);
+    let head;
+    if (branch.oid !== void 0 && branch.oid !== INITIAL_OID) {
+      try {
+        head = parseGitOid(branch.oid);
+      } catch {
+        return fail18(ioError3(context2));
+      }
+    }
+    const upstream = await resolveUpstream(runner, branch);
+    const conflicted = await runner.runNulFields({
+      argv: ["diff", "--name-only", "--diff-filter=U", "-z"],
+      operation: UNMERGED_OPERATION
+    });
+    const conflictedArchflowPaths = [];
+    const conflictedOtherPaths = [];
+    let unrepresentable = 0;
+    for (const path2 of conflicted) {
+      if (path2 === "") continue;
+      const raw = rawGitPath(path2);
+      if (path2.startsWith(ARCHFLOW_PREFIX2)) {
+        const claim = tryRepositoryPathClaim(raw);
+        if (claim === void 0) {
+          return fail18(taskInvalid2(context2, PATH_MISMATCH2));
+        }
+        conflictedArchflowPaths.push(claim);
+        continue;
+      }
+      conflictedOtherPaths.push(raw);
+      if (tryRepositoryPathClaim(raw) === void 0) unrepresentable += 1;
+    }
+    return ok18(
+      Object.freeze({
+        head,
+        branch: branch.head ?? "(detached)",
+        upstream,
+        inProgress,
+        conflictedArchflowPaths: Object.freeze(conflictedArchflowPaths),
+        conflictedOtherPaths: Object.freeze(conflictedOtherPaths),
+        unrepresentableOtherConflicts: parseSafeInteger(unrepresentable)
+      })
+    );
+  } catch (error51) {
+    if (error51 instanceof GitInvocationError) {
+      return fail18(projectErrorForGitFailure(error51, runner, context2));
+    }
+    if (errnoOf6(error51) !== void 0) return fail18(ioError3(context2));
+    throw error51;
+  }
+}
+function classifyMutationReadiness(status, context2) {
+  if (status.conflictedArchflowPaths.length > 0) {
+    return fail18(createProjectError("GIT_CONFLICT", { operation: context2.operation }));
+  }
+  const upstream = status.upstream;
+  if (upstream.kind === "tracked" && upstream.ahead !== 0 && upstream.behind !== 0 && status.head !== void 0) {
+    return fail18(
+      createProjectError("GIT_DIVERGED", {
+        expected_digest: historyIdentityDigest(upstream.upstreamOid),
+        observed_digest: historyIdentityDigest(status.head)
+      })
+    );
+  }
+  if (status.inProgress.length > 0) {
+    return fail18(createProjectError("HANDOFF_REQUIRED", { phase_instance: context2.phase_instance }));
+  }
+  return ok18(void 0);
+}
+
+// src/repository/handoff.ts
+var ok19 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail19 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+function invalid3(authority, issue_code) {
+  return fail19(createProjectError("TASK_INVALID", { task_id: authority.task_id, issue_code }));
+}
+function ownData2(value, field, label) {
+  const descriptor = Object.getOwnPropertyDescriptor(value, field);
+  if (descriptor === void 0 || !("value" in descriptor) || !descriptor.enumerable) {
+    throw new TypeError(`${label}.${field} must be an own enumerable data property`);
+  }
+  return descriptor.value;
+}
+async function inspectManualHandoff(input) {
+  const { dependencies, transaction_authority: authority } = input;
+  assertInternalTransactionAuthority(authority);
+  if (input.selected_authority === null || typeof input.selected_authority !== "object") {
+    throw new TypeError("selected handoff authority must be an object");
+  }
+  let selected;
+  try {
+    selected = input.resolve_selected_authority(input.selected_authority);
+  } catch {
+    return invalid3(authority, "handoff-selected-authority-not-authentic");
+  }
+  let document2;
+  try {
+    const suppliedValue = ownData2(selected.document, "value", "selected handoff authority");
+    const suppliedDigest = ownData2(selected.document, "digest", "selected handoff authority");
+    const suppliedBytes = ownData2(selected.document, "bytes", "selected handoff authority");
+    if (!(suppliedBytes instanceof Uint8Array)) throw new TypeError("authority bytes must be Uint8Array");
+    const parsed = selected.kind === "normal" ? parseCanonicalDocument(suppliedBytes, "selected handoff state") : parseCanonicalDocument(suppliedBytes, "selected handoff checkpoint");
+    assertPlainJson(suppliedValue, "selected handoff authority value");
+    if (parsed.digest !== suppliedDigest) throw new TypeError("authority digest does not bind bytes");
+    if (selected.kind === "manual") {
+      parseManualCheckpoint(parsed.value);
+      if (checkpointSelfBreak(parsed.value) !== void 0) {
+        throw new TypeError("manual authority checkpoint self digest is invalid");
+      }
+    } else if (!validateDurableSemantics({ state: parsed }).ok) {
+      throw new TypeError("normal authority state is invalid");
+    }
+    document2 = parsed;
+  } catch {
+    return invalid3(authority, "handoff-selected-authority-invalid");
+  }
+  if (document2.value.task_id !== authority.task_id || document2.value.repository_identity_digest !== authority.repository_identity_digest) {
+    return invalid3(authority, "handoff-authority-mismatch");
+  }
+  const status = await readHistoryStatus(dependencies.runner, authority.context);
+  if (!status.ok) return status;
+  const readiness = classifyMutationReadiness(status.value, authority.context);
+  if (!readiness.ok) return readiness;
+  if (status.value.head === void 0 || status.value.head !== input.expected_head) {
+    return invalid3(authority, "handoff-clean-head-mismatch");
+  }
+  if (status.value.upstream.kind !== "tracked" || status.value.upstream.ahead !== 0 || status.value.upstream.behind !== 0 || status.value.upstream.upstreamOid !== status.value.head) {
+    return fail19(createProjectError("HANDOFF_REQUIRED", { phase_instance: authority.context.phase_instance }));
+  }
+  try {
+    const changed = await readChangedGitPaths(dependencies.runner);
+    if (changed.paths.length !== 0 || changed.unrepresentable_count !== 0) {
+      return fail19(createProjectError("HANDOFF_REQUIRED", { phase_instance: authority.context.phase_instance }));
+    }
+    const committed = await readCommitTreeBlob(dependencies.runner, status.value.head, selected.path);
+    if (committed === void 0 || committed.mode !== "100644") {
+      return invalid3(authority, "handoff-authority-not-committed");
+    }
+    const committedBytes = await readGitBlobBytes(dependencies.runner, committed.oid);
+    if (!Buffer.from(committedBytes).equals(Buffer.from(document2.bytes))) {
+      return invalid3(authority, "handoff-authority-commit-mismatch");
+    }
+  } catch {
+    return invalid3(authority, "handoff-authority-commit-unreadable");
+  }
+  const protocol = Object.freeze([
+    "commit-authenticated-authority",
+    "push-selected-branch",
+    "clean-pull-in-next-writer",
+    "rerun-manual-status-before-mutation"
+  ]);
+  return ok19(Object.freeze({
+    status: "ready",
+    mode: selected.kind,
+    head_oid: status.value.head,
+    branch: status.value.branch,
+    authority_path: selected.path,
+    authority_digest: document2.digest,
+    authority_revision: document2.value.revision,
+    protocol
+  }));
+}
+
+// src/local/manual-workflow.ts
+var manualAuthorities = /* @__PURE__ */ new WeakMap();
+var ok20 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail20 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+function invalid4(services2, issue3) {
+  return fail20(createProjectError("STATE_INVALID", {
+    phase_instance: services2.authority.context.phase_instance,
+    issue_code: issue3
+  }));
+}
+function parseInitialization(value) {
+  return value.artifact_kind === "task-initialization" ? parseTaskInitialization(value) : parseLegacyImportInitialization(value);
+}
+function initializationFromInventory(checkpoints) {
+  const first = checkpoints.find((checkpoint) => checkpoint.revision === 1);
+  if (first !== void 0 && "initialization" in first) return first.initialization;
+  return void 0;
+}
+async function loadManualAuthority(input) {
+  const inventory = await readManualCheckpoints(input.services.dependencies, input.services.authority);
+  if (!inventory.ok) return inventory;
+  const candidates = inventory.value.map((document2) => document2.value);
+  const state = input.services.state;
+  let initialization;
+  try {
+    initialization = input.initialization === void 0 ? initializationFromInventory(candidates) : parseInitialization(structuredClone(input.initialization));
+  } catch {
+    return invalid4(input.services, "manual-initialization-invalid");
+  }
+  let anchor;
+  let kind;
+  if (state !== void 0) {
+    if (state.value.adopted_checkpoint !== void 0) {
+      anchor = Object.freeze({
+        mode: "continuation",
+        task_id: state.value.task_id,
+        repository_identity_digest: state.value.repository_identity_digest,
+        predecessor: state.value.adopted_checkpoint
+      });
+      kind = "continuation";
+    } else {
+      anchor = Object.freeze({
+        mode: "state",
+        task_id: state.value.task_id,
+        repository_identity_digest: state.value.repository_identity_digest,
+        state_anchor: Object.freeze({
+          anchor_kind: "state",
+          state_revision: state.value.revision,
+          state_digest: state.digest
+        })
+      });
+      kind = "state-anchored";
+    }
+  } else {
+    const identity = initialization ?? (() => {
+      const first = candidates.find((checkpoint) => checkpoint.revision === 1);
+      return first !== void 0 && "initialization" in first ? first.initialization : void 0;
+    })();
+    if (identity === void 0) return invalid4(input.services, "manual-initialization-missing");
+    initialization = parseInitialization(identity);
+    anchor = Object.freeze({
+      mode: "initial",
+      task_id: initialization.task_id,
+      repository_identity_digest: initialization.repository_identity_digest
+    });
+    kind = "initial";
+  }
+  if (anchor.task_id !== input.services.authority.task_id || anchor.repository_identity_digest !== input.services.authority.repository_identity_digest) {
+    return invalid4(input.services, "manual-authority-foreign");
+  }
+  const selected = selectGreatestValidChain(anchor, candidates);
+  if (selected.kind === "stop") return invalid4(input.services, `manual-checkpoint-${selected.outcome}`);
+  const selectedDocuments = selected.chain.map((checkpoint) => {
+    const digest11 = checkpointSelfDigest(checkpoint);
+    const document2 = inventory.value.find((candidate) => candidate.digest === digest11);
+    if (document2 === void 0) throw new TypeError("selected checkpoint was not read from inventory");
+    return document2;
+  });
+  const head = selected.chain.at(-1);
+  if (selected.chain.some((checkpoint) => checkpoint.terminal === "abandoned")) {
+    return invalid4(input.services, "manual-abandoned-authority-unauthenticated");
+  }
+  if (initialization === void 0) {
+    const embedded = selected.chain.find((checkpoint) => "initialization" in checkpoint);
+    if (embedded !== void 0 && "initialization" in embedded) initialization = embedded.initialization;
+  }
+  if (state === void 0 && initialization === void 0) return invalid4(input.services, "manual-initialization-unavailable");
+  const initializationDigest = state?.value.initialization_digest ?? canonicalJsonDigest(initialization);
+  if (initialization !== void 0 && canonicalJsonDigest(initialization) !== initializationDigest || selected.chain.some((checkpoint) => checkpoint.initialization_digest !== initializationDigest)) {
+    return invalid4(input.services, "manual-initialization-digest-mismatch");
+  }
+  const references = head?.authoritative_results ?? state?.value.authoritative_results ?? [];
+  const manifests = [];
+  const seen = /* @__PURE__ */ new Map();
+  let retainedBytes = 0;
+  for (const reference of references) {
+    const identity = `${reference.phase_instance}\0${reference.step}\0${reference.result_id}\0${reference.input_fingerprint}\0${reference.manifest_path}`;
+    const prior = seen.get(reference.result_digest);
+    if (prior !== void 0 && prior !== identity) return invalid4(input.services, "manual-retained-result-disagrees");
+    if (prior !== void 0) continue;
+    seen.set(reference.result_digest, identity);
+    const loaded = await input.services.dependencies.load_retained_result?.(reference);
+    if (loaded === void 0 || !loaded.ok) return invalid4(input.services, "manual-retained-result-unreadable");
+    const manifest = loaded.value.prepared.manifest;
+    if (manifest.digest !== reference.result_digest) return invalid4(input.services, "manual-retained-result-disagrees");
+    manifests.push(manifest);
+    if (reference.result_digest !== input.exclude_result_digest) retainedBytes += manifest.value.accounting.result_bytes;
+  }
+  let parsedRetained;
+  try {
+    parsedRetained = parseSafeInteger(retainedBytes);
+  } catch {
+    return invalid4(input.services, "manual-retained-accounting-invalid");
+  }
+  const resolvedKind = head === void 0 ? kind : "continuation";
+  const capability = Object.freeze({});
+  const baseFacts = {
+    services: input.services,
+    kind: resolvedKind,
+    ...initialization === void 0 ? {} : { initialization },
+    initialization_digest: initializationDigest,
+    ...state === void 0 ? {} : { state },
+    chain: Object.freeze(selectedDocuments),
+    ...head === void 0 ? {} : { head },
+    ...head !== void 0 || kind === "continuation" && state?.value.adopted_checkpoint !== void 0 ? {
+      predecessor: head !== void 0 ? Object.freeze({ revision: parseSafeInteger(head.revision), checkpoint_digest: checkpointSelfDigest(head) }) : state.value.adopted_checkpoint
+    } : {},
+    retained_manifests: Object.freeze(manifests),
+    retained_task_bytes: parsedRetained
+  };
+  let chainPlannedFinalPhase;
+  let designApprovalGateIds = [];
+  let design;
+  if (head !== void 0) {
+    design = manifests.find((manifest) => manifest.value.phase_instance === "design" && manifest.value.step === "produce" && manifest.value.source_artifact.artifact_kind === "document");
+    designApprovalGateIds = head.approvals.filter((approval) => approval.gate_kind === "artifact-approval" && approval.subject_digest === design?.value.artifact_digest).map((approval) => approval.gate_id);
+    if (design !== void 0 && designApprovalGateIds.length > 0 && design.value.source_artifact.artifact_kind === "document") {
+      const designArtifact = design.value.source_artifact;
+      const reference = references.find((candidate) => candidate.result_digest === design.digest);
+      const retained = reference === void 0 ? void 0 : await input.services.dependencies.load_retained_result?.(reference);
+      if (retained === void 0 || !retained.ok) return invalid4(input.services, "manual-approved-design-authority-missing");
+      const payload = retained.value.prepared.payloads.find((candidate) => candidate.path === designArtifact.projection_target);
+      if (payload === void 0) return invalid4(input.services, "manual-approved-design-authority-missing");
+      try {
+        const planned = plannedFinalPhaseFromDesign(payload.bytes);
+        chainPlannedFinalPhase = planned === null ? null : parseSafeInteger(planned);
+      } catch {
+        return invalid4(input.services, "manual-approved-design-phase-count-invalid");
+      }
+    }
+  }
+  const statePlannedFinalPhase = state?.value.planned_final_phase;
+  if (chainPlannedFinalPhase !== void 0 && statePlannedFinalPhase !== void 0 && (chainPlannedFinalPhase === null || chainPlannedFinalPhase !== statePlannedFinalPhase)) {
+    return invalid4(input.services, "manual-planned-final-phase-disagrees");
+  }
+  const resolvedPlannedFinalPhase = chainPlannedFinalPhase === void 0 ? statePlannedFinalPhase : chainPlannedFinalPhase === null ? void 0 : chainPlannedFinalPhase;
+  const authorityFacts = Object.freeze({
+    ...baseFacts,
+    ...resolvedPlannedFinalPhase === void 0 ? {} : { planned_final_phase: resolvedPlannedFinalPhase }
+  });
+  manualAuthorities.set(capability, authorityFacts);
+  if (chainPlannedFinalPhase !== void 0 && head !== void 0 && design !== void 0) {
+    const current = materializeManualAuthorityState(capability);
+    const loaded = await loadAuthenticatedManualGateFacts({
+      dependencies: input.services.dependencies,
+      transaction_authority: input.services.authority,
+      authority_binding: capability,
+      state: current,
+      gate_ids: designApprovalGateIds
+    });
+    if (!loaded.ok) return loaded;
+    const gates = resolveAuthenticatedManualGateFacts(loaded.value, capability);
+    const pair = gates.pairs.find((candidate) => candidate.request.kind === "artifact-approval" && candidate.request.phase_instance === "design" && candidate.request.subject_digest === design?.value.artifact_digest && candidate.decision.outcome === "decided" && candidate.decision.envelope.payload.decision === "approve");
+    if (pair === void 0) return invalid4(input.services, "manual-approved-design-authority-missing");
+    const planned = await loadApprovedDesignFinalPhase(input.services.dependencies, current, pair.decision);
+    if (!planned.ok) return planned;
+    const authenticatedPlanned = planned.value === void 0 || planned.value === null ? planned.value : parseSafeInteger(planned.value);
+    if (authenticatedPlanned !== chainPlannedFinalPhase) {
+      return invalid4(input.services, "manual-approved-design-phase-count-mismatch");
+    }
+  }
+  return ok20(capability);
+}
+function resolveManualAuthority(authority) {
+  const facts = manualAuthorities.get(authority);
+  if (facts === void 0) throw new TypeError("manual authority capability is invalid or expired");
+  return facts;
+}
+function resolveManualHandoffAuthority(authority) {
+  const facts = resolveManualAuthority(authority);
+  const head = facts.chain.at(-1);
+  if (head !== void 0) return Object.freeze({
+    kind: "manual",
+    path: parseRepositoryPathClaim(`.archflow/tasks/${facts.services.authority.task_id}/manual/checkpoints/${head.value.revision}-${head.digest}.json`),
+    document: head
+  });
+  if (facts.state === void 0) throw new TypeError("initial manual authority has no installed handoff document");
+  return Object.freeze({
+    kind: "normal",
+    path: parseRepositoryPathClaim(`.archflow/tasks/${facts.services.authority.task_id}/state.json`),
+    document: facts.state
+  });
+}
+async function buildCheckpointImportStateCall(input) {
+  const facts = resolveManualAuthority(input.authority);
+  const chain = facts.chain.map((document2) => document2.value);
+  const first = chain[0];
+  const head = chain.at(-1);
+  if (first === void 0 || head === void 0) return invalid4(facts.services, "manual-import-chain-empty");
+  let artifact;
+  if ("initialization" in first) {
+    if (facts.state !== void 0) return invalid4(facts.services, "manual-import-initial-with-state");
+    artifact = {
+      schema_version: "1",
+      artifact_kind: "manual-checkpoint-import",
+      task_id: facts.services.authority.task_id,
+      repository_identity_digest: facts.services.authority.repository_identity_digest,
+      import_mode: "initial",
+      chain
+    };
+  } else if ("state_anchor" in first) {
+    if (facts.state === void 0) return invalid4(facts.services, "manual-import-state-anchor-missing");
+    artifact = {
+      schema_version: "1",
+      artifact_kind: "manual-checkpoint-import",
+      task_id: facts.services.authority.task_id,
+      repository_identity_digest: facts.services.authority.repository_identity_digest,
+      import_mode: "state-anchored",
+      chain,
+      state_anchor: first.state_anchor
+    };
+  } else {
+    if (facts.state === void 0) return invalid4(facts.services, "manual-import-continuation-state-missing");
+    artifact = {
+      schema_version: "1",
+      artifact_kind: "manual-checkpoint-import",
+      task_id: facts.services.authority.task_id,
+      repository_identity_digest: facts.services.authority.repository_identity_digest,
+      import_mode: "continuation",
+      chain,
+      predecessor: first.predecessor,
+      expected_state_revision: facts.state.value.revision,
+      expected_state_digest: facts.state.digest
+    };
+  }
+  const callInput = {
+    schema_version: "1",
+    task_id: facts.services.authority.task_id,
+    intent_id: parsePathSafeId(input.intent_id),
+    expected_revision: facts.state?.value.revision ?? 0,
+    input_fingerprint: head.input_fingerprint,
+    phase_instance: head.phase_instance,
+    step: head.step,
+    status: head.status,
+    artifact
+  };
+  let parsedCall;
+  try {
+    parsedCall = parseToolCall("archflow_state", callInput);
+  } catch {
+    return invalid4(facts.services, "manual-import-state-call-invalid");
+  }
+  if (facts.state === void 0) {
+    const evidence = await loadManualImportEvidence({
+      dependencies: facts.services.dependencies,
+      authority: facts.services.authority,
+      artifact
+    });
+    if (!evidence.ok) return evidence;
+    const identified = await identifyStateInitialization(
+      facts.services.dependencies,
+      { authority: facts.services.authority, call: parsedCall },
+      evidence.value
+    );
+    if (!identified.ok) return identified;
+    if (identified.value.input_fingerprint !== head.input_fingerprint) {
+      return fail20(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
+        expected_digest: identified.value.input_fingerprint,
+        observed_digest: head.input_fingerprint
+      }));
+    }
+    return ok20(Object.freeze({
+      input: Object.freeze(callInput),
+      envelope: Object.freeze({
+        tool: "archflow_state",
+        input_fingerprint: identified.value.input_fingerprint,
+        request_digest: identified.value.request_digest,
+        artifact_digest: canonicalJsonDigest(artifact)
+      })
+    }));
+  }
+  const envelope = await computeCallEnvelope(facts.services, {
+    tool: "archflow_state",
+    input: callInput
+  });
+  if (!envelope.ok) return envelope;
+  if (envelope.value.input_fingerprint !== head.input_fingerprint) {
+    return fail20(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
+      expected_digest: envelope.value.input_fingerprint,
+      observed_digest: head.input_fingerprint
+    }));
+  }
+  return ok20(Object.freeze({ input: Object.freeze(callInput), envelope: envelope.value }));
+}
+function action2(code, detail, human, command, input) {
+  return Object.freeze({ code, detail, human_required: human, command, ...input === void 0 ? {} : { input } });
+}
+async function classifyManualWorkflowStatus(input) {
+  if (input.services.state === void 0 && input.initialization === void 0) {
+    const inventory = await readManualCheckpoints(input.services.dependencies, input.services.authority);
+    if (inventory.ok && inventory.value.length === 0) return ok20(Object.freeze({
+      mode: "degraded",
+      next_action: action2(
+        "create-task",
+        "Create the canonical initialization artifact, then pass it unchanged to manual-next to install the initial checkpoint.",
+        false,
+        `archflow-local task-init --task ${input.services.authority.task_id}`,
+        Object.freeze({ schema_version: "1", resume_command: "archflow-local manual-next", operation: "bootstrap" })
+      )
+    }));
+  }
+  const loaded = await loadManualAuthority(input);
+  if (!loaded.ok) return ok20(Object.freeze({
+    mode: "repair-required",
+    next_action: action2(
+      "repair-manual-authority",
+      `Repair unreadable, ambiguous, or discontinuous authority (${loaded.error.code}).`,
+      true,
+      "archflow-local manual-status"
+    )
+  }));
+  const facts = resolveManualAuthority(loaded.value);
+  const current = facts.head ?? facts.state?.value;
+  const mode = facts.head === void 0 && facts.state !== void 0 ? "normal" : "degraded";
+  let next;
+  let taskStatus;
+  if (mode === "normal") {
+    const normal = await computeTaskStatus(facts.services.dependencies, facts.services.authority);
+    if (!normal.ok) return normal;
+    taskStatus = normal.value;
+    const derived = normal.value.next_action;
+    next = action2(
+      derived.code,
+      derived.detail,
+      derived.human_required,
+      derived.skill === void 0 ? "archflow-status" : `$${derived.skill}`,
+      structuredClone(derived)
+    );
+  } else if (current?.terminal !== void 0) {
+    next = action2("task-complete", `Task is terminal: ${current.terminal}.`, false, "archflow-local manual-status");
+  } else if (current?.open_gate !== void 0) {
+    next = action2("resolve-open-gate", "Resolve or cancel the authenticated open gate before advancing.", true, "archflow-local manual-next", {
+      schema_version: "1",
+      operation: "gate",
+      action: { kind: "reload", gate_id: current.open_gate.gate_id }
+    });
+  } else {
+    const phase4 = current === void 0 ? "prd" : current.phase_instance;
+    const phaseKind2 = decodePhaseInstance(parsePhaseInstanceId(phase4)).kind;
+    const skill = WORKFLOW_V1.phases.find((candidate) => candidate.id === phaseKind2)?.skill ?? "archflow-status";
+    next = action2(
+      "gather-next-manual-milestone",
+      "Run the current workflow skill, then record its actual schema-valid outcome through manual-next; status cannot be inferred before that work finishes.",
+      false,
+      `$${skill}`,
+      Object.freeze({
+        resume_command: "archflow-local manual-next",
+        milestone_template: {
+          schema_version: "1",
+          operation: "step",
+          phase_instance: phase4,
+          step: current?.step ?? "produce",
+          status: "<running|succeeded|failed>"
+        }
+      })
+    );
+  }
+  return ok20(Object.freeze({
+    mode,
+    authority_kind: facts.kind,
+    ...current === void 0 ? {} : {
+      revision: parseSafeInteger(current.revision),
+      phase_instance: current.phase_instance,
+      step: current.step,
+      status: current.status
+    },
+    ...taskStatus === void 0 ? {} : { task_status: taskStatus },
+    next_action: next
+  }));
+}
+async function buildManualFallback(input) {
+  const facts = resolveManualAuthority(input.authority);
+  if (!["archflow_state", "archflow_counter_review", "archflow_adjudicate", "archflow_gate", "archflow_waiver"].includes(input.tool)) return invalid4(facts.services, "manual-fallback-tool-invalid");
+  const current = facts.head ?? facts.state?.value;
+  const selector = Object.freeze({
+    schema_version: "1",
+    operation: input.tool,
+    task_id: facts.services.authority.task_id,
+    ...current === void 0 ? {} : { phase_instance: current.phase_instance, step: current.step }
+  });
+  const pinned = current === void 0 ? Object.freeze({
+    initialization_digest: facts.initialization_digest
+  }) : Object.freeze({
+    initialization_digest: facts.initialization_digest,
+    input_fingerprint: current.input_fingerprint,
+    revision: current.revision
+  });
+  const resume = action2("resume-manual-next", "Pass this material unchanged to manual-next after recording its outcome.", false, "archflow-local manual-next", selector);
+  if (input.tool === "archflow_state") return ok20(Object.freeze({
+    tool: input.tool,
+    kind: "checkpoint",
+    material: Object.freeze({
+      action: "build-and-install-derived-checkpoint",
+      selector,
+      pinned,
+      proposed_call: input.proposed_call,
+      ...input.source_artifact === void 0 ? {} : { source_artifact: input.source_artifact }
+    }),
+    resume_action: resume
+  }));
+  if (input.tool === "archflow_counter_review" || input.tool === "archflow_adjudicate") {
+    const role = input.tool === "archflow_counter_review" ? "counter-review" : "adjudication";
+    const proposed = input.tool === "archflow_counter_review" ? Object.freeze({
+      proposed_call: input.proposed_call,
+      source_artifact: input.source_artifact,
+      rubric: input.rubric,
+      upstreams: input.upstreams,
+      reviewer_family: input.producer_family === "claude" ? "codex" : "claude"
+    }) : Object.freeze({
+      proposed_call: input.proposed_call,
+      source_artifact: input.source_artifact,
+      evidence: input.evidence,
+      upstreams: input.upstreams
+    });
+    const prompt = [
+      `Perform the degraded ${role} for task ${facts.services.authority.task_id}.`,
+      current === void 0 ? "Use the supplied initialization and artifact." : `Pinned milestone: ${current.phase_instance}/${current.step} at revision ${current.revision}.`,
+      "Return only schema-valid evidence bound to the supplied artifact and pinned inputs.",
+      input.tool === "archflow_adjudicate" ? "If the evidence is uncertain or the operation fails, open a human gate; do not infer advancement." : "Do not change files or advance the workflow.",
+      `Pinned input (use exactly): ${JSON.stringify(pinned)}`,
+      `Proposed input (use exactly): ${JSON.stringify(proposed)}`
+    ].join("\n");
+    return ok20(Object.freeze({ tool: input.tool, kind: "prompt", material: Object.freeze({ prompt, selector, pinned, proposed }), resume_action: resume }));
+  }
+  const gateKind2 = input.tool === "archflow_waiver" ? "waiver" : "gate";
+  return ok20(Object.freeze({
+    tool: input.tool,
+    kind: "gate-interface",
+    material: Object.freeze({
+      action: `publish-${gateKind2}-request-and-decision-templates`,
+      selector,
+      pinned,
+      proposed_call: input.proposed_call,
+      request_material: input.request_material,
+      decision_templates: input.decision_templates,
+      stop_until: "A canonical request-bound decision is atomically archived."
+    }),
+    resume_action: resume
+  }));
+}
+function parseManualNextValue(value) {
+  assertPlainJson(value, "manual-next input");
+  const copy = structuredClone(value);
+  if (copy.schema_version !== "1" || !["step", "terminal", "bootstrap", "gate", "fallback", "import-call"].includes(copy.operation)) {
+    throw new TypeError("manual-next operation is invalid");
+  }
+  if (copy.initialization !== void 0) parseInitialization(copy.initialization);
+  if (copy.result !== void 0) {
+    parseSafeId(copy.result.result_id);
+    if (copy.result.artifact === void 0 === (copy.result.evidence === void 0)) {
+      throw new TypeError("manual-next result requires exactly one artifact or evidence value");
+    }
+  }
+  if (copy.operation === "step") {
+    parsePhaseInstanceId(copy.phase_instance);
+    if (copy.step === void 0 || !PIPELINE_STEPS.includes(copy.step) || copy.status === void 0 || !["running", "succeeded", "failed"].includes(copy.status)) {
+      throw new TypeError("manual-next step milestone is invalid");
+    }
+  }
+  if (copy.operation === "terminal" && copy.terminal === void 0) throw new TypeError("manual-next terminal is required");
+  if (copy.operation === "gate") {
+    if (copy.action === void 0) throw new TypeError("manual-next gate action is required");
+    parseManualGateAction(copy.action);
+  }
+  if (copy.operation === "fallback" && copy.fallback_input === void 0) throw new TypeError("manual-next fallback input is required");
+  if (copy.operation === "import-call") parsePathSafeId(copy.intent_id);
+  return Object.freeze(copy);
+}
+function exactObject(value, required2, optional3 = []) {
+  if (value === null || Array.isArray(value) || typeof value !== "object") throw new TypeError("manual gate value must be an object");
+  const keys = Object.keys(value);
+  const allowed = /* @__PURE__ */ new Set([...required2, ...optional3]);
+  if (required2.some((key) => !Object.hasOwn(value, key)) || keys.some((key) => !allowed.has(key))) {
+    throw new TypeError("manual gate value has unexpected or missing fields");
+  }
+  return value;
+}
+function parseManualGateAction(value) {
+  if (value === null || Array.isArray(value) || typeof value !== "object" || !Object.hasOwn(value, "kind")) {
+    throw new TypeError("manual gate action must be an object with kind");
+  }
+  const action3 = value;
+  if (action3.kind === "publish") {
+    const published = exactObject(value, ["kind", "selector"]);
+    if (published.selector === null || Array.isArray(published.selector) || typeof published.selector !== "object" || !Object.hasOwn(published.selector, "kind")) throw new TypeError("manual gate selector must have kind");
+    const selectorBase = published.selector;
+    if (selectorBase.kind === "gate") {
+      const commit = Reflect.get(published.selector, "gate_kind") === "commit-authorization";
+      const selector = exactObject(
+        published.selector,
+        commit ? ["kind", "gate_kind", "summary"] : ["kind", "gate_kind", "summary", "context"],
+        ["supersedes_gate_id"]
+      );
+      if (!GATE_KINDS.includes(selector.gate_kind) || typeof selector.summary !== "string" || selector.summary.trim() === "") {
+        throw new TypeError("manual gate publish selector is invalid");
+      }
+      if (!commit) parseGateContext(selector.gate_kind, selector.context);
+      if (selector.supersedes_gate_id !== void 0) parsePathSafeId(selector.supersedes_gate_id);
+      return;
+    }
+    if (selectorBase.kind === "waiver") {
+      const selector = exactObject(published.selector, ["kind", "origin_gate_id", "summary", "rationale"]);
+      parsePathSafeId(selector.origin_gate_id);
+      if (typeof selector.summary !== "string" || selector.summary.trim() === "" || typeof selector.rationale !== "string" || selector.rationale.trim() === "") {
+        throw new TypeError("manual waiver publish selector is invalid");
+      }
+      return;
+    }
+    throw new TypeError("manual gate publish selector kind is invalid");
+  }
+  if (action3.kind === "reload") {
+    parsePathSafeId(exactObject(value, ["kind", "gate_id"]).gate_id);
+    return;
+  }
+  if (action3.kind === "resolve" || action3.kind === "supersede") {
+    const resolved = exactObject(
+      value,
+      ["kind", "gate_id", "input_fingerprint"],
+      action3.kind === "resolve" ? ["supplemental_outcome"] : ["supplemental_outcome"]
+    );
+    parsePathSafeId(resolved.gate_id);
+    parseSha256Digest(resolved.input_fingerprint);
+    if (action3.kind === "supersede" && resolved.supplemental_outcome === void 0) {
+      throw new TypeError("manual gate supersession outcome is required");
+    }
+    if (resolved.supplemental_outcome !== void 0) {
+      const supplemental2 = parseSupplementalReviewOutcome(resolved.supplemental_outcome);
+      if (action3.kind === "supersede" && supplemental2.action !== "supersede") {
+        throw new TypeError("manual gate supersession outcome is invalid");
+      }
+    }
+    return;
+  }
+  throw new TypeError("manual gate action kind is invalid");
+}
+function submittedResultSource(result) {
+  if (result.artifact !== void 0) return Object.freeze({
+    source_digest: canonicalJsonDigest(result.artifact),
+    phase_instance: result.artifact.phase_instance,
+    step: result.artifact.step,
+    input_fingerprint: result.artifact.input_fingerprint
+  });
+  const value = result.evidence;
+  const evidence = value.evidence;
+  const source = value.kind === "review" ? Object.freeze({ schema_version: "1", artifact_kind: "review-evidence", evidence }) : value.kind === "adjudication" ? Object.freeze({ schema_version: "1", artifact_kind: "adjudication-evidence", evidence }) : Object.freeze({ schema_version: "1", artifact_kind: "triage", evidence });
+  return Object.freeze({
+    source_digest: canonicalJsonDigest(source),
+    phase_instance: parsePhaseInstanceId(evidence.phase_instance),
+    step: evidence.step,
+    input_fingerprint: evidence.input_fingerprint
+  });
+}
+function reusableManualResult(authority, result) {
+  const facts = resolveManualAuthority(authority);
+  const expected = submittedResultSource(result);
+  const references = facts.head?.authoritative_results ?? facts.state?.value.authoritative_results ?? [];
+  const matches = references.filter((reference) => {
+    if (reference.result_id !== result.result_id || reference.phase_instance !== expected.phase_instance || reference.step !== expected.step || reference.input_fingerprint !== expected.input_fingerprint) return false;
+    const manifest = facts.retained_manifests.find((candidate) => candidate.digest === reference.result_digest);
+    return manifest !== void 0 && canonicalJsonDigest(manifest.value.source_artifact) === expected.source_digest;
+  });
+  if (matches.length > 1) throw new TypeError("manual retained result generation is ambiguous");
+  return matches[0];
+}
+async function runManualNext(input) {
+  let value;
+  try {
+    value = parseManualNextValue(input.value);
+  } catch {
+    return invalid4(input.services, "manual-next-input-invalid");
+  }
+  const authority = await loadManualAuthority({
+    services: input.services,
+    ...value.initialization === void 0 ? {} : { initialization: value.initialization }
+  });
+  if (!authority.ok) return authority;
+  let selectedAuthority = authority.value;
+  if (value.operation === "import-call") {
+    const call = await buildCheckpointImportStateCall({ authority: selectedAuthority, intent_id: value.intent_id });
+    return call.ok ? ok20(Object.freeze({ kind: "import-call", call: call.value })) : call;
+  }
+  if (value.operation === "fallback") {
+    const raw = value.fallback_input;
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return invalid4(input.services, "manual-fallback-input-invalid");
+    const fallback = await buildManualFallback({ ...structuredClone(raw), authority: selectedAuthority });
+    return fallback.ok ? ok20(Object.freeze({ kind: "fallback", fallback: fallback.value })) : fallback;
+  }
+  if (value.operation === "gate" && value.result !== void 0) {
+    return invalid4(input.services, "manual-gate-result-mix-invalid");
+  }
+  const installed = [];
+  if (value.result !== void 0) {
+    let reusable;
+    try {
+      reusable = reusableManualResult(selectedAuthority, value.result);
+    } catch {
+      return invalid4(input.services, "manual-retained-result-generation-ambiguous");
+    }
+    if (reusable !== void 0) {
+      const reloaded = await loadManualAuthority({
+        services: input.services,
+        ...value.initialization === void 0 ? {} : { initialization: value.initialization },
+        exclude_result_digest: reusable.result_digest
+      });
+      if (!reloaded.ok) return reloaded;
+      selectedAuthority = reloaded.value;
+      const result = await remintManualRetainedResult({
+        services: input.services,
+        authority: selectedAuthority,
+        reference: reusable
+      });
+      if (!result.ok) return result;
+      installed.push(result.value);
+    } else {
+      const accounting2 = await createRetainedTaskAccounting({ services: input.services, manual_authority: selectedAuthority });
+      const prepared = value.result.artifact !== void 0 ? await prepareRetainedStateResult({
+        services: input.services,
+        artifact: value.result.artifact,
+        result_id: value.result.result_id,
+        accounting: accounting2,
+        scanner: createSecretlintScanner()
+      }) : await prepareRetainedStateResult({
+        services: input.services,
+        evidence: value.result.evidence,
+        result_id: value.result.result_id,
+        accounting: accounting2,
+        scanner: createSecretlintScanner()
+      });
+      if (!prepared.ok) return prepared;
+      const result = await installManualRetainedResult({ services: input.services, authority: selectedAuthority, prepared: prepared.value });
+      if (!result.ok) return result;
+      installed.push(result.value);
+    }
+  }
+  let milestone;
+  let gateFacts;
+  if (value.operation === "gate") {
+    const gate = await advanceManualGate({
+      dependencies: input.services.dependencies,
+      transaction_authority: input.services.authority,
+      manual_authority: selectedAuthority,
+      state: materializeManualAuthorityState(selectedAuthority),
+      action: value.action,
+      resolve_publish_material: ({ manual_authority, state }) => {
+        if (manual_authority !== selectedAuthority) throw new TypeError("manual gate publish authority changed");
+        const facts = resolveManualAuthority(selectedAuthority);
+        const produce = facts.retained_manifests.find((manifest) => manifest.value.phase_instance === state.phase_instance && manifest.value.step === "produce");
+        if (produce === void 0) return invalid4(input.services, "manual-gate-current-subject-missing");
+        const references = facts.head?.authoritative_results ?? facts.state?.value.authoritative_results ?? [];
+        const retained = /* @__PURE__ */ new Map();
+        for (const step of ["self_review", "counter_review"]) {
+          const reference = references.find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === step);
+          const manifest = reference === void 0 ? void 0 : facts.retained_manifests.find((candidate) => candidate.digest === reference.result_digest);
+          if (reference === void 0 || manifest === void 0) {
+            return invalid4(input.services, "manual-gate-current-evidence-missing");
+          }
+          retained.set(step, Object.freeze({ reference, manifest: manifest.value }));
+        }
+        let derived;
+        try {
+          derived = deriveCurrentEvidenceSet(retained);
+        } catch {
+          return invalid4(input.services, "manual-gate-current-evidence-invalid");
+        }
+        if (derived.subject_digest !== produce.value.artifact_digest || derived.phase_instance !== state.phase_instance || derived.input_fingerprint !== state.input_fingerprint) {
+          return invalid4(input.services, "manual-gate-current-evidence-mismatch");
+        }
+        const checkpointEvidence = facts.head?.evidence_chain.find((entry) => entry.phase_instance === state.phase_instance && entry.subject_digest === derived.subject_digest);
+        if (checkpointEvidence !== void 0 && !isDeepStrictEqual9(checkpointEvidence.current_evidence, derived.current_evidence_set)) {
+          return invalid4(input.services, "manual-gate-checkpoint-evidence-mismatch");
+        }
+        return ok20(Object.freeze({
+          subject_digest: produce.value.artifact_digest,
+          current_evidence: derived.current_evidence_set
+        }));
+      }
+    });
+    if (!gate.ok) return gate;
+    if (gate.value.status === "awaiting-human") {
+      if (resolveManualAuthority(selectedAuthority).head?.open_gate?.gate_id === gate.value.gate_id) {
+        const status2 = await classifyManualWorkflowStatus({ services: input.services });
+        if (!status2.ok) return status2;
+        const { request, ...publicGate } = gate.value;
+        return ok20(Object.freeze({
+          kind: "gate-awaiting",
+          gate: Object.freeze({ ...publicGate, request: Object.freeze({ digest: request.digest, value: request.value }) }),
+          status: status2.value
+        }));
+      }
+      milestone = Object.freeze({ kind: "gate-open", request: gate.value.request.value });
+    } else {
+      milestone = Object.freeze({ kind: "gate-resolved", decision: gate.value.decision.value });
+      gateFacts = gate.value.gate_facts;
+    }
+  } else if (value.operation === "terminal") milestone = Object.freeze({ kind: "terminal", terminal: value.terminal });
+  else milestone = Object.freeze({
+    kind: "step",
+    phase_instance: value.operation === "bootstrap" ? parsePhaseInstanceId("prd") : value.phase_instance,
+    step: value.operation === "bootstrap" ? "produce" : value.step,
+    status: value.operation === "bootstrap" ? "running" : value.status
+  });
+  const checkpoint = await buildNextManualCheckpoint({
+    authority: selectedAuthority,
+    milestone,
+    results: installed,
+    ...gateFacts === void 0 ? {} : { gate_facts: gateFacts }
+  });
+  if (!checkpoint.ok) return checkpoint;
+  const written = await writeManualCheckpoint(input.services.dependencies, input.services.authority, checkpoint.value);
+  if (!written.ok) return written;
+  const status = await classifyManualWorkflowStatus({
+    services: input.services,
+    ...value.initialization === void 0 ? {} : { initialization: value.initialization }
+  });
+  if (!status.ok) return status;
+  return ok20(Object.freeze({
+    kind: "checkpoint",
+    checkpoint_path: `.archflow/tasks/${input.services.authority.task_id}/manual/checkpoints/${checkpoint.value.revision}-${written.value.digest}.json`,
+    checkpoint_digest: written.value.digest,
+    revision: parseSafeInteger(checkpoint.value.revision),
+    status: status.value
+  }));
+}
+async function runManualHandoff(input) {
+  let expected;
+  try {
+    expected = parseGitOid(input.expected_head);
+  } catch {
+    return invalid4(input.services, "manual-handoff-head-invalid");
+  }
+  const authority = await loadManualAuthority({
+    services: input.services,
+    ...input.initialization === void 0 ? {} : { initialization: input.initialization }
+  });
+  if (!authority.ok) return authority;
+  return inspectManualHandoff({
+    dependencies: { runner: input.services.runner },
+    transaction_authority: input.services.authority,
+    selected_authority: authority.value,
+    resolve_selected_authority: resolveManualHandoffAuthority,
+    expected_head: expected
+  });
+}
+
+// src/state/manual-checkpoints.ts
+var ok21 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ioFailure2 = (authority, operation) => Object.freeze({
+  schema_version: "1",
+  ok: false,
+  error: createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt })
+});
+function deriveFinalManualProjections(input) {
+  const installedByDigest = new Map(input.installed_results.map((facts) => [facts.reference.result_digest, facts]));
+  const projections = /* @__PURE__ */ new Map();
+  for (const reference of input.references) {
+    const installed = installedByDigest.get(reference.result_digest);
+    const retained = input.retained_manifests.find((candidate) => candidate.digest === reference.result_digest);
+    if (installed === void 0 && retained === void 0) return Object.freeze({ outcome: "missing-manifest" });
+    for (const projection of installed?.projections ?? retained.value.projections) {
+      const prior = projections.get(projection.path);
+      if (prior !== void 0 && prior !== projection.content_digest) return Object.freeze({ outcome: "path-conflict" });
+      projections.set(projection.path, projection.content_digest);
+    }
+  }
+  return Object.freeze({
+    outcome: "ok",
+    projections: Object.freeze([...projections].map(([path2, content_digest]) => ({ path: path2, content_digest })).sort((left, right) => left.path.localeCompare(right.path)))
+  });
+}
+function invalidManual(authority, issue3) {
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("STATE_INVALID", {
+      phase_instance: authority.context.phase_instance,
+      issue_code: issue3
+    })
+  });
+}
+function materializeManualAuthorityState(authority) {
+  return projectCurrentManualState(resolveManualAuthority(authority));
+}
+function projectCurrentManualState(authority) {
+  const head = authority.head;
+  if (authority.state !== void 0) {
+    const {
+      committed_intent: _committed,
+      adopted_checkpoint: _adopted,
+      open_gate: _open,
+      terminal: _terminal,
+      planned_final_phase: _planned,
+      revision: _revision,
+      phase_instance: _phase,
+      step: _step,
+      status: _status,
+      attempt: _attempt,
+      input_fingerprint: _fingerprint,
+      authoritative_results: _results,
+      approvals: _approvals,
+      waivers: _waivers,
+      ...state
+    } = authority.state.value;
+    const source2 = head ?? authority.state.value;
+    const revision = head?.revision ?? authority.state.value.adopted_checkpoint?.revision ?? authority.state.value.revision;
+    return {
+      ...state,
+      revision: parseSafeInteger(revision),
+      phase_instance: source2.phase_instance,
+      step: source2.step,
+      status: source2.status,
+      attempt: source2.attempt,
+      input_fingerprint: source2.input_fingerprint,
+      authoritative_results: source2.authoritative_results,
+      approvals: source2.approvals,
+      waivers: source2.waivers,
+      ...authority.planned_final_phase === void 0 ? {} : { planned_final_phase: authority.planned_final_phase },
+      ...source2.open_gate === void 0 ? {} : { open_gate: source2.open_gate },
+      ...source2.terminal === void 0 ? {} : { terminal: source2.terminal }
+    };
+  }
+  const source = head;
+  const initialization = authority.initialization;
+  if (initialization === void 0) throw new TypeError("initial manual authority requires initialization");
+  return {
+    schema_version: "1",
+    task_id: initialization.task_id,
+    repository_identity_digest: initialization.repository_identity_digest,
+    revision: parseSafeInteger(source?.revision ?? 0),
+    phase_instance: source?.phase_instance ?? "prd",
+    step: source?.step ?? "produce",
+    status: source?.status ?? "running",
+    attempt: source?.attempt ?? parseSafeInteger(1),
+    input_fingerprint: source?.input_fingerprint ?? authority.initialization_digest,
+    initialization_digest: authority.initialization_digest,
+    config_digest: initialization.config_digest,
+    workflow_digest: initialization.workflow_digest,
+    constitution_digest: initialization.constitution_digest,
+    policy_base_commit: initialization.policy_base_commit,
+    authoritative_results: source?.authoritative_results ?? [],
+    approvals: source?.approvals ?? [],
+    waivers: source?.waivers ?? [],
+    ...authority.planned_final_phase === void 0 ? {} : { planned_final_phase: authority.planned_final_phase },
+    ...source?.open_gate === void 0 ? {} : { open_gate: source.open_gate },
+    ...source?.terminal === void 0 ? {} : { terminal: source.terminal }
+  };
+}
+function requiresManualFinalPhaseCompletion(current, targetPhase) {
+  const decoded = decodePhaseInstance(current.phase_instance);
+  return decoded.kind === "phase-impl" && current.step === "adjudicate" && current.status === "succeeded" && current.planned_final_phase !== void 0 && Number(decoded.phase) >= Number(current.planned_final_phase) && targetPhase !== current.phase_instance;
+}
+async function deriveManualStepFingerprint(authority, current, phaseInstance3, step, status) {
+  const config2 = await authority.services.dependencies.read_config(authority.services.authority.config);
+  if (config2.kind !== "valid") return invalidManual(authority.services.authority, "manual-fingerprint-config-invalid");
+  const call = parseToolCall("archflow_state", {
+    schema_version: "1",
+    task_id: current.task_id,
+    intent_id: "manual-checkpoint-fingerprint",
+    expected_revision: current.revision,
+    input_fingerprint: current.input_fingerprint,
+    phase_instance: phaseInstance3,
+    step,
+    status
+  });
+  const subject = await authority.services.dependencies.resolve_input_fingerprint({
+    runner: authority.services.runner,
+    authority: authority.services.authority,
+    state: canonicalDocument(current),
+    call,
+    live_config: config2.snapshot,
+    context: authority.services.authority.context
+  });
+  return subject.ok ? ok21(computeInputFingerprint(subject.value)) : subject;
+}
+async function loadManualCommitTransitionFacts(input, authority, current) {
+  const implementation = authority.retained_manifests.find((manifest) => manifest.value.phase_instance === current.phase_instance && manifest.value.step === "produce" && manifest.value.source_artifact.artifact_kind === "implementation-output");
+  const approval = current.approvals.find((candidate) => candidate.gate_kind === "commit-authorization" && candidate.subject_digest === implementation?.value.artifact_digest);
+  if (implementation === void 0 || approval === void 0 || implementation.value.source_artifact.artifact_kind !== "implementation-output") {
+    return invalidManual(authority.services.authority, "manual-commit-proof-required");
+  }
+  const loaded = await loadAuthenticatedManualGateFacts({
+    dependencies: authority.services.dependencies,
+    transaction_authority: authority.services.authority,
+    authority_binding: input.authority,
+    state: current,
+    gate_ids: [approval.gate_id]
+  });
+  if (!loaded.ok) return loaded;
+  const gates = resolveAuthenticatedManualGateFacts(loaded.value, input.authority);
+  const authenticated = gates.authenticated_gate_approvals.find((candidate) => candidate.approval.gate_id === approval.gate_id && candidate.approval.subject_digest === implementation.value.artifact_digest && candidate.request.kind === "commit-authorization" && candidate.request.phase_instance === current.phase_instance);
+  if (authenticated === void 0 || authenticated.request.kind !== "commit-authorization" || !await implementationOutputCommittedAtCurrentTarget(
+    authority.services.runner,
+    implementation.value.source_artifact,
+    authenticated.request.context.target_ref
+  )) {
+    return invalidManual(authority.services.authority, "manual-commit-proof-required");
+  }
+  return ok21(Object.freeze({
+    completion_subject_digest: implementation.value.artifact_digest,
+    authenticated_gate_approvals: Object.freeze([authenticated]),
+    commit_observed: true
+  }));
+}
+async function buildNextManualCheckpoint(input) {
+  const authority = resolveManualAuthority(input.authority);
+  const current = projectCurrentManualState(authority);
+  if (current.terminal !== void 0) return invalidManual(authority.services.authority, "manual-terminal-already-set");
+  const revision = parseSafeInteger(current.revision + 1);
+  const resultFacts = input.results.map((result) => resolveInstalledManualResult(result, input.authority));
+  const references = new Map(current.authoritative_results.map((reference) => [`${reference.phase_instance}\0${reference.step}`, reference]));
+  for (const facts of resultFacts) {
+    references.set(`${facts.reference.phase_instance}\0${facts.reference.step}`, facts.reference);
+  }
+  const derivedProjections = deriveFinalManualProjections({
+    references: [...references.values()],
+    retained_manifests: authority.retained_manifests,
+    installed_results: resultFacts
+  });
+  if (derivedProjections.outcome !== "ok") {
+    return invalidManual(authority.services.authority, derivedProjections.outcome === "missing-manifest" ? "manual-current-result-manifest-missing" : "manual-projection-path-conflict");
+  }
+  const projections = new Map(derivedProjections.projections.map((projection) => [projection.path, projection.content_digest]));
+  let phaseInstance3 = current.phase_instance;
+  let step = current.step;
+  let status = current.status;
+  let attempt = current.attempt;
+  let inputFingerprint = current.input_fingerprint;
+  let approvals = current.approvals;
+  let waivers = current.waivers;
+  let openGate = current.open_gate;
+  let terminal;
+  if (input.milestone.kind === "step") {
+    if (current.open_gate !== void 0) return invalidManual(authority.services.authority, "manual-step-with-open-gate");
+    phaseInstance3 = input.milestone.phase_instance;
+    step = input.milestone.step;
+    status = input.milestone.status;
+    const sameSubject2 = phaseInstance3 === current.phase_instance && step === current.step;
+    attempt = phaseInstance3 !== current.phase_instance ? parseSafeInteger(1) : sameSubject2 && current.status === "failed" && status === "running" ? parseSafeInteger(current.attempt + 1) : current.attempt;
+    const installed = resultFacts.find((facts) => facts.reference.phase_instance === phaseInstance3 && facts.reference.step === step);
+    const reference = installed?.reference;
+    if (reference !== void 0) inputFingerprint = reference.input_fingerprint;
+    else if (status === "succeeded") return invalidManual(authority.services.authority, "manual-step-result-required");
+    else if (phaseInstance3 !== current.phase_instance || step !== current.step || authority.state === void 0 && authority.head === void 0) {
+      const derived = await deriveManualStepFingerprint(authority, current, phaseInstance3, step, status);
+      if (!derived.ok) return derived;
+      inputFingerprint = derived.value;
+    }
+    const bootstrap = authority.state === void 0 && authority.head === void 0;
+    if (!bootstrap) {
+      const sourceArtifact = installed?.manifest.value.source_artifact;
+      const transitionArtifact = sourceArtifact?.artifact_kind === "adjudication-evidence" ? void 0 : sourceArtifact;
+      const requiresCommit = decodePhaseInstance(current.phase_instance).kind === "phase-impl" && current.step === "adjudicate" && current.status === "succeeded" && phaseInstance3 !== current.phase_instance;
+      if (requiresCommit && requiresManualFinalPhaseCompletion(current, phaseInstance3)) {
+        return invalidManual(authority.services.authority, "manual-final-phase-must-complete");
+      }
+      const commit = requiresCommit ? await loadManualCommitTransitionFacts(input, authority, current) : void 0;
+      if (commit !== void 0 && !commit.ok) return commit;
+      const transition = planStateTransition({
+        current,
+        target: { phase_instance: phaseInstance3, step, status, attempt, input_fingerprint: inputFingerprint },
+        recomputed_input_fingerprint: inputFingerprint,
+        ...installed === void 0 ? {} : { result_reference: installed.reference },
+        ...transitionArtifact === void 0 ? {} : { artifact: transitionArtifact },
+        ...commit === void 0 ? {} : commit.value
+      });
+      if (!transition.ok) return transition;
+    }
+  } else if (input.milestone.kind === "gate-open") {
+    const request = input.milestone.request;
+    if (current.open_gate !== void 0 || request.task_id !== current.task_id || request.phase_instance !== current.phase_instance || request.opened_at_revision !== revision) {
+      return invalidManual(authority.services.authority, "manual-gate-open-transition-invalid");
+    }
+    const frozen = openGateFrozenStateDigest({ ...current, revision, open_gate: void 0 });
+    openGate = Object.freeze({
+      gate_id: request.gate_id,
+      gate_kind: request.kind,
+      subject_digest: request.subject_digest,
+      context_digest: request.context_digest,
+      frozen_state_digest: frozen,
+      ...request.context !== null && typeof request.context === "object" && "origin" in request.context ? { waiver_origin_gate_id: request.context.origin.origin_gate_id } : {},
+      opened_at_revision: revision
+    });
+  } else if (input.milestone.kind === "gate-resolved") {
+    if (current.open_gate === void 0 || input.gate_facts === void 0 || current.open_gate.gate_id !== input.milestone.decision.gate_id) {
+      return invalidManual(authority.services.authority, "manual-gate-resolution-authority-missing");
+    }
+    const gates = resolveAuthenticatedManualGateFacts(input.gate_facts, input.authority);
+    const decision2 = input.milestone.decision;
+    const pair = gates.pairs.find((candidate) => candidate.decision.gate_id === decision2.gate_id);
+    if (pair === void 0 || canonicalJsonDigest(pair.decision) !== canonicalJsonDigest(decision2)) {
+      return invalidManual(authority.services.authority, "manual-gate-resolution-mismatch");
+    }
+    const landed = gates.post_decision_state;
+    if (landed === void 0 || landed.revision !== revision || landed.task_id !== current.task_id || landed.repository_identity_digest !== current.repository_identity_digest || !isDeepStrictEqual10(landed.authoritative_results, current.authoritative_results)) {
+      return invalidManual(authority.services.authority, "manual-gate-post-decision-state-mismatch");
+    }
+    phaseInstance3 = landed.phase_instance;
+    step = landed.step;
+    status = landed.status;
+    attempt = landed.attempt;
+    inputFingerprint = landed.input_fingerprint;
+    approvals = landed.approvals;
+    waivers = landed.waivers;
+    openGate = landed.open_gate;
+    terminal = landed.terminal;
+  } else {
+    if (current.open_gate !== void 0) return invalidManual(authority.services.authority, "manual-terminal-with-open-gate");
+    if (input.milestone.terminal === "abandoned") {
+      return invalidManual(authority.services.authority, "manual-abandonment-authority-required");
+    }
+    if (input.milestone.terminal === "complete") {
+      const commit = await loadManualCommitTransitionFacts(input, authority, current);
+      if (!commit.ok) return invalidManual(authority.services.authority, "manual-terminal-proof-required");
+      const transition = planStateTransition({
+        current,
+        target: {
+          phase_instance: current.phase_instance,
+          step: current.step,
+          status: current.status,
+          attempt: current.attempt,
+          input_fingerprint: current.input_fingerprint
+        },
+        recomputed_input_fingerprint: current.input_fingerprint,
+        ...commit.value
+      });
+      if (!transition.ok || transition.value.terminal !== "complete") {
+        return invalidManual(authority.services.authority, "manual-terminal-proof-required");
+      }
+    }
+    terminal = input.milestone.terminal;
+  }
+  const common3 = {
+    schema_version: "1",
+    task_id: current.task_id,
+    repository_identity_digest: current.repository_identity_digest,
+    revision,
+    phase_instance: phaseInstance3,
+    step,
+    status,
+    attempt,
+    input_fingerprint: inputFingerprint,
+    assurance: "degraded",
+    initialization_digest: authority.initialization_digest,
+    authoritative_results: Object.freeze([...references.values()].sort((left, right) => left.phase_instance.localeCompare(right.phase_instance) || left.step.localeCompare(right.step))),
+    projections: Object.freeze([...projections].map(([path2, content_digest]) => ({ path: path2, content_digest })).sort((left, right) => left.path.localeCompare(right.path))),
+    evidence_chain: authority.head?.evidence_chain ?? [],
+    approvals: Object.freeze([...approvals].sort((left, right) => left.gate_id.localeCompare(right.gate_id))),
+    waivers: Object.freeze([...waivers].sort((left, right) => left.gate_id.localeCompare(right.gate_id))),
+    ...openGate === void 0 ? {} : { open_gate: openGate },
+    ...terminal === void 0 ? {} : { terminal }
+  };
+  const value = authority.kind === "continuation" ? { ...common3, predecessor: authority.predecessor } : authority.state !== void 0 ? { ...common3, state_anchor: {
+    anchor_kind: "state",
+    state_revision: authority.state.value.revision,
+    state_digest: authority.state.digest
+  } } : authority.initialization === void 0 ? void 0 : { ...common3, revision: 1, initialization: authority.initialization };
+  if (value === void 0) return invalidManual(authority.services.authority, "manual-initialization-unavailable");
+  try {
+    return ok21(parseManualCheckpoint(value));
+  } catch {
+    return invalidManual(authority.services.authority, "manual-checkpoint-derived-invalid");
+  }
+}
+async function writeManualCheckpoint(dependencies, authority, checkpoint) {
+  assertInternalTransactionAuthority(authority, dependencies);
+  const parsed = parseManualCheckpoint(checkpoint);
+  if (parsed.task_id !== authority.task_id || parsed.repository_identity_digest !== authority.repository_identity_digest) {
+    return Object.freeze({
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("STATE_INVALID", {
+        phase_instance: authority.context.phase_instance,
+        issue_code: "manual-checkpoint-authority-mismatch"
+      })
+    });
+  }
+  const digest11 = checkpointSelfDigest(parsed);
+  const target2 = await resolveTaskPath({
+    runner: dependencies.runner,
+    taskId: authority.task_id,
+    claim: parseTaskPathClaim(`manual/checkpoints/${parsed.revision}-${digest11}.json`),
+    expectedClass: "manual-checkpoint",
+    context: authority.context
+  });
+  if (!target2.ok) return target2;
+  const document2 = canonicalDocument(parsed);
+  try {
+    await ensureManualCheckpointDirectory(authority);
+    const installed = await dependencies.atomic.createExclusive(target2.value, document2.bytes);
+    if (installed === "exists") {
+      const handle = await openResolved(target2.value.absolute, fsConstants7.O_RDONLY);
+      try {
+        const existing = new Uint8Array(await handle.readFile());
+        if (!Buffer.from(existing).equals(Buffer.from(document2.bytes))) {
+          return Object.freeze({
+            schema_version: "1",
+            ok: false,
+            error: createProjectError("STATE_INVALID", {
+              phase_instance: authority.context.phase_instance,
+              issue_code: "manual-checkpoint-address-disagreement"
+            })
+          });
+        }
+      } finally {
+        await handle.close();
+      }
+    }
+    return ok21(document2);
+  } catch {
+    return ioFailure2(authority, "write-manual-checkpoint");
+  }
+}
+async function readManualCheckpoints(dependencies, authority) {
+  assertInternalTransactionAuthority(authority, dependencies);
+  let names;
+  try {
+    names = await readdir3(join9(authority.task_root, "manual", "checkpoints"));
+  } catch (error51) {
+    if (error51.code === "ENOENT") return ok21(Object.freeze([]));
+    return ioFailure2(authority, "read-manual-checkpoints");
+  }
+  const documents = [];
+  for (const name of names.sort()) {
+    if (!/^(?:0|[1-9][0-9]*)-[0-9a-f]{64}\.json$/u.test(name)) {
+      return Object.freeze({
+        schema_version: "1",
+        ok: false,
+        error: createProjectError("STATE_INVALID", {
+          phase_instance: authority.context.phase_instance,
+          issue_code: "manual-checkpoint-inventory-invalid"
+        })
+      });
+    }
+    const target2 = await resolveTaskPath({
+      runner: dependencies.runner,
+      taskId: authority.task_id,
+      claim: parseTaskPathClaim(`manual/checkpoints/${name}`),
+      expectedClass: "manual-checkpoint",
+      context: authority.context
+    });
+    if (!target2.ok) return target2;
+    try {
+      const handle = await openResolved(target2.value.absolute, fsConstants7.O_RDONLY);
+      try {
+        const document2 = parseCanonicalDocument(
+          new Uint8Array(await handle.readFile()),
+          "manual checkpoint"
+        );
+        const checkpoint = parseManualCheckpoint(document2.value);
+        const expectedName = `${checkpoint.revision}-${checkpointSelfDigest(checkpoint)}.json`;
+        if (name !== expectedName || checkpoint.task_id !== authority.task_id || checkpoint.repository_identity_digest !== authority.repository_identity_digest) {
+          throw new TypeError("manual checkpoint authority mismatch");
+        }
+        documents.push(document2);
+      } finally {
+        await handle.close();
+      }
+    } catch {
+      return Object.freeze({
+        schema_version: "1",
+        ok: false,
+        error: createProjectError("STATE_INVALID", {
+          phase_instance: authority.context.phase_instance,
+          issue_code: "manual-checkpoint-invalid"
+        })
+      });
+    }
+  }
+  documents.sort((left, right) => left.value.revision - right.value.revision || left.digest.localeCompare(right.digest));
+  return ok21(Object.freeze(documents));
+}
+
+// src/state/maintenance-roots.ts
+var ok22 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail21 = (authority, operation) => Object.freeze({
+  schema_version: "1",
+  ok: false,
+  error: createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt })
+});
+async function regularFiles(root, prefix = "") {
+  let entries;
+  try {
+    entries = await readdir4(join10(root, prefix), { withFileTypes: true });
+  } catch (error51) {
+    if (error51.code === "ENOENT") return [];
+    throw error51;
+  }
+  const files = [];
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    if (entry.isSymbolicLink()) throw new TypeError("maintenance inventory contains a symlink");
+    const path2 = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) files.push(...await regularFiles(root, path2));
+    else if (entry.isFile()) files.push(path2);
+    else throw new TypeError("maintenance inventory contains a non-regular entry");
+  }
+  return files;
+}
+async function readTaskFile(authority, path2) {
+  const absolute = join10(authority.task_root, ...path2.split("/"));
+  const rel = relative3(authority.task_root, absolute);
+  if (rel === ".." || rel.startsWith(`..${sep3}`)) throw new TypeError("maintenance path escaped task root");
+  const handle = await openResolved(absolute, fsConstants8.O_RDONLY);
+  try {
+    return new Uint8Array(await handle.readFile());
+  } finally {
+    await handle.close();
+  }
+}
+function referenceRoot(value, taskId) {
+  if (value === null || Array.isArray(value) || typeof value !== "object") return void 0;
+  const candidate = value;
+  if (candidate.task_id !== taskId || !Array.isArray(candidate.authoritative_results)) return void 0;
+  return candidate;
+}
+async function enumerateMaintenanceRoots(dependencies, authority) {
+  assertInternalTransactionAuthority(authority, dependencies);
+  const stateRead = await readTaskState(authority.state);
+  if (stateRead.kind !== "canonical") return fail21(authority, "enumerate-maintenance-state");
+  const checkpoints = await readManualCheckpoints(dependencies, authority);
+  if (!checkpoints.ok) return checkpoints;
+  try {
+    const receipts = [];
+    for (const path2 of await regularFiles(join10(authority.task_root, "intents"))) {
+      if (!path2.endsWith(".json")) throw new TypeError("invalid intent inventory");
+      const document2 = parseCanonicalDocument(await readTaskFile(authority, `intents/${path2}`), "intent receipt");
+      receipts.push({ prepared_state: parseIntentReceipt(document2.value).prepared_state });
+    }
+    const decisionReviewEvidence = [];
+    for (const directory of ["decisions", "reviews"]) {
+      for (const path2 of await regularFiles(join10(authority.task_root, directory))) {
+        if (!path2.endsWith(".json")) continue;
+        const document2 = parseCanonicalDocument(await readTaskFile(authority, `${directory}/${path2}`), "decision/review evidence");
+        assertPlainJson(document2.value, "decision/review evidence");
+        const root = referenceRoot(document2.value, authority.task_id);
+        if (root !== void 0) decisionReviewEvidence.push(root);
+      }
+    }
+    return ok22(Object.freeze({
+      inventory_complete: true,
+      current_state: stateRead.document.value,
+      checkpoints: Object.freeze(checkpoints.value.map((document2) => document2.value)),
+      resumable_receipts: Object.freeze(receipts),
+      decision_review_evidence: Object.freeze(decisionReviewEvidence)
+    }));
+  } catch {
+    return fail21(authority, "enumerate-maintenance-roots");
+  }
+}
+async function enumerateMaintenanceManifests(dependencies, authority, roots) {
+  assertInternalTransactionAuthority(authority, dependencies);
+  const references = /* @__PURE__ */ new Map();
+  for (const root of [roots.current_state, ...roots.checkpoints, ...roots.resumable_receipts.map((item) => item.prepared_state), ...roots.decision_review_evidence]) {
+    for (const reference of root.authoritative_results) references.set(reference.result_digest, reference.manifest_path);
+  }
+  try {
+    const manifests = [];
+    for (const [resultDigest, manifestPath] of [...references].sort()) {
+      const prefix = `.archflow/tasks/${authority.task_id}/`;
+      if (!manifestPath.startsWith(prefix)) throw new TypeError("manifest outside task");
+      const document2 = parseCanonicalDocument(await readTaskFile(authority, manifestPath.slice(prefix.length)), "result manifest");
+      manifests.push({ result_digest: resultDigest, manifest_path: manifestPath, manifest: document2.value });
+    }
+    return ok22(Object.freeze(manifests));
+  } catch {
+    return fail21(authority, "enumerate-maintenance-manifests");
+  }
+}
+async function enumerateMaintenanceCandidates(dependencies, authority, roots) {
+  assertInternalTransactionAuthority(authority, dependencies);
+  const referenced = new Set([roots.current_state, ...roots.checkpoints, ...roots.resumable_receipts.map((item) => item.prepared_state), ...roots.decision_review_evidence].flatMap((root) => root.authoritative_results.map((item) => item.result_digest)));
+  try {
+    const candidates = [];
+    for (const path2 of await regularFiles(join10(authority.task_root, "attempts"))) {
+      const claim = parseTaskPathClaim(`attempts/${path2}`);
+      const target2 = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim, expectedClass: "attempt", context: authority.context });
+      if (!target2.ok) return target2;
+      const bytes = await readTaskFile(authority, claim);
+      candidates.push({ path: target2.value.repositoryRelative, target: target2.value, digest: sha256Bytes(bytes), byte_count: bytes.byteLength, category: "unreferenced-attempt" });
+    }
+    for (const path2 of await regularFiles(join10(authority.task_root, "results", "sha256"))) {
+      const match = path2.match(/^([0-9a-f]{64})\/payload\/(.+)$/u);
+      if (!match || referenced.has(match[1])) continue;
+      const claim = parseTaskPathClaim(`results/sha256/${path2}`);
+      const target2 = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim, expectedClass: "result-payload", context: authority.context });
+      if (!target2.ok) return target2;
+      const bytes = await readTaskFile(authority, claim);
+      candidates.push({ path: target2.value.repositoryRelative, target: target2.value, digest: sha256Bytes(bytes), byte_count: bytes.byteLength, category: "superseded-payload" });
+    }
+    return ok22(Object.freeze(candidates.sort((a, b) => a.digest.localeCompare(b.digest))));
+  } catch {
+    return fail21(authority, "enumerate-maintenance-candidates");
+  }
+}
+
+// src/state/document-artifact.ts
+var ok23 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail22 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function ioFailure3(authority) {
-  return fail19(createProjectError("IO_ERROR", {
+  return fail22(createProjectError("IO_ERROR", {
     operation: authority.context.operation,
     attempt: authority.context.attempt
   }));
 }
-async function readResolvedBytes(target, authority) {
+async function readResolvedBytes(target2, authority) {
   try {
-    const handle = await openResolved(target.absolute, 0);
+    const handle = await openResolved(target2.absolute, 0);
     try {
-      return ok18(new Uint8Array(await handle.readFile()));
+      return ok23(new Uint8Array(await handle.readFile()));
     } finally {
       await handle.close();
     }
@@ -47819,7 +50523,7 @@ async function resolveDeclaredInput(runner, authority, path2) {
     try {
       taskPath = parseTaskPathClaim(path2.slice(prefix.length));
     } catch {
-      return fail19(createProjectError("PATH_INVALID", {
+      return fail22(createProjectError("PATH_INVALID", {
         task_id: authority.task_id,
         path_class: "repository-source"
       }));
@@ -47849,9 +50553,9 @@ async function buildDocumentArtifact(runner, authority, input) {
   if (!documentBytes.ok) return documentBytes;
   const declaredInputs = [];
   for (const declared of materialized.declared_inputs) {
-    const target = await resolveDeclaredInput(runner, authority, declared.path);
-    if (!target.ok) return target;
-    const bytes = await readResolvedBytes(target.value, authority);
+    const target2 = await resolveDeclaredInput(runner, authority, declared.path);
+    if (!target2.ok) return target2;
+    const bytes = await readResolvedBytes(target2.value, authority);
     if (!bytes.ok) return bytes;
     declaredInputs.push(Object.freeze({
       input_id: declared.input_id,
@@ -47870,7 +50574,7 @@ async function buildDocumentArtifact(runner, authority, input) {
     );
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
-      return fail19(projectErrorForGitFailure(error51, runner, authority.context));
+      return fail22(projectErrorForGitFailure(error51, runner, authority.context));
     }
     throw error51;
   }
@@ -47891,7 +50595,7 @@ async function buildDocumentArtifact(runner, authority, input) {
   const projections = Object.freeze([
     Object.freeze({ path: output.path, content_digest: contentDigest })
   ]);
-  return ok18(parseDocumentArtifact({
+  return ok23(parseDocumentArtifact({
     schema_version: "1",
     artifact_kind: "document",
     task_id: authority.task_id,
@@ -47911,7 +50615,7 @@ async function buildDocumentArtifact(runner, authority, input) {
 // src/init/assets.ts
 import { constants } from "node:fs";
 import { access, mkdir as mkdir3, open as open5, readFile as readFile5 } from "node:fs/promises";
-import { dirname as dirname4, join as join10 } from "node:path";
+import { dirname as dirname4, join as join11 } from "node:path";
 import { fileURLToPath } from "node:url";
 var ARCHFLOW_GITATTRIBUTES_LINE = ".archflow/** -text merge=binary";
 var ASSETS = Object.freeze([
@@ -47923,13 +50627,13 @@ var ASSETS = Object.freeze([
   ["constitution/30-product.md", ".archflow/constitution/30-product.md"],
   ["config.template.yaml", ".archflow/config.yaml"]
 ]);
-var ok19 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail20 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok24 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail23 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function errno(error51, code) {
   return error51 instanceof Error && error51.code === code;
 }
 function ioFailure4() {
-  return fail20(createProjectError("IO_ERROR", {
+  return fail23(createProjectError("IO_ERROR", {
     operation: "scaffold-repository-assets",
     attempt: 1
   }));
@@ -47941,7 +50645,7 @@ async function assetRoot() {
   ];
   for (const candidate of candidates) {
     try {
-      await access(join10(candidate, "workflow.yaml"), constants.R_OK);
+      await access(join11(candidate, "workflow.yaml"), constants.R_OK);
       return candidate;
     } catch (error51) {
       if (!errno(error51, "ENOENT")) throw error51;
@@ -47950,7 +50654,7 @@ async function assetRoot() {
   throw Object.assign(new Error("installed ArchFlow assets are missing"), { code: "ENOENT" });
 }
 async function appendGitAttributes(workingDirectory) {
-  const path2 = join10(workingDirectory, ".gitattributes");
+  const path2 = join11(workingDirectory, ".gitattributes");
   let current;
   try {
     current = new Uint8Array(await readFile5(path2));
@@ -47980,11 +50684,11 @@ async function appendGitAttributes(workingDirectory) {
 async function scaffoldRepositoryAssets(input) {
   try {
     const sourceRoot = await assetRoot();
-    const sources = await Promise.all(ASSETS.map(async ([source, destination]) => Object.freeze({ source: new Uint8Array(await readFile5(join10(sourceRoot, source))), destination })));
+    const sources = await Promise.all(ASSETS.map(async ([source, destination]) => Object.freeze({ source: new Uint8Array(await readFile5(join11(sourceRoot, source))), destination })));
     const created = [];
     const unchanged = [];
     for (const asset of sources) {
-      const destination = join10(input.working_directory, asset.destination);
+      const destination = join11(input.working_directory, asset.destination);
       try {
         const existing = new Uint8Array(await readFile5(destination));
         if (!Buffer.from(existing).equals(Buffer.from(asset.source))) {
@@ -47992,7 +50696,7 @@ async function scaffoldRepositoryAssets(input) {
             `ArchFlow scaffold differs at ${asset.destination}. Review or delete that file, then re-run archflow-local init.
 `
           );
-          return fail20(createProjectError("CONFIG_INVALID", { issue_code: "scaffold-diverged" }));
+          return fail23(createProjectError("CONFIG_INVALID", { issue_code: "scaffold-diverged" }));
         }
         unchanged.push(asset.destination);
       } catch (error51) {
@@ -48001,7 +50705,7 @@ async function scaffoldRepositoryAssets(input) {
     }
     for (const asset of sources) {
       if (unchanged.includes(asset.destination)) continue;
-      const destination = join10(input.working_directory, asset.destination);
+      const destination = join11(input.working_directory, asset.destination);
       await mkdir3(dirname4(destination), { recursive: true });
       const handle = await open5(destination, "wx");
       try {
@@ -48012,7 +50716,7 @@ async function scaffoldRepositoryAssets(input) {
       created.push(asset.destination);
     }
     const gitattributesUpdated = await appendGitAttributes(input.working_directory);
-    return ok19(Object.freeze({
+    return ok24(Object.freeze({
       schema_version: "1",
       created: Object.freeze(created),
       unchanged: Object.freeze(unchanged),
@@ -48024,12 +50728,12 @@ async function scaffoldRepositoryAssets(input) {
 }
 
 // src/init/diagnostics.ts
-import { stat as stat3 } from "node:fs/promises";
+import { stat as stat4 } from "node:fs/promises";
 
 // src/dispatch/workspace.ts
 import { mkdir as mkdir4, mkdtemp, realpath as realpath4, rm, symlink as symlink2 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute as isAbsolute3, join as join11, relative as relative4, resolve } from "node:path";
+import { isAbsolute as isAbsolute3, join as join12, relative as relative4, resolve } from "node:path";
 var FORWARDED_ENVIRONMENT = Object.freeze([
   "PATH",
   "LANG",
@@ -48046,13 +50750,13 @@ function isInside(parent, candidate) {
 function credentialPaths(adapter2, sourceHome, generatedHome) {
   if (adapter2 === "claude-cli") {
     return {
-      source: join11(sourceHome, ".claude", ".credentials.json"),
-      destination: join11(generatedHome, ".claude", ".credentials.json")
+      source: join12(sourceHome, ".claude", ".credentials.json"),
+      destination: join12(generatedHome, ".claude", ".credentials.json")
     };
   }
   return {
-    source: join11(sourceHome, ".codex", "auth.json"),
-    destination: join11(generatedHome, ".codex", "auth.json")
+    source: join12(sourceHome, ".codex", "auth.json"),
+    destination: join12(generatedHome, ".codex", "auth.json")
   };
 }
 async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd()) {
@@ -48063,10 +50767,10 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
   if (isInside(realRepositoryRoot, realTemporaryRoot)) {
     throw new Error("dispatch temporary directory must be outside the repository");
   }
-  const root = await mkdtemp(join11(realTemporaryRoot, "archflow-dispatch-"));
+  const root = await mkdtemp(join12(realTemporaryRoot, "archflow-dispatch-"));
   try {
-    const home = join11(root, "home");
-    const codexHome = join11(home, ".codex");
+    const home = join12(root, "home");
+    const codexHome = join12(home, ".codex");
     const sourceHome = resolve(process.env.HOME ?? homedir());
     const credential = credentialPaths(adapter2, sourceHome, home);
     await mkdir4(resolve(credential.destination, ".."), { recursive: true });
@@ -48096,7 +50800,7 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
 async function presentPaths(paths) {
   const found = await Promise.all(paths.map(async (path2) => {
     try {
-      await stat3(path2);
+      await stat4(path2);
       return path2;
     } catch (error51) {
       return error51.code === "ENOENT" ? void 0 : path2;
@@ -48173,7 +50877,7 @@ async function collectInitDiagnostics(input) {
 // src/init/registration.ts
 import { spawn as spawn2 } from "node:child_process";
 import { mkdir as mkdir5, readFile as readFile6, writeFile as writeFile2 } from "node:fs/promises";
-import { dirname as dirname5, join as join12 } from "node:path";
+import { dirname as dirname5, join as join13 } from "node:path";
 var CLAUDE_MCP_TIMEOUT_MS = 36e5;
 var CODEX_TOOL_TIMEOUT_SEC = 3600;
 var CODEX_STARTUP_TIMEOUT_SEC = 30;
@@ -48198,15 +50902,15 @@ ${CLAUDE_MANUAL_ENTRY}
 `;
 var CODEX_PASTE_GUIDANCE = `Add this exact ArchFlow-owned block to .codex/config.toml after resolving the conflicting content:
 ${CODEX_MANAGED_BLOCK}`;
-var ok20 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail21 = (issueCode) => Object.freeze({
+var ok25 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail24 = (issueCode) => Object.freeze({
   schema_version: "1",
   ok: false,
   error: createProjectError("CONFIG_INVALID", { issue_code: issueCode })
 });
 function refuse(issueCode, guidance) {
   process.stderr.write(guidance);
-  return fail21(issueCode);
+  return fail24(issueCode);
 }
 var ioFailure5 = (operation) => Object.freeze({
   schema_version: "1",
@@ -48250,26 +50954,26 @@ async function readOptional(path2) {
   }
 }
 function parseMcpJson(source) {
-  if (source === void 0) return ok20({ mcpServers: {} });
+  if (source === void 0) return ok25({ mcpServers: {} });
   let value;
   try {
     value = JSON.parse(source);
   } catch {
-    return fail21("mcp-json-foreign-keys");
+    return fail24("mcp-json-foreign-keys");
   }
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return fail21("mcp-json-foreign-keys");
+    return fail24("mcp-json-foreign-keys");
   }
   const record3 = value;
   if (Object.keys(record3).some((key) => key !== "mcpServers")) {
-    return fail21("mcp-json-foreign-keys");
+    return fail24("mcp-json-foreign-keys");
   }
   const servers = record3.mcpServers;
-  if (servers === void 0) return ok20({ mcpServers: {} });
+  if (servers === void 0) return ok25({ mcpServers: {} });
   if (servers === null || typeof servers !== "object" || Array.isArray(servers)) {
-    return fail21("mcp-json-foreign-keys");
+    return fail24("mcp-json-foreign-keys");
   }
-  return ok20({ mcpServers: servers });
+  return ok25({ mcpServers: servers });
 }
 function serverCommand(server) {
   if (server === null || typeof server !== "object" || Array.isArray(server)) return void 0;
@@ -48287,7 +50991,7 @@ function claudeGetDiagnostic(output) {
   };
 }
 async function registerClaudeProject(input) {
-  const path2 = join12(input.working_directory, ".mcp.json");
+  const path2 = join13(input.working_directory, ".mcp.json");
   try {
     const beforeSource = await readOptional(path2);
     const before = parseMcpJson(beforeSource);
@@ -48332,7 +51036,7 @@ async function registerClaudeProject(input) {
     const text3 = `${get.stdout}
 ${get.stderr}`;
     const diagnostic = claudeGetDiagnostic(text3);
-    return ok20(Object.freeze({
+    return ok25(Object.freeze({
       schema_version: "1",
       host: "claude",
       registration,
@@ -48349,11 +51053,11 @@ ${get.stderr}`;
 function managedBlockRange(source) {
   const begin = source.indexOf(CODEX_BLOCK_BEGIN);
   const end = source.indexOf(CODEX_BLOCK_END);
-  if (begin === -1 && end === -1) return ok20(void 0);
+  if (begin === -1 && end === -1) return ok25(void 0);
   if (begin === -1 || end === -1 || end < begin || source.indexOf(CODEX_BLOCK_BEGIN, begin + 1) !== -1 || source.indexOf(CODEX_BLOCK_END, end + 1) !== -1) {
-    return fail21("codex-config-foreign");
+    return fail24("codex-config-foreign");
   }
-  return ok20({ start: begin, end: end + CODEX_BLOCK_END.length + (source[end + CODEX_BLOCK_END.length] === "\n" ? 1 : 0) });
+  return ok25({ start: begin, end: end + CODEX_BLOCK_END.length + (source[end + CODEX_BLOCK_END.length] === "\n" ? 1 : 0) });
 }
 function outsideCodexConflict(source) {
   const lines = source.split(/\r?\n/u);
@@ -48403,7 +51107,7 @@ function codexGetDiagnostic(output) {
   }
 }
 async function registerCodexProject(input) {
-  const path2 = join12(input.working_directory, ".codex", "config.toml");
+  const path2 = join13(input.working_directory, ".codex", "config.toml");
   try {
     const before = await readOptional(path2) ?? "";
     const range = managedBlockRange(before);
@@ -48433,7 +51137,7 @@ async function registerCodexProject(input) {
     const resolved = get.exit_code === 0 ? codexGetDiagnostic(get.stdout) : void 0;
     const resolvedCommand = resolved?.command;
     const trusted = get.exit_code === 0 && resolvedCommand === "archflow-mcp" && resolved?.startup_timeout_sec === CODEX_STARTUP_TIMEOUT_SEC && resolved?.tool_timeout_sec === CODEX_TOOL_TIMEOUT_SEC;
-    return ok20(Object.freeze({
+    return ok25(Object.freeze({
       schema_version: "1",
       host: "codex",
       registration,
@@ -48489,10 +51193,10 @@ async function runInit(input) {
 
 // src/init/task-initialization.ts
 import { mkdir as mkdir6, open as open6, readFile as readFile7 } from "node:fs/promises";
-import { dirname as dirname6, join as join13 } from "node:path";
+import { dirname as dirname6, join as join14 } from "node:path";
 var decoder4 = new TextDecoder("utf-8", { fatal: true });
-var ok21 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail22 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok26 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail25 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function errno2(error51, code) {
   return error51 instanceof Error && error51.code === code;
 }
@@ -48506,13 +51210,13 @@ function policyBaseInvalid(commit) {
   });
 }
 async function createTaskConfig(root, taskId) {
-  const taskConfig = join13(root, ".archflow", "tasks", taskId, "config.yaml");
+  const taskConfig = join14(root, ".archflow", "tasks", taskId, "config.yaml");
   try {
     return new Uint8Array(await readFile7(taskConfig));
   } catch (error51) {
     if (!errno2(error51, "ENOENT")) throw error51;
   }
-  const template = new Uint8Array(await readFile7(join13(root, ".archflow", "config.yaml")));
+  const template = new Uint8Array(await readFile7(join14(root, ".archflow", "config.yaml")));
   await mkdir6(dirname6(taskConfig), { recursive: true });
   try {
     const handle = await open6(taskConfig, "wx");
@@ -48546,7 +51250,7 @@ async function stageTaskInitialization(input) {
   try {
     configBytes = await createTaskConfig(runner.location.worktreeRoot, taskId);
   } catch {
-    return fail22(createProjectError("IO_ERROR", {
+    return fail25(createProjectError("IO_ERROR", {
       operation: context2.operation,
       attempt: context2.attempt
     }));
@@ -48554,22 +51258,22 @@ async function stageTaskInitialization(input) {
   try {
     parseConfigYaml(decoder4.decode(configBytes), "task config");
   } catch {
-    return fail22(createProjectError("CONFIG_INVALID", { issue_code: "task-config-invalid" }));
+    return fail25(createProjectError("CONFIG_INVALID", { issue_code: "task-config-invalid" }));
   }
   try {
     const head = parseGitOid(await readHeadCommit(runner));
     const constitution = await resolvePinnedConstitution(runner, head, context2);
     if (!constitution.ok) return constitution;
     const workflowEntry = await readCommitTreeBlob(runner, head, PINNED_WORKFLOW_PATH);
-    if (workflowEntry === void 0) return fail22(policyBaseInvalid(head));
+    if (workflowEntry === void 0) return fail25(policyBaseInvalid(head));
     const workflowBytes = await readGitBlobBytes(runner, workflowEntry.oid);
     try {
       parseWorkflowYaml(decoder4.decode(workflowBytes), "pinned workflow");
     } catch {
-      return fail22(policyBaseInvalid(head));
+      return fail25(policyBaseInvalid(head));
     }
     const taskRoot = `.archflow/tasks/${taskId}`;
-    return ok21(Object.freeze({
+    return ok26(Object.freeze({
       schema_version: "1",
       artifact_kind: "task-initialization",
       task_id: taskId,
@@ -48589,11 +51293,11 @@ async function stageTaskInitialization(input) {
     }));
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
-      return fail22(projectErrorForGitFailure(error51, runner, context2));
+      return fail25(projectErrorForGitFailure(error51, runner, context2));
     }
     if (error51 instanceof TypeError || error51 instanceof RangeError) {
       const head = parseGitOid(await readHeadCommit(runner));
-      return fail22(policyBaseInvalid(head));
+      return fail25(policyBaseInvalid(head));
     }
     throw error51;
   }
@@ -48617,7 +51321,10 @@ var LOCAL_COMMANDS = Object.freeze([
   "task-init",
   "envelope",
   "build-document",
-  "build-implementation-output"
+  "build-implementation-output",
+  "manual-status",
+  "manual-next",
+  "manual-handoff"
 ]);
 var maintenanceRecordV1Validator = createJsonSchemaValidator(maintenance_record_schema_default, [primitives_schema_default, path_claim_schema_default]);
 function requireValue(input) {
@@ -48734,11 +51441,11 @@ async function maintain(input) {
   if (proof.permitted_deletions.length === 0) return { deleted: 0, reachability_proof_digest: proof.digest };
   const maintenanceId = parsePathSafeId(value.maintenance_id);
   const reason2 = String(value.human_reason ?? "");
-  await mkdir7(join14(authority.task_root, "maintenance"), { recursive: false }).catch((error51) => {
+  await mkdir7(join15(authority.task_root, "maintenance"), { recursive: false }).catch((error51) => {
     if (error51.code !== "EEXIST") throw error51;
   });
-  const target = await resolveTaskPath({ runner, taskId: authority.task_id, claim: parseTaskPathClaim(`maintenance/${maintenanceId}.json`), expectedClass: "maintenance-record", context: authority.context });
-  if (!target.ok) return target;
+  const target2 = await resolveTaskPath({ runner, taskId: authority.task_id, claim: parseTaskPathClaim(`maintenance/${maintenanceId}.json`), expectedClass: "maintenance-record", context: authority.context });
+  if (!target2.ok) return target2;
   const deletions = proof.permitted_deletions.map(({ target: _target, ...deletion }) => deletion);
   const record3 = {
     schema_version: "1",
@@ -48750,7 +51457,7 @@ async function maintain(input) {
     deletions,
     total_bytes_deleted: parseSafeInteger(deletions.reduce((total, deletion) => total + deletion.byte_count, 0))
   };
-  return performMaintenance({ atomic: dependencies.atomic, record_target: target.value, record: record3, proof, validate_record: (candidate) => maintenanceRecordV1Validator.assert(candidate, "maintenance record") });
+  return performMaintenance({ atomic: dependencies.atomic, record_target: target2.value, record: record3, proof, validate_record: (candidate) => maintenanceRecordV1Validator.assert(candidate, "maintenance record") });
 }
 async function runLocalCommand(input) {
   if (!LOCAL_COMMANDS.includes(input.command)) throw new TypeError(`unknown local command: ${input.command}`);
@@ -48780,6 +51487,20 @@ async function runLocalCommand(input) {
   }
   const created = await services(input);
   if (!created.ok) return created;
+  if (input.command === "manual-status") {
+    return classifyManualWorkflowStatus({ services: created.value });
+  }
+  if (input.command === "manual-next") {
+    return runManualNext({ services: created.value, value: requireValue(input) });
+  }
+  if (input.command === "manual-handoff") {
+    const value = recordValue(input);
+    return runManualHandoff({
+      services: created.value,
+      expected_head: String(value.expected_head),
+      ...value.initialization === void 0 ? {} : { initialization: value.initialization }
+    });
+  }
   if (input.command === "status") return computeTaskStatus(created.value.dependencies, created.value.authority);
   if (input.command === "envelope") return computeCallEnvelope(created.value, requireValue(input));
   if (input.command === "build-document") {
@@ -48810,10 +51531,10 @@ async function runLocalCommand(input) {
       const path2 = String(item.path);
       const bytes = Buffer.from(String(item.bytes_base64), "base64");
       const claim = parseTaskPathClaim(`results/sha256/${resultDigest}/payload/${path2}`);
-      const target = await resolveTaskPath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim, expectedClass: "result-payload", context: created.value.authority.context });
-      if (!target.ok) return target;
-      await ensurePayloadParent(created.value.authority, resultDigest, target.value.absolute);
-      payloads.push({ path: path2, target: target.value, bytes: new Uint8Array(bytes) });
+      const target2 = await resolveTaskPath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim, expectedClass: "result-payload", context: created.value.authority.context });
+      if (!target2.ok) return target2;
+      await ensurePayloadParent(created.value.authority, resultDigest, target2.value.absolute);
+      payloads.push({ path: path2, target: target2.value, bytes: new Uint8Array(bytes) });
     }
     const prepared = prepareSnapshot({ manifest, payloads, retained_task_bytes: parseSafeInteger(value.retained_task_bytes), validate_manifest: parseResultManifest });
     if (!prepared.ok) return prepared;
@@ -48868,7 +51589,7 @@ async function runLocalCommand(input) {
 }
 
 // src/local/main.ts
-var INPUT_FREE_COMMANDS = /* @__PURE__ */ new Set(["status", "init", "task-init"]);
+var INPUT_FREE_COMMANDS = /* @__PURE__ */ new Set(["status", "manual-status", "init", "task-init"]);
 async function readInput(path2) {
   const bytes = path2 === void 0 ? await new Promise((resolve2, reject) => {
     const chunks = [];

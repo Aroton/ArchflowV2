@@ -5,7 +5,7 @@ import {
   canonicalJsonDigest,
   type CanonicalDocument,
 } from "../contracts/canonical.js";
-import { checkpointSelfDigest, selectGreatestValidChain, chainAnchor, type InitialImportV1 } from "../contracts/durable-checkpoint.js";
+import { selectGreatestValidChain, chainAnchor } from "../contracts/durable-checkpoint.js";
 import {
   createCommittedIntentSubject,
   validateDurableSemantics,
@@ -41,7 +41,10 @@ import { identifyTransactionRequest } from "./request.js";
 import { IntentLayoutError, ensureIntentDirectory } from "./layout.js";
 import { TaskLockError } from "./lock.js";
 import type { TransactionDependencies, TransactionOutcome, TransactionRequest } from "./transaction.js";
-import { planStateTransition } from "./transitions.js";
+import {
+  reduceAuthenticatedManualChain,
+  type AuthenticatedManualImportEvidence,
+} from "./manual-import.js";
 
 type InitializationArtifact = TaskInitializationV1 | LegacyImportInitializationV1;
 type StateCall = Extract<ParsedToolCall, { readonly name: "archflow_state" }>;
@@ -119,18 +122,24 @@ async function validateLiveInitialization(
   return ok(undefined);
 }
 
-function initialState(call: StateCall, artifact: DurableArtifact): ProjectResult<TaskStateV1> {
+function initialState(
+  call: StateCall,
+  artifact: DurableArtifact,
+  evidence?: AuthenticatedManualImportEvidence,
+): ProjectResult<TaskStateV1> {
   const initialization = initializationFor(artifact);
   if (initialization === undefined) return contract("initialization-artifact-required");
-  let head: InitialImportV1["chain"][number] | undefined;
   if (artifact.artifact_kind === "manual-checkpoint-import") {
     if (artifact.import_mode !== "initial") return contract("initialization-import-mode-invalid");
     const selected = selectGreatestValidChain(chainAnchor(artifact), artifact.chain);
     if (selected.kind !== "chain" || selected.chain.length !== artifact.chain.length) {
       return contract(selected.kind === "stop" ? `initialization-chain-${selected.outcome}` : "initialization-chain-not-exact");
     }
-    head = selected.chain.at(-1);
+    const head = selected.chain.at(-1);
     if (head === undefined) return contract("initialization-chain-empty");
+    if (selected.chain.some((checkpoint) => checkpoint.terminal === "abandoned")) {
+      return contract("manual-import-abandoned-authority-unauthenticated");
+    }
     if (
       head.phase_instance !== call.input.phase_instance ||
       head.step !== call.input.step ||
@@ -138,78 +147,30 @@ function initialState(call: StateCall, artifact: DurableArtifact): ProjectResult
       head.input_fingerprint !== call.input.input_fingerprint
     ) return contract("initialization-chain-head-request-mismatch");
 
-    const first = selected.chain[0];
-    if (first === undefined || !("initialization" in first)) return contract("initialization-chain-head-invalid");
-    let cursor: TaskStateV1 = {
-      schema_version: "1",
-      task_id: initialization.task_id,
-      repository_identity_digest: initialization.repository_identity_digest,
-      revision: 1 as TaskStateV1["revision"],
-      phase_instance: first.phase_instance,
-      step: first.step,
-      status: first.status,
-      attempt: first.attempt,
-      input_fingerprint: first.input_fingerprint,
-      initialization_digest: first.initialization_digest,
-      config_digest: initialization.config_digest,
-      workflow_digest: initialization.workflow_digest,
-      constitution_digest: initialization.constitution_digest,
-      policy_base_commit: initialization.policy_base_commit,
-      authoritative_results: structuredClone(first.authoritative_results),
-      approvals: structuredClone(first.approvals),
-      waivers: structuredClone(first.waivers),
-      ...(first.open_gate === undefined ? {} : { open_gate: structuredClone(first.open_gate) }),
-      ...(first.terminal === undefined ? {} : { terminal: first.terminal }),
-    };
-    for (const checkpoint of selected.chain.slice(1)) {
-      const resultReference = checkpoint.status === "succeeded"
-        ? checkpoint.authoritative_results.find((reference) =>
-            reference.phase_instance === checkpoint.phase_instance &&
-            reference.step === checkpoint.step &&
-            reference.input_fingerprint === checkpoint.input_fingerprint)
-        : undefined;
-      const transition = planStateTransition({
-        current: cursor,
-        target: {
-          phase_instance: checkpoint.phase_instance,
-          step: checkpoint.step,
-          status: checkpoint.status,
-          attempt: checkpoint.attempt,
-          input_fingerprint: checkpoint.input_fingerprint,
-        },
-        recomputed_input_fingerprint: checkpoint.input_fingerprint,
-        artifact,
-        ...(resultReference === undefined ? {} : { result_reference: resultReference }),
-      });
-      if (!transition.ok) return transition;
-      cursor = { ...transition.value, revision: cursor.revision };
-    }
+    if (evidence === undefined) return contract("manual-import-evidence-required");
+    const reduced = reduceAuthenticatedManualChain({ artifact, evidence });
+    if (!reduced.ok) return reduced;
+    return ok({ ...reduced.value.next_state, revision: 1 as TaskStateV1["revision"] });
   }
 
-  const source = head;
   const state: TaskStateV1 = {
     schema_version: "1",
     task_id: initialization.task_id,
     repository_identity_digest: initialization.repository_identity_digest,
     revision: 1 as TaskStateV1["revision"],
-    phase_instance: source?.phase_instance ?? call.input.phase_instance,
-    step: source?.step ?? call.input.step,
-    status: source?.status ?? call.input.status,
-    attempt: source?.attempt ?? (1 as TaskStateV1["attempt"]),
-    input_fingerprint: source?.input_fingerprint ?? call.input.input_fingerprint,
+    phase_instance: call.input.phase_instance,
+    step: call.input.step,
+    status: call.input.status,
+    attempt: 1 as TaskStateV1["attempt"],
+    input_fingerprint: call.input.input_fingerprint,
     initialization_digest: canonicalJsonDigest(initialization),
     config_digest: initialization.config_digest,
     workflow_digest: initialization.workflow_digest,
     constitution_digest: initialization.constitution_digest,
     policy_base_commit: initialization.policy_base_commit,
-    authoritative_results: structuredClone(source?.authoritative_results ?? []),
-    approvals: structuredClone(source?.approvals ?? []),
-    waivers: structuredClone(source?.waivers ?? []),
-    ...(source === undefined ? {} : {
-      adopted_checkpoint: { revision: source.revision as TaskStateV1["revision"], checkpoint_digest: checkpointSelfDigest(source) },
-    }),
-    ...(source?.open_gate === undefined ? {} : { open_gate: structuredClone(source.open_gate) }),
-    ...(source?.terminal === undefined ? {} : { terminal: source.terminal }),
+    authoritative_results: [],
+    approvals: [],
+    waivers: [],
   };
   return ok(state);
 }
@@ -222,6 +183,7 @@ function initialState(call: StateCall, artifact: DurableArtifact): ProjectResult
 export async function identifyStateInitialization(
   dependencies: TransactionDependencies,
   request: TransactionRequest<"archflow_state">,
+  evidence?: AuthenticatedManualImportEvidence,
 ): Promise<ProjectResult<StateInitializationIdentification>> {
   assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
   assertAuthenticParsedToolCall(request.call);
@@ -242,7 +204,7 @@ export async function identifyStateInitialization(
   const artifactDocument = canonicalDocument(artifact);
   const artifactSemantics = validateDurableSemantics({ artifact: artifactDocument });
   if (!artifactSemantics.ok) return artifactSemantics;
-  const stateResult = initialState(request.call, artifact);
+  const stateResult = initialState(request.call, artifact, evidence);
   if (!stateResult.ok) return stateResult;
   const preparedState = canonicalDocument(stateResult.value);
   const initializationSemantics = validateDurableSemantics({
@@ -352,6 +314,7 @@ async function executeLocked(
   dependencies: TransactionDependencies,
   request: TransactionRequest<"archflow_state">,
   path: ResolvedPath,
+  evidence?: AuthenticatedManualImportEvidence,
 ): Promise<ProjectResult<TransactionOutcome<"archflow_state">>> {
   const stateRead = await dependencies.read_state(request.authority.state);
   if (stateRead.kind === "canonical") {
@@ -367,7 +330,7 @@ async function executeLocked(
   }
   if (stateRead.kind !== "missing") return contract(stateRead.kind === "unreadable" ? "task-state-unreadable" : "task-state-noncanonical");
 
-  const identification = await identifyStateInitialization(dependencies, request);
+  const identification = await identifyStateInitialization(dependencies, request, evidence);
   if (!identification.ok) return identification;
   const preparedState = identification.value.prepared_state;
   const inputFingerprint = identification.value.input_fingerprint;
@@ -455,6 +418,7 @@ async function executeLocked(
 export async function runStateInitialization(
   dependencies: TransactionDependencies,
   request: TransactionRequest<"archflow_state">,
+  evidence?: AuthenticatedManualImportEvidence,
 ): Promise<ProjectResult<TransactionOutcome<"archflow_state">>> {
   assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
   assertAuthenticParsedToolCall(request.call);
@@ -463,7 +427,7 @@ export async function runStateInitialization(
   let completed: ProjectResult<TransactionOutcome<"archflow_state">> | undefined;
   try {
     return await dependencies.lock.runExclusive(request.authority.task_root, async () => {
-      completed = await executeLocked(dependencies, request, path.value);
+      completed = await executeLocked(dependencies, request, path.value, evidence);
       return completed;
     });
   } catch (error) {

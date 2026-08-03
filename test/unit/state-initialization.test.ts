@@ -23,6 +23,7 @@ import type { ResolvedTaskPath } from "../../src/repository/paths.js";
 import type { AtomicWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import { runStateInitialization } from "../../src/state/initialization.js";
+import { loadManualImportEvidence } from "../../src/state/manual-import.js";
 import type { TransactionDependencies } from "../../src/state/transaction.js";
 
 const roots: string[] = [];
@@ -185,16 +186,8 @@ describe("revision-0 state initialization", () => {
     } as ManualCheckpointV1);
     const failed = continued(firstCheckpoint, 2, "produce", "failed", 1);
     const retried = continued(failed, 3, "produce", "running", 2);
-    const producedReference = {
-      phase_instance: context.phase_instance,
-      step: "produce" as const,
-      result_digest: "8".repeat(64) as never,
-      result_id: "initial-checkpoint-produce" as never,
-      input_fingerprint: fingerprint,
-      manifest_path: `.archflow/tasks/${taskId}/results/sha256/${"8".repeat(64)}/manifest.json` as never,
-    };
-    const succeeded = continued(retried, 4, "produce", "succeeded", 2, [producedReference]);
-    const reset = continued(succeeded, 5, "self_review", "running", 1, [producedReference]);
+    const succeeded = continued(retried, 4, "produce", "succeeded", 2);
+    const reset = continued(succeeded, 5, "self_review", "running", 1);
     const manual = parseManualCheckpointImport({
       schema_version: "1",
       artifact_kind: "manual-checkpoint-import",
@@ -209,12 +202,64 @@ describe("revision-0 state initialization", () => {
       phase_instance: reset.phase_instance, step: reset.step, status: reset.status,
       artifact: manual,
     });
+    const evidenceDependencies = {
+      ...dependencies,
+      load_retained_result: async () => { throw new Error("result loader must not be called for an empty chain"); },
+    };
+    const evidence = await loadManualImportEvidence({
+      dependencies: evidenceDependencies,
+      authority,
+      artifact: manual,
+    });
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) return;
     const rejected = await runStateInitialization(
-      dependencies,
+      evidenceDependencies,
       { authority, call: resetCall },
+      evidence.value,
     );
     expect(rejected.ok).toBe(false);
     if (!rejected.ok) expect(rejected.error.code).toBe("TRANSITION_INVALID");
+    expect(events).toEqual([]);
+
+    // A hand-authored abandoned head cannot be imported through the archflow_state
+    // revision-0 path, either as authenticated evidence or directly at the reducer boundary.
+    const abandoned = {
+      ...reset,
+      revision: 6 as never,
+      predecessor: { revision: reset.revision, checkpoint_digest: checkpointSelfDigest(reset) },
+      terminal: "abandoned" as const,
+    } as ManualCheckpointV1;
+    const abandonedImport = parseManualCheckpointImport({
+      schema_version: "1",
+      artifact_kind: "manual-checkpoint-import",
+      task_id: taskId,
+      repository_identity_digest: authority.repository_identity_digest,
+      import_mode: "initial",
+      chain: [firstCheckpoint, failed, retried, succeeded, reset, abandoned],
+    });
+    const abandonedCall = parseToolCall("archflow_state", {
+      schema_version: "1", task_id: taskId, intent_id: "reject-abandoned-import",
+      expected_revision: 0, input_fingerprint: abandoned.input_fingerprint,
+      phase_instance: abandoned.phase_instance, step: abandoned.step, status: abandoned.status,
+      artifact: abandonedImport,
+    });
+    const abandonedEvidence = await loadManualImportEvidence({
+      dependencies: evidenceDependencies,
+      authority,
+      artifact: abandonedImport,
+    });
+    expect(abandonedEvidence).toMatchObject({ ok: false, error: { code: "STATE_INVALID" } });
+    const directImport = await runStateInitialization(
+      evidenceDependencies,
+      { authority, call: abandonedCall },
+    );
+    expect(directImport).toMatchObject({ ok: false, error: { code: "CONTRACT_INVALID" } });
+    if (!directImport.ok) {
+      expect(directImport.error.diagnostic.parameters).toMatchObject({
+        issue_code: "manual-import-abandoned-authority-unauthenticated",
+      });
+    }
     expect(events).toEqual([]);
   });
 });

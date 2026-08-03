@@ -586,37 +586,6 @@
       "source_root": "node_modules/@secretlint/secretlint-rule-preset-recommend"
     },
     {
-      "component_id": "signal-exit-4-1-0-installed",
-      "legal_source": {
-        "digest": "b173e19b9a78df305577ace0e52ef45a4bcc915ea28b47b256dc3b68dcb1f7e7",
-        "payload_path": "legal/upstream/installed-signal-exit-4.1.0/LICENSE.txt",
-        "source_path": "release/legal/upstream/installed-signal-exit-4.1.0/LICENSE.txt"
-      },
-      "license_expression": "ISC",
-      "package_identity": {
-        "authority": "package-lock",
-        "integrity": "sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==",
-        "tarball_url": "https://registry.npmjs.org/signal-exit/-/signal-exit-4.1.0.tgz"
-      },
-      "package_name": "signal-exit",
-      "package_version": "4.1.0",
-      "provenance_inputs": [
-        {
-          "package_name": "signal-exit",
-          "package_relative_path": "LICENSE.txt",
-          "package_version": "4.1.0"
-        },
-        {
-          "package_name": "signal-exit",
-          "package_relative_path": "package.json",
-          "package_version": "4.1.0"
-        }
-      ],
-      "provenance_kind": "installed",
-      "source_map_expected": false,
-      "source_root": "node_modules/signal-exit"
-    },
-    {
       "component_id": "structured-source-4-0-0-installed",
       "legal_source": {
         "digest": "0e74697a68cebdcd61502c30fe80ab7f9e341d995dcd452023654d57133534b1",
@@ -646,37 +615,6 @@
       "provenance_kind": "installed",
       "source_map_expected": false,
       "source_root": "node_modules/structured-source"
-    },
-    {
-      "component_id": "write-file-atomic-8-0-0-installed",
-      "legal_source": {
-        "digest": "ea7f376fe7a1fc28572b83ac8f806d92effb31852b9981bc9ba9d5266caa6b28",
-        "payload_path": "legal/upstream/installed-write-file-atomic-8.0.0/LICENSE.md",
-        "source_path": "release/legal/upstream/installed-write-file-atomic-8.0.0/LICENSE.md"
-      },
-      "license_expression": "ISC",
-      "package_identity": {
-        "authority": "package-lock",
-        "integrity": "sha512-dYwyZredl67GyLLIHJnRM3h2PcOmN5SkcgC7eM5DPDEOEl6dLFqVrMg3F1Ea32usj4VSVZtd2H4MtKTNOf6nPg==",
-        "tarball_url": "https://registry.npmjs.org/write-file-atomic/-/write-file-atomic-8.0.0.tgz"
-      },
-      "package_name": "write-file-atomic",
-      "package_version": "8.0.0",
-      "provenance_inputs": [
-        {
-          "package_name": "write-file-atomic",
-          "package_relative_path": "LICENSE.md",
-          "package_version": "8.0.0"
-        },
-        {
-          "package_name": "write-file-atomic",
-          "package_relative_path": "package.json",
-          "package_version": "8.0.0"
-        }
-      ],
-      "provenance_kind": "installed",
-      "source_map_expected": false,
-      "source_root": "node_modules/write-file-atomic"
     },
     {
       "component_id": "yaml-2-9-0-installed",
@@ -773,9 +711,9 @@
         "digest": "6282adc7c1d1304f245ff5877a2824b05b53f9842dc658282610c981505f0caf",
         "path": "release/evidence/advisory-snapshot.json"
       },
-      "bundle_digest": "bd36e2fdcfd2dc2609f75cd74166842ddfffcc8c7a170182e417e112bb4a8ab1",
-      "decision_digest": "89268de4241d89723802de322f0a58763590b9fed62161d1b5c90313e0d48ec9",
-      "dependency_inventory_digest": "a5a828821d2fb59a678a8c3b64c186aab0d3dbb5c3423873044fe71d280be36f",
+      "bundle_digest": "1f83196572e000c09d3c185b3b2c7f91e334fda474a10e2b6cb2e294288936a0",
+      "decision_digest": "517d8d7bcac325f1062a25537d8cdd63baa63dbdf38cf82b498ad31e8530eb1f",
+      "dependency_inventory_digest": "6836db3d7e77b1cf9cb19c0a0c063ff6cfaee5f50e92fdeea28241fb31ec5777",
       "entry_bindings": [
         {
           "handler_authority": "mcp-tool-handler",
@@ -796,7 +734,7 @@
         "path": "release/evidence/patched-artifact-availability.json"
       },
       "reachability_evidence": {
-        "digest": "f599c4bc0f29c5a90fe317b79c422f18e494cc3f4066a5120402e7f4ecfb87c3",
+        "digest": "f35a895363df180f62a171618b6f32fa3343a42dad5b9b604a9f4d6bd0f4c669",
         "path": "release/evidence/focused-inert-reachability.json"
       },
       "scope": {
@@ -813,7 +751,7 @@
       },
       "status": "accepted",
       "user_acceptance": {
-        "digest": "375232858790bfb6d93315f4e6bfc084005645c12d1436879836e6a7a5a60d8c",
+        "digest": "06a56a86d164fb0abaa46e1714e07284a31079e54ade4532c93a0c4abcead056",
         "path": "release/evidence/user-risk-acceptance.json"
       }
     }
@@ -1028,17 +966,6 @@
       "source_path": "release/legal/upstream/installed-secretlint-secretlint-rule-preset-recommend-13.0.4/LICENSE"
     },
     {
-      "component_id": "signal-exit-4-1-0-installed",
-      "digest": "b173e19b9a78df305577ace0e52ef45a4bcc915ea28b47b256dc3b68dcb1f7e7",
-      "package_identity": {
-        "authority": "package-lock",
-        "integrity": "sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==",
-        "tarball_url": "https://registry.npmjs.org/signal-exit/-/signal-exit-4.1.0.tgz"
-      },
-      "payload_path": "legal/upstream/installed-signal-exit-4.1.0/LICENSE.txt",
-      "source_path": "release/legal/upstream/installed-signal-exit-4.1.0/LICENSE.txt"
-    },
-    {
       "component_id": "structured-source-4-0-0-installed",
       "digest": "0e74697a68cebdcd61502c30fe80ab7f9e341d995dcd452023654d57133534b1",
       "package_identity": {
@@ -1048,17 +975,6 @@
       },
       "payload_path": "legal/upstream/installed-structured-source-4.0.0/LICENSE.BSD",
       "source_path": "release/legal/upstream/installed-structured-source-4.0.0/LICENSE.BSD"
-    },
-    {
-      "component_id": "write-file-atomic-8-0-0-installed",
-      "digest": "ea7f376fe7a1fc28572b83ac8f806d92effb31852b9981bc9ba9d5266caa6b28",
-      "package_identity": {
-        "authority": "package-lock",
-        "integrity": "sha512-dYwyZredl67GyLLIHJnRM3h2PcOmN5SkcgC7eM5DPDEOEl6dLFqVrMg3F1Ea32usj4VSVZtd2H4MtKTNOf6nPg==",
-        "tarball_url": "https://registry.npmjs.org/write-file-atomic/-/write-file-atomic-8.0.0.tgz"
-      },
-      "payload_path": "legal/upstream/installed-write-file-atomic-8.0.0/LICENSE.md",
-      "source_path": "release/legal/upstream/installed-write-file-atomic-8.0.0/LICENSE.md"
     },
     {
       "component_id": "yaml-2-9-0-installed",

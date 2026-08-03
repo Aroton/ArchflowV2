@@ -91,7 +91,7 @@ async function fixture(): Promise<{
 }
 
 describe("whole-chain checkpoint adoption planner", () => {
-  it("selects the exact head and advances state only once", async () => {
+  it("rejects direct adoption without loader-authenticated evidence", async () => {
     const { state, artifact } = await fixture();
     const head = artifact.chain.at(-1)!;
     const call = parseToolCall("archflow_state", {
@@ -119,17 +119,15 @@ describe("whole-chain checkpoint adoption planner", () => {
     });
     const result = validateProjectResultStructure(call, { schema_version: "1", ok: true, value: success });
     const planned = planCheckpointAdoption({ current: canonicalDocument(state), call, expectation, result });
-    expect(planned.ok, planned.ok ? undefined : JSON.stringify(planned.error.diagnostic)).toBe(true);
-    if (!planned.ok) return;
-    expect(planned.value.next_state.adopted_checkpoint).toEqual({
-      revision: head.revision,
-      checkpoint_digest: checkpointSelfDigest(head),
-    });
-    expect(success.revision).toBe(state.revision + 1);
-    expect(head.revision).toBeGreaterThan(success.revision);
+    expect(planned.ok).toBe(false);
+    if (!planned.ok) {
+      expect(planned.error.diagnostic.parameters).toMatchObject({
+        issue_code: "manual-import-evidence-required",
+      });
+    }
   });
 
-  it("rejects stale state-anchor evidence", async () => {
+  it("does not inspect stale state-anchor claims without authenticated evidence", async () => {
     const { state, artifact } = await fixture();
     if (artifact.import_mode !== "state-anchored") throw new Error("expected state anchor");
     const staleFirst = { ...artifact.chain[0], state_anchor: { ...artifact.state_anchor, state_digest: "0".repeat(64) } } as ManualCheckpointV1;
@@ -158,10 +156,10 @@ describe("whole-chain checkpoint adoption planner", () => {
     const result = validateProjectResultStructure(call, { schema_version: "1", ok: true, value: success });
     const planned = planCheckpointAdoption({ current: canonicalDocument(state), call, expectation, result });
     expect(planned.ok).toBe(false);
-    if (!planned.ok) expect(planned.error.diagnostic.parameters).toMatchObject({ issue_code: "import-state-digest-mismatch" });
+    if (!planned.ok) expect(planned.error.diagnostic.parameters).toMatchObject({ issue_code: "manual-import-evidence-required" });
   });
 
-  it("rejects the old per-step attempt reset during state-anchored adoption", async () => {
+  it("does not replay attempt movement without authenticated evidence", async () => {
     const { state, artifact } = await fixture();
     const first = artifact.chain[0]!;
     const resetHead = {
@@ -202,15 +200,8 @@ describe("whole-chain checkpoint adoption planner", () => {
     });
     expect(planned.ok).toBe(false);
     if (!planned.ok) {
-      expect(planned.error).toMatchObject({
-        code: "TRANSITION_INVALID",
-        diagnostic: {
-          parameters: {
-            phase_instance: state.phase_instance,
-            from: "self_review-succeeded",
-            to: "counter_review-running",
-          },
-        },
+      expect(planned.error.diagnostic.parameters).toMatchObject({
+        issue_code: "manual-import-evidence-required",
       });
     }
   });

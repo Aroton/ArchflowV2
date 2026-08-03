@@ -153,9 +153,24 @@ describe("createAtomicWriter.replace", () => {
     await expect(readFile(target)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("marks package-level replacement failures as potentially ambiguous but never collisions", async () => {
+  it("marks failures before rename as uncommitted and never collisions", async () => {
     const root = await temporaryRoot();
     const target = join(root, "missing", "state.json");
+
+    const error = await atomicFailure(
+      createAtomicWriter().replace(resolved(target, "task-state"), new Uint8Array([1])),
+    );
+    expect(error).toMatchObject({
+      operation: "replace",
+      target_may_have_changed: false,
+      collision: false,
+    });
+  });
+
+  it("marks failures after the rename attempt as potentially changed", async () => {
+    const root = await temporaryRoot();
+    const target = join(root, "state.json");
+    await mkdir(target);
 
     const error = await atomicFailure(
       createAtomicWriter().replace(resolved(target, "task-state"), new Uint8Array([1])),

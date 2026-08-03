@@ -4756,8 +4756,8 @@ var require_multipleOf2 = __commonJS({
         const { gen, data, schemaCode, it } = cxt;
         const prec = it.opts.multipleOfPrecision;
         const res = gen.let("res");
-        const invalid3 = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
-        cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid3}))`);
+        const invalid4 = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
+        cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid4}))`);
       }
     };
     exports.default = def2;
@@ -7725,492 +7725,778 @@ var require_dist2 = __commonJS({
   }
 });
 
-// node_modules/signal-exit/dist/cjs/signals.js
-var require_signals = __commonJS({
-  "node_modules/signal-exit/dist/cjs/signals.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.signals = void 0;
-    exports.signals = [];
-    exports.signals.push("SIGHUP", "SIGINT", "SIGTERM");
-    if (process.platform !== "win32") {
-      exports.signals.push(
-        "SIGALRM",
-        "SIGABRT",
-        "SIGVTALRM",
-        "SIGXCPU",
-        "SIGXFSZ",
-        "SIGUSR2",
-        "SIGTRAP",
-        "SIGSYS",
-        "SIGQUIT",
-        "SIGIOT"
-        // should detect profiler and enable/disable accordingly.
-        // see #21
-        // 'SIGPROF'
-      );
-    }
-    if (process.platform === "linux") {
-      exports.signals.push("SIGIO", "SIGPOLL", "SIGPWR", "SIGSTKFLT");
-    }
-  }
-});
-
-// node_modules/signal-exit/dist/cjs/index.js
-var require_cjs = __commonJS({
-  "node_modules/signal-exit/dist/cjs/index.js"(exports) {
-    "use strict";
-    var _a3;
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.unload = exports.load = exports.onExit = exports.signals = void 0;
-    var signals_js_1 = require_signals();
-    Object.defineProperty(exports, "signals", { enumerable: true, get: function() {
-      return signals_js_1.signals;
-    } });
-    var processOk = (process5) => !!process5 && typeof process5 === "object" && typeof process5.removeListener === "function" && typeof process5.emit === "function" && typeof process5.reallyExit === "function" && typeof process5.listeners === "function" && typeof process5.kill === "function" && typeof process5.pid === "number" && typeof process5.on === "function";
-    var kExitEmitter = /* @__PURE__ */ Symbol.for("signal-exit emitter");
-    var global2 = globalThis;
-    var ObjectDefineProperty = Object.defineProperty.bind(Object);
-    var Emitter = class {
-      emitted = {
-        afterExit: false,
-        exit: false
-      };
-      listeners = {
-        afterExit: [],
-        exit: []
-      };
-      count = 0;
-      id = Math.random();
-      constructor() {
-        if (global2[kExitEmitter]) {
-          return global2[kExitEmitter];
-        }
-        ObjectDefineProperty(global2, kExitEmitter, {
-          value: this,
-          writable: false,
-          enumerable: false,
-          configurable: false
-        });
-      }
-      on(ev, fn) {
-        this.listeners[ev].push(fn);
-      }
-      removeListener(ev, fn) {
-        const list = this.listeners[ev];
-        const i = list.indexOf(fn);
-        if (i === -1) {
-          return;
-        }
-        if (i === 0 && list.length === 1) {
-          list.length = 0;
-        } else {
-          list.splice(i, 1);
-        }
-      }
-      emit(ev, code, signal) {
-        if (this.emitted[ev]) {
-          return false;
-        }
-        this.emitted[ev] = true;
-        let ret = false;
-        for (const fn of this.listeners[ev]) {
-          ret = fn(code, signal) === true || ret;
-        }
-        if (ev === "exit") {
-          ret = this.emit("afterExit", code, signal) || ret;
-        }
-        return ret;
-      }
-    };
-    var SignalExitBase = class {
-    };
-    var signalExitWrap = (handler) => {
-      return {
-        onExit(cb, opts) {
-          return handler.onExit(cb, opts);
-        },
-        load() {
-          return handler.load();
-        },
-        unload() {
-          return handler.unload();
-        }
-      };
-    };
-    var SignalExitFallback = class extends SignalExitBase {
-      onExit() {
-        return () => {
-        };
-      }
-      load() {
-      }
-      unload() {
-      }
-    };
-    var SignalExit = class extends SignalExitBase {
-      // "SIGHUP" throws an `ENOSYS` error on Windows,
-      // so use a supported signal instead
-      /* c8 ignore start */
-      #hupSig = process4.platform === "win32" ? "SIGINT" : "SIGHUP";
-      /* c8 ignore stop */
-      #emitter = new Emitter();
-      #process;
-      #originalProcessEmit;
-      #originalProcessReallyExit;
-      #sigListeners = {};
-      #loaded = false;
-      constructor(process5) {
-        super();
-        this.#process = process5;
-        this.#sigListeners = {};
-        for (const sig of signals_js_1.signals) {
-          this.#sigListeners[sig] = () => {
-            const listeners = this.#process.listeners(sig);
-            let { count } = this.#emitter;
-            const p = process5;
-            if (typeof p.__signal_exit_emitter__ === "object" && typeof p.__signal_exit_emitter__.count === "number") {
-              count += p.__signal_exit_emitter__.count;
-            }
-            if (listeners.length === count) {
-              this.unload();
-              const ret = this.#emitter.emit("exit", null, sig);
-              const s = sig === "SIGHUP" ? this.#hupSig : sig;
-              if (!ret)
-                process5.kill(process5.pid, s);
-            }
-          };
-        }
-        this.#originalProcessReallyExit = process5.reallyExit;
-        this.#originalProcessEmit = process5.emit;
-      }
-      onExit(cb, opts) {
-        if (!processOk(this.#process)) {
-          return () => {
-          };
-        }
-        if (this.#loaded === false) {
-          this.load();
-        }
-        const ev = opts?.alwaysLast ? "afterExit" : "exit";
-        this.#emitter.on(ev, cb);
-        return () => {
-          this.#emitter.removeListener(ev, cb);
-          if (this.#emitter.listeners["exit"].length === 0 && this.#emitter.listeners["afterExit"].length === 0) {
-            this.unload();
-          }
-        };
-      }
-      load() {
-        if (this.#loaded) {
-          return;
-        }
-        this.#loaded = true;
-        this.#emitter.count += 1;
-        for (const sig of signals_js_1.signals) {
-          try {
-            const fn = this.#sigListeners[sig];
-            if (fn)
-              this.#process.on(sig, fn);
-          } catch (_) {
-          }
-        }
-        this.#process.emit = (ev, ...a) => {
-          return this.#processEmit(ev, ...a);
-        };
-        this.#process.reallyExit = (code) => {
-          return this.#processReallyExit(code);
-        };
-      }
-      unload() {
-        if (!this.#loaded) {
-          return;
-        }
-        this.#loaded = false;
-        signals_js_1.signals.forEach((sig) => {
-          const listener = this.#sigListeners[sig];
-          if (!listener) {
-            throw new Error("Listener not defined for signal: " + sig);
-          }
-          try {
-            this.#process.removeListener(sig, listener);
-          } catch (_) {
-          }
-        });
-        this.#process.emit = this.#originalProcessEmit;
-        this.#process.reallyExit = this.#originalProcessReallyExit;
-        this.#emitter.count -= 1;
-      }
-      #processReallyExit(code) {
-        if (!processOk(this.#process)) {
-          return 0;
-        }
-        this.#process.exitCode = code || 0;
-        this.#emitter.emit("exit", this.#process.exitCode, null);
-        return this.#originalProcessReallyExit.call(this.#process, this.#process.exitCode);
-      }
-      #processEmit(ev, ...args) {
-        const og = this.#originalProcessEmit;
-        if (ev === "exit" && processOk(this.#process)) {
-          if (typeof args[0] === "number") {
-            this.#process.exitCode = args[0];
-          }
-          const ret = og.call(this.#process, ev, ...args);
-          this.#emitter.emit("exit", this.#process.exitCode, null);
-          return ret;
-        } else {
-          return og.call(this.#process, ev, ...args);
-        }
-      }
-    };
-    var process4 = globalThis.process;
-    _a3 = signalExitWrap(processOk(process4) ? new SignalExit(process4) : new SignalExitFallback()), /**
-     * Called when the process is exiting, whether via signal, explicit
-     * exit, or running out of stuff to do.
-     *
-     * If the global process object is not suitable for instrumentation,
-     * then this will be a no-op.
-     *
-     * Returns a function that may be used to unload signal-exit.
-     */
-    exports.onExit = _a3.onExit, /**
-     * Load the listeners.  Likely you never need to call this, unless
-     * doing a rather deep integration with signal-exit functionality.
-     * Mostly exposed for the benefit of testing.
-     *
-     * @internal
-     */
-    exports.load = _a3.load, /**
-     * Unload the listeners.  Likely you never need to call this, unless
-     * doing a rather deep integration with signal-exit functionality.
-     * Mostly exposed for the benefit of testing.
-     *
-     * @internal
-     */
-    exports.unload = _a3.unload;
-  }
-});
-
-// node_modules/write-file-atomic/lib/index.js
+// node_modules/boundary/lib/index.js
 var require_lib = __commonJS({
-  "node_modules/write-file-atomic/lib/index.js"(exports, module) {
+  "node_modules/boundary/lib/index.js"(exports) {
     "use strict";
-    module.exports = writeFile2;
-    module.exports.sync = writeFileSync;
-    module.exports._getTmpname = getTmpname;
-    module.exports._cleanupOnExit = cleanupOnExit;
-    var fs = __require("fs");
-    var crypto2 = __require("node:crypto");
-    var { onExit } = require_cjs();
-    var path2 = __require("path");
-    var { promisify } = __require("util");
-    var activeFiles = {};
-    var threadId = (function getId() {
-      try {
-        const workerThreads = __require("worker_threads");
-        return workerThreads.threadId;
-      } catch (e) {
-        return 0;
-      }
-    })();
-    var invocations = 0;
-    function getTmpname(filename) {
-      return filename + "." + crypto2.createHash("sha1").update(__filename).update(String(process.pid)).update(String(threadId)).update(String(++invocations)).digest().readUInt32BE(0);
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.binarySearch = exports.upperBound = exports.lowerBound = exports.compare = void 0;
+    function compare(v1, v2) {
+      return v1 < v2;
     }
-    function cleanupOnExit(tmpfile) {
+    exports.compare = compare;
+    function upperBound(array2, value, comp = compare) {
+      let len = array2.length;
+      let i = 0;
+      while (len) {
+        let diff = len >>> 1;
+        let cursor = i + diff;
+        if (comp(value, array2[cursor])) {
+          len = diff;
+        } else {
+          i = cursor + 1;
+          len -= diff + 1;
+        }
+      }
+      return i;
+    }
+    exports.upperBound = upperBound;
+    function lowerBound(array2, value, comp = compare) {
+      let len = array2.length;
+      let i = 0;
+      while (len) {
+        let diff = len >>> 1;
+        let cursor = i + diff;
+        if (comp(array2[cursor], value)) {
+          i = cursor + 1;
+          len -= diff + 1;
+        } else {
+          len = diff;
+        }
+      }
+      return i;
+    }
+    exports.lowerBound = lowerBound;
+    function binarySearch(array2, value, comp = compare) {
+      let cursor = lowerBound(array2, value, comp);
+      return cursor !== array2.length && !comp(value, array2[cursor]);
+    }
+    exports.binarySearch = binarySearch;
+  }
+});
+
+// node_modules/structured-source/lib/structured-source.js
+var require_structured_source = __commonJS({
+  "node_modules/structured-source/lib/structured-source.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.StructuredSource = void 0;
+    var boundary_1 = require_lib();
+    var StructuredSource2 = class {
+      /**
+       * @constructs StructuredSource
+       * @param {string} source - source code text.
+       */
+      constructor(source) {
+        this.indice = [0];
+        let regexp = /[\r\n\u2028\u2029]/g;
+        const length = source.length;
+        regexp.lastIndex = 0;
+        while (true) {
+          let result = regexp.exec(source);
+          if (!result) {
+            break;
+          }
+          let index = result.index;
+          if (source.charCodeAt(index) === 13 && source.charCodeAt(index + 1) === 10) {
+            index += 1;
+          }
+          let nextIndex = index + 1;
+          if (length < nextIndex) {
+            break;
+          }
+          this.indice.push(nextIndex);
+          regexp.lastIndex = nextIndex;
+        }
+      }
+      get line() {
+        return this.indice.length;
+      }
+      /**
+       * @param {SourceLocation} loc - location indicator.
+       * @return {[ number, number ]} range.
+       */
+      locationToRange(loc) {
+        return [this.positionToIndex(loc.start), this.positionToIndex(loc.end)];
+      }
+      /**
+       * @param {[ number, number ]} range - pair of indice.
+       * @return {SourceLocation} location.
+       */
+      rangeToLocation(range) {
+        return {
+          start: this.indexToPosition(range[0]),
+          end: this.indexToPosition(range[1])
+        };
+      }
+      /**
+       * @param {SourcePosition} pos - position indicator.
+       * @return {number} index.
+       */
+      positionToIndex(pos) {
+        let start = this.indice[pos.line - 1];
+        return start + pos.column;
+      }
+      /**
+       * @param {number} index - index to the source code.
+       * @return {SourcePosition} position.
+       */
+      indexToPosition(index) {
+        const startLine = (0, boundary_1.upperBound)(this.indice, index);
+        return {
+          line: startLine,
+          column: index - this.indice[startLine - 1]
+        };
+      }
+    };
+    exports.StructuredSource = StructuredSource2;
+  }
+});
+
+// node_modules/ms/index.js
+var require_ms = __commonJS({
+  "node_modules/ms/index.js"(exports, module) {
+    var s = 1e3;
+    var m = s * 60;
+    var h = m * 60;
+    var d = h * 24;
+    var w = d * 7;
+    var y = d * 365.25;
+    module.exports = function(val, options) {
+      options = options || {};
+      var type = typeof val;
+      if (type === "string" && val.length > 0) {
+        return parse3(val);
+      } else if (type === "number" && isFinite(val)) {
+        return options.long ? fmtLong(val) : fmtShort(val);
+      }
+      throw new Error(
+        "val is not a non-empty string or a valid number. val=" + JSON.stringify(val)
+      );
+    };
+    function parse3(str) {
+      str = String(str);
+      if (str.length > 100) {
+        return;
+      }
+      var match = /^(-?(?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)?$/i.exec(
+        str
+      );
+      if (!match) {
+        return;
+      }
+      var n = parseFloat(match[1]);
+      var type = (match[2] || "ms").toLowerCase();
+      switch (type) {
+        case "years":
+        case "year":
+        case "yrs":
+        case "yr":
+        case "y":
+          return n * y;
+        case "weeks":
+        case "week":
+        case "w":
+          return n * w;
+        case "days":
+        case "day":
+        case "d":
+          return n * d;
+        case "hours":
+        case "hour":
+        case "hrs":
+        case "hr":
+        case "h":
+          return n * h;
+        case "minutes":
+        case "minute":
+        case "mins":
+        case "min":
+        case "m":
+          return n * m;
+        case "seconds":
+        case "second":
+        case "secs":
+        case "sec":
+        case "s":
+          return n * s;
+        case "milliseconds":
+        case "millisecond":
+        case "msecs":
+        case "msec":
+        case "ms":
+          return n;
+        default:
+          return void 0;
+      }
+    }
+    function fmtShort(ms) {
+      var msAbs = Math.abs(ms);
+      if (msAbs >= d) {
+        return Math.round(ms / d) + "d";
+      }
+      if (msAbs >= h) {
+        return Math.round(ms / h) + "h";
+      }
+      if (msAbs >= m) {
+        return Math.round(ms / m) + "m";
+      }
+      if (msAbs >= s) {
+        return Math.round(ms / s) + "s";
+      }
+      return ms + "ms";
+    }
+    function fmtLong(ms) {
+      var msAbs = Math.abs(ms);
+      if (msAbs >= d) {
+        return plural(ms, msAbs, d, "day");
+      }
+      if (msAbs >= h) {
+        return plural(ms, msAbs, h, "hour");
+      }
+      if (msAbs >= m) {
+        return plural(ms, msAbs, m, "minute");
+      }
+      if (msAbs >= s) {
+        return plural(ms, msAbs, s, "second");
+      }
+      return ms + " ms";
+    }
+    function plural(ms, msAbs, n, name) {
+      var isPlural = msAbs >= n * 1.5;
+      return Math.round(ms / n) + " " + name + (isPlural ? "s" : "");
+    }
+  }
+});
+
+// node_modules/debug/src/common.js
+var require_common = __commonJS({
+  "node_modules/debug/src/common.js"(exports, module) {
+    function setup(env) {
+      createDebug.debug = createDebug;
+      createDebug.default = createDebug;
+      createDebug.coerce = coerce;
+      createDebug.disable = disable;
+      createDebug.enable = enable;
+      createDebug.enabled = enabled;
+      createDebug.humanize = require_ms();
+      createDebug.destroy = destroy;
+      Object.keys(env).forEach((key) => {
+        createDebug[key] = env[key];
+      });
+      createDebug.names = [];
+      createDebug.skips = [];
+      createDebug.formatters = {};
+      function selectColor(namespace) {
+        let hash2 = 0;
+        for (let i = 0; i < namespace.length; i++) {
+          hash2 = (hash2 << 5) - hash2 + namespace.charCodeAt(i);
+          hash2 |= 0;
+        }
+        return createDebug.colors[Math.abs(hash2) % createDebug.colors.length];
+      }
+      createDebug.selectColor = selectColor;
+      function createDebug(namespace) {
+        let prevTime;
+        let enableOverride = null;
+        let namespacesCache;
+        let enabledCache;
+        function debug2(...args) {
+          if (!debug2.enabled) {
+            return;
+          }
+          const self2 = debug2;
+          const curr = Number(/* @__PURE__ */ new Date());
+          const ms = curr - (prevTime || curr);
+          self2.diff = ms;
+          self2.prev = prevTime;
+          self2.curr = curr;
+          prevTime = curr;
+          args[0] = createDebug.coerce(args[0]);
+          if (typeof args[0] !== "string") {
+            args.unshift("%O");
+          }
+          let index = 0;
+          args[0] = args[0].replace(/%([a-zA-Z%])/g, (match, format) => {
+            if (match === "%%") {
+              return "%";
+            }
+            index++;
+            const formatter = createDebug.formatters[format];
+            if (typeof formatter === "function") {
+              const val = args[index];
+              match = formatter.call(self2, val);
+              args.splice(index, 1);
+              index--;
+            }
+            return match;
+          });
+          createDebug.formatArgs.call(self2, args);
+          const logFn = self2.log || createDebug.log;
+          logFn.apply(self2, args);
+        }
+        debug2.namespace = namespace;
+        debug2.useColors = createDebug.useColors();
+        debug2.color = createDebug.selectColor(namespace);
+        debug2.extend = extend2;
+        debug2.destroy = createDebug.destroy;
+        Object.defineProperty(debug2, "enabled", {
+          enumerable: true,
+          configurable: false,
+          get: () => {
+            if (enableOverride !== null) {
+              return enableOverride;
+            }
+            if (namespacesCache !== createDebug.namespaces) {
+              namespacesCache = createDebug.namespaces;
+              enabledCache = createDebug.enabled(namespace);
+            }
+            return enabledCache;
+          },
+          set: (v) => {
+            enableOverride = v;
+          }
+        });
+        if (typeof createDebug.init === "function") {
+          createDebug.init(debug2);
+        }
+        return debug2;
+      }
+      function extend2(namespace, delimiter) {
+        const newDebug = createDebug(this.namespace + (typeof delimiter === "undefined" ? ":" : delimiter) + namespace);
+        newDebug.log = this.log;
+        return newDebug;
+      }
+      function enable(namespaces) {
+        createDebug.save(namespaces);
+        createDebug.namespaces = namespaces;
+        createDebug.names = [];
+        createDebug.skips = [];
+        const split = (typeof namespaces === "string" ? namespaces : "").trim().replace(/\s+/g, ",").split(",").filter(Boolean);
+        for (const ns of split) {
+          if (ns[0] === "-") {
+            createDebug.skips.push(ns.slice(1));
+          } else {
+            createDebug.names.push(ns);
+          }
+        }
+      }
+      function matchesTemplate(search, template) {
+        let searchIndex = 0;
+        let templateIndex = 0;
+        let starIndex = -1;
+        let matchIndex = 0;
+        while (searchIndex < search.length) {
+          if (templateIndex < template.length && (template[templateIndex] === search[searchIndex] || template[templateIndex] === "*")) {
+            if (template[templateIndex] === "*") {
+              starIndex = templateIndex;
+              matchIndex = searchIndex;
+              templateIndex++;
+            } else {
+              searchIndex++;
+              templateIndex++;
+            }
+          } else if (starIndex !== -1) {
+            templateIndex = starIndex + 1;
+            matchIndex++;
+            searchIndex = matchIndex;
+          } else {
+            return false;
+          }
+        }
+        while (templateIndex < template.length && template[templateIndex] === "*") {
+          templateIndex++;
+        }
+        return templateIndex === template.length;
+      }
+      function disable() {
+        const namespaces = [
+          ...createDebug.names,
+          ...createDebug.skips.map((namespace) => "-" + namespace)
+        ].join(",");
+        createDebug.enable("");
+        return namespaces;
+      }
+      function enabled(name) {
+        for (const skip of createDebug.skips) {
+          if (matchesTemplate(name, skip)) {
+            return false;
+          }
+        }
+        for (const ns of createDebug.names) {
+          if (matchesTemplate(name, ns)) {
+            return true;
+          }
+        }
+        return false;
+      }
+      function coerce(val) {
+        if (val instanceof Error) {
+          return val.stack || val.message;
+        }
+        return val;
+      }
+      function destroy() {
+        console.warn("Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.");
+      }
+      createDebug.enable(createDebug.load());
+      return createDebug;
+    }
+    module.exports = setup;
+  }
+});
+
+// node_modules/debug/src/browser.js
+var require_browser = __commonJS({
+  "node_modules/debug/src/browser.js"(exports, module) {
+    exports.formatArgs = formatArgs;
+    exports.save = save;
+    exports.load = load;
+    exports.useColors = useColors;
+    exports.storage = localstorage();
+    exports.destroy = /* @__PURE__ */ (() => {
+      let warned = false;
       return () => {
-        try {
-          fs.unlinkSync(typeof tmpfile === "function" ? tmpfile() : tmpfile);
-        } catch {
+        if (!warned) {
+          warned = true;
+          console.warn("Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.");
         }
       };
-    }
-    function serializeActiveFile(absoluteName) {
-      return new Promise((resolve2) => {
-        if (!activeFiles[absoluteName]) {
-          activeFiles[absoluteName] = [];
-        }
-        activeFiles[absoluteName].push(resolve2);
-        if (activeFiles[absoluteName].length === 1) {
-          resolve2();
-        }
-      });
-    }
-    function isChownErrOk(err) {
-      if (err.code === "ENOSYS") {
+    })();
+    exports.colors = [
+      "#0000CC",
+      "#0000FF",
+      "#0033CC",
+      "#0033FF",
+      "#0066CC",
+      "#0066FF",
+      "#0099CC",
+      "#0099FF",
+      "#00CC00",
+      "#00CC33",
+      "#00CC66",
+      "#00CC99",
+      "#00CCCC",
+      "#00CCFF",
+      "#3300CC",
+      "#3300FF",
+      "#3333CC",
+      "#3333FF",
+      "#3366CC",
+      "#3366FF",
+      "#3399CC",
+      "#3399FF",
+      "#33CC00",
+      "#33CC33",
+      "#33CC66",
+      "#33CC99",
+      "#33CCCC",
+      "#33CCFF",
+      "#6600CC",
+      "#6600FF",
+      "#6633CC",
+      "#6633FF",
+      "#66CC00",
+      "#66CC33",
+      "#9900CC",
+      "#9900FF",
+      "#9933CC",
+      "#9933FF",
+      "#99CC00",
+      "#99CC33",
+      "#CC0000",
+      "#CC0033",
+      "#CC0066",
+      "#CC0099",
+      "#CC00CC",
+      "#CC00FF",
+      "#CC3300",
+      "#CC3333",
+      "#CC3366",
+      "#CC3399",
+      "#CC33CC",
+      "#CC33FF",
+      "#CC6600",
+      "#CC6633",
+      "#CC9900",
+      "#CC9933",
+      "#CCCC00",
+      "#CCCC33",
+      "#FF0000",
+      "#FF0033",
+      "#FF0066",
+      "#FF0099",
+      "#FF00CC",
+      "#FF00FF",
+      "#FF3300",
+      "#FF3333",
+      "#FF3366",
+      "#FF3399",
+      "#FF33CC",
+      "#FF33FF",
+      "#FF6600",
+      "#FF6633",
+      "#FF9900",
+      "#FF9933",
+      "#FFCC00",
+      "#FFCC33"
+    ];
+    function useColors() {
+      if (typeof window !== "undefined" && window.process && (window.process.type === "renderer" || window.process.__nwjs)) {
         return true;
       }
-      const nonroot = !process.getuid || process.getuid() !== 0;
-      if (nonroot) {
-        if (err.code === "EINVAL" || err.code === "EPERM") {
-          return true;
-        }
+      if (typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/(edge|trident)\/(\d+)/)) {
+        return false;
       }
-      return false;
+      let m;
+      return typeof document !== "undefined" && document.documentElement && document.documentElement.style && document.documentElement.style.WebkitAppearance || // Is firebug? http://stackoverflow.com/a/398120/376773
+      typeof window !== "undefined" && window.console && (window.console.firebug || window.console.exception && window.console.table) || // Is firefox >= v31?
+      // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
+      typeof navigator !== "undefined" && navigator.userAgent && (m = navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/)) && parseInt(m[1], 10) >= 31 || // Double check webkit in userAgent just in case we are in a worker
+      typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/);
     }
-    async function writeFileAsync(filename, data, options = {}) {
-      if (typeof options === "string") {
-        options = { encoding: options };
+    function formatArgs(args) {
+      args[0] = (this.useColors ? "%c" : "") + this.namespace + (this.useColors ? " %c" : " ") + args[0] + (this.useColors ? "%c " : " ") + "+" + module.exports.humanize(this.diff);
+      if (!this.useColors) {
+        return;
       }
-      let fd;
-      let tmpfile;
-      const removeOnExitHandler = onExit(cleanupOnExit(() => tmpfile));
-      const absoluteName = path2.resolve(filename);
+      const c = "color: " + this.color;
+      args.splice(1, 0, c, "color: inherit");
+      let index = 0;
+      let lastC = 0;
+      args[0].replace(/%[a-zA-Z%]/g, (match) => {
+        if (match === "%%") {
+          return;
+        }
+        index++;
+        if (match === "%c") {
+          lastC = index;
+        }
+      });
+      args.splice(lastC, 0, c);
+    }
+    exports.log = console.debug || console.log || (() => {
+    });
+    function save(namespaces) {
       try {
-        await serializeActiveFile(absoluteName);
-        const truename = await promisify(fs.realpath)(filename).catch(() => filename);
-        tmpfile = getTmpname(truename);
-        if (!options.mode || !options.chown) {
-          const stats = await promisify(fs.stat)(truename).catch(() => {
-          });
-          if (stats) {
-            if (options.mode == null) {
-              options.mode = stats.mode;
-            }
-            if (options.chown == null && process.getuid) {
-              options.chown = { uid: stats.uid, gid: stats.gid };
-            }
-          }
-        }
-        fd = await promisify(fs.open)(tmpfile, "w", options.mode);
-        if (options.tmpfileCreated) {
-          await options.tmpfileCreated(tmpfile);
-        }
-        if (ArrayBuffer.isView(data)) {
-          await promisify(fs.write)(fd, data, 0, data.length, 0);
-        } else if (data != null) {
-          await promisify(fs.write)(fd, String(data), 0, String(options.encoding || "utf8"));
-        }
-        if (options.fsync !== false) {
-          await promisify(fs.fsync)(fd);
-        }
-        await promisify(fs.close)(fd);
-        fd = null;
-        if (options.chown) {
-          await promisify(fs.chown)(tmpfile, options.chown.uid, options.chown.gid).catch((err) => {
-            if (!isChownErrOk(err)) {
-              throw err;
-            }
-          });
-        }
-        if (options.mode) {
-          await promisify(fs.chmod)(tmpfile, options.mode).catch((err) => {
-            if (!isChownErrOk(err)) {
-              throw err;
-            }
-          });
-        }
-        await promisify(fs.rename)(tmpfile, truename);
-      } finally {
-        if (fd) {
-          await promisify(fs.close)(fd).catch(
-            /* istanbul ignore next */
-            () => {
-            }
-          );
-        }
-        removeOnExitHandler();
-        await promisify(fs.unlink)(tmpfile).catch(() => {
-        });
-        activeFiles[absoluteName].shift();
-        if (activeFiles[absoluteName].length > 0) {
-          activeFiles[absoluteName][0]();
+        if (namespaces) {
+          exports.storage.setItem("debug", namespaces);
         } else {
-          delete activeFiles[absoluteName];
+          exports.storage.removeItem("debug");
         }
+      } catch (error51) {
       }
     }
-    async function writeFile2(filename, data, options, callback) {
-      if (options instanceof Function) {
-        callback = options;
-        options = {};
+    function load() {
+      let r;
+      try {
+        r = exports.storage.getItem("debug") || exports.storage.getItem("DEBUG");
+      } catch (error51) {
       }
-      const promise2 = writeFileAsync(filename, data, options);
-      if (callback) {
-        try {
-          const result = await promise2;
-          return callback(result);
-        } catch (err) {
-          return callback(err);
-        }
+      if (!r && typeof process !== "undefined" && "env" in process) {
+        r = process.env.DEBUG;
       }
-      return promise2;
+      return r;
     }
-    function writeFileSync(filename, data, options) {
-      if (typeof options === "string") {
-        options = { encoding: options };
-      } else if (!options) {
-        options = {};
-      }
+    function localstorage() {
       try {
-        filename = fs.realpathSync(filename);
-      } catch (ex) {
+        return localStorage;
+      } catch (error51) {
       }
-      const tmpfile = getTmpname(filename);
-      if (!options.mode || !options.chown) {
-        try {
-          const stats = fs.statSync(filename);
-          options = Object.assign({}, options);
-          if (!options.mode) {
-            options.mode = stats.mode;
-          }
-          if (!options.chown && process.getuid) {
-            options.chown = { uid: stats.uid, gid: stats.gid };
-          }
-        } catch (ex) {
-        }
-      }
-      let fd;
-      const cleanup = cleanupOnExit(tmpfile);
-      const removeOnExitHandler = onExit(cleanup);
-      let threw = true;
+    }
+    module.exports = require_common()(exports);
+    var { formatters } = module.exports;
+    formatters.j = function(v) {
       try {
-        fd = fs.openSync(tmpfile, "w", options.mode || 438);
-        if (options.tmpfileCreated) {
-          options.tmpfileCreated(tmpfile);
-        }
-        if (ArrayBuffer.isView(data)) {
-          fs.writeSync(fd, data, 0, data.length, 0);
-        } else if (data != null) {
-          fs.writeSync(fd, String(data), 0, String(options.encoding || "utf8"));
-        }
-        if (options.fsync !== false) {
-          fs.fsyncSync(fd);
-        }
-        fs.closeSync(fd);
-        fd = null;
-        if (options.chown) {
-          try {
-            fs.chownSync(tmpfile, options.chown.uid, options.chown.gid);
-          } catch (err) {
-            if (!isChownErrOk(err)) {
-              throw err;
-            }
-          }
-        }
-        if (options.mode) {
-          try {
-            fs.chmodSync(tmpfile, options.mode);
-          } catch (err) {
-            if (!isChownErrOk(err)) {
-              throw err;
-            }
-          }
-        }
-        fs.renameSync(tmpfile, filename);
-        threw = false;
-      } finally {
-        if (fd) {
-          try {
-            fs.closeSync(fd);
-          } catch (ex) {
-          }
-        }
-        removeOnExitHandler();
-        if (threw) {
-          cleanup();
-        }
+        return JSON.stringify(v);
+      } catch (error51) {
+        return "[UnexpectedJSONParseError]: " + error51.message;
       }
+    };
+  }
+});
+
+// node_modules/debug/src/node.js
+var require_node = __commonJS({
+  "node_modules/debug/src/node.js"(exports, module) {
+    var tty = __require("tty");
+    var util = __require("util");
+    exports.init = init;
+    exports.log = log;
+    exports.formatArgs = formatArgs;
+    exports.save = save;
+    exports.load = load;
+    exports.useColors = useColors;
+    exports.destroy = util.deprecate(
+      () => {
+      },
+      "Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`."
+    );
+    exports.colors = [6, 2, 3, 4, 5, 1];
+    try {
+      const supportsColor = __require("supports-color");
+      if (supportsColor && (supportsColor.stderr || supportsColor).level >= 2) {
+        exports.colors = [
+          20,
+          21,
+          26,
+          27,
+          32,
+          33,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          56,
+          57,
+          62,
+          63,
+          68,
+          69,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          92,
+          93,
+          98,
+          99,
+          112,
+          113,
+          128,
+          129,
+          134,
+          135,
+          148,
+          149,
+          160,
+          161,
+          162,
+          163,
+          164,
+          165,
+          166,
+          167,
+          168,
+          169,
+          170,
+          171,
+          172,
+          173,
+          178,
+          179,
+          184,
+          185,
+          196,
+          197,
+          198,
+          199,
+          200,
+          201,
+          202,
+          203,
+          204,
+          205,
+          206,
+          207,
+          208,
+          209,
+          214,
+          215,
+          220,
+          221
+        ];
+      }
+    } catch (error51) {
+    }
+    exports.inspectOpts = Object.keys(process.env).filter((key) => {
+      return /^debug_/i.test(key);
+    }).reduce((obj, key) => {
+      const prop = key.substring(6).toLowerCase().replace(/_([a-z])/g, (_, k) => {
+        return k.toUpperCase();
+      });
+      let val = process.env[key];
+      if (/^(yes|on|true|enabled)$/i.test(val)) {
+        val = true;
+      } else if (/^(no|off|false|disabled)$/i.test(val)) {
+        val = false;
+      } else if (val === "null") {
+        val = null;
+      } else {
+        val = Number(val);
+      }
+      obj[prop] = val;
+      return obj;
+    }, {});
+    function useColors() {
+      return "colors" in exports.inspectOpts ? Boolean(exports.inspectOpts.colors) : tty.isatty(process.stderr.fd);
+    }
+    function formatArgs(args) {
+      const { namespace: name, useColors: useColors2 } = this;
+      if (useColors2) {
+        const c = this.color;
+        const colorCode = "\x1B[3" + (c < 8 ? c : "8;5;" + c);
+        const prefix = `  ${colorCode};1m${name} \x1B[0m`;
+        args[0] = prefix + args[0].split("\n").join("\n" + prefix);
+        args.push(colorCode + "m+" + module.exports.humanize(this.diff) + "\x1B[0m");
+      } else {
+        args[0] = getDate() + name + " " + args[0];
+      }
+    }
+    function getDate() {
+      if (exports.inspectOpts.hideDate) {
+        return "";
+      }
+      return (/* @__PURE__ */ new Date()).toISOString() + " ";
+    }
+    function log(...args) {
+      return process.stderr.write(util.formatWithOptions(exports.inspectOpts, ...args) + "\n");
+    }
+    function save(namespaces) {
+      if (namespaces) {
+        process.env.DEBUG = namespaces;
+      } else {
+        delete process.env.DEBUG;
+      }
+    }
+    function load() {
+      return process.env.DEBUG;
+    }
+    function init(debug2) {
+      debug2.inspectOpts = {};
+      const keys = Object.keys(exports.inspectOpts);
+      for (let i = 0; i < keys.length; i++) {
+        debug2.inspectOpts[keys[i]] = exports.inspectOpts[keys[i]];
+      }
+    }
+    module.exports = require_common()(exports);
+    var { formatters } = module.exports;
+    formatters.o = function(v) {
+      this.inspectOpts.colors = this.useColors;
+      return util.inspect(v, this.inspectOpts).split("\n").map((str) => str.trim()).join(" ");
+    };
+    formatters.O = function(v) {
+      this.inspectOpts.colors = this.useColors;
+      return util.inspect(v, this.inspectOpts);
+    };
+  }
+});
+
+// node_modules/debug/src/index.js
+var require_src = __commonJS({
+  "node_modules/debug/src/index.js"(exports, module) {
+    if (typeof process === "undefined" || process.type === "renderer" || process.browser === true || process.__nwjs) {
+      module.exports = require_browser();
+    } else {
+      module.exports = require_node();
     }
   }
 });
@@ -13007,8 +13293,8 @@ var require_resolve_flow_scalar = __commonJS({
     };
     function parseCharCode(source, offset, length, onError) {
       const cc = source.substr(offset, length);
-      const ok17 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
-      const code = ok17 ? parseInt(cc, 16) : NaN;
+      const ok18 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
+      const code = ok18 ? parseInt(cc, 16) : NaN;
       try {
         return String.fromCodePoint(code);
       } catch {
@@ -15539,782 +15825,6 @@ var require_dist3 = __commonJS({
     exports.stringify = publicApi.stringify;
     exports.visit = visit2.visit;
     exports.visitAsync = visit2.visitAsync;
-  }
-});
-
-// node_modules/boundary/lib/index.js
-var require_lib2 = __commonJS({
-  "node_modules/boundary/lib/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.binarySearch = exports.upperBound = exports.lowerBound = exports.compare = void 0;
-    function compare(v1, v2) {
-      return v1 < v2;
-    }
-    exports.compare = compare;
-    function upperBound(array2, value, comp = compare) {
-      let len = array2.length;
-      let i = 0;
-      while (len) {
-        let diff = len >>> 1;
-        let cursor = i + diff;
-        if (comp(value, array2[cursor])) {
-          len = diff;
-        } else {
-          i = cursor + 1;
-          len -= diff + 1;
-        }
-      }
-      return i;
-    }
-    exports.upperBound = upperBound;
-    function lowerBound(array2, value, comp = compare) {
-      let len = array2.length;
-      let i = 0;
-      while (len) {
-        let diff = len >>> 1;
-        let cursor = i + diff;
-        if (comp(array2[cursor], value)) {
-          i = cursor + 1;
-          len -= diff + 1;
-        } else {
-          len = diff;
-        }
-      }
-      return i;
-    }
-    exports.lowerBound = lowerBound;
-    function binarySearch(array2, value, comp = compare) {
-      let cursor = lowerBound(array2, value, comp);
-      return cursor !== array2.length && !comp(value, array2[cursor]);
-    }
-    exports.binarySearch = binarySearch;
-  }
-});
-
-// node_modules/structured-source/lib/structured-source.js
-var require_structured_source = __commonJS({
-  "node_modules/structured-source/lib/structured-source.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.StructuredSource = void 0;
-    var boundary_1 = require_lib2();
-    var StructuredSource2 = class {
-      /**
-       * @constructs StructuredSource
-       * @param {string} source - source code text.
-       */
-      constructor(source) {
-        this.indice = [0];
-        let regexp = /[\r\n\u2028\u2029]/g;
-        const length = source.length;
-        regexp.lastIndex = 0;
-        while (true) {
-          let result = regexp.exec(source);
-          if (!result) {
-            break;
-          }
-          let index = result.index;
-          if (source.charCodeAt(index) === 13 && source.charCodeAt(index + 1) === 10) {
-            index += 1;
-          }
-          let nextIndex = index + 1;
-          if (length < nextIndex) {
-            break;
-          }
-          this.indice.push(nextIndex);
-          regexp.lastIndex = nextIndex;
-        }
-      }
-      get line() {
-        return this.indice.length;
-      }
-      /**
-       * @param {SourceLocation} loc - location indicator.
-       * @return {[ number, number ]} range.
-       */
-      locationToRange(loc) {
-        return [this.positionToIndex(loc.start), this.positionToIndex(loc.end)];
-      }
-      /**
-       * @param {[ number, number ]} range - pair of indice.
-       * @return {SourceLocation} location.
-       */
-      rangeToLocation(range) {
-        return {
-          start: this.indexToPosition(range[0]),
-          end: this.indexToPosition(range[1])
-        };
-      }
-      /**
-       * @param {SourcePosition} pos - position indicator.
-       * @return {number} index.
-       */
-      positionToIndex(pos) {
-        let start = this.indice[pos.line - 1];
-        return start + pos.column;
-      }
-      /**
-       * @param {number} index - index to the source code.
-       * @return {SourcePosition} position.
-       */
-      indexToPosition(index) {
-        const startLine = (0, boundary_1.upperBound)(this.indice, index);
-        return {
-          line: startLine,
-          column: index - this.indice[startLine - 1]
-        };
-      }
-    };
-    exports.StructuredSource = StructuredSource2;
-  }
-});
-
-// node_modules/ms/index.js
-var require_ms = __commonJS({
-  "node_modules/ms/index.js"(exports, module) {
-    var s = 1e3;
-    var m = s * 60;
-    var h = m * 60;
-    var d = h * 24;
-    var w = d * 7;
-    var y = d * 365.25;
-    module.exports = function(val, options) {
-      options = options || {};
-      var type = typeof val;
-      if (type === "string" && val.length > 0) {
-        return parse3(val);
-      } else if (type === "number" && isFinite(val)) {
-        return options.long ? fmtLong(val) : fmtShort(val);
-      }
-      throw new Error(
-        "val is not a non-empty string or a valid number. val=" + JSON.stringify(val)
-      );
-    };
-    function parse3(str) {
-      str = String(str);
-      if (str.length > 100) {
-        return;
-      }
-      var match = /^(-?(?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)?$/i.exec(
-        str
-      );
-      if (!match) {
-        return;
-      }
-      var n = parseFloat(match[1]);
-      var type = (match[2] || "ms").toLowerCase();
-      switch (type) {
-        case "years":
-        case "year":
-        case "yrs":
-        case "yr":
-        case "y":
-          return n * y;
-        case "weeks":
-        case "week":
-        case "w":
-          return n * w;
-        case "days":
-        case "day":
-        case "d":
-          return n * d;
-        case "hours":
-        case "hour":
-        case "hrs":
-        case "hr":
-        case "h":
-          return n * h;
-        case "minutes":
-        case "minute":
-        case "mins":
-        case "min":
-        case "m":
-          return n * m;
-        case "seconds":
-        case "second":
-        case "secs":
-        case "sec":
-        case "s":
-          return n * s;
-        case "milliseconds":
-        case "millisecond":
-        case "msecs":
-        case "msec":
-        case "ms":
-          return n;
-        default:
-          return void 0;
-      }
-    }
-    function fmtShort(ms) {
-      var msAbs = Math.abs(ms);
-      if (msAbs >= d) {
-        return Math.round(ms / d) + "d";
-      }
-      if (msAbs >= h) {
-        return Math.round(ms / h) + "h";
-      }
-      if (msAbs >= m) {
-        return Math.round(ms / m) + "m";
-      }
-      if (msAbs >= s) {
-        return Math.round(ms / s) + "s";
-      }
-      return ms + "ms";
-    }
-    function fmtLong(ms) {
-      var msAbs = Math.abs(ms);
-      if (msAbs >= d) {
-        return plural(ms, msAbs, d, "day");
-      }
-      if (msAbs >= h) {
-        return plural(ms, msAbs, h, "hour");
-      }
-      if (msAbs >= m) {
-        return plural(ms, msAbs, m, "minute");
-      }
-      if (msAbs >= s) {
-        return plural(ms, msAbs, s, "second");
-      }
-      return ms + " ms";
-    }
-    function plural(ms, msAbs, n, name) {
-      var isPlural = msAbs >= n * 1.5;
-      return Math.round(ms / n) + " " + name + (isPlural ? "s" : "");
-    }
-  }
-});
-
-// node_modules/debug/src/common.js
-var require_common = __commonJS({
-  "node_modules/debug/src/common.js"(exports, module) {
-    function setup(env) {
-      createDebug.debug = createDebug;
-      createDebug.default = createDebug;
-      createDebug.coerce = coerce;
-      createDebug.disable = disable;
-      createDebug.enable = enable;
-      createDebug.enabled = enabled;
-      createDebug.humanize = require_ms();
-      createDebug.destroy = destroy;
-      Object.keys(env).forEach((key) => {
-        createDebug[key] = env[key];
-      });
-      createDebug.names = [];
-      createDebug.skips = [];
-      createDebug.formatters = {};
-      function selectColor(namespace) {
-        let hash2 = 0;
-        for (let i = 0; i < namespace.length; i++) {
-          hash2 = (hash2 << 5) - hash2 + namespace.charCodeAt(i);
-          hash2 |= 0;
-        }
-        return createDebug.colors[Math.abs(hash2) % createDebug.colors.length];
-      }
-      createDebug.selectColor = selectColor;
-      function createDebug(namespace) {
-        let prevTime;
-        let enableOverride = null;
-        let namespacesCache;
-        let enabledCache;
-        function debug2(...args) {
-          if (!debug2.enabled) {
-            return;
-          }
-          const self2 = debug2;
-          const curr = Number(/* @__PURE__ */ new Date());
-          const ms = curr - (prevTime || curr);
-          self2.diff = ms;
-          self2.prev = prevTime;
-          self2.curr = curr;
-          prevTime = curr;
-          args[0] = createDebug.coerce(args[0]);
-          if (typeof args[0] !== "string") {
-            args.unshift("%O");
-          }
-          let index = 0;
-          args[0] = args[0].replace(/%([a-zA-Z%])/g, (match, format) => {
-            if (match === "%%") {
-              return "%";
-            }
-            index++;
-            const formatter = createDebug.formatters[format];
-            if (typeof formatter === "function") {
-              const val = args[index];
-              match = formatter.call(self2, val);
-              args.splice(index, 1);
-              index--;
-            }
-            return match;
-          });
-          createDebug.formatArgs.call(self2, args);
-          const logFn = self2.log || createDebug.log;
-          logFn.apply(self2, args);
-        }
-        debug2.namespace = namespace;
-        debug2.useColors = createDebug.useColors();
-        debug2.color = createDebug.selectColor(namespace);
-        debug2.extend = extend2;
-        debug2.destroy = createDebug.destroy;
-        Object.defineProperty(debug2, "enabled", {
-          enumerable: true,
-          configurable: false,
-          get: () => {
-            if (enableOverride !== null) {
-              return enableOverride;
-            }
-            if (namespacesCache !== createDebug.namespaces) {
-              namespacesCache = createDebug.namespaces;
-              enabledCache = createDebug.enabled(namespace);
-            }
-            return enabledCache;
-          },
-          set: (v) => {
-            enableOverride = v;
-          }
-        });
-        if (typeof createDebug.init === "function") {
-          createDebug.init(debug2);
-        }
-        return debug2;
-      }
-      function extend2(namespace, delimiter) {
-        const newDebug = createDebug(this.namespace + (typeof delimiter === "undefined" ? ":" : delimiter) + namespace);
-        newDebug.log = this.log;
-        return newDebug;
-      }
-      function enable(namespaces) {
-        createDebug.save(namespaces);
-        createDebug.namespaces = namespaces;
-        createDebug.names = [];
-        createDebug.skips = [];
-        const split = (typeof namespaces === "string" ? namespaces : "").trim().replace(/\s+/g, ",").split(",").filter(Boolean);
-        for (const ns of split) {
-          if (ns[0] === "-") {
-            createDebug.skips.push(ns.slice(1));
-          } else {
-            createDebug.names.push(ns);
-          }
-        }
-      }
-      function matchesTemplate(search, template) {
-        let searchIndex = 0;
-        let templateIndex = 0;
-        let starIndex = -1;
-        let matchIndex = 0;
-        while (searchIndex < search.length) {
-          if (templateIndex < template.length && (template[templateIndex] === search[searchIndex] || template[templateIndex] === "*")) {
-            if (template[templateIndex] === "*") {
-              starIndex = templateIndex;
-              matchIndex = searchIndex;
-              templateIndex++;
-            } else {
-              searchIndex++;
-              templateIndex++;
-            }
-          } else if (starIndex !== -1) {
-            templateIndex = starIndex + 1;
-            matchIndex++;
-            searchIndex = matchIndex;
-          } else {
-            return false;
-          }
-        }
-        while (templateIndex < template.length && template[templateIndex] === "*") {
-          templateIndex++;
-        }
-        return templateIndex === template.length;
-      }
-      function disable() {
-        const namespaces = [
-          ...createDebug.names,
-          ...createDebug.skips.map((namespace) => "-" + namespace)
-        ].join(",");
-        createDebug.enable("");
-        return namespaces;
-      }
-      function enabled(name) {
-        for (const skip of createDebug.skips) {
-          if (matchesTemplate(name, skip)) {
-            return false;
-          }
-        }
-        for (const ns of createDebug.names) {
-          if (matchesTemplate(name, ns)) {
-            return true;
-          }
-        }
-        return false;
-      }
-      function coerce(val) {
-        if (val instanceof Error) {
-          return val.stack || val.message;
-        }
-        return val;
-      }
-      function destroy() {
-        console.warn("Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.");
-      }
-      createDebug.enable(createDebug.load());
-      return createDebug;
-    }
-    module.exports = setup;
-  }
-});
-
-// node_modules/debug/src/browser.js
-var require_browser = __commonJS({
-  "node_modules/debug/src/browser.js"(exports, module) {
-    exports.formatArgs = formatArgs;
-    exports.save = save;
-    exports.load = load;
-    exports.useColors = useColors;
-    exports.storage = localstorage();
-    exports.destroy = /* @__PURE__ */ (() => {
-      let warned = false;
-      return () => {
-        if (!warned) {
-          warned = true;
-          console.warn("Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.");
-        }
-      };
-    })();
-    exports.colors = [
-      "#0000CC",
-      "#0000FF",
-      "#0033CC",
-      "#0033FF",
-      "#0066CC",
-      "#0066FF",
-      "#0099CC",
-      "#0099FF",
-      "#00CC00",
-      "#00CC33",
-      "#00CC66",
-      "#00CC99",
-      "#00CCCC",
-      "#00CCFF",
-      "#3300CC",
-      "#3300FF",
-      "#3333CC",
-      "#3333FF",
-      "#3366CC",
-      "#3366FF",
-      "#3399CC",
-      "#3399FF",
-      "#33CC00",
-      "#33CC33",
-      "#33CC66",
-      "#33CC99",
-      "#33CCCC",
-      "#33CCFF",
-      "#6600CC",
-      "#6600FF",
-      "#6633CC",
-      "#6633FF",
-      "#66CC00",
-      "#66CC33",
-      "#9900CC",
-      "#9900FF",
-      "#9933CC",
-      "#9933FF",
-      "#99CC00",
-      "#99CC33",
-      "#CC0000",
-      "#CC0033",
-      "#CC0066",
-      "#CC0099",
-      "#CC00CC",
-      "#CC00FF",
-      "#CC3300",
-      "#CC3333",
-      "#CC3366",
-      "#CC3399",
-      "#CC33CC",
-      "#CC33FF",
-      "#CC6600",
-      "#CC6633",
-      "#CC9900",
-      "#CC9933",
-      "#CCCC00",
-      "#CCCC33",
-      "#FF0000",
-      "#FF0033",
-      "#FF0066",
-      "#FF0099",
-      "#FF00CC",
-      "#FF00FF",
-      "#FF3300",
-      "#FF3333",
-      "#FF3366",
-      "#FF3399",
-      "#FF33CC",
-      "#FF33FF",
-      "#FF6600",
-      "#FF6633",
-      "#FF9900",
-      "#FF9933",
-      "#FFCC00",
-      "#FFCC33"
-    ];
-    function useColors() {
-      if (typeof window !== "undefined" && window.process && (window.process.type === "renderer" || window.process.__nwjs)) {
-        return true;
-      }
-      if (typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/(edge|trident)\/(\d+)/)) {
-        return false;
-      }
-      let m;
-      return typeof document !== "undefined" && document.documentElement && document.documentElement.style && document.documentElement.style.WebkitAppearance || // Is firebug? http://stackoverflow.com/a/398120/376773
-      typeof window !== "undefined" && window.console && (window.console.firebug || window.console.exception && window.console.table) || // Is firefox >= v31?
-      // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
-      typeof navigator !== "undefined" && navigator.userAgent && (m = navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/)) && parseInt(m[1], 10) >= 31 || // Double check webkit in userAgent just in case we are in a worker
-      typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/);
-    }
-    function formatArgs(args) {
-      args[0] = (this.useColors ? "%c" : "") + this.namespace + (this.useColors ? " %c" : " ") + args[0] + (this.useColors ? "%c " : " ") + "+" + module.exports.humanize(this.diff);
-      if (!this.useColors) {
-        return;
-      }
-      const c = "color: " + this.color;
-      args.splice(1, 0, c, "color: inherit");
-      let index = 0;
-      let lastC = 0;
-      args[0].replace(/%[a-zA-Z%]/g, (match) => {
-        if (match === "%%") {
-          return;
-        }
-        index++;
-        if (match === "%c") {
-          lastC = index;
-        }
-      });
-      args.splice(lastC, 0, c);
-    }
-    exports.log = console.debug || console.log || (() => {
-    });
-    function save(namespaces) {
-      try {
-        if (namespaces) {
-          exports.storage.setItem("debug", namespaces);
-        } else {
-          exports.storage.removeItem("debug");
-        }
-      } catch (error51) {
-      }
-    }
-    function load() {
-      let r;
-      try {
-        r = exports.storage.getItem("debug") || exports.storage.getItem("DEBUG");
-      } catch (error51) {
-      }
-      if (!r && typeof process !== "undefined" && "env" in process) {
-        r = process.env.DEBUG;
-      }
-      return r;
-    }
-    function localstorage() {
-      try {
-        return localStorage;
-      } catch (error51) {
-      }
-    }
-    module.exports = require_common()(exports);
-    var { formatters } = module.exports;
-    formatters.j = function(v) {
-      try {
-        return JSON.stringify(v);
-      } catch (error51) {
-        return "[UnexpectedJSONParseError]: " + error51.message;
-      }
-    };
-  }
-});
-
-// node_modules/debug/src/node.js
-var require_node = __commonJS({
-  "node_modules/debug/src/node.js"(exports, module) {
-    var tty = __require("tty");
-    var util = __require("util");
-    exports.init = init;
-    exports.log = log;
-    exports.formatArgs = formatArgs;
-    exports.save = save;
-    exports.load = load;
-    exports.useColors = useColors;
-    exports.destroy = util.deprecate(
-      () => {
-      },
-      "Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`."
-    );
-    exports.colors = [6, 2, 3, 4, 5, 1];
-    try {
-      const supportsColor = __require("supports-color");
-      if (supportsColor && (supportsColor.stderr || supportsColor).level >= 2) {
-        exports.colors = [
-          20,
-          21,
-          26,
-          27,
-          32,
-          33,
-          38,
-          39,
-          40,
-          41,
-          42,
-          43,
-          44,
-          45,
-          56,
-          57,
-          62,
-          63,
-          68,
-          69,
-          74,
-          75,
-          76,
-          77,
-          78,
-          79,
-          80,
-          81,
-          92,
-          93,
-          98,
-          99,
-          112,
-          113,
-          128,
-          129,
-          134,
-          135,
-          148,
-          149,
-          160,
-          161,
-          162,
-          163,
-          164,
-          165,
-          166,
-          167,
-          168,
-          169,
-          170,
-          171,
-          172,
-          173,
-          178,
-          179,
-          184,
-          185,
-          196,
-          197,
-          198,
-          199,
-          200,
-          201,
-          202,
-          203,
-          204,
-          205,
-          206,
-          207,
-          208,
-          209,
-          214,
-          215,
-          220,
-          221
-        ];
-      }
-    } catch (error51) {
-    }
-    exports.inspectOpts = Object.keys(process.env).filter((key) => {
-      return /^debug_/i.test(key);
-    }).reduce((obj, key) => {
-      const prop = key.substring(6).toLowerCase().replace(/_([a-z])/g, (_, k) => {
-        return k.toUpperCase();
-      });
-      let val = process.env[key];
-      if (/^(yes|on|true|enabled)$/i.test(val)) {
-        val = true;
-      } else if (/^(no|off|false|disabled)$/i.test(val)) {
-        val = false;
-      } else if (val === "null") {
-        val = null;
-      } else {
-        val = Number(val);
-      }
-      obj[prop] = val;
-      return obj;
-    }, {});
-    function useColors() {
-      return "colors" in exports.inspectOpts ? Boolean(exports.inspectOpts.colors) : tty.isatty(process.stderr.fd);
-    }
-    function formatArgs(args) {
-      const { namespace: name, useColors: useColors2 } = this;
-      if (useColors2) {
-        const c = this.color;
-        const colorCode = "\x1B[3" + (c < 8 ? c : "8;5;" + c);
-        const prefix = `  ${colorCode};1m${name} \x1B[0m`;
-        args[0] = prefix + args[0].split("\n").join("\n" + prefix);
-        args.push(colorCode + "m+" + module.exports.humanize(this.diff) + "\x1B[0m");
-      } else {
-        args[0] = getDate() + name + " " + args[0];
-      }
-    }
-    function getDate() {
-      if (exports.inspectOpts.hideDate) {
-        return "";
-      }
-      return (/* @__PURE__ */ new Date()).toISOString() + " ";
-    }
-    function log(...args) {
-      return process.stderr.write(util.formatWithOptions(exports.inspectOpts, ...args) + "\n");
-    }
-    function save(namespaces) {
-      if (namespaces) {
-        process.env.DEBUG = namespaces;
-      } else {
-        delete process.env.DEBUG;
-      }
-    }
-    function load() {
-      return process.env.DEBUG;
-    }
-    function init(debug2) {
-      debug2.inspectOpts = {};
-      const keys = Object.keys(exports.inspectOpts);
-      for (let i = 0; i < keys.length; i++) {
-        debug2.inspectOpts[keys[i]] = exports.inspectOpts[keys[i]];
-      }
-    }
-    module.exports = require_common()(exports);
-    var { formatters } = module.exports;
-    formatters.o = function(v) {
-      this.inspectOpts.colors = this.useColors;
-      return util.inspect(v, this.inspectOpts).split("\n").map((str) => str.trim()).join(" ");
-    };
-    formatters.O = function(v) {
-      this.inspectOpts.colors = this.useColors;
-      return util.inspect(v, this.inspectOpts);
-    };
-  }
-});
-
-// node_modules/debug/src/index.js
-var require_src = __commonJS({
-  "node_modules/debug/src/index.js"(exports, module) {
-    if (typeof process === "undefined" || process.type === "renderer" || process.browser === true || process.__nwjs) {
-      module.exports = require_browser();
-    } else {
-      module.exports = require_node();
-    }
   }
 });
 
@@ -28287,9 +27797,9 @@ var createToJSONSchemaMethod = (schema, processors = {}) => (params) => {
   extractDefs(ctx, schema);
   return finalize(ctx, schema);
 };
-var createStandardJSONSchemaMethod = (schema, io4, processors = {}) => (params) => {
+var createStandardJSONSchemaMethod = (schema, io5, processors = {}) => (params) => {
   const { libraryOptions, target: target2 } = params ?? {};
-  const ctx = initializeContext({ ...libraryOptions ?? {}, target: target2, io: io4, processors });
+  const ctx = initializeContext({ ...libraryOptions ?? {}, target: target2, io: io5, processors });
   process2(schema, ctx);
   extractDefs(ctx, schema);
   return finalize(ctx, schema);
@@ -34989,10 +34499,10 @@ function isStandardSchema(schema) {
 }
 var warnedZodFallback = false;
 var JSON_SCHEMA_CONVERSION_TARGET = "draft-2020-12";
-function standardSchemaToJsonSchema(schema, io4 = "input") {
+function standardSchemaToJsonSchema(schema, io5 = "input") {
   const std = schema["~standard"];
   let result;
-  if (std.jsonSchema) result = std.jsonSchema[io4]({ target: JSON_SCHEMA_CONVERSION_TARGET });
+  if (std.jsonSchema) result = std.jsonSchema[io5]({ target: JSON_SCHEMA_CONVERSION_TARGET });
   else if (std.vendor === "zod") {
     if (!("_zod" in schema)) throw new Error("Schema appears to be from zod 3, which the SDK cannot convert to JSON Schema. Upgrade to zod >=4.2.0, or wrap your JSON Schema with fromJsonSchema().");
     if (!warnedZodFallback) {
@@ -35001,10 +34511,10 @@ function standardSchemaToJsonSchema(schema, io4 = "input") {
     }
     result = toJSONSchema(schema, {
       target: JSON_SCHEMA_CONVERSION_TARGET,
-      io: io4
+      io: io5
     });
   } else throw new Error(`Schema library "${std.vendor}" does not implement StandardJSONSchemaV1 (\`~standard.jsonSchema\`). Upgrade to a version that does, or wrap your JSON Schema with fromJsonSchema().`);
-  if (io4 === "output") {
+  if (io5 === "output") {
     if (result.type !== void 0) return result;
     return isProvablyObjectShapedRoot(result) ? {
       type: "object",
@@ -40340,8 +39850,8 @@ var require_multipleOf = /* @__PURE__ */ __commonJSMin(((exports) => {
       const { gen, data, schemaCode, it } = cxt;
       const prec = it.opts.multipleOfPrecision;
       const res = gen.let("res");
-      const invalid3 = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
-      cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid3}))`);
+      const invalid4 = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
+      cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid4}))`);
     }
   };
   exports.default = def2;
@@ -55097,7 +54607,7 @@ function parseResultManifest(value) {
 }
 
 // src/state/transaction.ts
-import { isDeepStrictEqual as isDeepStrictEqual12 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual13 } from "node:util";
 import { isAbsolute as isAbsolute3, relative as relative3 } from "node:path";
 
 // src/repository/identity.ts
@@ -55650,7 +55160,6 @@ function computeTaskIdentity(taskId, repository) {
 }
 
 // src/state/atomic.ts
-var import_write_file_atomic = __toESM(require_lib(), 1);
 import { randomUUID } from "node:crypto";
 import { link, open as open2, rename, symlink, unlink } from "node:fs/promises";
 import { basename as basename2, dirname as dirname2, join as join2 } from "node:path";
@@ -55720,15 +55229,7 @@ async function replace(path2, bytes) {
   if (path2.path_class !== "task-state" && path2.path_class !== "gate-interface") {
     throw new TypeError("replace requires a task-state or gate-interface resolved path");
   }
-  try {
-    await (0, import_write_file_atomic.default)(path2.absolute, bytes);
-  } catch {
-    throw new AtomicReplaceError({
-      operation: "replace",
-      target_may_have_changed: true,
-      collision: false
-    });
-  }
+  await replaceRegularBytes(path2.absolute, bytes, 420);
 }
 async function removeGateInterface(path2) {
   if (path2.path_class !== "gate-interface") {
@@ -55762,13 +55263,28 @@ var PROJECTABLE = /* @__PURE__ */ new Set([
 function requireProjectable(path2) {
   if (!PROJECTABLE.has(path2.path_class)) throw new TypeError("projection requires a declared output path");
 }
+async function replaceRegularBytes(target2, bytes, mode) {
+  const temporary = join2(dirname2(target2), `.${basename2(target2)}.${process.pid}.${randomUUID()}.tmp`);
+  let handle;
+  let renameAttempted = false;
+  try {
+    handle = await open2(temporary, "wx", mode);
+    await writeAll(handle, bytes);
+    await handle.sync();
+    await handle.close();
+    handle = void 0;
+    renameAttempted = true;
+    await rename(temporary, target2);
+  } catch {
+    throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: renameAttempted, collision: false });
+  } finally {
+    await handle?.close().catch(() => void 0);
+    await unlink(temporary).catch(() => void 0);
+  }
+}
 async function replaceRegular(path2, bytes, executable) {
   requireProjectable(path2);
-  try {
-    await (0, import_write_file_atomic.default)(path2.absolute, bytes, { mode: executable ? 493 : 420 });
-  } catch {
-    throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: true, collision: false });
-  }
+  await replaceRegularBytes(path2.absolute, bytes, executable ? 493 : 420);
 }
 async function replaceSymlink(path2, target2) {
   requireProjectable(path2);
@@ -56056,80 +55572,11 @@ async function ensurePayloadParent(authority, digest11, target2) {
 }
 
 // src/state/checkpoints.ts
+import { isDeepStrictEqual as isDeepStrictEqual12 } from "node:util";
+
+// src/state/manual-import.ts
+import { constants as fsConstants5 } from "node:fs";
 import { isDeepStrictEqual as isDeepStrictEqual11 } from "node:util";
-
-// src/state/transitions.ts
-import { isDeepStrictEqual as isDeepStrictEqual10 } from "node:util";
-
-// src/contracts/yaml.ts
-var import_yaml = __toESM(require_dist3(), 1);
-function locatedMessage(label, error51) {
-  const position2 = error51.linePos?.[0];
-  return position2 === void 0 ? `${label}: ${error51.message}` : `${label}:${position2.line}:${position2.col}: ${error51.message}`;
-}
-function parseSingleYamlDocument(source, label) {
-  if (typeof source !== "string") throw new TypeError(`${label}: YAML source must be a string`);
-  const lineCounter = new import_yaml.LineCounter();
-  const documents = (0, import_yaml.parseAllDocuments)(source, {
-    version: "1.2",
-    schema: "core",
-    strict: true,
-    uniqueKeys: true,
-    merge: false,
-    customTags: [],
-    lineCounter,
-    prettyErrors: true
-  });
-  if (documents.length !== 1) throw new SyntaxError(`${label}: expected exactly one YAML document, found ${documents.length}`);
-  const document2 = documents[0];
-  if (document2.errors.length > 0) throw new SyntaxError(locatedMessage(label, document2.errors[0]));
-  if (document2.warnings.length > 0) throw new SyntaxError(locatedMessage(label, document2.warnings[0]));
-  let aliasOffset;
-  (0, import_yaml.visit)(document2, (_key, node) => {
-    if ((0, import_yaml.isAlias)(node)) {
-      aliasOffset = node.range?.[0];
-      return import_yaml.visit.BREAK;
-    }
-    return void 0;
-  });
-  if (aliasOffset !== void 0) {
-    const position2 = lineCounter.linePos(aliasOffset);
-    throw new SyntaxError(`${label}:${position2.line}:${position2.col}: YAML aliases are not allowed`);
-  }
-  const value = document2.toJS({ maxAliasCount: 0 });
-  assertPlainJson(value, label);
-  return value;
-}
-
-// src/contracts/workflow.ts
-var phaseSchema2 = external_exports.object({
-  id: external_exports.enum(PHASE_IDS),
-  skill: external_exports.string().min(1),
-  requires: external_exports.array(external_exports.enum(PHASE_IDS)).min(1).optional(),
-  iterates: external_exports.enum(ITERATION_POLICIES).optional(),
-  pipeline: external_exports.array(external_exports.enum(PIPELINE_STEPS)).min(1),
-  gate: external_exports.enum(GATE_POLICIES),
-  optional: external_exports.boolean().optional()
-}).strict();
-var workflowV1Schema = external_exports.object({ phases: external_exports.array(phaseSchema2) }).strict().superRefine((workflow, context2) => {
-  if (!sameJson(workflow, WORKFLOW_V1)) context2.addIssue({ code: "custom", message: "Workflow must match the fixed ArchFlow v1 graph exactly" });
-});
-var WORKFLOW_V1 = {
-  phases: [
-    { id: "explore", skill: "archflow-explore", pipeline: ["produce"], gate: "never", optional: true },
-    { id: "prd", skill: "archflow-prd", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "always" },
-    { id: "design", skill: "archflow-design", requires: ["prd"], pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "always" },
-    { id: "phase-design", skill: "archflow-phase-design", requires: ["design"], iterates: "per_phase", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "on_trigger" },
-    { id: "phase-impl", skill: "archflow-phase-impl", requires: ["phase-design"], iterates: "per_phase", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "on_trigger" }
-  ]
-};
-function sameJson(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-// src/state/gates.ts
-import { constants as fsConstants4 } from "node:fs";
-import { isDeepStrictEqual as isDeepStrictEqual9 } from "node:util";
 
 // src/contracts/durable-gate.ts
 var digest8 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
@@ -56168,134 +55615,8 @@ function parseActiveGate(value) {
   return activeGateV1Validator.assert(value, "active gate");
 }
 
-// src/state/gate-wait.ts
-import { constants as fsConstants3 } from "node:fs";
-import { lstat as lstat2 } from "node:fs/promises";
-var GATE_POLL_INTERVAL_MS = 500;
-async function isCompleteRegularProjection(path2) {
-  let handle;
-  try {
-    const metadata2 = await lstat2(path2.absolute);
-    if (metadata2.isSymbolicLink() || !metadata2.isFile()) return false;
-    handle = await openResolved(path2.absolute, fsConstants3.O_RDONLY | fsConstants3.O_NONBLOCK);
-    return (await handle.stat()).isFile();
-  } catch (error51) {
-    const code = error51?.code;
-    if (code === "ENOENT" || code === "ELOOP") return false;
-    throw error51;
-  } finally {
-    await handle?.close().catch(() => void 0);
-  }
-}
-function delayOrAbort(signal) {
-  return new Promise((resolve2) => {
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", onAbort);
-      resolve2("poll");
-    }, GATE_POLL_INTERVAL_MS);
-    const onAbort = () => {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", onAbort);
-      resolve2("aborted");
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-    if (signal.aborted) onAbort();
-  });
-}
-async function waitForGateInterface(input) {
-  if (input.decision_path.path_class !== "gate-interface") {
-    throw new TypeError("gate wait decision path must be a gate-interface");
-  }
-  if (input.supplemental !== void 0 && input.supplemental.path.path_class !== "review") {
-    throw new TypeError("gate wait supplemental path must be a review");
-  }
-  for (; ; ) {
-    if (input.signal.aborted) return Object.freeze({ kind: "aborted" });
-    if (input.supplemental !== void 0) {
-      const complete = await isCompleteRegularProjection(input.supplemental.path);
-      if (complete && !input.supplemental.already_recorded) {
-        return Object.freeze({ kind: "supplemental" });
-      }
-    }
-    if (await isCompleteRegularProjection(input.decision_path)) {
-      return Object.freeze({ kind: "interface" });
-    }
-    if (await delayOrAbort(input.signal) === "aborted") return Object.freeze({ kind: "aborted" });
-  }
-}
-
-// src/state/lock.ts
-import { AsyncLocalStorage } from "node:async_hooks";
-import { lstat as lstat3, mkdir as mkdir2, open as open3, readdir, realpath as realpath3, rename as rename2, rmdir } from "node:fs/promises";
-import { join as join4 } from "node:path";
-import { performance } from "node:perf_hooks";
-import { setTimeout as delay } from "node:timers/promises";
-var TaskLockError = class extends Error {
-  constructor(stage, cause) {
-    super(`task lock ${stage} failed`, cause === void 0 ? void 0 : { cause });
-    this.stage = stage;
-    this.name = "TaskLockError";
-  }
-  stage;
-};
-var TASK_LOCK_POLICY = Object.freeze({
-  directoryName: ".transaction-lock",
-  pollIntervalMs: 10,
-  deadlineMs: 250
-});
-function errnoOf4(error51) {
-  return error51 !== null && typeof error51 === "object" && "code" in error51 ? String(error51.code) : void 0;
-}
-function createTaskLock() {
-  const heldRoots = new AsyncLocalStorage();
-  async function acquire(lockPath) {
-    const deadline = performance.now() + TASK_LOCK_POLICY.deadlineMs;
-    for (; ; ) {
-      try {
-        await mkdir2(lockPath);
-        return;
-      } catch (error51) {
-        if (errnoOf4(error51) !== "EEXIST") throw new TaskLockError("acquire");
-      }
-      const remaining = deadline - performance.now();
-      if (remaining <= 0) throw new TaskLockError("acquire");
-      await delay(Math.min(TASK_LOCK_POLICY.pollIntervalMs, remaining));
-    }
-  }
-  async function runExclusive(taskRoot, work) {
-    const inheritedRoots = heldRoots.getStore() ?? /* @__PURE__ */ new Set();
-    if (inheritedRoots.has(taskRoot)) throw new TaskLockError("acquire");
-    const lockPath = join4(taskRoot, TASK_LOCK_POLICY.directoryName);
-    await acquire(lockPath);
-    const scopedRoots = /* @__PURE__ */ new Set([...inheritedRoots, taskRoot]);
-    let workResult;
-    let workError;
-    let workThrew = false;
-    try {
-      workResult = await heldRoots.run(scopedRoots, work);
-    } catch (error51) {
-      workThrew = true;
-      workError = error51;
-    }
-    scopedRoots.delete(taskRoot);
-    try {
-      await rmdir(lockPath);
-    } catch {
-      throw new TaskLockError("release", workThrew ? workError : void 0);
-    }
-    if (workThrew) throw workError;
-    return workResult;
-  }
-  return Object.freeze({ runExclusive });
-}
-
-// src/state/snapshots.ts
-import { chmod, lstat as lstat5, readlink as readlink2 } from "node:fs/promises";
-import { resolve as resolvePath5 } from "node:path";
-import { isDeepStrictEqual as isDeepStrictEqual8 } from "node:util";
-
 // src/state/implementation-manifest.ts
-import { lstat as lstat4, readFile, readlink } from "node:fs/promises";
+import { lstat as lstat2, readFile, readlink } from "node:fs/promises";
 import { resolve as resolvePath4 } from "node:path";
 import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
 
@@ -61260,7 +60581,7 @@ async function observePath(runner, resolved) {
   const lexicalPath = resolvePath4(runner.location.worktreeRoot, resolved.repositoryRelative);
   let stat3;
   try {
-    stat3 = await lstat4(lexicalPath);
+    stat3 = await lstat2(lexicalPath);
   } catch (error51) {
     if (error51.code === "ENOENT") {
       return { observation: Object.freeze({ path: resolved.repositoryRelative, path_class: resolved.path_class, state: "absent" }) };
@@ -61475,7 +60796,204 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
   return facts;
 }
 
+// src/state/transitions.ts
+import { isDeepStrictEqual as isDeepStrictEqual10 } from "node:util";
+
+// src/contracts/yaml.ts
+var import_yaml = __toESM(require_dist3(), 1);
+function locatedMessage(label, error51) {
+  const position2 = error51.linePos?.[0];
+  return position2 === void 0 ? `${label}: ${error51.message}` : `${label}:${position2.line}:${position2.col}: ${error51.message}`;
+}
+function parseSingleYamlDocument(source, label) {
+  if (typeof source !== "string") throw new TypeError(`${label}: YAML source must be a string`);
+  const lineCounter = new import_yaml.LineCounter();
+  const documents = (0, import_yaml.parseAllDocuments)(source, {
+    version: "1.2",
+    schema: "core",
+    strict: true,
+    uniqueKeys: true,
+    merge: false,
+    customTags: [],
+    lineCounter,
+    prettyErrors: true
+  });
+  if (documents.length !== 1) throw new SyntaxError(`${label}: expected exactly one YAML document, found ${documents.length}`);
+  const document2 = documents[0];
+  if (document2.errors.length > 0) throw new SyntaxError(locatedMessage(label, document2.errors[0]));
+  if (document2.warnings.length > 0) throw new SyntaxError(locatedMessage(label, document2.warnings[0]));
+  let aliasOffset;
+  (0, import_yaml.visit)(document2, (_key, node) => {
+    if ((0, import_yaml.isAlias)(node)) {
+      aliasOffset = node.range?.[0];
+      return import_yaml.visit.BREAK;
+    }
+    return void 0;
+  });
+  if (aliasOffset !== void 0) {
+    const position2 = lineCounter.linePos(aliasOffset);
+    throw new SyntaxError(`${label}:${position2.line}:${position2.col}: YAML aliases are not allowed`);
+  }
+  const value = document2.toJS({ maxAliasCount: 0 });
+  assertPlainJson(value, label);
+  return value;
+}
+
+// src/contracts/workflow.ts
+var phaseSchema2 = external_exports.object({
+  id: external_exports.enum(PHASE_IDS),
+  skill: external_exports.string().min(1),
+  requires: external_exports.array(external_exports.enum(PHASE_IDS)).min(1).optional(),
+  iterates: external_exports.enum(ITERATION_POLICIES).optional(),
+  pipeline: external_exports.array(external_exports.enum(PIPELINE_STEPS)).min(1),
+  gate: external_exports.enum(GATE_POLICIES),
+  optional: external_exports.boolean().optional()
+}).strict();
+var workflowV1Schema = external_exports.object({ phases: external_exports.array(phaseSchema2) }).strict().superRefine((workflow, context2) => {
+  if (!sameJson(workflow, WORKFLOW_V1)) context2.addIssue({ code: "custom", message: "Workflow must match the fixed ArchFlow v1 graph exactly" });
+});
+var WORKFLOW_V1 = {
+  phases: [
+    { id: "explore", skill: "archflow-explore", pipeline: ["produce"], gate: "never", optional: true },
+    { id: "prd", skill: "archflow-prd", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "always" },
+    { id: "design", skill: "archflow-design", requires: ["prd"], pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "always" },
+    { id: "phase-design", skill: "archflow-phase-design", requires: ["design"], iterates: "per_phase", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "on_trigger" },
+    { id: "phase-impl", skill: "archflow-phase-impl", requires: ["phase-design"], iterates: "per_phase", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "on_trigger" }
+  ]
+};
+function sameJson(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+// src/state/gates.ts
+import { constants as fsConstants4 } from "node:fs";
+import { isDeepStrictEqual as isDeepStrictEqual9 } from "node:util";
+
+// src/state/gate-wait.ts
+import { constants as fsConstants3 } from "node:fs";
+import { lstat as lstat3 } from "node:fs/promises";
+var GATE_POLL_INTERVAL_MS = 500;
+async function isCompleteRegularProjection(path2) {
+  let handle;
+  try {
+    const metadata2 = await lstat3(path2.absolute);
+    if (metadata2.isSymbolicLink() || !metadata2.isFile()) return false;
+    handle = await openResolved(path2.absolute, fsConstants3.O_RDONLY | fsConstants3.O_NONBLOCK);
+    return (await handle.stat()).isFile();
+  } catch (error51) {
+    const code = error51?.code;
+    if (code === "ENOENT" || code === "ELOOP") return false;
+    throw error51;
+  } finally {
+    await handle?.close().catch(() => void 0);
+  }
+}
+function delayOrAbort(signal) {
+  return new Promise((resolve2) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve2("poll");
+    }, GATE_POLL_INTERVAL_MS);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      resolve2("aborted");
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+}
+async function waitForGateInterface(input) {
+  if (input.decision_path.path_class !== "gate-interface") {
+    throw new TypeError("gate wait decision path must be a gate-interface");
+  }
+  if (input.supplemental !== void 0 && input.supplemental.path.path_class !== "review") {
+    throw new TypeError("gate wait supplemental path must be a review");
+  }
+  for (; ; ) {
+    if (input.signal.aborted) return Object.freeze({ kind: "aborted" });
+    if (input.supplemental !== void 0) {
+      const complete = await isCompleteRegularProjection(input.supplemental.path);
+      if (complete && !input.supplemental.already_recorded) {
+        return Object.freeze({ kind: "supplemental" });
+      }
+    }
+    if (await isCompleteRegularProjection(input.decision_path)) {
+      return Object.freeze({ kind: "interface" });
+    }
+    if (await delayOrAbort(input.signal) === "aborted") return Object.freeze({ kind: "aborted" });
+  }
+}
+
+// src/state/lock.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+import { lstat as lstat4, mkdir as mkdir2, open as open3, readdir, realpath as realpath3, rename as rename2, rmdir } from "node:fs/promises";
+import { join as join4 } from "node:path";
+import { performance } from "node:perf_hooks";
+import { setTimeout as delay } from "node:timers/promises";
+var TaskLockError = class extends Error {
+  constructor(stage, cause) {
+    super(`task lock ${stage} failed`, cause === void 0 ? void 0 : { cause });
+    this.stage = stage;
+    this.name = "TaskLockError";
+  }
+  stage;
+};
+var TASK_LOCK_POLICY = Object.freeze({
+  directoryName: ".transaction-lock",
+  pollIntervalMs: 10,
+  deadlineMs: 250
+});
+function errnoOf4(error51) {
+  return error51 !== null && typeof error51 === "object" && "code" in error51 ? String(error51.code) : void 0;
+}
+function createTaskLock() {
+  const heldRoots = new AsyncLocalStorage();
+  async function acquire(lockPath) {
+    const deadline = performance.now() + TASK_LOCK_POLICY.deadlineMs;
+    for (; ; ) {
+      try {
+        await mkdir2(lockPath);
+        return;
+      } catch (error51) {
+        if (errnoOf4(error51) !== "EEXIST") throw new TaskLockError("acquire");
+      }
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) throw new TaskLockError("acquire");
+      await delay(Math.min(TASK_LOCK_POLICY.pollIntervalMs, remaining));
+    }
+  }
+  async function runExclusive(taskRoot, work) {
+    const inheritedRoots = heldRoots.getStore() ?? /* @__PURE__ */ new Set();
+    if (inheritedRoots.has(taskRoot)) throw new TaskLockError("acquire");
+    const lockPath = join4(taskRoot, TASK_LOCK_POLICY.directoryName);
+    await acquire(lockPath);
+    const scopedRoots = /* @__PURE__ */ new Set([...inheritedRoots, taskRoot]);
+    let workResult;
+    let workError;
+    let workThrew = false;
+    try {
+      workResult = await heldRoots.run(scopedRoots, work);
+    } catch (error51) {
+      workThrew = true;
+      workError = error51;
+    }
+    scopedRoots.delete(taskRoot);
+    try {
+      await rmdir(lockPath);
+    } catch {
+      throw new TaskLockError("release", workThrew ? workError : void 0);
+    }
+    if (workThrew) throw workError;
+    return workResult;
+  }
+  return Object.freeze({ runExclusive });
+}
+
 // src/state/snapshots.ts
+import { chmod, lstat as lstat5, readlink as readlink2 } from "node:fs/promises";
+import { resolve as resolvePath5 } from "node:path";
+import { isDeepStrictEqual as isDeepStrictEqual8 } from "node:util";
 var RESULT_BYTE_CAP2 = 25 * 1024 * 1024;
 var TASK_BYTE_CAP2 = 250 * 1024 * 1024;
 var ok5 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
@@ -62474,7 +61992,7 @@ function plannedFinalPhaseFromDesign(bytes) {
   }
   return phases.length;
 }
-async function approvedDesignFinalPhase(dependencies, current, record3) {
+async function loadApprovedDesignFinalPhase(dependencies, current, record3) {
   if (record3.outcome !== "decided" || record3.kind !== "artifact-approval" || record3.phase_instance !== "design" || record3.envelope.payload.decision !== "approve") return ok6(void 0);
   const reference = current.authoritative_results.find((entry) => entry.phase_instance === "design" && entry.step === "produce");
   if (reference === void 0 || dependencies.load_retained_result === void 0) {
@@ -62548,7 +62066,7 @@ async function closedStateForRecord(dependencies, authority, current, request, r
   if (enactsReentry(record3)) {
     return planGateAuthorizedReentry(dependencies, authority, current, request, record3);
   }
-  const plannedFinalPhase = await approvedDesignFinalPhase(dependencies, current.value, record3);
+  const plannedFinalPhase = await loadApprovedDesignFinalPhase(dependencies, current.value, record3);
   return plannedFinalPhase.ok ? ok6(nextStateForRecord(current.value, record3, digest11, plannedFinalPhase.value)) : plannedFinalPhase;
 }
 async function validateCompletedReentry(dependencies, authority, current, request, record3) {
@@ -62913,6 +62431,191 @@ async function resolveAdvancingGate(dependencies, authority, gateId, inputFinger
     return error51 instanceof TaskLockError ? io(authority, `gate-lock-${error51.stage}`) : io(authority, "gate-resolve-advance");
   }
 }
+function importGateDecisions(state, pairs) {
+  if (state.open_gate !== void 0) throw new TypeError("manual gate import requires no live gate");
+  const approvals = [...state.approvals];
+  const waivers = [...state.waivers];
+  const present = new Set([...approvals, ...waivers].map((entry) => entry.gate_id));
+  for (const pair of pairs) {
+    const request = parseGateRequest(pair.request);
+    const decision2 = parseGateDecisionRecord(pair.decision);
+    if (request.task_id !== state.task_id) throw new TypeError("manual gate pair is foreign to current task");
+    if (present.has(request.gate_id)) continue;
+    if (request.gate_id !== decision2.gate_id || request.task_id !== decision2.task_id || request.phase_instance !== decision2.phase_instance || request.kind !== decision2.kind || request.subject_digest !== decision2.subject_digest || request.context_digest !== decision2.context_digest) throw new TypeError("manual gate pair does not bind");
+    const digest11 = canonicalJsonDigest(decision2);
+    const revision = state.revision + 1;
+    if (decision2.outcome === "decided") {
+      bindEnvelope(request, decision2.envelope);
+      if (gateDecisionEffect(decision2.envelope.payload) === "advance") approvals.push({ gate_id: decision2.gate_id, gate_kind: decision2.kind, subject_digest: decision2.subject_digest, decision_digest: digest11, resolved_at_revision: revision });
+    } else if (decision2.outcome === "waiver-decided") {
+      const context2 = request.context;
+      if (!("origin" in context2) || !isDeepStrictEqual9(context2.origin, decision2.origin) || !isDeepStrictEqual9(context2.origin.scope, decision2.scope)) throw new TypeError("manual waiver pair does not bind");
+      waivers.push({ gate_id: decision2.gate_id, rule_id: decision2.origin.rule.rule_id, rule_version: decision2.origin.rule.rule_version, subject_digest: decision2.origin.subject_digest, scope: decision2.scope, granted: decision2.granted, expires: "task-complete", granted_at_revision: revision });
+    }
+    present.add(request.gate_id);
+  }
+  approvals.sort((a, b) => a.gate_id.localeCompare(b.gate_id));
+  waivers.sort((a, b) => a.gate_id.localeCompare(b.gate_id));
+  return Object.freeze({ approvals: Object.freeze(approvals), waivers: Object.freeze(waivers) });
+}
+var authenticatedManualGateFacts = /* @__PURE__ */ new WeakMap();
+var authenticatedManualGateFactsBrand = /* @__PURE__ */ Symbol("AuthenticatedManualGateFacts");
+function resolveAuthenticatedManualGateFacts(facts, expectedAuthorityBinding) {
+  const resolved = authenticatedManualGateFacts.get(facts);
+  if (resolved === void 0 || expectedAuthorityBinding !== void 0 && resolved.authority_binding !== expectedAuthorityBinding) {
+    throw new TypeError("authenticated manual gate facts are required");
+  }
+  return resolved;
+}
+function mintArchivedApproval(approval, request, decision2) {
+  const authenticated = {
+    approval: deepFreezeGateJson(structuredClone(approval)),
+    request: deepFreezeGateJson(structuredClone(request)),
+    decision: deepFreezeGateJson(structuredClone(decision2))
+  };
+  Object.defineProperty(authenticated, authenticatedGateApprovalBrand, {
+    value: true,
+    enumerable: false,
+    writable: false,
+    configurable: false
+  });
+  Object.freeze(authenticated);
+  authenticatedGateApprovals.add(authenticated);
+  return authenticated;
+}
+async function loadAuthenticatedManualGateFacts(input) {
+  const { dependencies, transaction_authority: authority } = input;
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  if (input.authority_binding === null || typeof input.authority_binding !== "object") {
+    throw new TypeError("manual gate authority binding must be an object");
+  }
+  assertPlainJson({ state: input.state, gate_ids: input.gate_ids }, "manual gate archive input");
+  const state = structuredClone(input.state);
+  if (state.task_id !== authority.task_id || !verifyRepositoryIdentity(state.repository_identity_digest, authority.repository_identity).ok || !validateDurableSemantics({ state: canonicalDocument(state) }).ok) {
+    return issue2("STATE_INVALID", state, "manual-gate-state-authority-invalid");
+  }
+  if (new Set(input.gate_ids).size !== input.gate_ids.length) {
+    return issue2("STATE_INVALID", state, "manual-gate-id-duplicate");
+  }
+  const pairs = [];
+  for (const gateId of input.gate_ids) {
+    const requestPath = await resolvePath6(dependencies, authority, gateRequestClaim(gateId), "decision");
+    const decisionPath = await resolvePath6(dependencies, authority, gateDecisionClaim(gateId), "decision");
+    if (!requestPath.ok) return requestPath;
+    if (!decisionPath.ok) return decisionPath;
+    const request = await readCanonical(requestPath.value, "manual gate request", parseGateRequest);
+    const decision2 = await readCanonical(decisionPath.value, "manual gate decision", parseGateDecisionRecord);
+    if (request === "missing" || request === "invalid") {
+      return issue2("STATE_INVALID", state, "manual-gate-request-invalid");
+    }
+    if (decision2 === "missing" || decision2 === "invalid") {
+      return issue2("STATE_INVALID", state, "manual-gate-decision-invalid");
+    }
+    if (request.value.gate_id !== gateId || request.value.task_id !== authority.task_id || !validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok) {
+      return issue2("STATE_INVALID", state, "manual-gate-archive-binding-invalid");
+    }
+    if (decision2.value.outcome === "superseded") {
+      const resolver = dependencies.resolve_supplemental_review;
+      if (resolver === void 0) return issue2("STATE_INVALID", state, "manual-gate-supplemental-archive-invalid");
+      const resolved = await resolver({ authority, request: request.value });
+      if (!resolved.ok) return resolved;
+      let evidence;
+      try {
+        evidence = parseReviewEvidence(structuredClone(resolved.value.evidence));
+      } catch {
+        return issue2("STATE_INVALID", state, "manual-gate-supplemental-archive-invalid");
+      }
+      const producerFamilies = new Set(request.value.current_evidence.slots.map((candidate) => candidate.producer_family));
+      if (resolved.value.gate_id !== request.value.gate_id || resolved.value.triage_outcome !== "accepted-change" || resolved.value.triage_digest !== decision2.value.supersession.accepted_triage_digest || evidence.role !== "gate-counter-review" || evidence.assurance !== "degraded" || evidence.task_id !== request.value.task_id || evidence.phase_instance !== request.value.phase_instance || evidence.subject_digest !== request.value.subject_digest || evidence.model_family === evidence.producer_family || producerFamilies.size !== 1 || !producerFamilies.has(evidence.producer_family)) {
+        return issue2("STATE_INVALID", state, "manual-gate-supplemental-archive-invalid");
+      }
+    }
+    for (const supplemental2 of decision2.value.supplemental) {
+      const binding = supplementalGate(supplemental2);
+      if (binding.prior_gate_id !== request.value.gate_id || binding.task_id !== request.value.task_id || binding.phase_instance !== request.value.phase_instance || binding.subject_digest !== request.value.subject_digest) {
+        return issue2("STATE_INVALID", state, "manual-gate-supplemental-binding-invalid");
+      }
+      if (supplemental2.action !== "decline" && !await authenticSupplementalReview(dependencies, authority, request.value, binding.input_fingerprint, supplemental2)) {
+        return issue2("STATE_INVALID", state, "manual-gate-supplemental-archive-invalid");
+      }
+    }
+    pairs.push(Object.freeze({
+      request: deepFreezeGateJson(structuredClone(request.value)),
+      decision: deepFreezeGateJson(structuredClone(decision2.value))
+    }));
+  }
+  let importState = state;
+  if (state.open_gate !== void 0) {
+    const pair = pairs.find((candidate) => candidate.request.gate_id === state.open_gate.gate_id);
+    if (pair === void 0 || pair.request.kind !== state.open_gate.gate_kind || pair.request.subject_digest !== state.open_gate.subject_digest || pair.request.context_digest !== state.open_gate.context_digest) {
+      return issue2("STATE_INVALID", state, "manual-gate-open-binding-invalid");
+    }
+    const { open_gate: _open, ...closed } = state;
+    importState = closed;
+  }
+  for (const pair of pairs) {
+    const existingApproval = state.approvals.find((candidate) => candidate.gate_id === pair.request.gate_id);
+    const existingWaiver = state.waivers.find((candidate) => candidate.gate_id === pair.request.gate_id);
+    if (pair.decision.outcome === "decided" && gateDecisionEffect(pair.decision.envelope.payload) === "advance") {
+      if (existingWaiver !== void 0 || existingApproval !== void 0 && (existingApproval.gate_kind !== pair.request.kind || existingApproval.subject_digest !== pair.request.subject_digest || existingApproval.decision_digest !== canonicalJsonDigest(pair.decision) || existingApproval.resolved_at_revision > state.revision)) return issue2("STATE_INVALID", state, "manual-gate-approval-binding-invalid");
+    } else if (pair.decision.outcome === "waiver-decided") {
+      if (existingApproval !== void 0 || existingWaiver !== void 0 && (existingWaiver.rule_id !== pair.decision.origin.rule.rule_id || existingWaiver.rule_version !== pair.decision.origin.rule.rule_version || existingWaiver.subject_digest !== pair.decision.origin.subject_digest || existingWaiver.granted !== pair.decision.granted || !isDeepStrictEqual9(existingWaiver.scope, pair.decision.scope) || existingWaiver.granted_at_revision > state.revision)) return issue2("STATE_INVALID", state, "manual-gate-waiver-binding-invalid");
+    } else if (existingApproval !== void 0 || existingWaiver !== void 0) {
+      return issue2("STATE_INVALID", state, "manual-gate-nonauthorizing-record-has-authority");
+    }
+  }
+  let imported;
+  try {
+    imported = importGateDecisions(importState, pairs);
+  } catch {
+    return issue2("STATE_INVALID", state, "manual-gate-import-invalid");
+  }
+  const approvals = [];
+  for (const pair of pairs) {
+    if (pair.decision.outcome !== "decided" || gateDecisionEffect(pair.decision.envelope.payload) !== "advance") continue;
+    const decisionDigest = canonicalJsonDigest(pair.decision);
+    const approval = imported.approvals.find((candidate) => candidate.gate_id === pair.request.gate_id && candidate.decision_digest === decisionDigest);
+    if (approval === void 0) return issue2("STATE_INVALID", state, "manual-gate-approval-binding-invalid");
+    approvals.push(mintArchivedApproval(approval, pair.request, pair.decision));
+  }
+  const closingPair = state.open_gate === void 0 ? void 0 : pairs.find((pair) => pair.request.gate_id === state.open_gate.gate_id);
+  let postDecisionState;
+  if (closingPair !== void 0) {
+    const closed = await closedStateForRecord(
+      dependencies,
+      authority,
+      canonicalDocument(state),
+      closingPair.request,
+      closingPair.decision,
+      canonicalJsonDigest(closingPair.decision)
+    );
+    if (!closed.ok) return closed;
+    postDecisionState = deepFreezeGateJson(structuredClone(closed.value.value));
+  }
+  const lastDecision = pairs.at(-1)?.decision;
+  const effect = lastDecision?.outcome === "decided" ? gateDecisionEffect(lastDecision.envelope.payload) : "non-advancing";
+  const publicCapability = { gate_ids: Object.freeze([...input.gate_ids]) };
+  Object.defineProperty(publicCapability, authenticatedManualGateFactsBrand, {
+    value: true,
+    enumerable: false,
+    writable: false,
+    configurable: false
+  });
+  Object.freeze(publicCapability);
+  authenticatedManualGateFacts.set(publicCapability, Object.freeze({
+    authority_binding: input.authority_binding,
+    approvals: imported.approvals,
+    waivers: imported.waivers,
+    pairs: Object.freeze(pairs),
+    authenticated_gate_approvals: Object.freeze(approvals),
+    effect,
+    ...postDecisionState === void 0 ? {} : { post_decision_state: postDecisionState }
+  }));
+  return ok6(publicCapability);
+}
 
 // src/state/transitions.ts
 var ok7 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
@@ -63073,10 +62776,443 @@ function planStateTransition(value) {
   return ok7(draft);
 }
 
+// src/state/manual-import.ts
+var evidenceFacts = /* @__PURE__ */ new WeakMap();
+var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+function invalid2(phase4, issue4) {
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code: issue4 })
+  });
+}
+function io2(authority, operation) {
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt })
+  });
+}
+async function readGateDocument(dependencies, authority, gateId, kind, parse3) {
+  const target2 = await resolveTaskPath({
+    runner: dependencies.runner,
+    taskId: authority.task_id,
+    claim: kind === "request" ? gateRequestClaim(gateId) : gateDecisionClaim(gateId),
+    expectedClass: "decision",
+    context: authority.context
+  });
+  if (!target2.ok) return target2;
+  try {
+    const handle = await openResolved(target2.value.absolute, fsConstants5.O_RDONLY);
+    try {
+      const document2 = parseCanonicalDocument(new Uint8Array(await handle.readFile()), `manual gate ${kind}`);
+      return ok8(canonicalDocument(parse3(document2.value)));
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return io2(authority, `read-manual-gate-${kind}`);
+  }
+}
+function exactResultBinding(checkpoint, reference, retained) {
+  const manifest = retained.prepared.manifest;
+  return manifest.digest === reference.result_digest && manifest.value.task_id === checkpoint.task_id && manifest.value.repository_identity_digest === checkpoint.repository_identity_digest && manifest.value.result_id === reference.result_id && manifest.value.phase_instance === reference.phase_instance && manifest.value.step === reference.step && manifest.value.input_fingerprint === reference.input_fingerprint && reference.manifest_path === retained.manifest_target.repositoryRelative;
+}
+function expectedProjections(retained) {
+  const byPath = /* @__PURE__ */ new Map();
+  for (const installation of retained) {
+    for (const projection of installation.prepared.manifest.value.projections) {
+      const previous = byPath.get(projection.path);
+      if (previous !== void 0 && previous.content_digest !== projection.content_digest) {
+        throw new TypeError("reachable retained results disagree about a projection");
+      }
+      byPath.set(projection.path, projection);
+    }
+  }
+  return Object.freeze([...byPath.values()].sort((left, right) => left.path.localeCompare(right.path)));
+}
+async function loadManualImportEvidence(input) {
+  if (!isDeepStrictEqual11(Object.keys(input).sort(), ["artifact", "authority", "dependencies"])) {
+    throw new TypeError("manual import evidence input has unexpected or missing fields");
+  }
+  const { dependencies, authority } = input;
+  assertInternalTransactionAuthority(authority, { runner: dependencies.runner, environment: dependencies.environment });
+  assertPlainJson(input.artifact, "manual checkpoint import");
+  const artifact = structuredClone(input.artifact);
+  if (artifact.task_id !== authority.task_id || !verifyRepositoryIdentity(artifact.repository_identity_digest, authority.repository_identity).ok) {
+    return invalid2(authority.context.phase_instance, "manual-import-authority-mismatch");
+  }
+  const selected = selectGreatestValidChain(chainAnchor(artifact), artifact.chain);
+  if (selected.kind !== "chain" || selected.chain.length !== artifact.chain.length || !isDeepStrictEqual11(selected.chain, artifact.chain)) {
+    return invalid2(authority.context.phase_instance, selected.kind === "stop" ? `manual-import-chain-${selected.outcome}` : "manual-import-chain-not-exact");
+  }
+  if (selected.chain.some((checkpoint) => checkpoint.terminal === "abandoned")) {
+    return invalid2(authority.context.phase_instance, "manual-import-abandoned-authority-unauthenticated");
+  }
+  if (dependencies.load_retained_result === void 0) {
+    return invalid2(authority.context.phase_instance, "manual-import-result-loader-unavailable");
+  }
+  const checkpoints = /* @__PURE__ */ new Map();
+  const selectedHead = selected.chain.at(-1);
+  let planningBase;
+  const evidenceBinding = Object.freeze({});
+  if (artifact.import_mode === "initial") {
+    const first = selected.chain[0];
+    if (!("initialization" in first)) return invalid2(first.phase_instance, "manual-import-initialization-missing");
+    planningBase = initialBase(first);
+  } else {
+    const observed = await dependencies.read_state(authority.state);
+    if (observed.kind !== "canonical") return invalid2(authority.context.phase_instance, "manual-import-current-state-unavailable");
+    planningBase = observed.document.value;
+  }
+  for (const [checkpointIndex, checkpoint] of selected.chain.entries()) {
+    const priorCheckpoint = checkpointIndex === 0 ? void 0 : selected.chain[checkpointIndex - 1];
+    const closedPriorGate = priorCheckpoint?.open_gate !== void 0 && checkpoint.open_gate === void 0 ? priorCheckpoint.open_gate : void 0;
+    if (checkpoint === selectedHead && checkpoint.open_gate !== void 0) {
+      return invalid2(checkpoint.phase_instance, "manual-import-open-gate-must-close-cancel-or-supersede");
+    }
+    const retained = /* @__PURE__ */ new Map();
+    for (const reference of checkpoint.authoritative_results) {
+      const loaded = await dependencies.load_retained_result(reference);
+      if (!loaded.ok) return loaded;
+      if (!exactResultBinding(checkpoint, reference, loaded.value)) {
+        return invalid2(checkpoint.phase_instance, "manual-import-result-binding-invalid");
+      }
+      retained.set(reference.result_digest, loaded.value);
+    }
+    let projections;
+    try {
+      projections = expectedProjections(retained.values());
+    } catch {
+      return invalid2(checkpoint.phase_instance, "manual-import-projection-disagreement");
+    }
+    if (!isDeepStrictEqual11(projections, checkpoint.projections)) {
+      return invalid2(checkpoint.phase_instance, "manual-import-projection-binding-invalid");
+    }
+    for (const entry of checkpoint.evidence_chain) {
+      const produce = [...retained.values()].find((installation) => installation.prepared.manifest.value.phase_instance === entry.phase_instance && installation.prepared.manifest.value.step === "produce" && installation.prepared.manifest.value.artifact_digest === entry.subject_digest);
+      if (produce === void 0) {
+        return invalid2(checkpoint.phase_instance, "manual-import-evidence-subject-missing");
+      }
+      for (const slot of entry.current_evidence.slots) {
+        const evidenceResult = [...retained.values()].find((installation) => {
+          const manifest = installation.prepared.manifest.value;
+          const source = manifest.source_artifact;
+          return manifest.phase_instance === entry.phase_instance && manifest.artifact_digest === slot.evidence_digest && (source.artifact_kind === "review-evidence" || source.artifact_kind === "triage" || source.artifact_kind === "adjudication-evidence") && source.evidence.subject_digest === entry.subject_digest && source.evidence.input_fingerprint === entry.input_fingerprint;
+        });
+        if (evidenceResult === void 0) {
+          return invalid2(checkpoint.phase_instance, "manual-import-evidence-result-missing");
+        }
+      }
+    }
+    const gates = /* @__PURE__ */ new Map();
+    const gateRefs = [
+      ...checkpoint.approvals.map((reference) => ({ gate_id: reference.gate_id, reference })),
+      ...checkpoint.waivers.map((reference) => ({ gate_id: reference.gate_id, reference })),
+      ...checkpoint.open_gate === void 0 ? [] : [{ gate_id: checkpoint.open_gate.gate_id, reference: void 0 }],
+      ...closedPriorGate === void 0 ? [] : [{ gate_id: closedPriorGate.gate_id, reference: void 0 }]
+    ];
+    for (const gateEntry of gateRefs) {
+      const { gate_id: gateId, reference } = gateEntry;
+      if (gates.has(gateId)) continue;
+      const request = await readGateDocument(dependencies, authority, gateId, "request", parseGateRequest);
+      if (!request.ok) return request;
+      const decision2 = await readGateDocument(dependencies, authority, gateId, "decision", parseGateDecisionRecord);
+      if (!decision2.ok) return decision2;
+      const semantics = validateDurableSemantics({ gate_request: request.value, gate_decision: decision2.value });
+      if (!semantics.ok) return semantics;
+      if (request.value.value.task_id !== checkpoint.task_id || request.value.value.gate_id !== gateId || decision2.value.value.task_id !== checkpoint.task_id || decision2.value.value.gate_id !== gateId) {
+        return invalid2(checkpoint.phase_instance, "manual-import-gate-binding-invalid");
+      }
+      if (checkpoint.open_gate?.gate_id === gateId && (request.value.value.kind !== checkpoint.open_gate.gate_kind || request.value.value.subject_digest !== checkpoint.open_gate.subject_digest || request.value.value.context_digest !== checkpoint.open_gate.context_digest || request.value.value.opened_at_revision !== checkpoint.open_gate.opened_at_revision)) {
+        return invalid2(checkpoint.phase_instance, "manual-import-open-gate-request-binding-invalid");
+      }
+      if (closedPriorGate?.gate_id === gateId && (request.value.value.kind !== closedPriorGate.gate_kind || request.value.value.subject_digest !== closedPriorGate.subject_digest || request.value.value.context_digest !== closedPriorGate.context_digest || request.value.value.opened_at_revision !== closedPriorGate.opened_at_revision)) {
+        return invalid2(checkpoint.phase_instance, "manual-import-closed-gate-request-binding-invalid");
+      }
+      const expectedDigest = reference !== void 0 && "decision_digest" in reference ? reference.decision_digest : void 0;
+      if (expectedDigest !== void 0 && decision2.value.digest !== expectedDigest) {
+        return invalid2(checkpoint.phase_instance, "manual-import-gate-decision-digest-mismatch");
+      }
+      if (reference !== void 0 && "decision_digest" in reference) {
+        if (decision2.value.value.outcome !== "decided" || gateDecisionEffect(decision2.value.value.envelope.payload) !== "advance" || request.value.value.kind !== reference.gate_kind || request.value.value.subject_digest !== reference.subject_digest) {
+          return invalid2(checkpoint.phase_instance, "manual-import-approval-binding-invalid");
+        }
+      } else if (reference !== void 0) {
+        const record3 = decision2.value.value;
+        if (record3.outcome !== "waiver-decided" || record3.granted !== reference.granted || record3.origin.rule.rule_id !== reference.rule_id || record3.origin.rule.rule_version !== reference.rule_version || record3.origin.subject_digest !== reference.subject_digest || !isDeepStrictEqual11(record3.scope, reference.scope)) {
+          return invalid2(checkpoint.phase_instance, "manual-import-waiver-binding-invalid");
+        }
+      }
+      gates.set(gateId, Object.freeze({
+        request: request.value.value,
+        decision: decision2.value.value,
+        decision_digest: decision2.value.digest
+      }));
+    }
+    const committed2 = [];
+    for (const approval of checkpoint.approvals) {
+      if (approval.gate_kind !== "commit-authorization") continue;
+      const pair = gates.get(approval.gate_id);
+      if (pair?.decision.outcome !== "decided" || gateDecisionEffect(pair.decision.envelope.payload) !== "advance" || pair.request.kind !== "commit-authorization" || pair.request.subject_digest !== approval.subject_digest) {
+        return invalid2(checkpoint.phase_instance, "manual-import-commit-authorization-invalid");
+      }
+      const implementation = [...retained.entries()].find(([, installation]) => installation.prepared.manifest.value.artifact_digest === approval.subject_digest && installation.prepared.manifest.value.source_artifact.artifact_kind === "implementation-output");
+      if (implementation === void 0) {
+        return invalid2(checkpoint.phase_instance, "manual-import-implementation-result-missing");
+      }
+      const source = implementation[1].prepared.manifest.value.source_artifact;
+      if (source.artifact_kind !== "implementation-output" || source.phase_instance !== pair.request.phase_instance || source.phase_instance !== implementation[1].prepared.manifest.value.phase_instance || !await implementationOutputCommittedAtCurrentTarget(dependencies.runner, source, pair.request.context.target_ref)) {
+        return invalid2(checkpoint.phase_instance, "manual-import-committed-tree-proof-missing");
+      }
+      committed2.push(Object.freeze({
+        result_digest: implementation[0],
+        phase_instance: source.phase_instance,
+        subject_digest: approval.subject_digest,
+        gate_id: approval.gate_id
+      }));
+    }
+    const commitGateIds = checkpoint.approvals.filter((approval) => approval.gate_kind === "commit-authorization").map((approval) => approval.gate_id);
+    let authenticatedCommitApprovals = [];
+    if (commitGateIds.length > 0) {
+      const authenticated = await loadAuthenticatedManualGateFacts({
+        dependencies,
+        transaction_authority: authority,
+        authority_binding: evidenceBinding,
+        state: checkpointState(planningBase, checkpoint),
+        gate_ids: commitGateIds
+      });
+      if (!authenticated.ok) return authenticated;
+      authenticatedCommitApprovals = resolveAuthenticatedManualGateFacts(
+        authenticated.value,
+        evidenceBinding
+      ).authenticated_gate_approvals.filter((candidate) => candidate.approval.gate_kind === "commit-authorization");
+    }
+    let plannedFinalPhase;
+    const designApproval = checkpoint.approvals.find((approval) => approval.gate_kind === "artifact-approval" && [...retained.values()].some((installation) => installation.prepared.manifest.value.phase_instance === "design" && installation.prepared.manifest.value.step === "produce" && installation.prepared.manifest.value.artifact_digest === approval.subject_digest));
+    if (designApproval !== void 0) {
+      const pair = gates.get(designApproval.gate_id);
+      if (pair === void 0) return invalid2(checkpoint.phase_instance, "manual-approved-design-authority-missing");
+      const planned = await loadApprovedDesignFinalPhase(
+        dependencies,
+        checkpointState(planningBase, checkpoint),
+        pair.decision
+      );
+      if (!planned.ok) return planned;
+      plannedFinalPhase = planned.value === void 0 || planned.value === null ? planned.value : planned.value;
+    }
+    const digest11 = checkpointSelfDigest(checkpoint);
+    checkpoints.set(digest11, Object.freeze({
+      checkpoint_digest: digest11,
+      retained,
+      gates,
+      committed_implementations: Object.freeze(committed2),
+      authenticated_commit_approvals: Object.freeze(authenticatedCommitApprovals),
+      ...plannedFinalPhase === void 0 ? {} : { planned_final_phase: plannedFinalPhase }
+    }));
+    planningBase = checkpointState(planningBase, checkpoint);
+    if (plannedFinalPhase === null) {
+      const { planned_final_phase: _planned, ...withoutPlanned } = planningBase;
+      planningBase = withoutPlanned;
+    } else if (plannedFinalPhase !== void 0) {
+      planningBase = { ...planningBase, planned_final_phase: plannedFinalPhase };
+    }
+  }
+  const capability = Object.freeze({ kind: "authenticated-manual-import-evidence" });
+  evidenceFacts.set(capability, Object.freeze({ artifact_digest: canonicalDocument(artifact).digest, checkpoints }));
+  return ok8(capability);
+}
+function exactCommittedTransitionFacts(cursor, checkpoint, evidence) {
+  const decoded = decodePhaseInstance(cursor.phase_instance);
+  if (decoded.kind !== "phase-impl" || cursor.step !== "adjudicate" || cursor.status !== "succeeded") return void 0;
+  const proof = evidence.committed_implementations.find((candidate) => candidate.phase_instance === cursor.phase_instance && cursor.authoritative_results.some((reference) => reference.phase_instance === cursor.phase_instance && reference.step === "produce" && reference.result_digest === candidate.result_digest));
+  if (proof === void 0) return void 0;
+  const approval = checkpoint.approvals.find((candidate) => candidate.gate_id === proof.gate_id && candidate.gate_kind === "commit-authorization" && candidate.subject_digest === proof.subject_digest);
+  if (approval === void 0) return void 0;
+  const authenticated = evidence.authenticated_commit_approvals.find((candidate) => candidate.approval.gate_id === proof.gate_id && candidate.approval.subject_digest === proof.subject_digest && candidate.request.kind === "commit-authorization" && candidate.request.phase_instance === cursor.phase_instance);
+  if (authenticated === void 0) return void 0;
+  let legal = false;
+  if (checkpoint.terminal === "complete") {
+    legal = cursor.planned_final_phase !== void 0 && Number(decoded.phase) === Number(cursor.planned_final_phase) && checkpoint.phase_instance === cursor.phase_instance && checkpoint.step === cursor.step && checkpoint.status === cursor.status && checkpoint.attempt === cursor.attempt && checkpoint.input_fingerprint === cursor.input_fingerprint && isDeepStrictEqual11(checkpoint.authoritative_results, cursor.authoritative_results);
+  } else {
+    const target2 = decodePhaseInstance(checkpoint.phase_instance);
+    legal = (cursor.planned_final_phase === void 0 || Number(decoded.phase) < Number(cursor.planned_final_phase)) && target2.kind === "phase-design" && Number(target2.phase) === Number(decoded.phase) + 1 && checkpoint.step === "produce" && checkpoint.status === "running" && checkpoint.attempt === 1 && isDeepStrictEqual11(checkpoint.authoritative_results, cursor.authoritative_results);
+  }
+  return legal ? Object.freeze({
+    completion_subject_digest: proof.subject_digest,
+    authenticated_gate_approvals: Object.freeze([authenticated]),
+    commit_observed: true
+  }) : void 0;
+}
+function checkpointState(base2, checkpoint) {
+  return {
+    ...base2,
+    phase_instance: checkpoint.phase_instance,
+    step: checkpoint.step,
+    status: checkpoint.status,
+    attempt: checkpoint.attempt,
+    input_fingerprint: checkpoint.input_fingerprint,
+    authoritative_results: structuredClone(checkpoint.authoritative_results),
+    approvals: structuredClone(checkpoint.approvals),
+    waivers: structuredClone(checkpoint.waivers),
+    ...checkpoint.terminal === void 0 ? {} : { terminal: checkpoint.terminal }
+  };
+}
+function preservesGateRefs(current, checkpoint) {
+  return current.approvals.every((reference) => checkpoint.approvals.some((candidate) => isDeepStrictEqual11(candidate, reference))) && current.waivers.every((reference) => checkpoint.waivers.some((candidate) => isDeepStrictEqual11(candidate, reference)));
+}
+function authenticatedClosedGate(prior, checkpoint, evidence) {
+  const open5 = prior?.open_gate;
+  if (open5 === void 0 || checkpoint.open_gate !== void 0) return void 0;
+  const pair = evidence.gates.get(open5.gate_id);
+  return pair !== void 0 && pair.request.gate_id === open5.gate_id && pair.request.kind === open5.gate_kind && pair.request.subject_digest === open5.subject_digest && pair.request.context_digest === open5.context_digest && pair.request.opened_at_revision === open5.opened_at_revision && pair.decision.gate_id === open5.gate_id ? pair : void 0;
+}
+function isAuthenticatedRetryLanding(cursor, checkpoint, pair) {
+  if (pair?.decision.outcome !== "decided" || gateDecisionEffect(pair.decision.envelope.payload) !== "retry") return false;
+  const decision2 = pair.decision.envelope.payload.decision;
+  const reentry = pair.request.kind === "review-trigger" && decision2 === "revise" || pair.request.kind === "adjudication-failure" && decision2 === "revise" || pair.request.kind === "material-drift" && decision2 === "revise-current" || pair.request.kind === "attempts-exhausted" && (decision2 === "retry-once" || decision2 === "revise");
+  return reentry && cursor.status === "succeeded" && (cursor.step === "triage" || cursor.step === "adjudicate") && checkpoint.phase_instance === cursor.phase_instance && checkpoint.step === "produce" && checkpoint.status === "running" && checkpoint.attempt === cursor.attempt + 1 && checkpoint.input_fingerprint !== cursor.input_fingerprint && isDeepStrictEqual11(checkpoint.authoritative_results, cursor.authoritative_results) && isDeepStrictEqual11(checkpoint.approvals, cursor.approvals) && isDeepStrictEqual11(checkpoint.waivers, cursor.waivers);
+}
+function initialBase(checkpoint) {
+  const initialization = checkpoint.initialization;
+  return {
+    schema_version: "1",
+    task_id: initialization.task_id,
+    repository_identity_digest: initialization.repository_identity_digest,
+    revision: 1,
+    phase_instance: checkpoint.phase_instance,
+    step: checkpoint.step,
+    status: checkpoint.status,
+    attempt: checkpoint.attempt,
+    input_fingerprint: checkpoint.input_fingerprint,
+    initialization_digest: checkpoint.initialization_digest,
+    config_digest: initialization.config_digest,
+    workflow_digest: initialization.workflow_digest,
+    constitution_digest: initialization.constitution_digest,
+    policy_base_commit: initialization.policy_base_commit,
+    authoritative_results: [],
+    approvals: [],
+    waivers: []
+  };
+}
+function reduceAuthenticatedManualChain(input) {
+  const facts = evidenceFacts.get(input.evidence);
+  if (facts === void 0) throw new TypeError("authenticated manual import evidence is required");
+  assertPlainJson(input.artifact, "manual checkpoint import reduction artifact");
+  const artifact = structuredClone(input.artifact);
+  if (facts.artifact_digest !== canonicalDocument(artifact).digest) {
+    throw new TypeError("manual import evidence belongs to another artifact");
+  }
+  const selected = selectGreatestValidChain(chainAnchor(artifact), artifact.chain);
+  if (selected.kind !== "chain" || selected.chain.length !== artifact.chain.length || selected.chain.length === 0) {
+    return invalid2(input.current?.phase_instance ?? artifact.chain[0].phase_instance, "manual-import-chain-not-exact");
+  }
+  if (selected.chain.some((checkpoint) => checkpoint.terminal === "abandoned")) {
+    return invalid2(
+      input.current?.phase_instance ?? selected.chain[0].phase_instance,
+      "manual-import-abandoned-authority-unauthenticated"
+    );
+  }
+  const first = selected.chain[0];
+  let cursor;
+  if (artifact.import_mode === "initial") {
+    if (!("initialization" in first)) return invalid2(first.phase_instance, "manual-import-initialization-missing");
+    cursor = initialBase(first);
+  } else {
+    if (input.current === void 0) return invalid2(first.phase_instance, "manual-import-current-state-required");
+    cursor = structuredClone(input.current);
+  }
+  for (let index = 0; index < selected.chain.length; index += 1) {
+    const checkpoint = selected.chain[index];
+    const priorCheckpoint = index === 0 ? void 0 : selected.chain[index - 1];
+    const evidence = facts.checkpoints.get(checkpointSelfDigest(checkpoint));
+    if (evidence === void 0) throw new TypeError("manual import evidence is incomplete");
+    if (evidence.planned_final_phase === null) {
+      const { planned_final_phase: _planned, ...withoutPlanned } = cursor;
+      cursor = withoutPlanned;
+    } else if (evidence.planned_final_phase !== void 0) {
+      cursor = { ...cursor, planned_final_phase: evidence.planned_final_phase };
+    }
+    if (checkpoint.open_gate !== void 0) continue;
+    const closedGate = authenticatedClosedGate(priorCheckpoint, checkpoint, evidence);
+    const samePosition = cursor.phase_instance === checkpoint.phase_instance && cursor.step === checkpoint.step && cursor.status === checkpoint.status && cursor.attempt === checkpoint.attempt && cursor.input_fingerprint === checkpoint.input_fingerprint;
+    const terminalAdded = cursor.terminal === void 0 && checkpoint.terminal !== void 0;
+    const commitFacts = exactCommittedTransitionFacts(cursor, checkpoint, evidence);
+    if (!preservesGateRefs(cursor, checkpoint)) {
+      return invalid2(checkpoint.phase_instance, "manual-import-gate-authority-removed");
+    }
+    if (!samePosition) {
+      const resultReference = checkpoint.status === "succeeded" ? checkpoint.authoritative_results.find((reference) => reference.phase_instance === checkpoint.phase_instance && reference.step === checkpoint.step && reference.input_fingerprint === checkpoint.input_fingerprint) : void 0;
+      const retainedArtifact = resultReference === void 0 ? void 0 : evidence.retained.get(resultReference.result_digest)?.prepared.manifest.value.source_artifact;
+      if (resultReference !== void 0 && retainedArtifact === void 0) {
+        return invalid2(checkpoint.phase_instance, "manual-import-result-evidence-missing");
+      }
+      const transitionArtifact = retainedArtifact?.artifact_kind === "adjudication-evidence" ? void 0 : retainedArtifact;
+      const transition = planStateTransition({
+        current: cursor,
+        target: {
+          phase_instance: checkpoint.phase_instance,
+          step: checkpoint.step,
+          status: checkpoint.status,
+          attempt: checkpoint.attempt,
+          input_fingerprint: checkpoint.input_fingerprint
+        },
+        recomputed_input_fingerprint: checkpoint.input_fingerprint,
+        ...commitFacts === void 0 ? {
+          ...transitionArtifact === void 0 ? {} : { artifact: transitionArtifact },
+          ...resultReference === void 0 ? {} : { result_reference: resultReference }
+        } : commitFacts
+      });
+      if (!transition.ok) {
+        if (!isAuthenticatedRetryLanding(cursor, checkpoint, closedGate)) return transition;
+      } else if (!isDeepStrictEqual11(transition.value.authoritative_results, checkpoint.authoritative_results)) {
+        return invalid2(checkpoint.phase_instance, "manual-import-result-transition-mismatch");
+      }
+    } else if (!terminalAdded && isDeepStrictEqual11(cursor.approvals, checkpoint.approvals) && isDeepStrictEqual11(cursor.waivers, checkpoint.waivers) && isDeepStrictEqual11(cursor.authoritative_results, checkpoint.authoritative_results)) {
+      const authenticatedNonStateClosure = closedGate !== void 0 && (closedGate.decision.outcome === "cancelled" || closedGate.decision.outcome === "superseded" || closedGate.decision.outcome === "decided" && gateDecisionEffect(closedGate.decision.envelope.payload) !== "advance");
+      if (!(artifact.import_mode === "initial" && index === 0) && !authenticatedNonStateClosure) {
+        return invalid2(checkpoint.phase_instance, "manual-import-checkpoint-no-effect");
+      }
+    }
+    if (terminalAdded) {
+      if (checkpoint.terminal !== "complete") {
+        return invalid2(checkpoint.phase_instance, "manual-import-terminal-authority-invalid");
+      }
+      if (commitFacts === void 0) return invalid2(checkpoint.phase_instance, "manual-import-terminal-commit-proof-missing");
+      const terminal = planStateTransition({
+        current: cursor,
+        target: {
+          phase_instance: checkpoint.phase_instance,
+          step: checkpoint.step,
+          status: checkpoint.status,
+          attempt: checkpoint.attempt,
+          input_fingerprint: checkpoint.input_fingerprint
+        },
+        recomputed_input_fingerprint: checkpoint.input_fingerprint,
+        ...commitFacts
+      });
+      if (!terminal.ok || terminal.value.terminal !== "complete") {
+        return invalid2(checkpoint.phase_instance, "manual-import-terminal-commit-proof-missing");
+      }
+    }
+    cursor = checkpointState(cursor, checkpoint);
+  }
+  const head = selected.chain.at(-1);
+  const { revision: _revision, committed_intent: _intent, open_gate: _gate, ...draft } = cursor;
+  const next = {
+    ...draft,
+    adopted_checkpoint: {
+      revision: head.revision,
+      checkpoint_digest: checkpointSelfDigest(head)
+    }
+  };
+  return ok8(Object.freeze({ next_state: Object.freeze(next), head }));
+}
+
 // src/state/checkpoints.ts
 var authenticAdoptionPlans = /* @__PURE__ */ new WeakMap();
-var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var invalid2 = (phase4, issue_code) => Object.freeze({
+var ok9 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var invalid3 = (phase4, issue_code) => Object.freeze({
   schema_version: "1",
   ok: false,
   error: createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code })
@@ -63097,13 +63233,15 @@ function assertInternalCheckpointAdoptionPlan(value) {
   }
 }
 function planCheckpointAdoption(value) {
-  if (!isDeepStrictEqual11(Object.keys(value).sort(), ["call", "current", "expectation", "result"])) {
+  const keys = Object.keys(value).sort();
+  if (!isDeepStrictEqual12(keys, ["call", "current", "expectation", "result"]) && !isDeepStrictEqual12(keys, ["call", "current", "evidence", "expectation", "result"])) {
     throw new TypeError("checkpoint adoption input has unexpected or missing fields");
   }
   const currentDocument = ownField(value, "current");
   const call = ownField(value, "call");
   const expectation = ownField(value, "expectation");
   const result = ownField(value, "result");
+  const evidence = keys.includes("evidence") ? ownField(value, "evidence") : void 0;
   const artifactValue = call.input.artifact;
   if (artifactValue?.artifact_kind !== "manual-checkpoint-import") {
     throw new TypeError("checkpoint adoption requires a manual-checkpoint-import artifact");
@@ -63111,75 +63249,36 @@ function planCheckpointAdoption(value) {
   assertPlainJson(artifactValue, "manual checkpoint import");
   const artifact = structuredClone(artifactValue);
   if (artifact.import_mode === "initial") {
-    return invalid2(currentDocument.value.phase_instance, "checkpoint-initial-import-requires-missing-state");
+    return invalid3(currentDocument.value.phase_instance, "checkpoint-initial-import-requires-missing-state");
+  }
+  if (evidence === void 0) {
+    return invalid3(currentDocument.value.phase_instance, "manual-import-evidence-required");
   }
   const artifactDocument = canonicalDocument(artifact);
   const semantics = validateDurableSemantics({ state: currentDocument, artifact: artifactDocument });
   if (!semantics.ok) return semantics;
   const selected = selectGreatestValidChain(chainAnchor(artifact), artifact.chain);
   if (selected.kind !== "chain") {
-    return invalid2(currentDocument.value.phase_instance, `checkpoint-chain-${selected.outcome}`);
+    return invalid3(currentDocument.value.phase_instance, `checkpoint-chain-${selected.outcome}`);
   }
-  if (selected.chain.length !== artifact.chain.length || !isDeepStrictEqual11(selected.chain, artifact.chain)) {
-    return invalid2(currentDocument.value.phase_instance, "checkpoint-chain-not-exact");
+  if (selected.chain.length !== artifact.chain.length || !isDeepStrictEqual12(selected.chain, artifact.chain)) {
+    return invalid3(currentDocument.value.phase_instance, "checkpoint-chain-not-exact");
   }
   const head = selected.chain.at(-1);
-  if (head === void 0) return invalid2(currentDocument.value.phase_instance, "checkpoint-chain-empty");
+  if (head === void 0) return invalid3(currentDocument.value.phase_instance, "checkpoint-chain-empty");
   if (call.input.phase_instance !== head.phase_instance || call.input.step !== head.step || call.input.status !== head.status || call.input.input_fingerprint !== head.input_fingerprint) {
-    return invalid2(currentDocument.value.phase_instance, "checkpoint-chain-head-request-mismatch");
+    return invalid3(currentDocument.value.phase_instance, "checkpoint-chain-head-request-mismatch");
   }
-  let cursor = currentDocument.value;
-  for (let index = 0; index < selected.chain.length; index += 1) {
-    const checkpoint = selected.chain[index];
-    const resultReference = checkpoint.status === "succeeded" ? checkpoint.authoritative_results.find((reference) => reference.phase_instance === checkpoint.phase_instance && reference.step === checkpoint.step && reference.input_fingerprint === checkpoint.input_fingerprint) : void 0;
-    const transition = planStateTransition({
-      current: cursor,
-      target: {
-        phase_instance: checkpoint.phase_instance,
-        step: checkpoint.step,
-        status: checkpoint.status,
-        attempt: checkpoint.attempt,
-        input_fingerprint: checkpoint.input_fingerprint
-      },
-      recomputed_input_fingerprint: checkpoint.input_fingerprint,
-      artifact,
-      ...resultReference === void 0 ? {} : { result_reference: resultReference }
-    });
-    if (!transition.ok) return transition;
-    cursor = { ...transition.value, revision: cursor.revision };
-  }
-  const current = currentDocument.value;
-  const {
-    revision: _revision,
-    committed_intent: _committed,
-    open_gate: _openGate,
-    terminal: _terminal,
-    ...preserved
-  } = current;
-  const next = {
-    ...preserved,
-    phase_instance: head.phase_instance,
-    step: head.step,
-    status: head.status,
-    attempt: head.attempt,
-    input_fingerprint: head.input_fingerprint,
-    authoritative_results: structuredClone(head.authoritative_results),
-    approvals: structuredClone(head.approvals),
-    waivers: structuredClone(head.waivers),
-    adopted_checkpoint: {
-      revision: parseSafeInteger(head.revision),
-      checkpoint_digest: checkpointSelfDigest(head)
-    },
-    ...head.open_gate === void 0 ? {} : { open_gate: structuredClone(head.open_gate) },
-    ...head.terminal === void 0 ? {} : { terminal: head.terminal }
-  };
+  const reduced = reduceAuthenticatedManualChain({ artifact, evidence, current: currentDocument.value });
+  if (!reduced.ok) return reduced;
+  const next = reduced.value.next_state;
   const prepared = Object.freeze({
     expectation,
     result,
     next_state: Object.freeze(next)
   });
   authenticAdoptionPlans.set(prepared, canonicalDocument(next).digest);
-  return ok8(prepared);
+  return ok9(prepared);
 }
 
 // src/state/transaction.ts
@@ -63224,7 +63323,7 @@ function prepareResultInstallation(plan) {
   return capability;
 }
 var authenticTransactionOutcomes = /* @__PURE__ */ new WeakSet();
-var ok9 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok10 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail9 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function issue3(code, issue_code) {
   return code === "CONTRACT_INVALID" ? fail9(createProjectError("CONTRACT_INVALID", { issue_code })) : fail9(createProjectError("CONFIG_INVALID", { issue_code }));
@@ -63235,7 +63334,7 @@ function stateIssue(state, issue_code) {
 function taskIssue(task_id, issue_code) {
   return fail9(createProjectError("TASK_INVALID", { task_id, issue_code }));
 }
-function io2(authority, operation) {
+function io3(authority, operation) {
   return fail9(createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt }));
 }
 function mismatch(expected_digest, observed_digest) {
@@ -63305,20 +63404,20 @@ function materializeDraft(value) {
   return structuredClone(value);
 }
 function sameCheckpoint(left, right) {
-  return isDeepStrictEqual12(left, right);
+  return isDeepStrictEqual13(left, right);
 }
 function assertPreserved(current, next, preparedValue) {
   if (next.task_id !== current.task_id || next.repository_identity_digest !== current.repository_identity_digest || next.initialization_digest !== current.initialization_digest || next.config_digest !== current.config_digest || next.workflow_digest !== current.workflow_digest || next.constitution_digest !== current.constitution_digest || next.policy_base_commit !== current.policy_base_commit) {
     throw new TypeError("next state draft changed a transaction-substrate identity or pin");
   }
-  if (!sameCheckpoint(next.adopted_checkpoint, current.adopted_checkpoint) || !isDeepStrictEqual12(next.open_gate, current.open_gate) || !isDeepStrictEqual12(next.approvals, current.approvals) || !isDeepStrictEqual12(next.waivers, current.waivers)) {
+  if (!sameCheckpoint(next.adopted_checkpoint, current.adopted_checkpoint) || !isDeepStrictEqual13(next.open_gate, current.open_gate) || !isDeepStrictEqual13(next.approvals, current.approvals) || !isDeepStrictEqual13(next.waivers, current.waivers)) {
     assertInternalCheckpointAdoptionPlan(preparedValue);
   }
 }
 function outcomeResult(state, outcome, replayed) {
   const value = Object.freeze({ state, outcome, replayed });
   authenticTransactionOutcomes.add(value);
-  return ok9(value);
+  return ok10(value);
 }
 async function resolveIntentTarget(dependencies, request) {
   const claim = parseTaskPathClaim(`intents/${request.call.input.intent_id}.json`);
@@ -63343,7 +63442,7 @@ function stateReadFailure(result) {
   return issue3("CONTRACT_INVALID", result.kind === "missing" ? "task-state-missing" : result.kind === "unreadable" ? "task-state-unreadable" : "task-state-noncanonical");
 }
 function receiptShellFailure(current, claimed, result, authority) {
-  if (result.kind === "unreadable") return io2(authority, "intent-receipt-read");
+  if (result.kind === "unreadable") return io3(authority, "intent-receipt-read");
   if (result.kind === "missing") {
     return claimed ? stateIssue(current, "intent-receipt-missing") : void 0;
   }
@@ -63352,7 +63451,7 @@ function receiptShellFailure(current, claimed, result, authority) {
 async function liveIdentification(dependencies, request, current) {
   const config2 = await dependencies.read_config(request.authority.config);
   if (config2.kind !== "valid") {
-    return config2.kind === "invalid" ? issue3("CONFIG_INVALID", "task-config-invalid") : io2(request.authority, "task-config-read");
+    return config2.kind === "invalid" ? issue3("CONFIG_INVALID", "task-config-invalid") : io3(request.authority, "task-config-read");
   }
   if (config2.snapshot.digest !== current.value.config_digest) {
     return fail9(createProjectError("PINNED_CONFIG_MISMATCH", {
@@ -63374,13 +63473,13 @@ async function liveIdentification(dependencies, request, current) {
   if (inputFingerprint !== request.call.input.input_fingerprint) {
     return fingerprintMismatch(inputFingerprint, request.call.input.input_fingerprint);
   }
-  return ok9(identifyTransactionRequest(request.call, request.authority, inputFingerprint));
+  return ok10(identifyTransactionRequest(request.call, request.authority, inputFingerprint));
 }
 function identifyFromReceipt(request, receipt) {
   if (receipt.input_fingerprint !== request.call.input.input_fingerprint) {
     return fingerprintMismatch(receipt.input_fingerprint, request.call.input.input_fingerprint);
   }
-  return ok9(identifyTransactionRequest(request.call, request.authority, receipt.input_fingerprint));
+  return ok10(identifyTransactionRequest(request.call, request.authority, receipt.input_fingerprint));
 }
 function validateReceiptIdentity(request, receipt) {
   if (receipt.intent_id !== request.call.input.intent_id) {
@@ -63399,7 +63498,7 @@ function validateReceiptIdentity(request, receipt) {
   if (receipt.prepared_state.input_fingerprint !== receipt.input_fingerprint) {
     return taskIssue(receipt.task_id, "intent-receipt-input-fingerprint-mismatch");
   }
-  return ok9(void 0);
+  return ok10(void 0);
 }
 function validateReceiptLocally(receiptDocument) {
   const receipt = receiptDocument.value;
@@ -63421,10 +63520,10 @@ function validateReceiptLocally(receiptDocument) {
   if (receipt.prepared_state.committed_intent !== void 0) {
     return taskIssue(receipt.task_id, "intent-receipt-prepared-state-committed-intent-present");
   }
-  return ok9(void 0);
+  return ok10(void 0);
 }
 function validateAdoptionPreparedState(request, receipt) {
-  if (receipt.operation !== "adopt-manual-checkpoint-import") return ok9(void 0);
+  if (receipt.operation !== "adopt-manual-checkpoint-import") return ok10(void 0);
   if (request.call.name !== "archflow_state") {
     return taskIssue(receipt.task_id, "intent-receipt-adopted-checkpoint-mismatch");
   }
@@ -63441,7 +63540,7 @@ function validateAdoptionPreparedState(request, receipt) {
   if (!sameCheckpoint(receipt.prepared_state.adopted_checkpoint, expected)) {
     return taskIssue(receipt.task_id, "intent-receipt-adopted-checkpoint-mismatch");
   }
-  return ok9(void 0);
+  return ok10(void 0);
 }
 function replayOutcome(request, receipt) {
   try {
@@ -63453,7 +63552,7 @@ function replayOutcome(request, receipt) {
     if (!validated.ok || validated.value.revision !== receipt.resulting_revision) {
       return taskIssue(receipt.task_id, "intent-receipt-reference-result-mismatch");
     }
-    return ok9(validated.value);
+    return ok10(validated.value);
   } catch {
     return taskIssue(receipt.task_id, "intent-receipt-reference-result-mismatch");
   }
@@ -63481,7 +63580,7 @@ function materializePlan(value) {
   const hasInstallation = Object.hasOwn(value, "result_installation");
   const expected = hasInstallation ? ["expectation", "next_state", "result", "result_installation"] : ["expectation", "next_state", "result"];
   const keys = Reflect.ownKeys(value);
-  if (keys.some((key) => typeof key !== "string") || !isDeepStrictEqual12(keys.sort(), expected)) {
+  if (keys.some((key) => typeof key !== "string") || !isDeepStrictEqual13(keys.sort(), expected)) {
     throw new TypeError("prepared transaction has unexpected or missing slots");
   }
   const expectation = ownDataField2(value, "expectation", "prepared transaction");
@@ -63530,7 +63629,7 @@ function resultProjectionTargetIsContained(artifactKind, taskRoot, worktreeRoot,
 }
 function validateResultInstallationBinding(request, current, identified, plan, authenticatedWorktreeRoot) {
   const installation = plan.result_installation;
-  if (installation === void 0) return ok9(void 0);
+  if (installation === void 0) return ok10(void 0);
   const facts = installation.plan;
   const manifest = facts.prepared.manifest.value;
   const expectedStep = expectedInstallationSource(request.call, manifest.source_artifact);
@@ -63539,7 +63638,7 @@ function validateResultInstallationBinding(request, current, identified, plan, a
   }
   const reference = facts.reference;
   const nextReference = plan.next_state.authoritative_results.find((entry) => entry.phase_instance === reference.phase_instance && entry.step === reference.step);
-  if (!isDeepStrictEqual12(nextReference, reference) || reference.result_id !== plan.expectation.result_id) {
+  if (!isDeepStrictEqual13(nextReference, reference) || reference.result_id !== plan.expectation.result_id) {
     throw new TypeError("result installation reference does not match the prepared transaction");
   }
   if (reference.input_fingerprint !== identified.input_fingerprint) {
@@ -63561,7 +63660,7 @@ function validateResultInstallationBinding(request, current, identified, plan, a
     authenticatedWorktreeRoot,
     entry.target
   ))) return issue3("CONTRACT_INVALID", "result-installation-projection-target-mismatch");
-  return ok9(void 0);
+  return ok10(void 0);
 }
 function buildPlan(request, current, identified, preparedValue, authenticatedWorktreeRoot) {
   const resultingRevision = parseSafeInteger(current.value.revision + 1);
@@ -63607,7 +63706,7 @@ function buildPlan(request, current, identified, preparedValue, authenticatedWor
   const final = committedState(receipt);
   const semantics = validatePreparedAndCommitted(current, receipt, final);
   if (!semantics.ok) return semantics;
-  return ok9(Object.freeze({
+  return ok10(Object.freeze({
     receipt,
     final,
     outcome,
@@ -63632,7 +63731,7 @@ async function arbitrate(dependencies, request, intentPath, predecessor, plan, o
     const receiptRead = await dependencies.read_receipt(intentPath);
     if (stateRead.document.digest === plan.final.digest) {
       if (receiptRead.kind !== "canonical") {
-        if (receiptRead.kind === "unreadable") return io2(request.authority, "intent-receipt-read");
+        if (receiptRead.kind === "unreadable") return io3(request.authority, "intent-receipt-read");
         return stateIssue(stateRead.document.value, receiptRead.kind === "missing" ? "intent-receipt-missing" : "intent-receipt-noncanonical");
       }
       const committed2 = validateDurableSemantics(createCommittedIntentSubject(stateRead.document, receiptRead.document));
@@ -63643,7 +63742,7 @@ async function arbitrate(dependencies, request, intentPath, predecessor, plan, o
       return outcomeResult(stateRead.document, plan.outcome, false);
     }
     if (stateRead.document.digest === predecessor.digest) {
-      return unchangedFailure ?? io2(request.authority, operation);
+      return unchangedFailure ?? io3(request.authority, operation);
     }
     return fail9(createProjectError("RECONCILIATION_REQUIRED", {
       recorded_digest: plan.final.digest,
@@ -63737,7 +63836,7 @@ async function installResultFacts(dependencies, authority, current, facts, repla
       issue_code: `projection-${projected.outcome}`
     }));
   }
-  return ok9(void 0);
+  return ok10(void 0);
 }
 async function installPlan(dependencies, request, intentPath, current, plan, receiptAlreadyExists) {
   const resumesResult = plan.receipt.value.operation === "record-document-artifact" || plan.receipt.value.operation === "record-implementation-output" || plan.receipt.value.operation === "record-self-review" || plan.receipt.value.operation === "record-triage" || plan.receipt.value.operation === "counter-review" || plan.receipt.value.operation === "adjudicate";
@@ -63763,7 +63862,7 @@ async function installPlan(dependencies, request, intentPath, current, plan, rec
   try {
     await ensureIntentDirectory(request.authority);
   } catch (error51) {
-    if (error51 instanceof IntentLayoutError) return io2(request.authority, "intent-receipt-create");
+    if (error51 instanceof IntentLayoutError) return io3(request.authority, "intent-receipt-create");
     throw error51;
   }
   if (!receiptAlreadyExists) {
@@ -63772,7 +63871,7 @@ async function installPlan(dependencies, request, intentPath, current, plan, rec
       if (created === "exists") {
         const collision = await dependencies.read_receipt(intentPath);
         if (collision.kind !== "canonical") {
-          if (collision.kind === "unreadable") return io2(request.authority, "intent-receipt-read");
+          if (collision.kind === "unreadable") return io3(request.authority, "intent-receipt-read");
           return issue3("CONTRACT_INVALID", collision.kind === "missing" ? "intent-receipt-missing" : "intent-receipt-noncanonical");
         }
         if (collision.document.digest !== plan.receipt.digest) {
@@ -63784,7 +63883,7 @@ async function installPlan(dependencies, request, intentPath, current, plan, rec
       if (error51.target_may_have_changed) {
         return arbitrate(dependencies, request, intentPath, current, plan, "intent-receipt-create");
       }
-      return io2(request.authority, "intent-receipt-create");
+      return io3(request.authority, "intent-receipt-create");
     }
   }
   try {
@@ -63794,7 +63893,7 @@ async function installPlan(dependencies, request, intentPath, current, plan, rec
     if (error51.target_may_have_changed) {
       return arbitrate(dependencies, request, intentPath, current, plan, "task-state-replace");
     }
-    return io2(request.authority, "task-state-replace");
+    return io3(request.authority, "task-state-replace");
   }
   const observed = await dependencies.read_state(request.authority.state);
   if (observed.kind !== "canonical") {
@@ -63904,7 +64003,7 @@ async function runStateTransaction(dependencies, request, prepare) {
     });
   } catch (error51) {
     if (!(error51 instanceof TaskLockError)) throw error51;
-    if (error51.stage === "acquire") return io2(request.authority, "task-lock-acquire");
+    if (error51.stage === "acquire") return io3(request.authority, "task-lock-acquire");
     if (completed === void 0 && error51.cause !== void 0) throw error51.cause;
     if (completed?.ok) return completed;
     if (arbitrationFacts !== void 0) {
@@ -63918,7 +64017,7 @@ async function runStateTransaction(dependencies, request, prepare) {
         completed
       );
     }
-    return io2(request.authority, "task-lock-release");
+    return io3(request.authority, "task-lock-release");
   }
 }
 
@@ -65130,7 +65229,7 @@ function renderAdjudicationEvidence(value) {
 }
 
 // src/state/evidence-results.ts
-var ok10 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok11 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function projectionClaim(phaseInstance3, value) {
   if (value.kind === "triage") return triageReviewClaim(phaseInstance3);
   if (value.kind === "adjudication") return adjudicationReviewClaim(phaseInstance3);
@@ -65329,7 +65428,7 @@ async function prepareEvidenceResult(input) {
     input_fingerprint: qualified.input_fingerprint,
     manifest_path: manifestTarget.value.repositoryRelative
   });
-  return ok10(Object.freeze({
+  return ok11(Object.freeze({
     reference,
     prepared: prepared.value,
     manifest_target: manifestTarget.value,
@@ -65382,7 +65481,7 @@ async function loadRetainedEvidence(dependencies, state, phase_instance) {
       manifest
     }));
   }
-  return ok10(retained);
+  return ok11(retained);
 }
 function deriveCurrentEvidenceSet(retained) {
   const selfEntry = retained.get("self_review");
@@ -65461,7 +65560,7 @@ async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
     ...derived
   });
   registerCurrentReviewSet(current);
-  return ok10(current);
+  return ok11(current);
 }
 
 // src/contracts/constitution.ts
@@ -65541,7 +65640,7 @@ function immutableRegistry(rules2) {
   });
   return registry2;
 }
-var ok11 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok12 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail13 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 async function readConstitutionTreeFiles(runner, commit) {
   const listed = await readCommitTreeEntries(runner, commit, CONSTITUTION_DIRECTORY);
@@ -65582,7 +65681,7 @@ async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
       files: Object.freeze(selected.map((file2) => Object.freeze({ ...file2 })))
     });
     authenticResolvedConstitutions.add(resolved);
-    return ok11(resolved);
+    return ok12(resolved);
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
       return fail13(projectErrorForGitFailure(error51, runner, context2));
@@ -65605,7 +65704,7 @@ async function detectTaskLocalConstitutionEdit(runner, policyBaseCommit, pinnedC
     for (const path2 of uncommitted.paths) {
       if (path2.startsWith(`${CONSTITUTION_DIRECTORY}/`)) candidates.add(path2);
     }
-    if (candidates.size === 0) return ok11(void 0);
+    if (candidates.size === 0) return ok12(void 0);
     for (const value of candidates) {
       const claim = tryRepositoryPathClaim(rawGitPath(value));
       if (claim === void 0) continue;
@@ -65619,7 +65718,7 @@ async function detectTaskLocalConstitutionEdit(runner, policyBaseCommit, pinnedC
     }
     const head = parseGitOid(await readHeadCommit(runner));
     const currentFiles = await readConstitutionTreeFiles(runner, head);
-    return ok11(Object.freeze({
+    return ok12(Object.freeze({
       pinned_constitution_digest: pinnedConstitutionDigest,
       current_constitution_digest: computePinnedConstitutionDigest(currentFiles),
       changed_path_class: "task-branch-constitution"
@@ -66472,7 +66571,7 @@ function createInternalInputFingerprintResolver(input) {
 }
 
 // src/state/fingerprint-readers.ts
-var ok12 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok13 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail15 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function stateIssue2(input, issueCode) {
   return createProjectError("STATE_INVALID", {
@@ -66496,7 +66595,7 @@ var readCanonicalWorkflowDigest = async (input) => {
       argv: ["cat-file", "blob", entry.oid],
       operation: "git-workflow-read"
     });
-    return ok12(sha256Bytes(bytes.stdout));
+    return ok13(sha256Bytes(bytes.stdout));
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
       return fail15(projectErrorForGitFailure(error51, input.runner, input.context));
@@ -66510,7 +66609,7 @@ var readCanonicalConstitutionDigest = async (input) => {
     input.state.value.policy_base_commit,
     input.context
   );
-  return resolved.ok ? ok12(resolved.value.digest) : resolved;
+  return resolved.ok ? ok13(resolved.value.digest) : resolved;
 };
 function artifactPaths(_input) {
   return Object.freeze([]);
@@ -66519,7 +66618,7 @@ function upstreamPaths(_input) {
   return Object.freeze([]);
 }
 async function identitiesFor(input, claims, missingIssue) {
-  if (claims.length === 0) return ok12(Object.freeze([]));
+  if (claims.length === 0) return ok13(Object.freeze([]));
   const resolved = [];
   for (const claim of claims) {
     const path2 = await resolveTaskPath({
@@ -66559,18 +66658,18 @@ async function identitiesFor(input, claims, missingIssue) {
     }));
   }
   identities.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
-  return ok12(Object.freeze(identities));
+  return ok13(Object.freeze(identities));
 }
 var readCanonicalArtifactIdentities = async (input) => identitiesFor(input, artifactPaths(input), "fingerprint-artifact-missing");
 var readCanonicalUpstreamIdentities = async (input) => identitiesFor(input, upstreamPaths(input), "fingerprint-upstream-missing");
 var readCanonicalDeclaredInputs = async (input) => {
   const call = input.call;
   if (call.name !== "archflow_state" || call.input.artifact === void 0) {
-    return ok12(Object.freeze([]));
+    return ok13(Object.freeze([]));
   }
   const artifact = call.input.artifact;
   const declared = artifact.artifact_kind === "document" || artifact.artifact_kind === "implementation-output" ? artifact.declared_inputs : [];
-  return ok12(Object.freeze(structuredClone(declared)));
+  return ok13(Object.freeze(structuredClone(declared)));
 };
 function createProductionInputFingerprintResolver() {
   return createInternalInputFingerprintResolver({
@@ -66583,7 +66682,7 @@ function createProductionInputFingerprintResolver() {
 }
 
 // src/state/read.ts
-import { constants as fsConstants5 } from "node:fs";
+import { constants as fsConstants6 } from "node:fs";
 var stateValidator = createJsonSchemaValidator(task_state_schema_default, [
   primitives_schema_default,
   path_claim_schema_default
@@ -66595,7 +66694,7 @@ function errnoOf5(error51) {
 async function readBytes(path2) {
   let handle;
   try {
-    handle = await openResolved(path2.absolute, fsConstants5.O_RDONLY);
+    handle = await openResolved(path2.absolute, fsConstants6.O_RDONLY);
     return Object.freeze({ kind: "bytes", bytes: new Uint8Array(await handle.readFile()) });
   } catch (error51) {
     return Object.freeze({ kind: errnoOf5(error51) === "ENOENT" ? "missing" : "unreadable" });
@@ -66642,14 +66741,570 @@ async function readTaskConfig(path2) {
   }
 }
 
-// src/state/production.ts
-var ok13 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+// src/state/initialization.ts
+import { isAbsolute as isAbsolute5, relative as relative5 } from "node:path";
+var ok14 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail16 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var contract = (issue_code) => fail16(createProjectError("CONTRACT_INVALID", { issue_code }));
+var io4 = (request, operation) => fail16(createProjectError("IO_ERROR", { operation, attempt: request.authority.context.attempt }));
+function initializationFor(artifact) {
+  if (artifact.artifact_kind === "task-initialization" || artifact.artifact_kind === "legacy-import-initialization") {
+    return artifact;
+  }
+  if (artifact.artifact_kind !== "manual-checkpoint-import" || artifact.import_mode !== "initial") return void 0;
+  const first = artifact.chain[0];
+  return first !== void 0 && "initialization" in first ? first.initialization : void 0;
+}
+function operationFor2(artifact) {
+  if (artifact.artifact_kind === "task-initialization") return "adopt-task-initialization";
+  if (artifact.artifact_kind === "legacy-import-initialization") return "adopt-legacy-import-initialization";
+  if (artifact.artifact_kind === "manual-checkpoint-import") return "adopt-manual-checkpoint-import";
+  throw new TypeError("revision-0 initialization received a non-initialization artifact");
+}
+async function validateLiveInitialization(dependencies, request, initialization) {
+  const taskRoot = `.archflow/tasks/${request.authority.task_id}`;
+  const expectedPaths = {
+    task_root: taskRoot,
+    config: request.authority.config.repositoryRelative,
+    state: request.authority.state.repositoryRelative,
+    workflow: ".archflow/workflow.yaml",
+    constitution_root: ".archflow/constitution"
+  };
+  if (initialization.canonical_paths.task_root !== expectedPaths.task_root || initialization.canonical_paths.config !== expectedPaths.config || initialization.canonical_paths.state !== expectedPaths.state || initialization.canonical_paths.workflow !== expectedPaths.workflow || initialization.canonical_paths.constitution_root !== expectedPaths.constitution_root) return contract("initialization-canonical-paths-mismatch");
+  const commits = initialization.artifact_kind === "task-initialization" ? [initialization.code_baseline_commit, initialization.policy_base_commit] : [initialization.import_baseline_commit, initialization.code_baseline_commit, initialization.policy_base_commit];
+  for (const oid of new Set(commits)) {
+    try {
+      const observed = await dependencies.runner.run({
+        argv: ["rev-parse", "--verify", "--quiet", `${oid}^{commit}`],
+        operation: parseSafeCode("validate-initialization-commit"),
+        expectedAbsence: [{ code: 1, stderrIncludes: "" }]
+      });
+      if (observed.absent) return contract("initialization-commit-missing");
+      const resolved = new TextDecoder("utf-8", { fatal: true }).decode(observed.stdout).trim();
+      if (resolved !== oid) return contract("initialization-commit-mismatch");
+    } catch {
+      return io4(request, "validate-initialization-commit");
+    }
+  }
+  return ok14(void 0);
+}
+function initialState(call, artifact, evidence) {
+  const initialization = initializationFor(artifact);
+  if (initialization === void 0) return contract("initialization-artifact-required");
+  if (artifact.artifact_kind === "manual-checkpoint-import") {
+    if (artifact.import_mode !== "initial") return contract("initialization-import-mode-invalid");
+    const selected = selectGreatestValidChain(chainAnchor(artifact), artifact.chain);
+    if (selected.kind !== "chain" || selected.chain.length !== artifact.chain.length) {
+      return contract(selected.kind === "stop" ? `initialization-chain-${selected.outcome}` : "initialization-chain-not-exact");
+    }
+    const head = selected.chain.at(-1);
+    if (head === void 0) return contract("initialization-chain-empty");
+    if (selected.chain.some((checkpoint) => checkpoint.terminal === "abandoned")) {
+      return contract("manual-import-abandoned-authority-unauthenticated");
+    }
+    if (head.phase_instance !== call.input.phase_instance || head.step !== call.input.step || head.status !== call.input.status || head.input_fingerprint !== call.input.input_fingerprint) return contract("initialization-chain-head-request-mismatch");
+    if (evidence === void 0) return contract("manual-import-evidence-required");
+    const reduced = reduceAuthenticatedManualChain({ artifact, evidence });
+    if (!reduced.ok) return reduced;
+    return ok14({ ...reduced.value.next_state, revision: 1 });
+  }
+  const state = {
+    schema_version: "1",
+    task_id: initialization.task_id,
+    repository_identity_digest: initialization.repository_identity_digest,
+    revision: 1,
+    phase_instance: call.input.phase_instance,
+    step: call.input.step,
+    status: call.input.status,
+    attempt: 1,
+    input_fingerprint: call.input.input_fingerprint,
+    initialization_digest: canonicalJsonDigest(initialization),
+    config_digest: initialization.config_digest,
+    workflow_digest: initialization.workflow_digest,
+    constitution_digest: initialization.constitution_digest,
+    policy_base_commit: initialization.policy_base_commit,
+    authoritative_results: [],
+    approvals: [],
+    waivers: []
+  };
+  return ok14(state);
+}
+async function identifyStateInitialization(dependencies, request, evidence) {
+  assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
+  assertAuthenticParsedToolCall(request.call);
+  const artifactValue = request.call.input.artifact;
+  if (request.call.input.expected_revision !== 0 || artifactValue === void 0) {
+    return contract("revision-zero-initialization-required");
+  }
+  assertPlainJson(artifactValue, "initialization artifact");
+  const artifact = structuredClone(artifactValue);
+  const initialization = initializationFor(artifact);
+  if (initialization === void 0) return contract("initialization-artifact-required");
+  if (initialization.task_id !== request.authority.task_id) return contract("initialization-task-mismatch");
+  const repository = verifyRepositoryIdentity(initialization.repository_identity_digest, request.authority.repository_identity);
+  if (!repository.ok) return repository;
+  const liveInitialization = await validateLiveInitialization(dependencies, request, initialization);
+  if (!liveInitialization.ok) return liveInitialization;
+  const artifactDocument = canonicalDocument(artifact);
+  const artifactSemantics = validateDurableSemantics({ artifact: artifactDocument });
+  if (!artifactSemantics.ok) return artifactSemantics;
+  const stateResult = initialState(request.call, artifact, evidence);
+  if (!stateResult.ok) return stateResult;
+  const preparedState = canonicalDocument(stateResult.value);
+  const initializationSemantics = validateDurableSemantics({
+    state: preparedState,
+    artifact: canonicalDocument(initialization)
+  });
+  if (!initializationSemantics.ok) return initializationSemantics;
+  const config2 = await dependencies.read_config(request.authority.config);
+  if (config2.kind !== "valid") return config2.kind === "invalid" ? contract("task-config-invalid") : io4(request, "task-config-read");
+  if (config2.snapshot.digest !== initialization.config_digest) {
+    return fail16(createProjectError("PINNED_CONFIG_MISMATCH", {
+      expected_digest: initialization.config_digest,
+      observed_digest: config2.snapshot.digest
+    }));
+  }
+  const fingerprint = await dependencies.resolve_input_fingerprint({
+    runner: dependencies.runner,
+    authority: request.authority,
+    state: preparedState,
+    call: request.call,
+    live_config: config2.snapshot,
+    context: request.authority.context
+  });
+  if (!fingerprint.ok) return fingerprint;
+  assertPlainJson(fingerprint.value, "initialization fingerprint subject");
+  const inputFingerprint = computeInputFingerprint(structuredClone(fingerprint.value));
+  const identified = identifyTransactionRequest(request.call, request.authority, inputFingerprint);
+  return ok14(Object.freeze({
+    call: identified.call,
+    input_fingerprint: inputFingerprint,
+    request_digest: identified.request_digest,
+    prepared_state: preparedState
+  }));
+}
+async function intentTarget(dependencies, request) {
+  const claim = parseTaskPathClaim(`intents/${request.call.input.intent_id}.json`);
+  const result = await resolveTaskPath({
+    runner: dependencies.runner,
+    taskId: request.authority.task_id,
+    claim,
+    expectedClass: "intent",
+    context: request.authority.context
+  });
+  if (!result.ok) return result;
+  const rel = relative5(request.authority.task_root, result.value.absolute);
+  if (rel === "" || rel === ".." || rel.startsWith("../") || isAbsolute5(rel)) {
+    throw new TypeError("initialization intent target escaped the task root");
+  }
+  return result;
+}
+function committed(receipt) {
+  const value = receipt.value;
+  const reference = {
+    intent_id: value.intent_id,
+    request_digest: value.request_digest,
+    receipt_digest: receipt.digest,
+    outcome_digest: value.outcome_digest,
+    prior_revision: value.prior_revision,
+    resulting_revision: value.resulting_revision,
+    result_id: value.result_id
+  };
+  return canonicalDocument({ ...value.prepared_state, committed_intent: reference });
+}
+function replay(request, state, receipt) {
+  const semantic = validateDurableSemantics(createCommittedIntentSubject(state, receipt));
+  if (!semantic.ok) return semantic;
+  const artifact = request.call.input.artifact;
+  if (receipt.value.tool !== "archflow_state" || receipt.value.intent_id !== request.call.input.intent_id || receipt.value.task_id !== request.authority.task_id || receipt.value.repository_identity_digest !== request.authority.repository_identity_digest || receipt.value.prior_revision !== 0 || receipt.value.resulting_revision !== 1) return contract("initialization-receipt-identity-mismatch");
+  if (artifact === void 0 || receipt.value.operation !== operationFor2(artifact)) return contract("initialization-receipt-operation-mismatch");
+  if (receipt.value.input_fingerprint !== request.call.input.input_fingerprint) {
+    return fail16(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
+      expected_digest: receipt.value.input_fingerprint,
+      observed_digest: request.call.input.input_fingerprint
+    }));
+  }
+  const identified = identifyTransactionRequest(request.call, request.authority, receipt.value.input_fingerprint);
+  if (identified.request_digest !== receipt.value.request_digest) {
+    return fail16(createProjectError("INTENT_MISMATCH", {
+      expected_digest: receipt.value.request_digest,
+      observed_digest: identified.request_digest
+    }));
+  }
+  const outcome = validateProjectResultStructure(request.call, { schema_version: "1", ok: true, value: receipt.value.outcome });
+  if (!outcome.ok) return outcome;
+  return ok14(Object.freeze({ state, outcome: outcome.value, replayed: true }));
+}
+async function executeLocked2(dependencies, request, path2, evidence) {
+  const stateRead = await dependencies.read_state(request.authority.state);
+  if (stateRead.kind === "canonical") {
+    const repository = verifyRepositoryIdentity(stateRead.document.value.repository_identity_digest, request.authority.repository_identity);
+    if (!repository.ok) return repository;
+    const receiptRead = await dependencies.read_receipt(path2);
+    if (stateRead.document.value.revision === 1 && stateRead.document.value.committed_intent?.intent_id === request.call.input.intent_id && receiptRead.kind === "canonical") return replay(request, stateRead.document, receiptRead.document);
+    return fail16(createProjectError("STATE_CONFLICT", { expected_revision: 0, observed_revision: stateRead.document.value.revision }));
+  }
+  if (stateRead.kind !== "missing") return contract(stateRead.kind === "unreadable" ? "task-state-unreadable" : "task-state-noncanonical");
+  const identification = await identifyStateInitialization(dependencies, request, evidence);
+  if (!identification.ok) return identification;
+  const preparedState = identification.value.prepared_state;
+  const inputFingerprint = identification.value.input_fingerprint;
+  if (inputFingerprint !== request.call.input.input_fingerprint) {
+    return fail16(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
+      expected_digest: inputFingerprint,
+      observed_digest: request.call.input.input_fingerprint
+    }));
+  }
+  const identified = identification.value;
+  const artifact = structuredClone(request.call.input.artifact);
+  const success2 = { path: parseTaskPathClaim("state.json"), revision: 1, status: request.call.input.status };
+  const expectation = createInternalResultExpectation({
+    schema_version: "1",
+    tool: "archflow_state",
+    task_id: request.authority.task_id,
+    intent_id: request.call.input.intent_id,
+    input_fingerprint: inputFingerprint,
+    request_digest: identified.request_digest,
+    result_id: request.call.input.intent_id,
+    resulting_revision: 1,
+    success: success2
+  });
+  const result = validateProjectResultStructure(request.call, { schema_version: "1", ok: true, value: success2 });
+  if (!result.ok) return result;
+  const outcome = structuredClone(result.value);
+  const receipt = canonicalDocument(parseIntentReceipt({
+    schema_version: "1",
+    intent_id: request.call.input.intent_id,
+    task_id: request.authority.task_id,
+    repository_identity_digest: request.authority.repository_identity_digest,
+    tool: "archflow_state",
+    operation: operationFor2(artifact),
+    request_digest: expectation.request_digest,
+    input_fingerprint: inputFingerprint,
+    prior_revision: 0,
+    resulting_revision: 1,
+    result_id: expectation.result_id,
+    outcome_digest: intentOutcomeDigest(outcome),
+    outcome,
+    prepared_state_digest: preparedState.digest,
+    prepared_state: preparedState.value
+  }));
+  if (intentReceiptDigest(receipt.value) !== receipt.digest) throw new TypeError("initialization receipt digest mismatch");
+  const final = committed(receipt);
+  const existing = await dependencies.read_receipt(path2);
+  if (existing.kind === "canonical") {
+    if (existing.document.digest !== receipt.digest) {
+      return fail16(createProjectError("INTENT_MISMATCH", { expected_digest: existing.document.digest, observed_digest: receipt.digest }));
+    }
+  } else if (existing.kind !== "missing") {
+    return existing.kind === "unreadable" ? io4(request, "intent-receipt-read") : contract("intent-receipt-noncanonical");
+  }
+  try {
+    await ensureIntentDirectory(request.authority);
+    if (existing.kind === "missing") {
+      const created = await dependencies.atomic.createExclusive(path2, receipt.bytes);
+      if (created === "exists") {
+        const collision = await dependencies.read_receipt(path2);
+        if (collision.kind !== "canonical" || collision.document.digest !== receipt.digest) {
+          return contract("intent-receipt-collision");
+        }
+      }
+    }
+    await dependencies.atomic.replace(request.authority.state, final.bytes);
+  } catch (error51) {
+    if (error51 instanceof IntentLayoutError) return io4(request, "intent-receipt-create");
+    if (!(error51 instanceof AtomicReplaceError)) throw error51;
+    const observed2 = await dependencies.read_state(request.authority.state);
+    if (observed2.kind === "canonical" && observed2.document.digest === final.digest) {
+      return ok14(Object.freeze({ state: observed2.document, outcome, replayed: false }));
+    }
+    if (observed2.kind === "missing") return io4(request, error51.operation === "replace" ? "task-state-replace" : "intent-receipt-create");
+    return contract("transaction-outcome-ambiguous");
+  }
+  const observed = await dependencies.read_state(request.authority.state);
+  if (observed.kind !== "canonical" || observed.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
+  return ok14(Object.freeze({ state: observed.document, outcome, replayed: false }));
+}
+async function runStateInitialization(dependencies, request, evidence) {
+  assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
+  assertAuthenticParsedToolCall(request.call);
+  const path2 = await intentTarget(dependencies, request);
+  if (!path2.ok) return path2;
+  let completed;
+  try {
+    return await dependencies.lock.runExclusive(request.authority.task_root, async () => {
+      completed = await executeLocked2(dependencies, request, path2.value, evidence);
+      return completed;
+    });
+  } catch (error51) {
+    if (!(error51 instanceof TaskLockError)) throw error51;
+    if (error51.stage === "acquire") return io4(request, "task-lock-acquire");
+    if (completed !== void 0) return completed;
+    if (error51.cause !== void 0) throw error51.cause;
+    return io4(request, "task-lock-release");
+  }
+}
+
+// src/mcp/handlers/state-results.ts
+var ok15 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var contractInvalid2 = (issueCode) => Object.freeze({
+  schema_version: "1",
+  ok: false,
+  error: createProjectError("CONTRACT_INVALID", {
+    tool: "archflow_state",
+    issue_code: issueCode
+  })
+});
+async function target(services, claim, expectedClass) {
+  return resolveTaskPath({
+    runner: services.runner,
+    taskId: services.authority.task_id,
+    claim: parseTaskPathClaim(claim),
+    expectedClass,
+    context: services.authority.context
+  });
+}
+function scannerCapture(scanner) {
+  let observed;
+  return {
+    scanner: Object.freeze({
+      scan: async (candidates) => {
+        observed = parseSecretScanResult(await scanner.scan(candidates));
+        return observed;
+      }
+    }),
+    result: () => {
+      if (observed === void 0) throw new TypeError("projection scanner did not run");
+      return observed;
+    }
+  };
+}
+function accounting(outputs, retained, revision) {
+  const counted = outputs.flatMap((output) => output.storage === "raw-payload" ? [{ path: output.path, storage: "raw-payload", stored_bytes: output.payload_bytes }] : []);
+  const resultBytes = parseSafeInteger(counted.reduce((sum, entry) => sum + entry.stored_bytes, 0));
+  return Object.freeze({
+    schema_version: "1",
+    result_bytes: resultBytes,
+    task_bytes: parseSafeInteger(retained + resultBytes),
+    result_byte_cap: 26214400,
+    task_byte_cap: 262144e3,
+    counted_entries: Object.freeze(counted),
+    measured_at_revision: revision
+  });
+}
+async function prepareDocumentResult(input) {
+  const documentTarget = await target(input.services, input.artifact.document_path, "document");
+  if (!documentTarget.ok) return documentTarget;
+  if (documentTarget.value.repositoryRelative !== input.artifact.projection_target) {
+    return contractInvalid2("document-projection-target-mismatch");
+  }
+  const captured = await captureProjectionTarget(documentTarget.value);
+  if (captured.rollback.state !== "present" || captured.rollback.file_type !== "regular") {
+    return contractInvalid2("document-projection-not-regular-file");
+  }
+  const bytes = captured.rollback.bytes;
+  if (bytes.byteLength !== input.artifact.byte_count || sha256Bytes(bytes) !== input.artifact.content_digest) {
+    return contractInvalid2("document-content-mismatch");
+  }
+  const identity = await hashGitBlobIdentity(input.services.runner, bytes, input.artifact.projection_target);
+  const after = Object.freeze({
+    oid: parseGitOid(identity.oid),
+    mode: "100644",
+    size_bytes: parseSafeInteger(identity.size_bytes)
+  });
+  const output = Object.freeze({
+    path: input.artifact.projection_target,
+    path_class: "document",
+    operation: "add",
+    storage: "raw-payload",
+    payload_bytes: parseSafeInteger(bytes.byteLength),
+    payload_digest: sha256Bytes(bytes),
+    file_type: "regular",
+    after
+  });
+  const projections = Object.freeze([{ path: output.path, content_digest: output.payload_digest }]);
+  if (deriveDeclaredSnapshotDigest([output], projections) !== input.artifact.snapshot_digest) {
+    return contractInvalid2("document-snapshot-digest-mismatch");
+  }
+  const capture = scannerCapture(input.scanner);
+  const plan = await prepareProjectionPlan([{
+    path: output.path,
+    target: documentTarget.value,
+    desired: { state: "present", file_type: "regular", mode: "100644", bytes },
+    authenticated_before: captured.observation,
+    rollback: captured.rollback,
+    git_tracked: true
+  }], capture.scanner, input.services.runner.location.worktreeRoot);
+  if (!plan.ok) return plan;
+  const manifestValue = {
+    schema_version: "1",
+    task_id: input.services.authority.task_id,
+    repository_identity_digest: input.services.authority.repository_identity_digest,
+    result_id: input.result_id,
+    phase_instance: input.artifact.phase_instance,
+    step: input.artifact.step,
+    artifact_digest: canonicalJsonDigest(input.artifact),
+    source_artifact: input.artifact,
+    input_fingerprint: input.artifact.input_fingerprint,
+    snapshot_digest: input.artifact.snapshot_digest,
+    outputs: [output],
+    projections,
+    accounting: accounting([output], input.retained_task_bytes, input.measured_at_revision),
+    secret_scan: capture.result()
+  };
+  const manifest = canonicalDocument(manifestValue);
+  const manifestTarget = await target(input.services, `results/sha256/${manifest.digest}/manifest.json`, "result-manifest");
+  const payloadTarget = await target(input.services, `results/sha256/${manifest.digest}/payload/${output.path}`, "result-payload");
+  if (!manifestTarget.ok) return manifestTarget;
+  if (!payloadTarget.ok) return payloadTarget;
+  const prepared = await prepareDocumentSnapshot({
+    runner: input.services.runner,
+    manifest: manifestValue,
+    payloads: [{ path: output.path, bytes, target: payloadTarget.value }],
+    retained_task_bytes: input.retained_task_bytes
+  });
+  if (!prepared.ok) return prepared;
+  return ok15(Object.freeze({
+    reference: Object.freeze({
+      phase_instance: input.artifact.phase_instance,
+      step: input.artifact.step,
+      result_digest: prepared.value.result_digest,
+      result_id: input.result_id,
+      input_fingerprint: input.artifact.input_fingerprint,
+      manifest_path: manifestTarget.value.repositoryRelative
+    }),
+    prepared: prepared.value,
+    manifest_target: manifestTarget.value,
+    projection_plan: plan.value
+  }));
+}
+async function prepareImplementationResult(input) {
+  const facts = await verifyImplementationManifest(
+    input.services.runner,
+    input.artifact,
+    input.services.authority.context
+  );
+  const sources = [];
+  const addSource = async (path2, pathClass3, desired, tracked, renamePair) => {
+    const resolved = await resolveDeclaredOutputPath({
+      runner: input.services.runner,
+      taskId: input.services.authority.task_id,
+      claim: path2,
+      pathClass: pathClass3,
+      context: input.services.authority.context
+    });
+    if (!resolved.ok) throw resolved.error;
+    const captured = await captureProjectionTarget(resolved.value);
+    sources.push(Object.freeze({
+      path: path2,
+      target: resolved.value,
+      desired,
+      authenticated_before: captured.observation,
+      rollback: captured.rollback,
+      git_tracked: tracked,
+      ...renamePair === void 0 ? {} : { rename_pair: renamePair }
+    }));
+  };
+  for (const output of input.artifact.outputs) {
+    if (output.operation === "rename") {
+      await addSource(output.previous_path, output.path_class, { state: "absent" }, true, {
+        role: "source",
+        peer_path: output.path
+      });
+    }
+    if (output.operation === "delete") {
+      await addSource(output.path, output.path_class, { state: "absent" }, true);
+      continue;
+    }
+    const raw = facts.raw_payloads.get(output.path);
+    const resolved = await resolveDeclaredOutputPath({
+      runner: input.services.runner,
+      taskId: input.services.authority.task_id,
+      claim: output.path,
+      pathClass: output.path_class,
+      context: input.services.authority.context
+    });
+    if (!resolved.ok) return resolved;
+    const captured = await captureProjectionTarget(resolved.value);
+    const bytes = raw ?? (captured.rollback.state === "present" ? captured.rollback.bytes : void 0);
+    if (bytes === void 0) return contractInvalid2("implementation-after-image-unavailable");
+    const desired = output.file_type === "regular" ? { state: "present", file_type: "regular", mode: output.after.mode, bytes } : { state: "present", file_type: "symlink", mode: "120000", bytes };
+    await addSource(output.path, output.path_class, desired, output.operation !== "add", output.operation === "rename" ? {
+      role: "destination",
+      peer_path: output.previous_path
+    } : void 0);
+  }
+  const capture = scannerCapture(input.scanner);
+  const plan = await prepareProjectionPlan(
+    sources,
+    capture.scanner,
+    input.services.runner.location.worktreeRoot
+  );
+  if (!plan.ok) return plan;
+  const snapshotByPath = new Map(facts.snapshot_entries.map((entry) => [entry.path, entry]));
+  const projections = [];
+  for (const output of input.artifact.outputs) {
+    if (output.operation === "delete") continue;
+    const observed = snapshotByPath.get(output.path);
+    if (observed?.state !== "present") return contractInvalid2("implementation-projection-identity-missing");
+    projections.push({ path: output.path, content_digest: observed.content_digest });
+  }
+  const manifestValue = {
+    schema_version: "1",
+    task_id: input.services.authority.task_id,
+    repository_identity_digest: input.services.authority.repository_identity_digest,
+    result_id: input.result_id,
+    phase_instance: input.artifact.phase_instance,
+    step: input.artifact.step,
+    artifact_digest: canonicalJsonDigest(input.artifact),
+    source_artifact: input.artifact,
+    input_fingerprint: input.artifact.input_fingerprint,
+    snapshot_digest: input.artifact.snapshot_digest,
+    outputs: input.artifact.outputs,
+    projections,
+    accounting: input.artifact.accounting,
+    secret_scan: input.artifact.secret_scan
+  };
+  parseResultManifest(manifestValue);
+  const manifest = canonicalDocument(manifestValue);
+  const manifestTarget = await target(input.services, `results/sha256/${manifest.digest}/manifest.json`, "result-manifest");
+  if (!manifestTarget.ok) return manifestTarget;
+  const payloads = [];
+  for (const [path2, bytes] of facts.raw_payloads) {
+    const payloadTarget = await target(input.services, `results/sha256/${manifest.digest}/payload/${path2}`, "result-payload");
+    if (!payloadTarget.ok) return payloadTarget;
+    payloads.push(Object.freeze({ path: path2, bytes, target: payloadTarget.value }));
+  }
+  const prepared = prepareSnapshot({
+    manifest: manifestValue,
+    payloads,
+    retained_task_bytes: input.retained_task_bytes,
+    validate_manifest: parseResultManifest
+  });
+  if (!prepared.ok) return prepared;
+  return ok15(Object.freeze({
+    reference: Object.freeze({
+      phase_instance: input.artifact.phase_instance,
+      step: input.artifact.step,
+      result_digest: prepared.value.result_digest,
+      result_id: input.result_id,
+      input_fingerprint: input.artifact.input_fingerprint,
+      manifest_path: manifestTarget.value.repositoryRelative
+    }),
+    prepared: prepared.value,
+    manifest_target: manifestTarget.value,
+    projection_plan: plan.value
+  }));
+}
+
+// src/state/production.ts
+var ok16 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail17 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function context(input, phase4, attempt) {
   return Object.freeze({ task_id: input.task_id, phase_instance: phase4, operation: input.operation, attempt });
 }
 function stateFailure(phase4, issue4) {
-  return fail16(createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code: issue4 }));
+  return fail17(createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code: issue4 }));
 }
 async function resolvePath7(runner, authority, claim, expectedClass) {
   return resolveTaskPath({
@@ -66769,7 +67424,7 @@ async function readRetainedResult(runner, authority, reference) {
     runner.location.worktreeRoot
   );
   if (!projectionPlan.ok) return projectionPlan;
-  return ok13(Object.freeze({
+  return ok16(Object.freeze({
     prepared: Object.freeze({ manifest: read.value, result_digest: read.value.digest, payloads: Object.freeze(payloads) }),
     manifest_target: manifestTarget.value,
     projection_plan: projectionPlan.value,
@@ -66792,7 +67447,7 @@ async function createProductionServices(input) {
   if (!provisionalAuthority.ok) return provisionalAuthority;
   const observed = await readTaskState(provisionalAuthority.value.state);
   if (observed.kind === "unreadable") {
-    return fail16(createProjectError("IO_ERROR", { operation: input.operation, attempt: provisionalContext.attempt }));
+    return fail17(createProjectError("IO_ERROR", { operation: input.operation, attempt: provisionalContext.attempt }));
   }
   if (observed.kind === "noncanonical") return stateFailure(provisionalPhase, "task-state-noncanonical");
   const resolvedContext = observed.kind === "canonical" ? context(input, observed.document.value.phase_instance, observed.document.value.attempt) : provisionalContext;
@@ -66850,7 +67505,7 @@ async function createProductionServices(input) {
         live_config: liveConfig.snapshot,
         context: authority.context
       });
-      return subject.ok ? ok13(computeInputFingerprint(subject.value)) : subject;
+      return subject.ok ? ok16(computeInputFingerprint(subject.value)) : subject;
     },
     resolve_supplemental_review: async ({ request }) => {
       const target2 = await resolvePath7(
@@ -66870,7 +67525,7 @@ async function createProductionServices(input) {
         const record3 = parseSupplementalReviewRecord(document2.value);
         const producerFamilies = new Set(request.current_evidence.slots.map((slot) => slot.producer_family));
         if (record3.gate_id !== request.gate_id || record3.request_digest !== request.request_digest || record3.task_id !== request.task_id || record3.phase_instance !== request.phase_instance || record3.kind !== request.kind || record3.subject_digest !== request.subject_digest || record3.context_digest !== request.context_digest || record3.current_evidence_set_digest !== request.current_evidence.set_digest || producerFamilies.size !== 1 || !producerFamilies.has(record3.review.producer_family) || record3.review.model_family === record3.review.producer_family || canonicalJsonDigest(record3.review) !== record3.evidence_digest) return stateFailure(authority.context.phase_instance, "supplemental-review-authority-invalid");
-        return ok13(Object.freeze({
+        return ok16(Object.freeze({
           evidence: record3.review,
           gate_id: record3.gate_id,
           triage_digest: record3.triage_digest,
@@ -66883,7 +67538,7 @@ async function createProductionServices(input) {
       }
     }
   });
-  return ok13(Object.freeze({
+  return ok16(Object.freeze({
     runner: discovered.value,
     environment: environment.value,
     authority,
@@ -66893,7 +67548,7 @@ async function createProductionServices(input) {
 }
 
 // src/mcp/handlers/session.ts
-var fail17 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail18 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 async function openHandlerSession(call, context2) {
   const suppliedPhase = call.name === "archflow_state" || call.name === "archflow_gate" ? call.input.phase_instance : void 0;
   const services = await createProductionServices({
@@ -66905,22 +67560,22 @@ async function openHandlerSession(call, context2) {
   if (!services.ok) return services;
   const state = services.value.state?.value;
   if (state === void 0 && call.name !== "archflow_state") {
-    return fail17(createProjectError("STATE_MISSING", {
+    return fail18(createProjectError("STATE_MISSING", {
       phase_instance: suppliedPhase ?? "prd"
     }));
   }
   const configRead = await services.value.dependencies.read_config(services.value.authority.config);
   if (configRead.kind !== "valid") {
-    return fail17(createProjectError("CONFIG_INVALID", { issue_code: `config-${configRead.kind}` }));
+    return fail18(createProjectError("CONFIG_INVALID", { issue_code: `config-${configRead.kind}` }));
   }
   if (state !== void 0 && state.config_digest !== configRead.snapshot.digest) {
-    return fail17(createProjectError("PINNED_CONFIG_MISMATCH", {
+    return fail18(createProjectError("PINNED_CONFIG_MISMATCH", {
       expected_digest: state.config_digest,
       observed_digest: configRead.snapshot.digest
     }));
   }
   const host = context2.connection.initialization_candidates.host;
-  if (host === "unknown") return fail17(createProjectError("UNSUPPORTED_HOST", { host }));
+  if (host === "unknown") return fail18(createProjectError("UNSUPPORTED_HOST", { host }));
   const phaseInstance3 = state?.phase_instance ?? suppliedPhase;
   if (phaseInstance3 === void 0) throw new TypeError("phase instance is unavailable");
   const phase_kind = decodePhaseInstance(phaseInstance3).kind;
@@ -66940,13 +67595,13 @@ async function openHandlerSession(call, context2) {
 }
 
 // src/mcp/handlers/adjudicate.ts
-var fail18 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-var ok14 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail19 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok17 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 async function resumeAdjudicationReplay(input) {
   for (; ; ) {
     const frame = await input.load_frame();
     if (!frame.ok) return frame;
-    if (frame.value.next === "complete") return ok14(input.outcome);
+    if (frame.value.next === "complete") return ok17(input.outcome);
     if (frame.value.gate === void 0) throw new TypeError("adjudication replay gate frame is incomplete");
     const resolved = await input.resolve_gate(frame.value.gate);
     if (!resolved.ok) return resolved;
@@ -66961,7 +67616,7 @@ async function handleAdjudicate(call, context2) {
     if (!session.ok) return session;
     const { services } = session.value;
     const state = services.state;
-    if (state === void 0) return fail18(createProjectError("STATE_MISSING", { phase_instance: "prd" }));
+    if (state === void 0) return fail19(createProjectError("STATE_MISSING", { phase_instance: "prd" }));
     const replay2 = await resolvePreDispatchReplay(services.dependencies, services.authority, call);
     const currentReviews = await loadCurrentReviewSet(
       { read_state: services.dependencies.read_state, load_retained_result: services.dependencies.load_retained_result },
@@ -66988,11 +67643,11 @@ async function handleAdjudicate(call, context2) {
     try {
       artifact = renderProduceReviewMaterial(produce.value, projection.value);
     } catch {
-      return fail18(createProjectError("CONTRACT_INVALID", { tool: call.name, issue_code: "artifact-not-utf8" }));
+      return fail19(createProjectError("CONTRACT_INVALID", { tool: call.name, issue_code: "artifact-not-utf8" }));
     }
     const subjectDigest = produce.value.artifact_digest;
     if (subjectDigest !== currentReviews.value.subject_digest) {
-      return fail18(createProjectError("STATE_INVALID", {
+      return fail19(createProjectError("STATE_INVALID", {
         phase_instance: state.value.phase_instance,
         issue_code: "adjudication-subject-not-current"
       }));
@@ -67004,7 +67659,7 @@ async function handleAdjudicate(call, context2) {
         if (!classified.ok) return classified;
         const binding = classified.value === "document" ? resolveProduceUpstreamBinding(durable, path2) : void 0;
         if (binding === void 0) {
-          return fail18(createProjectError("STATE_INVALID", {
+          return fail19(createProjectError("STATE_INVALID", {
             phase_instance: durable.phase_instance,
             issue_code: "adjudication-upstream-path-mismatch"
           }));
@@ -67022,7 +67677,7 @@ async function handleAdjudicate(call, context2) {
         try {
           text4 = new TextDecoder("utf-8", { fatal: true }).decode(projection2.value.bytes);
         } catch {
-          return fail18(createProjectError("CONTRACT_INVALID", {
+          return fail19(createProjectError("CONTRACT_INVALID", {
             tool: call.name,
             issue_code: "adjudication-upstream-not-utf8"
           }));
@@ -67042,7 +67697,7 @@ async function handleAdjudicate(call, context2) {
           }
         }
         if (!approved) {
-          return fail18(createProjectError("STATE_INVALID", {
+          return fail19(createProjectError("STATE_INVALID", {
             phase_instance: durable.phase_instance,
             issue_code: "upstream-approval-missing"
           }));
@@ -67050,7 +67705,7 @@ async function handleAdjudicate(call, context2) {
         derived.push(Object.freeze({ upstream_digest: upstreamDigest, artifact: text4 }));
       }
       derived.sort((left, right) => left.upstream_digest.localeCompare(right.upstream_digest));
-      return ok14(Object.freeze(derived));
+      return ok17(Object.freeze(derived));
     };
     const upstreams = await deriveUpstreams(state.value, call.input.upstream_paths);
     if (!upstreams.ok) return upstreams;
@@ -67073,7 +67728,7 @@ async function handleAdjudicate(call, context2) {
     const openGate = async (request) => {
       const current = await services.dependencies.read_state(services.authority.state);
       if (current.kind !== "canonical") {
-        return fail18(createProjectError("STATE_INVALID", { phase_instance: state.value.phase_instance, issue_code: "adjudication-gate-state-invalid" }));
+        return fail19(createProjectError("STATE_INVALID", { phase_instance: state.value.phase_instance, issue_code: "adjudication-gate-state-invalid" }));
       }
       const gateIntent = stableId("adjudication-gate", {
         schema_version: "1",
@@ -67126,9 +67781,9 @@ async function handleAdjudicate(call, context2) {
     };
     const loadRetiredOutcome = async () => {
       const current = await services.dependencies.read_state(services.authority.state);
-      if (current.kind !== "canonical") return ok14(void 0);
+      if (current.kind !== "canonical") return ok17(void 0);
       const reference = current.document.value.authoritative_results.find((item) => item.phase_instance === current.document.value.phase_instance && item.step === "adjudicate" && item.input_fingerprint === call.input.input_fingerprint);
-      if (reference === void 0) return ok14(void 0);
+      if (reference === void 0) return ok17(void 0);
       const target2 = await resolveTaskPath({
         runner: services.runner,
         taskId: services.authority.task_id,
@@ -67147,7 +67802,7 @@ async function handleAdjudicate(call, context2) {
         const identified = identifyTransactionRequest(call, services.authority, reference.input_fingerprint);
         const retained = await services.dependencies.load_retained_result(reference);
         if (!retained.ok) return retained;
-        if (receipt.tool !== "archflow_adjudicate" || receipt.intent_id !== call.input.intent_id || receipt.task_id !== services.authority.task_id || receipt.repository_identity_digest !== services.authority.repository_identity_digest || receipt.input_fingerprint !== reference.input_fingerprint || receipt.request_digest !== identified.request_digest || receipt.result_id !== reference.result_id || retained.value.prepared.manifest.value.result_id !== reference.result_id || retained.value.prepared.manifest.value.source_artifact.artifact_kind !== "adjudication-evidence") return fail18(createProjectError("STATE_INVALID", {
+        if (receipt.tool !== "archflow_adjudicate" || receipt.intent_id !== call.input.intent_id || receipt.task_id !== services.authority.task_id || receipt.repository_identity_digest !== services.authority.repository_identity_digest || receipt.input_fingerprint !== reference.input_fingerprint || receipt.request_digest !== identified.request_digest || receipt.result_id !== reference.result_id || retained.value.prepared.manifest.value.result_id !== reference.result_id || retained.value.prepared.manifest.value.source_artifact.artifact_kind !== "adjudication-evidence") return fail19(createProjectError("STATE_INVALID", {
           phase_instance: current.document.value.phase_instance,
           issue_code: "retired-adjudication-outcome-invalid"
         }));
@@ -67156,9 +67811,9 @@ async function handleAdjudicate(call, context2) {
           ok: true,
           value: receipt.outcome
         });
-        return structured.ok ? ok14(structured.value) : structured;
+        return structured.ok ? ok17(structured.value) : structured;
       } catch {
-        return ok14(void 0);
+        return ok17(void 0);
       }
     };
     let authenticatedOutcome;
@@ -67174,7 +67829,7 @@ async function handleAdjudicate(call, context2) {
         outcome: authenticatedOutcome,
         load_frame: async () => {
           const current = await services.dependencies.read_state(services.authority.state);
-          if (current.kind !== "canonical") return fail18(createProjectError("STATE_INVALID", {
+          if (current.kind !== "canonical") return fail19(createProjectError("STATE_INVALID", {
             phase_instance: state.value.phase_instance,
             issue_code: "adjudication-replay-state-invalid"
           }));
@@ -67186,7 +67841,7 @@ async function handleAdjudicate(call, context2) {
           if (!retained.ok) return retained;
           const adjudicationSource = retained.value.get("adjudicate")?.manifest.source_artifact;
           if (adjudicationSource?.artifact_kind !== "adjudication-evidence") {
-            return fail18(createProjectError("STATE_INVALID", {
+            return fail19(createProjectError("STATE_INVALID", {
               phase_instance: current.document.value.phase_instance,
               issue_code: "retired-adjudication-evidence-missing"
             }));
@@ -67205,7 +67860,7 @@ async function handleAdjudicate(call, context2) {
             authenticated_gate_approvals: Object.freeze(approvals),
             ...session.value.config.max_attempts === void 0 ? {} : { max_attempts: session.value.config.max_attempts }
           });
-          if (assessment.next !== "adjudication-gate") return ok14(Object.freeze({ next: "complete" }));
+          if (assessment.next !== "adjudication-gate") return ok17(Object.freeze({ next: "complete" }));
           const candidates = selectAdjudicationGates(constitution.value.rules, adjudicationSource.evidence);
           const next = candidates.find((candidate) => {
             const contextDigest = computeGateContextDigest(candidate.kind, candidate.context);
@@ -67215,11 +67870,11 @@ async function handleAdjudicate(call, context2) {
             if ((candidate.kind === "review-trigger" || candidate.kind === "adjudication-failure") && "eligible_waiver_rules" in candidateContext && "waiver_scope" in candidateContext && candidateContext.eligible_waiver_rules.length > 0 && candidateContext.eligible_waiver_rules.every((rule4) => waiverInForce(current.document.value, rule4, candidate.subject_digest, candidateContext.waiver_scope) !== void 0)) return false;
             return true;
           });
-          if (next === void 0) return fail18(createProjectError("STATE_INVALID", {
+          if (next === void 0) return fail19(createProjectError("STATE_INVALID", {
             phase_instance: current.document.value.phase_instance,
             issue_code: "adjudication-gate-derivation-invalid"
           }));
-          return ok14(Object.freeze({ next: "adjudication-gate", gate: next }));
+          return ok17(Object.freeze({ next: "adjudication-gate", gate: next }));
         },
         resolve_gate: openGate
       });
@@ -67283,12 +67938,12 @@ async function handleAdjudicate(call, context2) {
     });
     if (!result.ok) return result;
     if (result.value.transaction === void 0) {
-      return fail18(createProjectError("GATE_ACTIVE", {
+      return fail19(createProjectError("GATE_ACTIVE", {
         gate_id: preDispatchGateId ?? parsePathSafeId(call.input.intent_id),
         gate_kind: "constitution-edit"
       }));
     }
-    return ok14(result.value.transaction.outcome);
+    return ok17(result.value.transaction.outcome);
   });
 }
 
@@ -67455,7 +68110,7 @@ async function runCounterReview(dependencies, input) {
 }
 
 // src/mcp/handlers/counter-review.ts
-var fail19 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail20 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function dispatchId(prefix, value) {
   return parseSafeId(`${prefix}-${sha256Bytes(new TextEncoder().encode(value)).slice(0, 32)}`);
 }
@@ -67466,7 +68121,7 @@ async function handleCounterReview(call, context2) {
     const { services } = session.value;
     const state = services.state;
     if (state === void 0) {
-      return fail19(createProjectError("STATE_MISSING", { phase_instance: "prd" }));
+      return fail20(createProjectError("STATE_MISSING", { phase_instance: "prd" }));
     }
     const replay2 = await resolvePreDispatchReplay(
       services.dependencies,
@@ -67490,7 +68145,7 @@ async function handleCounterReview(call, context2) {
     try {
       artifact = renderProduceReviewMaterial(produce.value, projection.value);
     } catch {
-      return fail19(createProjectError("CONTRACT_INVALID", {
+      return fail20(createProjectError("CONTRACT_INVALID", {
         tool: call.name,
         issue_code: "artifact-not-utf8"
       }));
@@ -67523,13 +68178,13 @@ async function handleCounterReview(call, context2) {
       }),
       reobserve_projection_digest: async () => {
         const current = await services.dependencies.read_state(services.authority.state);
-        if (current.kind !== "canonical") return fail19(createProjectError("STATE_INVALID", {
+        if (current.kind !== "canonical") return fail20(createProjectError("STATE_INVALID", {
           phase_instance: state.value.phase_instance,
           issue_code: "counter-review-state-not-current"
         }));
         const retained = await loadCurrentProduceSubject(services.dependencies, current.document.value);
         if (!retained.ok) return retained;
-        if (retained.value.artifact_digest !== produce.value.artifact_digest) return fail19(createProjectError("STATE_INVALID", {
+        if (retained.value.artifact_digest !== produce.value.artifact_digest) return fail20(createProjectError("STATE_INVALID", {
           phase_instance: state.value.phase_instance,
           issue_code: "counter-review-subject-not-current"
         }));
@@ -67576,7 +68231,7 @@ async function handleCounterReview(call, context2) {
 }
 
 // src/mcp/handlers/gate.ts
-var fail20 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail21 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 async function handleGate(call, context2) {
   return mapHandlerErrors(context2.invocation_id, async () => {
     const session = await openHandlerSession(call, context2);
@@ -67608,19 +68263,19 @@ async function handleGate(call, context2) {
     if ("record" in outcome.value && outcome.value.record.value.outcome === "superseded") {
       const supplemental2 = call.input.supplemental_outcome;
       if (supplemental2?.action !== "supersede" || outcome.value.record.value.gate_id !== supplemental2.review.prior_gate_id || outcome.value.record.value.supersession.old_subject_digest !== supplemental2.old_subject_digest) {
-        return fail20(createProjectError("STATE_INVALID", {
+        return fail21(createProjectError("STATE_INVALID", {
           phase_instance: call.input.phase_instance,
           issue_code: "gate-supersession-caller-binding-invalid"
         }));
       }
-      return fail20(createProjectError("GATE_SUPERSEDED", {
+      return fail21(createProjectError("GATE_SUPERSEDED", {
         gate_id: outcome.value.record.value.gate_id,
         old_subject_digest: outcome.value.record.value.supersession.old_subject_digest,
         new_subject_digest: supplemental2.new_subject_digest
       }));
     }
     if (!("record" in outcome.value) || outcome.value.record.value.outcome !== "decided") {
-      return fail20(createProjectError("STATE_INVALID", {
+      return fail21(createProjectError("STATE_INVALID", {
         phase_instance: call.input.phase_instance,
         issue_code: "gate-resolution-missing-decision"
       }));
@@ -67639,603 +68294,6 @@ async function handleGate(call, context2) {
   });
 }
 
-// src/state/initialization.ts
-import { isAbsolute as isAbsolute5, relative as relative5 } from "node:path";
-var ok15 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail21 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-var contract = (issue_code) => fail21(createProjectError("CONTRACT_INVALID", { issue_code }));
-var io3 = (request, operation) => fail21(createProjectError("IO_ERROR", { operation, attempt: request.authority.context.attempt }));
-function initializationFor(artifact) {
-  if (artifact.artifact_kind === "task-initialization" || artifact.artifact_kind === "legacy-import-initialization") {
-    return artifact;
-  }
-  if (artifact.artifact_kind !== "manual-checkpoint-import" || artifact.import_mode !== "initial") return void 0;
-  const first = artifact.chain[0];
-  return first !== void 0 && "initialization" in first ? first.initialization : void 0;
-}
-function operationFor2(artifact) {
-  if (artifact.artifact_kind === "task-initialization") return "adopt-task-initialization";
-  if (artifact.artifact_kind === "legacy-import-initialization") return "adopt-legacy-import-initialization";
-  if (artifact.artifact_kind === "manual-checkpoint-import") return "adopt-manual-checkpoint-import";
-  throw new TypeError("revision-0 initialization received a non-initialization artifact");
-}
-async function validateLiveInitialization(dependencies, request, initialization) {
-  const taskRoot = `.archflow/tasks/${request.authority.task_id}`;
-  const expectedPaths = {
-    task_root: taskRoot,
-    config: request.authority.config.repositoryRelative,
-    state: request.authority.state.repositoryRelative,
-    workflow: ".archflow/workflow.yaml",
-    constitution_root: ".archflow/constitution"
-  };
-  if (initialization.canonical_paths.task_root !== expectedPaths.task_root || initialization.canonical_paths.config !== expectedPaths.config || initialization.canonical_paths.state !== expectedPaths.state || initialization.canonical_paths.workflow !== expectedPaths.workflow || initialization.canonical_paths.constitution_root !== expectedPaths.constitution_root) return contract("initialization-canonical-paths-mismatch");
-  const commits = initialization.artifact_kind === "task-initialization" ? [initialization.code_baseline_commit, initialization.policy_base_commit] : [initialization.import_baseline_commit, initialization.code_baseline_commit, initialization.policy_base_commit];
-  for (const oid of new Set(commits)) {
-    try {
-      const observed = await dependencies.runner.run({
-        argv: ["rev-parse", "--verify", "--quiet", `${oid}^{commit}`],
-        operation: parseSafeCode("validate-initialization-commit"),
-        expectedAbsence: [{ code: 1, stderrIncludes: "" }]
-      });
-      if (observed.absent) return contract("initialization-commit-missing");
-      const resolved = new TextDecoder("utf-8", { fatal: true }).decode(observed.stdout).trim();
-      if (resolved !== oid) return contract("initialization-commit-mismatch");
-    } catch {
-      return io3(request, "validate-initialization-commit");
-    }
-  }
-  return ok15(void 0);
-}
-function initialState(call, artifact) {
-  const initialization = initializationFor(artifact);
-  if (initialization === void 0) return contract("initialization-artifact-required");
-  let head;
-  if (artifact.artifact_kind === "manual-checkpoint-import") {
-    if (artifact.import_mode !== "initial") return contract("initialization-import-mode-invalid");
-    const selected = selectGreatestValidChain(chainAnchor(artifact), artifact.chain);
-    if (selected.kind !== "chain" || selected.chain.length !== artifact.chain.length) {
-      return contract(selected.kind === "stop" ? `initialization-chain-${selected.outcome}` : "initialization-chain-not-exact");
-    }
-    head = selected.chain.at(-1);
-    if (head === void 0) return contract("initialization-chain-empty");
-    if (head.phase_instance !== call.input.phase_instance || head.step !== call.input.step || head.status !== call.input.status || head.input_fingerprint !== call.input.input_fingerprint) return contract("initialization-chain-head-request-mismatch");
-    const first = selected.chain[0];
-    if (first === void 0 || !("initialization" in first)) return contract("initialization-chain-head-invalid");
-    let cursor = {
-      schema_version: "1",
-      task_id: initialization.task_id,
-      repository_identity_digest: initialization.repository_identity_digest,
-      revision: 1,
-      phase_instance: first.phase_instance,
-      step: first.step,
-      status: first.status,
-      attempt: first.attempt,
-      input_fingerprint: first.input_fingerprint,
-      initialization_digest: first.initialization_digest,
-      config_digest: initialization.config_digest,
-      workflow_digest: initialization.workflow_digest,
-      constitution_digest: initialization.constitution_digest,
-      policy_base_commit: initialization.policy_base_commit,
-      authoritative_results: structuredClone(first.authoritative_results),
-      approvals: structuredClone(first.approvals),
-      waivers: structuredClone(first.waivers),
-      ...first.open_gate === void 0 ? {} : { open_gate: structuredClone(first.open_gate) },
-      ...first.terminal === void 0 ? {} : { terminal: first.terminal }
-    };
-    for (const checkpoint of selected.chain.slice(1)) {
-      const resultReference = checkpoint.status === "succeeded" ? checkpoint.authoritative_results.find((reference) => reference.phase_instance === checkpoint.phase_instance && reference.step === checkpoint.step && reference.input_fingerprint === checkpoint.input_fingerprint) : void 0;
-      const transition = planStateTransition({
-        current: cursor,
-        target: {
-          phase_instance: checkpoint.phase_instance,
-          step: checkpoint.step,
-          status: checkpoint.status,
-          attempt: checkpoint.attempt,
-          input_fingerprint: checkpoint.input_fingerprint
-        },
-        recomputed_input_fingerprint: checkpoint.input_fingerprint,
-        artifact,
-        ...resultReference === void 0 ? {} : { result_reference: resultReference }
-      });
-      if (!transition.ok) return transition;
-      cursor = { ...transition.value, revision: cursor.revision };
-    }
-  }
-  const source = head;
-  const state = {
-    schema_version: "1",
-    task_id: initialization.task_id,
-    repository_identity_digest: initialization.repository_identity_digest,
-    revision: 1,
-    phase_instance: source?.phase_instance ?? call.input.phase_instance,
-    step: source?.step ?? call.input.step,
-    status: source?.status ?? call.input.status,
-    attempt: source?.attempt ?? 1,
-    input_fingerprint: source?.input_fingerprint ?? call.input.input_fingerprint,
-    initialization_digest: canonicalJsonDigest(initialization),
-    config_digest: initialization.config_digest,
-    workflow_digest: initialization.workflow_digest,
-    constitution_digest: initialization.constitution_digest,
-    policy_base_commit: initialization.policy_base_commit,
-    authoritative_results: structuredClone(source?.authoritative_results ?? []),
-    approvals: structuredClone(source?.approvals ?? []),
-    waivers: structuredClone(source?.waivers ?? []),
-    ...source === void 0 ? {} : {
-      adopted_checkpoint: { revision: source.revision, checkpoint_digest: checkpointSelfDigest(source) }
-    },
-    ...source?.open_gate === void 0 ? {} : { open_gate: structuredClone(source.open_gate) },
-    ...source?.terminal === void 0 ? {} : { terminal: source.terminal }
-  };
-  return ok15(state);
-}
-async function identifyStateInitialization(dependencies, request) {
-  assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
-  assertAuthenticParsedToolCall(request.call);
-  const artifactValue = request.call.input.artifact;
-  if (request.call.input.expected_revision !== 0 || artifactValue === void 0) {
-    return contract("revision-zero-initialization-required");
-  }
-  assertPlainJson(artifactValue, "initialization artifact");
-  const artifact = structuredClone(artifactValue);
-  const initialization = initializationFor(artifact);
-  if (initialization === void 0) return contract("initialization-artifact-required");
-  if (initialization.task_id !== request.authority.task_id) return contract("initialization-task-mismatch");
-  const repository = verifyRepositoryIdentity(initialization.repository_identity_digest, request.authority.repository_identity);
-  if (!repository.ok) return repository;
-  const liveInitialization = await validateLiveInitialization(dependencies, request, initialization);
-  if (!liveInitialization.ok) return liveInitialization;
-  const artifactDocument = canonicalDocument(artifact);
-  const artifactSemantics = validateDurableSemantics({ artifact: artifactDocument });
-  if (!artifactSemantics.ok) return artifactSemantics;
-  const stateResult = initialState(request.call, artifact);
-  if (!stateResult.ok) return stateResult;
-  const preparedState = canonicalDocument(stateResult.value);
-  const initializationSemantics = validateDurableSemantics({
-    state: preparedState,
-    artifact: canonicalDocument(initialization)
-  });
-  if (!initializationSemantics.ok) return initializationSemantics;
-  const config2 = await dependencies.read_config(request.authority.config);
-  if (config2.kind !== "valid") return config2.kind === "invalid" ? contract("task-config-invalid") : io3(request, "task-config-read");
-  if (config2.snapshot.digest !== initialization.config_digest) {
-    return fail21(createProjectError("PINNED_CONFIG_MISMATCH", {
-      expected_digest: initialization.config_digest,
-      observed_digest: config2.snapshot.digest
-    }));
-  }
-  const fingerprint = await dependencies.resolve_input_fingerprint({
-    runner: dependencies.runner,
-    authority: request.authority,
-    state: preparedState,
-    call: request.call,
-    live_config: config2.snapshot,
-    context: request.authority.context
-  });
-  if (!fingerprint.ok) return fingerprint;
-  assertPlainJson(fingerprint.value, "initialization fingerprint subject");
-  const inputFingerprint = computeInputFingerprint(structuredClone(fingerprint.value));
-  const identified = identifyTransactionRequest(request.call, request.authority, inputFingerprint);
-  return ok15(Object.freeze({
-    call: identified.call,
-    input_fingerprint: inputFingerprint,
-    request_digest: identified.request_digest,
-    prepared_state: preparedState
-  }));
-}
-async function intentTarget(dependencies, request) {
-  const claim = parseTaskPathClaim(`intents/${request.call.input.intent_id}.json`);
-  const result = await resolveTaskPath({
-    runner: dependencies.runner,
-    taskId: request.authority.task_id,
-    claim,
-    expectedClass: "intent",
-    context: request.authority.context
-  });
-  if (!result.ok) return result;
-  const rel = relative5(request.authority.task_root, result.value.absolute);
-  if (rel === "" || rel === ".." || rel.startsWith("../") || isAbsolute5(rel)) {
-    throw new TypeError("initialization intent target escaped the task root");
-  }
-  return result;
-}
-function committed(receipt) {
-  const value = receipt.value;
-  const reference = {
-    intent_id: value.intent_id,
-    request_digest: value.request_digest,
-    receipt_digest: receipt.digest,
-    outcome_digest: value.outcome_digest,
-    prior_revision: value.prior_revision,
-    resulting_revision: value.resulting_revision,
-    result_id: value.result_id
-  };
-  return canonicalDocument({ ...value.prepared_state, committed_intent: reference });
-}
-function replay(request, state, receipt) {
-  const semantic = validateDurableSemantics(createCommittedIntentSubject(state, receipt));
-  if (!semantic.ok) return semantic;
-  const artifact = request.call.input.artifact;
-  if (receipt.value.tool !== "archflow_state" || receipt.value.intent_id !== request.call.input.intent_id || receipt.value.task_id !== request.authority.task_id || receipt.value.repository_identity_digest !== request.authority.repository_identity_digest || receipt.value.prior_revision !== 0 || receipt.value.resulting_revision !== 1) return contract("initialization-receipt-identity-mismatch");
-  if (artifact === void 0 || receipt.value.operation !== operationFor2(artifact)) return contract("initialization-receipt-operation-mismatch");
-  if (receipt.value.input_fingerprint !== request.call.input.input_fingerprint) {
-    return fail21(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
-      expected_digest: receipt.value.input_fingerprint,
-      observed_digest: request.call.input.input_fingerprint
-    }));
-  }
-  const identified = identifyTransactionRequest(request.call, request.authority, receipt.value.input_fingerprint);
-  if (identified.request_digest !== receipt.value.request_digest) {
-    return fail21(createProjectError("INTENT_MISMATCH", {
-      expected_digest: receipt.value.request_digest,
-      observed_digest: identified.request_digest
-    }));
-  }
-  const outcome = validateProjectResultStructure(request.call, { schema_version: "1", ok: true, value: receipt.value.outcome });
-  if (!outcome.ok) return outcome;
-  return ok15(Object.freeze({ state, outcome: outcome.value, replayed: true }));
-}
-async function executeLocked2(dependencies, request, path2) {
-  const stateRead = await dependencies.read_state(request.authority.state);
-  if (stateRead.kind === "canonical") {
-    const repository = verifyRepositoryIdentity(stateRead.document.value.repository_identity_digest, request.authority.repository_identity);
-    if (!repository.ok) return repository;
-    const receiptRead = await dependencies.read_receipt(path2);
-    if (stateRead.document.value.revision === 1 && stateRead.document.value.committed_intent?.intent_id === request.call.input.intent_id && receiptRead.kind === "canonical") return replay(request, stateRead.document, receiptRead.document);
-    return fail21(createProjectError("STATE_CONFLICT", { expected_revision: 0, observed_revision: stateRead.document.value.revision }));
-  }
-  if (stateRead.kind !== "missing") return contract(stateRead.kind === "unreadable" ? "task-state-unreadable" : "task-state-noncanonical");
-  const identification = await identifyStateInitialization(dependencies, request);
-  if (!identification.ok) return identification;
-  const preparedState = identification.value.prepared_state;
-  const inputFingerprint = identification.value.input_fingerprint;
-  if (inputFingerprint !== request.call.input.input_fingerprint) {
-    return fail21(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
-      expected_digest: inputFingerprint,
-      observed_digest: request.call.input.input_fingerprint
-    }));
-  }
-  const identified = identification.value;
-  const artifact = structuredClone(request.call.input.artifact);
-  const success2 = { path: parseTaskPathClaim("state.json"), revision: 1, status: request.call.input.status };
-  const expectation = createInternalResultExpectation({
-    schema_version: "1",
-    tool: "archflow_state",
-    task_id: request.authority.task_id,
-    intent_id: request.call.input.intent_id,
-    input_fingerprint: inputFingerprint,
-    request_digest: identified.request_digest,
-    result_id: request.call.input.intent_id,
-    resulting_revision: 1,
-    success: success2
-  });
-  const result = validateProjectResultStructure(request.call, { schema_version: "1", ok: true, value: success2 });
-  if (!result.ok) return result;
-  const outcome = structuredClone(result.value);
-  const receipt = canonicalDocument(parseIntentReceipt({
-    schema_version: "1",
-    intent_id: request.call.input.intent_id,
-    task_id: request.authority.task_id,
-    repository_identity_digest: request.authority.repository_identity_digest,
-    tool: "archflow_state",
-    operation: operationFor2(artifact),
-    request_digest: expectation.request_digest,
-    input_fingerprint: inputFingerprint,
-    prior_revision: 0,
-    resulting_revision: 1,
-    result_id: expectation.result_id,
-    outcome_digest: intentOutcomeDigest(outcome),
-    outcome,
-    prepared_state_digest: preparedState.digest,
-    prepared_state: preparedState.value
-  }));
-  if (intentReceiptDigest(receipt.value) !== receipt.digest) throw new TypeError("initialization receipt digest mismatch");
-  const final = committed(receipt);
-  const existing = await dependencies.read_receipt(path2);
-  if (existing.kind === "canonical") {
-    if (existing.document.digest !== receipt.digest) {
-      return fail21(createProjectError("INTENT_MISMATCH", { expected_digest: existing.document.digest, observed_digest: receipt.digest }));
-    }
-  } else if (existing.kind !== "missing") {
-    return existing.kind === "unreadable" ? io3(request, "intent-receipt-read") : contract("intent-receipt-noncanonical");
-  }
-  try {
-    await ensureIntentDirectory(request.authority);
-    if (existing.kind === "missing") {
-      const created = await dependencies.atomic.createExclusive(path2, receipt.bytes);
-      if (created === "exists") {
-        const collision = await dependencies.read_receipt(path2);
-        if (collision.kind !== "canonical" || collision.document.digest !== receipt.digest) {
-          return contract("intent-receipt-collision");
-        }
-      }
-    }
-    await dependencies.atomic.replace(request.authority.state, final.bytes);
-  } catch (error51) {
-    if (error51 instanceof IntentLayoutError) return io3(request, "intent-receipt-create");
-    if (!(error51 instanceof AtomicReplaceError)) throw error51;
-    const observed2 = await dependencies.read_state(request.authority.state);
-    if (observed2.kind === "canonical" && observed2.document.digest === final.digest) {
-      return ok15(Object.freeze({ state: observed2.document, outcome, replayed: false }));
-    }
-    if (observed2.kind === "missing") return io3(request, error51.operation === "replace" ? "task-state-replace" : "intent-receipt-create");
-    return contract("transaction-outcome-ambiguous");
-  }
-  const observed = await dependencies.read_state(request.authority.state);
-  if (observed.kind !== "canonical" || observed.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
-  return ok15(Object.freeze({ state: observed.document, outcome, replayed: false }));
-}
-async function runStateInitialization(dependencies, request) {
-  assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
-  assertAuthenticParsedToolCall(request.call);
-  const path2 = await intentTarget(dependencies, request);
-  if (!path2.ok) return path2;
-  let completed;
-  try {
-    return await dependencies.lock.runExclusive(request.authority.task_root, async () => {
-      completed = await executeLocked2(dependencies, request, path2.value);
-      return completed;
-    });
-  } catch (error51) {
-    if (!(error51 instanceof TaskLockError)) throw error51;
-    if (error51.stage === "acquire") return io3(request, "task-lock-acquire");
-    if (completed !== void 0) return completed;
-    if (error51.cause !== void 0) throw error51.cause;
-    return io3(request, "task-lock-release");
-  }
-}
-
-// src/mcp/handlers/state-results.ts
-var ok16 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var contractInvalid2 = (issueCode) => Object.freeze({
-  schema_version: "1",
-  ok: false,
-  error: createProjectError("CONTRACT_INVALID", {
-    tool: "archflow_state",
-    issue_code: issueCode
-  })
-});
-async function target(services, claim, expectedClass) {
-  return resolveTaskPath({
-    runner: services.runner,
-    taskId: services.authority.task_id,
-    claim: parseTaskPathClaim(claim),
-    expectedClass,
-    context: services.authority.context
-  });
-}
-function scannerCapture(scanner) {
-  let observed;
-  return {
-    scanner: Object.freeze({
-      scan: async (candidates) => {
-        observed = parseSecretScanResult(await scanner.scan(candidates));
-        return observed;
-      }
-    }),
-    result: () => {
-      if (observed === void 0) throw new TypeError("projection scanner did not run");
-      return observed;
-    }
-  };
-}
-function accounting(outputs, retained, revision) {
-  const counted = outputs.flatMap((output) => output.storage === "raw-payload" ? [{ path: output.path, storage: "raw-payload", stored_bytes: output.payload_bytes }] : []);
-  const resultBytes = parseSafeInteger(counted.reduce((sum, entry) => sum + entry.stored_bytes, 0));
-  return Object.freeze({
-    schema_version: "1",
-    result_bytes: resultBytes,
-    task_bytes: parseSafeInteger(retained + resultBytes),
-    result_byte_cap: 26214400,
-    task_byte_cap: 262144e3,
-    counted_entries: Object.freeze(counted),
-    measured_at_revision: revision
-  });
-}
-async function prepareDocumentResult(input) {
-  const documentTarget = await target(input.services, input.artifact.document_path, "document");
-  if (!documentTarget.ok) return documentTarget;
-  if (documentTarget.value.repositoryRelative !== input.artifact.projection_target) {
-    return contractInvalid2("document-projection-target-mismatch");
-  }
-  const captured = await captureProjectionTarget(documentTarget.value);
-  if (captured.rollback.state !== "present" || captured.rollback.file_type !== "regular") {
-    return contractInvalid2("document-projection-not-regular-file");
-  }
-  const bytes = captured.rollback.bytes;
-  if (bytes.byteLength !== input.artifact.byte_count || sha256Bytes(bytes) !== input.artifact.content_digest) {
-    return contractInvalid2("document-content-mismatch");
-  }
-  const identity = await hashGitBlobIdentity(input.services.runner, bytes, input.artifact.projection_target);
-  const after = Object.freeze({
-    oid: parseGitOid(identity.oid),
-    mode: "100644",
-    size_bytes: parseSafeInteger(identity.size_bytes)
-  });
-  const output = Object.freeze({
-    path: input.artifact.projection_target,
-    path_class: "document",
-    operation: "add",
-    storage: "raw-payload",
-    payload_bytes: parseSafeInteger(bytes.byteLength),
-    payload_digest: sha256Bytes(bytes),
-    file_type: "regular",
-    after
-  });
-  const projections = Object.freeze([{ path: output.path, content_digest: output.payload_digest }]);
-  if (deriveDeclaredSnapshotDigest([output], projections) !== input.artifact.snapshot_digest) {
-    return contractInvalid2("document-snapshot-digest-mismatch");
-  }
-  const capture = scannerCapture(input.scanner);
-  const plan = await prepareProjectionPlan([{
-    path: output.path,
-    target: documentTarget.value,
-    desired: { state: "present", file_type: "regular", mode: "100644", bytes },
-    authenticated_before: captured.observation,
-    rollback: captured.rollback,
-    git_tracked: true
-  }], capture.scanner, input.services.runner.location.worktreeRoot);
-  if (!plan.ok) return plan;
-  const manifestValue = {
-    schema_version: "1",
-    task_id: input.services.authority.task_id,
-    repository_identity_digest: input.services.authority.repository_identity_digest,
-    result_id: input.result_id,
-    phase_instance: input.artifact.phase_instance,
-    step: input.artifact.step,
-    artifact_digest: canonicalJsonDigest(input.artifact),
-    source_artifact: input.artifact,
-    input_fingerprint: input.artifact.input_fingerprint,
-    snapshot_digest: input.artifact.snapshot_digest,
-    outputs: [output],
-    projections,
-    accounting: accounting([output], input.retained_task_bytes, input.measured_at_revision),
-    secret_scan: capture.result()
-  };
-  const manifest = canonicalDocument(manifestValue);
-  const manifestTarget = await target(input.services, `results/sha256/${manifest.digest}/manifest.json`, "result-manifest");
-  const payloadTarget = await target(input.services, `results/sha256/${manifest.digest}/payload/${output.path}`, "result-payload");
-  if (!manifestTarget.ok) return manifestTarget;
-  if (!payloadTarget.ok) return payloadTarget;
-  const prepared = await prepareDocumentSnapshot({
-    runner: input.services.runner,
-    manifest: manifestValue,
-    payloads: [{ path: output.path, bytes, target: payloadTarget.value }],
-    retained_task_bytes: input.retained_task_bytes
-  });
-  if (!prepared.ok) return prepared;
-  return ok16(Object.freeze({
-    reference: Object.freeze({
-      phase_instance: input.artifact.phase_instance,
-      step: input.artifact.step,
-      result_digest: prepared.value.result_digest,
-      result_id: input.result_id,
-      input_fingerprint: input.artifact.input_fingerprint,
-      manifest_path: manifestTarget.value.repositoryRelative
-    }),
-    prepared: prepared.value,
-    manifest_target: manifestTarget.value,
-    projection_plan: plan.value
-  }));
-}
-async function prepareImplementationResult(input) {
-  const facts = await verifyImplementationManifest(
-    input.services.runner,
-    input.artifact,
-    input.services.authority.context
-  );
-  const sources = [];
-  const addSource = async (path2, pathClass3, desired, tracked, renamePair) => {
-    const resolved = await resolveDeclaredOutputPath({
-      runner: input.services.runner,
-      taskId: input.services.authority.task_id,
-      claim: path2,
-      pathClass: pathClass3,
-      context: input.services.authority.context
-    });
-    if (!resolved.ok) throw resolved.error;
-    const captured = await captureProjectionTarget(resolved.value);
-    sources.push(Object.freeze({
-      path: path2,
-      target: resolved.value,
-      desired,
-      authenticated_before: captured.observation,
-      rollback: captured.rollback,
-      git_tracked: tracked,
-      ...renamePair === void 0 ? {} : { rename_pair: renamePair }
-    }));
-  };
-  for (const output of input.artifact.outputs) {
-    if (output.operation === "rename") {
-      await addSource(output.previous_path, output.path_class, { state: "absent" }, true, {
-        role: "source",
-        peer_path: output.path
-      });
-    }
-    if (output.operation === "delete") {
-      await addSource(output.path, output.path_class, { state: "absent" }, true);
-      continue;
-    }
-    const raw = facts.raw_payloads.get(output.path);
-    const resolved = await resolveDeclaredOutputPath({
-      runner: input.services.runner,
-      taskId: input.services.authority.task_id,
-      claim: output.path,
-      pathClass: output.path_class,
-      context: input.services.authority.context
-    });
-    if (!resolved.ok) return resolved;
-    const captured = await captureProjectionTarget(resolved.value);
-    const bytes = raw ?? (captured.rollback.state === "present" ? captured.rollback.bytes : void 0);
-    if (bytes === void 0) return contractInvalid2("implementation-after-image-unavailable");
-    const desired = output.file_type === "regular" ? { state: "present", file_type: "regular", mode: output.after.mode, bytes } : { state: "present", file_type: "symlink", mode: "120000", bytes };
-    await addSource(output.path, output.path_class, desired, output.operation !== "add", output.operation === "rename" ? {
-      role: "destination",
-      peer_path: output.previous_path
-    } : void 0);
-  }
-  const capture = scannerCapture(input.scanner);
-  const plan = await prepareProjectionPlan(
-    sources,
-    capture.scanner,
-    input.services.runner.location.worktreeRoot
-  );
-  if (!plan.ok) return plan;
-  const snapshotByPath = new Map(facts.snapshot_entries.map((entry) => [entry.path, entry]));
-  const projections = [];
-  for (const output of input.artifact.outputs) {
-    if (output.operation === "delete") continue;
-    const observed = snapshotByPath.get(output.path);
-    if (observed?.state !== "present") return contractInvalid2("implementation-projection-identity-missing");
-    projections.push({ path: output.path, content_digest: observed.content_digest });
-  }
-  const manifestValue = {
-    schema_version: "1",
-    task_id: input.services.authority.task_id,
-    repository_identity_digest: input.services.authority.repository_identity_digest,
-    result_id: input.result_id,
-    phase_instance: input.artifact.phase_instance,
-    step: input.artifact.step,
-    artifact_digest: canonicalJsonDigest(input.artifact),
-    source_artifact: input.artifact,
-    input_fingerprint: input.artifact.input_fingerprint,
-    snapshot_digest: input.artifact.snapshot_digest,
-    outputs: input.artifact.outputs,
-    projections,
-    accounting: input.artifact.accounting,
-    secret_scan: input.artifact.secret_scan
-  };
-  parseResultManifest(manifestValue);
-  const manifest = canonicalDocument(manifestValue);
-  const manifestTarget = await target(input.services, `results/sha256/${manifest.digest}/manifest.json`, "result-manifest");
-  if (!manifestTarget.ok) return manifestTarget;
-  const payloads = [];
-  for (const [path2, bytes] of facts.raw_payloads) {
-    const payloadTarget = await target(input.services, `results/sha256/${manifest.digest}/payload/${path2}`, "result-payload");
-    if (!payloadTarget.ok) return payloadTarget;
-    payloads.push(Object.freeze({ path: path2, bytes, target: payloadTarget.value }));
-  }
-  const prepared = prepareSnapshot({
-    manifest: manifestValue,
-    payloads,
-    retained_task_bytes: input.retained_task_bytes,
-    validate_manifest: parseResultManifest
-  });
-  if (!prepared.ok) return prepared;
-  return ok16(Object.freeze({
-    reference: Object.freeze({
-      phase_instance: input.artifact.phase_instance,
-      step: input.artifact.step,
-      result_digest: prepared.value.result_digest,
-      result_id: input.result_id,
-      input_fingerprint: input.artifact.input_fingerprint,
-      manifest_path: manifestTarget.value.repositoryRelative
-    }),
-    prepared: prepared.value,
-    manifest_target: manifestTarget.value,
-    projection_plan: plan.value
-  }));
-}
-
 // src/mcp/handlers/state.ts
 var fail22 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function stateResultId(intentId) {
@@ -68246,14 +68304,24 @@ async function handleState(call, context2) {
     const session = await openHandlerSession(call, context2);
     if (!session.ok) return session;
     const { services } = session.value;
+    const artifact = call.input.artifact;
+    let manualEvidence;
+    if (artifact?.artifact_kind === "manual-checkpoint-import") {
+      const loaded = await loadManualImportEvidence({
+        dependencies: services.dependencies,
+        authority: services.authority,
+        artifact
+      });
+      if (!loaded.ok) return loaded;
+      manualEvidence = loaded.value;
+    }
     if (services.state === void 0) {
       const initialized = await runStateInitialization(services.dependencies, {
         authority: services.authority,
         call
-      });
+      }, manualEvidence);
       return initialized.ok ? Object.freeze({ schema_version: "1", ok: true, value: initialized.value.outcome }) : initialized;
     }
-    const artifact = call.input.artifact;
     const identified = identifyTransactionRequest(
       call,
       services.authority,
@@ -68348,7 +68416,8 @@ async function handleState(call, context2) {
           value: success2
         });
         if (artifact?.artifact_kind === "manual-checkpoint-import") {
-          return planCheckpointAdoption({ current, call: identifiedCall, expectation, result });
+          if (manualEvidence === void 0) throw new TypeError("manual import evidence was not loaded");
+          return planCheckpointAdoption({ current, call: identifiedCall, expectation, result, evidence: manualEvidence });
         }
         let completionSubjectDigest;
         let commitObserved = false;
@@ -68423,11 +68492,11 @@ async function handleState(call, context2) {
 }
 
 // src/mcp/handlers/waiver.ts
-import { isDeepStrictEqual as isDeepStrictEqual13 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual14 } from "node:util";
 var fail23 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function authenticWaiverOriginArchive(request, decision2, origin2) {
   const payload = decision2.value.outcome === "decided" ? decision2.value.envelope.payload : void 0;
-  return request.value.gate_id === origin2.origin_gate_id && request.value.task_id === origin2.task_id && request.value.phase_instance === origin2.phase_instance && request.value.subject_digest === origin2.subject_digest && request.value.context_digest === origin2.origin_context_digest && request.value.current_evidence.set_digest === origin2.current_evidence_set_digest && (request.value.kind === "review-trigger" || request.value.kind === "adjudication-failure") && decision2.digest === origin2.origin_decision_digest && payload?.decision === "waiver-requested" && isDeepStrictEqual13(payload.rule, origin2.rule) && "waiver_scope" in request.value.context && isDeepStrictEqual13(request.value.context.waiver_scope, origin2.scope) && validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok;
+  return request.value.gate_id === origin2.origin_gate_id && request.value.task_id === origin2.task_id && request.value.phase_instance === origin2.phase_instance && request.value.subject_digest === origin2.subject_digest && request.value.context_digest === origin2.origin_context_digest && request.value.current_evidence.set_digest === origin2.current_evidence_set_digest && (request.value.kind === "review-trigger" || request.value.kind === "adjudication-failure") && decision2.digest === origin2.origin_decision_digest && payload?.decision === "waiver-requested" && isDeepStrictEqual14(payload.rule, origin2.rule) && "waiver_scope" in request.value.context && isDeepStrictEqual14(request.value.context.waiver_scope, origin2.scope) && validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok;
 }
 async function handleWaiver(call, context2) {
   return mapHandlerErrors(context2.invocation_id, async () => {

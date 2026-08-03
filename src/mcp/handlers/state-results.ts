@@ -11,6 +11,7 @@ import type { OutputEntry } from "../../contracts/durable-primitives.js";
 import { hashGitBlobIdentity } from "../../repository/git.js";
 import { resolveDeclaredOutputPath, resolveTaskPath, type ResolvedPath, type ResolvedTaskPath } from "../../repository/paths.js";
 import type { TransactionAuthority } from "../../state/authority.js";
+import { prepareEvidenceResult, type EvidenceResultValue } from "../../state/evidence-results.js";
 import { verifyImplementationManifest } from "../../state/implementation-manifest.js";
 import {
   captureProjectionTarget,
@@ -25,7 +26,11 @@ import {
   type ProjectionPlan,
   type ProjectionSource,
 } from "../../state/snapshots.js";
-import type { ProductionServices } from "../../state/production.js";
+import {
+  resolveRetainedTaskAccounting,
+  type ProductionServices,
+  type RetainedTaskAccounting,
+} from "../../state/production.js";
 
 export type PreparedStateResult = Readonly<{
   reference: AuthoritativeResultRef;
@@ -33,6 +38,17 @@ export type PreparedStateResult = Readonly<{
   manifest_target: ResolvedPath;
   projection_plan: ProjectionPlan;
 }>;
+
+type PrepareRetainedStateResultCommon = Readonly<{
+  services: ProductionServices;
+  result_id: SafeId;
+  accounting: RetainedTaskAccounting;
+  scanner: SecretScanner;
+}>;
+export type PrepareRetainedStateResultInput = PrepareRetainedStateResultCommon & (
+  | Readonly<{ artifact: DocumentArtifactV1 | ImplementationOutputV1; evidence?: never }>
+  | Readonly<{ evidence: EvidenceResultValue; artifact?: never }>
+);
 
 const ok = <T>(value: T) => Object.freeze({ schema_version: "1" as const, ok: true as const, value });
 const contractInvalid = <T>(issueCode: string): ProjectResult<T> => Object.freeze({
@@ -321,4 +337,27 @@ export async function prepareImplementationResult(input: Readonly<{
     manifest_target: manifestTarget.value,
     projection_plan: plan.value,
   }));
+}
+
+/** Common preparation seam for normal and manual production. Accounting is capability-derived. */
+export async function prepareRetainedStateResult(
+  input: PrepareRetainedStateResultInput,
+): Promise<ProjectResult<PreparedStateResult>> {
+  const accounting = resolveRetainedTaskAccounting(input.accounting);
+  const common = {
+    result_id: input.result_id,
+    retained_task_bytes: accounting.task_bytes,
+    measured_at_revision: accounting.measured_at_revision,
+    scanner: input.scanner,
+  };
+  if (input.evidence !== undefined) return prepareEvidenceResult({
+    ...common,
+    authority: input.services.authority,
+    runner: input.services.runner,
+    value: input.evidence,
+  });
+  const services = { ...common, services: input.services };
+  return input.artifact.artifact_kind === "document"
+    ? prepareDocumentResult({ ...services, artifact: input.artifact })
+    : prepareImplementationResult({ ...services, artifact: input.artifact });
 }

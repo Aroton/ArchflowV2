@@ -6,7 +6,7 @@ import { canonicalJsonBytes } from "../contracts/canonical.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { LOCAL_COMMANDS, runLocalCommand, type LocalCommand } from "./commands.js";
 
-const INPUT_FREE_COMMANDS = new Set<LocalCommand>(["status", "init", "task-init"]);
+const INPUT_FREE_COMMANDS = new Set<LocalCommand>(["status", "manual-status", "init", "task-init"]);
 
 async function readInput(path: string | undefined): Promise<unknown> {
   const bytes = path === undefined

@@ -9,6 +9,10 @@ Treat the arguments as `<task> <phase-number>`. Work only in `.archflow/tasks/<t
 
 Before changing code, run status and require durable authority for `phase_instance: "phase-impl-<phase-number>"`. A phase-design file or approval in conversation is insufficient. Never write code before the phase design is durably approved.
 
+## Degraded operation
+
+If a workflow tool is unavailable, run input-free `archflow-local manual-status --task <task>` and perform exactly its one `next_action`. Pass `archflow-local manual-next --task <task>` only the complete plain-JSON selector/source artifact it requests; use the emitted fallback prompt, decision interfaces, installed retained result/checkpoint, and resume action verbatim. The helper derives result references and checkpoint links, authenticates archived gates and waivers, and requires committed-tree observation after exact-diff commit authorization. Prepared but uncheckpointed output is not success. Never stage or commit before the manual authority reports the explicit authorization bound to the final result, and still stop for the user's separate confirmation before committing. For writer transfer, run `archflow-local manual-handoff --task <task>` with the emitted input; the human commits/pushes the checkpoint and the next writer cleanly pulls before status can resume. The skill never merges, pushes, chooses a successor, or fabricates a routine divergence record. If both server and helper are unavailable, stop and reinstall with `./install.sh`; create no milestone and infer no authorization.
+
 ## Stable rubric
 
 Use this exact JSON object, without editing or reordering it, both when hashing the rubric and when calling `archflow_counter_review`:

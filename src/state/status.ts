@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { canonicalJsonDigest, parseCanonicalDocument } from "../contracts/canonical.js";
+import { selectGreatestValidChain, type ChainAnchor } from "../contracts/durable-checkpoint.js";
 import { parseConfigYaml } from "../contracts/config.js";
 import { parseActiveGate, parseGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
@@ -136,6 +137,15 @@ export type TaskStatusV1 = DegradedStatus & Readonly<{
   gate_input?: CommitAuthorizationInput;
   next_action: NextAction;
 }>;
+
+/** Checkpoint revisions continue from adopted checkpoint authority, not from state CAS revisions. */
+export function manualCheckpointHeadIsPending(
+  state: Pick<TaskStateV1, "revision" | "adopted_checkpoint">,
+  checkpointHead: number | undefined,
+): boolean {
+  return checkpointHead !== undefined &&
+    checkpointHead > (state.adopted_checkpoint?.revision ?? state.revision);
+}
 
 function unavailableConfig(expected?: Sha256Digest, observed?: Sha256Digest, issue?: string): ConfigVerification {
   return Object.freeze({
@@ -517,8 +527,31 @@ export async function computeTaskStatus(
   let checkpointHead: number | undefined;
   try {
     const checkpoints = await readManualCheckpoints(dependencies, authority);
-    if (checkpoints.ok) checkpointHead = checkpoints.value.at(-1)?.value.revision;
-    else blockers.push("checkpoint-inventory-unavailable");
+    if (checkpoints.ok) {
+      const checkpointAnchor: ChainAnchor = state.adopted_checkpoint === undefined
+        ? Object.freeze({
+            mode: "state" as const,
+            task_id: authority.task_id,
+            repository_identity_digest: authority.repository_identity_digest,
+            state_anchor: Object.freeze({
+              anchor_kind: "state" as const,
+              state_revision: state.revision,
+              state_digest: stateDocument.digest,
+            }),
+          })
+        : Object.freeze({
+            mode: "continuation" as const,
+            task_id: authority.task_id,
+            repository_identity_digest: authority.repository_identity_digest,
+            predecessor: state.adopted_checkpoint,
+          });
+      const selected = selectGreatestValidChain(
+        checkpointAnchor,
+        checkpoints.value.map((checkpoint) => checkpoint.value),
+      );
+      if (selected.kind === "chain") checkpointHead = selected.chain.at(-1)?.revision;
+      else blockers.push(`checkpoint-${selected.outcome}`);
+    } else blockers.push("checkpoint-inventory-unavailable");
   } catch {
     blockers.push("checkpoint-inventory-unavailable");
   }
@@ -681,7 +714,7 @@ export async function computeTaskStatus(
       gateBindingBlocker = "active-gate-invalid";
     }
   }
-  if (checkpointHead !== undefined && checkpointHead > state.revision) blockers.push("checkpoint-import-available");
+  if (manualCheckpointHeadIsPending(state, checkpointHead)) blockers.push("checkpoint-import-available");
 
   let adjudicationGateKind: Parameters<typeof deriveNextAction>[0]["adjudication_gate_kind"];
   if (assessment?.next === "adjudication-gate" && constitution !== undefined) {
@@ -759,20 +792,52 @@ export async function computeDegradedStatus(
   }
   const checkpoints = await readManualCheckpoints(dependencies, authority);
   if (!checkpoints.ok) return checkpoints;
-  const head = checkpoints.value.at(-1)?.value.revision;
+  const candidates = checkpoints.value.map((checkpoint) => checkpoint.value);
+  let anchor: ChainAnchor;
+  if (stateRead.kind === "missing") {
+    anchor = Object.freeze({
+      mode: "initial",
+      task_id: authority.task_id,
+      repository_identity_digest: authority.repository_identity_digest,
+    });
+  } else if (stateRead.kind === "canonical" && stateRead.document.value.adopted_checkpoint !== undefined) {
+    anchor = Object.freeze({
+      mode: "continuation",
+      task_id: authority.task_id,
+      repository_identity_digest: authority.repository_identity_digest,
+      predecessor: stateRead.document.value.adopted_checkpoint,
+    });
+  } else if (stateRead.kind === "canonical") {
+    anchor = Object.freeze({
+      mode: "state",
+      task_id: authority.task_id,
+      repository_identity_digest: authority.repository_identity_digest,
+      state_anchor: Object.freeze({
+        anchor_kind: "state",
+        state_revision: stateRead.document.value.revision,
+        state_digest: stateRead.document.digest,
+      }),
+    });
+  } else {
+    throw new TypeError("unreachable state read classification");
+  }
+  const selected = selectGreatestValidChain(anchor, candidates);
+  const head = selected.kind === "chain" ? selected.chain.at(-1)?.revision : undefined;
+  const chainBlocker = selected.kind === "stop" ? `checkpoint-${selected.outcome}` : undefined;
   if (stateRead.kind === "missing") {
     return ok(Object.freeze({
       task_id: authority.task_id,
       state: "missing" as const,
       ...(head === undefined ? {} : { checkpoint_head_revision: head }),
-      blocking_reasons: Object.freeze(["state-missing"]),
+      blocking_reasons: Object.freeze(["state-missing", ...(chainBlocker === undefined ? [] : [chainBlocker])]),
     }));
   }
   if (stateRead.kind !== "canonical") throw new TypeError("unreachable state read classification");
   const state = stateRead.document.value;
   const blockers: string[] = [];
+  if (chainBlocker !== undefined) blockers.push(chainBlocker);
   if (state.open_gate !== undefined) blockers.push("gate-decision-required");
-  if (head !== undefined && head > state.revision) blockers.push("checkpoint-import-available");
+  if (manualCheckpointHeadIsPending(state, head)) blockers.push("checkpoint-import-available");
   return ok(Object.freeze({
     task_id: authority.task_id,
     state: state.terminal ?? "active",

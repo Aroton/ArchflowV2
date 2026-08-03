@@ -7,6 +7,10 @@ description: Design and durably review one approved ArchFlow implementation phas
 
 Treat the arguments as `<task> <phase-number>`. Work only in `.archflow/tasks/<task>/` plus shared `.archflow/context/`; never read another task's files. The canonical artifact is `.archflow/tasks/<task>/phases/<phase-number>/design.md`. Durable status, not that document's status line, decides whether implementation may begin.
 
+## Degraded operation
+
+If a workflow tool is unavailable, run input-free `archflow-local manual-status --task <task>` and take exactly its one `next_action`. Use `archflow-local manual-next --task <task>` only with the complete plain-JSON selector/source artifact it requests, and follow the emitted fallback and resume action verbatim. The helper must retain the exact phase-design result, bind manual review/adjudication to pinned inputs, archive every gate/waiver outcome, and install a closed checkpoint before status may move. An unresolved gate, accepted review change, drift, uncertainty, or missing committed authority remains non-advancing; `DESIGNED` still requires an explicit archived approval of the current fixed point. Re-run `manual-status` after every milestone. If both server and helper are unavailable, stop and reinstall with `./install.sh`; never write code or infer design approval.
+
 ## Stable rubric
 
 Use this exact JSON object, without editing or reordering it, both when hashing the rubric and when calling `archflow_counter_review`:
@@ -29,7 +33,7 @@ Every non-produce call uses one `archflow-local envelope --task <task>` pass ove
 2. Run `archflow-local envelope --task <task>` over the complete `archflow_state` request and substitute the returned fingerprint into both the request and artifact.
 3. Run `envelope` again over that substituted request for the true request digest, then call `archflow_state` with byte-equivalent input.
 
-On a fingerprint mismatch, abandon the pending intent, use the returned expected digest and safe next action, rebuild with a fresh intent, and re-run status. Do not introduce a manual fallback.
+On a fingerprint mismatch, abandon the pending intent, use the returned expected digest and safe next action, rebuild with a fresh intent, and re-run status. A fingerprint mismatch does not itself authorize degraded mode; use a manual fallback only when the helper classifies an unavailable capability.
 
 ## Phase work
 
