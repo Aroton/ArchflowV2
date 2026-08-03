@@ -2,7 +2,7 @@ import reviewOutputSchema from "../contracts/schemas/v1/review.schema.json" with
 
 import { canonicalJsonDigest } from "../contracts/canonical.js";
 import type { ConfigV1 } from "../contracts/config.js";
-import type { ProjectResult } from "../contracts/errors.js";
+import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeInteger, type SafeInteger } from "../contracts/evidence.js";
 import {
   createInternalResultExpectation,
@@ -51,6 +51,7 @@ export type RunCounterReviewDependencies = Readonly<{
     evidence: ReviewEvidence,
     measuredAtRevision: SafeInteger,
   ) => Promise<ProjectResult<PreparedEvidenceResult>>;
+  reobserve_projection_digest: () => Promise<ProjectResult<ReviewEvidence["subject_digest"]>>;
 }>;
 
 export type RunCounterReviewInput = Readonly<{
@@ -61,6 +62,7 @@ export type RunCounterReviewInput = Readonly<{
   producer_family: ModelFamily;
   measured_at_revision: SafeInteger;
   envelope: ReviewEnvelopeInput;
+  projection_digest: ReviewEvidence["subject_digest"];
 }>;
 
 /**
@@ -91,6 +93,18 @@ export async function runCounterReview(
   const envelope = buildReviewEnvelope(input.envelope);
   const dispatched = await serializeDispatch(() =>
     dependencies.dispatch(route, envelope, reviewOutputSchema as PlainJsonValue));
+  const currentProjection = await dependencies.reobserve_projection_digest();
+  if (!currentProjection.ok) return currentProjection;
+  if (currentProjection.value !== input.projection_digest) {
+    return {
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("STATE_INVALID", {
+        phase_instance: input.envelope.subject.phase_instance,
+        issue_code: "counter-review-subject-not-current",
+      }),
+    };
+  }
   const observed = mintReviewObservation({
     subject: input.envelope.subject,
     adapter: route.adapter,

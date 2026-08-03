@@ -152,6 +152,12 @@ export type TaskStateV1 = {
   /** SET — sorted by `gate_id`, duplicates rejected. */
   readonly waivers: readonly WaiverRef[];
   /**
+   * Human-approved final implementation phase from the current approved design's consecutive exact
+   * `### Phase N: Name` headings. Absence requires its explicit open-ended marker; design approval is
+   * the only normal-mode writer.
+   */
+  readonly planned_final_phase?: SafeInteger;
+  /**
    * At most one, and a single optional object rather than an array: a nested or concurrent gate is
    * *unrepresentable* rather than merely rejected. Phase 12 owns the one-active-gate lifecycle —
    * when this may be set, cleared, or superseded. Phase 7 owns only the shape.

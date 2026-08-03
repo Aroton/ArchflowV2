@@ -1,7 +1,7 @@
 import { execFile, type ExecFileException } from "node:child_process";
 import { resolve as resolvePath } from "node:path";
 
-import { repositoryCandidateDigest } from "../contracts/canonical.js";
+import { parseGitOid, repositoryCandidateDigest, type GitOid } from "../contracts/canonical.js";
 import {
   createProjectError,
   type ProjectError,
@@ -347,17 +347,26 @@ export async function readChangedGitPaths(runner: GitRunner): Promise<GitChanged
   return Object.freeze({ paths: Object.freeze([...new Set(paths)]), unrepresentable_count: unrepresentable });
 }
 
+/** True only when `ancestor` is retained by the immutable `descendant` ancestry. */
+export async function isCommitAncestor(
+  runner: GitRunner,
+  ancestor: string,
+  descendant: string,
+): Promise<boolean> {
+  const result = await runner.run({
+    argv: ["merge-base", "--is-ancestor", ancestor, descendant],
+    operation: ANCESTOR_OPERATION,
+    expectedAbsence: [{ code: 1, stderrIncludes: "" }],
+  });
+  return !result.absent;
+}
+
 /** True only when `ancestor` is retained by the current HEAD ancestry. */
 export async function isCommitAncestorOfHead(
   runner: GitRunner,
   ancestor: string
 ): Promise<boolean> {
-  const result = await runner.run({
-    argv: ["merge-base", "--is-ancestor", ancestor, "HEAD"],
-    operation: ANCESTOR_OPERATION,
-    expectedAbsence: [{ code: 1, stderrIncludes: "" }],
-  });
-  return !result.absent;
+  return isCommitAncestor(runner, ancestor, "HEAD");
 }
 
 /** Resolves one exact blob entry from a commit tree; empty output is ordinary absence. */
@@ -449,14 +458,19 @@ export async function readCommitRangeChangedPaths(
   return Object.freeze(unique);
 }
 
-/** Resolves the current HEAD commit through the shared bounded Git command boundary. */
-export async function readHeadCommit(runner: GitRunner): Promise<string> {
+/** Resolves one revision to a commit through the shared bounded Git command boundary. */
+export async function resolveCommit(runner: GitRunner, revision: string): Promise<GitOid> {
   const oid = await runner.runText({
-    argv: ["rev-parse", "--verify", "HEAD^{commit}"],
+    argv: ["rev-parse", "--verify", `${revision}^{commit}`],
     operation: HEAD_COMMIT_OPERATION,
   });
-  if (!GIT_OID.test(oid)) throw new TypeError("git rev-parse returned an invalid HEAD commit");
-  return oid;
+  if (!GIT_OID.test(oid)) throw new TypeError("git rev-parse returned an invalid commit");
+  return parseGitOid(oid);
+}
+
+/** Resolves the current HEAD commit through the shared bounded Git command boundary. */
+export async function readHeadCommit(runner: GitRunner): Promise<GitOid> {
+  return resolveCommit(runner, "HEAD");
 }
 
 /** Reads the byte size of a blob already named by an authenticated tree entry. */

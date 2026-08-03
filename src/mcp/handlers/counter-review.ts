@@ -5,9 +5,13 @@ import { parseSafeId } from "../../contracts/evidence.js";
 import type { ParsedToolCall, ToolSuccess } from "../../contracts/mcp-tools.js";
 import type { PlainJsonValue } from "../../contracts/plain-json.js";
 import { createDispatchCoordinator } from "../../dispatch/coordinator.js";
-import { openResolved, resolveTaskPath } from "../../repository/paths.js";
 import { runCounterReview } from "../../review/counter-review.js";
 import { prepareEvidenceResult } from "../../state/evidence-results.js";
+import {
+  loadCurrentProduceSubject,
+  readProduceProjection,
+  renderProduceReviewMaterial,
+} from "../../state/produce-subject.js";
 import { mapHandlerErrors } from "./errors.js";
 import { resolvePreDispatchReplay } from "./replay.js";
 import { openHandlerSession } from "./session.js";
@@ -41,26 +45,15 @@ export async function handleCounterReview(
       return Object.freeze({ schema_version: "1", ok: true, value: replay.value });
     }
 
-    const artifactTarget = await resolveTaskPath({
-      runner: services.runner,
-      taskId: services.authority.task_id,
-      claim: call.input.artifact_path,
-      context: services.authority.context,
-    });
-    if (!artifactTarget.ok) return artifactTarget;
-    let artifactBytes: Uint8Array;
-    try {
-      const handle = await openResolved(artifactTarget.value.absolute, 0);
-      artifactBytes = new Uint8Array(await handle.readFile().finally(() => handle.close()));
-    } catch {
-      return fail(createProjectError("IO_ERROR", {
-        operation: "counter-review-artifact-read",
-        attempt: services.authority.context.attempt,
-      }));
-    }
+    const produce = await loadCurrentProduceSubject(services.dependencies, state.value);
+    if (!produce.ok) return produce;
+    const projection = await readProduceProjection(
+      services.runner, services.authority, produce.value, call.input.artifact_path,
+    );
+    if (!projection.ok) return projection;
     let artifact: string;
     try {
-      artifact = new TextDecoder("utf-8", { fatal: true }).decode(artifactBytes);
+      artifact = renderProduceReviewMaterial(produce.value, projection.value);
     } catch {
       return fail(createProjectError("CONTRACT_INVALID", {
         tool: call.name,
@@ -94,6 +87,23 @@ export async function handleCounterReview(
         scanner: services.dependencies.gate_secret_scanner!,
         value: { kind: "review", evidence },
       }),
+      reobserve_projection_digest: async () => {
+        const current = await services.dependencies.read_state(services.authority.state);
+        if (current.kind !== "canonical") return fail(createProjectError("STATE_INVALID", {
+          phase_instance: state.value.phase_instance, issue_code: "counter-review-state-not-current",
+        }));
+        const retained = await loadCurrentProduceSubject(services.dependencies, current.document.value);
+        if (!retained.ok) return retained;
+        if (retained.value.artifact_digest !== produce.value.artifact_digest) return fail(createProjectError("STATE_INVALID", {
+          phase_instance: state.value.phase_instance, issue_code: "counter-review-subject-not-current",
+        }));
+        const observed = await readProduceProjection(
+          services.runner, services.authority, retained.value, call.input.artifact_path,
+        );
+        return observed.ok
+          ? Object.freeze({ schema_version: "1" as const, ok: true as const, value: observed.value.digest })
+          : observed;
+      },
     }, {
       authority: services.authority,
       call,
@@ -109,7 +119,7 @@ export async function handleCounterReview(
           phase_instance: state.value.phase_instance,
           role: "counter-review",
           step: "counter_review",
-          subject_digest: sha256Bytes(artifactBytes),
+          subject_digest: produce.value.artifact_digest,
           input_fingerprint: call.input.input_fingerprint,
           rubric_digest: canonicalJsonDigest(call.input.rubric as unknown as PlainJsonValue),
           producer_family: session.value.producer_family,
@@ -117,6 +127,7 @@ export async function handleCounterReview(
           result_id: resultId,
         },
       },
+      projection_digest: projection.value.digest,
     });
     if (!result.ok) return result;
     return Object.freeze({

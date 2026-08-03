@@ -133,6 +133,21 @@ describe("internal transaction request identity", () => {
     }
   });
 
+  it("keeps waiver supplemental retry metadata outside the stable request digest", () => {
+    const raw = rawInputs().archflow_waiver;
+    const gate = { prior_gate_id: "waiver-gate", task_id: taskId, phase_instance: phase, subject_digest: waiverOrigin.subject_digest, input_fingerprint: raw.input_fingerprint } as const;
+    const first = identifyTransactionRequest(parseToolCall("archflow_waiver", {
+      ...raw, supplemental_outcome: { action: "decline", gate, reason: "Declined optional review" },
+    }), authority, fingerprint);
+    const second = identifyTransactionRequest(parseToolCall("archflow_waiver", {
+      ...raw, supplemental_outcome: { action: "decline", gate, reason: "Declined after reconsideration" },
+    }), authority, fingerprint);
+    expect(second.request_digest).toBe(first.request_digest);
+    expect(first.request_digest).toBe(identifyTransactionRequest(
+      parseToolCall("archflow_waiver", raw), authority, fingerprint,
+    ).request_digest);
+  });
+
   it("selects every artifact operation and binds the exact canonical artifact digest", () => {
     const reviewArtifact = {
       schema_version: "1",

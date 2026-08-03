@@ -38,6 +38,7 @@ import { TaskLockError } from "../../src/state/lock.js";
 import { deriveDeclaredSnapshotDigest, TASK_BYTE_CAP, type PreparedSnapshot, type ProjectionPlan } from "../../src/state/snapshots.js";
 import {
   assertAuthenticTransactionOutcome,
+  resultProjectionTargetIsContained,
   runStateTransaction,
   prepareResultInstallation,
   type PreparedTransaction,
@@ -500,6 +501,29 @@ async function runInstallation(
 }
 
 describe("mature state transaction kernel", () => {
+  it("contains implementation projections to the worktree without weakening task-owned projections", async () => {
+    const h = await harness();
+    const repositoryTarget: ResolvedPath = {
+      absolute: join(h.root, "tracked.txt") as ResolvedTaskPath,
+      repositoryRelative: parseRepositoryPathClaim("tracked.txt"),
+      path_class: "repository-source",
+    };
+    const outsideTarget: ResolvedPath = {
+      absolute: join(h.root, "..", "outside.txt") as ResolvedTaskPath,
+      repositoryRelative: parseRepositoryPathClaim("tracked.txt"),
+      path_class: "repository-source",
+    };
+    expect(resultProjectionTargetIsContained(
+      "implementation-output", h.authority.task_root, h.root, repositoryTarget,
+    )).toBe(true);
+    expect(resultProjectionTargetIsContained(
+      "implementation-output", h.authority.task_root, h.root, outsideTarget,
+    )).toBe(false);
+    expect(resultProjectionTargetIsContained(
+      "document", h.authority.task_root, h.root, repositoryTarget,
+    )).toBe(false);
+  });
+
   it("writes one receipt before state and returns the authenticated committed state", async () => {
     const h = await harness();
     const parsed = call(7);

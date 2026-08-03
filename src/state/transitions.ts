@@ -8,6 +8,10 @@ import { decodePhaseInstance, encodePhaseInstance, parsePositiveSafePhaseNumber 
 import { assertPlainJson } from "../contracts/plain-json.js";
 import { WORKFLOW_V1 } from "../contracts/workflow.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
+import {
+  assertAuthenticatedGateApproval,
+  type AuthenticatedGateApproval,
+} from "./gates.js";
 import type { NextStateDraft } from "./transaction.js";
 
 export type TransitionTarget = Readonly<{
@@ -24,6 +28,9 @@ export type TransitionPlanInput = Readonly<{
   recomputed_input_fingerprint: Sha256Digest;
   artifact?: DurableArtifact;
   result_reference?: AuthoritativeResultRef;
+  completion_subject_digest?: Sha256Digest;
+  authenticated_gate_approvals?: readonly AuthenticatedGateApproval[];
+  commit_observed?: boolean;
 }>;
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
@@ -176,15 +183,67 @@ function withResultReference(
   return Object.freeze(next);
 }
 
+function hasAuthenticatedCommittedOutput(input: TransitionPlanInput): boolean {
+  const decoded = decodePhaseInstance(input.current.phase_instance);
+  if (
+    decoded.kind !== "phase-impl" ||
+    input.current.step !== "adjudicate" ||
+    input.current.status !== "succeeded" ||
+    input.current.terminal !== undefined ||
+    input.current.open_gate !== undefined ||
+    input.completion_subject_digest === undefined ||
+    input.commit_observed !== true ||
+    input.artifact !== undefined ||
+    input.result_reference !== undefined
+  ) return false;
+  for (const authenticated of input.authenticated_gate_approvals ?? []) {
+    assertAuthenticatedGateApproval(authenticated);
+    if (
+      authenticated.approval.gate_kind === "commit-authorization" &&
+      authenticated.approval.subject_digest === input.completion_subject_digest &&
+      authenticated.request.kind === "commit-authorization" &&
+      authenticated.request.phase_instance === input.current.phase_instance &&
+      authenticated.request.subject_digest === input.completion_subject_digest
+    ) return true;
+  }
+  return false;
+}
+
 /** Plans one fixed-workflow move. It is pure and performs no receipt or state write. */
 export function planStateTransition(value: TransitionPlanInput): ProjectResult<NextStateDraft> {
-  assertPlainJson(value, "transition plan input");
-  const input = structuredClone(value);
+  const { authenticated_gate_approvals: authenticatedApprovals, ...plainValue } = value;
+  assertPlainJson(plainValue, "transition plan input");
+  const input = {
+    ...structuredClone(plainValue),
+    ...(authenticatedApprovals === undefined ? {} : { authenticated_gate_approvals: authenticatedApprovals }),
+  } as TransitionPlanInput;
   const from = `${input.current.step}-${input.current.status}`;
   const to = `${input.target.step}-${input.target.status}`;
   if (input.target.input_fingerprint !== input.recomputed_input_fingerprint) {
     return fingerprintFailure(input.recomputed_input_fingerprint, input.target.input_fingerprint);
   }
+  const committedOutput = hasAuthenticatedCommittedOutput(input);
+  const decodedCurrent = decodePhaseInstance(input.current.phase_instance);
+  const completesFinalPhase = committedOutput &&
+    decodedCurrent.kind === "phase-impl" &&
+    input.current.planned_final_phase !== undefined &&
+    Number(decodedCurrent.phase) === Number(input.current.planned_final_phase) &&
+    input.target.phase_instance === input.current.phase_instance &&
+    input.target.step === input.current.step &&
+    input.target.status === input.current.status &&
+    input.target.attempt === input.current.attempt &&
+    input.target.input_fingerprint === input.current.input_fingerprint;
+  if (completesFinalPhase) {
+    const { revision: _revision, committed_intent: _intent, ...preserved } = input.current;
+    return ok(Object.freeze({ ...preserved, terminal: "complete" }));
+  }
+  if (
+    decodedCurrent.kind === "phase-impl" &&
+    input.current.step === "adjudicate" &&
+    input.current.status === "succeeded" &&
+    input.target.phase_instance !== input.current.phase_instance &&
+    !committedOutput
+  ) return invalid(input, from, to);
   if (!legalMovement(input.current, input.target) || !artifactMatches(input) || !resultReferenceMatches(input)) {
     return invalid(input, from, to);
   }

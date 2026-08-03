@@ -3,13 +3,12 @@ import { dirname, join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { canonicalDocument, canonicalJsonDigest, gitBlobOid, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
+import { canonicalDocument, canonicalJsonDigest, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parseSafeCode, parseSafeId, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { computeInputFingerprint } from "../../src/contracts/fingerprints.js";
-import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
-import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
+import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import type { ReviewEvidence } from "../../src/contracts/review.js";
 import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import { createToolHandlers } from "../../src/mcp/handlers/index.js";
@@ -20,13 +19,17 @@ import { createAtomicWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import { resolvePinnedConstitution } from "../../src/state/constitution.js";
 import { prepareEvidenceResult } from "../../src/state/evidence-results.js";
+import { buildDocumentArtifact } from "../../src/state/document-artifact.js";
+import { prepareDocumentResult } from "../../src/mcp/handlers/state-results.js";
 import { ensurePayloadParent, ensureResultDirectory } from "../../src/state/layout.js";
 import { installSnapshot } from "../../src/state/snapshots.js";
+import { computeTaskStatus } from "../../src/state/status.js";
+import { createProductionServices } from "../../src/state/production.js";
 import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
 
 const TASK = parseTaskSlug("handler-adjudicate-constitution-edit");
-const PHASE = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(15) });
-const ARTIFACT = "phases/15/impl-notes.md";
+const PHASE = "prd" as TaskStateV1["phase_instance"];
+const ARTIFACT = "prd.md";
 const ARTIFACT_BYTES = new TextEncoder().encode("Reviewed phase implementation\n");
 const CONFIG = `schema_version: "1"
 roles:
@@ -76,14 +79,33 @@ Preserve explicit human review gates.
     const policyBaseCommit = parseGitOid(repository.git("rev-parse", "HEAD"));
     const constitution = await resolvePinnedConstitution(discovered.value, policyBaseCommit, context);
     if (!constitution.ok) throw new Error(constitution.error.code);
-    const artifactPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/${ARTIFACT}`);
     const fingerprint = computeInputFingerprint({
       schema_version: "1", workflow_digest: sha256Bytes(workflow),
       config_digest: sha256Bytes(new TextEncoder().encode(CONFIG)), constitution_digest: constitution.value.digest,
-      artifact_identities: [{ path: artifactPath, mode: "100644", oid: gitBlobOid(ARTIFACT_BYTES) }],
+      artifact_identities: [],
       upstream_identities: [], rubric_digest: canonicalJsonDigest({}), phase_instance: PHASE, declared_inputs: [],
     });
-    const subjectDigest = sha256Bytes(ARTIFACT_BYTES);
+    const produceArtifact = await buildDocumentArtifact(discovered.value, authority.value, {
+      phase_instance: PHASE, step: "produce", document_path: parseTaskPathClaim(ARTIFACT),
+      declared_inputs: [], input_fingerprint: fingerprint,
+    });
+    if (!produceArtifact.ok) throw new Error(produceArtifact.error.code);
+    const preparedProduce = await prepareDocumentResult({
+      services: { authority: authority.value, runner: discovered.value } as Parameters<typeof prepareDocumentResult>[0]["services"],
+      artifact: produceArtifact.value, result_id: parseSafeId("produce-result"),
+      retained_task_bytes: parseSafeInteger(0), measured_at_revision: parseSafeInteger(6), scanner,
+    });
+    if (!preparedProduce.ok) throw new Error(preparedProduce.error.code);
+    await ensureResultDirectory(authority.value, preparedProduce.value.reference.result_digest);
+    for (const payload of preparedProduce.value.prepared.payloads) {
+      await ensurePayloadParent(authority.value, preparedProduce.value.reference.result_digest, payload.target.absolute);
+    }
+    const installedProduce = await installSnapshot(
+      createAtomicWriter(), preparedProduce.value.prepared, preparedProduce.value.manifest_target,
+      discovered.value.location.worktreeRoot as never,
+    );
+    if (!installedProduce.ok) throw new Error(installedProduce.error.code);
+    const subjectDigest = preparedProduce.value.prepared.manifest.value.artifact_digest;
     const reviewBase = {
       schema_version: "1", task_id: TASK, phase_instance: PHASE, subject_digest: subjectDigest,
       input_fingerprint: fingerprint, rubric_digest: canonicalJsonDigest({}), producer_family: "claude",
@@ -101,8 +123,8 @@ Preserve explicit human review gates.
         observed_output_digest: "b".repeat(64) as never, result_id: "review-result-2",
       },
     ];
-    const references = [];
-    let retainedBytes = 0;
+    const references = [preparedProduce.value.reference];
+    let retainedBytes: number = preparedProduce.value.prepared.manifest.value.accounting.result_bytes;
     for (const [index, evidence] of reviews.entries()) {
       const prepared = await prepareEvidenceResult({
         authority: authority.value, runner: discovered.value, result_id: parseSafeId(`review-result-${index + 1}`),
@@ -170,9 +192,43 @@ process.exit(99);
       });
       if (outcome.kind === "project-result") expect("value" in outcome.result).toBe(false);
       expect(existsSync(dispatchMarker)).toBe(false);
-      expect(JSON.parse(readFileSync(join(authority.value.task_root, "gate.json"), "utf8"))).toMatchObject({
+      const archivedGate = JSON.parse(readFileSync(join(authority.value.task_root, "gate.json"), "utf8")) as {
+        kind: string; gate_id: string; request_digest: string; subject_digest: string; context_digest: string;
+        current_evidence: { set_digest: string };
+      };
+      expect(archivedGate).toMatchObject({
         kind: "constitution-edit", subject_digest: subjectDigest,
       });
+      const production = await createProductionServices({
+        working_directory: repository.path,
+        task_id: TASK,
+        operation: parseSafeCode("adjudicate-constitution-status"),
+      });
+      if (!production.ok) throw new Error(production.error.code);
+      const status = await computeTaskStatus(production.value.dependencies, production.value.authority);
+      if (!status.ok) throw new Error(status.error.code);
+      const openGate = status.value.open_gate;
+      expect(openGate).toMatchObject({
+        kind: "constitution-edit",
+        gate_id: expect.any(String),
+        decision_path: "gate.decision",
+        request_path: `decisions/${archivedGate.gate_id}/request.json`,
+      });
+      expect(openGate?.decision_templates).toHaveLength(4);
+      expect(openGate?.decision_templates.map((template) => {
+        const value = template as { cancelled?: boolean; payload?: { decision?: string } };
+        return value.cancelled === true ? "cancel" : value.payload?.decision;
+      })).toEqual(["revert-edit", "start-base-amendment", "abort", "cancel"]);
+      const prompt = openGate?.counter_review_prompt ?? "";
+      for (const binding of [
+        archivedGate.gate_id,
+        archivedGate.request_digest,
+        archivedGate.subject_digest,
+        archivedGate.context_digest,
+        fingerprint,
+        archivedGate.current_evidence.set_digest,
+      ]) expect(prompt).toContain(binding);
+      expect(prompt).toContain("archflow-local gate-counter --task handler-adjudicate-constitution-edit");
     } finally {
       if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
     }

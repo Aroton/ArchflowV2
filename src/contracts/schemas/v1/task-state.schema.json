@@ -71,6 +71,12 @@
       "items": { "$ref": "#/$defs/waiverRef" },
       "x-archflow-sorted-unique-by": "gate_id"
     },
+    "planned_final_phase": {
+      "$comment": "The positive final implementation phase recorded from consecutive exact `### Phase N: Name` headings in the human-approved design. Absence is valid only when that design carries the explicit `<!-- archflow:phase-plan:open-ended -->` marker.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
     "open_gate": {
       "$comment": "A single optional object, NEVER an array: a nested or concurrent gate is unrepresentable rather than merely rejected. Phase 12 owns the one-active-gate lifecycle — when this may be set, cleared, or superseded.",
       "$ref": "#/$defs/openGateRef"

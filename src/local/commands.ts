@@ -6,6 +6,8 @@ import type { MaintenanceRecordV1 } from "../contracts/durable-maintenance.js";
 import { parseGateDecisionRecord, parseGateRequest } from "../contracts/durable-gate.js";
 import { chainAnchor, parseManualCheckpoint, parseManualCheckpointImport, selectGreatestValidChain } from "../contracts/durable-checkpoint.js";
 import { parseResultManifest } from "../contracts/durable-result-manifest.js";
+import { parseDocumentArtifact } from "../contracts/durable-document.js";
+import { parseImplementationOutput } from "../contracts/durable-implementation-output.js";
 import { parsePathSafeId, parseSafeInteger, parseTaskSlug, type SafeCode } from "../contracts/evidence.js";
 import { createVerifiedEvidenceReference } from "../contracts/internal/test-capabilities.js";
 import { parseTaskPathClaim } from "../contracts/path-claims.js";
@@ -20,7 +22,7 @@ import maintenanceRecordSchema from "../contracts/schemas/v1/maintenance-record.
 import primitivesSchema from "../contracts/schemas/v1/primitives.schema.json" with { type: "json" };
 import pathClaimSchema from "../contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
 import { gateCounterReviewClaim, gateRequestClaim, gateSupplementalReviewClaim, openResolved, resolveTaskPath } from "../repository/paths.js";
-import { createManualGateFile } from "../state/gates.js";
+import { createManualGateFile, writeGateDecisionInterface } from "../state/gates.js";
 import { ensureDecisionDirectory, ensureManualCheckpointDirectory } from "../state/layout.js";
 import { ensurePayloadParent, ensureResultDirectory } from "../state/layout.js";
 import { computeMaintenanceProof, performMaintenance } from "../state/maintenance.js";
@@ -28,7 +30,9 @@ import { enumerateMaintenanceCandidates, enumerateMaintenanceManifests, enumerat
 import { writeManualCheckpoint } from "../state/manual-checkpoints.js";
 import { readManualCheckpoints } from "../state/manual-checkpoints.js";
 import { createProductionServices } from "../state/production.js";
-import { computeDegradedStatus } from "../state/status.js";
+import { computeTaskStatus } from "../state/status.js";
+import { buildDocumentArtifact, type DocumentArtifactInput } from "../state/document-artifact.js";
+import { buildImplementationOutput, type ImplementationOutputInput } from "../state/implementation-manifest.js";
 import { installSnapshot, prepareSnapshot, restoreSnapshotOutput } from "../state/snapshots.js";
 import { reconcileCurrentAuthority } from "../state/reconciliation.js";
 import type { ProjectResult } from "../contracts/errors.js";
@@ -36,10 +40,12 @@ import type { GateRequestV1 } from "../contracts/durable-gate.js";
 import type { SupplementalReviewRecordV1 } from "../contracts/supplemental-record.js";
 import { runInit } from "../init/index.js";
 import { stageTaskInitialization } from "../init/task-initialization.js";
+import { computeCallEnvelope } from "./envelope.js";
 
 export const LOCAL_COMMANDS = Object.freeze([
   "validate", "hash", "render", "snapshot", "restore", "maintain", "decide",
   "gate-counter", "status", "reconcile", "import", "checkpoint", "init", "task-init",
+  "envelope", "build-document", "build-implementation-output",
 ] as const);
 export type LocalCommand = typeof LOCAL_COMMANDS[number];
 const maintenanceRecordV1Validator = createJsonSchemaValidator<MaintenanceRecordV1>(maintenanceRecordSchema, [primitivesSchema, pathClaimSchema]);
@@ -74,6 +80,8 @@ function validateArtifact(value: Record<string, PlainJsonValue>): PlainJsonValue
     case "review": return parseReviewEvidence(artifact);
     case "adjudication": return parseAdjudicationEvidence(artifact);
     case "triage": return parseTriageCandidate(artifact);
+    case "document": return parseDocumentArtifact(artifact);
+    case "implementation-output": return parseImplementationOutput(artifact);
     default: throw new TypeError("validate input.kind is not supported");
   }
 }
@@ -219,7 +227,24 @@ export async function runLocalCommand(input: CommandInput): Promise<PlainJsonVal
   }
   const created = await services(input);
   if (!created.ok) return created;
-  if (input.command === "status") return computeDegradedStatus(created.value.dependencies, created.value.authority);
+  if (input.command === "status") return computeTaskStatus(created.value.dependencies, created.value.authority);
+  if (input.command === "envelope") return computeCallEnvelope(created.value, requireValue(input));
+  if (input.command === "build-document") {
+    return buildDocumentArtifact(
+      created.value.runner,
+      created.value.authority,
+      requireValue(input) as unknown as DocumentArtifactInput,
+    );
+  }
+  if (input.command === "build-implementation-output") {
+    if (created.value.state === undefined) throw new TypeError("build-implementation-output requires current task state");
+    return buildImplementationOutput(
+      created.value.dependencies,
+      created.value.authority,
+      created.value.state,
+      requireValue(input) as unknown as ImplementationOutputInput,
+    );
+  }
   if (input.command === "snapshot") {
     const value = recordValue(input);
     const manifest = parseResultManifest(value.manifest);
@@ -265,7 +290,11 @@ export async function runLocalCommand(input: CommandInput): Promise<PlainJsonVal
   if (input.command === "decide") {
     const value = requireValue(input) as Record<string, PlainJsonValue>;
     const kind = value.kind;
-    if (kind !== "request" && kind !== "decision") throw new TypeError("decide input.kind must be request or decision");
+    if (kind === "interface") {
+      assertPlainJson(value.value, "decide interface value");
+      return writeGateDecisionInterface(created.value.dependencies, created.value.authority, structuredClone(value.value));
+    }
+    if (kind !== "request" && kind !== "decision") throw new TypeError("decide input.kind must be request, decision, or interface");
     const document = value.value;
     const parsed = kind === "request" ? parseGateRequest(document) : parseGateDecisionRecord(document);
     return createManualGateFile(created.value.dependencies, created.value.authority, kind, parsed);

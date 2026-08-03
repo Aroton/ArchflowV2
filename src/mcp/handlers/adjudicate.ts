@@ -1,4 +1,4 @@
-import { canonicalJsonDigest, parseCanonicalDocument, sha256Bytes } from "../../contracts/canonical.js";
+import { canonicalJsonDigest, parseCanonicalDocument } from "../../contracts/canonical.js";
 import type { InvocationContext } from "../../contracts/contexts.js";
 import { parseIntentReceipt } from "../../contracts/durable-intent.js";
 import { createProjectError, type ProjectResult } from "../../contracts/errors.js";
@@ -7,16 +7,23 @@ import { computeGateContextDigest } from "../../contracts/fingerprints.js";
 import { validateProjectResultStructure, type ParsedToolCall, type ToolSuccess } from "../../contracts/mcp-tools.js";
 import type { PlainJsonValue } from "../../contracts/plain-json.js";
 import { createDispatchCoordinator } from "../../dispatch/coordinator.js";
-import { openResolved, resolveTaskPath, type ResolvedPath } from "../../repository/paths.js";
+import { classifyTaskPath, openResolved, resolveTaskPath, type ResolvedPath } from "../../repository/paths.js";
 import { parseTaskPathClaim } from "../../contracts/path-claims.js";
 import { runAdjudication, type AdjudicationGateRequest } from "../../review/adjudication.js";
 import { selectAdjudicationGates } from "../../review/adjudication.js";
 import type { AdjudicationUpstreamInput } from "../../review/envelopes.js";
-import { assessCurrentEvidence, waiverInForce } from "../../review/fixed-point.js";
+import { assessCurrentEvidence, requireApprovedUpstreamDigests, waiverInForce } from "../../review/fixed-point.js";
 import { detectTaskLocalConstitutionEdit, resolvePinnedConstitution } from "../../state/constitution.js";
 import { loadCurrentReviewSet, loadRetainedEvidence, prepareEvidenceResult } from "../../state/evidence-results.js";
 import { loadAuthenticatedGateApproval, openDurableGate, runDurableGate, type AuthenticatedGateApproval } from "../../state/gates.js";
 import { identifyTransactionRequest } from "../../state/request.js";
+import {
+  loadCurrentProduceSubject,
+  loadProduceUpstreamSubject,
+  readProduceProjection,
+  renderProduceReviewMaterial,
+  resolveProduceUpstreamBinding,
+} from "../../state/produce-subject.js";
 import { mapHandlerErrors } from "./errors.js";
 import { resolvePreDispatchReplay } from "./replay.js";
 import { openHandlerSession } from "./session.js";
@@ -80,17 +87,18 @@ export async function handleAdjudicate(
     );
     if (!constitution.ok) return constitution;
 
-    const artifactTarget = await resolveTaskPath({
-      runner: services.runner, taskId: services.authority.task_id,
-      claim: call.input.artifact_path, context: services.authority.context,
-    });
-    if (!artifactTarget.ok) return artifactTarget;
+    const produce = await loadCurrentProduceSubject(services.dependencies, state.value);
+    if (!produce.ok) return produce;
+    const projection = await readProduceProjection(
+      services.runner, services.authority, produce.value, call.input.artifact_path,
+    );
+    if (!projection.ok) return projection;
     let artifact: string;
-    try { artifact = await readUtf8(artifactTarget.value); }
+    try { artifact = renderProduceReviewMaterial(produce.value, projection.value); }
     catch {
       return fail(createProjectError("CONTRACT_INVALID", { tool: call.name, issue_code: "artifact-not-utf8" }));
     }
-    const subjectDigest = sha256Bytes(new TextEncoder().encode(artifact));
+    const subjectDigest = produce.value.artifact_digest;
     if (subjectDigest !== currentReviews.value.subject_digest) {
       return fail(createProjectError("STATE_INVALID", {
         phase_instance: state.value.phase_instance, issue_code: "adjudication-subject-not-current",
@@ -103,41 +111,63 @@ export async function handleAdjudicate(
     ): Promise<ProjectResult<readonly AdjudicationUpstreamInput[]>> => {
       const derived: AdjudicationUpstreamInput[] = [];
       for (const path of paths) {
-        const target = await resolveTaskPath({
-          runner: services.runner, taskId: services.authority.task_id,
-          claim: path, context: services.authority.context,
-        });
-        if (!target.ok) return target;
-        let bytes: Uint8Array;
-        let text: string;
-        try {
-          const handle = await openResolved(target.value.absolute, 0);
-          bytes = new Uint8Array(await handle.readFile().finally(() => handle.close()));
-          text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-        } catch {
-          return fail(createProjectError("IO_ERROR", {
-            operation: "adjudication-upstream-read", attempt: services.authority.context.attempt,
+        const classified = classifyTaskPath(services.authority.task_id, path);
+        if (!classified.ok) return classified;
+        const binding = classified.value === "document"
+          ? resolveProduceUpstreamBinding(durable, path)
+          : undefined;
+        if (binding === undefined) {
+          return fail(createProjectError("STATE_INVALID", {
+            phase_instance: durable.phase_instance, issue_code: "adjudication-upstream-path-mismatch",
           }));
         }
-        const upstreamDigest = sha256Bytes(bytes);
-        const approval = durable.approvals.find((candidate) =>
-          candidate.gate_kind === "artifact-approval" && candidate.subject_digest === upstreamDigest);
-        if (approval === undefined) {
+        const upstream = await loadProduceUpstreamSubject(services.dependencies, durable, binding);
+        if (!upstream.ok) return upstream;
+        const projection = await readProduceProjection(
+          services.runner, services.authority, upstream.value, path,
+        );
+        if (!projection.ok) return projection;
+        let text: string;
+        try {
+          text = new TextDecoder("utf-8", { fatal: true }).decode(projection.value.bytes);
+        } catch {
+          return fail(createProjectError("CONTRACT_INVALID", {
+            tool: call.name, issue_code: "adjudication-upstream-not-utf8",
+          }));
+        }
+        const upstreamDigest = upstream.value.artifact_digest;
+        let approved = false;
+        for (const approval of [...durable.approvals]
+          .filter((candidate) => candidate.gate_kind === "artifact-approval" && candidate.subject_digest === upstreamDigest)
+          .sort((left, right) => right.resolved_at_revision - left.resolved_at_revision)) {
+          const authenticated = await loadAuthenticatedGateApproval(
+            services.dependencies, services.authority, approval,
+          );
+          if (!authenticated.ok) return authenticated;
+          if (
+            authenticated.value.request.kind === "artifact-approval" &&
+            authenticated.value.request.context.artifact_kind === binding.artifact_kind
+          ) {
+            approved = true;
+            break;
+          }
+        }
+        if (!approved) {
           return fail(createProjectError("STATE_INVALID", {
             phase_instance: durable.phase_instance, issue_code: "upstream-approval-missing",
           }));
         }
-        const authenticated = await loadAuthenticatedGateApproval(
-          services.dependencies, services.authority, approval,
-        );
-        if (!authenticated.ok) return authenticated;
         derived.push(Object.freeze({ upstream_digest: upstreamDigest, artifact: text }));
       }
+      derived.sort((left, right) => left.upstream_digest.localeCompare(right.upstream_digest));
       return ok(Object.freeze(derived));
     };
     const upstreams = await deriveUpstreams(state.value, call.input.upstream_paths);
     if (!upstreams.ok) return upstreams;
-    const approvedUpstreamDigests = Object.freeze(upstreams.value.map((item) => item.upstream_digest));
+    const approvedUpstreamDigests = requireApprovedUpstreamDigests(
+      state.value.approvals,
+      upstreams.value.map((item) => item.upstream_digest),
+    );
     const resultId = stableId("adjudication-result", call.input.intent_id);
     const coordinator = createDispatchCoordinator({
       authority: services.authority, dependencies: services.dependencies, host: session.value.host,
@@ -268,6 +298,7 @@ export async function handleAdjudicate(
           subject_digest: adjudicationSource.evidence.subject_digest,
           input_fingerprint: adjudicationSource.evidence.input_fingerprint,
           constitution: constitution.value,
+          approved_upstream_digests: approvedUpstreamDigests,
           authenticated_gate_approvals: Object.freeze(approvals),
           ...(session.value.config.max_attempts === undefined ? {} : { max_attempts: session.value.config.max_attempts }),
         });

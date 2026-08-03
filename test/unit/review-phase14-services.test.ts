@@ -72,6 +72,7 @@ function retained(
   fingerprint = D("2"),
   accepted = 0,
   adjudicationFingerprint = fingerprint,
+  approvedUpstreamDigests: readonly Sha256Digest[] = [],
 ): RetainedEvidenceSet {
   const base = {
     schema_version: "1",
@@ -160,7 +161,7 @@ function retained(
     input_fingerprint: adjudicationFingerprint,
     step: "adjudicate",
     pinned_constitution_digest: constitution.digest,
-    approved_upstream_digests: [],
+    approved_upstream_digests: approvedUpstreamDigests,
     source_evidence_set_digest: evidenceSet.set_digest,
     rule_findings: [],
     drift_findings: [],
@@ -337,6 +338,24 @@ describe("Phase 14 review services", () => {
     });
     expect(assessCurrentEvidence(state(), wrongAdjudication, subject).next)
       .toBe("adjudicate");
+  });
+
+  it("makes retained adjudication stale when the currently approved upstream digests change", () => {
+    const approved = D("6");
+    const evidence = retained(D("8"), D("2"), 0, D("2"), [approved]);
+    expect(assessCurrentEvidence(state(), evidence, {
+      subject_digest: D("8"), input_fingerprint: D("2"), constitution,
+      approved_upstream_digests: [approved],
+    }).next).toBe("advance");
+    expect(assessCurrentEvidence(state({ step: "adjudicate", status: "succeeded" }), evidence, {
+      subject_digest: D("8"), input_fingerprint: D("2"), constitution,
+      approved_upstream_digests: [D("7")],
+    })).toMatchObject({
+      current: ["self_review", "counter_review", "triage"],
+      stale: ["adjudicate"],
+      next: "produce",
+      reentry_required: true,
+    });
   });
 
   it.each([

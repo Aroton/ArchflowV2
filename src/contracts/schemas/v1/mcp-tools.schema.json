@@ -431,7 +431,8 @@
               "scope": { "$ref": "#/$defs/scope" }
             }
           },
-          "rationale": { "$ref": "#/$defs/text" }
+          "rationale": { "$ref": "#/$defs/text" },
+          "supplemental_outcome": { "$ref": "urn:archflow:schema:v1:supplemental-review" }
         }
       },
       "success": {

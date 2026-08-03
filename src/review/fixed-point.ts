@@ -42,6 +42,7 @@ export type EvidenceSubject = Readonly<{
   subject_digest: Sha256Digest;
   input_fingerprint: Sha256Digest;
   constitution: ResolvedConstitution;
+  approved_upstream_digests?: readonly Sha256Digest[];
   authenticated_gate_approvals?: readonly AuthenticatedGateApproval[];
   max_attempts?: number;
 }>;
@@ -124,7 +125,11 @@ function currentFor(
   if (step === "adjudicate") {
     const adjudication = evidence as AdjudicationEvidence;
     return currentTriage !== undefined &&
-      adjudication.source_evidence_set_digest === reviews.current_evidence_set.set_digest;
+      adjudication.source_evidence_set_digest === reviews.current_evidence_set.set_digest &&
+      adjudication.approved_upstream_digests.length ===
+        (subject.approved_upstream_digests ?? []).length &&
+      adjudication.approved_upstream_digests.every((digest, index) =>
+        digest === (subject.approved_upstream_digests ?? [])[index]);
   }
   return false;
 }

@@ -1,137 +1,58 @@
 ---
 name: archflow-prd
-description: Research a domain and create or revise an ArchFlow product requirements document. Use when the user wants to define a feature, its requirements, scope, risks, or success metrics.
+description: Define, review, adjudicate, and obtain explicit approval for an ArchFlow product requirements document.
 ---
 
-# Create Product Requirements Document
+# Product Requirements Document
 
-Treat the task name supplied with this skill as `<task>` and work in `.archflow/tasks/<task>/`.
+Treat the argument as `<task>`. This is a normal-mode phase skill: durable state and every server-checked value come from the local helper and the five workflow tools. Work only in `.archflow/tasks/<task>/` plus shared `.archflow/context/`; never read another task's files.
 
-Run this session as the workflow orchestrator: the requirements conversation, decisions, review gates, and triage stay here because they need the full history, while bulk work — research, drafting, fresh-context review — runs in sub-agents that write to disk and return only conclusions. Treat sub-agents as available — both Claude Code and Codex provide them natively; work inline only when spawning actually fails or a piece of work is too small to justify the hand-off.
+## Stable rubric
 
-## Setup and requirements
+Use this exact JSON object, without editing or reordering it, both when hashing the rubric and when calling `archflow_counter_review`:
 
-Create the task directory if necessary. Read `.archflow/context/` when it exists. If `prd.md` already exists, read it and ask whether to revise it or start fresh.
-
-Ask what `<task>` is: the problem being solved and who it is for. Then, over a natural, focused conversation (typically a few rounds — stop as soon as requirements are sufficient), establish:
-
-- problem statement and motivation;
-- target users and needs;
-- must-have versus nice-to-have features;
-- technical stack, timeline, and integration constraints;
-- explicit out-of-scope work.
-
-Use structured choices when helpful. Do not research until requirements are sufficient.
-
-## Research
-
-Research only the dimensions that are load-bearing for this task — a user-facing product in a competitive space warrants all three below; an internal tool or refactor may warrant one or none. Skipping a dimension is a judgment call, not a failure. Spawn one research agent per dimension you pursue, run them in parallel, and wait for all of them — survey material is exactly what should never enter the orchestrator's context. A researcher sees nothing of this conversation, so give each a complete brief: the user's problem, requirements, constraints, and a summary of any context documents. Instruct each to return only the findings the PRD author needs to make decisions — synthesized conclusions, not raw survey material.
-
-1. **Domain research**: current best practices, table-stakes features, and common architecture patterns.
-2. **Competitive landscape**: existing solutions, what they do well, recurring complaints, and differentiators.
-3. **Technical research**: best practices, pitfalls, and recommended or avoided libraries for technologies in scope.
-
-Use current web research when the domain is fast-moving, competitive positioning matters, or you are uncertain — not as a ritual for every task.
-
-## Write the PRD
-
-Spawn a writer agent to draft the PRD; it sees none of this conversation, so give it the complete user requirements as established above, all research findings, and any context documents. Draft inline only when the task is small enough that its PRD is about a page and the hand-off would cost more than the drafting. Write `.archflow/tasks/<task>/prd.md` with genuine analysis rather than boilerplate, scaled to the task: a small internal change deserves a one-page PRD, not a filled-in ceremony. Use this structure, keeping only the sections that earn their place — omit any section that would hold boilerplate for this task:
-
-```markdown
-# PRD: [Task Name]
-
-> [One-paragraph elevator pitch]
-
-## Problem Statement
-[What problem does this solve? Why now?]
-
-## Target Users
-[Primary users, their needs, current pain points]
-
-## Core Value Proposition
-[The ONE thing this must deliver]
-
-## Functional Requirements
-### Must Have (v1)
-| ID | Requirement | Description |
-|----|-------------|-------------|
-| REQ-01 | [Name] | [User can do X / System does Y] |
-
-### Should Have (v1+)
-| ID | Requirement | Description |
-|----|-------------|-------------|
-| REQ-20 | [Name] | [Description] |
-
-### Out of Scope
-| Feature | Reason |
-|---------|--------|
-| [Feature] | [Why excluded] |
-
-## Non-Functional Requirements
-| Category | Requirement |
-|----------|-------------|
-| Performance | [Measurable targets] |
-| Security | [Requirements] |
-
-## Research Summary
-### Industry Context
-[Synthesized competitive landscape and table stakes]
-### Technology Landscape
-[Best practices, approaches, and pitfalls]
-### Key Risks
-[What could go wrong or remains unknown?]
-
-## Constraints
-| Constraint | Details |
-|------------|---------|
-| [Type] | [What and why] |
-
-## Success Metrics
-[How do we know this succeeded?]
-
----
-*Created: [date]*
+```json
+{"schema_version":"1","kind":"artifact","mode":"adversarial","criteria":[{"id":"brief-fitness","text":"The PRD solves the stated user brief without expanding into speculative scope.","blocking":true},{"id":"completeness","text":"The goals, user workflow, requirements, exclusions, risks, and success measures are complete enough to design against.","blocking":true},{"id":"testable-requirements","text":"Each requirement is specific and observable enough to verify without guessing intent.","blocking":true},{"id":"stated-assumptions","text":"Material assumptions and unresolved human choices are explicit and do not masquerade as requirements.","blocking":true}]}
 ```
 
-## Sub-agent review
+Compute `rubric_digest` by passing that literal to `archflow-local hash`. Use the effective self-review provenance and pinned active rules reported by status; never self-declare routing, model family, model, or effort and never substitute mutable worktree policy.
 
-Before the user sees the draft, have it critiqued. Spawn one or more fresh-context reviewer agents — one is usually enough — giving each the draft, the user's stated requirements, and the research findings. Instruct them to find problems, not to affirm: incomplete, inconsistent, or untestable requirements; scope creep; missing constraints or out-of-scope entries; boilerplate posing as analysis.
+## Durable loop
 
-Triage each finding, revise the draft, and repeat until a round surfaces nothing that changes the document — typically one or two rounds; diminishing returns, not a round count, is the stop signal. Tell the user what review caught and changed.
+Run `archflow-local status --task <task>`, inspect the JSON result's `ok` field rather than relying on the process exit code, perform exactly its `next_action`, then run status again. Continue until status requests human judgment or reports that the phase advanced. Do not infer state, approval, or evidence currency from Markdown, filenames, conversation, or an absent gate.
 
-## Review and commit
+If `next_action` is `initialize-repository`, stop and direct the user to `archflow-init`. If it is `create-task`, run `archflow-local task-init --task <task>`, use that returned initialization artifact in the first `archflow_state` request, and obtain its exact fingerprint and request digest from `archflow-local envelope --task <task>`. For reconciliation, configuration, checkpoint, or inspection actions, report the helper's one safe action and do not improvise repair or a manual fallback.
 
-Present the PRD, noting what the sub-agent review changed, and stop for review. Alongside it, offer a **counter-review by the other client**: emit a copy/paste-ready prompt addressed to the client you are not running in (in Claude Code, write it for Codex; in Codex, for Claude Code) so a different model reviews the PRD with fresh eyes. Whether to run it is the user's call. The prompt must be self-contained, along these lines:
+For each pipeline step, call `archflow_state` with `status: "running"` before doing its work. The skill records the terminal `succeeded` or `failed` state for `produce`, `self_review`, and `triage`. `archflow_counter_review` and `archflow_adjudicate` install their own successful terminal state; do not send a second successful state transition after either tool returns.
 
-```text
-Counter-review the PRD at .archflow/tasks/<task>/prd.md.
+Every non-produce tool request uses one `archflow-local envelope --task <task>` pass over the complete proposed tool input, then uses the returned `input_fingerprint` in the tool call. A produce request is two-pass:
 
-Read .archflow/context/ first if present.
+1. Draft `.archflow/tasks/<task>/prd.md`, then run `archflow-local build-document --task <task>` for `phase_instance: "prd"`, `step: "produce"`, `document_path: "prd.md"`, and an empty `declared_inputs` array, initially using the fingerprint reported by status.
+2. Run `archflow-local envelope --task <task>` over the complete `archflow_state` request. Substitute its fingerprint into both the request and the document artifact's `input_fingerprint`.
+3. Run `archflow-local envelope --task <task>` again over that substituted request to obtain the true request digest, then call `archflow_state` with the byte-equivalent input.
 
-A different model drafted this PRD and already revised it once — your job is to
-find what it missed. Challenge requirement completeness, consistency, and
-testability; scope boundaries; unstated constraints; and risks the research
-overlooked. Do not rewrite the document or change any files outside the review.
+If a tool reports a fingerprint mismatch, discard the pending intent, take the expected digest and safe next action from the result, rebuild the request with a fresh intent, and re-run status. This is recovery, not the normal recipe.
 
-Write your findings to .archflow/tasks/<task>/reviews/prd-counter-review.md
-as a list, each with a severity (blocker / major / minor) and a suggested
-resolution. If you find nothing substantive, say so explicitly in that file.
-```
+## Phase work
 
-When the user returns and the review file exists without a `## Triage` section, read it and triage every finding: accept it and revise the PRD, or reject it with a stated reason. Append the dispositions as a `## Triage` section to the review file and re-present only what changed.
+When status selects `produce`, research only as much as the brief needs and write `.archflow/tasks/<task>/prd.md`. Capture the problem, users, goals and non-goals, testable requirements, assumptions, risks, and success criteria. Keep the artifact useful for architecture decisions rather than prescribing implementation prematurely.
 
-When re-presenting after revisions, summarize what changed since the last review rather than restating the full document. Repeat until explicitly approved. Then commit only the PRD as:
+When status selects `self_review`, evaluate the current PRD against every criterion in the stable rubric and the pinned active rules. Construct one complete agent-declared self-review artifact using only the current subject digest, input fingerprint, phase instance, effective self-review provenance from status, and the rubric digest from `archflow-local hash`. Record every substantive finding; an empty finding list is valid only after actually applying the rubric. Use `archflow-local render --task <task>` when a canonical review projection is needed, and install the artifact through `archflow_state`.
 
-```text
-<Task Title>: Create PRD
-```
+When status selects `counter_review`, call `archflow_counter_review` with `artifact_path: "prd.md"` and the exact stable rubric. Do not manufacture, summarize into authority, or edit the server-attested result.
 
-Report completion with copy/paste-ready next steps:
+When status selects `triage`, transcribe status's current evidence set, canonical source evidence digest order, and every finding identity into one triage artifact. Give every finding exactly one accepted or rejected disposition. Accepted findings include a concrete revision intent; rejected findings cite artifact evidence. If any finding is accepted, revise `prd.md` and follow status back through fresh production and review. Install triage through `archflow_state`.
 
-```text
-PRD committed. Next, design the architecture:
-Claude Code: /archflow-design <task>
-Codex: $archflow-design <task>
-```
+When status selects `adjudicate`, call `archflow_adjudicate` with `artifact_path: "prd.md"` and `upstream_paths: []`. Let the server evaluate the pinned constitution and open any required gate.
 
-Never commit or pass a review gate without approval.
+## Human gates
+
+The PRD always requires an `artifact-approval` gate after the fixed point closes. Assemble its complete `archflow_gate` input only by transcribing the current subject, evidence, revision, and fingerprint exposed by status, with `context: {"artifact_kind":"prd"}`. Use a fresh intent. Before making the blocking call, run `archflow-local envelope --task <task>` with that exact input and present the returned gate ID and optional counter-review prompt to the user. Then call `archflow_gate` with byte-equivalent input.
+
+For every open gate, including one opened inside adjudication, re-run status and present its ready-to-write decision templates, paths, and complete optional counter-review prompt. The user alone chooses whether to run that review and which decision template to authorize. If they run it, follow the generated recipe and `archflow-local gate-counter --task <task>`; if status then requests supplemental triage, disposition every returned finding and accept any artifact-changing result only by revising the PRD and re-entering the fixed point. If they decline, record no review. Install the chosen template with `archflow-local decide --task <task>` using `kind: "interface"`, then let the blocked call resume.
+
+Keep the original `archflow_gate` input and `intent_id` for every supplemental retry. Decline by retrying with status's exact `decline` outcome and create no review. If review is elected, install it, let the blocked call return `SUPPLEMENTAL_REVIEW_REQUIRED`, then retry with status's exact `ingest` outcome. Re-run status after ingest and retry with its exact `triage-no-change` outcome, or, for an accepted change, revise and rebuild the artifact, take the exact new subject digest from `envelope`, retry with the authenticated supersede facts plus that digest, and expect `GATE_SUPERSEDED`. A superseded gate approves nothing: re-enter produce, review, triage, and adjudication to a fixed point before opening a fresh gate. Never fabricate review, triage, subject, or human-decision facts.
+
+If the explicit decision is `waiver-requested`, it is not approval. Re-run status, construct the `archflow_waiver` origin only from the server's archived request and decision plus helper-derived digests, run `envelope` before the blocking waiver call, and handle the waiver gate through the same status/templates/prompt procedure. A denied or cancelled waiver grants nothing.
+
+Never claim approval, select a decision, or pass the gate for the user. Stop until the user's explicit decision. After the approved gate resolves, re-run status and report the durable next action; approval in conversation alone is not authority.

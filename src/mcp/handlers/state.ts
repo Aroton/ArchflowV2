@@ -11,6 +11,10 @@ import {
 import { parseTaskPathClaim } from "../../contracts/path-claims.js";
 import { planCheckpointAdoption } from "../../state/checkpoints.js";
 import {
+  loadAuthenticatedGateApproval,
+  type AuthenticatedGateApproval,
+} from "../../state/gates.js";
+import {
   loadCurrentReviewSet,
   prepareEvidenceResult,
   type EvidenceResultValue,
@@ -18,6 +22,9 @@ import {
 } from "../../state/evidence-results.js";
 import { runStateInitialization } from "../../state/initialization.js";
 import { identifyTransactionRequest } from "../../state/request.js";
+import { loadCurrentProduceSubject } from "../../state/produce-subject.js";
+import { implementationOutputCommittedAtCurrentTarget } from "../../state/implementation-manifest.js";
+import { decodePhaseInstance } from "../../contracts/phase-instance.js";
 import {
   prepareResultInstallation,
   runStateTransaction,
@@ -92,6 +99,14 @@ export async function handleState(
           if (retainedBytes === undefined || scanner === undefined || loadRetained === undefined) {
             throw new TypeError("evidence preparation dependencies are unavailable");
           }
+          const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
+          if (!produce.ok) return produce;
+          if (artifact.evidence.subject_digest !== produce.value.artifact_digest) {
+            return fail(createProjectError("STATE_INVALID", {
+              phase_instance: current.value.phase_instance,
+              issue_code: "review-subject-not-current-produce-artifact",
+            }));
+          }
           let value: EvidenceResultValue;
           if (artifact.artifact_kind === "review-evidence") {
             value = { kind: "review", evidence: artifact.evidence };
@@ -148,6 +163,46 @@ export async function handleState(
         if (artifact?.artifact_kind === "manual-checkpoint-import") {
           return planCheckpointAdoption({ current, call: identifiedCall, expectation, result });
         }
+        let completionSubjectDigest;
+        let commitObserved = false;
+        const authenticatedGateApprovals: AuthenticatedGateApproval[] = [];
+        const completionSignal =
+          artifact === undefined &&
+          decodePhaseInstance(current.value.phase_instance).kind === "phase-impl" &&
+          current.value.step === "adjudicate" &&
+          current.value.status === "succeeded";
+        if (completionSignal) {
+          const reference = current.value.authoritative_results.find((entry) =>
+            entry.phase_instance === current.value.phase_instance && entry.step === "produce");
+          const loader = services.dependencies.load_retained_result;
+          if (reference !== undefined && loader !== undefined) {
+            const retained = await loader(reference);
+            if (!retained.ok) return retained;
+            completionSubjectDigest = retained.value.prepared.manifest.value.artifact_digest;
+            for (const approval of current.value.approvals) {
+              if (approval.gate_kind !== "commit-authorization" || approval.subject_digest !== completionSubjectDigest) continue;
+              const loaded = await loadAuthenticatedGateApproval(
+                services.dependencies, services.authority, approval,
+              );
+              if (!loaded.ok) return loaded;
+              authenticatedGateApprovals.push(loaded.value);
+            }
+            const source = retained.value.prepared.manifest.value.source_artifact;
+            if (source.artifact_kind === "implementation-output") {
+              for (const authenticated of authenticatedGateApprovals) {
+                if (authenticated.request.kind !== "commit-authorization") continue;
+                if (await implementationOutputCommittedAtCurrentTarget(
+                  services.runner,
+                  source,
+                  authenticated.request.context.target_ref,
+                )) {
+                  commitObserved = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
         const next = planStateTransition({
           current: current.value,
           target: {
@@ -166,6 +221,11 @@ export async function handleState(
           recomputed_input_fingerprint: call.input.input_fingerprint,
           ...(artifact === undefined ? {} : { artifact }),
           ...(preparedResult === undefined ? {} : { result_reference: preparedResult.reference }),
+          ...(completionSubjectDigest === undefined ? {} : { completion_subject_digest: completionSubjectDigest }),
+          commit_observed: commitObserved,
+          ...(authenticatedGateApprovals.length === 0 ? {} : {
+            authenticated_gate_approvals: authenticatedGateApprovals,
+          }),
         });
         if (!next.ok) return next;
         return Object.freeze({

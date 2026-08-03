@@ -79,26 +79,12 @@ export const readCanonicalConstitutionDigest: CanonicalConstitutionDigestReader 
   return resolved.ok ? ok(resolved.value.digest) : resolved;
 };
 
-function artifactPaths(input: FingerprintReadContext<any>): readonly TaskPathClaim[] {
-  switch (input.call.name) {
-    case "archflow_counter_review":
-    case "archflow_adjudicate":
-      return Object.freeze([input.call.input.artifact_path]);
-    case "archflow_state":
-    case "archflow_gate":
-    case "archflow_waiver":
-      return Object.freeze([]);
-    default: {
-      const exhaustive: never = input.call;
-      throw new TypeError(`unknown tool ${String((exhaustive as { name?: unknown }).name)}`);
-    }
-  }
+function artifactPaths(_input: FingerprintReadContext<any>): readonly TaskPathClaim[] {
+  return Object.freeze([]);
 }
 
-function upstreamPaths(input: FingerprintReadContext<any>): readonly TaskPathClaim[] {
-  return input.call.name === "archflow_adjudicate"
-    ? Object.freeze([...input.call.input.upstream_paths])
-    : Object.freeze([]);
+function upstreamPaths(_input: FingerprintReadContext<any>): readonly TaskPathClaim[] {
+  return Object.freeze([]);
 }
 
 async function identitiesFor(

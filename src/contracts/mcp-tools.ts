@@ -47,7 +47,7 @@ export interface AdjudicateInput extends CommonToolInput { readonly artifact_pat
 export interface AdjudicateSuccess { readonly path: TaskPathClaim; readonly constitution: ConstitutionResult; readonly drift: DriftResult; readonly triggers: readonly RuleVersionRef[]; readonly revision: number }
 export type GateInput = { readonly [K in GateKind]: CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly summary: string; readonly subject_digest: Sha256Digest; readonly current_evidence: CurrentEvidenceSetRef; readonly supersedes?: GateSupersessionRef; readonly supplemental_outcome?: SupplementalReviewOutcome; readonly kind: K; readonly context: GateContext<K> } }[GateKind];
 export type GateSuccess = { readonly [K in GateKind]: { readonly kind: K; readonly decision: GateDecisionEnvelope<K>; readonly notes: string; readonly revision: number } }[GateKind];
-export interface WaiverInput extends CommonToolInput { readonly origin: WaiverOriginRef; readonly rationale: string }
+export interface WaiverInput extends CommonToolInput { readonly origin: WaiverOriginRef; readonly rationale: string; readonly supplemental_outcome?: SupplementalReviewOutcome }
 export interface WaiverDecisionBinding { readonly origin_gate_id: PathSafeId; readonly waiver_gate_id: PathSafeId; readonly task_id: TaskSlug; readonly rule_id: string; readonly rule_version: number; readonly subject_digest: Sha256Digest; readonly current_evidence_set_digest: Sha256Digest; readonly scope: WaiverScope; readonly human_provenance: HumanDecisionProvenance }
 export type WaiverSuccess = (WaiverDecisionBinding & { readonly granted: true; readonly expires: "task-complete"; readonly notes: string; readonly revision: number }) | (WaiverDecisionBinding & { readonly granted: false; readonly notes: string; readonly revision: number });
 export interface ToolContract<Input, Success> { readonly input: Input; readonly success: Success }
@@ -84,12 +84,16 @@ const adjudicateInput = z.object({ ...common, artifact_path: taskPathClaimV1Sche
 const supersedes = z.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest, old_subject_digest: digest }).strict();
 const gateInput = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), supersedes: supersedes.optional(), supplemental_outcome: z.unknown().optional(), kind: z.enum(GATE_KINDS), context: z.unknown() }).strict();
 const waiverOrigin = z.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest, origin_context_digest: digest, task_id: taskSlugV1Schema, phase_instance: phase, subject_digest: digest, current_evidence_set_digest: digest, rule, scope }).strict();
-const waiverInput = z.object({ ...common, origin: waiverOrigin, rationale: text }).strict();
+const waiverInput = z.object({ ...common, origin: waiverOrigin, rationale: text, supplemental_outcome: z.unknown().optional() }).strict();
 
 function inputFor<K extends ToolName>(name: K, value: unknown): ToolInput<K> {
   const parsed = name === "archflow_state" ? stateInput.parse(value) : name === "archflow_counter_review" ? counterInput.parse(value) : name === "archflow_adjudicate" ? adjudicateInput.parse(value) : name === "archflow_waiver" ? waiverInput.parse(value) : gateInput.parse(value);
   if (name === "archflow_gate") { const v = parsed as z.infer<typeof gateInput>; parseGateContext(v.kind, v.context); return { ...v, current_evidence: parseCurrentEvidenceSetRef(v.current_evidence), ...(v.supplemental_outcome === undefined ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) }) } as ToolInput<K>; }
-  if (name === "archflow_waiver") { const v = parsed as z.infer<typeof waiverInput>; if (v.task_id !== v.origin.task_id) throw new TypeError("waiver task_id must match origin task_id"); }
+  if (name === "archflow_waiver") {
+    const v = parsed as z.infer<typeof waiverInput>;
+    if (v.task_id !== v.origin.task_id) throw new TypeError("waiver task_id must match origin task_id");
+    return { ...v, ...(v.supplemental_outcome === undefined ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) }) } as ToolInput<K>;
+  }
   return parsed as ToolInput<K>;
 }
 function deepFreeze<T>(value: T): T {

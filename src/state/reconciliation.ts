@@ -40,6 +40,8 @@ export type ReconciliationInput = Readonly<{
   current_projections: readonly ProjectionDigestRef[];
   active_heads: ActiveAuthorityHeads;
   intent?: ReconciliationIntent;
+  /** Discovery-only blockers consumed by status; they do not alter reconciliation classification. */
+  blocking_reasons?: readonly string[];
 }>;
 
 export type ReconciliationFinding =
@@ -63,6 +65,7 @@ function materialize(input: ReconciliationInput): ReconciliationInput {
     recorded_projections: input.recorded_projections,
     current_projections: input.current_projections,
     active_heads: input.active_heads,
+    ...(input.blocking_reasons === undefined ? {} : { blocking_reasons: input.blocking_reasons }),
   }, "reconciliation working set");
   let intent: ReconciliationIntent | undefined;
   if (input.intent !== undefined) {
@@ -85,6 +88,9 @@ function materialize(input: ReconciliationInput): ReconciliationInput {
     current_projections: structuredClone(input.current_projections),
     active_heads: structuredClone(input.active_heads),
     ...(intent === undefined ? {} : { intent }),
+    ...(input.blocking_reasons === undefined
+      ? {}
+      : { blocking_reasons: Object.freeze([...input.blocking_reasons]) }),
   };
 }
 

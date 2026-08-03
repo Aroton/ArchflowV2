@@ -1,5 +1,7 @@
 # ArchFlow Process
 
+> **Stale:** This page documents the legacy skill-only workflow; Phase 22 will rewrite it for the MCP-backed workflow.
+
 ## Overall Workflow
 
 ```mermaid

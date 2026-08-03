@@ -113,6 +113,23 @@ describe("planStateTransition", () => {
     expect(skipped.ok ? undefined : skipped.error.code).toBe("TRANSITION_INVALID");
   });
 
+  it("does not advance an implementation phase until its authorized commit is observed", () => {
+    const current = state({
+      phase_instance: phase("phase-impl", 2),
+      status: "succeeded",
+      step: "adjudicate",
+      attempt: parseSafeInteger(3),
+    });
+    const target = {
+      phase_instance: phase("phase-design", 3), step: "produce" as const,
+      status: "running" as const, attempt: parseSafeInteger(1), input_fingerprint: D("8"),
+    };
+    const unobserved = planStateTransition({
+      current, target, recomputed_input_fingerprint: D("8"),
+    });
+    expect(unobserved).toMatchObject({ ok: false, error: { code: "TRANSITION_INVALID" } });
+  });
+
   it("carries the phase-instance attempt across steps and increments retries and re-entry", () => {
     const across = state({
       step: "self_review",

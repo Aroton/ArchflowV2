@@ -1,0 +1,186 @@
+import type { TaskStateV1 } from "../contracts/durable-state.js";
+import type { GateKind } from "../contracts/gates.js";
+import type { PathSafeId, Sha256Digest } from "../contracts/evidence.js";
+import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
+import { WORKFLOW_V1 } from "../contracts/workflow.js";
+import type { PipelineStep } from "../contracts/vocabulary.js";
+import type { EvidenceAssessment } from "../review/fixed-point.js";
+import type { ReconciliationFinding } from "./reconciliation.js";
+
+export type NextActionCode =
+  | "initialize-repository"
+  | "create-task"
+  | "resume-exact-intent"
+  | "restore-or-record-new-transition"
+  | "inspect-retained-receipt"
+  | "create-fresh-intent"
+  | "resolve-current-authority"
+  | "restore-pinned-config"
+  | "open-gate"
+  | "resolve-open-gate"
+  | "triage-supplemental-review"
+  | "import-manual-checkpoints"
+  | "run-step"
+  | "commit-phase"
+  | "advance-phase"
+  | "complete-task"
+  | "task-complete"
+  | "inspect-state";
+
+export type NextAction = Readonly<{
+  code: NextActionCode;
+  detail: string;
+  human_required: boolean;
+  phase_instance?: PhaseInstanceId;
+  step?: PipelineStep;
+  skill?: string;
+  gate_id?: PathSafeId;
+  gate_kind?: GateKind;
+}>;
+
+export type AuthenticatedApprovalFact = Readonly<{
+  gate_kind: GateKind;
+  subject_digest: Sha256Digest;
+}>;
+
+export type NextActionInput = Readonly<{
+  repository_initialized: boolean;
+  state?: TaskStateV1;
+  config_verified?: boolean;
+  reconciliation_findings?: readonly ReconciliationFinding[];
+  reconciliation_blocking_reasons?: readonly string[];
+  untriaged_supplemental_review?: boolean;
+  checkpoint_head_revision?: number;
+  assessment?: EvidenceAssessment;
+  evidence_available?: boolean;
+  subject_digest?: Sha256Digest;
+  authenticated_approvals?: readonly AuthenticatedApprovalFact[];
+  commit_observed?: boolean;
+  adjudication_gate_kind?: GateKind;
+}>;
+
+function action(
+  code: NextActionCode,
+  detail: string,
+  humanRequired: boolean,
+  state?: TaskStateV1,
+  extra: Partial<NextAction> = {},
+): NextAction {
+  if (state === undefined) return Object.freeze({ code, detail, human_required: humanRequired, ...extra });
+  const kind = decodePhaseInstance(state.phase_instance).kind;
+  const skill = WORKFLOW_V1.phases.find((phase) => phase.id === kind)?.skill;
+  return Object.freeze({
+    code,
+    detail,
+    human_required: humanRequired,
+    phase_instance: state.phase_instance,
+    ...(skill === undefined ? {} : { skill }),
+    ...extra,
+  });
+}
+
+function matchingApproval(input: NextActionInput, kind: GateKind): boolean {
+  return input.subject_digest !== undefined &&
+    (input.authenticated_approvals ?? []).some((approval) =>
+      approval.gate_kind === kind && approval.subject_digest === input.subject_digest);
+}
+
+function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
+  const phase = decodePhaseInstance(state.phase_instance);
+  const requiredKind = phase.kind === "prd" || phase.kind === "design" || phase.kind === "phase-design"
+    ? "artifact-approval"
+    : phase.kind === "phase-impl"
+      ? "commit-authorization"
+      : undefined;
+  if (requiredKind !== undefined && !matchingApproval(input, requiredKind)) {
+    return action("open-gate", `Open the required ${requiredKind} gate.`, true, state, {
+      gate_kind: requiredKind,
+    });
+  }
+  if (phase.kind === "phase-impl" && input.commit_observed !== true) {
+    return action(
+      "commit-phase",
+      "Stage the authorized phase outputs, show and confirm the commit, then commit them to the approved current target ref.",
+      true,
+      state,
+    );
+  }
+  if (
+    phase.kind === "phase-impl" &&
+    state.planned_final_phase !== undefined &&
+    Number(phase.phase) === Number(state.planned_final_phase)
+  ) {
+    return action("complete-task", "Record that the final planned implementation phase is committed.", false, state);
+  }
+  return action("advance-phase", "Advance to the next phase in the fixed workflow.", false, state);
+}
+
+/** Derives exactly one legal next action from already-authenticated status facts. Pure and I/O-free. */
+export function deriveNextAction(input: NextActionInput): NextAction {
+  const state = input.state;
+  if (state === undefined) {
+    return input.repository_initialized
+      ? action("create-task", "Create durable state for this task.", false)
+      : action("initialize-repository", "Initialize ArchFlow in this repository.", false);
+  }
+  if (input.config_verified !== true) {
+    return action("restore-pinned-config", "Restore the task's digest-pinned configuration before continuing.", true, state);
+  }
+  const finding = input.reconciliation_findings?.[0];
+  if (finding !== undefined) {
+    return action(finding.next_action, `Resolve reconciliation finding ${finding.kind}.`, true, state);
+  }
+  const discoveryBlocker = input.reconciliation_blocking_reasons?.[0];
+  if (discoveryBlocker !== undefined) {
+    return discoveryBlocker === "retained-receipt-ambiguity"
+      ? action("inspect-retained-receipt", "Inspect the ambiguous retained successor receipts.", true, state)
+      : action("inspect-state", `Inspect reconciliation discovery blocker ${discoveryBlocker}.`, true, state);
+  }
+  if (state.terminal !== undefined) {
+    return action(
+      "task-complete",
+      state.terminal === "complete"
+        ? "The final planned implementation phase is committed."
+        : `Task is terminal: ${state.terminal}.`,
+      false,
+      state,
+    );
+  }
+  if (state.open_gate !== undefined) {
+    return input.untriaged_supplemental_review === true
+      ? action("triage-supplemental-review", "Triage the retained supplemental gate review.", true, state, {
+          gate_id: state.open_gate.gate_id,
+          gate_kind: state.open_gate.gate_kind,
+        })
+      : action("resolve-open-gate", "Resolve the currently open human gate.", true, state, {
+          gate_id: state.open_gate.gate_id,
+          gate_kind: state.open_gate.gate_kind,
+        });
+  }
+  if ((input.checkpoint_head_revision ?? state.revision) > state.revision) {
+    return action("import-manual-checkpoints", "Import the available manual checkpoint chain.", true, state);
+  }
+  const currentProduce = state.authoritative_results.some((reference) =>
+    reference.phase_instance === state.phase_instance && reference.step === "produce");
+  if (!currentProduce) {
+    return action("run-step", "Run the produce pipeline step.", false, state, { step: "produce" });
+  }
+  const next = input.assessment?.next;
+  if (next !== undefined) {
+    if (next === "advance") return advanceAction(input, state);
+    if (next === "attempts-exhausted") {
+      return action("open-gate", "Open the attempts-exhausted gate.", true, state, { gate_kind: "attempts-exhausted" });
+    }
+    if (next === "adjudication-gate") {
+      return input.adjudication_gate_kind === undefined
+        ? action("inspect-state", "Inspect the unresolved adjudication gate obligation.", true, state)
+        : action("open-gate", `Open the required ${input.adjudication_gate_kind} gate.`, true, state, {
+            gate_kind: input.adjudication_gate_kind,
+          });
+    }
+    return action("run-step", `Run the ${next} pipeline step.`, false, state, { step: next });
+  }
+  return input.evidence_available === false
+    ? action("inspect-state", "Inspect why current evidence is unavailable.", true, state)
+    : action("run-step", `Continue the ${state.step} pipeline step.`, false, state, { step: state.step });
+}

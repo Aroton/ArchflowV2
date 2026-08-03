@@ -21,11 +21,12 @@ import type { CommittedIntentRef, TaskStateV1 } from "../contracts/durable-state
 import type { LegacyImportInitializationV1 } from "../contracts/durable-legacy-import.js";
 import type { TaskInitializationV1 } from "../contracts/durable-task-initialization.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
-import { parseSafeCode } from "../contracts/evidence.js";
+import { parseSafeCode, type Sha256Digest } from "../contracts/evidence.js";
 import { computeInputFingerprint } from "../contracts/fingerprints.js";
 import {
   assertAuthenticParsedToolCall,
   createInternalResultExpectation,
+  type RequestIdentifiedToolCall,
   validateProjectResultStructure,
   type ParsedToolCall,
   type ToolSuccess,
@@ -44,6 +45,13 @@ import { planStateTransition } from "./transitions.js";
 
 type InitializationArtifact = TaskInitializationV1 | LegacyImportInitializationV1;
 type StateCall = Extract<ParsedToolCall, { readonly name: "archflow_state" }>;
+
+export type StateInitializationIdentification = Readonly<{
+  call: Extract<RequestIdentifiedToolCall, { readonly name: "archflow_state" }>;
+  input_fingerprint: Sha256Digest;
+  request_digest: Sha256Digest;
+  prepared_state: CanonicalDocument<TaskStateV1>;
+}>;
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 const fail = <T = never>(error: ProjectError): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: false, error });
@@ -206,6 +214,71 @@ function initialState(call: StateCall, artifact: DurableArtifact): ProjectResult
   return ok(state);
 }
 
+/**
+ * Identifies the revision-0 state request without writing the receipt or task state. The local
+ * envelope command and the committing initialization path deliberately share this derivation so
+ * their fingerprint and request digest cannot drift.
+ */
+export async function identifyStateInitialization(
+  dependencies: TransactionDependencies,
+  request: TransactionRequest<"archflow_state">,
+): Promise<ProjectResult<StateInitializationIdentification>> {
+  assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
+  assertAuthenticParsedToolCall(request.call);
+  const artifactValue = request.call.input.artifact;
+  if (request.call.input.expected_revision !== 0 || artifactValue === undefined) {
+    return contract("revision-zero-initialization-required");
+  }
+  assertPlainJson(artifactValue, "initialization artifact");
+  const artifact = structuredClone(artifactValue) as DurableArtifact;
+  const initialization = initializationFor(artifact);
+  if (initialization === undefined) return contract("initialization-artifact-required");
+  if (initialization.task_id !== request.authority.task_id) return contract("initialization-task-mismatch");
+  const repository = verifyRepositoryIdentity(initialization.repository_identity_digest, request.authority.repository_identity);
+  if (!repository.ok) return repository;
+  const liveInitialization = await validateLiveInitialization(dependencies, request, initialization);
+  if (!liveInitialization.ok) return liveInitialization;
+
+  const artifactDocument = canonicalDocument(artifact);
+  const artifactSemantics = validateDurableSemantics({ artifact: artifactDocument });
+  if (!artifactSemantics.ok) return artifactSemantics;
+  const stateResult = initialState(request.call, artifact);
+  if (!stateResult.ok) return stateResult;
+  const preparedState = canonicalDocument(stateResult.value);
+  const initializationSemantics = validateDurableSemantics({
+    state: preparedState,
+    artifact: canonicalDocument(initialization),
+  });
+  if (!initializationSemantics.ok) return initializationSemantics;
+
+  const config = await dependencies.read_config(request.authority.config);
+  if (config.kind !== "valid") return config.kind === "invalid" ? contract("task-config-invalid") : io(request, "task-config-read");
+  if (config.snapshot.digest !== initialization.config_digest) {
+    return fail(createProjectError("PINNED_CONFIG_MISMATCH", {
+      expected_digest: initialization.config_digest,
+      observed_digest: config.snapshot.digest,
+    }));
+  }
+  const fingerprint = await dependencies.resolve_input_fingerprint({
+    runner: dependencies.runner,
+    authority: request.authority,
+    state: preparedState,
+    call: request.call,
+    live_config: config.snapshot,
+    context: request.authority.context,
+  });
+  if (!fingerprint.ok) return fingerprint;
+  assertPlainJson(fingerprint.value, "initialization fingerprint subject");
+  const inputFingerprint = computeInputFingerprint(structuredClone(fingerprint.value));
+  const identified = identifyTransactionRequest(request.call, request.authority, inputFingerprint);
+  return ok(Object.freeze({
+    call: identified.call,
+    input_fingerprint: inputFingerprint,
+    request_digest: identified.request_digest,
+    prepared_state: preparedState,
+  }));
+}
+
 async function intentTarget(
   dependencies: TransactionDependencies,
   request: TransactionRequest<"archflow_state">,
@@ -294,56 +367,19 @@ async function executeLocked(
   }
   if (stateRead.kind !== "missing") return contract(stateRead.kind === "unreadable" ? "task-state-unreadable" : "task-state-noncanonical");
 
-  const artifactValue = request.call.input.artifact;
-  if (request.call.input.expected_revision !== 0 || artifactValue === undefined) return contract("revision-zero-initialization-required");
-  assertPlainJson(artifactValue, "initialization artifact");
-  const artifact = structuredClone(artifactValue) as DurableArtifact;
-  const initialization = initializationFor(artifact);
-  if (initialization === undefined) return contract("initialization-artifact-required");
-  if (initialization.task_id !== request.authority.task_id) return contract("initialization-task-mismatch");
-  const repository = verifyRepositoryIdentity(initialization.repository_identity_digest, request.authority.repository_identity);
-  if (!repository.ok) return repository;
-  const liveInitialization = await validateLiveInitialization(dependencies, request, initialization);
-  if (!liveInitialization.ok) return liveInitialization;
-
-  const artifactDocument = canonicalDocument(artifact);
-  const artifactSemantics = validateDurableSemantics({ artifact: artifactDocument });
-  if (!artifactSemantics.ok) return artifactSemantics;
-  const stateResult = initialState(request.call, artifact);
-  if (!stateResult.ok) return stateResult;
-  const preparedState = canonicalDocument(stateResult.value);
-  const initializationSemantics = validateDurableSemantics({
-    state: preparedState,
-    artifact: canonicalDocument(initialization),
-  });
-  if (!initializationSemantics.ok) return initializationSemantics;
-
-  const config = await dependencies.read_config(request.authority.config);
-  if (config.kind !== "valid") return config.kind === "invalid" ? contract("task-config-invalid") : io(request, "task-config-read");
-  if (config.snapshot.digest !== initialization.config_digest) {
-    return fail(createProjectError("PINNED_CONFIG_MISMATCH", {
-      expected_digest: initialization.config_digest,
-      observed_digest: config.snapshot.digest,
-    }));
-  }
-  const fingerprint = await dependencies.resolve_input_fingerprint({
-    runner: dependencies.runner,
-    authority: request.authority,
-    state: preparedState,
-    call: request.call,
-    live_config: config.snapshot,
-    context: request.authority.context,
-  });
-  if (!fingerprint.ok) return fingerprint;
-  assertPlainJson(fingerprint.value, "initialization fingerprint subject");
-  const inputFingerprint = computeInputFingerprint(structuredClone(fingerprint.value));
+  const identification = await identifyStateInitialization(dependencies, request);
+  if (!identification.ok) return identification;
+  const preparedState = identification.value.prepared_state;
+  const inputFingerprint = identification.value.input_fingerprint;
   if (inputFingerprint !== request.call.input.input_fingerprint) {
     return fail(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
       expected_digest: inputFingerprint,
       observed_digest: request.call.input.input_fingerprint,
     }));
   }
-  const identified = identifyTransactionRequest(request.call, request.authority, inputFingerprint);
+  const identified = identification.value;
+
+  const artifact = structuredClone(request.call.input.artifact!) as DurableArtifact;
 
   const success = { path: parseTaskPathClaim("state.json"), revision: 1, status: request.call.input.status };
   const expectation = createInternalResultExpectation({

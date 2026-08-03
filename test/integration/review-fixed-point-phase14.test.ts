@@ -714,6 +714,11 @@ async function commitCounter(
   });
   const result = await runCounterReview({
     transaction: dependencies,
+    reobserve_projection_digest: async () => ({
+      schema_version: "1",
+      ok: true,
+      value: subject,
+    }),
     dispatch: async () => ({
       cli_version: "fixture-1",
       extracted_output_bytes: canonicalJsonBytes(
@@ -764,6 +769,7 @@ async function commitCounter(
         result_id: resultId,
       },
     },
+    projection_digest: subject,
   });
   if (!result.ok) throw new Error(result.error.code);
 }

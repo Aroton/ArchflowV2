@@ -1,0 +1,227 @@
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, describe, expect, it } from "vitest";
+
+import { canonicalDocument, sha256Bytes } from "../../src/contracts/canonical.js";
+import { parseActiveGate, parseGateRequest } from "../../src/contracts/durable-gate.js";
+import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
+import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
+import { resolvePinnedConstitution } from "../../src/state/constitution.js";
+import { createProductionServices } from "../../src/state/production.js";
+import { buildCommitAuthorizationInput, computeTaskStatus } from "../../src/state/status.js";
+import type { CurrentProduceSubject } from "../../src/state/produce-subject.js";
+
+const roots: string[] = [];
+afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+const TASK = parseTaskSlug("status-task");
+const PHASE = "phase-impl-17" as TaskStateV1["phase_instance"];
+const D = (value: string) => parseSha256Digest(value.repeat(64));
+const gitEnv = {
+  ...process.env,
+  GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null",
+  GIT_AUTHOR_NAME: "ArchFlow Test", GIT_AUTHOR_EMAIL: "test@example.invalid",
+  GIT_COMMITTER_NAME: "ArchFlow Test", GIT_COMMITTER_EMAIL: "test@example.invalid",
+};
+const configText = `schema_version: "1"
+roles:
+  producer: { model: claude-opus-4-6, effort: high }
+  self-reviewer: { model: claude-opus-4-6, effort: high }
+overrides:
+  phase-impl:
+    producer: { model: gpt-5.4, effort: high }
+    self-reviewer: { model: gpt-5.4, effort: high }
+`;
+
+async function harness() {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "archflow-status-")));
+  roots.push(root);
+  execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: root, env: gitEnv });
+  mkdirSync(join(root, ".archflow", "constitution"), { recursive: true });
+  writeFileSync(join(root, ".archflow", "constitution", "01-trust.md"),
+    "---\nid: trust\nversion: 1\nstatus: active\n---\nPinned rule text.\n");
+  writeFileSync(join(root, "tracked.txt"), "root\n");
+  execFileSync("git", ["add", "--", ".archflow/constitution/01-trust.md", "tracked.txt"], { cwd: root, env: gitEnv });
+  execFileSync("git", ["commit", "-q", "-m", "root"], { cwd: root, env: gitEnv });
+  mkdirSync(join(root, ".archflow", "tasks", TASK, "intents"), { recursive: true });
+  writeFileSync(join(root, ".archflow", "tasks", TASK, "config.yaml"), configText);
+  const created = await createProductionServices({
+    working_directory: root, task_id: TASK, operation: parseSafeCode("status-test"), phase_instance: PHASE,
+  });
+  if (!created.ok) throw new Error(created.error.code);
+  const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, env: gitEnv, encoding: "utf8" }).trim() as TaskStateV1["policy_base_commit"];
+  const constitution = await resolvePinnedConstitution(created.value.runner, head, created.value.authority.context);
+  if (!constitution.ok) throw new Error(constitution.error.code);
+  const state = (extra: Partial<TaskStateV1> = {}): TaskStateV1 => ({
+    schema_version: "1", task_id: TASK,
+    repository_identity_digest: created.value.authority.repository_identity_digest,
+    revision: parseSafeInteger(4), phase_instance: PHASE, step: "produce", status: "running",
+    attempt: parseSafeInteger(1), input_fingerprint: D("2"), initialization_digest: D("3"),
+    config_digest: sha256Bytes(Buffer.from(configText)), workflow_digest: D("5"),
+    constitution_digest: constitution.value.digest, policy_base_commit: head,
+    authoritative_results: [], approvals: [], waivers: [], ...extra,
+  });
+  return { root, services: created.value, state };
+}
+
+describe("computeTaskStatus", () => {
+  it("materializes sorted retained commit-authorization resume facts without a rubric digest", () => {
+    const evidence = {
+      set_digest: D("8"),
+      slots: [
+        { role: "self-review", evidence_digest: D("9"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
+        { role: "counter-review", evidence_digest: D("a"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+      ],
+    } as const;
+    const subject = {
+      artifact_digest: D("b"),
+      artifact: {
+        artifact_kind: "implementation-output",
+        diff_digest: D("c"),
+        parent_documents: [
+          { content_digest: D("f") },
+          { content_digest: D("d") },
+        ],
+      },
+      retained: { prepared: { manifest: { value: { artifact_digest: D("b") } } } },
+    } as unknown as CurrentProduceSubject;
+    const input = buildCommitAuthorizationInput(subject, evidence, {
+      value: "refs/heads/feature", guidance: "Current symbolic branch ref observed from repository authority.",
+    });
+    expect(input).toEqual({
+      kind: "commit-authorization", subject_digest: D("b"), current_evidence: evidence,
+      context: {
+        target_ref: "refs/heads/feature", diff_digest: D("c"),
+        current_artifact_digests: [D("b")], parent_document_digests: [D("d"), D("f")],
+      },
+      target_ref_guidance: "Current symbolic branch ref observed from repository authority.",
+    });
+    expect(input).not.toHaveProperty("rubric_digest");
+  });
+
+  it("reports missing state through the normal result contract", async () => {
+    const h = await harness();
+    const status = await computeTaskStatus(h.services.dependencies, h.services.authority);
+    expect(status).toMatchObject({ ok: true, value: { state: "missing", next_action: { code: "create-task" } } });
+  });
+
+  it("uses override-aware same-family routes and commit-pinned rules", async () => {
+    const h = await harness();
+    writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state()).bytes);
+    writeFileSync(join(h.root, ".archflow", "constitution", "01-trust.md"),
+      "---\nid: trust\nversion: 2\nstatus: active\n---\nUncommitted replacement.\n");
+    const status = await computeTaskStatus(h.services.dependencies, h.services.authority);
+    expect(status).toMatchObject({
+      ok: true,
+      value: {
+        config: { verified: true },
+        routes: { producer: { family: "codex", model: "gpt-5.4" }, self_review: { family: "codex", model: "gpt-5.4" } },
+        constitution: { active_rules: [{ id: "trust", version: 1, text: "Pinned rule text." }] },
+      },
+    });
+    if (status.ok) expect(status.value).not.toHaveProperty("rubric_digest");
+    if (status.ok) expect(status.value.next_action).toMatchObject({ code: "run-step", step: "produce" });
+  });
+
+  it("degrades config and missing gate archive disagreements without throwing", async () => {
+    const h = await harness();
+    const context = { artifact_kind: "phase-implementation" } as const;
+    const active = parseActiveGate({
+      schema_version: "1", gate_id: "gate-status", intent_id: "gate-intent", request_digest: D("7"),
+      task_id: TASK, phase_instance: PHASE, summary: "Approve", subject_digest: D("8"),
+      context_digest: computeGateContextDigest("artifact-approval", context),
+      current_evidence: { set_digest: D("9"), slots: [
+        { role: "self-review", evidence_digest: D("a"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
+        { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+      ] },
+      kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"],
+      opened_at_revision: 4, status: "awaiting-human", supplemental: [],
+      decision_template: {
+        schema_version: "1", gate_id: "gate-status", task_id: TASK, phase_instance: PHASE,
+        kind: "artifact-approval", subject_digest: D("8"), context_digest: computeGateContextDigest("artifact-approval", context),
+        required_fields: ["payload", "human_provenance"], cancellation_fields: ["cancelled", "reason", "human_provenance"],
+      },
+    });
+    writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state({
+      open_gate: {
+        gate_id: active.gate_id, gate_kind: active.kind, subject_digest: active.subject_digest,
+        context_digest: active.context_digest, frozen_state_digest: D("c"), opened_at_revision: parseSafeInteger(4),
+      },
+    })).bytes);
+    writeFileSync(join(h.services.authority.task_root, "gate.json"), canonicalDocument(active).bytes);
+    writeFileSync(h.services.authority.config.absolute, `${configText}max_attempts: 4\n`);
+    const status = await computeTaskStatus(h.services.dependencies, h.services.authority);
+    expect(status).toMatchObject({ ok: true, value: { config: { verified: false }, next_action: { code: "restore-pinned-config" } } });
+    if (status.ok) {
+      expect(status.value.blocking_reasons).toContain("active-gate-request-missing");
+      expect(status.value).not.toHaveProperty("open_gate");
+    }
+    writeFileSync(h.services.authority.config.absolute, configText);
+    const gateBlocked = await computeTaskStatus(h.services.dependencies, h.services.authority);
+    expect(gateBlocked).toMatchObject({
+      ok: true,
+      value: { next_action: { code: "resolve-current-authority" } },
+    });
+    if (gateBlocked.ok) expect(gateBlocked.value).not.toHaveProperty("open_gate");
+  });
+
+  it("reports a superseding gate with its complete human-resolution interface", async () => {
+    const h = await harness();
+    const context = { artifact_kind: "phase-implementation" } as const;
+    const active = parseActiveGate({
+      schema_version: "1", gate_id: "gate-superseding", intent_id: "gate-superseding-intent", request_digest: D("7"),
+      task_id: TASK, phase_instance: PHASE, summary: "Approve revised implementation", subject_digest: D("8"),
+      context_digest: computeGateContextDigest("artifact-approval", context),
+      current_evidence: { set_digest: D("9"), slots: [
+        { role: "self-review", evidence_digest: D("a"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
+        { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
+      ] },
+      supersedes: { superseded_gate_id: "gate-original", accepted_triage_digest: D("d"), old_subject_digest: D("e") },
+      kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"],
+      opened_at_revision: 4, status: "awaiting-human", supplemental: [],
+      decision_template: {
+        schema_version: "1", gate_id: "gate-superseding", task_id: TASK, phase_instance: PHASE,
+        kind: "artifact-approval", subject_digest: D("8"), context_digest: computeGateContextDigest("artifact-approval", context),
+        required_fields: ["payload", "human_provenance"], cancellation_fields: ["cancelled", "reason", "human_provenance"],
+      },
+    });
+    const { status: _status, supplemental: _supplemental, decision_template: _template, ...requestFields } = active;
+    const request = parseGateRequest(requestFields);
+    writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state({
+      open_gate: {
+        gate_id: active.gate_id, gate_kind: active.kind, subject_digest: active.subject_digest,
+        context_digest: active.context_digest, frozen_state_digest: D("c"), opened_at_revision: parseSafeInteger(4),
+      },
+    })).bytes);
+    writeFileSync(join(h.services.authority.task_root, "gate.json"), canonicalDocument(active).bytes);
+    mkdirSync(join(h.services.authority.task_root, "decisions", active.gate_id), { recursive: true });
+    writeFileSync(
+      join(h.services.authority.task_root, "decisions", active.gate_id, "request.json"),
+      canonicalDocument(request).bytes,
+    );
+
+    const status = await computeTaskStatus(h.services.dependencies, h.services.authority);
+    expect(status).toMatchObject({
+      ok: true,
+      value: {
+        open_gate: {
+          gate_id: active.gate_id,
+          decision_path: "gate.decision",
+          archive_decision_path: `decisions/${active.gate_id}/decision.json`,
+          request_path: `decisions/${active.gate_id}/request.json`,
+        },
+        next_action: { code: "resolve-open-gate", gate_id: active.gate_id, human_required: true },
+      },
+    });
+    if (!status.ok || status.value.open_gate === undefined) throw new Error("superseding gate status unavailable");
+    expect(status.value.blocking_reasons).not.toContain("active-gate-mismatch");
+    expect(status.value.open_gate.decision_templates.length).toBeGreaterThan(1);
+    expect(status.value.open_gate.gate_counter_review_path).toContain(active.gate_id);
+    expect(status.value.open_gate.counter_review_prompt).toContain("Perform an optional independent counter-review");
+    expect(status.value.open_gate.counter_review_prompt).toContain(active.gate_id);
+    expect(status.value.open_gate.counter_review_prompt).toContain(active.request_digest);
+  });
+});

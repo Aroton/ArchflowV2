@@ -19,7 +19,7 @@ import {
   type IntentReceiptV1,
 } from "../contracts/durable-intent.js";
 import type { AuthoritativeResultRef, CommittedIntentRef, TaskStateV1 } from "../contracts/durable-state.js";
-import { parseResultManifest } from "../contracts/durable-result-manifest.js";
+import { parseResultManifest, type ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import { checkpointSelfDigest } from "../contracts/durable-checkpoint.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
@@ -575,6 +575,19 @@ function targetIsInside(root: string, target: ResolvedPath): boolean {
   return rel !== "" && rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel);
 }
 
+/** Selects the authenticated containment boundary for a prepared result projection. */
+export function resultProjectionTargetIsContained(
+  artifactKind: ResultManifestV1["source_artifact"]["artifact_kind"],
+  taskRoot: string,
+  worktreeRoot: string,
+  target: ResolvedPath,
+): boolean {
+  return targetIsInside(
+    artifactKind === "implementation-output" ? worktreeRoot : taskRoot,
+    target,
+  );
+}
+
 function validateResultInstallationBinding<K extends ToolName>(
   request: TransactionRequest<K>,
   current: CanonicalDocument<TaskStateV1>,
@@ -631,7 +644,12 @@ function validateResultInstallationBinding<K extends ToolName>(
     facts.projection_plan.entries.some((entry) =>
       outputs.get(entry.path) !== entry.target.path_class ||
       entry.target.repositoryRelative !== entry.path ||
-      !targetIsInside(request.authority.task_root, entry.target))
+      !resultProjectionTargetIsContained(
+        manifest.source_artifact.artifact_kind,
+        request.authority.task_root,
+        authenticatedWorktreeRoot,
+        entry.target,
+      ))
   ) return issue("CONTRACT_INVALID", "result-installation-projection-target-mismatch");
   return ok(undefined);
 }

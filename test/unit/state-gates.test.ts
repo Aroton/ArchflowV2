@@ -10,7 +10,8 @@ import { computeGateContextDigest, computeGateId, type InputFingerprintSubject }
 import { parseGateDecisionRecord, parseGateRequest } from "../../src/contracts/durable-gate.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
-import { gateDecisionEffect, type GateEffect, type GateKind } from "../../src/contracts/gates.js";
+import { gateDecisionEffect, type GateContext, type GateEffect, type GateKind } from "../../src/contracts/gates.js";
+import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { currentEvidenceSetRef } from "../../src/contracts/trust.js";
 import type { RepositoryOperationContext } from "../../src/repository/git.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
@@ -22,6 +23,7 @@ import { deriveCurrentEvidenceSet, type RetainedEvidenceSet } from "../../src/st
 import { importGateDecisions, loadAuthenticatedGateApproval, runDurableGate } from "../../src/state/gates.js";
 import { createTaskLock } from "../../src/state/lock.js";
 import { readIntentReceipt, readTaskConfig, readTaskState } from "../../src/state/read.js";
+import { planStateTransition } from "../../src/state/transitions.js";
 import { resolvedConstitutionFixture } from "../helpers/resolved-constitution.js";
 
 const D = (value: string) => parseSha256Digest(value.repeat(64));
@@ -276,4 +278,218 @@ describe("gate manual authority import", () => {
       adjudication_gate_pending: false,
     });
   }, 5_000);
+
+  it("records the retained approved design plan and authenticates final completion", async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "archflow-final-phase-"))); roots.push(root);
+    const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", GIT_AUTHOR_NAME: "ArchFlow Test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "ArchFlow Test", GIT_COMMITTER_EMAIL: "test@example.invalid" };
+    execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: root, env });
+    writeFileSync(join(root, "tracked.txt"), "root\n"); execFileSync("git", ["add", "tracked.txt"], { cwd: root, env }); execFileSync("git", ["commit", "-q", "-m", "root"], { cwd: root, env });
+    const taskRoot = join(root, ".archflow", "tasks", "task-1"); mkdirSync(taskRoot, { recursive: true });
+    const configBytes = Buffer.from('schema_version: "1"\nroles:\n  counter-reviewer: {model: gpt-example, effort: high}\n  adjudicator: {model: claude-example, effort: high}\n');
+    writeFileSync(join(taskRoot, "config.yaml"), configBytes);
+    const operation: RepositoryOperationContext = { task_id: parseTaskSlug("task-1"), phase_instance: "design" as never, operation: parseSafeCode("final-phase-test"), attempt: parseSafeInteger(1) };
+    const runnerResult = await discoverWorktree(createGitRunner({ cwd: root }), operation); if (!runnerResult.ok) throw new Error("discovery failed");
+    const git = await preflightGit(runnerResult.value, operation); if (!git.ok) throw new Error("preflight failed");
+    const authorityResult = await createInternalTransactionAuthority({ runner: runnerResult.value, environment: git.value, task_id: parseTaskSlug("task-1"), context: operation }); if (!authorityResult.ok) throw new Error("authority failed");
+    const authority = authorityResult.value;
+    const inputFingerprint = D("2");
+    const evidence = currentEvidenceSetRef([self, counter]);
+    let retained: unknown;
+    const dependencies = {
+      runner: runnerResult.value, environment: git.value, atomic: createAtomicWriter(), lock: createTaskLock(),
+      read_state: readTaskState, read_config: readTaskConfig, read_receipt: readIntentReceipt,
+      resolve_input_fingerprint: async () => ({ schema_version: "1" as const, ok: true as const, value: {} as InputFingerprintSubject }),
+      load_retained_result: async () => ({ schema_version: "1" as const, ok: true as const, value: retained as never }),
+    };
+    const resultReference = (resultId: string, phaseInstance: TaskStateV1["phase_instance"], artifactDigest: ReturnType<typeof D>) => ({
+      phase_instance: phaseInstance, step: "produce" as const, result_digest: artifactDigest,
+      result_id: resultId as never, input_fingerprint: inputFingerprint,
+      manifest_path: parseRepositoryPathClaim(`.archflow/tasks/task-1/results/sha256/${artifactDigest}/manifest.json`),
+    });
+    const installDesign = (markdown: string, resultId: string) => {
+      const bytes = new TextEncoder().encode(markdown);
+      const contentDigest = sha256Bytes(bytes);
+      const artifact = {
+        schema_version: "1", artifact_kind: "document", task_id: "task-1", phase_instance: "design", step: "produce",
+        document_path: parseTaskPathClaim("design.md"), path_class: "document", byte_count: bytes.byteLength,
+        content_digest: contentDigest, declared_inputs: [], input_fingerprint: inputFingerprint,
+        snapshot_digest: D("8"), projection_target: parseRepositoryPathClaim(".archflow/tasks/task-1/design.md"),
+      } as const;
+      const artifactDigest = canonicalJsonDigest(artifact);
+      retained = {
+        prepared: {
+          manifest: canonicalDocument({ artifact_digest: artifactDigest, source_artifact: artifact } as never),
+          payloads: [{ path: artifact.projection_target, bytes, target: {} }],
+        },
+      };
+      return resultReference(resultId, "design" as TaskStateV1["phase_instance"], artifactDigest);
+    };
+    let current: TaskStateV1 = {
+      ...state(), repository_identity_digest: authority.repository_identity_digest,
+      config_digest: sha256Bytes(configBytes), input_fingerprint: inputFingerprint,
+      phase_instance: "design" as TaskStateV1["phase_instance"], step: "adjudicate", status: "succeeded",
+      authoritative_results: [installDesign("### Phase 1: One\n### Phase 2: Two\n", "design-1")],
+    };
+    writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
+
+    let sequence = 0;
+    const approve = async <K extends "artifact-approval" | "commit-authorization">(
+      kind: K,
+      subjectDigest: ReturnType<typeof D>,
+      gateContext: GateContext<K>,
+      expectedIssue?: string,
+    ) => {
+      sequence += 1;
+      const intentId = `approval-${sequence}` as never;
+      const requestDigest = D(sequence.toString(16));
+      const base = {
+        authority, expected_revision: current.revision, intent_id: intentId, request_digest: requestDigest,
+        input_fingerprint: inputFingerprint, phase_instance: current.phase_instance, summary: "Approve retained authority",
+        subject_digest: subjectDigest, current_evidence: evidence, kind, context: gateContext,
+      } as const;
+      const gate = computeGateId({ task_identity_digest: authority.task_identity_digest, intent_id: intentId, request_digest: requestDigest });
+      const aborted = new AbortController(); aborted.abort();
+      expect(await runDurableGate(dependencies, { ...base, signal: aborted.signal })).toMatchObject({ ok: false, error: { code: "CANCELLED" } });
+      const contextDigest = computeGateContextDigest(kind, gateContext as never);
+      writeFileSync(join(taskRoot, "gate.decision"), canonicalDocument({
+        schema_version: "1", gate_id: gate, task_id: "task-1", phase_instance: current.phase_instance,
+        kind, subject_digest: subjectDigest, context_digest: contextDigest, human_provenance: {
+          ...provenance, decision_event_id: `decision-${sequence}`, helper_invocation_id: `helper-${sequence}`,
+        }, payload: kind === "artifact-approval"
+          ? { decision: "approve", reason: "Reviewed" }
+          : { decision: "authorize-commit", reason: "Reviewed" },
+      }).bytes);
+      const result = await runDurableGate(dependencies, { ...base, signal: new AbortController().signal });
+      if (expectedIssue !== undefined) {
+        expect(result).toMatchObject({
+          ok: false,
+          error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: expectedIssue } } },
+        });
+        await expect(readTaskState(authority.state)).resolves.toMatchObject({
+          kind: "canonical",
+          document: { value: { planned_final_phase: current.planned_final_phase, open_gate: { gate_id: gate } } },
+        });
+        const archive = join(taskRoot, "decisions", gate, "decision.json");
+        expect(existsSync(archive)).toBe(false);
+        // The rejected approval remains a correctable human interface, not a server-owned archive
+        // that requires manual deletion. Exercise the ordinary revise escape path on the same gate.
+        writeFileSync(join(taskRoot, "gate.decision"), canonicalDocument({
+          schema_version: "1", gate_id: gate, task_id: "task-1", phase_instance: current.phase_instance,
+          kind, subject_digest: subjectDigest, context_digest: contextDigest, human_provenance: {
+            ...provenance, decision_event_id: `decision-${sequence}-revised`, helper_invocation_id: `helper-${sequence}-revised`,
+          }, payload: { decision: "revise", reason: "Correct the malformed phase plan" },
+        }).bytes);
+        const recovered = await runDurableGate(dependencies, { ...base, signal: new AbortController().signal });
+        expect(recovered).toMatchObject({ ok: true, value: { effect: "retry", replayed: false } });
+        if (!recovered.ok || !("state" in recovered.value)) throw new Error("corrected gate did not resolve");
+        current = recovered.value.state.value;
+        expect(existsSync(archive)).toBe(true);
+        return;
+      }
+      expect(result.ok).toBe(true);
+      if (!result.ok || !("state" in result.value)) throw new Error("gate did not resolve");
+      current = result.value.state.value;
+    };
+
+    await approve("artifact-approval", current.authoritative_results[0]!.result_digest, { artifact_kind: "design" });
+    expect(current.planned_final_phase).toBe(2);
+
+    const amended = installDesign("### Phase 1: One\n### Phase 2: Two\n### Phase 3: Three\n", "design-2");
+    current = { ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "adjudicate", status: "succeeded", authoritative_results: [amended] };
+    writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
+    await approve("artifact-approval", amended.result_digest, { artifact_kind: "design" });
+    expect(current.planned_final_phase).toBe(3);
+
+    const invalidPlans = [
+      ["malformed heading", "## Phase Plan\n### Phase 1:\n"],
+      ["alternate dash", "## Phase Plan\n### Phase 1 — One\n"],
+      ["table plan", "## Phase Plan\n| Phase | Name |\n|---|---|\n| 1 | One |\n"],
+      ["missing plan", "# Design without an implementation phase list\n"],
+      ["nonconsecutive headings", "## Phase Plan\n### Phase 1: One\n### Phase 3: Three\n"],
+      ["mixed exact and alternate headings", "## Phase Plan\n### Phase 1: One\n### Phase 2 — Two\n"],
+      ["mixed exact and fourth-level headings", "## Phase Plan\n### Phase 1: One\n#### Phase 2: Two\n"],
+      ["leading whitespace heading", "## Phase Plan\n ### Phase 1: One\n"],
+      ["marker plus malformed heading", "<!-- archflow:phase-plan:open-ended -->\n### Phase 1 — One\n"],
+      ["marker plus exact heading", "<!-- archflow:phase-plan:open-ended -->\n### Phase 1: One\n"],
+    ] as const;
+    for (const [name, markdown] of invalidPlans) {
+      const invalid = installDesign(markdown, `design-invalid-${name.replaceAll(" ", "-")}`);
+      current = { ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "adjudicate", status: "succeeded", authoritative_results: [invalid] };
+      writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
+      await approve("artifact-approval", invalid.result_digest, { artifact_kind: "design" }, "approved-design-phase-count-invalid");
+      expect(current.planned_final_phase).toBe(3);
+    }
+
+    const openEnded = installDesign("# Intentionally open-ended design\n\n<!-- archflow:phase-plan:open-ended -->\n", "design-3");
+    current = { ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "adjudicate", status: "succeeded", authoritative_results: [openEnded] };
+    writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
+    await approve("artifact-approval", openEnded.result_digest, { artifact_kind: "design" });
+    expect(current.planned_final_phase).toBeUndefined();
+
+    const implementationArtifactDigest = D("d");
+    const implementationReference = resultReference("implementation-3", "phase-impl-3" as TaskStateV1["phase_instance"], implementationArtifactDigest);
+    retained = { prepared: { manifest: canonicalDocument({
+      artifact_digest: implementationArtifactDigest,
+      source_artifact: { artifact_kind: "implementation-output", diff_digest: D("e"), parent_documents: [{ content_digest: D("f") }] },
+    } as never), payloads: [] } };
+    current = {
+      ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "phase-impl-3" as TaskStateV1["phase_instance"],
+      step: "adjudicate", status: "succeeded", planned_final_phase: parseSafeInteger(3), authoritative_results: [implementationReference],
+    };
+    writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
+    await approve("commit-authorization", implementationArtifactDigest, {
+      target_ref: "refs/heads/task", diff_digest: D("e"), current_artifact_digests: [implementationArtifactDigest], parent_document_digests: [D("f")],
+    });
+    const approval = current.approvals.find((entry) => entry.gate_kind === "commit-authorization")!;
+    const authenticated = await loadAuthenticatedGateApproval(dependencies, authority, approval);
+    expect(authenticated.ok).toBe(true);
+    if (!authenticated.ok) return;
+    const completed = planStateTransition({
+      current,
+      target: { phase_instance: current.phase_instance, step: current.step, status: current.status, attempt: current.attempt, input_fingerprint: current.input_fingerprint },
+      recomputed_input_fingerprint: current.input_fingerprint,
+      completion_subject_digest: implementationArtifactDigest,
+      authenticated_gate_approvals: [authenticated.value],
+      commit_observed: true,
+    });
+    expect(completed).toMatchObject({ ok: true, value: { terminal: "complete" } });
+    const nonFinalCurrent = { ...current, planned_final_phase: parseSafeInteger(4) };
+    const nonFinalTarget = {
+      phase_instance: "phase-design-4" as TaskStateV1["phase_instance"], step: "produce" as const,
+      status: "running" as const, attempt: parseSafeInteger(1), input_fingerprint: current.input_fingerprint,
+    };
+    expect(planStateTransition({
+      current: nonFinalCurrent,
+      target: nonFinalTarget,
+      recomputed_input_fingerprint: current.input_fingerprint,
+      completion_subject_digest: implementationArtifactDigest,
+      authenticated_gate_approvals: [authenticated.value],
+    })).toMatchObject({ ok: false, error: { code: "TRANSITION_INVALID" } });
+    expect(planStateTransition({
+      current: nonFinalCurrent,
+      target: nonFinalTarget,
+      recomputed_input_fingerprint: current.input_fingerprint,
+      completion_subject_digest: implementationArtifactDigest,
+      authenticated_gate_approvals: [authenticated.value],
+      commit_observed: true,
+    })).toMatchObject({ ok: true, value: { phase_instance: "phase-design-4" } });
+    const { planned_final_phase: _plannedFinalPhase, ...openEndedState } = current;
+    const openEndedCompletion = planStateTransition({
+      current: openEndedState,
+      target: { phase_instance: current.phase_instance, step: current.step, status: current.status, attempt: current.attempt, input_fingerprint: current.input_fingerprint },
+      recomputed_input_fingerprint: current.input_fingerprint,
+      completion_subject_digest: implementationArtifactDigest,
+      authenticated_gate_approvals: [authenticated.value],
+      commit_observed: true,
+    });
+    expect(openEndedCompletion).toMatchObject({ ok: false, error: { code: "TRANSITION_INVALID" } });
+    expect(() => planStateTransition({
+      current,
+      target: { phase_instance: current.phase_instance, step: current.step, status: current.status, attempt: current.attempt, input_fingerprint: current.input_fingerprint },
+      recomputed_input_fingerprint: current.input_fingerprint,
+      completion_subject_digest: implementationArtifactDigest,
+      authenticated_gate_approvals: [{ approval: authenticated.value.approval, request: authenticated.value.request, decision: authenticated.value.decision } as never],
+      commit_observed: true,
+    })).toThrow(/authenticated gate approval/u);
+  }, 10_000);
 });

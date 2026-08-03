@@ -4764,8 +4764,8 @@ var require_multipleOf = __commonJS({
         const { gen, data, schemaCode, it } = cxt;
         const prec = it.opts.multipleOfPrecision;
         const res = gen.let("res");
-        const invalid = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
-        cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid}))`);
+        const invalid2 = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
+        cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid2}))`);
       }
     };
     exports.default = def2;
@@ -13060,8 +13060,8 @@ var require_resolve_flow_scalar = __commonJS({
     };
     function parseCharCode(source, offset, length, onError) {
       const cc = source.substr(offset, length);
-      const ok15 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
-      const code = ok15 ? parseInt(cc, 16) : NaN;
+      const ok22 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
+      const code = ok22 ? parseInt(cc, 16) : NaN;
       try {
         return String.fromCodePoint(code);
       } catch {
@@ -16488,7 +16488,7 @@ var init_renderers = __esm({
 });
 
 // src/local/main.ts
-import { readFile as readFile5 } from "node:fs/promises";
+import { readFile as readFile8 } from "node:fs/promises";
 import process3 from "node:process";
 import { parseArgs } from "node:util";
 
@@ -28255,9 +28255,9 @@ var createToJSONSchemaMethod = (schema, processors = {}) => (params) => {
   extractDefs(ctx, schema);
   return finalize(ctx, schema);
 };
-var createStandardJSONSchemaMethod = (schema, io, processors = {}) => (params) => {
+var createStandardJSONSchemaMethod = (schema, io3, processors = {}) => (params) => {
   const { libraryOptions, target } = params ?? {};
-  const ctx = initializeContext({ ...libraryOptions ?? {}, target, io, processors });
+  const ctx = initializeContext({ ...libraryOptions ?? {}, target, io: io3, processors });
   process2(schema, ctx);
   extractDefs(ctx, schema);
   return finalize(ctx, schema);
@@ -31093,6 +31093,13 @@ function parseGitOid(value) {
   assertPlainJson(value, "git object name");
   return gitOidV1Schema.parse(value);
 }
+function parseGitTreeMode(value) {
+  assertPlainJson(value, "git tree mode");
+  return gitTreeModeV1Schema.parse(value);
+}
+function normalizeGitTreeMode(value) {
+  return parseGitTreeMode(value === "40000" ? "040000" : value);
+}
 var encoder = new TextEncoder();
 var decoder = new TextDecoder("utf-8", { fatal: true });
 function ordinal(a, b) {
@@ -31121,6 +31128,10 @@ function sha256Bytes(bytes) {
 }
 function canonicalJsonDigest(value) {
   return sha256Bytes(canonicalJsonBytes(value));
+}
+function gitBlobOid(content) {
+  const header = Buffer.from(`blob ${String(content.byteLength)}\0`, "ascii");
+  return createHash("sha1").update(header).update(content).digest("hex");
 }
 function repositoryCandidateDigest(absoluteCwd) {
   return sha256Bytes(encoder.encode(`archflow:repository-candidate:v1:${absoluteCwd}`));
@@ -31153,7 +31164,7 @@ function parseCanonicalDocument(bytes, label = "JSON document") {
 
 // src/local/commands.ts
 import { mkdir as mkdir7 } from "node:fs/promises";
-import { join as join12 } from "node:path";
+import { join as join14 } from "node:path";
 
 // src/contracts/gates.ts
 import { isDeepStrictEqual } from "node:util";
@@ -31257,6 +31268,9 @@ function parseRepositoryPathClaim(value) {
 }
 function toRepositoryPathClaim(taskId, claim) {
   return parseRepositoryPathClaim(`.archflow/tasks/${taskId}/${claim}`);
+}
+function rawGitPath(value) {
+  return value;
 }
 var TASK_PATH_CLASSES = [
   "task-config",
@@ -31399,6 +31413,12 @@ function parseGateContext(kind, value) {
   assertPlainJson(value, `${kind} gate context`);
   return contexts[kind].parse(value);
 }
+function parseGateDecisionEnvelope(value) {
+  assertPlainJson(value, "gate decision envelope");
+  const parsed = gateDecisionEnvelopeV1Schema.parse(value);
+  if (parsed.kind === "restore-collision" && parsed.payload.decision === "adopt-as-new-generation") return parsed;
+  return parsed;
+}
 function validateGateDecision(kind, context2, payload) {
   parseGateContext(kind, context2);
   assertPlainJson(payload, `${kind} gate decision`);
@@ -31424,6 +31444,9 @@ function validateGateDecision(kind, context2, payload) {
     if (candidate === void 0 || !isDeepStrictEqual(candidate, adoptionPayload.adoption_authority)) throw new TypeError("restore adoption authority must exactly match the context candidate");
   }
   return parsed;
+}
+function gateDecisionEffect(payload) {
+  return effects[payload.decision];
 }
 
 // src/contracts/supplemental.ts
@@ -32384,6 +32407,12 @@ var task_state_schema_default = {
       type: "array",
       items: { $ref: "#/$defs/waiverRef" },
       "x-archflow-sorted-unique-by": "gate_id"
+    },
+    planned_final_phase: {
+      $comment: "The positive final implementation phase recorded from consecutive exact `### Phase N: Name` headings in the human-approved design. Absence is valid only when that design carries the explicit `<!-- archflow:phase-plan:open-ended -->` marker.",
+      type: "integer",
+      minimum: 1,
+      maximum: 9007199254740991
     },
     open_gate: {
       $comment: "A single optional object, NEVER an array: a nested or concurrent gate is unrepresentable rather than merely rejected. Phase 12 owns the one-active-gate lifecycle \u2014 when this may be set, cleared, or superseded.",
@@ -34378,6 +34407,10 @@ function parseGateDecisionRecord(value) {
   assertPlainJson(value, "gate decision record");
   return assertZodAgreement(value, gateDecisionRecordV1Validator, gateDecisionRecordV1Schema, "gate decision record");
 }
+function parseActiveGate(value) {
+  assertPlainJson(value, "active gate");
+  return activeGateV1Validator.assert(value, "active gate");
+}
 
 // src/contracts/durable-state.ts
 var STEP_STATUSES = ["running", "succeeded", "failed"];
@@ -34819,6 +34852,12 @@ var referencedEvidenceSchema = external_exports.union([
   external_exports.object({ evidence_digest: digestSchema, evidence: reviewEvidenceSchema }).strict(),
   external_exports.object({ evidence_digest: digestSchema, evidence: adjudicationEvidenceSchema }).strict()
 ]);
+function parseRequiredReviewSlots(value) {
+  assertPlainJson(value, "required review slots");
+  const slots = requiredReviewSlotsSchema.parse(value);
+  validateSlots(slots);
+  return slots;
+}
 function parseCurrentEvidenceSetRef(value) {
   assertPlainJson(value, "current evidence set reference");
   const parsed = currentEvidenceSetRefSchema.parse(value);
@@ -35167,6 +35206,98 @@ function parseResultManifest(value) {
   return resultManifestV1Validator.assert(value, "result manifest");
 }
 
+// src/contracts/durable-document.ts
+var documentArtifactV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  artifact_kind: external_exports.literal("document"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  document_path: taskPathClaimV1Schema,
+  path_class: external_exports.literal("document"),
+  byte_count: safeIntegerV1Schema,
+  content_digest: sha256DigestV1Schema,
+  declared_inputs: external_exports.array(declaredInputRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
+  input_fingerprint: sha256DigestV1Schema,
+  snapshot_digest: sha256DigestV1Schema,
+  projection_target: repositoryPathClaimV1Schema
+}).strict();
+function parseDocumentArtifact(value) {
+  assertPlainJson(value, "document artifact");
+  return documentArtifactV1Schema.parse(value);
+}
+
+// src/contracts/secret-scan.ts
+var detectorId = safeIdV1Schema;
+var pathClass = external_exports.enum(PATH_CLASSES);
+var position = external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+var secretFindingV1Schema = external_exports.object({
+  detector_id: detectorId,
+  path_class: pathClass,
+  virtual_path: repositoryPathClaimV1Schema,
+  line: position,
+  column: position
+}).strict();
+var secretScanResultV1Schema = external_exports.discriminatedUnion("outcome", [
+  external_exports.object({
+    schema_version: external_exports.literal("1"),
+    outcome: external_exports.literal("clean"),
+    detector_set_id: detectorId,
+    scanned_paths: external_exports.array(repositoryPathClaimV1Schema)
+  }).strict(),
+  external_exports.object({
+    schema_version: external_exports.literal("1"),
+    outcome: external_exports.literal("detected"),
+    detector_set_id: detectorId,
+    findings: external_exports.array(secretFindingV1Schema)
+  }).strict(),
+  external_exports.object({
+    schema_version: external_exports.literal("1"),
+    outcome: external_exports.literal("unavailable"),
+    reason: safeCodeV1Schema
+  }).strict()
+]);
+
+// src/contracts/durable-implementation-output.ts
+var sha256Digest4 = sha256DigestV1Schema;
+var safeInteger5 = safeIntegerV1Schema;
+var parentDocumentRefV1Schema = external_exports.object({
+  document_path: taskPathClaimV1Schema,
+  content_digest: sha256Digest4,
+  role: external_exports.enum(["prd", "design", "phase-design", "impl-notes"])
+}).strict();
+var rawGitPathMirror = external_exports.string();
+var undeclaredChangeReportV1Schema = external_exports.object({
+  scanned: external_exports.boolean(),
+  undeclared_paths: external_exports.array(rawGitPathMirror).refine((items) => isSortedUniqueBy(items), "undeclared_paths must be sorted with no duplicates"),
+  unrepresentable_count: safeInteger5
+}).strict();
+var implementationOutputV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  artifact_kind: external_exports.literal("implementation-output"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  base_commit: gitOidV1Schema,
+  index_identity_digest: sha256Digest4,
+  worktree_identity_digest: sha256Digest4,
+  outputs: external_exports.array(outputEntryV1Schema).min(1).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "outputs must be sorted by path with no duplicates"),
+  parent_documents: external_exports.array(parentDocumentRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("document_path")), "parent_documents must be sorted by document_path with no duplicates"),
+  diff_digest: sha256Digest4,
+  snapshot_digest: sha256Digest4,
+  restore_targets: external_exports.array(repositoryPathClaimV1Schema).refine((items) => isSortedUniqueBy(items), "restore_targets must be sorted with no duplicates"),
+  accounting: snapshotAccountingV1Schema,
+  secret_scan: secretScanResultV1Schema,
+  undeclared_changes: undeclaredChangeReportV1Schema,
+  declared_inputs: external_exports.array(declaredInputRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
+  input_fingerprint: sha256Digest4,
+  constitution_edit_gate_id: pathSafeIdV1Schema.optional()
+}).strict();
+function parseImplementationOutput(value) {
+  assertPlainJson(value, "implementation output");
+  return implementationOutputV1Schema.parse(value);
+}
+
 // src/contracts/durable.ts
 import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
 
@@ -35178,6 +35309,9 @@ var TOOL_NAMES = Object.freeze([
   "archflow_gate",
   "archflow_waiver"
 ]);
+function isToolName(value) {
+  return typeof value === "string" && TOOL_NAMES.includes(value);
+}
 
 // src/contracts/errors.ts
 var tool = external_exports.enum(TOOL_NAMES);
@@ -35194,8 +35328,8 @@ var phaseInstance = external_exports.string().refine((value) => {
 });
 var object2 = (shape) => external_exports.object(shape).strict();
 var digestPair = { expected_digest: sha256DigestV1Schema, observed_digest: sha256DigestV1Schema };
-var pathClass = external_exports.enum(PATH_CLASSES);
-var taskPathClass = { task_id: taskSlugV1Schema, path_class: pathClass };
+var pathClass2 = external_exports.enum(PATH_CLASSES);
+var taskPathClass = { task_id: taskSlugV1Schema, path_class: pathClass2 };
 var adapterAttempt = { adapter, attempt: safeIntegerV1Schema };
 var sortedPaths = external_exports.array(repositoryPathClaimV1Schema).min(1).superRefine((items, context2) => {
   for (let index = 1; index < items.length; index += 1) if (items[index - 1].localeCompare(items[index]) >= 0) context2.addIssue({ code: "custom", message: "offending_paths must be sorted and unique" });
@@ -35232,9 +35366,9 @@ var PROJECT_PARAMETER_SCHEMAS = {
   INTENT_NOT_CURRENT: object2({ intent_id: pathSafeIdV1Schema, receipt_revision: safeIntegerV1Schema, current_revision: safeIntegerV1Schema }),
   SNAPSHOT_LIMIT: object2({ limit_scope: external_exports.enum(["result", "task"]), offending_paths: sortedPaths, current_bytes: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }),
   SNAPSHOT_INVALID: object2({ snapshot_digest: sha256DigestV1Schema, issue_code: safeCodeV1Schema }),
-  RESTORE_COLLISION: object2({ gate_id: pathSafeIdV1Schema, path_class: pathClass }),
+  RESTORE_COLLISION: object2({ gate_id: pathSafeIdV1Schema, path_class: pathClass2 }),
   RECONCILIATION_REQUIRED: object2({ recorded_digest: sha256DigestV1Schema, observed_digest: sha256DigestV1Schema }),
-  SECRET_DETECTED: object2({ path_class: pathClass, detector_id: safeIdV1Schema }),
+  SECRET_DETECTED: object2({ path_class: pathClass2, detector_id: safeIdV1Schema }),
   GATE_ACTIVE: object2({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind }),
   GATE_DECISION_INVALID: object2({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind, issue_code: safeCodeV1Schema }),
   GATE_CANCELLED: object2({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind }),
@@ -35268,8 +35402,8 @@ function parser(schema) {
     return schema.parse(value);
   } });
 }
-function defineError(owner, retryable, schema, action, projection) {
-  return Object.freeze({ owner, retryable, parameter_parser: parser(schema), action, projection });
+function defineError(owner, retryable, schema, action2, projection) {
+  return Object.freeze({ owner, retryable, parameter_parser: parser(schema), action: action2, projection });
 }
 var PROJECT_ERROR_DEFINITIONS = Object.freeze({
   CONTRACT_INVALID: defineError("contracts", false, PROJECT_PARAMETER_SCHEMAS.CONTRACT_INVALID, "correct-contract", "project"),
@@ -35704,8 +35838,8 @@ function validateDurableSemantics(subject) {
         return fail2(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPayloadInvalid));
       }
     } else if (gateDecision.outcome === "waiver-decided") {
-      const waiverContext = gateRequest.context;
-      if (!("origin" in waiverContext) || !isDeepStrictEqual3(gateDecision.origin, waiverContext.origin) || !isDeepStrictEqual3(gateDecision.scope, waiverContext.origin.scope) || gateDecision.kind !== waiverContext.origin.scope.operation) {
+      const waiverContext2 = gateRequest.context;
+      if (!("origin" in waiverContext2) || !isDeepStrictEqual3(gateDecision.origin, waiverContext2.origin) || !isDeepStrictEqual3(gateDecision.scope, waiverContext2.origin.scope) || gateDecision.kind !== waiverContext2.origin.scope.operation) {
         return fail2(contractInvalid(DURABLE_ISSUE_CODES.waiverDecisionOriginMismatch));
       }
     }
@@ -36107,90 +36241,6 @@ function validateDurableSemantics(subject) {
 // src/contracts/internal/test-capabilities.ts
 init_trust_brands();
 
-// src/contracts/durable-document.ts
-var documentArtifactV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  artifact_kind: external_exports.literal("document"),
-  task_id: taskSlugV1Schema,
-  phase_instance: phaseInstanceIdV1Schema,
-  step: external_exports.enum(PIPELINE_STEPS),
-  document_path: taskPathClaimV1Schema,
-  path_class: external_exports.literal("document"),
-  byte_count: safeIntegerV1Schema,
-  content_digest: sha256DigestV1Schema,
-  declared_inputs: external_exports.array(declaredInputRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
-  input_fingerprint: sha256DigestV1Schema,
-  snapshot_digest: sha256DigestV1Schema,
-  projection_target: repositoryPathClaimV1Schema
-}).strict();
-
-// src/contracts/secret-scan.ts
-var detectorId = safeIdV1Schema;
-var pathClass2 = external_exports.enum(PATH_CLASSES);
-var position = external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
-var secretFindingV1Schema = external_exports.object({
-  detector_id: detectorId,
-  path_class: pathClass2,
-  virtual_path: repositoryPathClaimV1Schema,
-  line: position,
-  column: position
-}).strict();
-var secretScanResultV1Schema = external_exports.discriminatedUnion("outcome", [
-  external_exports.object({
-    schema_version: external_exports.literal("1"),
-    outcome: external_exports.literal("clean"),
-    detector_set_id: detectorId,
-    scanned_paths: external_exports.array(repositoryPathClaimV1Schema)
-  }).strict(),
-  external_exports.object({
-    schema_version: external_exports.literal("1"),
-    outcome: external_exports.literal("detected"),
-    detector_set_id: detectorId,
-    findings: external_exports.array(secretFindingV1Schema)
-  }).strict(),
-  external_exports.object({
-    schema_version: external_exports.literal("1"),
-    outcome: external_exports.literal("unavailable"),
-    reason: safeCodeV1Schema
-  }).strict()
-]);
-
-// src/contracts/durable-implementation-output.ts
-var sha256Digest4 = sha256DigestV1Schema;
-var safeInteger5 = safeIntegerV1Schema;
-var parentDocumentRefV1Schema = external_exports.object({
-  document_path: taskPathClaimV1Schema,
-  content_digest: sha256Digest4,
-  role: external_exports.enum(["prd", "design", "phase-design", "impl-notes"])
-}).strict();
-var rawGitPathMirror = external_exports.string();
-var undeclaredChangeReportV1Schema = external_exports.object({
-  scanned: external_exports.boolean(),
-  undeclared_paths: external_exports.array(rawGitPathMirror).refine((items) => isSortedUniqueBy(items), "undeclared_paths must be sorted with no duplicates"),
-  unrepresentable_count: safeInteger5
-}).strict();
-var implementationOutputV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  artifact_kind: external_exports.literal("implementation-output"),
-  task_id: taskSlugV1Schema,
-  phase_instance: phaseInstanceIdV1Schema,
-  step: external_exports.enum(PIPELINE_STEPS),
-  base_commit: gitOidV1Schema,
-  index_identity_digest: sha256Digest4,
-  worktree_identity_digest: sha256Digest4,
-  outputs: external_exports.array(outputEntryV1Schema).min(1).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "outputs must be sorted by path with no duplicates"),
-  parent_documents: external_exports.array(parentDocumentRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("document_path")), "parent_documents must be sorted by document_path with no duplicates"),
-  diff_digest: sha256Digest4,
-  snapshot_digest: sha256Digest4,
-  restore_targets: external_exports.array(repositoryPathClaimV1Schema).refine((items) => isSortedUniqueBy(items), "restore_targets must be sorted with no duplicates"),
-  accounting: snapshotAccountingV1Schema,
-  secret_scan: secretScanResultV1Schema,
-  undeclared_changes: undeclaredChangeReportV1Schema,
-  declared_inputs: external_exports.array(declaredInputRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
-  input_fingerprint: sha256Digest4,
-  constitution_edit_gate_id: pathSafeIdV1Schema.optional()
-}).strict();
-
 // src/contracts/rubric.ts
 var rubricV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
@@ -36241,6 +36291,7 @@ function parseTriageCandidate(value) {
 // src/contracts/mcp-tools.ts
 var parsedToolInputBrand = /* @__PURE__ */ Symbol("ParsedToolInput");
 var parsedCalls = /* @__PURE__ */ new WeakSet();
+var requestDigests = /* @__PURE__ */ new WeakMap();
 var digest8 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var safeId3 = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
 var text2 = external_exports.string().min(1).max(4096).regex(/\S/u);
@@ -36282,7 +36333,7 @@ var adjudicateInput = external_exports.object({ ...common2, artifact_path: taskP
 var supersedes = external_exports.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest8, old_subject_digest: digest8 }).strict();
 var gateInput = external_exports.object({ ...common2, phase_instance: phase3, summary: text2, subject_digest: digest8, current_evidence: external_exports.unknown(), supersedes: supersedes.optional(), supplemental_outcome: external_exports.unknown().optional(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown() }).strict();
 var waiverOrigin = external_exports.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest8, origin_context_digest: digest8, task_id: taskSlugV1Schema, phase_instance: phase3, subject_digest: digest8, current_evidence_set_digest: digest8, rule: rule3, scope: scope2 }).strict();
-var waiverInput = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text2 }).strict();
+var waiverInput = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text2, supplemental_outcome: external_exports.unknown().optional() }).strict();
 function inputFor(name, value) {
   const parsed = name === "archflow_state" ? stateInput.parse(value) : name === "archflow_counter_review" ? counterInput.parse(value) : name === "archflow_adjudicate" ? adjudicateInput.parse(value) : name === "archflow_waiver" ? waiverInput.parse(value) : gateInput.parse(value);
   if (name === "archflow_gate") {
@@ -36293,6 +36344,7 @@ function inputFor(name, value) {
   if (name === "archflow_waiver") {
     const v = parsed;
     if (v.task_id !== v.origin.task_id) throw new TypeError("waiver task_id must match origin task_id");
+    return { ...v, ...v.supplemental_outcome === void 0 ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) } };
   }
   return parsed;
 }
@@ -36302,6 +36354,11 @@ function deepFreeze(value) {
     Object.freeze(value);
   }
   return value;
+}
+function assertAuthenticParsedToolCall(value) {
+  if (value === null || typeof value !== "object" || !parsedCalls.has(value)) {
+    throw new TypeError("an authentic parsed tool call is required");
+  }
 }
 function parseToolCall(name, value) {
   if (!TOOL_NAMES.includes(name)) throw new TypeError("unknown tool");
@@ -36314,6 +36371,12 @@ function parseToolCall(name, value) {
   Object.freeze(input);
   const call = Object.freeze({ name, input });
   parsedCalls.add(call);
+  return call;
+}
+function bindParsedToolCallRequest(call, requestDigest) {
+  if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required");
+  digest8.parse(requestDigest);
+  requestDigests.set(call, requestDigest);
   return call;
 }
 var successSchemas = {
@@ -36386,8 +36449,122 @@ function computePinnedConstitutionDigest(files) {
     )
   });
 }
+var exactFields = (value, expected) => {
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
+    throw new TypeError(`operation_fields must contain exactly ${wanted.join(", ")}`);
+  }
+};
+function closedOperationFields(subject) {
+  switch (subject.tool) {
+    case "archflow_state": {
+      const fields = subject.operation_fields;
+      if (subject.operation === "record-state-boundary") {
+        exactFields(fields, ["phase_instance", "step", "status"]);
+        return { phase_instance: fields.phase_instance, step: fields.step, status: fields.status };
+      }
+      const artifactFields = fields;
+      const operationForKind = {
+        "task-initialization": "adopt-task-initialization",
+        "legacy-import-initialization": "adopt-legacy-import-initialization",
+        document: "record-document-artifact",
+        "implementation-output": "record-implementation-output",
+        "manual-checkpoint-import": "adopt-manual-checkpoint-import",
+        "review-evidence": "record-self-review",
+        triage: "record-triage"
+      };
+      if (operationForKind[artifactFields.artifact_kind] !== subject.operation) {
+        throw new TypeError("invalid archflow_state operation for artifact_kind");
+      }
+      exactFields(artifactFields, ["phase_instance", "step", "status", "artifact_kind", "artifact_digest"]);
+      return {
+        phase_instance: artifactFields.phase_instance,
+        step: artifactFields.step,
+        status: artifactFields.status,
+        artifact_kind: artifactFields.artifact_kind,
+        artifact_digest: artifactFields.artifact_digest
+      };
+    }
+    case "archflow_counter_review": {
+      const fields = subject.operation_fields;
+      if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
+      exactFields(fields, ["artifact_path", "rubric"]);
+      return { artifact_path: fields.artifact_path, rubric: fields.rubric };
+    }
+    case "archflow_adjudicate": {
+      const fields = subject.operation_fields;
+      if (subject.operation !== "adjudicate") throw new TypeError("invalid archflow_adjudicate operation");
+      exactFields(fields, ["artifact_path", "upstream_paths"]);
+      return { artifact_path: fields.artifact_path, upstream_paths: fields.upstream_paths };
+    }
+    case "archflow_gate": {
+      const fields = subject.operation_fields;
+      if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
+      const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context"];
+      if (fields.supersedes !== void 0) expected.push("supersedes");
+      exactFields(fields, expected);
+      const selected = {
+        phase_instance: fields.phase_instance,
+        summary: fields.summary,
+        subject_digest: fields.subject_digest,
+        current_evidence: fields.current_evidence,
+        kind: fields.kind,
+        context: fields.context,
+        ...fields.supersedes === void 0 ? {} : { supersedes: fields.supersedes }
+      };
+      return selected;
+    }
+    case "archflow_waiver": {
+      const fields = subject.operation_fields;
+      if (subject.operation !== "waiver") throw new TypeError("invalid archflow_waiver operation");
+      exactFields(fields, ["origin", "rationale"]);
+      return { origin: fields.origin, rationale: fields.rationale };
+    }
+    default: {
+      const exhaustive = subject;
+      throw new TypeError(`unknown request tool ${String(exhaustive.tool)}`);
+    }
+  }
+}
+function computeRequestDigest(subject) {
+  const snapshot = materialize2(subject, "request digest subject");
+  const operationFields = closedOperationFields(snapshot);
+  return canonicalJsonDigest({
+    schema_version: snapshot.schema_version,
+    tool: snapshot.tool,
+    repository_identity_digest: snapshot.repository_identity_digest,
+    task_identity_digest: snapshot.task_identity_digest,
+    operation: snapshot.operation,
+    operation_fields: operationFields,
+    input_fingerprint: snapshot.input_fingerprint
+  });
+}
+function computeGateId(subject) {
+  const snapshot = materialize2(subject, "gate identity subject");
+  return `g-${canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "gate-identity",
+    task_identity_digest: snapshot.task_identity_digest,
+    intent_id: snapshot.intent_id,
+    request_digest: snapshot.request_digest
+  })}`;
+}
+function computeGateContextDigest(kind, context2) {
+  const snapshot = materialize2(context2, "gate context digest subject");
+  return kind === "waiver" ? canonicalJsonDigest({ schema_version: "1", digest_kind: "waiver-context", ...snapshot }) : canonicalJsonDigest({ schema_version: "1", digest_kind: "gate-context", kind, context: snapshot });
+}
 function computePinnedConfigDigest(configBytes) {
   return sha256Bytes(configBytes);
+}
+function verifyPinnedConfig(expected, observedBytes) {
+  const observed = computePinnedConfigDigest(observedBytes);
+  if (observed === expected) return { schema_version: "1", ok: true, value: observed };
+  return {
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("PINNED_CONFIG_MISMATCH", { expected_digest: expected, observed_digest: observed })
+  };
 }
 
 // src/repository/identity.ts
@@ -36550,13 +36727,62 @@ async function hashGitBlob(runner, bytes, path2) {
   if (!GIT_OID.test(oid)) throw new TypeError("git hash-object returned an invalid SHA-1 object id");
   return oid;
 }
-async function isCommitAncestorOfHead(runner, ancestor) {
+async function hashGitBlobIdentity(runner, bytes, path2) {
+  const argv = ["hash-object", "-w"];
+  if (path2 !== void 0) argv.push(`--path=${path2}`);
+  argv.push("--stdin");
+  const oid = await runner.runText({ argv, operation: HASH_OBJECT_OPERATION, stdin: bytes });
+  if (!GIT_OID.test(oid)) throw new TypeError("git hash-object returned an invalid SHA-1 object id");
+  return Object.freeze({ oid, size_bytes: await readGitBlobSize(runner, oid) });
+}
+async function readChangedGitPaths(runner) {
   const result = await runner.run({
-    argv: ["merge-base", "--is-ancestor", ancestor, "HEAD"],
+    argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    operation: "git-status-declared-scope"
+  });
+  const fields = [];
+  let start = 0;
+  for (let index = 0; index < result.stdout.byteLength; index += 1) {
+    if (result.stdout[index] === 0) {
+      fields.push(result.stdout.slice(start, index));
+      start = index + 1;
+    }
+  }
+  if (start !== result.stdout.byteLength) throw new TypeError("git status porcelain output is not NUL-terminated");
+  const paths = [];
+  let unrepresentable = 0;
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index];
+    if (field.byteLength < 4 || field[2] !== 32) throw new TypeError("git status porcelain record is malformed");
+    const status = String.fromCharCode(field[0], field[1]);
+    const pathFields = [field.slice(3)];
+    if (status.includes("R") || status.includes("C")) {
+      const source = fields[index + 1];
+      if (source === void 0) throw new TypeError("git status rename record lacks its source");
+      pathFields.push(source);
+      index += 1;
+    }
+    for (const pathBytes of pathFields) {
+      try {
+        paths.push(fatalDecoder.decode(pathBytes));
+      } catch {
+        unrepresentable += 1;
+      }
+    }
+  }
+  paths.sort();
+  return Object.freeze({ paths: Object.freeze([...new Set(paths)]), unrepresentable_count: unrepresentable });
+}
+async function isCommitAncestor(runner, ancestor, descendant) {
+  const result = await runner.run({
+    argv: ["merge-base", "--is-ancestor", ancestor, descendant],
     operation: ANCESTOR_OPERATION,
     expectedAbsence: [{ code: 1, stderrIncludes: "" }]
   });
   return !result.absent;
+}
+async function isCommitAncestorOfHead(runner, ancestor) {
+  return isCommitAncestor(runner, ancestor, "HEAD");
 }
 async function readCommitTreeBlob(runner, commit, path2) {
   const fields = await runner.runNulFields({
@@ -36597,13 +36823,16 @@ async function readCommitTreeEntries(runner, commit, directory) {
   entries.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
   return Object.freeze(entries);
 }
-async function readHeadCommit(runner) {
+async function resolveCommit(runner, revision) {
   const oid = await runner.runText({
-    argv: ["rev-parse", "--verify", "HEAD^{commit}"],
+    argv: ["rev-parse", "--verify", `${revision}^{commit}`],
     operation: HEAD_COMMIT_OPERATION
   });
-  if (!GIT_OID.test(oid)) throw new TypeError("git rev-parse returned an invalid HEAD commit");
-  return oid;
+  if (!GIT_OID.test(oid)) throw new TypeError("git rev-parse returned an invalid commit");
+  return parseGitOid(oid);
+}
+async function readHeadCommit(runner) {
+  return resolveCommit(runner, "HEAD");
 }
 async function readGitBlobSize(runner, oid) {
   if (!GIT_OID.test(oid)) throw new TypeError("Git blob object id is invalid");
@@ -36845,6 +37074,15 @@ async function resolveRepositoryIdentity(runner, environment, context2) {
     throw error51;
   }
 }
+function verifyRepositoryIdentity(expected, observed) {
+  if (expected === observed.digest) return ok2(observed);
+  return fail4(
+    createProjectError("REPOSITORY_MISMATCH", {
+      expected_digest: expected,
+      observed_digest: observed.digest
+    })
+  );
+}
 function computeTaskIdentity(taskId, repository) {
   const repositoryIdentityDigest = repository.digest;
   return Object.freeze({
@@ -36972,6 +37210,9 @@ function classifyTaskPath(taskId, claim) {
   const matched = classifyIn(TASK_CLASS_RULES, claim);
   if (matched === void 0) return fail5(pathInvalid(taskId, void 0));
   return ok3(matched);
+}
+function classifyRepositoryPath(claim) {
+  return classifyRepositoryPathFor(UNSCOPED_TASK_ID, claim, void 0);
 }
 function classifyRepositoryPathFor(taskId, claim, expectedClass) {
   if (!inArchflowTree(claim)) return ok3("repository-source");
@@ -37107,6 +37348,28 @@ async function resolveDeclaredOutputPath(options) {
     expectedClass: pathClass3,
     context: context2
   });
+}
+async function resolveDeclaredRename(options) {
+  const previous = await resolveDeclaredOutputPath({
+    runner: options.runner,
+    taskId: options.taskId,
+    claim: options.previousPath,
+    pathClass: options.pathClass,
+    context: options.context
+  });
+  if (!previous.ok) return previous;
+  const next = await resolveDeclaredOutputPath({
+    runner: options.runner,
+    taskId: options.taskId,
+    claim: options.path,
+    pathClass: options.pathClass,
+    context: options.context
+  });
+  if (!next.ok) return next;
+  if (previous.value.path_class !== next.value.path_class) {
+    return fail5(pathInvalid(options.taskId, options.pathClass));
+  }
+  return ok3(Object.freeze({ previous: previous.value, next: next.value }));
 }
 async function openResolved(path2, flags) {
   const noFollow = fsConstants.O_NOFOLLOW ?? 0;
@@ -37323,6 +37586,74 @@ async function createInternalTransactionAuthority(input) {
   return Object.freeze({ schema_version: "1", ok: true, value: authority });
 }
 
+// src/state/request.ts
+function subjectFor(call, authority, inputFingerprint) {
+  const common3 = {
+    schema_version: "1",
+    repository_identity_digest: authority.repository_identity_digest,
+    task_identity_digest: authority.task_identity_digest,
+    input_fingerprint: inputFingerprint
+  };
+  switch (call.name) {
+    case "archflow_state":
+      if (call.input.artifact === void 0) {
+        return { ...common3, tool: call.name, operation: "record-state-boundary", operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status } };
+      }
+      return {
+        ...common3,
+        tool: call.name,
+        operation: {
+          "task-initialization": "adopt-task-initialization",
+          "legacy-import-initialization": "adopt-legacy-import-initialization",
+          document: "record-document-artifact",
+          "implementation-output": "record-implementation-output",
+          "manual-checkpoint-import": "adopt-manual-checkpoint-import",
+          "review-evidence": "record-self-review",
+          triage: "record-triage"
+        }[call.input.artifact.artifact_kind],
+        operation_fields: {
+          phase_instance: call.input.phase_instance,
+          step: call.input.step,
+          status: call.input.status,
+          artifact_kind: call.input.artifact.artifact_kind,
+          artifact_digest: canonicalJsonDigest(call.input.artifact)
+        }
+      };
+    case "archflow_counter_review":
+      return { ...common3, tool: call.name, operation: "counter-review", operation_fields: { artifact_path: call.input.artifact_path, rubric: call.input.rubric } };
+    case "archflow_adjudicate":
+      return { ...common3, tool: call.name, operation: "adjudicate", operation_fields: { artifact_path: call.input.artifact_path, upstream_paths: call.input.upstream_paths } };
+    case "archflow_gate": {
+      const operation_fields = {
+        phase_instance: call.input.phase_instance,
+        summary: call.input.summary,
+        subject_digest: call.input.subject_digest,
+        current_evidence: call.input.current_evidence,
+        ...call.input.supersedes === void 0 ? {} : { supersedes: call.input.supersedes },
+        kind: call.input.kind,
+        context: call.input.context
+      };
+      return { ...common3, tool: call.name, operation: "gate", operation_fields };
+    }
+    case "archflow_waiver":
+      return { ...common3, tool: call.name, operation: "waiver", operation_fields: { origin: call.input.origin, rationale: call.input.rationale } };
+    default: {
+      const exhaustive = call;
+      throw new TypeError(`unknown tool ${String(exhaustive.name)}`);
+    }
+  }
+}
+function identifyTransactionRequest(call, authority, recomputedInputFingerprint) {
+  assertInternalTransactionAuthority(authority);
+  if (call.input.task_id !== authority.task_id) throw new TypeError("request task_id must match transaction authority");
+  const requestDigest = computeRequestDigest(subjectFor(call, authority, recomputedInputFingerprint));
+  return Object.freeze({
+    call: bindParsedToolCallRequest(call, requestDigest),
+    request_digest: requestDigest,
+    input_fingerprint: recomputedInputFingerprint
+  });
+}
+
 // src/state/layout.ts
 import { constants as fsConstants2 } from "node:fs";
 import { lstat, mkdir } from "node:fs/promises";
@@ -37419,6 +37750,9 @@ async function ensurePayloadParent(authority, digest11, target) {
   await mkdir(parent, { recursive: true });
 }
 
+// src/state/transitions.ts
+import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
+
 // src/contracts/yaml.ts
 var import_yaml = __toESM(require_dist2(), 1);
 function locatedMessage(label, error51) {
@@ -37492,6 +37826,11 @@ function parseWorkflowYaml(source, label = "workflow.yaml") {
   return parseWorkflowV1(parseSingleYamlDocument(source, label));
 }
 
+// src/state/gates.ts
+import { constants as fsConstants3 } from "node:fs";
+import { randomUUID as randomUUID2 } from "node:crypto";
+import { isDeepStrictEqual as isDeepStrictEqual6 } from "node:util";
+
 // src/state/lock.ts
 import { AsyncLocalStorage } from "node:async_hooks";
 import { lstat as lstat2, mkdir as mkdir2, open as open3, readdir, realpath as realpath3, rename as rename2, rmdir } from "node:fs/promises";
@@ -37558,18 +37897,99 @@ function createTaskLock() {
 }
 
 // src/state/snapshots.ts
-import { chmod, lstat as lstat3, readlink } from "node:fs/promises";
+import { chmod, lstat as lstat4, readlink as readlink2 } from "node:fs/promises";
+import { resolve as resolvePath5 } from "node:path";
+import { isDeepStrictEqual as isDeepStrictEqual5 } from "node:util";
+
+// src/state/implementation-manifest.ts
+import { lstat as lstat3, readFile, readlink } from "node:fs/promises";
 import { resolve as resolvePath4 } from "node:path";
 import { isDeepStrictEqual as isDeepStrictEqual4 } from "node:util";
 
-// src/state/implementation-manifest.ts
-var ordinal4 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
-function deriveSnapshotDigest(entries) {
-  return canonicalJsonDigest({
-    schema_version: "1",
-    digest_kind: "declared-output-snapshot",
-    entries: [...entries].sort((left, right) => ordinal4(left.path, right.path))
+// src/repository/index-entries.ts
+var LS_FILES_OPERATION = "git-ls-files";
+var TREE_MODE_ILLEGAL = "archflow-tree-mode-illegal";
+var PATH_MISMATCH = "git-path-mismatch";
+var ARCHFLOW_PREFIX = ".archflow/";
+var GITLINK_MODE = "160000";
+function ok4(value) {
+  return Object.freeze({ schema_version: "1", ok: true, value });
+}
+function fail6(error51) {
+  return Object.freeze({ schema_version: "1", ok: false, error: error51 });
+}
+function taskInvalid(context2, issueCode) {
+  return createProjectError("TASK_INVALID", {
+    task_id: context2.task_id,
+    issue_code: issueCode
   });
+}
+function assertArchflowIndexEntry(entry) {
+  if (entry.mode !== "100644") {
+    throw new TypeError(
+      `${entry.path} has index mode ${entry.mode}; only 100644 is legal below .archflow/`
+    );
+  }
+}
+function parseStage(value) {
+  return value === "0" ? 0 : value === "1" ? 1 : value === "2" ? 2 : value === "3" ? 3 : void 0;
+}
+async function readIndexEntries(runner, paths, context2) {
+  if (paths.length === 0) return ok4(Object.freeze([]));
+  let fields;
+  try {
+    fields = await runner.runNulFields({
+      argv: [
+        "ls-files",
+        "-s",
+        "-z",
+        "--",
+        ...paths.map((claim) => `:(top,literal)${claim}`)
+      ],
+      operation: LS_FILES_OPERATION
+    });
+  } catch (error51) {
+    if (error51 instanceof GitInvocationError) {
+      return fail6(projectErrorForGitFailure(error51, runner, context2));
+    }
+    throw error51;
+  }
+  const requested = new Map(paths.map((claim) => [claim, claim]));
+  const entries = [];
+  for (const field of fields) {
+    const tab = field.indexOf("	");
+    if (tab < 0) return fail6(taskInvalid(context2, PATH_MISMATCH));
+    const meta3 = field.slice(0, tab).split(" ");
+    if (meta3.length !== 3) return fail6(taskInvalid(context2, PATH_MISMATCH));
+    const [modeText, oidText, stageText] = meta3;
+    const claim = requested.get(field.slice(tab + 1));
+    if (claim === void 0) return fail6(taskInvalid(context2, PATH_MISMATCH));
+    let mode;
+    try {
+      mode = normalizeGitTreeMode(modeText);
+    } catch {
+      return fail6(taskInvalid(context2, TREE_MODE_ILLEGAL));
+    }
+    if (mode === GITLINK_MODE) return fail6(taskInvalid(context2, TREE_MODE_ILLEGAL));
+    let oid;
+    try {
+      oid = parseGitOid(oidText);
+    } catch {
+      return fail6(taskInvalid(context2, PATH_MISMATCH));
+    }
+    const stage = parseStage(stageText);
+    if (stage === void 0) return fail6(taskInvalid(context2, PATH_MISMATCH));
+    const entry = Object.freeze({ path: claim, mode, oid, stage });
+    if (claim.startsWith(ARCHFLOW_PREFIX)) {
+      try {
+        assertArchflowIndexEntry(entry);
+      } catch {
+        return fail6(taskInvalid(context2, TREE_MODE_ILLEGAL));
+      }
+    }
+    entries.push(entry);
+  }
+  return ok4(Object.freeze(entries));
 }
 
 // src/state/secret-scan.ts
@@ -42237,7 +42657,7 @@ var FILTER_RULE = "@secretlint/secretlint-rule-filter-comments";
 var RULE_PREFIX = "@secretlint/secretlint-rule-";
 var RULE_ID = /^@secretlint\/secretlint-rule-(?<suffix>[a-z0-9][a-z0-9-]*)$/u;
 var utf8 = new TextDecoder("utf-8", { fatal: true });
-var ordinal5 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+var ordinal4 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 var enabledCreators = rules.filter((creator) => creator.meta.id !== FILTER_RULE);
 var enabledRuleIds = Object.freeze(enabledCreators.map((creator) => creator.meta.id).sort());
 if (new Set(enabledRuleIds).size !== enabledRuleIds.length || enabledRuleIds.some((id4) => !RULE_ID.test(id4))) {
@@ -42294,7 +42714,7 @@ function createSecretlintScanner() {
     const seen = /* @__PURE__ */ new Set();
     const findings = [];
     try {
-      for (const candidate of candidates.sort((left, right) => ordinal5(left.virtual_path, right.virtual_path))) {
+      for (const candidate of candidates.sort((left, right) => ordinal4(left.virtual_path, right.virtual_path))) {
         if (seen.has(candidate.virtual_path)) throw new TypeError("duplicate secret-scan candidate path");
         seen.add(candidate.virtual_path);
         const extension = sourceExtension(candidate.virtual_path);
@@ -42330,7 +42750,7 @@ function createSecretlintScanner() {
       });
     }
     if (findings.length > 0) {
-      findings.sort((left, right) => ordinal5(left.virtual_path, right.virtual_path) || left.line - right.line || left.column - right.column || ordinal5(left.detector_id, right.detector_id));
+      findings.sort((left, right) => ordinal4(left.virtual_path, right.virtual_path) || left.line - right.line || left.column - right.column || ordinal4(left.detector_id, right.detector_id));
       return Object.freeze({
         schema_version: "1",
         outcome: "detected",
@@ -42350,11 +42770,620 @@ function createSecretlintScanner() {
   });
 }
 
+// src/state/implementation-manifest.ts
+async function implementationOutputCommittedAtCurrentTarget(runner, output, targetRef) {
+  const symbolicRef = await runner.runText({
+    argv: ["symbolic-ref", "--quiet", "HEAD"],
+    operation: "git-current-commit-target",
+    expectedAbsence: [{ code: 1, stderrIncludes: "" }]
+  });
+  if (targetRef === "HEAD" ? symbolicRef !== "" : symbolicRef !== targetRef) return false;
+  const headCommit = await resolveCommit(runner, "HEAD");
+  const targetCommit = await resolveCommit(runner, targetRef);
+  if (headCommit !== targetCommit) return false;
+  if (!await isCommitAncestor(runner, output.base_commit, headCommit)) return false;
+  for (const entry of output.outputs) {
+    const committed = await readCommitTreeBlob(runner, headCommit, entry.path);
+    if (entry.operation === "delete") {
+      if (committed !== void 0) return false;
+      continue;
+    }
+    if (committed?.mode !== entry.after.mode || committed.oid !== entry.after.oid) return false;
+    if (entry.operation === "rename" && await readCommitTreeBlob(runner, headCommit, entry.previous_path) !== void 0) return false;
+  }
+  return true;
+}
+var ordinal5 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+function ownEnumerableData(value, key) {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  if (descriptor === void 0 || !("value" in descriptor) || !descriptor.enumerable) {
+    throw new TypeError(`${key} must be an own enumerable data property`);
+  }
+  return descriptor.value;
+}
+function sortedUniquePaths(output) {
+  const paths = /* @__PURE__ */ new Set();
+  for (const entry of output.outputs) {
+    if (paths.has(entry.path)) throw new TypeError("duplicate declared output path");
+    paths.add(entry.path);
+    if (entry.operation === "rename") {
+      if (entry.previous_path === entry.path || paths.has(entry.previous_path)) {
+        throw new TypeError("duplicate or conflicting declared rename path");
+      }
+      paths.add(entry.previous_path);
+    }
+  }
+  return Object.freeze([...paths].sort(ordinal5));
+}
+function deriveSnapshotDigest(entries) {
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "declared-output-snapshot",
+    entries: [...entries].sort((left, right) => ordinal5(left.path, right.path))
+  });
+}
+function deriveImplementationDiffDigest(baseCommit, outputs) {
+  const entries = outputs.map((entry) => {
+    const common3 = {
+      path: entry.path,
+      path_class: entry.path_class,
+      operation: entry.operation,
+      file_type: entry.file_type
+    };
+    if (entry.operation === "add") return { ...common3, after: entry.after };
+    if (entry.operation === "delete") return { ...common3, before: entry.before };
+    if (entry.operation === "rename") {
+      return { ...common3, previous_path: entry.previous_path, before: entry.before, after: entry.after };
+    }
+    return { ...common3, before: entry.before, after: entry.after };
+  });
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "implementation-diff",
+    base_commit: baseCommit,
+    entries: entries.sort((left, right) => ordinal5(left.path, right.path))
+  });
+}
+function deriveIndexIdentityDigest(entries, undeclaredChanges) {
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "declared-index-identity",
+    entries: [...entries].sort((left, right) => ordinal5(left.path, right.path)),
+    undeclared_changes: undeclaredChanges
+  });
+}
+function deriveWorktreeIdentityDigest(entries, undeclaredChanges) {
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "declared-worktree-identity",
+    entries: [...entries].sort((left, right) => ordinal5(left.path, right.path)),
+    undeclared_changes: undeclaredChanges
+  });
+}
+function sameIdentity(observed, expected) {
+  return observed.state === "present" && observed.oid === expected.oid && observed.mode === expected.mode && observed.size_bytes === expected.size_bytes;
+}
+async function observePath(runner, resolved) {
+  const lexicalPath = resolvePath4(runner.location.worktreeRoot, resolved.repositoryRelative);
+  let stat4;
+  try {
+    stat4 = await lstat3(lexicalPath);
+  } catch (error51) {
+    if (error51.code === "ENOENT") {
+      return { observation: Object.freeze({ path: resolved.repositoryRelative, path_class: resolved.path_class, state: "absent" }) };
+    }
+    throw error51;
+  }
+  let bytes;
+  let fileType;
+  let mode;
+  let oid;
+  if (stat4.isSymbolicLink()) {
+    bytes = new Uint8Array(await readlink(lexicalPath, { encoding: "buffer" }));
+    fileType = "symlink";
+    mode = "120000";
+    oid = gitBlobOid(bytes);
+  } else if (stat4.isFile()) {
+    const handle = await openResolved(lexicalPath, 0);
+    try {
+      bytes = new Uint8Array(await handle.readFile());
+    } finally {
+      await handle.close();
+    }
+    fileType = "regular";
+    mode = (stat4.mode & 73) === 0 ? "100644" : "100755";
+    const identity = await hashGitBlobIdentity(runner, bytes, resolved.repositoryRelative);
+    oid = parseGitOid(identity.oid);
+    return {
+      observation: Object.freeze({
+        path: resolved.repositoryRelative,
+        path_class: resolved.path_class,
+        state: "present",
+        file_type: fileType,
+        mode,
+        size_bytes: parseSafeInteger(identity.size_bytes),
+        oid,
+        content_digest: sha256Bytes(bytes)
+      }),
+      bytes
+    };
+  } else {
+    throw new TypeError("declared output is not a regular file or symlink");
+  }
+  return {
+    observation: Object.freeze({
+      path: resolved.repositoryRelative,
+      path_class: resolved.path_class,
+      state: "present",
+      file_type: fileType,
+      mode,
+      size_bytes: parseSafeInteger(bytes.byteLength),
+      oid,
+      content_digest: sha256Bytes(bytes)
+    }),
+    bytes
+  };
+}
+async function resolveAll(runner, output, context2) {
+  const resolved = /* @__PURE__ */ new Map();
+  for (const entry of output.outputs) {
+    if (entry.operation === "rename") {
+      const result = await resolveDeclaredRename({ runner, taskId: output.task_id, previousPath: entry.previous_path, path: entry.path, pathClass: entry.path_class, context: context2 });
+      if (!result.ok) throw result.error;
+      resolved.set(entry.previous_path, result.value.previous);
+      resolved.set(entry.path, result.value.next);
+    } else {
+      const result = await resolveDeclaredOutputPath({ runner, taskId: output.task_id, claim: entry.path, pathClass: entry.path_class, context: context2 });
+      if (!result.ok) throw result.error;
+      resolved.set(entry.path, result.value);
+    }
+  }
+  return resolved;
+}
+async function baseIdentity(runner, commit, path2) {
+  const entry = await readCommitTreeBlob(runner, commit, path2);
+  if (entry === void 0) return void 0;
+  return Object.freeze({ oid: parseGitOid(entry.oid), mode: entry.mode, size_bytes: parseSafeInteger(await readGitBlobSize(runner, entry.oid)) });
+}
+var claimableOutputClasses = /* @__PURE__ */ new Set([
+  "document",
+  "import",
+  "manual-checkpoint",
+  "repository-source",
+  "result-payload",
+  "review",
+  "task-branch-constitution"
+]);
+function classifyOutputPath(authority, path2) {
+  const prefix = `.archflow/tasks/${authority.task_id}/`;
+  if (path2.startsWith(prefix)) {
+    const classified2 = classifyTaskPath(authority.task_id, parseTaskPathClaim(path2.slice(prefix.length)));
+    if (!classified2.ok) return classified2;
+    if (!claimableOutputClasses.has(classified2.value)) throw new TypeError("declared output path is server-owned");
+    return Object.freeze({ schema_version: "1", ok: true, value: classified2.value });
+  }
+  const classified = classifyRepositoryPath(path2);
+  if (!classified.ok) return classified;
+  const pathClass3 = classified.value === "shared-constitution" ? "task-branch-constitution" : classified.value;
+  if (!claimableOutputClasses.has(pathClass3)) throw new TypeError("declared output path is read-only");
+  return Object.freeze({ schema_version: "1", ok: true, value: pathClass3 });
+}
+async function resolveReadablePath(dependencies, authority, path2) {
+  const prefix = `.archflow/tasks/${authority.task_id}/`;
+  if (path2.startsWith(prefix)) {
+    return resolveTaskPath({
+      runner: dependencies.runner,
+      taskId: authority.task_id,
+      claim: parseTaskPathClaim(path2.slice(prefix.length)),
+      context: authority.context
+    });
+  }
+  return resolveRepositoryPath({
+    runner: dependencies.runner,
+    claim: path2,
+    context: authority.context
+  });
+}
+async function readRegularBytes(path2, label) {
+  const stat4 = await lstat3(path2.absolute);
+  if (!stat4.isFile()) throw new TypeError(`${label} is not a regular file`);
+  return new Uint8Array(await readFile(path2.absolute));
+}
+async function readRenameSources(runner, baseCommit) {
+  const fields = await runner.runNulFields({
+    argv: ["diff", "--name-status", "-z", "--find-renames", baseCommit, "--"],
+    operation: "git-diff-implementation-output"
+  });
+  const renames = /* @__PURE__ */ new Map();
+  const deleted = [];
+  for (let index = 0; index < fields.length; ) {
+    const status = fields[index++];
+    if (status === void 0) throw new TypeError("git diff name-status output is malformed");
+    if (/^R[0-9]+$/u.test(status)) {
+      const previous = fields[index++];
+      const next = fields[index++];
+      if (previous === void 0 || next === void 0) throw new TypeError("git diff rename output is malformed");
+      renames.set(next, parseRepositoryPathClaim(previous));
+    } else {
+      const path2 = fields[index++];
+      if (path2 === void 0) throw new TypeError("git diff name-status output is malformed");
+      if (status === "D") deleted.push(parseRepositoryPathClaim(path2));
+    }
+  }
+  return Object.freeze({ renames, deleted: Object.freeze(deleted.sort(ordinal5)) });
+}
+function identityOf(observation) {
+  return Object.freeze({
+    oid: observation.oid,
+    mode: observation.mode,
+    size_bytes: parseSafeInteger(observation.size_bytes)
+  });
+}
+async function buildImplementationOutput(dependencies, authority, state, suppliedInput) {
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  assertPlainJson(suppliedInput, "implementation output builder input");
+  const input = structuredClone(suppliedInput);
+  if (state.value.task_id !== authority.task_id) throw new TypeError("state task does not match transaction authority");
+  if (dependencies.read_retained_task_bytes === void 0) {
+    throw new TypeError("retained byte accounting is unavailable");
+  }
+  const outputPaths = [...input.outputs].sort(ordinal5);
+  if (outputPaths.length === 0 || new Set(outputPaths).size !== outputPaths.length) {
+    throw new TypeError("implementation outputs must be non-empty and unique");
+  }
+  const renameChanges = await readRenameSources(dependencies.runner, input.base_commit);
+  const outputs = [];
+  const observations = /* @__PURE__ */ new Map();
+  const resolveOutput = async (path2, pathClass3) => {
+    const resolved = await resolveDeclaredOutputPath({
+      runner: dependencies.runner,
+      taskId: authority.task_id,
+      claim: path2,
+      pathClass: pathClass3,
+      context: authority.context
+    });
+    if (!resolved.ok) return resolved;
+    observations.set(path2, await observePath(dependencies.runner, resolved.value));
+    return resolved;
+  };
+  for (const path2 of outputPaths) {
+    const classified = classifyOutputPath(authority, path2);
+    if (!classified.ok) return classified;
+    const pathClass3 = classified.value;
+    const resolved = await resolveOutput(path2, pathClass3);
+    if (!resolved.ok) return resolved;
+    const after = observations.get(path2);
+    const before = await baseIdentity(dependencies.runner, input.base_commit, path2);
+    let previousPath = before === void 0 && after.observation.state === "present" ? renameChanges.renames.get(path2) : void 0;
+    if (previousPath === void 0 && before === void 0 && after.observation.state === "present") {
+      const afterIdentity = identityOf(after.observation);
+      const candidates = [];
+      for (const deletedPath of renameChanges.deleted) {
+        const deletedIdentity = await baseIdentity(dependencies.runner, input.base_commit, deletedPath);
+        if (deletedIdentity !== void 0 && isDeepStrictEqual4(deletedIdentity, afterIdentity)) {
+          candidates.push(deletedPath);
+        }
+      }
+      if (candidates.length === 1) previousPath = candidates[0];
+    }
+    if (previousPath !== void 0) {
+      const previousClass = classifyOutputPath(authority, previousPath);
+      if (!previousClass.ok) return previousClass;
+      if (previousClass.value !== pathClass3) throw new TypeError("rename endpoints have different path classes");
+      const previousResolved = await resolveOutput(previousPath, pathClass3);
+      if (!previousResolved.ok) return previousResolved;
+      const previousIdentity = await baseIdentity(dependencies.runner, input.base_commit, previousPath);
+      if (previousIdentity === void 0 || after.observation.state !== "present") {
+        throw new TypeError("rename does not match base/worktree state");
+      }
+      const afterIdentity = identityOf(after.observation);
+      const retainedByGit = isDeepStrictEqual4(previousIdentity, afterIdentity) && await isCommitAncestorOfHead(dependencies.runner, input.base_commit);
+      outputs.push(Object.freeze(retainedByGit ? {
+        path: path2,
+        path_class: pathClass3,
+        operation: "rename",
+        storage: "git-object",
+        file_type: after.observation.file_type,
+        before: previousIdentity,
+        after: afterIdentity,
+        previous_path: previousPath
+      } : {
+        path: path2,
+        path_class: pathClass3,
+        operation: "rename",
+        storage: "raw-payload",
+        payload_bytes: parseSafeInteger(after.bytes.byteLength),
+        payload_digest: sha256Bytes(after.bytes),
+        file_type: after.observation.file_type,
+        before: previousIdentity,
+        after: afterIdentity,
+        previous_path: previousPath
+      }));
+    } else if (before === void 0 && after.observation.state === "present") {
+      outputs.push(Object.freeze({
+        path: path2,
+        path_class: pathClass3,
+        operation: "add",
+        storage: "raw-payload",
+        payload_bytes: parseSafeInteger(after.bytes.byteLength),
+        payload_digest: sha256Bytes(after.bytes),
+        file_type: after.observation.file_type,
+        after: identityOf(after.observation)
+      }));
+    } else if (before !== void 0 && after.observation.state === "absent") {
+      outputs.push(Object.freeze({
+        path: path2,
+        path_class: pathClass3,
+        operation: "delete",
+        storage: "git-object",
+        file_type: before.mode === "120000" ? "symlink" : "regular",
+        before
+      }));
+    } else if (before !== void 0 && after.observation.state === "present") {
+      outputs.push(Object.freeze({
+        path: path2,
+        path_class: pathClass3,
+        operation: "modify",
+        storage: "raw-payload",
+        payload_bytes: parseSafeInteger(after.bytes.byteLength),
+        payload_digest: sha256Bytes(after.bytes),
+        file_type: after.observation.file_type,
+        before,
+        after: identityOf(after.observation)
+      }));
+    } else {
+      throw new TypeError("declared output is absent from both base and worktree");
+    }
+  }
+  outputs.sort((left, right) => ordinal5(left.path, right.path));
+  const restoreTargets = [...input.restore_targets].sort(ordinal5);
+  if (new Set(restoreTargets).size !== restoreTargets.length || restoreTargets.some((path2) => !outputPaths.includes(path2))) {
+    throw new TypeError("restore targets must be unique declared output paths");
+  }
+  const scope3 = [...new Set(outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]))].sort(ordinal5);
+  const changed = await readChangedGitPaths(dependencies.runner);
+  const scopeSet = new Set(scope3);
+  const undeclaredChanges = Object.freeze({
+    scanned: true,
+    undeclared_paths: Object.freeze(changed.paths.filter((path2) => !scopeSet.has(path2)).map(rawGitPath)),
+    unrepresentable_count: parseSafeInteger(changed.unrepresentable_count)
+  });
+  const snapshotEntries = Object.freeze(scope3.map((path2) => observations.get(path2).observation));
+  const indexResult = await readIndexEntries(dependencies.runner, scope3, authority.context);
+  if (!indexResult.ok) return indexResult;
+  const indexByPath = new Map(indexResult.value.map((entry) => [entry.path, entry]));
+  const indexEntries = scope3.map((path2) => {
+    const entry = indexByPath.get(path2);
+    if (entry === void 0) return Object.freeze({ path: path2, state: "absent" });
+    if (entry.stage !== 0) throw new TypeError("declared index path is unmerged");
+    return Object.freeze({ path: path2, state: "present", stage: 0, mode: entry.mode, oid: entry.oid });
+  });
+  const parentDocuments = [];
+  for (const parent of [...input.parent_documents].sort((left, right) => ordinal5(left.document_path, right.document_path))) {
+    const resolved = await resolveTaskPath({
+      runner: dependencies.runner,
+      taskId: authority.task_id,
+      claim: parent.document_path,
+      expectedClass: "document",
+      context: authority.context
+    });
+    if (!resolved.ok) return resolved;
+    parentDocuments.push(Object.freeze({
+      document_path: parent.document_path,
+      content_digest: sha256Bytes(await readRegularBytes(resolved.value, "parent document")),
+      role: parent.role
+    }));
+  }
+  if (new Set(parentDocuments.map((parent) => parent.document_path)).size !== parentDocuments.length) {
+    throw new TypeError("parent documents must be unique");
+  }
+  const declaredInputs = [];
+  for (const declared of [...input.declared_inputs].sort((left, right) => ordinal5(left.input_id, right.input_id))) {
+    const resolved = await resolveReadablePath(dependencies, authority, declared.path);
+    if (!resolved.ok) return resolved;
+    declaredInputs.push(Object.freeze({
+      input_id: declared.input_id,
+      digest: sha256Bytes(await readRegularBytes(resolved.value, "declared input"))
+    }));
+  }
+  if (new Set(declaredInputs.map((declared) => declared.input_id)).size !== declaredInputs.length) {
+    throw new TypeError("declared input ids must be unique");
+  }
+  const scanCandidates = outputs.flatMap((output) => {
+    if (output.operation === "delete") return [];
+    const observed = observations.get(output.path);
+    if (observed.observation.state !== "present" || observed.bytes === void 0) {
+      throw new TypeError("present output bytes are unavailable");
+    }
+    return [secretScanCandidateFromBytes({
+      virtual_path: output.path,
+      path_class: output.path_class,
+      bytes: observed.bytes
+    })];
+  });
+  const secretScan = await createSecretlintScanner().scan(scanCandidates);
+  const countedEntries = outputs.map((output) => Object.freeze(output.storage === "raw-payload" ? { path: output.path, storage: "raw-payload", stored_bytes: output.payload_bytes } : { path: output.path, storage: "git-object", stored_bytes: 0 }));
+  const resultBytes = parseSafeInteger(countedEntries.reduce((total, entry) => total + entry.stored_bytes, 0));
+  const retainedBytes = await dependencies.read_retained_task_bytes();
+  const artifact = Object.freeze({
+    schema_version: "1",
+    artifact_kind: "implementation-output",
+    task_id: authority.task_id,
+    phase_instance: input.phase_instance,
+    step: input.step,
+    base_commit: input.base_commit,
+    index_identity_digest: deriveIndexIdentityDigest(indexEntries, undeclaredChanges),
+    worktree_identity_digest: deriveWorktreeIdentityDigest(snapshotEntries, undeclaredChanges),
+    outputs: Object.freeze(outputs),
+    parent_documents: Object.freeze(parentDocuments),
+    diff_digest: deriveImplementationDiffDigest(input.base_commit, outputs),
+    snapshot_digest: deriveSnapshotDigest(snapshotEntries),
+    restore_targets: Object.freeze(restoreTargets),
+    accounting: Object.freeze({
+      schema_version: "1",
+      result_bytes: resultBytes,
+      task_bytes: parseSafeInteger(retainedBytes + resultBytes),
+      result_byte_cap: 26214400,
+      task_byte_cap: 262144e3,
+      counted_entries: Object.freeze(countedEntries),
+      measured_at_revision: state.value.revision
+    }),
+    secret_scan: secretScan,
+    undeclared_changes: undeclaredChanges,
+    declared_inputs: Object.freeze(declaredInputs),
+    input_fingerprint: input.input_fingerprint,
+    ...input.constitution_edit_gate_id === void 0 ? {} : {
+      constitution_edit_gate_id: input.constitution_edit_gate_id
+    }
+  });
+  await verifyImplementationManifest(dependencies.runner, artifact, authority.context);
+  return Object.freeze({ schema_version: "1", ok: true, value: artifact });
+}
+async function verifyImplementationManifest(runner, supplied, context2, suppliedCurrentSources = []) {
+  assertPlainJson(supplied, "implementation output");
+  const output = structuredClone(supplied);
+  const currentSources = /* @__PURE__ */ new Map();
+  for (const suppliedSource of suppliedCurrentSources) {
+    if (suppliedSource === null || typeof suppliedSource !== "object") {
+      throw new TypeError("current authoritative output source must be an object");
+    }
+    const state = ownEnumerableData(suppliedSource, "state");
+    const path2 = ownEnumerableData(suppliedSource, "path");
+    let source;
+    if (state === "absent") {
+      source = Object.freeze({ path: path2, state });
+    } else if (state === "present") {
+      const suppliedIdentity = ownEnumerableData(suppliedSource, "identity");
+      assertPlainJson(suppliedIdentity, "current authoritative output identity");
+      const bytesDescriptor = Object.getOwnPropertyDescriptor(suppliedSource, "bytes");
+      if (bytesDescriptor !== void 0 && (!("value" in bytesDescriptor) || !bytesDescriptor.enumerable)) {
+        throw new TypeError("bytes must be an own enumerable data property");
+      }
+      const suppliedBytes = bytesDescriptor?.value;
+      if (suppliedBytes !== void 0 && !(suppliedBytes instanceof Uint8Array)) {
+        throw new TypeError("current authoritative output bytes must be bytes");
+      }
+      source = Object.freeze({
+        path: path2,
+        state,
+        identity: structuredClone(suppliedIdentity),
+        ...suppliedBytes === void 0 ? {} : { bytes: new Uint8Array(suppliedBytes) }
+      });
+    } else {
+      throw new TypeError("current authoritative output source state is invalid");
+    }
+    if (currentSources.has(source.path)) throw new TypeError("duplicate current authoritative output source");
+    if (source.state === "present" && source.bytes !== void 0) {
+      const identity = source.identity.mode === "120000" ? { oid: gitBlobOid(source.bytes), size_bytes: source.bytes.byteLength } : await hashGitBlobIdentity(runner, source.bytes, source.path);
+      if (identity.oid !== source.identity.oid || identity.size_bytes !== source.identity.size_bytes) {
+        throw new TypeError("current authoritative output bytes disagree with their identity");
+      }
+    }
+    currentSources.set(source.path, source);
+  }
+  const scope3 = sortedUniquePaths(output);
+  const changed = await readChangedGitPaths(runner);
+  const scopeSet = new Set(scope3);
+  const undeclaredChanges = {
+    scanned: true,
+    undeclared_paths: changed.paths.filter((path2) => !scopeSet.has(path2)).map(rawGitPath),
+    unrepresentable_count: parseSafeInteger(changed.unrepresentable_count)
+  };
+  if (!isDeepStrictEqual4(undeclaredChanges, output.undeclared_changes)) {
+    throw new TypeError("undeclared change report does not match the live Git working set");
+  }
+  const resolved = await resolveAll(runner, output, context2);
+  const observed = /* @__PURE__ */ new Map();
+  for (const path2 of scope3) {
+    const target = resolved.get(path2);
+    if (target === void 0) throw new TypeError("declared scope path was not resolved");
+    observed.set(path2, await observePath(runner, target));
+  }
+  const ancestryRetained = await isCommitAncestorOfHead(runner, output.base_commit);
+  const rawPayloads = /* @__PURE__ */ new Map();
+  const snapshot = /* @__PURE__ */ new Map();
+  for (const entry of output.outputs) {
+    const after = observed.get(entry.path);
+    if (after === void 0) throw new TypeError("missing output observation");
+    const beforePath = entry.operation === "rename" ? entry.previous_path : entry.path;
+    const currentBefore = currentSources.get(beforePath);
+    const baseBefore = await baseIdentity(runner, output.base_commit, beforePath);
+    const before = currentBefore === void 0 ? baseBefore : currentBefore.state === "present" ? currentBefore.identity : void 0;
+    const currentDestination = currentSources.get(entry.path);
+    const destinationBefore = entry.operation === "rename" ? currentDestination === void 0 ? await baseIdentity(runner, output.base_commit, entry.path) : currentDestination.state === "present" ? currentDestination.identity : void 0 : before;
+    if (entry.operation === "add") {
+      if (before !== void 0 || after.observation.state !== "present") throw new TypeError("add does not match base/worktree state");
+    } else if (entry.operation === "modify") {
+      if (before === void 0 || !sameIdentity({ ...after.observation, path: beforePath }, entry.after) || before.oid !== entry.before.oid || before.mode !== entry.before.mode || before.size_bytes !== entry.before.size_bytes) {
+        throw new TypeError("modify identity does not match base/worktree state");
+      }
+    } else if (entry.operation === "delete") {
+      if (before === void 0 || after.observation.state !== "absent" || before.oid !== entry.before.oid || before.mode !== entry.before.mode || before.size_bytes !== entry.before.size_bytes) {
+        throw new TypeError("delete identity does not match base/worktree state");
+      }
+    } else {
+      const previous = observed.get(entry.previous_path)?.observation;
+      if (before === void 0 || destinationBefore !== void 0 || previous?.state !== "absent" || !sameIdentity(after.observation, entry.after) || before.oid !== entry.before.oid || before.mode !== entry.before.mode || before.size_bytes !== entry.before.size_bytes) {
+        throw new TypeError("rename identity or non-overwrite condition does not match base/worktree state");
+      }
+      snapshot.set(entry.previous_path, previous);
+    }
+    if (entry.operation !== "delete" && !sameIdentity(after.observation, entry.after)) {
+      throw new TypeError(`after identity does not match projected bytes for ${entry.path}`);
+    }
+    if (entry.storage === "raw-payload") {
+      if (after.bytes === void 0 || entry.payload_bytes !== after.bytes.byteLength || entry.payload_digest !== sha256Bytes(after.bytes)) {
+        throw new TypeError("raw payload facts do not match projected bytes");
+      }
+      rawPayloads.set(entry.path, new Uint8Array(after.bytes));
+    } else if (entry.operation !== "delete") {
+      const proofPath = entry.operation === "rename" ? entry.previous_path : entry.path;
+      const proof = await baseIdentity(runner, output.base_commit, proofPath);
+      if (!ancestryRetained || proof === void 0 || !sameIdentity(after.observation, proof)) {
+        throw new TypeError("git-object storage lacks a reachable base-tree proof");
+      }
+      const projected = entry.file_type === "regular" ? await readGitBlobProjectedBytes(runner, proof.oid, entry.path) : await readGitBlobBytes(runner, proof.oid);
+      if (after.bytes === void 0 || sha256Bytes(projected) !== sha256Bytes(after.bytes)) {
+        throw new TypeError("git-object storage cannot reproduce the projected worktree bytes");
+      }
+    }
+    snapshot.set(entry.path, after.observation);
+  }
+  const worktreeEntries = Object.freeze(scope3.map((path2) => observed.get(path2)?.observation));
+  const snapshotEntries = Object.freeze(scope3.map((path2) => snapshot.get(path2) ?? observed.get(path2)?.observation));
+  const indexResult = await readIndexEntries(runner, scope3, context2);
+  if (!indexResult.ok) throw indexResult.error;
+  const byIndexPath = new Map(indexResult.value.map((entry) => [entry.path, entry]));
+  const indexEntries = scope3.map((path2) => {
+    const entry = byIndexPath.get(path2);
+    if (entry === void 0) return Object.freeze({ path: path2, state: "absent" });
+    if (entry.stage !== 0) throw new TypeError("declared index path is unmerged");
+    return Object.freeze({ path: path2, state: "present", stage: 0, mode: entry.mode, oid: entry.oid });
+  });
+  const facts = Object.freeze({
+    snapshot_digest: deriveSnapshotDigest(snapshotEntries),
+    diff_digest: deriveImplementationDiffDigest(output.base_commit, output.outputs),
+    index_identity_digest: deriveIndexIdentityDigest(indexEntries, undeclaredChanges),
+    worktree_identity_digest: deriveWorktreeIdentityDigest(worktreeEntries, undeclaredChanges),
+    snapshot_entries: snapshotEntries,
+    index_entries: Object.freeze(indexEntries),
+    worktree_entries: worktreeEntries,
+    raw_payloads: rawPayloads
+  });
+  if (facts.snapshot_digest !== output.snapshot_digest || facts.diff_digest !== output.diff_digest || facts.index_identity_digest !== output.index_identity_digest || facts.worktree_identity_digest !== output.worktree_identity_digest) {
+    throw new TypeError("implementation identity digest does not match authenticated observations");
+  }
+  return facts;
+}
+
 // src/state/snapshots.ts
 var RESULT_BYTE_CAP2 = 25 * 1024 * 1024;
 var TASK_BYTE_CAP2 = 250 * 1024 * 1024;
-var ok4 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail6 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok5 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail7 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function deriveDeclaredSnapshotDigest(outputs, projections) {
   const projectionDigests = new Map(projections.map((projection) => [projection.path, projection.content_digest]));
   if (projectionDigests.size !== projections.length) throw new TypeError("duplicate snapshot projection path");
@@ -42385,9 +43414,9 @@ function deriveDeclaredSnapshotDigest(outputs, projections) {
   return deriveSnapshotDigest([...entries.values()]);
 }
 function snapshotInvalid(digest11, issue_code) {
-  return fail6(createProjectError("SNAPSHOT_INVALID", { snapshot_digest: digest11, issue_code }));
+  return fail7(createProjectError("SNAPSHOT_INVALID", { snapshot_digest: digest11, issue_code }));
 }
-function ownEnumerableData(value, key) {
+function ownEnumerableData2(value, key) {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
   if (descriptor === void 0 || !("value" in descriptor) || !descriptor.enumerable) {
     throw new TypeError(`${key} must be an own enumerable data property`);
@@ -42401,11 +43430,11 @@ function cloneBytes(value, label) {
 function atLexicalLeaf(path2, worktreeRoot) {
   return Object.freeze({
     ...path2,
-    absolute: resolvePath4(worktreeRoot, path2.repositoryRelative)
+    absolute: resolvePath5(worktreeRoot, path2.repositoryRelative)
   });
 }
 function prepareSnapshot(input) {
-  const rawManifest = ownEnumerableData(input, "manifest");
+  const rawManifest = ownEnumerableData2(input, "manifest");
   assertPlainJson(rawManifest, "result manifest");
   const manifest = structuredClone(rawManifest);
   input.validate_manifest(manifest);
@@ -42413,13 +43442,13 @@ function prepareSnapshot(input) {
     return snapshotInvalid(manifest.snapshot_digest, "snapshot-digest-mismatch");
   }
   const document2 = canonicalDocument(manifest);
-  const rawPayloads = ownEnumerableData(input, "payloads");
+  const rawPayloads = ownEnumerableData2(input, "payloads");
   if (!Array.isArray(rawPayloads)) throw new TypeError("payloads must be an array");
   const payloads = rawPayloads.map((item, index) => {
     if (item === null || typeof item !== "object") throw new TypeError(`payloads[${index}] must be an object`);
-    const path2 = ownEnumerableData(item, "path");
-    const target = ownEnumerableData(item, "target");
-    const bytes = cloneBytes(ownEnumerableData(item, "bytes"), `payloads[${index}].bytes`);
+    const path2 = ownEnumerableData2(item, "path");
+    const target = ownEnumerableData2(item, "target");
+    const bytes = cloneBytes(ownEnumerableData2(item, "bytes"), `payloads[${index}].bytes`);
     if (typeof path2 !== "string" || target === null || typeof target !== "object") {
       throw new TypeError(`payloads[${index}] has invalid path or target`);
     }
@@ -42443,7 +43472,7 @@ function prepareSnapshot(input) {
     }
   }
   if (resultBytes > RESULT_BYTE_CAP2) {
-    return fail6(createProjectError("SNAPSHOT_LIMIT", {
+    return fail7(createProjectError("SNAPSHOT_LIMIT", {
       limit_scope: "result",
       offending_paths: [...byPath.keys()].sort(),
       current_bytes: resultBytes,
@@ -42452,7 +43481,7 @@ function prepareSnapshot(input) {
   }
   const taskBytes = input.retained_task_bytes + resultBytes;
   if (taskBytes > TASK_BYTE_CAP2) {
-    return fail6(createProjectError("SNAPSHOT_LIMIT", {
+    return fail7(createProjectError("SNAPSHOT_LIMIT", {
       limit_scope: "task",
       offending_paths: [...byPath.keys()].sort(),
       current_bytes: taskBytes,
@@ -42462,7 +43491,7 @@ function prepareSnapshot(input) {
   if (manifest.accounting.result_bytes !== resultBytes || manifest.accounting.task_bytes !== taskBytes) {
     return snapshotInvalid(manifest.snapshot_digest, "accounting-mismatch");
   }
-  return ok4(Object.freeze({ manifest: document2, result_digest: document2.digest, payloads: Object.freeze(payloads) }));
+  return ok5(Object.freeze({ manifest: document2, result_digest: document2.digest, payloads: Object.freeze(payloads) }));
 }
 async function installOne(atomic, target, bytes) {
   const created = await atomic.createExclusive(target, bytes);
@@ -42485,7 +43514,7 @@ async function installSnapshot(atomic, prepared, manifestTarget, worktreeRoot) {
       if (await installOne(atomic, atLexicalLeaf(payload.target, worktreeRoot), payload.bytes) === "created") payloadsCreated += 1;
     }
     const manifest = await installOne(atomic, atLexicalLeaf(manifestTarget, worktreeRoot), prepared.manifest.bytes);
-    return ok4(Object.freeze({ manifest, payloads_created: payloadsCreated }));
+    return ok5(Object.freeze({ manifest, payloads_created: payloadsCreated }));
   } catch {
     return snapshotInvalid(prepared.manifest.value.snapshot_digest, "immutable-install-disagreement");
   }
@@ -42541,7 +43570,7 @@ async function readSnapshot(input) {
       }
     }
   }
-  return ok4(document2);
+  return ok5(document2);
 }
 async function restoreSnapshotOutput(input) {
   const read = await readSnapshot({
@@ -42553,7 +43582,7 @@ async function restoreSnapshotOutput(input) {
   if (!read.ok) return read;
   const output = read.value.value.outputs.find((candidate) => candidate.path === input.output_path);
   if (output === void 0) return snapshotInvalid(read.value.value.snapshot_digest, "output-not-declared");
-  if (output.operation === "delete") return ok4(Object.freeze({ state: "absent" }));
+  if (output.operation === "delete") return ok5(Object.freeze({ state: "absent" }));
   let bytes;
   if (output.storage === "git-object") {
     try {
@@ -42578,9 +43607,9 @@ async function restoreSnapshotOutput(input) {
     bytes = payload.value;
   }
   if (output.file_type === "symlink") {
-    return ok4(Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes }));
+    return ok5(Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes }));
   }
-  return ok4(Object.freeze({ state: "present", file_type: "regular", mode: output.after.mode, bytes }));
+  return ok5(Object.freeze({ state: "present", file_type: "regular", mode: output.after.mode, bytes }));
 }
 async function readSnapshotPayload(input) {
   if (input.target.path_class !== "result-payload") throw new TypeError("payload target has wrong class");
@@ -42590,16 +43619,16 @@ async function readSnapshotPayload(input) {
     if (bytes.byteLength !== input.expected_bytes || sha256Bytes(bytes) !== input.expected_digest) {
       return snapshotInvalid(input.snapshot_digest, "payload-identity-mismatch");
     }
-    return ok4(bytes);
+    return ok5(bytes);
   } catch {
     return snapshotInvalid(input.snapshot_digest, "payload-unreadable");
   }
 }
 async function captureProjectionTarget(path2) {
   try {
-    const stat4 = await lstat3(path2.absolute);
+    const stat4 = await lstat4(path2.absolute);
     if (stat4.isSymbolicLink()) {
-      const bytes2 = Buffer.from(await readlink(path2.absolute), "utf8");
+      const bytes2 = Buffer.from(await readlink2(path2.absolute), "utf8");
       return Object.freeze({
         observation: Object.freeze({ state: "present", file_type: "symlink", mode: "120000", size_bytes: bytes2.byteLength, content_digest: sha256Bytes(bytes2) }),
         rollback: Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes: bytes2 })
@@ -42637,11 +43666,11 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
   if (!Array.isArray(sources)) throw new TypeError("projection sources must be an array");
   const materialized = sources.map((source, index) => {
     if (source === null || typeof source !== "object") throw new TypeError(`projection source ${index} must be an object`);
-    const path2 = ownEnumerableData(source, "path");
-    const targetValue = ownEnumerableData(source, "target");
-    const desiredValue = ownEnumerableData(source, "desired");
-    const beforeValue = ownEnumerableData(source, "authenticated_before");
-    const tracked = ownEnumerableData(source, "git_tracked");
+    const path2 = ownEnumerableData2(source, "path");
+    const targetValue = ownEnumerableData2(source, "target");
+    const desiredValue = ownEnumerableData2(source, "desired");
+    const beforeValue = ownEnumerableData2(source, "authenticated_before");
+    const tracked = ownEnumerableData2(source, "git_tracked");
     assertPlainJson(beforeValue, `projection source ${index} before-image`);
     if (typeof path2 !== "string" || targetValue === null || typeof targetValue !== "object" || typeof tracked !== "boolean" || desiredValue === null || typeof desiredValue !== "object") {
       throw new TypeError(`projection source ${index} has invalid fields`);
@@ -42651,15 +43680,15 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
     if (suppliedTarget.repositoryRelative !== path2) throw new TypeError(`projection source ${index} target path disagrees`);
     const target = Object.freeze({
       ...suppliedTarget,
-      absolute: resolvePath4(worktreeRoot, suppliedTarget.repositoryRelative)
+      absolute: resolvePath5(worktreeRoot, suppliedTarget.repositoryRelative)
     });
-    const desiredState = ownEnumerableData(desiredValue, "state");
+    const desiredState = ownEnumerableData2(desiredValue, "state");
     let desired;
     if (desiredState === "absent") desired = Object.freeze({ state: "absent" });
     else {
-      const fileType = ownEnumerableData(desiredValue, "file_type");
-      const mode = ownEnumerableData(desiredValue, "mode");
-      const bytes = cloneBytes(ownEnumerableData(desiredValue, "bytes"), `projection source ${index} desired bytes`);
+      const fileType = ownEnumerableData2(desiredValue, "file_type");
+      const mode = ownEnumerableData2(desiredValue, "mode");
+      const bytes = cloneBytes(ownEnumerableData2(desiredValue, "bytes"), `projection source ${index} desired bytes`);
       if (fileType === "regular" && (mode === "100644" || mode === "100755")) desired = Object.freeze({ state: "present", file_type: fileType, mode, bytes });
       else if (fileType === "symlink" && mode === "120000") desired = Object.freeze({ state: "present", file_type: fileType, mode, bytes });
       else throw new TypeError(`projection source ${index} has invalid desired identity`);
@@ -42670,12 +43699,12 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
       if (!("value" in rollbackDescriptor) || !rollbackDescriptor.enumerable) throw new TypeError("rollback must be an own enumerable data property");
       const value = rollbackDescriptor.value;
       if (value === null || typeof value !== "object") throw new TypeError("rollback must be a projection image");
-      const state = ownEnumerableData(value, "state");
+      const state = ownEnumerableData2(value, "state");
       if (state === "absent") rollback = Object.freeze({ state: "absent" });
       else {
-        const fileType = ownEnumerableData(value, "file_type");
-        const mode = ownEnumerableData(value, "mode");
-        const bytes = cloneBytes(ownEnumerableData(value, "bytes"), `projection source ${index} rollback bytes`);
+        const fileType = ownEnumerableData2(value, "file_type");
+        const mode = ownEnumerableData2(value, "mode");
+        const bytes = cloneBytes(ownEnumerableData2(value, "bytes"), `projection source ${index} rollback bytes`);
         if (fileType === "regular" && (mode === "100644" || mode === "100755")) rollback = Object.freeze({ state: "present", file_type: fileType, mode, bytes });
         else if (fileType === "symlink" && mode === "120000") rollback = Object.freeze({ state: "present", file_type: fileType, mode, bytes });
         else throw new TypeError(`projection source ${index} has invalid rollback identity`);
@@ -42687,8 +43716,8 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
       if (!("value" in renameDescriptor) || !renameDescriptor.enumerable) throw new TypeError("rename_pair must be an own enumerable data property");
       const value = renameDescriptor.value;
       if (value === null || typeof value !== "object") throw new TypeError("rename_pair must be an object");
-      const role = ownEnumerableData(value, "role");
-      const peerPath = ownEnumerableData(value, "peer_path");
+      const role = ownEnumerableData2(value, "role");
+      const peerPath = ownEnumerableData2(value, "peer_path");
       if (role !== "source" && role !== "destination" || typeof peerPath !== "string") throw new TypeError("rename_pair is invalid");
       renamePair = Object.freeze({ role, peer_path: peerPath });
     }
@@ -42714,24 +43743,24 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
   if (scan.outcome === "detected") {
     const finding = scan.findings[0];
     if (finding === void 0) throw new TypeError("detected scan must contain a finding");
-    return fail6(createProjectError("SECRET_DETECTED", { path_class: finding.path_class, detector_id: finding.detector_id }));
+    return fail7(createProjectError("SECRET_DETECTED", { path_class: finding.path_class, detector_id: finding.detector_id }));
   }
   if (scan.outcome === "unavailable") {
     const first = materialized.find((source) => source.git_tracked);
-    return fail6(createProjectError("SECRET_DETECTED", { path_class: first?.target.path_class ?? "repository-source", detector_id: "scanner-unavailable" }));
+    return fail7(createProjectError("SECRET_DETECTED", { path_class: first?.target.path_class ?? "repository-source", detector_id: "scanner-unavailable" }));
   }
   const entries = [];
   for (const source of materialized) {
     const observed = await observe(source.target);
     if (source.authenticated_before.state === "present") {
-      if (source.rollback === void 0 || !isDeepStrictEqual4(desiredObservation(source.rollback), source.authenticated_before)) {
+      if (source.rollback === void 0 || !isDeepStrictEqual5(desiredObservation(source.rollback), source.authenticated_before)) {
         throw new TypeError("present authenticated before-image requires matching rollback bytes");
       }
     } else if (source.rollback !== void 0 && source.rollback.state !== "absent") {
       throw new TypeError("absent authenticated before-image cannot carry present rollback bytes");
     }
-    const exact = isDeepStrictEqual4(observed, desiredObservation(source.desired));
-    const before = isDeepStrictEqual4(observed, source.authenticated_before);
+    const exact = isDeepStrictEqual5(observed, desiredObservation(source.desired));
+    const before = isDeepStrictEqual5(observed, source.authenticated_before);
     const renameDestinationBlocked = source.rename_pair?.role === "destination" && observed.state !== "absent" && !exact;
     entries.push(Object.freeze({
       path: source.path,
@@ -42745,11 +43774,477 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
     }));
   }
   const collisions = entries.filter((entry) => entry.disposition === "collision").map((entry) => Object.freeze({ path: entry.path, path_class: entry.target.path_class }));
-  return ok4(Object.freeze({
+  return ok5(Object.freeze({
     entries: Object.freeze(entries),
     collisions: Object.freeze(collisions),
     collision_choices: Object.freeze(["discard-and-restore", "adopt-as-new-generation", "abort"])
   }));
+}
+
+// src/state/gates.ts
+var DECISIONS = Object.freeze({
+  "artifact-approval": ["approve", "revise", "reject", "cancel"],
+  "review-trigger": ["approve", "revise", "reject", "waiver-requested", "cancel"],
+  "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
+  "adjudication-failure": ["approve", "revise", "reject", "waiver-requested", "cancel"],
+  "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
+  "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
+  "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
+  "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
+  "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"]
+});
+var authenticatedGateApprovals = /* @__PURE__ */ new WeakSet();
+var authenticatedGateApprovalBrand = /* @__PURE__ */ Symbol("AuthenticatedGateApproval");
+function assertAuthenticatedGateApproval(value) {
+  if (!authenticatedGateApprovals.has(value)) {
+    throw new TypeError("an authenticated gate approval is required");
+  }
+}
+function deepFreezeGateJson(value) {
+  if (value !== null && typeof value === "object") {
+    for (const nested of Object.values(value)) deepFreezeGateJson(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
+var ok6 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail8 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var issue2 = (code, state, issueCode) => fail8(code === "STATE_INVALID" ? createProjectError(code, { phase_instance: state.phase_instance, issue_code: issueCode }) : createProjectError(code, { issue_code: issueCode }));
+var io = (authority, operation) => fail8(createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt }));
+async function resolvePath6(dependencies, authority, claim, expectedClass) {
+  const resolved = await resolveTaskPath({
+    runner: dependencies.runner,
+    taskId: authority.task_id,
+    claim: typeof claim === "string" ? claim : claim,
+    expectedClass,
+    context: authority.context
+  });
+  return resolved;
+}
+async function readCanonical(path2, label, parse3) {
+  let handle;
+  try {
+    handle = await openResolved(path2.absolute, fsConstants3.O_RDONLY);
+    const document2 = parseCanonicalDocument(new Uint8Array(await handle.readFile()), label);
+    parse3(document2.value);
+    return document2;
+  } catch (error51) {
+    const code = error51?.code;
+    return code === "ENOENT" ? "missing" : "invalid";
+  } finally {
+    await handle?.close().catch(() => void 0);
+  }
+}
+function waiverContext(value) {
+  return value !== null && typeof value === "object" && "origin" in value ? value : void 0;
+}
+function bindEnvelope(request, envelope) {
+  if (envelope.gate_id !== request.gate_id || envelope.task_id !== request.task_id || envelope.phase_instance !== request.phase_instance || envelope.kind !== request.kind || envelope.subject_digest !== request.subject_digest || envelope.context_digest !== request.context_digest) throw new TypeError("gate decision does not bind archived request");
+  if (request.context !== null && typeof request.context === "object" && "origin" in request.context) {
+    throw new TypeError("waiver gate requires a waiver decision");
+  }
+  validateGateDecision(request.kind, request.context, envelope.payload);
+}
+function parseInterface(value, request, supplemental2 = []) {
+  assertPlainJson(value, "gate decision interface");
+  if (value !== null && typeof value === "object" && "cancelled" in value) {
+    const candidate = value;
+    if (candidate.cancelled !== true || candidate.gate_id !== request.gate_id || candidate.task_id !== request.task_id || candidate.phase_instance !== request.phase_instance || candidate.subject_digest !== request.subject_digest || candidate.context_digest !== request.context_digest) throw new TypeError("cancellation does not bind request");
+    return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, supplemental: supplemental2, outcome: "cancelled", reason: candidate.reason, human_provenance: candidate.human_provenance });
+  }
+  if (request.context !== null && typeof request.context === "object" && "origin" in request.context) {
+    const candidate = value;
+    const context2 = request.context;
+    if (candidate.gate_id !== request.gate_id || candidate.task_id !== request.task_id || candidate.phase_instance !== request.phase_instance || candidate.subject_digest !== request.subject_digest || candidate.context_digest !== request.context_digest || !isDeepStrictEqual6(candidate.origin, context2.origin) || !isDeepStrictEqual6(candidate.scope, context2.origin.scope)) throw new TypeError("waiver decision does not bind origin");
+    return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, supplemental: supplemental2, outcome: "waiver-decided", granted: candidate.granted, scope: candidate.scope, origin: candidate.origin, notes: candidate.notes, human_provenance: candidate.human_provenance });
+  }
+  const envelope = parseGateDecisionEnvelope(value);
+  bindEnvelope(request, envelope);
+  return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, supplemental: supplemental2, outcome: "decided", envelope });
+}
+var TEMPLATE_REASON = "Record the human decision reason.";
+var TEMPLATE_RATIONALE = "Record the human decision rationale.";
+var TEMPLATE_RESOLUTION = "Record the human resolution for this rule.";
+function decisionTemplateBase(active) {
+  return {
+    schema_version: "1",
+    gate_id: active.gate_id,
+    task_id: active.task_id,
+    phase_instance: active.phase_instance,
+    subject_digest: active.subject_digest,
+    context_digest: active.context_digest
+  };
+}
+function buildGateDecisionTemplates(active) {
+  const request = parseActiveGate(structuredClone(active));
+  const base2 = decisionTemplateBase(request);
+  const cancellation = { ...base2, cancelled: true, reason: TEMPLATE_REASON };
+  const waiver = waiverContext(request.context);
+  if (waiver !== void 0) {
+    return deepFreezeGateJson([
+      {
+        ...base2,
+        granted: true,
+        scope: structuredClone(waiver.origin.scope),
+        origin: structuredClone(waiver.origin),
+        notes: TEMPLATE_REASON
+      },
+      {
+        ...base2,
+        granted: false,
+        scope: structuredClone(waiver.origin.scope),
+        origin: structuredClone(waiver.origin),
+        notes: TEMPLATE_REASON
+      },
+      cancellation
+    ]);
+  }
+  const templates = [];
+  for (const decision2 of request.allowed_decisions) {
+    if (decision2 === "cancel") {
+      templates.push(cancellation);
+      continue;
+    }
+    const context2 = request.context;
+    const payloads = [];
+    if (decision2 === "waiver-requested") {
+      const eligible = context2.eligible_waiver_rules;
+      for (const rule4 of eligible) {
+        payloads.push({
+          decision: decision2,
+          reason: TEMPLATE_REASON,
+          rule: structuredClone(rule4),
+          rationale: TEMPLATE_RATIONALE
+        });
+      }
+    } else if (request.kind === "adjudication-failure" && decision2 === "approve") {
+      const adjudicationContext = request.context;
+      const eligible = new Set(adjudicationContext.eligible_waiver_rules.map((rule4) => `${rule4.rule_id}:${rule4.rule_version}`));
+      const required2 = /* @__PURE__ */ new Map();
+      for (const rule4 of [...adjudicationContext.failed_rules, ...adjudicationContext.uncertain_rules]) {
+        const key = `${rule4.rule_id}:${rule4.rule_version}`;
+        if (!eligible.has(key)) required2.set(key, rule4);
+      }
+      const resolutions = [...required2.values()].sort((left, right) => left.rule_id.localeCompare(right.rule_id) || left.rule_version - right.rule_version).map((rule4) => ({ rule: structuredClone(rule4), resolution: TEMPLATE_RESOLUTION }));
+      payloads.push({ decision: decision2, reason: TEMPLATE_REASON, resolutions });
+    } else if (request.kind === "restore-collision" && decision2 === "adopt-as-new-generation") {
+      if (request.context.adoption_candidate !== void 0) {
+        payloads.push({
+          decision: decision2,
+          reason: TEMPLATE_REASON,
+          adoption_authority: structuredClone(request.context.adoption_candidate),
+          rationale: TEMPLATE_RATIONALE
+        });
+      }
+    } else {
+      payloads.push({ decision: decision2, reason: TEMPLATE_REASON });
+    }
+    for (const payload of payloads) {
+      validateGateDecision(request.kind, request.context, payload);
+      templates.push({ ...base2, kind: request.kind, payload });
+    }
+  }
+  return deepFreezeGateJson(templates);
+}
+async function writeGateDecisionInterface(dependencies, authority, value) {
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  assertPlainJson(value, "gate decision template");
+  const selected = structuredClone(value);
+  const provenance2 = {
+    schema_version: "1",
+    actor_class: "human",
+    assurance: "declared-local-trace",
+    channel: "archflow-local",
+    decision_event_id: randomUUID2(),
+    helper_invocation_id: randomUUID2(),
+    recorded_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  const candidate = selected !== null && typeof selected === "object" && !Array.isArray(selected) ? { ...selected, human_provenance: provenance2 } : selected;
+  try {
+    return await dependencies.lock.runExclusive(authority.task_root, async () => {
+      const stateResult = await stateOrFailure(dependencies, authority);
+      if (!stateResult.ok) return stateResult;
+      const current = stateResult.value;
+      const gate = current.value.open_gate;
+      if (gate === void 0) return issue2("STATE_INVALID", current.value, "gate-interface-open-gate-missing");
+      const activePath = await resolvePath6(dependencies, authority, "gate.json", "gate-interface");
+      const interfacePath = await resolvePath6(dependencies, authority, "gate.decision", "gate-interface");
+      if (!activePath.ok) return activePath;
+      if (!interfacePath.ok) return interfacePath;
+      const projected = await readCanonical(activePath.value, "active gate", parseActiveGate);
+      if (projected === "missing" || projected === "invalid") {
+        return issue2("STATE_INVALID", current.value, "active-gate-interface-invalid");
+      }
+      const active = projected.value;
+      if (active.task_id !== authority.task_id || active.gate_id !== gate.gate_id || active.kind !== gate.gate_kind || active.subject_digest !== gate.subject_digest || active.context_digest !== gate.context_digest) return issue2("STATE_INVALID", current.value, "active-gate-interface-mismatch");
+      try {
+        parseInterface(candidate, active);
+      } catch {
+        return fail8(createProjectError("GATE_DECISION_INVALID", {
+          gate_id: active.gate_id,
+          gate_kind: active.kind,
+          issue_code: "decision-binding-invalid"
+        }));
+      }
+      const existing = await readCanonical(interfacePath.value, "gate decision interface", (raw) => raw);
+      if (existing !== "missing" && existing !== "invalid") {
+        try {
+          parseInterface(existing.value, active);
+          return fail8(createProjectError("GATE_ACTIVE", {
+            gate_id: active.gate_id,
+            gate_kind: active.kind
+          }));
+        } catch {
+        }
+      }
+      const document2 = canonicalDocument(candidate);
+      await dependencies.atomic.replace(interfacePath.value, document2.bytes);
+      return ok6({
+        gate_id: active.gate_id,
+        decision_path: "gate.decision",
+        decision_digest: document2.digest
+      });
+    });
+  } catch (error51) {
+    return error51 instanceof TaskLockError ? io(authority, `gate-lock-${error51.stage}`) : io(authority, "gate-interface-write");
+  }
+}
+async function stateOrFailure(dependencies, authority) {
+  const read = await dependencies.read_state(authority.state);
+  return read.kind === "canonical" ? ok6(read.document) : read.kind === "unreadable" ? io(authority, "gate-state-read") : issue2("CONTRACT_INVALID", void 0, `gate-state-${read.kind}`);
+}
+async function loadAuthenticatedGateApproval(dependencies, authority, approval) {
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  assertPlainJson(approval, "approval reference");
+  const claimed = structuredClone(approval);
+  const current = await stateOrFailure(dependencies, authority);
+  if (!current.ok) return current;
+  if (current.value.value.task_id !== authority.task_id || !verifyRepositoryIdentity(
+    current.value.value.repository_identity_digest,
+    authority.repository_identity
+  ).ok) return issue2("STATE_INVALID", current.value.value, "gate-approval-state-authority-mismatch");
+  const durable = current.value.value.approvals.find((entry) => entry.gate_id === claimed.gate_id);
+  if (durable === void 0 || !isDeepStrictEqual6(durable, claimed)) {
+    return issue2("STATE_INVALID", current.value.value, "gate-approval-not-current");
+  }
+  const requestPath = await resolvePath6(
+    dependencies,
+    authority,
+    gateRequestClaim(claimed.gate_id),
+    "decision"
+  );
+  const decisionPath = await resolvePath6(
+    dependencies,
+    authority,
+    gateDecisionClaim(claimed.gate_id),
+    "decision"
+  );
+  if (!requestPath.ok) return requestPath;
+  if (!decisionPath.ok) return decisionPath;
+  const request = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+  const decision2 = await readCanonical(
+    decisionPath.value,
+    "gate decision record",
+    parseGateDecisionRecord
+  );
+  if (request === "missing" || request === "invalid") {
+    return issue2("STATE_INVALID", current.value.value, "gate-approval-request-invalid");
+  }
+  if (decision2 === "missing" || decision2 === "invalid") {
+    return issue2("STATE_INVALID", current.value.value, "gate-approval-decision-invalid");
+  }
+  if (decision2.digest !== claimed.decision_digest || !validateDurableSemantics({
+    gate_request: request,
+    gate_decision: decision2
+  }).ok || decision2.value.outcome !== "decided" || gateDecisionEffect(decision2.value.envelope.payload) !== "advance" || request.value.task_id !== authority.task_id || request.value.gate_id !== claimed.gate_id || request.value.kind !== claimed.gate_kind || request.value.subject_digest !== claimed.subject_digest || decision2.value.gate_id !== claimed.gate_id || decision2.value.task_id !== authority.task_id || decision2.value.kind !== claimed.gate_kind || decision2.value.subject_digest !== claimed.subject_digest) return issue2("STATE_INVALID", current.value.value, "gate-approval-binding-invalid");
+  const authenticated = {
+    approval: deepFreezeGateJson(structuredClone(durable)),
+    request: deepFreezeGateJson(structuredClone(request.value)),
+    decision: deepFreezeGateJson(structuredClone(decision2.value))
+  };
+  Object.defineProperty(authenticated, authenticatedGateApprovalBrand, {
+    value: true,
+    enumerable: false,
+    writable: false,
+    configurable: false
+  });
+  Object.freeze(authenticated);
+  authenticatedGateApprovals.add(authenticated);
+  return ok6(authenticated);
+}
+async function createManualGateFile(dependencies, authority, kind, value) {
+  assertInternalTransactionAuthority(authority, { runner: dependencies.runner, environment: dependencies.environment });
+  const parsed = kind === "request" ? parseGateRequest(value) : parseGateDecisionRecord(value);
+  await ensureDecisionDirectory(authority, parsed.gate_id);
+  const target = await resolvePath6(dependencies, authority, kind === "request" ? gateRequestClaim(parsed.gate_id) : gateDecisionClaim(parsed.gate_id), "decision");
+  if (!target.ok) return target;
+  const document2 = canonicalDocument(parsed);
+  return await dependencies.atomic.createExclusive(target.value, document2.bytes) === "created" ? ok6(document2) : issue2("CONTRACT_INVALID", void 0, `manual-gate-${kind}-exists`);
+}
+
+// src/state/transitions.ts
+var ok7 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+function invalid(input, from, to) {
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("TRANSITION_INVALID", {
+      phase_instance: input.target.phase_instance,
+      from,
+      to
+    })
+  });
+}
+function fingerprintFailure(expected, observed) {
+  return Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("INPUT_FINGERPRINT_MISMATCH", {
+      expected_digest: expected,
+      observed_digest: observed
+    })
+  });
+}
+function phaseKind(instance) {
+  return decodePhaseInstance(instance).kind;
+}
+function pipeline(instance) {
+  const kind = phaseKind(instance);
+  const configured = WORKFLOW_V1.phases.find((phase4) => phase4.id === kind);
+  if (configured === void 0) throw new TypeError("phase instance is absent from the fixed workflow");
+  return configured.pipeline;
+}
+function nextPhase(instance) {
+  const decoded = decodePhaseInstance(instance);
+  switch (decoded.kind) {
+    case "prd":
+      return encodePhaseInstance({ kind: "design" });
+    case "design":
+      return encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(1) });
+    case "phase-design":
+      return encodePhaseInstance({ kind: "phase-impl", phase: decoded.phase });
+    case "phase-impl":
+      if (decoded.phase === Number.MAX_SAFE_INTEGER) return void 0;
+      return encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(decoded.phase + 1) });
+  }
+}
+function sameSubject(current, target) {
+  return current.phase_instance === target.phase_instance && current.step === target.step;
+}
+function legalMovement(current, target) {
+  if (current.terminal !== void 0 || current.open_gate !== void 0) return false;
+  if (sameSubject(current, target)) {
+    if (current.status === "running") {
+      return target.attempt === current.attempt && (target.status === "succeeded" || target.status === "failed");
+    }
+    return current.status === "failed" && target.status === "running" && target.attempt === current.attempt + 1;
+  }
+  if (current.status !== "succeeded" || target.status !== "running") return false;
+  if (target.phase_instance === current.phase_instance && (current.step === "triage" || current.step === "adjudicate") && target.step === "produce") {
+    return target.attempt === current.attempt + 1;
+  }
+  const steps = pipeline(current.phase_instance);
+  const index = steps.indexOf(current.step);
+  if (index < 0) return false;
+  if (index + 1 < steps.length) {
+    return target.phase_instance === current.phase_instance && target.step === steps[index + 1] && target.attempt === current.attempt;
+  }
+  const following = nextPhase(current.phase_instance);
+  return following !== void 0 && target.phase_instance === following && target.step === pipeline(following)[0] && target.attempt === 1;
+}
+function artifactMatches(input) {
+  const artifact = input.artifact;
+  if (artifact === void 0) {
+    return input.target.status !== "succeeded" || input.target.step !== "produce";
+  }
+  const artifactTaskId = artifact.artifact_kind === "review-evidence" || artifact.artifact_kind === "triage" ? artifact.evidence.task_id : artifact.task_id;
+  if (artifactTaskId !== input.current.task_id) return false;
+  if (artifact.artifact_kind === "task-initialization" || artifact.artifact_kind === "legacy-import-initialization") {
+    return false;
+  }
+  if (artifact.artifact_kind === "document" || artifact.artifact_kind === "implementation-output") {
+    return artifact.phase_instance === input.target.phase_instance && artifact.step === input.target.step && artifact.input_fingerprint === input.recomputed_input_fingerprint;
+  }
+  if (artifact.artifact_kind === "review-evidence" || artifact.artifact_kind === "triage") {
+    return artifact.evidence.phase_instance === input.target.phase_instance && artifact.evidence.step === input.target.step && artifact.evidence.input_fingerprint === input.recomputed_input_fingerprint;
+  }
+  if (artifact.artifact_kind === "manual-checkpoint-import") {
+    return artifact.chain.some((checkpoint) => checkpoint.phase_instance === input.target.phase_instance && checkpoint.step === input.target.step && checkpoint.status === input.target.status && checkpoint.attempt === input.target.attempt && checkpoint.input_fingerprint === input.recomputed_input_fingerprint);
+  }
+  return input.target.phase_instance === input.current.phase_instance && input.target.step === input.current.step;
+}
+function resultReferenceMatches(input) {
+  const reference = input.result_reference;
+  const sourceKind = input.artifact?.artifact_kind;
+  const evidenceStep = input.target.step === "self_review" || input.target.step === "counter_review" || input.target.step === "triage" || input.target.step === "adjudicate";
+  const producing = input.target.status === "succeeded" && (input.target.step === "produce" && (sourceKind === "document" || sourceKind === "implementation-output") || evidenceStep);
+  if (!producing) return reference === void 0;
+  if (reference === void 0) return false;
+  return reference.phase_instance === input.target.phase_instance && reference.step === input.target.step && reference.input_fingerprint === input.recomputed_input_fingerprint;
+}
+function withResultReference(current, reference) {
+  if (reference === void 0) return current;
+  const next = current.filter((entry) => entry.phase_instance !== reference.phase_instance || entry.step !== reference.step);
+  next.push(reference);
+  next.sort((left, right) => {
+    const leftKey = `${left.phase_instance}\0${left.step}`;
+    const rightKey = `${right.phase_instance}\0${right.step}`;
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+  });
+  return Object.freeze(next);
+}
+function hasAuthenticatedCommittedOutput(input) {
+  const decoded = decodePhaseInstance(input.current.phase_instance);
+  if (decoded.kind !== "phase-impl" || input.current.step !== "adjudicate" || input.current.status !== "succeeded" || input.current.terminal !== void 0 || input.current.open_gate !== void 0 || input.completion_subject_digest === void 0 || input.commit_observed !== true || input.artifact !== void 0 || input.result_reference !== void 0) return false;
+  for (const authenticated of input.authenticated_gate_approvals ?? []) {
+    assertAuthenticatedGateApproval(authenticated);
+    if (authenticated.approval.gate_kind === "commit-authorization" && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.request.kind === "commit-authorization" && authenticated.request.phase_instance === input.current.phase_instance && authenticated.request.subject_digest === input.completion_subject_digest) return true;
+  }
+  return false;
+}
+function planStateTransition(value) {
+  const { authenticated_gate_approvals: authenticatedApprovals, ...plainValue } = value;
+  assertPlainJson(plainValue, "transition plan input");
+  const input = {
+    ...structuredClone(plainValue),
+    ...authenticatedApprovals === void 0 ? {} : { authenticated_gate_approvals: authenticatedApprovals }
+  };
+  const from = `${input.current.step}-${input.current.status}`;
+  const to = `${input.target.step}-${input.target.status}`;
+  if (input.target.input_fingerprint !== input.recomputed_input_fingerprint) {
+    return fingerprintFailure(input.recomputed_input_fingerprint, input.target.input_fingerprint);
+  }
+  const committedOutput = hasAuthenticatedCommittedOutput(input);
+  const decodedCurrent = decodePhaseInstance(input.current.phase_instance);
+  const completesFinalPhase = committedOutput && decodedCurrent.kind === "phase-impl" && input.current.planned_final_phase !== void 0 && Number(decodedCurrent.phase) === Number(input.current.planned_final_phase) && input.target.phase_instance === input.current.phase_instance && input.target.step === input.current.step && input.target.status === input.current.status && input.target.attempt === input.current.attempt && input.target.input_fingerprint === input.current.input_fingerprint;
+  if (completesFinalPhase) {
+    const { revision: _revision2, committed_intent: _intent2, ...preserved2 } = input.current;
+    return ok7(Object.freeze({ ...preserved2, terminal: "complete" }));
+  }
+  if (decodedCurrent.kind === "phase-impl" && input.current.step === "adjudicate" && input.current.status === "succeeded" && input.target.phase_instance !== input.current.phase_instance && !committedOutput) return invalid(input, from, to);
+  if (!legalMovement(input.current, input.target) || !artifactMatches(input) || !resultReferenceMatches(input)) {
+    return invalid(input, from, to);
+  }
+  const { revision: _revision, committed_intent: _intent, ...preserved } = input.current;
+  const draft = Object.freeze({
+    ...preserved,
+    phase_instance: input.target.phase_instance,
+    step: input.target.step,
+    status: input.target.status,
+    attempt: input.target.attempt,
+    input_fingerprint: input.target.input_fingerprint,
+    authoritative_results: withResultReference(preserved.authoritative_results, input.result_reference)
+  });
+  if (input.result_reference === void 0 && !isDeepStrictEqual7(draft.authoritative_results, input.current.authoritative_results)) {
+    throw new TypeError("transition planning changed authoritative results");
+  }
+  return ok7(draft);
 }
 
 // src/state/transaction.ts
@@ -42932,45 +44427,10 @@ var maintenance_record_schema_default = {
   }
 };
 
-// src/state/gates.ts
-var DECISIONS = Object.freeze({
-  "artifact-approval": ["approve", "revise", "reject", "cancel"],
-  "review-trigger": ["approve", "revise", "reject", "waiver-requested", "cancel"],
-  "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
-  "adjudication-failure": ["approve", "revise", "reject", "waiver-requested", "cancel"],
-  "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
-  "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
-  "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
-  "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
-  "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"]
-});
-var ok5 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail7 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-var issue2 = (code, state, issueCode) => fail7(code === "STATE_INVALID" ? createProjectError(code, { phase_instance: state.phase_instance, issue_code: issueCode }) : createProjectError(code, { issue_code: issueCode }));
-async function resolvePath5(dependencies, authority, claim, expectedClass) {
-  const resolved = await resolveTaskPath({
-    runner: dependencies.runner,
-    taskId: authority.task_id,
-    claim: typeof claim === "string" ? claim : claim,
-    expectedClass,
-    context: authority.context
-  });
-  return resolved;
-}
-async function createManualGateFile(dependencies, authority, kind, value) {
-  assertInternalTransactionAuthority(authority, { runner: dependencies.runner, environment: dependencies.environment });
-  const parsed = kind === "request" ? parseGateRequest(value) : parseGateDecisionRecord(value);
-  await ensureDecisionDirectory(authority, parsed.gate_id);
-  const target = await resolvePath5(dependencies, authority, kind === "request" ? gateRequestClaim(parsed.gate_id) : gateDecisionClaim(parsed.gate_id), "decision");
-  if (!target.ok) return target;
-  const document2 = canonicalDocument(parsed);
-  return await dependencies.atomic.createExclusive(target.value, document2.bytes) === "created" ? ok5(document2) : issue2("CONTRACT_INVALID", void 0, `manual-gate-${kind}-exists`);
-}
-
 // src/state/maintenance.ts
 import { unlink as unlink2 } from "node:fs/promises";
 import { dirname as dirname3 } from "node:path";
-function ownEnumerableData2(value, key) {
+function ownEnumerableData3(value, key) {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
   if (descriptor === void 0 || !("value" in descriptor) || !descriptor.enumerable) {
     throw new TypeError(`${key} must be an own enumerable data property`);
@@ -42981,13 +44441,13 @@ function ordinal6(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 function computeMaintenanceProof(input) {
-  const rootsValue = ownEnumerableData2(input, "roots");
+  const rootsValue = ownEnumerableData3(input, "roots");
   assertPlainJson(rootsValue, "maintenance roots");
   const roots = structuredClone(rootsValue);
-  const manifestsValue = ownEnumerableData2(input, "manifests");
+  const manifestsValue = ownEnumerableData3(input, "manifests");
   assertPlainJson(manifestsValue, "maintenance manifests");
   const manifestItems = structuredClone(manifestsValue);
-  const candidatesValue = ownEnumerableData2(input, "candidates");
+  const candidatesValue = ownEnumerableData3(input, "candidates");
   assertPlainJson(candidatesValue, "maintenance candidates");
   const candidates = structuredClone(candidatesValue);
   if (roots.inventory_complete !== true) throw new TypeError("maintenance root inventory is incomplete");
@@ -43100,15 +44560,15 @@ async function performMaintenance(input) {
 }
 
 // src/state/maintenance-roots.ts
-import { constants as fsConstants5 } from "node:fs";
+import { constants as fsConstants6 } from "node:fs";
 import { readdir as readdir3 } from "node:fs/promises";
 import { join as join6, relative as relative3, sep as sep3 } from "node:path";
 
 // src/state/manual-checkpoints.ts
-import { constants as fsConstants3 } from "node:fs";
+import { constants as fsConstants4 } from "node:fs";
 import { readdir as readdir2 } from "node:fs/promises";
 import { join as join5 } from "node:path";
-var ok6 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var ioFailure = (authority, operation) => Object.freeze({
   schema_version: "1",
   ok: false,
@@ -43141,7 +44601,7 @@ async function writeManualCheckpoint(dependencies, authority, checkpoint) {
     await ensureManualCheckpointDirectory(authority);
     const installed = await dependencies.atomic.createExclusive(target.value, document2.bytes);
     if (installed === "exists") {
-      const handle = await openResolved(target.value.absolute, fsConstants3.O_RDONLY);
+      const handle = await openResolved(target.value.absolute, fsConstants4.O_RDONLY);
       try {
         const existing = new Uint8Array(await handle.readFile());
         if (!Buffer.from(existing).equals(Buffer.from(document2.bytes))) {
@@ -43158,7 +44618,7 @@ async function writeManualCheckpoint(dependencies, authority, checkpoint) {
         await handle.close();
       }
     }
-    return ok6(document2);
+    return ok8(document2);
   } catch {
     return ioFailure(authority, "write-manual-checkpoint");
   }
@@ -43169,7 +44629,7 @@ async function readManualCheckpoints(dependencies, authority) {
   try {
     names = await readdir2(join5(authority.task_root, "manual", "checkpoints"));
   } catch (error51) {
-    if (error51.code === "ENOENT") return ok6(Object.freeze([]));
+    if (error51.code === "ENOENT") return ok8(Object.freeze([]));
     return ioFailure(authority, "read-manual-checkpoints");
   }
   const documents = [];
@@ -43193,7 +44653,7 @@ async function readManualCheckpoints(dependencies, authority) {
     });
     if (!target.ok) return target;
     try {
-      const handle = await openResolved(target.value.absolute, fsConstants3.O_RDONLY);
+      const handle = await openResolved(target.value.absolute, fsConstants4.O_RDONLY);
       try {
         const document2 = parseCanonicalDocument(
           new Uint8Array(await handle.readFile()),
@@ -43220,11 +44680,11 @@ async function readManualCheckpoints(dependencies, authority) {
     }
   }
   documents.sort((left, right) => left.value.revision - right.value.revision || left.digest.localeCompare(right.digest));
-  return ok6(Object.freeze(documents));
+  return ok8(Object.freeze(documents));
 }
 
 // src/state/read.ts
-import { constants as fsConstants4 } from "node:fs";
+import { constants as fsConstants5 } from "node:fs";
 
 // src/contracts/config.ts
 var REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"];
@@ -43271,7 +44731,7 @@ function errnoOf5(error51) {
 async function readBytes(path2) {
   let handle;
   try {
-    handle = await openResolved(path2.absolute, fsConstants4.O_RDONLY);
+    handle = await openResolved(path2.absolute, fsConstants5.O_RDONLY);
     return Object.freeze({ kind: "bytes", bytes: new Uint8Array(await handle.readFile()) });
   } catch (error51) {
     return Object.freeze({ kind: errnoOf5(error51) === "ENOENT" ? "missing" : "unreadable" });
@@ -43319,8 +44779,8 @@ async function readTaskConfig(path2) {
 }
 
 // src/state/maintenance-roots.ts
-var ok7 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail8 = (authority, operation) => Object.freeze({
+var ok9 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail9 = (authority, operation) => Object.freeze({
   schema_version: "1",
   ok: false,
   error: createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt })
@@ -43347,7 +44807,7 @@ async function readTaskFile(authority, path2) {
   const absolute = join6(authority.task_root, ...path2.split("/"));
   const rel = relative3(authority.task_root, absolute);
   if (rel === ".." || rel.startsWith(`..${sep3}`)) throw new TypeError("maintenance path escaped task root");
-  const handle = await openResolved(absolute, fsConstants5.O_RDONLY);
+  const handle = await openResolved(absolute, fsConstants6.O_RDONLY);
   try {
     return new Uint8Array(await handle.readFile());
   } finally {
@@ -43363,7 +44823,7 @@ function referenceRoot(value, taskId) {
 async function enumerateMaintenanceRoots(dependencies, authority) {
   assertInternalTransactionAuthority(authority, dependencies);
   const stateRead = await readTaskState(authority.state);
-  if (stateRead.kind !== "canonical") return fail8(authority, "enumerate-maintenance-state");
+  if (stateRead.kind !== "canonical") return fail9(authority, "enumerate-maintenance-state");
   const checkpoints = await readManualCheckpoints(dependencies, authority);
   if (!checkpoints.ok) return checkpoints;
   try {
@@ -43383,7 +44843,7 @@ async function enumerateMaintenanceRoots(dependencies, authority) {
         if (root !== void 0) decisionReviewEvidence.push(root);
       }
     }
-    return ok7(Object.freeze({
+    return ok9(Object.freeze({
       inventory_complete: true,
       current_state: stateRead.document.value,
       checkpoints: Object.freeze(checkpoints.value.map((document2) => document2.value)),
@@ -43391,7 +44851,7 @@ async function enumerateMaintenanceRoots(dependencies, authority) {
       decision_review_evidence: Object.freeze(decisionReviewEvidence)
     }));
   } catch {
-    return fail8(authority, "enumerate-maintenance-roots");
+    return fail9(authority, "enumerate-maintenance-roots");
   }
 }
 async function enumerateMaintenanceManifests(dependencies, authority, roots) {
@@ -43408,9 +44868,9 @@ async function enumerateMaintenanceManifests(dependencies, authority, roots) {
       const document2 = parseCanonicalDocument(await readTaskFile(authority, manifestPath.slice(prefix.length)), "result manifest");
       manifests.push({ result_digest: resultDigest, manifest_path: manifestPath, manifest: document2.value });
     }
-    return ok7(Object.freeze(manifests));
+    return ok9(Object.freeze(manifests));
   } catch {
-    return fail8(authority, "enumerate-maintenance-manifests");
+    return fail9(authority, "enumerate-maintenance-manifests");
   }
 }
 async function enumerateMaintenanceCandidates(dependencies, authority, roots) {
@@ -43434,14 +44894,14 @@ async function enumerateMaintenanceCandidates(dependencies, authority, roots) {
       const bytes = await readTaskFile(authority, claim);
       candidates.push({ path: target.value.repositoryRelative, target: target.value, digest: sha256Bytes(bytes), byte_count: bytes.byteLength, category: "superseded-payload" });
     }
-    return ok7(Object.freeze(candidates.sort((a, b) => a.digest.localeCompare(b.digest))));
+    return ok9(Object.freeze(candidates.sort((a, b) => a.digest.localeCompare(b.digest))));
   } catch {
-    return fail8(authority, "enumerate-maintenance-candidates");
+    return fail9(authority, "enumerate-maintenance-candidates");
   }
 }
 
 // src/state/fingerprint-readers.ts
-import { lstat as lstat4, readFile } from "node:fs/promises";
+import { lstat as lstat5, readFile as readFile2 } from "node:fs/promises";
 
 // src/state/fingerprint.ts
 var failure = (state, issueCode) => Object.freeze({
@@ -43468,8 +44928,8 @@ function phaseInstance2(call, context2) {
     }
   }
 }
-function rubricDigest(call) {
-  return call.name === "archflow_counter_review" ? canonicalJsonDigest(call.input.rubric) : canonicalJsonDigest({});
+function rubricDigest(_call) {
+  return canonicalJsonDigest({});
 }
 function createInternalInputFingerprintResolver(input) {
   return async (context2) => {
@@ -43559,6 +45019,11 @@ var CONSTITUTION_DIRECTORY = ".archflow/constitution";
 var RULE_FILE = /^\.archflow\/constitution\/[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
 var decoder3 = new TextDecoder("utf-8", { fatal: true });
 var authenticResolvedConstitutions = /* @__PURE__ */ new WeakSet();
+function assertResolvedConstitution(value) {
+  if (value === null || typeof value !== "object" || !authenticResolvedConstitutions.has(value)) {
+    throw new TypeError("an authentic resolved constitution is required");
+  }
+}
 function immutableRegistry(rules2) {
   const entries = [...rules2].map(([id4, rule4]) => {
     const frozenRule = Object.freeze({
@@ -43583,8 +45048,8 @@ function immutableRegistry(rules2) {
   });
   return registry2;
 }
-var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail9 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok10 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail10 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 async function readConstitutionTreeFiles(runner, commit) {
   const listed = await readCommitTreeEntries(runner, commit, CONSTITUTION_DIRECTORY);
   return Object.freeze(listed.filter((entry) => RULE_FILE.test(entry.path)).map((entry) => Object.freeze({
@@ -43606,7 +45071,7 @@ function invalidPolicyBase(policyBaseCommit, observed) {
 async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
   try {
     const selected = await readConstitutionTreeFiles(runner, policyBaseCommit);
-    if (selected.length === 0) return fail9(invalidPolicyBase(policyBaseCommit));
+    if (selected.length === 0) return fail10(invalidPolicyBase(policyBaseCommit));
     const sources = {};
     for (const file2 of selected) {
       sources[file2.path] = decoder3.decode(await readGitBlobBytes(runner, file2.oid));
@@ -43615,22 +45080,22 @@ async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
     try {
       rules2 = parseConstitutionRuleFiles(sources);
     } catch {
-      return fail9(invalidPolicyBase(policyBaseCommit));
+      return fail10(invalidPolicyBase(policyBaseCommit));
     }
-    if (rules2.size === 0) return fail9(invalidPolicyBase(policyBaseCommit));
+    if (rules2.size === 0) return fail10(invalidPolicyBase(policyBaseCommit));
     const resolved = Object.freeze({
       digest: computePinnedConstitutionDigest(selected),
       rules: immutableRegistry(rules2),
       files: Object.freeze(selected.map((file2) => Object.freeze({ ...file2 })))
     });
     authenticResolvedConstitutions.add(resolved);
-    return ok8(resolved);
+    return ok10(resolved);
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
-      return fail9(projectErrorForGitFailure(error51, runner, context2));
+      return fail10(projectErrorForGitFailure(error51, runner, context2));
     }
     if (error51 instanceof TypeError || error51 instanceof RangeError) {
-      return fail9(invalidPolicyBase(policyBaseCommit));
+      return fail10(invalidPolicyBase(policyBaseCommit));
     }
     throw error51;
   }
@@ -43638,8 +45103,8 @@ async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
 var PINNED_WORKFLOW_PATH = parseRepositoryPathClaim(".archflow/workflow.yaml");
 
 // src/state/fingerprint-readers.ts
-var ok9 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail10 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok11 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail11 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function stateIssue(input, issueCode) {
   return createProjectError("STATE_INVALID", {
     phase_instance: input.state.value.phase_instance,
@@ -43654,7 +45119,7 @@ var readCanonicalWorkflowDigest = async (input) => {
       PINNED_WORKFLOW_PATH
     );
     if (entry === void 0) {
-      return fail10(createProjectError("POLICY_BASE_INVALID", {
+      return fail11(createProjectError("POLICY_BASE_INVALID", {
         expected_digest: input.state.value.workflow_digest
       }));
     }
@@ -43662,10 +45127,10 @@ var readCanonicalWorkflowDigest = async (input) => {
       argv: ["cat-file", "blob", entry.oid],
       operation: "git-workflow-read"
     });
-    return ok9(sha256Bytes(bytes.stdout));
+    return ok11(sha256Bytes(bytes.stdout));
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
-      return fail10(projectErrorForGitFailure(error51, input.runner, input.context));
+      return fail11(projectErrorForGitFailure(error51, input.runner, input.context));
     }
     throw error51;
   }
@@ -43676,28 +45141,16 @@ var readCanonicalConstitutionDigest = async (input) => {
     input.state.value.policy_base_commit,
     input.context
   );
-  return resolved.ok ? ok9(resolved.value.digest) : resolved;
+  return resolved.ok ? ok11(resolved.value.digest) : resolved;
 };
-function artifactPaths(input) {
-  switch (input.call.name) {
-    case "archflow_counter_review":
-    case "archflow_adjudicate":
-      return Object.freeze([input.call.input.artifact_path]);
-    case "archflow_state":
-    case "archflow_gate":
-    case "archflow_waiver":
-      return Object.freeze([]);
-    default: {
-      const exhaustive = input.call;
-      throw new TypeError(`unknown tool ${String(exhaustive.name)}`);
-    }
-  }
+function artifactPaths(_input) {
+  return Object.freeze([]);
 }
-function upstreamPaths(input) {
-  return input.call.name === "archflow_adjudicate" ? Object.freeze([...input.call.input.upstream_paths]) : Object.freeze([]);
+function upstreamPaths(_input) {
+  return Object.freeze([]);
 }
 async function identitiesFor(input, claims, missingIssue) {
-  if (claims.length === 0) return ok9(Object.freeze([]));
+  if (claims.length === 0) return ok11(Object.freeze([]));
   const resolved = [];
   for (const claim of claims) {
     const path2 = await resolveTaskPath({
@@ -43713,14 +45166,14 @@ async function identitiesFor(input, claims, missingIssue) {
   for (const path2 of resolved) {
     let bytes;
     try {
-      const stat4 = await lstat4(path2.absolute);
-      if (!stat4.isFile()) return fail10(stateIssue(input, missingIssue));
-      bytes = new Uint8Array(await readFile(path2.absolute));
+      const stat4 = await lstat5(path2.absolute);
+      if (!stat4.isFile()) return fail11(stateIssue(input, missingIssue));
+      bytes = new Uint8Array(await readFile2(path2.absolute));
     } catch (error51) {
       if (error51.code === "ENOENT") {
-        return fail10(stateIssue(input, missingIssue));
+        return fail11(stateIssue(input, missingIssue));
       }
-      return fail10(createProjectError("IO_ERROR", {
+      return fail11(createProjectError("IO_ERROR", {
         operation: input.context.operation,
         attempt: input.context.attempt
       }));
@@ -43737,18 +45190,18 @@ async function identitiesFor(input, claims, missingIssue) {
     }));
   }
   identities.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
-  return ok9(Object.freeze(identities));
+  return ok11(Object.freeze(identities));
 }
 var readCanonicalArtifactIdentities = async (input) => identitiesFor(input, artifactPaths(input), "fingerprint-artifact-missing");
 var readCanonicalUpstreamIdentities = async (input) => identitiesFor(input, upstreamPaths(input), "fingerprint-upstream-missing");
 var readCanonicalDeclaredInputs = async (input) => {
   const call = input.call;
   if (call.name !== "archflow_state" || call.input.artifact === void 0) {
-    return ok9(Object.freeze([]));
+    return ok11(Object.freeze([]));
   }
   const artifact = call.input.artifact;
   const declared = artifact.artifact_kind === "document" || artifact.artifact_kind === "implementation-output" ? artifact.declared_inputs : [];
-  return ok9(Object.freeze(structuredClone(declared)));
+  return ok11(Object.freeze(structuredClone(declared)));
 };
 function createProductionInputFingerprintResolver() {
   return createInternalInputFingerprintResolver({
@@ -43761,15 +45214,15 @@ function createProductionInputFingerprintResolver() {
 }
 
 // src/state/production.ts
-var ok10 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail11 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok12 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail12 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function context(input, phase4, attempt) {
   return Object.freeze({ task_id: input.task_id, phase_instance: phase4, operation: input.operation, attempt });
 }
 function stateFailure(phase4, issue3) {
-  return fail11(createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code: issue3 }));
+  return fail12(createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code: issue3 }));
 }
-async function resolvePath6(runner, authority, claim, expectedClass) {
+async function resolvePath7(runner, authority, claim, expectedClass) {
   return resolveTaskPath({
     runner,
     taskId: authority.task_id,
@@ -43779,7 +45232,7 @@ async function resolvePath6(runner, authority, claim, expectedClass) {
   });
 }
 async function readRetainedResult(runner, authority, reference) {
-  const manifestTarget = await resolvePath6(
+  const manifestTarget = await resolvePath7(
     runner,
     authority,
     parseTaskPathClaim(reference.manifest_path.replace(`.archflow/tasks/${authority.task_id}/`, "")),
@@ -43800,7 +45253,7 @@ async function readRetainedResult(runner, authority, reference) {
   for (const output of manifest.outputs) {
     if (output.storage !== "raw-payload") continue;
     const taskRelative = `results/sha256/${reference.result_digest}/payload/${output.path}`;
-    const payloadTarget = await resolvePath6(runner, authority, parseTaskPathClaim(taskRelative), "result-payload");
+    const payloadTarget = await resolvePath7(runner, authority, parseTaskPathClaim(taskRelative), "result-payload");
     if (!payloadTarget.ok) return payloadTarget;
     const bytes = await readSnapshotPayload({
       target: payloadTarget.value,
@@ -43887,7 +45340,7 @@ async function readRetainedResult(runner, authority, reference) {
     runner.location.worktreeRoot
   );
   if (!projectionPlan.ok) return projectionPlan;
-  return ok10(Object.freeze({
+  return ok12(Object.freeze({
     prepared: Object.freeze({ manifest: read.value, result_digest: read.value.digest, payloads: Object.freeze(payloads) }),
     manifest_target: manifestTarget.value,
     projection_plan: projectionPlan.value,
@@ -43910,7 +45363,7 @@ async function createProductionServices(input) {
   if (!provisionalAuthority.ok) return provisionalAuthority;
   const observed = await readTaskState(provisionalAuthority.value.state);
   if (observed.kind === "unreadable") {
-    return fail11(createProjectError("IO_ERROR", { operation: input.operation, attempt: provisionalContext.attempt }));
+    return fail12(createProjectError("IO_ERROR", { operation: input.operation, attempt: provisionalContext.attempt }));
   }
   if (observed.kind === "noncanonical") return stateFailure(provisionalPhase, "task-state-noncanonical");
   const resolvedContext = observed.kind === "canonical" ? context(input, observed.document.value.phase_instance, observed.document.value.attempt) : provisionalContext;
@@ -43968,10 +45421,10 @@ async function createProductionServices(input) {
         live_config: liveConfig.snapshot,
         context: authority.context
       });
-      return subject.ok ? ok10(computeInputFingerprint(subject.value)) : subject;
+      return subject.ok ? ok12(computeInputFingerprint(subject.value)) : subject;
     },
     resolve_supplemental_review: async ({ request }) => {
-      const target = await resolvePath6(
+      const target = await resolvePath7(
         discovered.value,
         authority,
         gateSupplementalReviewClaim(request.gate_id),
@@ -43988,7 +45441,7 @@ async function createProductionServices(input) {
         const record3 = parseSupplementalReviewRecord(document2.value);
         const producerFamilies = new Set(request.current_evidence.slots.map((slot) => slot.producer_family));
         if (record3.gate_id !== request.gate_id || record3.request_digest !== request.request_digest || record3.task_id !== request.task_id || record3.phase_instance !== request.phase_instance || record3.kind !== request.kind || record3.subject_digest !== request.subject_digest || record3.context_digest !== request.context_digest || record3.current_evidence_set_digest !== request.current_evidence.set_digest || producerFamilies.size !== 1 || !producerFamilies.has(record3.review.producer_family) || record3.review.model_family === record3.review.producer_family || canonicalJsonDigest(record3.review) !== record3.evidence_digest) return stateFailure(authority.context.phase_instance, "supplemental-review-authority-invalid");
-        return ok10(Object.freeze({
+        return ok12(Object.freeze({
           evidence: record3.review,
           gate_id: record3.gate_id,
           triage_digest: record3.triage_digest,
@@ -44001,7 +45454,7 @@ async function createProductionServices(input) {
       }
     }
   });
-  return ok10(Object.freeze({
+  return ok12(Object.freeze({
     runner: discovered.value,
     environment: environment.value,
     authority,
@@ -44011,278 +45464,431 @@ async function createProductionServices(input) {
 }
 
 // src/state/status.ts
-var ok11 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-async function computeDegradedStatus(dependencies, authority) {
-  assertInternalTransactionAuthority(authority, dependencies);
-  const stateRead = await readTaskState(authority.state);
-  if (stateRead.kind === "unreadable" || stateRead.kind === "noncanonical") {
-    return Object.freeze({
-      schema_version: "1",
-      ok: false,
-      error: createProjectError("STATE_INVALID", {
-        phase_instance: authority.context.phase_instance,
-        issue_code: stateRead.kind === "unreadable" ? "state-unreadable" : "state-noncanonical"
-      })
-    });
+import { readFile as readFile4 } from "node:fs/promises";
+import { join as join9 } from "node:path";
+
+// src/dispatch/routing.ts
+var DispatchRoutingError = class extends Error {
+  constructor(project_error) {
+    super(project_error.code);
+    this.project_error = project_error;
+    this.name = "DispatchRoutingError";
   }
-  const checkpoints = await readManualCheckpoints(dependencies, authority);
-  if (!checkpoints.ok) return checkpoints;
-  const head = checkpoints.value.at(-1)?.value.revision;
-  if (stateRead.kind === "missing") {
-    return ok11(Object.freeze({
-      task_id: authority.task_id,
-      state: "missing",
-      ...head === void 0 ? {} : { checkpoint_head_revision: head },
-      blocking_reasons: Object.freeze(["state-missing"])
-    }));
+  project_error;
+};
+var fail13 = (error51) => {
+  throw new DispatchRoutingError(error51);
+};
+function deriveModelFamily(model) {
+  if (model.startsWith("claude-")) return "claude";
+  if (model.startsWith("gpt-")) return "codex";
+  return fail13(createProjectError("CONFIG_MODEL_UNSUPPORTED", { model }));
+}
+function adapterForFamily(family3) {
+  return family3 === "claude" ? "claude-cli" : "codex-cli";
+}
+var SUPPORTED_EFFORTS = Object.freeze({
+  "claude-cli": /* @__PURE__ */ new Set(["low", "medium", "high", "xhigh", "max"]),
+  // Codex 0.146.0 recognizes every effort in the durable configuration vocabulary.
+  "codex-cli": new Set(EFFORT_VALUES)
+});
+function assertSupportedEffort(adapter2, effort) {
+  if (!SUPPORTED_EFFORTS[adapter2].has(effort)) {
+    fail13(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
   }
-  if (stateRead.kind !== "canonical") throw new TypeError("unreachable state read classification");
-  const state = stateRead.document.value;
-  const blockers = [];
-  if (state.open_gate !== void 0) blockers.push("gate-decision-required");
-  if (head !== void 0 && head > state.revision) blockers.push("checkpoint-import-available");
-  return ok11(Object.freeze({
-    task_id: authority.task_id,
-    state: state.terminal ?? "active",
-    revision: state.revision,
-    phase_instance: state.phase_instance,
-    step: state.step,
-    status: state.status,
-    ...head === void 0 ? {} : { checkpoint_head_revision: head },
-    ...state.open_gate === void 0 ? {} : { open_gate_id: state.open_gate.gate_id },
-    blocking_reasons: Object.freeze(blockers)
-  }));
+}
+function resolveDispatchRoute(config2, phaseKind2, role, producer_family) {
+  const configured = config2.overrides?.[phaseKind2]?.[role] ?? config2.roles[role];
+  if (configured === void 0) {
+    return fail13(createProjectError("CONFIG_INVALID", { issue_code: "route-missing" }));
+  }
+  if (!safeIdV1Schema.safeParse(configured.model).success) {
+    return fail13(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
+  }
+  const family3 = deriveModelFamily(configured.model);
+  const adapter2 = adapterForFamily(family3);
+  assertAdapterFamily(adapter2, family3);
+  assertSupportedEffort(adapter2, configured.effort);
+  if ((role === "counter-reviewer" || role === "adjudicator") && family3 === producer_family) {
+    const expected_family = producer_family === "claude" ? "codex" : "claude";
+    return fail13(createProjectError("FAMILY_MISMATCH", { expected_family, observed_family: family3 }));
+  }
+  return Object.freeze({ adapter: adapter2, family: family3, model: configured.model, effort: configured.effort });
 }
 
-// src/state/reconciliation.ts
-function materialize3(input) {
-  const stateValue = ownData(input.state, "value", "reconciliation state");
-  const stateDigest = ownData(input.state, "digest", "reconciliation state");
-  assertPlainJson(stateValue, "reconciliation state value");
-  assertPlainJson({
-    recorded_projections: input.recorded_projections,
-    current_projections: input.current_projections,
-    active_heads: input.active_heads
-  }, "reconciliation working set");
-  let intent;
-  if (input.intent !== void 0) {
-    assertPlainJson({ request_digest: input.intent.request_digest }, "reconciliation intent");
-    if (input.intent.receipt === void 0) {
-      intent = { request_digest: input.intent.request_digest };
-    } else {
-      const receiptValue = ownData(input.intent.receipt, "value", "reconciliation receipt");
-      const receiptDigest = ownData(input.intent.receipt, "digest", "reconciliation receipt");
-      assertPlainJson(receiptValue, "reconciliation receipt value");
-      intent = {
-        request_digest: input.intent.request_digest,
-        receipt: { bytes: input.intent.receipt.bytes, value: structuredClone(receiptValue), digest: receiptDigest }
-      };
-    }
+// src/local/envelope.ts
+import { readFile as readFile3 } from "node:fs/promises";
+
+// src/state/initialization.ts
+var ok13 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail14 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var contract = (issue_code) => fail14(createProjectError("CONTRACT_INVALID", { issue_code }));
+var io2 = (request, operation) => fail14(createProjectError("IO_ERROR", { operation, attempt: request.authority.context.attempt }));
+function initializationFor(artifact) {
+  if (artifact.artifact_kind === "task-initialization" || artifact.artifact_kind === "legacy-import-initialization") {
+    return artifact;
   }
-  return {
-    state: { bytes: input.state.bytes, value: structuredClone(stateValue), digest: stateDigest },
-    recorded_projections: structuredClone(input.recorded_projections),
-    current_projections: structuredClone(input.current_projections),
-    active_heads: structuredClone(input.active_heads),
-    ...intent === void 0 ? {} : { intent }
+  if (artifact.artifact_kind !== "manual-checkpoint-import" || artifact.import_mode !== "initial") return void 0;
+  const first = artifact.chain[0];
+  return first !== void 0 && "initialization" in first ? first.initialization : void 0;
+}
+async function validateLiveInitialization(dependencies, request, initialization) {
+  const taskRoot = `.archflow/tasks/${request.authority.task_id}`;
+  const expectedPaths = {
+    task_root: taskRoot,
+    config: request.authority.config.repositoryRelative,
+    state: request.authority.state.repositoryRelative,
+    workflow: ".archflow/workflow.yaml",
+    constitution_root: ".archflow/constitution"
   };
-}
-function ownData(value, field, label) {
-  const descriptor = Object.getOwnPropertyDescriptor(value, field);
-  if (descriptor === void 0 || !("value" in descriptor) || !descriptor.enumerable) {
-    throw new TypeError(`${label}.${field} must be an own enumerable data property`);
-  }
-  return descriptor.value;
-}
-function reconcileCurrentAuthority(value) {
-  const input = materialize3(value);
-  const findings = [];
-  const observed = new Map(input.current_projections.map((projection) => [projection.path, projection.content_digest]));
-  for (const recorded of input.recorded_projections) {
-    const digest11 = observed.get(recorded.path);
-    if (digest11 !== recorded.content_digest) {
-      findings.push(Object.freeze({
-        kind: "projection-mismatch",
-        path: recorded.path,
-        recorded_digest: recorded.content_digest,
-        ...digest11 === void 0 ? {} : { observed_digest: digest11 },
-        next_action: "restore-or-record-new-transition"
-      }));
-    }
-  }
-  const receipt = input.intent?.receipt;
-  if (receipt !== void 0) {
-    const isCommitted = input.state.value.committed_intent?.receipt_digest === receipt.digest;
-    let valid = false;
+  if (initialization.canonical_paths.task_root !== expectedPaths.task_root || initialization.canonical_paths.config !== expectedPaths.config || initialization.canonical_paths.state !== expectedPaths.state || initialization.canonical_paths.workflow !== expectedPaths.workflow || initialization.canonical_paths.constitution_root !== expectedPaths.constitution_root) return contract("initialization-canonical-paths-mismatch");
+  const commits = initialization.artifact_kind === "task-initialization" ? [initialization.code_baseline_commit, initialization.policy_base_commit] : [initialization.import_baseline_commit, initialization.code_baseline_commit, initialization.policy_base_commit];
+  for (const oid of new Set(commits)) {
     try {
-      const parsed = parseIntentReceipt(receipt.value);
-      valid = receipt.digest === canonicalJsonDigest(parsed) && receipt.digest === intentReceiptDigest(parsed) && parsed.prepared_state_digest === canonicalJsonDigest(parsed.prepared_state) && parsed.outcome_digest === intentOutcomeDigest(parsed.outcome) && validateDurableSemantics(isCommitted ? createCommittedIntentSubject(input.state, receipt) : createPreparedIntentSubject(input.state, receipt)).ok;
+      const observed = await dependencies.runner.run({
+        argv: ["rev-parse", "--verify", "--quiet", `${oid}^{commit}`],
+        operation: parseSafeCode("validate-initialization-commit"),
+        expectedAbsence: [{ code: 1, stderrIncludes: "" }]
+      });
+      if (observed.absent) return contract("initialization-commit-missing");
+      const resolved = new TextDecoder("utf-8", { fatal: true }).decode(observed.stdout).trim();
+      if (resolved !== oid) return contract("initialization-commit-mismatch");
     } catch {
-      valid = false;
-    }
-    if (!valid) {
-      findings.push(Object.freeze({
-        kind: "receipt-invalid",
-        receipt_digest: receipt.digest,
-        next_action: "inspect-retained-receipt"
-      }));
-    } else if (receipt.value.request_digest !== input.intent.request_digest) {
-      findings.push(Object.freeze({
-        kind: "intent-mismatch",
-        requested_digest: input.intent.request_digest,
-        receipt_request_digest: receipt.value.request_digest,
-        next_action: "create-fresh-intent"
-      }));
-    } else if (!isCommitted) {
-      findings.push(Object.freeze({
-        kind: "receipt-only",
-        request_digest: receipt.value.request_digest,
-        receipt_digest: receipt.digest,
-        next_action: "resume-exact-intent"
-      }));
+      return io2(request, "validate-initialization-commit");
     }
   }
-  const heads = input.active_heads;
-  const state = input.state.value;
-  const gateMatches = heads.gate === void 0 ? state.open_gate === void 0 : state.open_gate?.gate_id === heads.gate.gate_id && state.open_gate.subject_digest === heads.gate.subject_digest && state.open_gate.context_digest === heads.gate.context_digest;
-  if (!gateMatches) {
-    findings.push(Object.freeze({ kind: "active-gate-mismatch", ...heads.gate === void 0 ? {} : { head: heads.gate }, next_action: "resolve-current-authority" }));
+  return ok13(void 0);
+}
+function initialState(call, artifact) {
+  const initialization = initializationFor(artifact);
+  if (initialization === void 0) return contract("initialization-artifact-required");
+  let head;
+  if (artifact.artifact_kind === "manual-checkpoint-import") {
+    if (artifact.import_mode !== "initial") return contract("initialization-import-mode-invalid");
+    const selected = selectGreatestValidChain(chainAnchor(artifact), artifact.chain);
+    if (selected.kind !== "chain" || selected.chain.length !== artifact.chain.length) {
+      return contract(selected.kind === "stop" ? `initialization-chain-${selected.outcome}` : "initialization-chain-not-exact");
+    }
+    head = selected.chain.at(-1);
+    if (head === void 0) return contract("initialization-chain-empty");
+    if (head.phase_instance !== call.input.phase_instance || head.step !== call.input.step || head.status !== call.input.status || head.input_fingerprint !== call.input.input_fingerprint) return contract("initialization-chain-head-request-mismatch");
+    const first = selected.chain[0];
+    if (first === void 0 || !("initialization" in first)) return contract("initialization-chain-head-invalid");
+    let cursor = {
+      schema_version: "1",
+      task_id: initialization.task_id,
+      repository_identity_digest: initialization.repository_identity_digest,
+      revision: 1,
+      phase_instance: first.phase_instance,
+      step: first.step,
+      status: first.status,
+      attempt: first.attempt,
+      input_fingerprint: first.input_fingerprint,
+      initialization_digest: first.initialization_digest,
+      config_digest: initialization.config_digest,
+      workflow_digest: initialization.workflow_digest,
+      constitution_digest: initialization.constitution_digest,
+      policy_base_commit: initialization.policy_base_commit,
+      authoritative_results: structuredClone(first.authoritative_results),
+      approvals: structuredClone(first.approvals),
+      waivers: structuredClone(first.waivers),
+      ...first.open_gate === void 0 ? {} : { open_gate: structuredClone(first.open_gate) },
+      ...first.terminal === void 0 ? {} : { terminal: first.terminal }
+    };
+    for (const checkpoint of selected.chain.slice(1)) {
+      const resultReference = checkpoint.status === "succeeded" ? checkpoint.authoritative_results.find((reference) => reference.phase_instance === checkpoint.phase_instance && reference.step === checkpoint.step && reference.input_fingerprint === checkpoint.input_fingerprint) : void 0;
+      const transition = planStateTransition({
+        current: cursor,
+        target: {
+          phase_instance: checkpoint.phase_instance,
+          step: checkpoint.step,
+          status: checkpoint.status,
+          attempt: checkpoint.attempt,
+          input_fingerprint: checkpoint.input_fingerprint
+        },
+        recomputed_input_fingerprint: checkpoint.input_fingerprint,
+        artifact,
+        ...resultReference === void 0 ? {} : { result_reference: resultReference }
+      });
+      if (!transition.ok) return transition;
+      cursor = { ...transition.value, revision: cursor.revision };
+    }
   }
-  const checkpointMatches = heads.checkpoint === void 0 ? state.adopted_checkpoint === void 0 : state.adopted_checkpoint?.revision === heads.checkpoint.revision && state.adopted_checkpoint.checkpoint_digest === heads.checkpoint.checkpoint_digest;
-  if (!checkpointMatches) {
-    findings.push(Object.freeze({ kind: "adopted-checkpoint-mismatch", ...heads.checkpoint === void 0 ? {} : { head: heads.checkpoint }, next_action: "resolve-current-authority" }));
+  const source = head;
+  const state = {
+    schema_version: "1",
+    task_id: initialization.task_id,
+    repository_identity_digest: initialization.repository_identity_digest,
+    revision: 1,
+    phase_instance: source?.phase_instance ?? call.input.phase_instance,
+    step: source?.step ?? call.input.step,
+    status: source?.status ?? call.input.status,
+    attempt: source?.attempt ?? 1,
+    input_fingerprint: source?.input_fingerprint ?? call.input.input_fingerprint,
+    initialization_digest: canonicalJsonDigest(initialization),
+    config_digest: initialization.config_digest,
+    workflow_digest: initialization.workflow_digest,
+    constitution_digest: initialization.constitution_digest,
+    policy_base_commit: initialization.policy_base_commit,
+    authoritative_results: structuredClone(source?.authoritative_results ?? []),
+    approvals: structuredClone(source?.approvals ?? []),
+    waivers: structuredClone(source?.waivers ?? []),
+    ...source === void 0 ? {} : {
+      adopted_checkpoint: { revision: source.revision, checkpoint_digest: checkpointSelfDigest(source) }
+    },
+    ...source?.open_gate === void 0 ? {} : { open_gate: structuredClone(source.open_gate) },
+    ...source?.terminal === void 0 ? {} : { terminal: source.terminal }
+  };
+  return ok13(state);
+}
+async function identifyStateInitialization(dependencies, request) {
+  assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
+  assertAuthenticParsedToolCall(request.call);
+  const artifactValue = request.call.input.artifact;
+  if (request.call.input.expected_revision !== 0 || artifactValue === void 0) {
+    return contract("revision-zero-initialization-required");
   }
-  return Object.freeze({
-    classification: findings.length === 0 ? "consistent" : "reconciliation-required",
-    findings: Object.freeze(findings)
+  assertPlainJson(artifactValue, "initialization artifact");
+  const artifact = structuredClone(artifactValue);
+  const initialization = initializationFor(artifact);
+  if (initialization === void 0) return contract("initialization-artifact-required");
+  if (initialization.task_id !== request.authority.task_id) return contract("initialization-task-mismatch");
+  const repository = verifyRepositoryIdentity(initialization.repository_identity_digest, request.authority.repository_identity);
+  if (!repository.ok) return repository;
+  const liveInitialization = await validateLiveInitialization(dependencies, request, initialization);
+  if (!liveInitialization.ok) return liveInitialization;
+  const artifactDocument = canonicalDocument(artifact);
+  const artifactSemantics = validateDurableSemantics({ artifact: artifactDocument });
+  if (!artifactSemantics.ok) return artifactSemantics;
+  const stateResult = initialState(request.call, artifact);
+  if (!stateResult.ok) return stateResult;
+  const preparedState = canonicalDocument(stateResult.value);
+  const initializationSemantics = validateDurableSemantics({
+    state: preparedState,
+    artifact: canonicalDocument(initialization)
   });
-}
-
-// src/init/assets.ts
-import { constants } from "node:fs";
-import { access, mkdir as mkdir3, open as open4, readFile as readFile2 } from "node:fs/promises";
-import { dirname as dirname4, join as join7 } from "node:path";
-import { fileURLToPath } from "node:url";
-var ARCHFLOW_GITATTRIBUTES_LINE = ".archflow/** -text merge=binary";
-var ASSETS = Object.freeze([
-  ["workflow.yaml", ".archflow/workflow.yaml"],
-  ["constitution/README.md", ".archflow/constitution/README.md"],
-  ["constitution/00-process.md", ".archflow/constitution/00-process.md"],
-  ["constitution/10-architecture.md", ".archflow/constitution/10-architecture.md"],
-  ["constitution/20-data.md", ".archflow/constitution/20-data.md"],
-  ["constitution/30-product.md", ".archflow/constitution/30-product.md"],
-  ["config.template.yaml", ".archflow/config.yaml"]
-]);
-var ok12 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail12 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-function errno(error51, code) {
-  return error51 instanceof Error && error51.code === code;
-}
-function ioFailure2() {
-  return fail12(createProjectError("IO_ERROR", {
-    operation: "scaffold-repository-assets",
-    attempt: 1
+  if (!initializationSemantics.ok) return initializationSemantics;
+  const config2 = await dependencies.read_config(request.authority.config);
+  if (config2.kind !== "valid") return config2.kind === "invalid" ? contract("task-config-invalid") : io2(request, "task-config-read");
+  if (config2.snapshot.digest !== initialization.config_digest) {
+    return fail14(createProjectError("PINNED_CONFIG_MISMATCH", {
+      expected_digest: initialization.config_digest,
+      observed_digest: config2.snapshot.digest
+    }));
+  }
+  const fingerprint = await dependencies.resolve_input_fingerprint({
+    runner: dependencies.runner,
+    authority: request.authority,
+    state: preparedState,
+    call: request.call,
+    live_config: config2.snapshot,
+    context: request.authority.context
+  });
+  if (!fingerprint.ok) return fingerprint;
+  assertPlainJson(fingerprint.value, "initialization fingerprint subject");
+  const inputFingerprint = computeInputFingerprint(structuredClone(fingerprint.value));
+  const identified = identifyTransactionRequest(request.call, request.authority, inputFingerprint);
+  return ok13(Object.freeze({
+    call: identified.call,
+    input_fingerprint: inputFingerprint,
+    request_digest: identified.request_digest,
+    prepared_state: preparedState
   }));
 }
-async function assetRoot() {
-  const candidates = [
-    fileURLToPath(new URL("../assets/", import.meta.url)),
-    fileURLToPath(new URL("../../assets/", import.meta.url))
-  ];
-  for (const candidate of candidates) {
-    try {
-      await access(join7(candidate, "workflow.yaml"), constants.R_OK);
-      return candidate;
-    } catch (error51) {
-      if (!errno(error51, "ENOENT")) throw error51;
-    }
-  }
-  throw Object.assign(new Error("installed ArchFlow assets are missing"), { code: "ENOENT" });
-}
-async function appendGitAttributes(workingDirectory) {
-  const path2 = join7(workingDirectory, ".gitattributes");
-  let current;
-  try {
-    current = new Uint8Array(await readFile2(path2));
-  } catch (error51) {
-    if (!errno(error51, "ENOENT")) throw error51;
-    const handle2 = await open4(path2, "wx");
-    try {
-      await handle2.writeFile(`${ARCHFLOW_GITATTRIBUTES_LINE}
-`);
-    } finally {
-      await handle2.close();
-    }
-    return true;
-  }
-  const text3 = new TextDecoder("utf-8", { fatal: true }).decode(current);
-  if (text3.split(/\r?\n/u).includes(ARCHFLOW_GITATTRIBUTES_LINE)) return false;
-  const prefix = current.byteLength === 0 || text3.endsWith("\n") ? "" : "\n";
-  const handle = await open4(path2, "a");
-  try {
-    await handle.writeFile(`${prefix}${ARCHFLOW_GITATTRIBUTES_LINE}
-`);
-  } finally {
-    await handle.close();
-  }
-  return true;
-}
-async function scaffoldRepositoryAssets(input) {
-  try {
-    const sourceRoot = await assetRoot();
-    const sources = await Promise.all(ASSETS.map(async ([source, destination]) => Object.freeze({ source: new Uint8Array(await readFile2(join7(sourceRoot, source))), destination })));
-    const created = [];
-    const unchanged = [];
-    for (const asset of sources) {
-      const destination = join7(input.working_directory, asset.destination);
-      try {
-        const existing = new Uint8Array(await readFile2(destination));
-        if (!Buffer.from(existing).equals(Buffer.from(asset.source))) {
-          process.stderr.write(
-            `ArchFlow scaffold differs at ${asset.destination}. Review or delete that file, then re-run archflow-local init.
-`
-          );
-          return fail12(createProjectError("CONFIG_INVALID", { issue_code: "scaffold-diverged" }));
-        }
-        unchanged.push(asset.destination);
-      } catch (error51) {
-        if (!errno(error51, "ENOENT")) throw error51;
-      }
-    }
-    for (const asset of sources) {
-      if (unchanged.includes(asset.destination)) continue;
-      const destination = join7(input.working_directory, asset.destination);
-      await mkdir3(dirname4(destination), { recursive: true });
-      const handle = await open4(destination, "wx");
-      try {
-        await handle.writeFile(asset.source);
-      } finally {
-        await handle.close();
-      }
-      created.push(asset.destination);
-    }
-    const gitattributesUpdated = await appendGitAttributes(input.working_directory);
-    return ok12(Object.freeze({
-      schema_version: "1",
-      created: Object.freeze(created),
-      unchanged: Object.freeze(unchanged),
-      gitattributes_updated: gitattributesUpdated
-    }));
-  } catch {
-    return ioFailure2();
-  }
-}
 
-// src/init/diagnostics.ts
-import { stat as stat3 } from "node:fs/promises";
+// src/local/envelope.ts
+var ok14 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail15 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+function configuredProducerFamily(currentEvidence) {
+  const families = new Set(currentEvidence.slots.map((slot) => slot.producer_family));
+  if (families.size !== 1) throw new TypeError("gate evidence must name one configured producer family");
+  const family3 = families.values().next().value;
+  if (family3 !== "claude" && family3 !== "codex") throw new TypeError("gate evidence producer family is invalid");
+  return family3;
+}
+function renderGateCounterPrompt(input) {
+  assertPlainJson(input, "gate counter-review prompt input");
+  const snapshot = structuredClone(input);
+  const producerFamily = configuredProducerFamily(snapshot.current_evidence);
+  const reviewerFamily = producerFamily === "claude" ? "codex" : "claude";
+  const retryTool = snapshot.tool;
+  const acceptedChangeGuidance = retryTool === "archflow_gate" ? "For accepted-change, do not decide the old gate: revise and rebuild the artifact, take the exact new subject from envelope.artifact_digest, combine it with status.open_gate.supplemental_supersession, and retry the same call with that complete supersede outcome. GATE_SUPERSEDED confirms that the old gate closed without approval; re-enter produce/review/triage/adjudicate to a fixed point and open a fresh gate over the new subject." : "For accepted-change, do not decide or retry the old waiver gate. Revise the bound subject and return to the upstream produce/review/triage/adjudicate workflow; the waiver result contract has no superseded success shape.";
+  const bindings = JSON.stringify({
+    gate_id: snapshot.gate_id,
+    request_digest: snapshot.request_digest,
+    task_id: snapshot.task_id,
+    phase_instance: snapshot.phase_instance,
+    kind: snapshot.kind,
+    subject_digest: snapshot.subject_digest,
+    context_digest: snapshot.context_digest,
+    input_fingerprint: snapshot.input_fingerprint,
+    current_evidence_set_digest: snapshot.current_evidence.set_digest,
+    producer_family: producerFamily,
+    reviewer_family: reviewerFamily
+  }, null, 2);
+  return `Perform an optional independent counter-review of the open ArchFlow gate using the configured ${reviewerFamily} reviewer family.
+
+The review is advisory until the human chooses whether to install it. Do not edit the gate decision or any task artifact. Read .archflow/tasks/${snapshot.task_id}/gate.json and .archflow/tasks/${snapshot.task_id}/decisions/${snapshot.gate_id}/request.json, inspect the subject and current evidence they bind, then create a degraded ReviewEvidence JSON document in gate-counter-review.json with role "gate-counter-review", step "counter_review", producer_family "${producerFamily}", model_family "${reviewerFamily}", assurance "degraded", and these exact bindings:
+
+${bindings}
+
+Write the rubric you actually used to gate-counter-rubric.json and obtain rubric_digest with:
+
+archflow-local hash --task ${snapshot.task_id} < gate-counter-rubric.json
+
+Set model and effort to the values actually used, or "unknown" when unavailable, and include a non-empty reason for degraded assurance. Findings must use stable kebab-case finding_id values; verdict and blocking_count must agree with the findings. Hash and render the review with:
+
+archflow-local hash --task ${snapshot.task_id} < gate-counter-review.json
+archflow-local render --task ${snapshot.task_id} < gate-counter-render-input.json
+
+gate-counter-render-input.json must be {"kind":"review","value":<the complete review object>}. Copy the returned review digest into evidence_digest and the render digest into projection_digest.
+
+Triage every finding into gate-counter-triage.json. Bind task_id, phase_instance, subject_digest, input_fingerprint, and current_evidence_set_digest exactly as above; set source_evidence_digests to [evidence_digest], include one disposition per finding, and make accepted_count/rejected_count exact. Hash it with:
+
+archflow-local hash --task ${snapshot.task_id} < gate-counter-triage.json
+
+Create gate-counter-record.json as SupplementalReviewRecordV1 with schema_version "1", all bindings above, evidence_digest, projection_digest, the complete review, triage_digest, the complete triage, and outcome "no-change" when no finding was accepted or "accepted-change" otherwise. Create gate-counter-validate-input.json as {"kind":"supplemental-review","value":<the complete supplemental record>}. Validate and install it from a second terminal:
+
+archflow-local validate --task ${snapshot.task_id} < gate-counter-validate-input.json
+archflow-local gate-counter --task ${snapshot.task_id} < gate-counter-record.json
+
+Keep the original ${retryTool} input byte-for-byte except for supplemental_outcome, and keep its same intent_id on every retry. If the human declines, select status.open_gate.supplemental_outcomes[action="decline"], create no review or triage, and retry ${retryTool} once with that exact payload.
+
+If the human elects review, install the record above and let the original blocked call return SUPPLEMENTAL_REVIEW_REQUIRED. Re-run status, select its exact ingest payload, and retry the same ${retryTool} input with that supplemental_outcome. Re-run status after ingest. For a retained no-change outcome, select the exact triage-no-change payload and retry the same ${retryTool} call; the gate may then resolve only from the human's separately selected gate.decision. ${acceptedChangeGuidance} Never invent a supplemental review, triage result, subject digest, or human gate decision.`;
+}
+async function archivedWaiverRequest(services2, call) {
+  const target = await resolveTaskPath({
+    runner: services2.runner,
+    taskId: services2.authority.task_id,
+    claim: gateRequestClaim(call.input.origin.origin_gate_id),
+    expectedClass: "decision",
+    context: services2.authority.context
+  });
+  if (!target.ok) return target;
+  try {
+    const document2 = parseCanonicalDocument(
+      new Uint8Array(await readFile3(target.value.absolute)),
+      "waiver origin gate request"
+    );
+    return ok14(parseGateRequest(document2.value));
+  } catch {
+    return fail15(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-request-invalid" }));
+  }
+}
+async function fingerprintFor(services2, call) {
+  if (services2.state === void 0) {
+    if (call.name !== "archflow_state") {
+      const phase4 = call.name === "archflow_waiver" ? call.input.origin.phase_instance : services2.authority.context.phase_instance;
+      return fail15(createProjectError("STATE_MISSING", { phase_instance: phase4 }));
+    }
+    const identified = await identifyStateInitialization(services2.dependencies, {
+      authority: services2.authority,
+      call
+    });
+    return identified.ok ? ok14(identified.value.input_fingerprint) : identified;
+  }
+  if (call.name === "archflow_gate" || call.name === "archflow_waiver") {
+    return ok14(services2.state.value.input_fingerprint);
+  }
+  const config2 = await services2.dependencies.read_config(services2.authority.config);
+  if (config2.kind !== "valid") {
+    return fail15(createProjectError("CONFIG_INVALID", { issue_code: `config-${config2.kind}` }));
+  }
+  if (config2.snapshot.digest !== services2.state.value.config_digest) {
+    return fail15(createProjectError("PINNED_CONFIG_MISMATCH", {
+      expected_digest: services2.state.value.config_digest,
+      observed_digest: config2.snapshot.digest
+    }));
+  }
+  const resolved = await services2.dependencies.resolve_input_fingerprint({
+    runner: services2.runner,
+    authority: services2.authority,
+    state: services2.state,
+    call,
+    live_config: config2.snapshot,
+    context: services2.authority.context
+  });
+  if (!resolved.ok) return resolved;
+  assertPlainJson(resolved.value, "envelope fingerprint subject");
+  return ok14(computeInputFingerprint(structuredClone(resolved.value)));
+}
+async function computeCallEnvelope(services2, value) {
+  assertPlainJson(value, "call envelope input");
+  const snapshot = structuredClone(value);
+  if (snapshot === null || Array.isArray(snapshot) || typeof snapshot !== "object") {
+    throw new TypeError("call envelope input must be an object");
+  }
+  const tool2 = Reflect.get(snapshot, "tool");
+  if (!isToolName(tool2)) throw new TypeError("call envelope tool is invalid");
+  const call = parseToolCall(tool2, Reflect.get(snapshot, "input"));
+  const fingerprint = await fingerprintFor(services2, call);
+  if (!fingerprint.ok) return fingerprint;
+  const identified = identifyTransactionRequest(call, services2.authority, fingerprint.value);
+  const envelope = {
+    tool: tool2,
+    input_fingerprint: fingerprint.value,
+    request_digest: identified.request_digest,
+    ...call.name === "archflow_state" && call.input.artifact !== void 0 ? { artifact_digest: canonicalJsonDigest(call.input.artifact) } : {}
+  };
+  if (call.name !== "archflow_gate" && call.name !== "archflow_waiver") return ok14(Object.freeze(envelope));
+  const gateId = computeGateId({
+    task_identity_digest: services2.authority.task_identity_digest,
+    intent_id: call.input.intent_id,
+    request_digest: identified.request_digest
+  });
+  let phaseInstance3;
+  let kind;
+  let subjectDigest;
+  let contextDigest;
+  let currentEvidence;
+  if (call.name === "archflow_gate") {
+    phaseInstance3 = call.input.phase_instance;
+    kind = call.input.kind;
+    subjectDigest = call.input.subject_digest;
+    contextDigest = computeGateContextDigest(call.input.kind, call.input.context);
+    currentEvidence = call.input.current_evidence;
+  } else {
+    const origin2 = await archivedWaiverRequest(services2, call);
+    if (!origin2.ok) return origin2;
+    const waiverContext2 = { origin: call.input.origin, rationale: call.input.rationale };
+    phaseInstance3 = call.input.origin.phase_instance;
+    kind = call.input.origin.scope.operation;
+    subjectDigest = call.input.origin.subject_digest;
+    contextDigest = computeGateContextDigest("waiver", waiverContext2);
+    currentEvidence = origin2.value.current_evidence;
+  }
+  const promptInput = {
+    tool: call.name,
+    gate_id: gateId,
+    request_digest: identified.request_digest,
+    task_id: services2.authority.task_id,
+    phase_instance: phaseInstance3,
+    kind,
+    subject_digest: subjectDigest,
+    context_digest: contextDigest,
+    input_fingerprint: fingerprint.value,
+    current_evidence: currentEvidence
+  };
+  return ok14(Object.freeze({
+    ...envelope,
+    gate: Object.freeze({
+      gate_id: gateId,
+      decision_path: parseTaskPathClaim("gate.decision"),
+      archive_decision_path: gateDecisionClaim(gateId),
+      request_path: gateRequestClaim(gateId),
+      gate_counter_review_path: gateCounterReviewClaim(phaseInstance3, gateId),
+      counter_review_prompt: renderGateCounterPrompt(promptInput)
+    })
+  }));
+}
 
 // src/dispatch/cli.ts
 import { stat as stat2, writeFile } from "node:fs/promises";
-import { join as join8 } from "node:path";
+import { join as join7 } from "node:path";
 
 // src/dispatch/process.ts
 import { spawn } from "node:child_process";
-import { open as open5, stat } from "node:fs/promises";
+import { open as open4, stat } from "node:fs/promises";
 var DISPATCH_TIMEOUT_MS = 3e5;
 var DISPATCH_OUTPUT_BYTE_CAP = 8 * 1024 * 1024;
 var TERMINATION_GRACE_MS = 250;
@@ -44294,7 +45900,7 @@ var DispatchProcessError = class extends Error {
   }
   project_error;
 };
-var fail13 = (error51) => {
+var fail16 = (error51) => {
   throw new DispatchProcessError(error51);
 };
 function checkedPositiveInteger(value, label) {
@@ -44322,11 +45928,11 @@ function terminateChild(child) {
   return escalation;
 }
 function classifySpawnError(adapter2, error51) {
-  if (error51.code === "ENOENT") return fail13(createProjectError("CLI_MISSING", { adapter: adapter2 }));
+  if (error51.code === "ENOENT") return fail16(createProjectError("CLI_MISSING", { adapter: adapter2 }));
   if (error51.code === "EACCES" || error51.code === "EPERM") {
-    return fail13(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "not-executable" }));
+    return fail16(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "not-executable" }));
   }
-  return fail13(createProjectError("IO_ERROR", { operation: "dispatch-spawn", attempt: 1 }));
+  return fail16(createProjectError("IO_ERROR", { operation: "dispatch-spawn", attempt: 1 }));
 }
 async function readBoundedFinalOutput(adapter2, path2, byteCap) {
   let metadata2;
@@ -44334,21 +45940,21 @@ async function readBoundedFinalOutput(adapter2, path2, byteCap) {
     metadata2 = await stat(path2, { bigint: true });
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
-    return fail13(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
+    return fail16(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
   }
   if (!metadata2.isFile()) {
-    return fail13(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
+    return fail16(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
   }
   if (metadata2.size > BigInt(byteCap)) {
     const byteCount = Number(metadata2.size);
     if (!Number.isSafeInteger(byteCount)) {
-      return fail13(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
+      return fail16(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
     }
-    return fail13(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
+    return fail16(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
   }
   let handle;
   try {
-    handle = await open5(path2, "r");
+    handle = await open4(path2, "r");
     const chunks = [];
     let byteCount = 0;
     while (true) {
@@ -44357,14 +45963,14 @@ async function readBoundedFinalOutput(adapter2, path2, byteCap) {
       if (bytesRead === 0) break;
       byteCount += bytesRead;
       if (byteCount > byteCap) {
-        return fail13(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
+        return fail16(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
       }
       chunks.push(buffer.subarray(0, bytesRead));
     }
     return Buffer.concat(chunks, byteCount);
   } catch (error51) {
     if (error51 instanceof DispatchProcessError) throw error51;
-    return fail13(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
+    return fail16(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
   } finally {
     await handle?.close().catch(() => void 0);
   }
@@ -44374,7 +45980,7 @@ async function runDispatchChild(spec) {
   const byteCap = checkedPositiveInteger(spec.byte_cap ?? DISPATCH_OUTPUT_BYTE_CAP, "dispatch byte cap");
   const cancellationSource = spec.cancellation_source ?? "client";
   if (spec.signal.aborted) {
-    return fail13(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
+    return fail16(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
   }
   const spawnOptions = {
     cwd: spec.cwd,
@@ -44446,20 +46052,20 @@ async function runDispatchChild(spec) {
   spec.signal.removeEventListener("abort", abort);
   if (spawnError !== void 0) return classifySpawnError(spec.adapter, spawnError);
   if (termination === "cancelled") {
-    return fail13(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
+    return fail16(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
   }
   if (termination === "timeout") {
-    return fail13(createProjectError("TIMEOUT", { adapter: spec.adapter, attempt: 1, limit_ms: timeoutMs }));
+    return fail16(createProjectError("TIMEOUT", { adapter: spec.adapter, attempt: 1, limit_ms: timeoutMs }));
   }
   if (termination === "overflow") {
-    return fail13(createProjectError("OUTPUT_OVERFLOW", {
+    return fail16(createProjectError("OUTPUT_OVERFLOW", {
       adapter: spec.adapter,
       byte_count: overflowBytes,
       byte_cap: byteCap
     }));
   }
   if (termination === "io") {
-    return fail13(createProjectError("IO_ERROR", { operation: ioOperation, attempt: 1 }));
+    return fail16(createProjectError("IO_ERROR", { operation: ioOperation, attempt: 1 }));
   }
   const stdout = Buffer.concat(stdoutChunks, stdoutBytes);
   const stderr = Buffer.concat(stderrChunks, stderrBytes);
@@ -44516,7 +46122,7 @@ var CliAdapterError = class extends Error {
   project_error;
   cli_version;
 };
-var fail14 = (error51, cliVersion) => {
+var fail17 = (error51, cliVersion) => {
   throw new CliAdapterError(error51, cliVersion);
 };
 function decodeJson2(bytes, adapter2, issueCode) {
@@ -44527,7 +46133,7 @@ function decodeJson2(bytes, adapter2, issueCode) {
     assertPlainJson(value, "CLI JSON output");
     return value;
   } catch {
-    return fail14(createProjectError("MODEL_OUTPUT_INVALID", {
+    return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
       adapter: adapter2,
       attempt: 1,
       issue_code: issueCode
@@ -44582,7 +46188,7 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
   );
   const version2 = exactVersion(adapter2, versionResult.stdout);
   if (versionResult.exit_code !== 0 || version2 === "unrecognized" || compareVersions(version2, minimumVersion) < 0) {
-    return fail14(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version2 }));
+    return fail17(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version2 }));
   }
   const authResult = await runPreflightCommand(
     adapter2,
@@ -44603,7 +46209,7 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
   } else if (adapter2 === "codex-cli" && authResult.exit_code === 0) {
     loggedIn = /^Logged in(?:\s|$)/u.test(authResult.stdout.toString("utf8").trim());
   }
-  if (!loggedIn) return fail14(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version2);
+  if (!loggedIn) return fail17(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version2);
   const managedPolicyPaths = await existingPaths(policyPaths);
   return Object.freeze({
     cli_version: version2,
@@ -44614,13 +46220,13 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
 function assertRoute(adapter2, route) {
   const expectedFamily = adapter2 === "claude-cli" ? "claude" : "codex";
   if (route.adapter !== adapter2 || route.family !== expectedFamily) {
-    fail14(createProjectError("FAMILY_MISMATCH", {
+    fail17(createProjectError("FAMILY_MISMATCH", {
       expected_family: expectedFamily,
       observed_family: route.family
     }));
   }
   if (!safeIdV1Schema.safeParse(route.model).success) {
-    fail14(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
+    fail17(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }
 }
 function exitClass(result) {
@@ -44704,9 +46310,9 @@ var claudeAdapter = Object.freeze({
     assertPlainJson(outputSchema, "CLI output schema");
     const schema = structuredClone(outputSchema);
     if (route.effort === "ultra") {
-      return fail14(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
+      return fail17(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
-    const mcpConfigPath = join8(workspace.root, "empty-mcp.json");
+    const mcpConfigPath = join7(workspace.root, "empty-mcp.json");
     await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
     return Object.freeze({
       adapter: "claude-cli",
@@ -44740,7 +46346,7 @@ var claudeAdapter = Object.freeze({
   parseOutput(result) {
     const wrapper = decodeJson2(result.stdout, "claude-cli", "claude-wrapper-invalid");
     if (wrapper === null || typeof wrapper !== "object" || Array.isArray(wrapper)) {
-      return fail14(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "claude-cli",
         attempt: 1,
         issue_code: "structured-output-missing"
@@ -44748,7 +46354,7 @@ var claudeAdapter = Object.freeze({
     }
     const descriptor = Object.getOwnPropertyDescriptor(wrapper, "structured_output");
     if (descriptor === void 0 || descriptor.enumerable !== true || !("value" in descriptor)) {
-      return fail14(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "claude-cli",
         attempt: 1,
         issue_code: "structured-output-missing"
@@ -44758,7 +46364,7 @@ var claudeAdapter = Object.freeze({
       assertPlainJson(descriptor.value, "Claude structured output");
       return canonicalJsonBytes(descriptor.value);
     } catch {
-      return fail14(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "claude-cli",
         attempt: 1,
         issue_code: "structured-output-invalid"
@@ -44788,8 +46394,8 @@ var codexAdapter = Object.freeze({
     assertRoute("codex-cli", route);
     assertPlainJson(outputSchema, "CLI output schema");
     const schema = structuredClone(outputSchema);
-    const schemaPath = join8(workspace.root, `${envelope.result_kind}.schema.json`);
-    const outputPath = join8(workspace.root, "final-output.json");
+    const schemaPath = join7(workspace.root, `${envelope.result_kind}.schema.json`);
+    const outputPath = join7(workspace.root, "final-output.json");
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}
 `, { encoding: "utf8", mode: 384 });
     const disabled = CODEX_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]);
@@ -44830,7 +46436,7 @@ var codexAdapter = Object.freeze({
   },
   parseOutput(result) {
     if (result.final_output === void 0) {
-      return fail14(createProjectError("MODEL_OUTPUT_INVALID", {
+      return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "codex-cli",
         attempt: 1,
         issue_code: "final-output-missing"
@@ -44847,10 +46453,1583 @@ function preflightAdapter(adapterId, workspace) {
   return adapterId === "claude-cli" ? claudeAdapter.preflight(workspace) : codexAdapter.preflight(workspace);
 }
 
+// src/review/envelopes.ts
+var utf82 = new TextEncoder();
+
+// src/state/evidence-results.ts
+init_trust_brands();
+init_renderers();
+var ok15 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+function expectedSourceKind(step) {
+  if (step === "self_review" || step === "counter_review") return "review-evidence";
+  if (step === "triage") return "triage";
+  if (step === "adjudicate") return "adjudication-evidence";
+  return void 0;
+}
+function validateLoadedEvidence(reference, loaded) {
+  const document2 = canonicalDocument(parseResultManifest(loaded.prepared.manifest.value));
+  if (document2.digest !== loaded.prepared.manifest.digest || !Buffer.from(document2.bytes).equals(Buffer.from(loaded.prepared.manifest.bytes)) || loaded.prepared.result_digest !== document2.digest || reference.result_digest !== document2.digest || reference.manifest_path !== loaded.manifest_target.repositoryRelative || loaded.manifest_target.path_class !== "result-manifest") {
+    throw new TypeError("loaded evidence result identity disagrees");
+  }
+  const manifest = document2.value;
+  const expectedKind = expectedSourceKind(reference.step);
+  if (expectedKind === void 0 || manifest.source_artifact.artifact_kind !== expectedKind || manifest.result_id !== reference.result_id || manifest.phase_instance !== reference.phase_instance || manifest.step !== reference.step || manifest.input_fingerprint !== reference.input_fingerprint) {
+    throw new TypeError("loaded evidence result correlation disagrees");
+  }
+  if (manifest.source_artifact.artifact_kind === "review-evidence" && (reference.step === "self_review" && manifest.source_artifact.evidence.role !== "self-review" || reference.step === "counter_review" && manifest.source_artifact.evidence.role !== "counter-review")) {
+    throw new TypeError("loaded review evidence role disagrees with its step");
+  }
+  if (!validateDurableSemantics({ result_manifest: document2 }).ok) {
+    throw new TypeError("loaded evidence manifest semantics are invalid");
+  }
+  return manifest;
+}
+async function loadRetainedEvidence(dependencies, state, phase_instance) {
+  if (dependencies.load_retained_result === void 0) {
+    throw new TypeError("retained evidence loading is unavailable");
+  }
+  const retained = /* @__PURE__ */ new Map();
+  for (const reference of state.authoritative_results) {
+    if (reference.phase_instance !== phase_instance || expectedSourceKind(reference.step) === void 0) {
+      continue;
+    }
+    if (retained.has(reference.step)) {
+      throw new TypeError("phase has duplicate retained evidence for one step");
+    }
+    const loaded = await dependencies.load_retained_result(reference);
+    if (!loaded.ok) return loaded;
+    const manifest = validateLoadedEvidence(reference, loaded.value);
+    retained.set(reference.step, Object.freeze({
+      reference: structuredClone(reference),
+      manifest
+    }));
+  }
+  return ok15(retained);
+}
+function deriveCurrentEvidenceSet(retained) {
+  const selfEntry = retained.get("self_review");
+  const counterEntry = retained.get("counter_review");
+  if (selfEntry === void 0 || counterEntry === void 0) {
+    throw new TypeError("current review reconstruction requires self and counter evidence");
+  }
+  const selfSource = selfEntry.manifest.source_artifact;
+  const counterSource = counterEntry.manifest.source_artifact;
+  if (selfSource.artifact_kind !== "review-evidence" || counterSource.artifact_kind !== "review-evidence") {
+    throw new TypeError("current review manifests have the wrong source kind");
+  }
+  const self2 = selfSource.evidence;
+  const counter = counterSource.evidence;
+  if (self2.role !== "self-review" || self2.assurance !== "agent-declared" || self2.model_family !== self2.producer_family || counter.role !== "counter-review" || counter.assurance !== "server-attested" && counter.assurance !== "degraded" || counter.model_family === counter.producer_family || self2.task_id !== counter.task_id || self2.phase_instance !== counter.phase_instance || self2.subject_digest !== counter.subject_digest || self2.input_fingerprint !== counter.input_fingerprint || self2.rubric_digest !== counter.rubric_digest || self2.producer_family !== counter.producer_family) {
+    throw new TypeError("retained reviews do not form one current review set");
+  }
+  const verifiedSelf = createVerifiedEvidenceReference(self2);
+  const verifiedCounter = createVerifiedEvidenceReference(counter);
+  if (verifiedSelf.evidence_digest !== selfEntry.manifest.artifact_digest || verifiedCounter.evidence_digest !== counterEntry.manifest.artifact_digest) {
+    throw new TypeError("retained review evidence digest does not match its manifest");
+  }
+  const slots = parseRequiredReviewSlots([{
+    role: "self-review",
+    evidence_digest: verifiedSelf.evidence_digest,
+    assurance: "agent-declared",
+    producer_family: self2.producer_family,
+    reviewer_family: self2.model_family,
+    independence: "same-family-self"
+  }, {
+    role: "counter-review",
+    evidence_digest: verifiedCounter.evidence_digest,
+    assurance: counter.assurance,
+    producer_family: counter.producer_family,
+    reviewer_family: counter.model_family,
+    independence: "opposite-family"
+  }]);
+  return Object.freeze({
+    task_id: self2.task_id,
+    phase_instance: self2.phase_instance,
+    subject_digest: self2.subject_digest,
+    input_fingerprint: self2.input_fingerprint,
+    current_evidence_set: currentEvidenceSetRef(slots),
+    reviews: Object.freeze([
+      verifiedSelf,
+      verifiedCounter
+    ])
+  });
+}
+
+// src/review/fixed-point.ts
+var DEFAULT_MAX_ATTEMPTS = 3;
+var EVIDENCE_STEPS = Object.freeze([
+  "self_review",
+  "counter_review",
+  "triage",
+  "adjudicate"
+]);
+function evidencePayload(manifest) {
+  const source = manifest.source_artifact;
+  if (source.artifact_kind === "review-evidence" || source.artifact_kind === "triage" || source.artifact_kind === "adjudication-evidence") return source.evidence;
+  return void 0;
+}
+function subjectCurrent(evidence, subject) {
+  return evidence !== void 0 && evidence.subject_digest === subject.subject_digest && evidence.input_fingerprint === subject.input_fingerprint;
+}
+function currentReviewSet(retained, subject) {
+  try {
+    const derived = deriveCurrentEvidenceSet(retained);
+    return derived.subject_digest === subject.subject_digest && derived.input_fingerprint === subject.input_fingerprint ? derived : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function currentFor(retained, step, subject, reviews, currentTriage) {
+  if (step === "self_review" || step === "counter_review") return reviews !== void 0;
+  const entry = retained.get(step);
+  const evidence = entry === void 0 ? void 0 : evidencePayload(entry.manifest);
+  if (!subjectCurrent(evidence, subject) || reviews === void 0) return false;
+  if (step === "triage") {
+    const triage = evidence;
+    return triage.current_evidence_set_digest === reviews.current_evidence_set.set_digest && triage.source_evidence_digests.length === reviews.current_evidence_set.slots.length && triage.source_evidence_digests.every((digest11, index) => digest11 === reviews.current_evidence_set.slots[index].evidence_digest);
+  }
+  if (step === "adjudicate") {
+    const adjudication = evidence;
+    return currentTriage !== void 0 && adjudication.source_evidence_set_digest === reviews.current_evidence_set.set_digest && adjudication.approved_upstream_digests.length === (subject.approved_upstream_digests ?? []).length && adjudication.approved_upstream_digests.every((digest11, index) => digest11 === (subject.approved_upstream_digests ?? [])[index]);
+  }
+  return false;
+}
+function triageAt(retained) {
+  const source = retained.get("triage")?.manifest.source_artifact;
+  return source?.artifact_kind === "triage" ? source.evidence : void 0;
+}
+function adjudicationAt(retained) {
+  const source = retained.get("adjudicate")?.manifest.source_artifact;
+  return source?.artifact_kind === "adjudication-evidence" ? source.evidence : void 0;
+}
+function adjudicationGateSatisfied(state, retained, subject, gate) {
+  const contextDigest = computeGateContextDigest(gate.kind, gate.context);
+  const selfDigest = retained.get("self_review")?.manifest.artifact_digest;
+  const counterDigest = retained.get("counter_review")?.manifest.artifact_digest;
+  const triage = triageAt(retained);
+  const adjudication = adjudicationAt(retained);
+  for (const authenticated of subject.authenticated_gate_approvals ?? []) {
+    assertAuthenticatedGateApproval(authenticated);
+    const { approval, request, decision: decision2 } = authenticated;
+    if (approval.gate_kind !== gate.kind || approval.subject_digest !== gate.subject_digest || request.kind !== gate.kind || request.subject_digest !== gate.subject_digest || request.context_digest !== contextDigest || request.phase_instance !== state.phase_instance || decision2.context_digest !== contextDigest || decision2.envelope.context_digest !== contextDigest || selfDigest === void 0 || counterDigest === void 0 || triage === void 0 || adjudication === void 0 || triage.subject_digest !== subject.subject_digest || triage.input_fingerprint !== subject.input_fingerprint || adjudication.subject_digest !== subject.subject_digest || adjudication.input_fingerprint !== subject.input_fingerprint || adjudication.source_evidence_set_digest !== request.current_evidence.set_digest || request.current_evidence.set_digest !== triage.current_evidence_set_digest || request.current_evidence.slots[0].evidence_digest !== selfDigest || request.current_evidence.slots[1].evidence_digest !== counterDigest) continue;
+    return true;
+  }
+  if (gate.kind !== "review-trigger" && gate.kind !== "adjudication-failure" || !("eligible_waiver_rules" in gate.context) || !("waiver_scope" in gate.context)) return false;
+  const required2 = gate.context.eligible_waiver_rules;
+  const scope3 = gate.context.waiver_scope;
+  return required2.length > 0 && required2.every((rule4) => waiverInForce(
+    state,
+    rule4,
+    gate.subject_digest,
+    scope3
+  ) !== void 0);
+}
+function adjudicationGatePending(state, gate) {
+  const open7 = state.open_gate;
+  return open7 !== void 0 && open7.gate_kind === gate.kind && open7.subject_digest === gate.subject_digest && open7.context_digest === computeGateContextDigest(gate.kind, gate.context);
+}
+function dispositionState(retained, reviews, triage) {
+  const self2 = reviews?.reviews[0]?.evidence;
+  const counter = reviews?.reviews[1]?.evidence;
+  if (reviews === void 0 || self2 === void 0 || counter === void 0 || triage === void 0) {
+    return Object.freeze({ complete: false, blocker: false, accepted: false });
+  }
+  const reviewSet = reviews;
+  const expected = /* @__PURE__ */ new Map();
+  for (const review of [self2, counter]) {
+    for (const finding of review.findings) {
+      const digest11 = review === self2 ? reviewSet.current_evidence_set.slots[0].evidence_digest : reviewSet.current_evidence_set.slots[1].evidence_digest;
+      expected.set(`${digest11}:${finding.finding_id}`, finding.blocking);
+    }
+  }
+  const actual = new Map(triage.dispositions.map((item) => [
+    `${item.review_evidence_digest}:${item.finding_id}`,
+    item.disposition
+  ]));
+  const complete = actual.size === expected.size && [...expected.keys()].every((key) => actual.has(key));
+  const blocker = [...expected].some(([key, blocking]) => blocking && actual.get(key) !== "rejected");
+  return Object.freeze({
+    complete,
+    blocker,
+    accepted: triage.accepted_count > 0
+  });
+}
+function assessCurrentEvidence(state, retained, subject) {
+  assertResolvedConstitution(subject.constitution);
+  if (subject.constitution.digest !== state.constitution_digest) {
+    throw new TypeError("fixed-point constitution does not match durable state");
+  }
+  const retainedAdjudication = adjudicationAt(retained);
+  if (retainedAdjudication !== void 0 && retainedAdjudication.pinned_constitution_digest !== subject.constitution.digest) {
+    throw new TypeError("retained adjudication does not match the pinned constitution");
+  }
+  const maximum = subject.max_attempts ?? DEFAULT_MAX_ATTEMPTS;
+  if (!Number.isSafeInteger(maximum) || maximum < 1) {
+    throw new TypeError("max_attempts must be a positive safe integer");
+  }
+  const reviews = currentReviewSet(retained, subject);
+  const candidateTriage = triageAt(retained);
+  const triageCurrent = currentFor(
+    retained,
+    "triage",
+    subject,
+    reviews,
+    void 0
+  ) ? candidateTriage : void 0;
+  const current = EVIDENCE_STEPS.filter((step) => currentFor(retained, step, subject, reviews, triageCurrent));
+  const stale = EVIDENCE_STEPS.filter((step) => retained.has(step) && !current.includes(step));
+  const disposition = dispositionState(retained, reviews, triageCurrent);
+  let next;
+  let reentry = false;
+  let gatePending = false;
+  const acceptedReentry = disposition.accepted && state.step === "triage" && state.status === "succeeded";
+  const staleAdjudicationReentry = retained.has("adjudicate") && !current.includes("adjudicate") && state.step === "adjudicate" && state.status === "succeeded";
+  if (acceptedReentry || staleAdjudicationReentry) {
+    reentry = true;
+    next = "produce";
+  } else if (!current.includes("self_review")) next = "self_review";
+  else if (!current.includes("counter_review")) next = "counter_review";
+  else if (!current.includes("triage") || !disposition.complete) next = "triage";
+  else if (disposition.accepted) {
+    next = "triage";
+  } else if (!current.includes("adjudicate")) {
+    next = "adjudicate";
+  } else {
+    const adjudication = adjudicationAt(retained);
+    const gates = adjudication === void 0 ? [] : selectAdjudicationGates(subject.constitution.rules, adjudication);
+    const gate = gates.find((candidate) => !adjudicationGateSatisfied(state, retained, subject, candidate));
+    if (gate === void 0) {
+      next = "advance";
+    } else {
+      gatePending = adjudicationGatePending(state, gate);
+      next = "adjudication-gate";
+    }
+  }
+  const exhausted = reentry && state.attempt >= maximum;
+  return Object.freeze({
+    current: Object.freeze([...current]),
+    stale: Object.freeze([...stale]),
+    every_finding_dispositioned: disposition.complete,
+    blocker_remains: disposition.blocker,
+    reentry_required: reentry,
+    exhausted,
+    adjudication_gate_pending: gatePending,
+    next: exhausted ? "attempts-exhausted" : next
+  });
+}
+function waiverInForce(state, rule4, subjectDigest, scope3) {
+  if (state.terminal !== void 0) return void 0;
+  return state.waivers.find((waiver) => waiver.granted && waiver.expires === "task-complete" && waiver.rule_id === rule4.rule_id && waiver.rule_version === rule4.rule_version && waiver.subject_digest === subjectDigest && waiver.scope.operation === scope3.operation && waiver.scope.boundary === scope3.boundary);
+}
+
+// src/review/adjudication.ts
+init_trust_brands();
+function refs(rules2) {
+  return canonicalRefs(rules2.map((rule4) => Object.freeze({ rule_id: rule4.id, rule_version: rule4.version })));
+}
+function canonicalRefs(rules2) {
+  return Object.freeze([...rules2].sort((left, right) => left.rule_id.localeCompare(right.rule_id) || left.rule_version - right.rule_version));
+}
+function selectAdjudicationGates(registry2, evidence) {
+  const gates = [];
+  if (evidence.constitution === "fail" || evidence.constitution === "uncertain") {
+    const failed = evidence.rule_findings.filter((item) => item.compliance === "fail");
+    const uncertain = evidence.rule_findings.filter((item) => item.compliance === "uncertain");
+    gates.push(Object.freeze({
+      kind: "adjudication-failure",
+      subject_digest: evidence.subject_digest,
+      context: Object.freeze({
+        constitution: evidence.constitution,
+        failed_rules: refs(failed.map((item) => registry2.get(item.rule_id))),
+        uncertain_rules: refs(uncertain.map((item) => registry2.get(item.rule_id))),
+        eligible_waiver_rules: refs([...failed, ...uncertain].map((item) => registry2.get(item.rule_id))),
+        waiver_scope: Object.freeze({
+          operation: "adjudication-failure",
+          boundary: "subject"
+        })
+      })
+    }));
+  }
+  const material = evidence.drift_findings.find((item) => item.drift === "material");
+  if (material !== void 0) {
+    gates.push(Object.freeze({
+      kind: "material-drift",
+      subject_digest: evidence.subject_digest,
+      context: Object.freeze({
+        affected_upstream: Object.freeze({
+          kind: "implementation-result",
+          digest: material.upstream_digest
+        }),
+        drift: "material",
+        affected_claim_ids: Object.freeze([...material.affected_claim_ids].sort())
+      })
+    }));
+  }
+  if (evidence.matched_rule_versions.length > 0 || evidence.uncertain_rule_versions.length > 0) {
+    gates.push(Object.freeze({
+      kind: "review-trigger",
+      subject_digest: evidence.subject_digest,
+      context: Object.freeze({
+        matched_rules: evidence.matched_rule_versions,
+        uncertain_rules: evidence.uncertain_rule_versions,
+        eligible_waiver_rules: canonicalRefs([
+          ...evidence.matched_rule_versions,
+          ...evidence.uncertain_rule_versions
+        ]),
+        waiver_scope: Object.freeze({
+          operation: "review-trigger",
+          boundary: "subject"
+        })
+      })
+    }));
+  }
+  return Object.freeze(gates);
+}
+
+// src/state/next-action.ts
+function action(code, detail, humanRequired, state, extra = {}) {
+  if (state === void 0) return Object.freeze({ code, detail, human_required: humanRequired, ...extra });
+  const kind = decodePhaseInstance(state.phase_instance).kind;
+  const skill = WORKFLOW_V1.phases.find((phase4) => phase4.id === kind)?.skill;
+  return Object.freeze({
+    code,
+    detail,
+    human_required: humanRequired,
+    phase_instance: state.phase_instance,
+    ...skill === void 0 ? {} : { skill },
+    ...extra
+  });
+}
+function matchingApproval(input, kind) {
+  return input.subject_digest !== void 0 && (input.authenticated_approvals ?? []).some((approval) => approval.gate_kind === kind && approval.subject_digest === input.subject_digest);
+}
+function advanceAction(input, state) {
+  const phase4 = decodePhaseInstance(state.phase_instance);
+  const requiredKind = phase4.kind === "prd" || phase4.kind === "design" || phase4.kind === "phase-design" ? "artifact-approval" : phase4.kind === "phase-impl" ? "commit-authorization" : void 0;
+  if (requiredKind !== void 0 && !matchingApproval(input, requiredKind)) {
+    return action("open-gate", `Open the required ${requiredKind} gate.`, true, state, {
+      gate_kind: requiredKind
+    });
+  }
+  if (phase4.kind === "phase-impl" && input.commit_observed !== true) {
+    return action(
+      "commit-phase",
+      "Stage the authorized phase outputs, show and confirm the commit, then commit them to the approved current target ref.",
+      true,
+      state
+    );
+  }
+  if (phase4.kind === "phase-impl" && state.planned_final_phase !== void 0 && Number(phase4.phase) === Number(state.planned_final_phase)) {
+    return action("complete-task", "Record that the final planned implementation phase is committed.", false, state);
+  }
+  return action("advance-phase", "Advance to the next phase in the fixed workflow.", false, state);
+}
+function deriveNextAction(input) {
+  const state = input.state;
+  if (state === void 0) {
+    return input.repository_initialized ? action("create-task", "Create durable state for this task.", false) : action("initialize-repository", "Initialize ArchFlow in this repository.", false);
+  }
+  if (input.config_verified !== true) {
+    return action("restore-pinned-config", "Restore the task's digest-pinned configuration before continuing.", true, state);
+  }
+  const finding = input.reconciliation_findings?.[0];
+  if (finding !== void 0) {
+    return action(finding.next_action, `Resolve reconciliation finding ${finding.kind}.`, true, state);
+  }
+  const discoveryBlocker = input.reconciliation_blocking_reasons?.[0];
+  if (discoveryBlocker !== void 0) {
+    return discoveryBlocker === "retained-receipt-ambiguity" ? action("inspect-retained-receipt", "Inspect the ambiguous retained successor receipts.", true, state) : action("inspect-state", `Inspect reconciliation discovery blocker ${discoveryBlocker}.`, true, state);
+  }
+  if (state.terminal !== void 0) {
+    return action(
+      "task-complete",
+      state.terminal === "complete" ? "The final planned implementation phase is committed." : `Task is terminal: ${state.terminal}.`,
+      false,
+      state
+    );
+  }
+  if (state.open_gate !== void 0) {
+    return input.untriaged_supplemental_review === true ? action("triage-supplemental-review", "Triage the retained supplemental gate review.", true, state, {
+      gate_id: state.open_gate.gate_id,
+      gate_kind: state.open_gate.gate_kind
+    }) : action("resolve-open-gate", "Resolve the currently open human gate.", true, state, {
+      gate_id: state.open_gate.gate_id,
+      gate_kind: state.open_gate.gate_kind
+    });
+  }
+  if ((input.checkpoint_head_revision ?? state.revision) > state.revision) {
+    return action("import-manual-checkpoints", "Import the available manual checkpoint chain.", true, state);
+  }
+  const currentProduce = state.authoritative_results.some((reference) => reference.phase_instance === state.phase_instance && reference.step === "produce");
+  if (!currentProduce) {
+    return action("run-step", "Run the produce pipeline step.", false, state, { step: "produce" });
+  }
+  const next = input.assessment?.next;
+  if (next !== void 0) {
+    if (next === "advance") return advanceAction(input, state);
+    if (next === "attempts-exhausted") {
+      return action("open-gate", "Open the attempts-exhausted gate.", true, state, { gate_kind: "attempts-exhausted" });
+    }
+    if (next === "adjudication-gate") {
+      return input.adjudication_gate_kind === void 0 ? action("inspect-state", "Inspect the unresolved adjudication gate obligation.", true, state) : action("open-gate", `Open the required ${input.adjudication_gate_kind} gate.`, true, state, {
+        gate_kind: input.adjudication_gate_kind
+      });
+    }
+    return action("run-step", `Run the ${next} pipeline step.`, false, state, { step: next });
+  }
+  return input.evidence_available === false ? action("inspect-state", "Inspect why current evidence is unavailable.", true, state) : action("run-step", `Continue the ${state.step} pipeline step.`, false, state, { step: state.step });
+}
+
+// src/state/produce-subject.ts
+function expectedProduceUpstreamBindings(state) {
+  const phase4 = decodePhaseInstance(state.phase_instance);
+  if (phase4.kind === "prd") return Object.freeze([]);
+  if (phase4.kind === "design") return Object.freeze([
+    Object.freeze({ phase_instance: encodePhaseInstance({ kind: "prd" }), path: parseTaskPathClaim("prd.md"), artifact_kind: "prd" })
+  ]);
+  if (phase4.kind === "phase-design") return Object.freeze([
+    Object.freeze({ phase_instance: encodePhaseInstance({ kind: "design" }), path: parseTaskPathClaim("design.md"), artifact_kind: "design" }),
+    Object.freeze({ phase_instance: encodePhaseInstance({ kind: "prd" }), path: parseTaskPathClaim("prd.md"), artifact_kind: "prd" })
+  ]);
+  return Object.freeze([
+    Object.freeze({
+      phase_instance: encodePhaseInstance({ kind: "phase-design", phase: phase4.phase }),
+      path: parseTaskPathClaim(`phases/${String(phase4.phase)}/design.md`),
+      artifact_kind: "phase-design"
+    }),
+    Object.freeze({ phase_instance: encodePhaseInstance({ kind: "design" }), path: parseTaskPathClaim("design.md"), artifact_kind: "design" })
+  ]);
+}
+async function loadProduceUpstreamSubject(dependencies, state, binding) {
+  const reference = [...state.authoritative_results].reverse().find((candidate) => candidate.phase_instance === binding.phase_instance && candidate.step === "produce");
+  if (reference === void 0 || dependencies.load_retained_result === void 0) {
+    return fail18(state.phase_instance, "current-upstream-produce-result-missing");
+  }
+  const retained = await dependencies.load_retained_result(reference);
+  if (!retained.ok) return retained;
+  const manifest = retained.value.prepared.manifest.value;
+  const artifact = manifest.source_artifact;
+  if (artifact.artifact_kind !== "document" || artifact.document_path !== binding.path) {
+    return fail18(state.phase_instance, "current-upstream-produce-artifact-invalid");
+  }
+  if (canonicalJsonDigest(artifact) !== manifest.artifact_digest) {
+    return fail18(state.phase_instance, "current-upstream-produce-artifact-digest-mismatch");
+  }
+  return Object.freeze({
+    schema_version: "1",
+    ok: true,
+    value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, retained: retained.value })
+  });
+}
+var fail18 = (phase4, issue_code) => Object.freeze({
+  schema_version: "1",
+  ok: false,
+  error: createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code })
+});
+async function loadCurrentProduceSubject(dependencies, state) {
+  const reference = state.authoritative_results.find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "produce");
+  if (reference === void 0 || dependencies.load_retained_result === void 0) {
+    return fail18(state.phase_instance, "current-produce-result-missing");
+  }
+  const retained = await dependencies.load_retained_result(reference);
+  if (!retained.ok) return retained;
+  const manifest = retained.value.prepared.manifest.value;
+  const artifact = manifest.source_artifact;
+  if (artifact.artifact_kind !== "document" && artifact.artifact_kind !== "implementation-output") {
+    return fail18(state.phase_instance, "current-produce-artifact-invalid");
+  }
+  if (canonicalJsonDigest(artifact) !== manifest.artifact_digest) {
+    return fail18(state.phase_instance, "current-produce-artifact-digest-mismatch");
+  }
+  return Object.freeze({
+    schema_version: "1",
+    ok: true,
+    value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, retained: retained.value })
+  });
+}
+
+// src/state/reconciliation-discovery.ts
+import { constants as fsConstants7 } from "node:fs";
+import { lstat as lstat6, readdir as readdir4, readlink as readlink3 } from "node:fs/promises";
+import { join as join8 } from "node:path";
+
+// src/state/reconciliation.ts
+function activeGateHead(active, request) {
+  if (active.gate_id !== request.gate_id || active.task_id !== request.task_id || active.phase_instance !== request.phase_instance || active.kind !== request.kind || active.subject_digest !== request.subject_digest || active.context_digest !== request.context_digest) throw new TypeError("active gate projection does not bind its archived request");
+  return Object.freeze({
+    gate_id: parsePathSafeId(request.gate_id),
+    subject_digest: request.subject_digest,
+    context_digest: request.context_digest
+  });
+}
+function materialize3(input) {
+  const stateValue = ownData(input.state, "value", "reconciliation state");
+  const stateDigest = ownData(input.state, "digest", "reconciliation state");
+  assertPlainJson(stateValue, "reconciliation state value");
+  assertPlainJson({
+    recorded_projections: input.recorded_projections,
+    current_projections: input.current_projections,
+    active_heads: input.active_heads,
+    ...input.blocking_reasons === void 0 ? {} : { blocking_reasons: input.blocking_reasons }
+  }, "reconciliation working set");
+  let intent;
+  if (input.intent !== void 0) {
+    assertPlainJson({ request_digest: input.intent.request_digest }, "reconciliation intent");
+    if (input.intent.receipt === void 0) {
+      intent = { request_digest: input.intent.request_digest };
+    } else {
+      const receiptValue = ownData(input.intent.receipt, "value", "reconciliation receipt");
+      const receiptDigest = ownData(input.intent.receipt, "digest", "reconciliation receipt");
+      assertPlainJson(receiptValue, "reconciliation receipt value");
+      intent = {
+        request_digest: input.intent.request_digest,
+        receipt: { bytes: input.intent.receipt.bytes, value: structuredClone(receiptValue), digest: receiptDigest }
+      };
+    }
+  }
+  return {
+    state: { bytes: input.state.bytes, value: structuredClone(stateValue), digest: stateDigest },
+    recorded_projections: structuredClone(input.recorded_projections),
+    current_projections: structuredClone(input.current_projections),
+    active_heads: structuredClone(input.active_heads),
+    ...intent === void 0 ? {} : { intent },
+    ...input.blocking_reasons === void 0 ? {} : { blocking_reasons: Object.freeze([...input.blocking_reasons]) }
+  };
+}
+function ownData(value, field, label) {
+  const descriptor = Object.getOwnPropertyDescriptor(value, field);
+  if (descriptor === void 0 || !("value" in descriptor) || !descriptor.enumerable) {
+    throw new TypeError(`${label}.${field} must be an own enumerable data property`);
+  }
+  return descriptor.value;
+}
+function reconcileCurrentAuthority(value) {
+  const input = materialize3(value);
+  const findings = [];
+  const observed = new Map(input.current_projections.map((projection) => [projection.path, projection.content_digest]));
+  for (const recorded of input.recorded_projections) {
+    const digest11 = observed.get(recorded.path);
+    if (digest11 !== recorded.content_digest) {
+      findings.push(Object.freeze({
+        kind: "projection-mismatch",
+        path: recorded.path,
+        recorded_digest: recorded.content_digest,
+        ...digest11 === void 0 ? {} : { observed_digest: digest11 },
+        next_action: "restore-or-record-new-transition"
+      }));
+    }
+  }
+  const receipt = input.intent?.receipt;
+  if (receipt !== void 0) {
+    const isCommitted = input.state.value.committed_intent?.receipt_digest === receipt.digest;
+    let valid = false;
+    try {
+      const parsed = parseIntentReceipt(receipt.value);
+      valid = receipt.digest === canonicalJsonDigest(parsed) && receipt.digest === intentReceiptDigest(parsed) && parsed.prepared_state_digest === canonicalJsonDigest(parsed.prepared_state) && parsed.outcome_digest === intentOutcomeDigest(parsed.outcome) && validateDurableSemantics(isCommitted ? createCommittedIntentSubject(input.state, receipt) : createPreparedIntentSubject(input.state, receipt)).ok;
+    } catch {
+      valid = false;
+    }
+    if (!valid) {
+      findings.push(Object.freeze({
+        kind: "receipt-invalid",
+        receipt_digest: receipt.digest,
+        next_action: "inspect-retained-receipt"
+      }));
+    } else if (receipt.value.request_digest !== input.intent.request_digest) {
+      findings.push(Object.freeze({
+        kind: "intent-mismatch",
+        requested_digest: input.intent.request_digest,
+        receipt_request_digest: receipt.value.request_digest,
+        next_action: "create-fresh-intent"
+      }));
+    } else if (!isCommitted) {
+      findings.push(Object.freeze({
+        kind: "receipt-only",
+        request_digest: receipt.value.request_digest,
+        receipt_digest: receipt.digest,
+        next_action: "resume-exact-intent"
+      }));
+    }
+  }
+  const heads = input.active_heads;
+  const state = input.state.value;
+  const gateMatches = heads.gate === void 0 ? state.open_gate === void 0 : state.open_gate?.gate_id === heads.gate.gate_id && state.open_gate.subject_digest === heads.gate.subject_digest && state.open_gate.context_digest === heads.gate.context_digest;
+  if (!gateMatches) {
+    findings.push(Object.freeze({ kind: "active-gate-mismatch", ...heads.gate === void 0 ? {} : { head: heads.gate }, next_action: "resolve-current-authority" }));
+  }
+  const checkpointMatches = heads.checkpoint === void 0 ? state.adopted_checkpoint === void 0 : state.adopted_checkpoint?.revision === heads.checkpoint.revision && state.adopted_checkpoint.checkpoint_digest === heads.checkpoint.checkpoint_digest;
+  if (!checkpointMatches) {
+    findings.push(Object.freeze({ kind: "adopted-checkpoint-mismatch", ...heads.checkpoint === void 0 ? {} : { head: heads.checkpoint }, next_action: "resolve-current-authority" }));
+  }
+  return Object.freeze({
+    classification: findings.length === 0 ? "consistent" : "reconciliation-required",
+    findings: Object.freeze(findings)
+  });
+}
+
+// src/state/reconciliation-discovery.ts
+var ok16 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var stateInvalid2 = (authority, issueCode) => Object.freeze({
+  schema_version: "1",
+  ok: false,
+  error: createProjectError("STATE_INVALID", {
+    phase_instance: authority.context.phase_instance,
+    issue_code: issueCode
+  })
+});
+var ioFailure2 = (authority, operation) => Object.freeze({
+  schema_version: "1",
+  ok: false,
+  error: createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt })
+});
+async function readCanonical2(path2, label, parse3) {
+  let handle;
+  try {
+    handle = await openResolved(path2.absolute, fsConstants7.O_RDONLY);
+    const document2 = parseCanonicalDocument(new Uint8Array(await handle.readFile()), label);
+    parse3(document2.value);
+    return document2;
+  } catch (error51) {
+    return error51.code === "ENOENT" ? "missing" : "invalid";
+  } finally {
+    await handle?.close().catch(() => void 0);
+  }
+}
+async function currentProjectionDigest(path2) {
+  try {
+    const metadata2 = await lstat6(path2.absolute);
+    if (metadata2.isSymbolicLink()) return sha256Bytes(Buffer.from(await readlink3(path2.absolute), "utf8"));
+    if (!metadata2.isFile()) throw new TypeError("projection is not a regular file or symlink");
+    const handle = await openResolved(path2.absolute, fsConstants7.O_RDONLY);
+    try {
+      return sha256Bytes(new Uint8Array(await handle.readFile()));
+    } finally {
+      await handle.close();
+    }
+  } catch (error51) {
+    if (error51.code === "ENOENT") return "missing";
+    throw error51;
+  }
+}
+function outputClassFor(manifest, path2) {
+  for (const output of manifest.outputs) {
+    if (output.path === path2 || output.operation === "rename" && output.previous_path === path2) {
+      return output.path_class;
+    }
+  }
+  return void 0;
+}
+async function discoverProjections(dependencies, authority, state) {
+  if (dependencies.load_retained_result === void 0) {
+    return stateInvalid2(authority, "reconciliation-result-loader-unavailable");
+  }
+  const newest = /* @__PURE__ */ new Map();
+  try {
+    for (const reference of state.value.authoritative_results) {
+      const loaded = await dependencies.load_retained_result(reference);
+      if (!loaded.ok) return loaded;
+      const manifest = loaded.value.prepared.manifest.value;
+      for (const projection of manifest.projections) {
+        const pathClass3 = outputClassFor(manifest, projection.path);
+        if (pathClass3 === void 0) return stateInvalid2(authority, "reconciliation-projection-unbound");
+        const target = await resolveDeclaredOutputPath({
+          runner: dependencies.runner,
+          taskId: authority.task_id,
+          claim: projection.path,
+          pathClass: pathClass3,
+          context: authority.context
+        });
+        if (!target.ok) return target;
+        const candidate = Object.freeze({
+          projection,
+          measured_at_revision: manifest.accounting.measured_at_revision,
+          target: target.value
+        });
+        const prior = newest.get(projection.path);
+        if (prior === void 0 || candidate.measured_at_revision > prior.measured_at_revision) {
+          newest.set(projection.path, candidate);
+        }
+      }
+    }
+    const recorded = [];
+    const current = [];
+    for (const candidate of [...newest.values()].sort((left, right) => left.projection.path.localeCompare(right.projection.path))) {
+      recorded.push(candidate.projection);
+      const digest11 = await currentProjectionDigest(candidate.target);
+      if (digest11 !== "missing") {
+        current.push(Object.freeze({ path: candidate.projection.path, content_digest: digest11 }));
+      }
+    }
+    return ok16(Object.freeze({ recorded: Object.freeze(recorded), current: Object.freeze(current) }));
+  } catch {
+    return ioFailure2(authority, "discover-reconciliation-projections");
+  }
+}
+async function discoverGateHead(dependencies, authority) {
+  const activePath = await resolveTaskPath({
+    runner: dependencies.runner,
+    taskId: authority.task_id,
+    claim: parseTaskPathClaim("gate.json"),
+    expectedClass: "gate-interface",
+    context: authority.context
+  });
+  if (!activePath.ok) return activePath;
+  const active = await readCanonical2(activePath.value, "active gate", parseActiveGate);
+  if (active === "missing") return ok16(Object.freeze({}));
+  if (active === "invalid") return ok16(Object.freeze({ blocker: "active-gate-invalid" }));
+  const requestPath = await resolveTaskPath({
+    runner: dependencies.runner,
+    taskId: authority.task_id,
+    claim: gateRequestClaim(active.value.gate_id),
+    expectedClass: "decision",
+    context: authority.context
+  });
+  if (!requestPath.ok) return requestPath;
+  const request = await readCanonical2(requestPath.value, "gate request", parseGateRequest);
+  if (request === "missing") return ok16(Object.freeze({ blocker: "active-gate-request-missing" }));
+  if (request === "invalid") return ok16(Object.freeze({ blocker: "active-gate-request-invalid" }));
+  try {
+    return ok16(Object.freeze({ head: activeGateHead(active.value, request.value) }));
+  } catch {
+    return ok16(Object.freeze({ blocker: "active-gate-request-mismatch" }));
+  }
+}
+async function discoverCheckpointHead(dependencies, authority, state) {
+  const adopted = state.value.adopted_checkpoint;
+  if (adopted === void 0) return ok16(Object.freeze({}));
+  const target = await resolveTaskPath({
+    runner: dependencies.runner,
+    taskId: authority.task_id,
+    claim: parseTaskPathClaim(`manual/checkpoints/${adopted.revision}-${adopted.checkpoint_digest}.json`),
+    expectedClass: "manual-checkpoint",
+    context: authority.context
+  });
+  if (!target.ok) return target;
+  const checkpoint = await readCanonical2(target.value, "manual checkpoint", parseManualCheckpoint);
+  if (checkpoint === "missing") return ok16(Object.freeze({ blocker: "adopted-checkpoint-missing" }));
+  if (checkpoint === "invalid") return ok16(Object.freeze({ blocker: "adopted-checkpoint-invalid" }));
+  const digest11 = checkpointSelfDigest(checkpoint.value);
+  if (checkpoint.digest !== digest11 || checkpoint.value.task_id !== authority.task_id || checkpoint.value.repository_identity_digest !== authority.repository_identity_digest) {
+    return ok16(Object.freeze({ blocker: "adopted-checkpoint-invalid" }));
+  }
+  return ok16(Object.freeze({ head: Object.freeze({ revision: checkpoint.value.revision, checkpoint_digest: digest11 }) }));
+}
+async function discoverIntent(dependencies, authority, state) {
+  let names;
+  try {
+    names = await readdir4(join8(authority.task_root, "intents"));
+  } catch (error51) {
+    if (error51.code === "ENOENT") return ok16(Object.freeze({}));
+    return ioFailure2(authority, "discover-reconciliation-intents");
+  }
+  const candidates = [];
+  for (const name of names.sort()) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$/u.test(name)) continue;
+    const target = await resolveTaskPath({
+      runner: dependencies.runner,
+      taskId: authority.task_id,
+      claim: parseTaskPathClaim(`intents/${name}`),
+      expectedClass: "intent",
+      context: authority.context
+    });
+    if (!target.ok) return target;
+    const receipt2 = await readCanonical2(target.value, "intent receipt", parseIntentReceipt);
+    if (receipt2 === "missing" || receipt2 === "invalid") continue;
+    if (receipt2.value.prior_revision !== state.value.revision || receipt2.value.resulting_revision !== state.value.revision + 1 || receipt2.value.prepared_state.revision !== receipt2.value.resulting_revision) continue;
+    if (!validateDurableSemantics(createPreparedIntentSubject(state, receipt2)).ok) continue;
+    candidates.push(receipt2);
+  }
+  if (candidates.length > 1) {
+    return ok16(Object.freeze({ blocker: "retained-receipt-ambiguity" }));
+  }
+  const receipt = candidates[0];
+  return receipt === void 0 ? ok16(Object.freeze({})) : ok16(Object.freeze({ intent: Object.freeze({ request_digest: receipt.value.request_digest, receipt }) }));
+}
+async function discoverReconciliationInput(dependencies, authority, state) {
+  assertInternalTransactionAuthority(authority, dependencies);
+  const projections = await discoverProjections(dependencies, authority, state);
+  if (!projections.ok) return projections;
+  const gate = await discoverGateHead(dependencies, authority);
+  if (!gate.ok) return gate;
+  const checkpoint = await discoverCheckpointHead(dependencies, authority, state);
+  if (!checkpoint.ok) return checkpoint;
+  const intent = await discoverIntent(dependencies, authority, state);
+  if (!intent.ok) return intent;
+  const blockers = [gate.value.blocker, checkpoint.value.blocker, intent.value.blocker].filter((value) => value !== void 0);
+  return ok16(Object.freeze({
+    state,
+    recorded_projections: projections.value.recorded,
+    current_projections: projections.value.current,
+    active_heads: Object.freeze({
+      ...gate.value.head === void 0 ? {} : { gate: gate.value.head },
+      ...checkpoint.value.head === void 0 ? {} : { checkpoint: checkpoint.value.head }
+    }),
+    ...intent.value.intent === void 0 ? {} : { intent: intent.value.intent },
+    ...blockers.length === 0 ? {} : { blocking_reasons: Object.freeze(blockers) }
+  }));
+}
+
+// src/state/status.ts
+var ok17 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+function unavailableConfig(expected, observed, issue3) {
+  return Object.freeze({
+    verified: false,
+    ...expected === void 0 ? {} : { expected_digest: expected },
+    ...observed === void 0 ? {} : { observed_digest: observed },
+    ...issue3 === void 0 ? {} : { issue: issue3 }
+  });
+}
+async function readActiveGate(authority) {
+  try {
+    const bytes = new Uint8Array(await readFile4(join9(authority.task_root, "gate.json")));
+    return parseActiveGate(parseCanonicalDocument(bytes, "active gate").value);
+  } catch (error51) {
+    if (error51.code === "ENOENT") return void 0;
+    throw error51;
+  }
+}
+async function readArchivedGateRequest(authority, active) {
+  try {
+    const bytes = new Uint8Array(await readFile4(join9(
+      authority.task_root,
+      "decisions",
+      active.gate_id,
+      "request.json"
+    )));
+    return parseGateRequest(parseCanonicalDocument(bytes, "gate request").value);
+  } catch (error51) {
+    if (error51.code === "ENOENT") return void 0;
+    throw error51;
+  }
+}
+async function currentApprovedUpstreams(dependencies, state, authenticated) {
+  const bindings = expectedProduceUpstreamBindings(state);
+  const digests = [];
+  for (const binding of bindings) {
+    const loaded = await loadProduceUpstreamSubject(dependencies, state, binding);
+    if (!loaded.ok) throw new TypeError("current upstream produced authority invalid");
+    const approval = [...authenticated].filter((item) => item.approval.gate_kind === "artifact-approval" && item.approval.subject_digest === loaded.value.artifact_digest && item.request.kind === "artifact-approval" && item.request.context.artifact_kind === binding.artifact_kind).sort((left, right) => right.approval.resolved_at_revision - left.approval.resolved_at_revision)[0];
+    if (approval === void 0) throw new TypeError("current upstream produced authority lacks approval");
+    digests.push(loaded.value.artifact_digest);
+  }
+  return Object.freeze(digests.sort());
+}
+function pendingAdjudicationGateKind(state, constitution, retained, authenticated) {
+  const source = retained.get("adjudicate")?.manifest.source_artifact;
+  if (source?.artifact_kind !== "adjudication-evidence") return void 0;
+  let currentSet;
+  try {
+    currentSet = deriveCurrentEvidenceSet(retained).current_evidence_set;
+  } catch {
+  }
+  for (const gate of selectAdjudicationGates(constitution.rules, source.evidence)) {
+    const contextDigest = computeGateContextDigest(gate.kind, gate.context);
+    const approved = currentSet !== void 0 && authenticated.some((item) => item.approval.gate_kind === gate.kind && item.approval.subject_digest === gate.subject_digest && item.request.phase_instance === state.phase_instance && item.request.context_digest === contextDigest && item.request.current_evidence.set_digest === currentSet.set_digest && source.evidence.source_evidence_set_digest === currentSet.set_digest);
+    let waived = false;
+    if ((gate.kind === "review-trigger" || gate.kind === "adjudication-failure") && "eligible_waiver_rules" in gate.context && "waiver_scope" in gate.context) {
+      const waiverContext2 = gate.context;
+      waived = waiverContext2.eligible_waiver_rules.length > 0 && waiverContext2.eligible_waiver_rules.every((rule4) => waiverInForce(state, rule4, gate.subject_digest, waiverContext2.waiver_scope) !== void 0);
+    }
+    if (!approved && !waived) return gate.kind;
+  }
+  return void 0;
+}
+function supplementalReviewRef(active, inputFingerprint, evidence) {
+  if (evidence.model_family !== "claude" && evidence.model_family !== "codex") {
+    throw new TypeError("supplemental reviewer family is unavailable");
+  }
+  return Object.freeze({
+    prior_gate_id: active.gate_id,
+    task_id: active.task_id,
+    phase_instance: active.phase_instance,
+    subject_digest: active.subject_digest,
+    input_fingerprint: inputFingerprint,
+    evidence_slot: Object.freeze({
+      role: "gate-counter-review",
+      evidence_digest: canonicalJsonDigest(evidence),
+      assurance: "degraded",
+      producer_family: evidence.producer_family,
+      reviewer_family: evidence.model_family,
+      independence: "opposite-family",
+      gate_id: active.gate_id
+    })
+  });
+}
+async function supplementalOutcomeTemplates(dependencies, authority, active, inputFingerprint, currentSubjectDigest) {
+  const gate = Object.freeze({
+    prior_gate_id: active.gate_id,
+    task_id: active.task_id,
+    phase_instance: active.phase_instance,
+    subject_digest: active.subject_digest,
+    input_fingerprint: inputFingerprint
+  });
+  const outcomes = [Object.freeze({
+    action: "decline",
+    gate,
+    reason: "Human explicitly declined the optional gate counter-review."
+  })];
+  if (dependencies.resolve_supplemental_review === void 0) return Object.freeze({ outcomes: Object.freeze(outcomes) });
+  const retained = await dependencies.resolve_supplemental_review({ authority, request: active });
+  if (!retained.ok) return Object.freeze({ outcomes: Object.freeze(outcomes) });
+  let review;
+  try {
+    review = supplementalReviewRef(active, inputFingerprint, retained.value.evidence);
+  } catch {
+    return Object.freeze({ outcomes: Object.freeze(outcomes) });
+  }
+  const ingested = active.supplemental.some((entry) => entry.action === "ingest" && entry.review.evidence_slot.evidence_digest === review.evidence_slot.evidence_digest);
+  if (!ingested) {
+    outcomes.push(Object.freeze({
+      action: "ingest",
+      review,
+      reason: "Install the retained supplemental gate counter-review for human triage."
+    }));
+    return Object.freeze({ outcomes: Object.freeze(outcomes) });
+  }
+  if (retained.value.triage_outcome === "no-change" && retained.value.triage_digest !== void 0) {
+    outcomes.push(Object.freeze({
+      action: "triage-no-change",
+      review,
+      triage_digest: retained.value.triage_digest,
+      reason: "Human triaged the retained supplemental review with no accepted artifact change."
+    }));
+  } else if (retained.value.triage_outcome === "accepted-change" && retained.value.triage_digest !== void 0) {
+    const facts = Object.freeze({
+      action: "supersede",
+      review,
+      accepted_triage_digest: retained.value.triage_digest,
+      old_subject_digest: active.subject_digest,
+      new_subject_digest_from: "envelope.artifact_digest",
+      reason: "Human accepted supplemental triage and revised the bound subject."
+    });
+    if (currentSubjectDigest !== void 0 && currentSubjectDigest !== active.subject_digest) {
+      outcomes.push(Object.freeze({
+        action: "supersede",
+        review,
+        accepted_triage_digest: retained.value.triage_digest,
+        old_subject_digest: active.subject_digest,
+        new_subject_digest: currentSubjectDigest,
+        reason: facts.reason
+      }));
+    }
+    return Object.freeze({ outcomes: Object.freeze(outcomes), supersession: facts });
+  }
+  return Object.freeze({ outcomes: Object.freeze(outcomes) });
+}
+async function gateStatus(dependencies, authority, active, inputFingerprint, currentSubjectDigest) {
+  const supplemental2 = await supplementalOutcomeTemplates(
+    dependencies,
+    authority,
+    active,
+    inputFingerprint,
+    currentSubjectDigest
+  );
+  return Object.freeze({
+    gate_id: active.gate_id,
+    kind: active.kind,
+    decision_path: "gate.decision",
+    archive_decision_path: `decisions/${active.gate_id}/decision.json`,
+    request_path: `decisions/${active.gate_id}/request.json`,
+    gate_counter_review_path: gateCounterReviewClaim(active.phase_instance, active.gate_id),
+    decision_templates: buildGateDecisionTemplates(active),
+    counter_review_prompt: renderGateCounterPrompt({
+      tool: active.context !== null && typeof active.context === "object" && "origin" in active.context ? "archflow_waiver" : "archflow_gate",
+      gate_id: active.gate_id,
+      request_digest: active.request_digest,
+      task_id: active.task_id,
+      phase_instance: active.phase_instance,
+      kind: active.kind,
+      subject_digest: active.subject_digest,
+      context_digest: active.context_digest,
+      input_fingerprint: inputFingerprint,
+      current_evidence: active.current_evidence
+    }),
+    supplemental_outcomes: supplemental2.outcomes,
+    ...supplemental2.supersession === void 0 ? {} : { supplemental_supersession: supplemental2.supersession }
+  });
+}
+async function currentTargetRef(dependencies) {
+  try {
+    const branch = await dependencies.runner.runText({
+      argv: ["symbolic-ref", "--quiet", "HEAD"],
+      operation: "status-target-ref",
+      expectedAbsence: [{ code: 1, stderrIncludes: "" }]
+    });
+    if (branch !== "") return Object.freeze({
+      value: branch,
+      guidance: "Current symbolic branch ref observed from repository authority."
+    });
+  } catch {
+  }
+  return Object.freeze({
+    value: "HEAD",
+    guidance: "Repository HEAD is detached or its symbolic branch ref is unavailable; confirm this target before authorizing commit."
+  });
+}
+function buildCommitAuthorizationInput(subject, currentEvidence, target) {
+  if (subject.artifact.artifact_kind !== "implementation-output") {
+    throw new TypeError("commit authorization requires retained implementation output");
+  }
+  const manifest = subject.retained.prepared.manifest.value;
+  if (manifest.artifact_digest !== subject.artifact_digest) {
+    throw new TypeError("commit authorization manifest subject disagrees");
+  }
+  return Object.freeze({
+    kind: "commit-authorization",
+    subject_digest: subject.artifact_digest,
+    current_evidence: currentEvidence,
+    context: Object.freeze({
+      target_ref: target.value,
+      diff_digest: subject.artifact.diff_digest,
+      current_artifact_digests: Object.freeze([manifest.artifact_digest]),
+      parent_document_digests: Object.freeze(subject.artifact.parent_documents.map((item) => item.content_digest).sort())
+    }),
+    target_ref_guidance: target.guidance
+  });
+}
+async function computeTaskStatus(dependencies, authority) {
+  const blockers = [];
+  let stateRead;
+  try {
+    assertInternalTransactionAuthority(authority, dependencies);
+    stateRead = await readTaskState(authority.state);
+  } catch {
+    const next = deriveNextAction({ repository_initialized: true });
+    return ok17(Object.freeze({
+      task_id: authority.task_id,
+      state: "missing",
+      config: unavailableConfig(void 0, void 0, "status-authority-invalid"),
+      blocking_reasons: Object.freeze(["status-authority-invalid"]),
+      next_action: next
+    }));
+  }
+  if (stateRead.kind !== "canonical") {
+    const reason2 = stateRead.kind === "missing" ? "state-missing" : `state-${stateRead.kind}`;
+    const next = deriveNextAction({ repository_initialized: true });
+    return ok17(Object.freeze({
+      task_id: authority.task_id,
+      state: "missing",
+      config: unavailableConfig(void 0, void 0, "state-unavailable"),
+      blocking_reasons: Object.freeze([reason2]),
+      next_action: next
+    }));
+  }
+  const stateDocument = stateRead.document;
+  const state = stateDocument.value;
+  let config2;
+  let parsedConfig;
+  try {
+    const read = await dependencies.read_config(authority.config);
+    if (read.kind !== "valid") {
+      config2 = unavailableConfig(state.config_digest, void 0, `config-${read.kind}`);
+      blockers.push(`config-${read.kind}`);
+    } else {
+      const verified = verifyPinnedConfig(state.config_digest, read.snapshot.bytes);
+      config2 = verified.ok ? Object.freeze({ verified: true, expected_digest: state.config_digest, observed_digest: verified.value }) : unavailableConfig(state.config_digest, read.snapshot.digest, "pinned-config-mismatch");
+      if (!verified.ok) blockers.push("pinned-config-mismatch");
+      parsedConfig = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(read.snapshot.bytes), "task config");
+    }
+  } catch {
+    config2 = unavailableConfig(state.config_digest, void 0, "config-unresolvable");
+    blockers.push("config-unresolvable");
+  }
+  let routes;
+  if (parsedConfig !== void 0) {
+    try {
+      const phaseKind2 = decodePhaseInstance(state.phase_instance).kind;
+      const producer = resolveDispatchRoute(parsedConfig, phaseKind2, "producer", "claude");
+      const selfReview = resolveDispatchRoute(parsedConfig, phaseKind2, "self-reviewer", producer.family);
+      if (producer.family !== selfReview.family) throw new TypeError("producer and self-review routes must share a family");
+      routes = Object.freeze({ producer, self_review: selfReview });
+    } catch {
+      blockers.push("dispatch-routes-invalid");
+    }
+  }
+  let constitution;
+  let constitutionStatus;
+  try {
+    const resolved = await resolvePinnedConstitution(dependencies.runner, state.policy_base_commit, authority.context);
+    if (resolved.ok) {
+      constitution = resolved.value;
+      constitutionStatus = Object.freeze({
+        digest: resolved.value.digest,
+        active_rules: Object.freeze([...resolved.value.rules.values()].filter((rule4) => rule4.status === "active").sort((left, right) => left.id.localeCompare(right.id)).map((rule4) => Object.freeze({
+          id: rule4.id,
+          version: rule4.version,
+          text: rule4.text,
+          ...rule4.review_trigger === void 0 ? {} : { review_trigger: rule4.review_trigger },
+          ...rule4.enforced_by === void 0 ? {} : { enforced_by: Object.freeze([...rule4.enforced_by]) }
+        })))
+      });
+      if (resolved.value.digest !== state.constitution_digest) blockers.push("constitution-pin-disagreement");
+    } else {
+      blockers.push("constitution-unresolvable");
+    }
+  } catch {
+    blockers.push("constitution-unresolvable");
+  }
+  let reconciliation;
+  let reconciliationBlockers = Object.freeze([]);
+  try {
+    const discovered = await discoverReconciliationInput(dependencies, authority, stateDocument);
+    if (discovered.ok) {
+      reconciliation = reconcileCurrentAuthority(discovered.value);
+      reconciliationBlockers = discovered.value.blocking_reasons ?? Object.freeze([]);
+      blockers.push(...reconciliationBlockers);
+      blockers.push(...reconciliation.findings.map((finding) => finding.kind));
+    } else {
+      blockers.push("reconciliation-unavailable");
+    }
+  } catch {
+    blockers.push("reconciliation-unavailable");
+  }
+  let checkpointHead;
+  try {
+    const checkpoints = await readManualCheckpoints(dependencies, authority);
+    if (checkpoints.ok) checkpointHead = checkpoints.value.at(-1)?.value.revision;
+    else blockers.push("checkpoint-inventory-unavailable");
+  } catch {
+    blockers.push("checkpoint-inventory-unavailable");
+  }
+  let retained = /* @__PURE__ */ new Map();
+  if (dependencies.load_retained_result === void 0) {
+    blockers.push("retained-evidence-unavailable");
+  } else {
+    try {
+      const loaded = await loadRetainedEvidence(
+        { load_retained_result: dependencies.load_retained_result },
+        state,
+        state.phase_instance
+      );
+      if (loaded.ok) retained = loaded.value;
+      else blockers.push("retained-evidence-unavailable");
+    } catch {
+      blockers.push("retained-evidence-unavailable");
+    }
+  }
+  let subjectDigest;
+  let produceSubject;
+  if (state.step !== "produce" || state.status === "succeeded") {
+    try {
+      const produced = await loadCurrentProduceSubject(dependencies, state);
+      if (produced.ok) {
+        produceSubject = produced.value;
+        subjectDigest = produced.value.artifact_digest;
+      } else blockers.push("current-subject-unavailable");
+    } catch {
+      blockers.push("current-subject-unavailable");
+    }
+  }
+  const authenticatedApprovals = [];
+  const approvalFacts = [];
+  for (const approval of state.approvals) {
+    try {
+      const loaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
+      if (loaded.ok) {
+        authenticatedApprovals.push(loaded.value);
+        approvalFacts.push(Object.freeze({ gate_kind: approval.gate_kind, subject_digest: approval.subject_digest }));
+      } else {
+        blockers.push(`approval-${approval.gate_id}-unavailable`);
+      }
+    } catch {
+      blockers.push(`approval-${approval.gate_id}-unavailable`);
+    }
+  }
+  let commitObserved = false;
+  if (produceSubject?.artifact.artifact_kind === "implementation-output") {
+    for (const authenticated of authenticatedApprovals) {
+      if (authenticated.request.kind !== "commit-authorization" || authenticated.request.phase_instance !== state.phase_instance || authenticated.request.subject_digest !== produceSubject.artifact_digest) continue;
+      try {
+        if (await implementationOutputCommittedAtCurrentTarget(
+          dependencies.runner,
+          produceSubject.artifact,
+          authenticated.request.context.target_ref
+        )) {
+          commitObserved = true;
+          break;
+        }
+      } catch {
+        blockers.push("commit-observation-unavailable");
+      }
+    }
+  }
+  let assessment;
+  if (constitution !== void 0 && subjectDigest !== void 0) {
+    try {
+      const approvedUpstreamDigests = await currentApprovedUpstreams(
+        dependencies,
+        state,
+        authenticatedApprovals
+      );
+      assessment = assessCurrentEvidence(state, retained, {
+        subject_digest: subjectDigest,
+        input_fingerprint: state.input_fingerprint,
+        constitution,
+        approved_upstream_digests: approvedUpstreamDigests,
+        authenticated_gate_approvals: authenticatedApprovals,
+        ...parsedConfig?.max_attempts === void 0 ? {} : { max_attempts: parsedConfig.max_attempts }
+      });
+    } catch {
+      blockers.push("fixed-point-disagreement");
+    }
+  }
+  let evidence;
+  try {
+    const derived = deriveCurrentEvidenceSet(retained);
+    if (assessment === void 0) throw new TypeError("evidence assessment unavailable");
+    const findings = derived.reviews.flatMap((review) => review.evidence.findings.map((finding) => Object.freeze({
+      review_evidence_digest: review.evidence_digest,
+      finding_id: finding.finding_id,
+      blocking: finding.blocking
+    })));
+    const self2 = derived.reviews[0].evidence;
+    evidence = Object.freeze({
+      available: true,
+      subject_digest: derived.subject_digest,
+      current_evidence: derived.current_evidence_set,
+      findings: Object.freeze(findings),
+      self_review_provenance: Object.freeze({
+        assurance: self2.assurance,
+        producer_family: self2.producer_family,
+        model_family: self2.model_family,
+        model: self2.model,
+        effort: self2.effort
+      }),
+      assessment
+    });
+  } catch {
+    evidence = Object.freeze({
+      available: false,
+      reason: retained.has("self_review") && retained.has("counter_review") ? "review-set-invalid" : "review-set-incomplete",
+      ...assessment === void 0 ? {} : { assessment }
+    });
+  }
+  let activeGate;
+  let openGate;
+  let gateBindingBlocker;
+  if (state.open_gate !== void 0) {
+    blockers.push("gate-decision-required");
+    try {
+      activeGate = await readActiveGate(authority);
+      const request = activeGate === void 0 ? void 0 : await readArchivedGateRequest(authority, activeGate);
+      const stateBindingMatches = activeGate !== void 0 && activeGate.task_id === state.task_id && activeGate.phase_instance === state.phase_instance && activeGate.gate_id === state.open_gate.gate_id && activeGate.kind === state.open_gate.gate_kind && activeGate.subject_digest === state.open_gate.subject_digest && activeGate.context_digest === state.open_gate.context_digest && activeGate.opened_at_revision === state.open_gate.opened_at_revision;
+      let requestBindingMatches = false;
+      if (activeGate !== void 0 && request !== void 0) {
+        try {
+          activeGateHead(activeGate, request);
+          requestBindingMatches = true;
+        } catch {
+        }
+      }
+      if (activeGate === void 0 || !stateBindingMatches || !requestBindingMatches) {
+        blockers.push("active-gate-mismatch");
+        gateBindingBlocker = "active-gate-mismatch";
+      } else {
+        openGate = await gateStatus(
+          dependencies,
+          authority,
+          activeGate,
+          state.input_fingerprint,
+          subjectDigest
+        );
+      }
+    } catch {
+      blockers.push("active-gate-invalid");
+      gateBindingBlocker = "active-gate-invalid";
+    }
+  }
+  if (checkpointHead !== void 0 && checkpointHead > state.revision) blockers.push("checkpoint-import-available");
+  let adjudicationGateKind;
+  if (assessment?.next === "adjudication-gate" && constitution !== void 0) {
+    adjudicationGateKind = pendingAdjudicationGateKind(state, constitution, retained, authenticatedApprovals);
+  }
+  const nextAction = deriveNextAction({
+    repository_initialized: true,
+    state,
+    config_verified: config2.verified,
+    ...reconciliation === void 0 ? {} : { reconciliation_findings: reconciliation.findings },
+    reconciliation_blocking_reasons: Object.freeze([
+      ...reconciliationBlockers,
+      ...gateBindingBlocker === void 0 ? [] : [gateBindingBlocker]
+    ]),
+    ...activeGate === void 0 ? {} : {
+      untriaged_supplemental_review: activeGate.supplemental.some((item) => item.action === "ingest")
+    },
+    ...checkpointHead === void 0 ? {} : { checkpoint_head_revision: checkpointHead },
+    ...assessment === void 0 ? {} : { assessment },
+    evidence_available: evidence.available,
+    ...subjectDigest === void 0 ? {} : { subject_digest: subjectDigest },
+    authenticated_approvals: approvalFacts,
+    commit_observed: commitObserved,
+    ...adjudicationGateKind === void 0 ? {} : { adjudication_gate_kind: adjudicationGateKind }
+  });
+  let gateInput2;
+  if (nextAction.code === "open-gate" && nextAction.gate_kind === "commit-authorization" && produceSubject?.artifact.artifact_kind === "implementation-output" && evidence.available) {
+    const target = await currentTargetRef(dependencies);
+    gateInput2 = buildCommitAuthorizationInput(produceSubject, evidence.current_evidence, target);
+  }
+  return ok17(Object.freeze({
+    task_id: authority.task_id,
+    state: state.terminal ?? "active",
+    revision: state.revision,
+    phase_instance: state.phase_instance,
+    step: state.step,
+    status: state.status,
+    attempt: state.attempt,
+    input_fingerprint: state.input_fingerprint,
+    config: config2,
+    ...routes === void 0 ? {} : { routes },
+    ...constitutionStatus === void 0 ? {} : { constitution: constitutionStatus },
+    ...checkpointHead === void 0 ? {} : { checkpoint_head_revision: checkpointHead },
+    ...state.open_gate === void 0 ? {} : { open_gate_id: state.open_gate.gate_id },
+    ...openGate === void 0 ? {} : { open_gate: openGate },
+    ...reconciliation === void 0 ? {} : { reconciliation },
+    evidence,
+    ...gateInput2 === void 0 ? {} : { gate_input: gateInput2 },
+    blocking_reasons: Object.freeze([...new Set(blockers)]),
+    next_action: nextAction
+  }));
+}
+
+// src/state/document-artifact.ts
+var ok18 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail19 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+function ioFailure3(authority) {
+  return fail19(createProjectError("IO_ERROR", {
+    operation: authority.context.operation,
+    attempt: authority.context.attempt
+  }));
+}
+async function readResolvedBytes(target, authority) {
+  try {
+    const handle = await openResolved(target.absolute, 0);
+    try {
+      return ok18(new Uint8Array(await handle.readFile()));
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return ioFailure3(authority);
+  }
+}
+async function resolveDeclaredInput(runner, authority, path2) {
+  const prefix = `.archflow/tasks/${authority.task_id}/`;
+  if (path2.startsWith(prefix)) {
+    let taskPath;
+    try {
+      taskPath = parseTaskPathClaim(path2.slice(prefix.length));
+    } catch {
+      return fail19(createProjectError("PATH_INVALID", {
+        task_id: authority.task_id,
+        path_class: "repository-source"
+      }));
+    }
+    return resolveTaskPath({
+      runner,
+      taskId: authority.task_id,
+      claim: taskPath,
+      context: authority.context
+    });
+  }
+  return resolveRepositoryPath({ runner, claim: path2, context: authority.context });
+}
+async function buildDocumentArtifact(runner, authority, input) {
+  assertInternalTransactionAuthority(authority);
+  assertPlainJson(input, "document artifact builder input");
+  const materialized = structuredClone(input);
+  const documentTarget = await resolveTaskPath({
+    runner,
+    taskId: authority.task_id,
+    claim: materialized.document_path,
+    expectedClass: "document",
+    context: authority.context
+  });
+  if (!documentTarget.ok) return documentTarget;
+  const documentBytes = await readResolvedBytes(documentTarget.value, authority);
+  if (!documentBytes.ok) return documentBytes;
+  const declaredInputs = [];
+  for (const declared of materialized.declared_inputs) {
+    const target = await resolveDeclaredInput(runner, authority, declared.path);
+    if (!target.ok) return target;
+    const bytes = await readResolvedBytes(target.value, authority);
+    if (!bytes.ok) return bytes;
+    declaredInputs.push(Object.freeze({
+      input_id: declared.input_id,
+      digest: sha256Bytes(bytes.value)
+    }));
+  }
+  declaredInputs.sort((left, right) => left.input_id < right.input_id ? -1 : left.input_id > right.input_id ? 1 : 0);
+  const byteCount = parseSafeInteger(documentBytes.value.byteLength);
+  const contentDigest = sha256Bytes(documentBytes.value);
+  let identity;
+  try {
+    identity = await hashGitBlobIdentity(
+      runner,
+      documentBytes.value,
+      documentTarget.value.repositoryRelative
+    );
+  } catch (error51) {
+    if (error51 instanceof GitInvocationError) {
+      return fail19(projectErrorForGitFailure(error51, runner, authority.context));
+    }
+    throw error51;
+  }
+  const output = Object.freeze({
+    path: documentTarget.value.repositoryRelative,
+    path_class: "document",
+    operation: "add",
+    storage: "raw-payload",
+    payload_bytes: byteCount,
+    payload_digest: contentDigest,
+    file_type: "regular",
+    after: Object.freeze({
+      oid: parseGitOid(identity.oid),
+      mode: "100644",
+      size_bytes: parseSafeInteger(identity.size_bytes)
+    })
+  });
+  const projections = Object.freeze([
+    Object.freeze({ path: output.path, content_digest: contentDigest })
+  ]);
+  return ok18(parseDocumentArtifact({
+    schema_version: "1",
+    artifact_kind: "document",
+    task_id: authority.task_id,
+    phase_instance: materialized.phase_instance,
+    step: materialized.step,
+    document_path: materialized.document_path,
+    path_class: "document",
+    byte_count: byteCount,
+    content_digest: contentDigest,
+    declared_inputs: Object.freeze(declaredInputs),
+    input_fingerprint: materialized.input_fingerprint,
+    snapshot_digest: deriveDeclaredSnapshotDigest([output], projections),
+    projection_target: toRepositoryPathClaim(authority.task_id, materialized.document_path)
+  }));
+}
+
+// src/init/assets.ts
+import { constants } from "node:fs";
+import { access, mkdir as mkdir3, open as open5, readFile as readFile5 } from "node:fs/promises";
+import { dirname as dirname4, join as join10 } from "node:path";
+import { fileURLToPath } from "node:url";
+var ARCHFLOW_GITATTRIBUTES_LINE = ".archflow/** -text merge=binary";
+var ASSETS = Object.freeze([
+  ["workflow.yaml", ".archflow/workflow.yaml"],
+  ["constitution/README.md", ".archflow/constitution/README.md"],
+  ["constitution/00-process.md", ".archflow/constitution/00-process.md"],
+  ["constitution/10-architecture.md", ".archflow/constitution/10-architecture.md"],
+  ["constitution/20-data.md", ".archflow/constitution/20-data.md"],
+  ["constitution/30-product.md", ".archflow/constitution/30-product.md"],
+  ["config.template.yaml", ".archflow/config.yaml"]
+]);
+var ok19 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail20 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+function errno(error51, code) {
+  return error51 instanceof Error && error51.code === code;
+}
+function ioFailure4() {
+  return fail20(createProjectError("IO_ERROR", {
+    operation: "scaffold-repository-assets",
+    attempt: 1
+  }));
+}
+async function assetRoot() {
+  const candidates = [
+    fileURLToPath(new URL("../assets/", import.meta.url)),
+    fileURLToPath(new URL("../../assets/", import.meta.url))
+  ];
+  for (const candidate of candidates) {
+    try {
+      await access(join10(candidate, "workflow.yaml"), constants.R_OK);
+      return candidate;
+    } catch (error51) {
+      if (!errno(error51, "ENOENT")) throw error51;
+    }
+  }
+  throw Object.assign(new Error("installed ArchFlow assets are missing"), { code: "ENOENT" });
+}
+async function appendGitAttributes(workingDirectory) {
+  const path2 = join10(workingDirectory, ".gitattributes");
+  let current;
+  try {
+    current = new Uint8Array(await readFile5(path2));
+  } catch (error51) {
+    if (!errno(error51, "ENOENT")) throw error51;
+    const handle2 = await open5(path2, "wx");
+    try {
+      await handle2.writeFile(`${ARCHFLOW_GITATTRIBUTES_LINE}
+`);
+    } finally {
+      await handle2.close();
+    }
+    return true;
+  }
+  const text3 = new TextDecoder("utf-8", { fatal: true }).decode(current);
+  if (text3.split(/\r?\n/u).includes(ARCHFLOW_GITATTRIBUTES_LINE)) return false;
+  const prefix = current.byteLength === 0 || text3.endsWith("\n") ? "" : "\n";
+  const handle = await open5(path2, "a");
+  try {
+    await handle.writeFile(`${prefix}${ARCHFLOW_GITATTRIBUTES_LINE}
+`);
+  } finally {
+    await handle.close();
+  }
+  return true;
+}
+async function scaffoldRepositoryAssets(input) {
+  try {
+    const sourceRoot = await assetRoot();
+    const sources = await Promise.all(ASSETS.map(async ([source, destination]) => Object.freeze({ source: new Uint8Array(await readFile5(join10(sourceRoot, source))), destination })));
+    const created = [];
+    const unchanged = [];
+    for (const asset of sources) {
+      const destination = join10(input.working_directory, asset.destination);
+      try {
+        const existing = new Uint8Array(await readFile5(destination));
+        if (!Buffer.from(existing).equals(Buffer.from(asset.source))) {
+          process.stderr.write(
+            `ArchFlow scaffold differs at ${asset.destination}. Review or delete that file, then re-run archflow-local init.
+`
+          );
+          return fail20(createProjectError("CONFIG_INVALID", { issue_code: "scaffold-diverged" }));
+        }
+        unchanged.push(asset.destination);
+      } catch (error51) {
+        if (!errno(error51, "ENOENT")) throw error51;
+      }
+    }
+    for (const asset of sources) {
+      if (unchanged.includes(asset.destination)) continue;
+      const destination = join10(input.working_directory, asset.destination);
+      await mkdir3(dirname4(destination), { recursive: true });
+      const handle = await open5(destination, "wx");
+      try {
+        await handle.writeFile(asset.source);
+      } finally {
+        await handle.close();
+      }
+      created.push(asset.destination);
+    }
+    const gitattributesUpdated = await appendGitAttributes(input.working_directory);
+    return ok19(Object.freeze({
+      schema_version: "1",
+      created: Object.freeze(created),
+      unchanged: Object.freeze(unchanged),
+      gitattributes_updated: gitattributesUpdated
+    }));
+  } catch {
+    return ioFailure4();
+  }
+}
+
+// src/init/diagnostics.ts
+import { stat as stat3 } from "node:fs/promises";
+
 // src/dispatch/workspace.ts
 import { mkdir as mkdir4, mkdtemp, realpath as realpath4, rm, symlink as symlink2 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute as isAbsolute3, join as join9, relative as relative4, resolve } from "node:path";
+import { isAbsolute as isAbsolute3, join as join11, relative as relative4, resolve } from "node:path";
 var FORWARDED_ENVIRONMENT = Object.freeze([
   "PATH",
   "LANG",
@@ -44867,13 +48046,13 @@ function isInside(parent, candidate) {
 function credentialPaths(adapter2, sourceHome, generatedHome) {
   if (adapter2 === "claude-cli") {
     return {
-      source: join9(sourceHome, ".claude", ".credentials.json"),
-      destination: join9(generatedHome, ".claude", ".credentials.json")
+      source: join11(sourceHome, ".claude", ".credentials.json"),
+      destination: join11(generatedHome, ".claude", ".credentials.json")
     };
   }
   return {
-    source: join9(sourceHome, ".codex", "auth.json"),
-    destination: join9(generatedHome, ".codex", "auth.json")
+    source: join11(sourceHome, ".codex", "auth.json"),
+    destination: join11(generatedHome, ".codex", "auth.json")
   };
 }
 async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd()) {
@@ -44884,10 +48063,10 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
   if (isInside(realRepositoryRoot, realTemporaryRoot)) {
     throw new Error("dispatch temporary directory must be outside the repository");
   }
-  const root = await mkdtemp(join9(realTemporaryRoot, "archflow-dispatch-"));
+  const root = await mkdtemp(join11(realTemporaryRoot, "archflow-dispatch-"));
   try {
-    const home = join9(root, "home");
-    const codexHome = join9(home, ".codex");
+    const home = join11(root, "home");
+    const codexHome = join11(home, ".codex");
     const sourceHome = resolve(process.env.HOME ?? homedir());
     const credential = credentialPaths(adapter2, sourceHome, home);
     await mkdir4(resolve(credential.destination, ".."), { recursive: true });
@@ -44993,8 +48172,8 @@ async function collectInitDiagnostics(input) {
 
 // src/init/registration.ts
 import { spawn as spawn2 } from "node:child_process";
-import { mkdir as mkdir5, readFile as readFile3, writeFile as writeFile2 } from "node:fs/promises";
-import { dirname as dirname5, join as join10 } from "node:path";
+import { mkdir as mkdir5, readFile as readFile6, writeFile as writeFile2 } from "node:fs/promises";
+import { dirname as dirname5, join as join12 } from "node:path";
 var CLAUDE_MCP_TIMEOUT_MS = 36e5;
 var CODEX_TOOL_TIMEOUT_SEC = 3600;
 var CODEX_STARTUP_TIMEOUT_SEC = 30;
@@ -45019,17 +48198,17 @@ ${CLAUDE_MANUAL_ENTRY}
 `;
 var CODEX_PASTE_GUIDANCE = `Add this exact ArchFlow-owned block to .codex/config.toml after resolving the conflicting content:
 ${CODEX_MANAGED_BLOCK}`;
-var ok13 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail15 = (issueCode) => Object.freeze({
+var ok20 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail21 = (issueCode) => Object.freeze({
   schema_version: "1",
   ok: false,
   error: createProjectError("CONFIG_INVALID", { issue_code: issueCode })
 });
 function refuse(issueCode, guidance) {
   process.stderr.write(guidance);
-  return fail15(issueCode);
+  return fail21(issueCode);
 }
-var ioFailure3 = (operation) => Object.freeze({
+var ioFailure5 = (operation) => Object.freeze({
   schema_version: "1",
   ok: false,
   error: createProjectError("IO_ERROR", { operation, attempt: 1 })
@@ -45064,33 +48243,33 @@ function runCommand(command, argv, cwd, environment) {
 }
 async function readOptional(path2) {
   try {
-    return await readFile3(path2, "utf8");
+    return await readFile6(path2, "utf8");
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
     throw error51;
   }
 }
 function parseMcpJson(source) {
-  if (source === void 0) return ok13({ mcpServers: {} });
+  if (source === void 0) return ok20({ mcpServers: {} });
   let value;
   try {
     value = JSON.parse(source);
   } catch {
-    return fail15("mcp-json-foreign-keys");
+    return fail21("mcp-json-foreign-keys");
   }
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return fail15("mcp-json-foreign-keys");
+    return fail21("mcp-json-foreign-keys");
   }
   const record3 = value;
   if (Object.keys(record3).some((key) => key !== "mcpServers")) {
-    return fail15("mcp-json-foreign-keys");
+    return fail21("mcp-json-foreign-keys");
   }
   const servers = record3.mcpServers;
-  if (servers === void 0) return ok13({ mcpServers: {} });
+  if (servers === void 0) return ok20({ mcpServers: {} });
   if (servers === null || typeof servers !== "object" || Array.isArray(servers)) {
-    return fail15("mcp-json-foreign-keys");
+    return fail21("mcp-json-foreign-keys");
   }
-  return ok13({ mcpServers: servers });
+  return ok20({ mcpServers: servers });
 }
 function serverCommand(server) {
   if (server === null || typeof server !== "object" || Array.isArray(server)) return void 0;
@@ -45108,7 +48287,7 @@ function claudeGetDiagnostic(output) {
   };
 }
 async function registerClaudeProject(input) {
-  const path2 = join10(input.working_directory, ".mcp.json");
+  const path2 = join12(input.working_directory, ".mcp.json");
   try {
     const beforeSource = await readOptional(path2);
     const before = parseMcpJson(beforeSource);
@@ -45130,13 +48309,13 @@ async function registerClaudeProject(input) {
       } catch (error51) {
         return commandFailure("claude-cli", error51);
       }
-      if (add.exit_code !== 0 && add.exit_code !== 1) return ioFailure3("claude-mcp-add");
+      if (add.exit_code !== 0 && add.exit_code !== 1) return ioFailure5("claude-mcp-add");
       registration = "created";
     }
     const after = parseMcpJson(await readOptional(path2));
     if (!after.ok) return refuse("mcp-json-foreign-keys", CLAUDE_PASTE_GUIDANCE);
     const projectEntry = after.value.mcpServers.archflow;
-    if (projectEntry === void 0) return ioFailure3("claude-mcp-add-readback");
+    if (projectEntry === void 0) return ioFailure5("claude-mcp-add-readback");
     if (serverCommand(projectEntry) !== "archflow-mcp") return refuse("server-command-collision", CLAUDE_PASTE_GUIDANCE);
     const entry = projectEntry;
     if (entry.timeout !== CLAUDE_MCP_TIMEOUT_MS) registration = registration === "created" ? "created" : "updated";
@@ -45153,7 +48332,7 @@ async function registerClaudeProject(input) {
     const text3 = `${get.stdout}
 ${get.stderr}`;
     const diagnostic = claudeGetDiagnostic(text3);
-    return ok13(Object.freeze({
+    return ok20(Object.freeze({
       schema_version: "1",
       host: "claude",
       registration,
@@ -45164,17 +48343,17 @@ ${get.stderr}`;
       diagnostic: get.exit_code === 0 ? text3.trim() : "Project registration written; Claude runtime approval remains to be completed."
     }));
   } catch {
-    return ioFailure3("claude-registration");
+    return ioFailure5("claude-registration");
   }
 }
 function managedBlockRange(source) {
   const begin = source.indexOf(CODEX_BLOCK_BEGIN);
   const end = source.indexOf(CODEX_BLOCK_END);
-  if (begin === -1 && end === -1) return ok13(void 0);
+  if (begin === -1 && end === -1) return ok20(void 0);
   if (begin === -1 || end === -1 || end < begin || source.indexOf(CODEX_BLOCK_BEGIN, begin + 1) !== -1 || source.indexOf(CODEX_BLOCK_END, end + 1) !== -1) {
-    return fail15("codex-config-foreign");
+    return fail21("codex-config-foreign");
   }
-  return ok13({ start: begin, end: end + CODEX_BLOCK_END.length + (source[end + CODEX_BLOCK_END.length] === "\n" ? 1 : 0) });
+  return ok20({ start: begin, end: end + CODEX_BLOCK_END.length + (source[end + CODEX_BLOCK_END.length] === "\n" ? 1 : 0) });
 }
 function outsideCodexConflict(source) {
   const lines = source.split(/\r?\n/u);
@@ -45224,7 +48403,7 @@ function codexGetDiagnostic(output) {
   }
 }
 async function registerCodexProject(input) {
-  const path2 = join10(input.working_directory, ".codex", "config.toml");
+  const path2 = join12(input.working_directory, ".codex", "config.toml");
   try {
     const before = await readOptional(path2) ?? "";
     const range = managedBlockRange(before);
@@ -45254,7 +48433,7 @@ async function registerCodexProject(input) {
     const resolved = get.exit_code === 0 ? codexGetDiagnostic(get.stdout) : void 0;
     const resolvedCommand = resolved?.command;
     const trusted = get.exit_code === 0 && resolvedCommand === "archflow-mcp" && resolved?.startup_timeout_sec === CODEX_STARTUP_TIMEOUT_SEC && resolved?.tool_timeout_sec === CODEX_TOOL_TIMEOUT_SEC;
-    return ok13(Object.freeze({
+    return ok20(Object.freeze({
       schema_version: "1",
       host: "codex",
       registration,
@@ -45265,7 +48444,7 @@ async function registerCodexProject(input) {
       diagnostic: trusted ? get.stdout.trim() : "Codex project config is written but remains inactive until the repository is trusted in Codex."
     }));
   } catch {
-    return ioFailure3("codex-registration");
+    return ioFailure5("codex-registration");
   }
 }
 
@@ -45309,11 +48488,11 @@ async function runInit(input) {
 }
 
 // src/init/task-initialization.ts
-import { mkdir as mkdir6, open as open6, readFile as readFile4 } from "node:fs/promises";
-import { dirname as dirname6, join as join11 } from "node:path";
+import { mkdir as mkdir6, open as open6, readFile as readFile7 } from "node:fs/promises";
+import { dirname as dirname6, join as join13 } from "node:path";
 var decoder4 = new TextDecoder("utf-8", { fatal: true });
-var ok14 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail16 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok21 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail22 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function errno2(error51, code) {
   return error51 instanceof Error && error51.code === code;
 }
@@ -45327,13 +48506,13 @@ function policyBaseInvalid(commit) {
   });
 }
 async function createTaskConfig(root, taskId) {
-  const taskConfig = join11(root, ".archflow", "tasks", taskId, "config.yaml");
+  const taskConfig = join13(root, ".archflow", "tasks", taskId, "config.yaml");
   try {
-    return new Uint8Array(await readFile4(taskConfig));
+    return new Uint8Array(await readFile7(taskConfig));
   } catch (error51) {
     if (!errno2(error51, "ENOENT")) throw error51;
   }
-  const template = new Uint8Array(await readFile4(join11(root, ".archflow", "config.yaml")));
+  const template = new Uint8Array(await readFile7(join13(root, ".archflow", "config.yaml")));
   await mkdir6(dirname6(taskConfig), { recursive: true });
   try {
     const handle = await open6(taskConfig, "wx");
@@ -45345,7 +48524,7 @@ async function createTaskConfig(root, taskId) {
     return template;
   } catch (error51) {
     if (!errno2(error51, "EEXIST")) throw error51;
-    return new Uint8Array(await readFile4(taskConfig));
+    return new Uint8Array(await readFile7(taskConfig));
   }
 }
 async function stageTaskInitialization(input) {
@@ -45367,7 +48546,7 @@ async function stageTaskInitialization(input) {
   try {
     configBytes = await createTaskConfig(runner.location.worktreeRoot, taskId);
   } catch {
-    return fail16(createProjectError("IO_ERROR", {
+    return fail22(createProjectError("IO_ERROR", {
       operation: context2.operation,
       attempt: context2.attempt
     }));
@@ -45375,22 +48554,22 @@ async function stageTaskInitialization(input) {
   try {
     parseConfigYaml(decoder4.decode(configBytes), "task config");
   } catch {
-    return fail16(createProjectError("CONFIG_INVALID", { issue_code: "task-config-invalid" }));
+    return fail22(createProjectError("CONFIG_INVALID", { issue_code: "task-config-invalid" }));
   }
   try {
     const head = parseGitOid(await readHeadCommit(runner));
     const constitution = await resolvePinnedConstitution(runner, head, context2);
     if (!constitution.ok) return constitution;
     const workflowEntry = await readCommitTreeBlob(runner, head, PINNED_WORKFLOW_PATH);
-    if (workflowEntry === void 0) return fail16(policyBaseInvalid(head));
+    if (workflowEntry === void 0) return fail22(policyBaseInvalid(head));
     const workflowBytes = await readGitBlobBytes(runner, workflowEntry.oid);
     try {
       parseWorkflowYaml(decoder4.decode(workflowBytes), "pinned workflow");
     } catch {
-      return fail16(policyBaseInvalid(head));
+      return fail22(policyBaseInvalid(head));
     }
     const taskRoot = `.archflow/tasks/${taskId}`;
-    return ok14(Object.freeze({
+    return ok21(Object.freeze({
       schema_version: "1",
       artifact_kind: "task-initialization",
       task_id: taskId,
@@ -45410,11 +48589,11 @@ async function stageTaskInitialization(input) {
     }));
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
-      return fail16(projectErrorForGitFailure(error51, runner, context2));
+      return fail22(projectErrorForGitFailure(error51, runner, context2));
     }
     if (error51 instanceof TypeError || error51 instanceof RangeError) {
       const head = parseGitOid(await readHeadCommit(runner));
-      return fail16(policyBaseInvalid(head));
+      return fail22(policyBaseInvalid(head));
     }
     throw error51;
   }
@@ -45435,7 +48614,10 @@ var LOCAL_COMMANDS = Object.freeze([
   "import",
   "checkpoint",
   "init",
-  "task-init"
+  "task-init",
+  "envelope",
+  "build-document",
+  "build-implementation-output"
 ]);
 var maintenanceRecordV1Validator = createJsonSchemaValidator(maintenance_record_schema_default, [primitives_schema_default, path_claim_schema_default]);
 function requireValue(input) {
@@ -45468,6 +48650,10 @@ function validateArtifact(value) {
       return parseAdjudicationEvidence(artifact);
     case "triage":
       return parseTriageCandidate(artifact);
+    case "document":
+      return parseDocumentArtifact(artifact);
+    case "implementation-output":
+      return parseImplementationOutput(artifact);
     default:
       throw new TypeError("validate input.kind is not supported");
   }
@@ -45548,7 +48734,7 @@ async function maintain(input) {
   if (proof.permitted_deletions.length === 0) return { deleted: 0, reachability_proof_digest: proof.digest };
   const maintenanceId = parsePathSafeId(value.maintenance_id);
   const reason2 = String(value.human_reason ?? "");
-  await mkdir7(join12(authority.task_root, "maintenance"), { recursive: false }).catch((error51) => {
+  await mkdir7(join14(authority.task_root, "maintenance"), { recursive: false }).catch((error51) => {
     if (error51.code !== "EEXIST") throw error51;
   });
   const target = await resolveTaskPath({ runner, taskId: authority.task_id, claim: parseTaskPathClaim(`maintenance/${maintenanceId}.json`), expectedClass: "maintenance-record", context: authority.context });
@@ -45594,7 +48780,24 @@ async function runLocalCommand(input) {
   }
   const created = await services(input);
   if (!created.ok) return created;
-  if (input.command === "status") return computeDegradedStatus(created.value.dependencies, created.value.authority);
+  if (input.command === "status") return computeTaskStatus(created.value.dependencies, created.value.authority);
+  if (input.command === "envelope") return computeCallEnvelope(created.value, requireValue(input));
+  if (input.command === "build-document") {
+    return buildDocumentArtifact(
+      created.value.runner,
+      created.value.authority,
+      requireValue(input)
+    );
+  }
+  if (input.command === "build-implementation-output") {
+    if (created.value.state === void 0) throw new TypeError("build-implementation-output requires current task state");
+    return buildImplementationOutput(
+      created.value.dependencies,
+      created.value.authority,
+      created.value.state,
+      requireValue(input)
+    );
+  }
   if (input.command === "snapshot") {
     const value = recordValue(input);
     const manifest = parseResultManifest(value.manifest);
@@ -45640,7 +48843,11 @@ async function runLocalCommand(input) {
   if (input.command === "decide") {
     const value = requireValue(input);
     const kind = value.kind;
-    if (kind !== "request" && kind !== "decision") throw new TypeError("decide input.kind must be request or decision");
+    if (kind === "interface") {
+      assertPlainJson(value.value, "decide interface value");
+      return writeGateDecisionInterface(created.value.dependencies, created.value.authority, structuredClone(value.value));
+    }
+    if (kind !== "request" && kind !== "decision") throw new TypeError("decide input.kind must be request, decision, or interface");
     const document2 = value.value;
     const parsed = kind === "request" ? parseGateRequest(document2) : parseGateDecisionRecord(document2);
     return createManualGateFile(created.value.dependencies, created.value.authority, kind, parsed);
@@ -45668,7 +48875,7 @@ async function readInput(path2) {
     process3.stdin.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
     process3.stdin.once("end", () => resolve2(Buffer.concat(chunks)));
     process3.stdin.once("error", reject);
-  }) : await readFile5(path2);
+  }) : await readFile8(path2);
   if (bytes.byteLength === 0) return void 0;
   return JSON.parse(bytes.toString("utf8"));
 }

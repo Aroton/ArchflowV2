@@ -54,10 +54,8 @@ function phaseInstance(call: ParsedToolCall, context: RepositoryOperationContext
   }
 }
 
-function rubricDigest(call: ParsedToolCall): Sha256Digest {
-  return call.name === "archflow_counter_review"
-    ? canonicalJsonDigest(call.input.rubric as never)
-    : canonicalJsonDigest({});
+function rubricDigest(_call: ParsedToolCall): Sha256Digest {
+  return canonicalJsonDigest({});
 }
 
 /** Builds the production resolver from canonical readers; no caller digest or subject is accepted. */

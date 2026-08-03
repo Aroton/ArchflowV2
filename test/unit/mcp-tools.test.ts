@@ -317,6 +317,9 @@ describe("correlated MCP tool contracts", () => {
     const input = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, origin, rationale: "Needed" };
     expect(() => parseToolCall("archflow_waiver", { ...input, task_id: "other" })).toThrow(/task_id/);
     const call = parseToolCall("archflow_waiver", input);
+    const supplemental = { action: "decline", gate: { prior_gate_id: "gate-2", task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), input_fingerprint: digest }, reason: "Proceed without optional review" } as const;
+    expect(parseToolCall("archflow_waiver", { ...input, supplemental_outcome: supplemental }).input.supplemental_outcome).toEqual(supplemental);
+    expect(() => parseToolCall("archflow_waiver", { ...input, supplemental_outcome: { ...supplemental, action: "unknown" } })).toThrow();
     const success = { origin_gate_id: "gate-1", waiver_gate_id: "gate-2", task_id: "task-1", rule_id: "Rule:1", rule_version: 1, subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), scope: origin.scope, human_provenance: { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "Decision:1", helper_invocation_id: "Helper:1", recorded_at: "2026-07-27T12:00:00.000Z" }, granted: false, notes: "Denied", revision: 1 };
     expect(validateProjectResultStructure(call, { schema_version: "1", ok: true, value: success }).ok).toBe(true);
     expect(() => validateProjectResultStructure(call, { schema_version: "1", ok: true, value: { ...success, human_provenance: { ...success.human_provenance, recorded_at: "2026-07-27T12:00:00Z" } } })).toThrow();

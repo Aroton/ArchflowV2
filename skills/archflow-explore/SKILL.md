@@ -5,7 +5,7 @@ description: Explore a codebase and produce persistent ArchFlow context referenc
 
 # Explore Codebase
 
-Create reference documents in `.archflow/context/`; they persist across tasks and sessions. A focus area may be supplied with the invocation.
+Create reference documents in `.archflow/context/`; they persist across tasks and sessions. A focus area may be supplied with the invocation. If `.archflow/workflow.yaml` or `.archflow/constitution/` is absent, stop and direct the user to `archflow-init` before writing context.
 
 ## Setup
 
@@ -37,7 +37,7 @@ Stop. Apply requested changes and re-present until the user explicitly approves.
 Archflow: Explore Codebase Context
 ```
 
-Report completion with both refresh and workflow-next actions:
+Report completion with both refresh and workflow-next actions. The next task will use the canonical tree `.archflow/tasks/<task>/{config.yaml,state.json,prd.md,design.md}` and `.archflow/tasks/<task>/phases/<n>/{design.md,impl-notes.md}`; never create the legacy `architecture.md` or `phases/phase-<n>-*.md` layout.
 
 ```text
 Context committed. Refresh or focus exploration anytime:

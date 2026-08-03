@@ -1,38 +1,27 @@
 ---
 name: archflow-status
-description: Show ArchFlow task status and recommend exactly one next action. Use when the user asks about project progress, phase state, or what to do next.
+description: Report reconciled durable ArchFlow truth and exactly one server-derived next action.
 ---
 
-# Project Status
+# Workflow Status
 
-Optionally accept a task name. Inspect `.archflow/` without changing files.
+Accept an optional `<task>`. This skill is read-only: it does not edit artifacts, resolve gates, repair authority, stage files, or commit.
 
-1. If `.archflow/` is absent, report that no ArchFlow tasks exist and direct the user to `archflow-prd <task-name>`.
-2. List task directories under `.archflow/tasks/`; when a task was supplied, report only that task.
-3. For every reported task, inspect `prd.md`, `architecture.md` (including its Progress table), and every phase design and implementation-log file. Present:
+If `.archflow/` is absent, report that repository initialization is required. If no task is supplied, list directory names directly under `.archflow/tasks/`; do not ask the helper to enumerate tasks. Run `archflow-local status --task <task>` once for each selected task and inspect the JSON result's `ok` field rather than treating process exit zero as success.
 
-   ```markdown
-   ## ArchFlow Status
+The normal status result is the only authority for task state. Report its task, revision, phase instance, step, step status, attempt, verified configuration state, reconciliation state, evidence availability and assessment, open gate, checkpoint head, blocking reasons, and exactly one `next_action`. Do not derive progress from `prd.md`, `design.md`, `phases/<n>/design.md`, `phases/<n>/impl-notes.md`, filenames, status lines, Git history, conversation, or missing files.
 
-   ### [task-name]
-   PRD: Done / Not started
-   Architecture: Done / Not started
-   Phases:
-   | # | Name | Status |
-   |---|------|--------|
-   | 1 | ... | Complete |
-   | 2 | ... | In Progress |
-   | 3 | ... | Not Started |
+When configuration is not verified, report only the expected and observed digests supplied by status. Explain that an intentional routing, model, or effort change needs a distinct new task or the explicit upgrade workflow. Never echo configuration contents as part of the mismatch.
 
-   **Next**:
-   Claude Code: `/archflow-[skill] [arguments]`
-   Codex: `$archflow-[skill] [arguments]`
-   ```
+When status reports an open gate, include its kind and ID, the task-root decision path, every ready-to-write decision template, and the complete optional counter-review prompt and paths returned by status. These values come from the live gate projection and cover gates opened inside adjudication as well as skill-opened gates. State that the user alone chooses whether to run the optional review and which decision to authorize; do not select, write, approve, waive, cancel, or resolve anything.
 
-   If several tasks exist, use a compact version for each.
-4. Check `.archflow/tasks/<task>/reviews/` for counter-review files lacking a `## Triage` section. An untriaged counter-review means the authoring skill should be resumed to triage it, and that takes priority as the next action (PRD or architecture reviews → the skill that wrote the document; `phase-N-design-*` → `archflow-phase-design`; `phase-N-impl-*` → `archflow-phase-impl`).
-5. If context documents exist, report when they were last updated. If they carry a commit stamp, compare it against the current HEAD (`git rev-list --count <stamp>..HEAD`) and flag significant drift with a suggestion to re-run `archflow-explore`, focused on the areas that changed most.
-6. Show the five most recent commit subjects using `git log --oneline -5`.
-7. Recommend exactly one next action for the requested or most active task: create a PRD, design architecture, triage an untriaged counter-review, or advance the next incomplete phase — `archflow-phase-design <task> N` when the phase has no design doc, `archflow-phase-impl <task> N` (in a fresh session) when it is `DESIGNED` or `IN PROGRESS` — or declare completion. If context does not exist, recommend exploration only when it is the most useful next action.
+Also report the exact supplemental outcomes status makes available for the current gate lifecycle. Explain that every retry keeps the original `archflow_gate` input and `intent_id`: decline creates no review; an elected installed review first yields `SUPPLEMENTAL_REVIEW_REQUIRED`, then uses `ingest`, then `triage-no-change` or accepted-change supersession with the new artifact digest returned by `envelope`. `GATE_SUPERSEDED` approves nothing and requires the fixed point and a fresh gate. Do not perform or infer any of these human choices.
 
-Replace `[skill] [arguments]` with exactly one applicable next action; always display both copy/paste-ready client forms.
+Present `next_action.code`, its detail, whether a human is required, and any returned phase instance, step, skill, gate kind, or gate ID verbatim. Recommend that one action only. In particular:
+
+- `initialize-repository`, `create-task`, `run-step`, `commit-phase`, `advance-phase`, and `complete-task` identify workflow work, not inferred permission to skip the named skill. `commit-phase` means authorization exists but Git has not yet proved the authorized outputs committed on the approved current target; it does not itself authorize staging or committing without the phase skill's explicit confirmation gate.
+- `open-gate`, `resolve-open-gate`, and `triage-supplemental-review` are human trust boundaries and remain pending until durable authority proves resolution.
+- `resume-exact-intent`, `restore-or-record-new-transition`, `inspect-retained-receipt`, `create-fresh-intent`, `resolve-current-authority`, `restore-pinned-config`, `import-manual-checkpoints`, and `inspect-state` are reported as blocking recovery work exactly as returned; do not invent a repair.
+- `task-complete` means the final planned implementation phase is committed. It does not imply QA, staging, release, deployment, or publication.
+
+When the result is not `ok`, report its structured error and safe next action without promoting partial information to state. Manual and degraded reconstruction are outside this skill's current normal-mode contract.

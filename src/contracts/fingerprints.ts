@@ -93,7 +93,7 @@ type SelectorKeys = {
   readonly archflow_counter_review: "artifact_path" | "rubric";
   readonly archflow_adjudicate: "artifact_path" | "upstream_paths";
   readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "supersedes" | "supplemental_outcome" | "kind" | "context";
-  readonly archflow_waiver: "origin" | "rationale";
+  readonly archflow_waiver: "origin" | "rationale" | "supplemental_outcome";
 };
 type ExactSelectorCoverage = {
   readonly [K in ToolName]: Exclude<keyof ToolInput<K>, keyof CommonToolInput> extends SelectorKeys[K]

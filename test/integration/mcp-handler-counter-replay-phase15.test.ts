@@ -3,19 +3,25 @@ import { delimiter, dirname, join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { canonicalDocument, canonicalJsonDigest, gitBlobOid, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
+import { canonicalDocument, canonicalJsonDigest, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { computeInputFingerprint } from "../../src/contracts/fingerprints.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
-import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
+import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { createToolHandlers } from "../../src/mcp/handlers/index.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import { resolvePinnedConstitution } from "../../src/state/constitution.js";
+import { buildDocumentArtifact } from "../../src/state/document-artifact.js";
+import { createAtomicWriter } from "../../src/state/atomic.js";
+import { ensurePayloadParent, ensureResultDirectory } from "../../src/state/layout.js";
+import { installSnapshot } from "../../src/state/snapshots.js";
+import { prepareDocumentResult } from "../../src/mcp/handlers/state-results.js";
+import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
 
 const TASK = parseTaskSlug("handler-counter-replay");
@@ -34,6 +40,12 @@ roles:
     model: gpt-fixture
     effort: high
 `;
+const scanner: SecretScanner = {
+  scan: async (candidates) => ({
+    schema_version: "1", outcome: "clean", detector_set_id: "counter-replay-scanner" as never,
+    scanned_paths: candidates.map((candidate) => candidate.virtual_path),
+  }),
+};
 
 afterAll(cleanupTemporaryRepositories);
 
@@ -75,18 +87,37 @@ Preserve explicit human review gates.
   if (!constitution.ok) throw new Error(constitution.error.code);
   const configDigest = sha256Bytes(new TextEncoder().encode(CONFIG));
   const workflowDigest = sha256Bytes(workflow);
-  const artifactPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/${ARTIFACT}`);
   const fingerprint = computeInputFingerprint({
     schema_version: "1",
     workflow_digest: workflowDigest,
     config_digest: configDigest,
     constitution_digest: constitution.value.digest,
-    artifact_identities: [{ path: artifactPath, mode: "100644", oid: gitBlobOid(ARTIFACT_BYTES) }],
+    artifact_identities: [],
     upstream_identities: [],
-    rubric_digest: canonicalJsonDigest(RUBRIC),
+    rubric_digest: canonicalJsonDigest({}),
     phase_instance: PHASE,
     declared_inputs: [],
   });
+  const produceArtifact = await buildDocumentArtifact(discovered.value, authority.value, {
+    phase_instance: PHASE, step: "produce", document_path: parseTaskPathClaim(ARTIFACT),
+    declared_inputs: [], input_fingerprint: fingerprint,
+  });
+  if (!produceArtifact.ok) throw new Error(produceArtifact.error.code);
+  const preparedProduce = await prepareDocumentResult({
+    services: { authority: authority.value, runner: discovered.value } as Parameters<typeof prepareDocumentResult>[0]["services"],
+    artifact: produceArtifact.value, result_id: "produce-result" as never,
+    retained_task_bytes: parseSafeInteger(0), measured_at_revision: parseSafeInteger(6), scanner,
+  });
+  if (!preparedProduce.ok) throw new Error(preparedProduce.error.code);
+  await ensureResultDirectory(authority.value, preparedProduce.value.reference.result_digest);
+  for (const payload of preparedProduce.value.prepared.payloads) {
+    await ensurePayloadParent(authority.value, preparedProduce.value.reference.result_digest, payload.target.absolute);
+  }
+  const installedProduce = await installSnapshot(
+    createAtomicWriter(), preparedProduce.value.prepared, preparedProduce.value.manifest_target,
+    discovered.value.location.worktreeRoot as never,
+  );
+  if (!installedProduce.ok) throw new Error(installedProduce.error.code);
   const state: TaskStateV1 = {
     schema_version: "1",
     task_id: TASK,
@@ -102,7 +133,7 @@ Preserve explicit human review gates.
     workflow_digest: workflowDigest,
     constitution_digest: constitution.value.digest,
     policy_base_commit: policyBaseCommit,
-    authoritative_results: [],
+    authoritative_results: [preparedProduce.value.reference],
     approvals: [],
     waivers: [],
   };
