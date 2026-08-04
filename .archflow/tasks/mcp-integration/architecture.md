@@ -818,9 +818,11 @@ The full suite passed 1,163 of 1,166 tests. The three failures are exactly the i
 
 **Depends on**: Phases 1–19
 
-**Requirements**: REQ-04, REQ-05, REQ-11, REQ-12, REQ-13, REQ-14, REQ-15, REQ-16, REQ-17, REQ-18, REQ-20, REQ-21, REQ-22, REQ-23, REQ-24, REQ-25, REQ-26, REQ-27, REQ-28, REQ-29, REQ-30, REQ-31, REQ-32, REQ-33, REQ-34, REQ-35, REQ-36, REQ-37, REQ-38, REQ-39, REQ-50
+**Requirements**: REQ-01, REQ-04, REQ-05, REQ-11, REQ-12, REQ-13, REQ-14, REQ-15, REQ-16, REQ-17, REQ-18, REQ-20, REQ-21, REQ-22, REQ-23, REQ-24, REQ-25, REQ-26, REQ-27, REQ-28, REQ-29, REQ-30, REQ-31, REQ-32, REQ-33, REQ-34, REQ-35, REQ-36, REQ-37, REQ-38, REQ-39, REQ-50
 
 **Scope**: Expand the owning-phase proofs across fault/configuration matrices: task/manual initialization and checkpoint chains; immutable-config mutations; local races and clone-divergence repair; Git text/mode/symlink normalization; snapshot growth/caps/retention/maintenance/secret scanning; implementation-manifest operations; path portability; gate attacks; selected-CLI own-auth trust with repository/global/other-family/unrelated-secret isolation; managed context injection; descendant escape; cancellation; and migration.
+
+REQ-01 and host-registration crash safety were added to this phase on 2026-08-04, by explicit user decision at the Phase 20 design gate. Phase 20 design review found that `src/init/registration.ts` replaces `.mcp.json` and `.codex/config.toml` with a truncating write, so an interrupted registration destroys a user's own host configuration. Phase 16 owns registration and did not defer this; the fix and its fault proof are taken here rather than deferred, and host-config writes use a mechanism local to `src/init/` because the branded state and projection writers reject unclassed paths by design.
 
 **Success Criteria**:
 
