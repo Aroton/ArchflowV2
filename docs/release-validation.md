@@ -42,7 +42,7 @@ implement.
 | ID | Status | Evidence and boundary actually proved | Remaining boundary |
 |---|---|---|---|
 | VAL-01 | **pending** | `docs/real-host-journeys.md` specifies the Claude-producer and Codex-producer terminal journeys, including exact human gates, two implementation phases, commit authorization, separate commit confirmation, and final-state capture. Prior normal-mode mechanics are covered by `test/integration/review-fixed-point-live-phase17.test.ts`, `test/unit/state-next-action-phase17.test.ts`, and the Phase 17 implementation log. | Neither operator journey has been executed: `docs/validation/journey-val01-claude.md` and `docs/validation/journey-val01-codex.md` do not exist. There is therefore no real terminal proof of either full producer direction, exact final-diff authorization, or merged implementation. |
-| VAL-02 | **blocked** | Phase 14 recorded deterministic fake-CLI fixed-point mechanics in `test/integration/review-corpus-phase14.test.ts` and `test/integration/review-fixed-point-phase14.test.ts`. The real benchmark in `docs/validation/review-benchmark.json` completed all 12 serialized turns in both producer directions in 753.3 seconds; immutable observations are bound by digest `61f6b56b0ac92c587c5312f12c3c7babcfd29d1925206d14fa07b81f7c221eea`. The user dispositioned all runs: six `seed-detected`, one `clean-pass`, and five `false-blocker`, yielding approval detection 1.0, false-blocker rate 0.8333333333333334, triage completeness 12, and zero defects found after pass. | The user rejected release thresholds because five of six controls produced false blockers. `docs/validation/thresholds.json` intentionally does not exist. The quality gate failed and reopens the central automation premise; VAL-02 cannot advance through threshold tuning or added mechanics without a revised, approved product approach. |
+| VAL-02 | **passed** | Phase 14 recorded deterministic fixed-point mechanics. After the first real benchmark's 83.3% false-blocker failure, the approved rubric recalibration was measured over the unchanged corpus and 12-run matrix. Immutable observations are bound by digest `e39457d0ffb34e0727dd085288dc968cda9182fc9bd508d5d5a2a323745f257f`; human scoring records four `seed-detected`, two `missed`, and six `clean-pass`, yielding detection 2/3, false-blocker rate 0, triage completeness 12, and two defects missed by non-blocking reviews. The user approved these observed metrics and the digest-bound thresholds in `docs/validation/thresholds.json`. | The sample is deliberately small and one seeded `LEASE_EXPIRED` handling defect was missed in both directions; the approved threshold records that observed limitation rather than claiming perfect detection. |
 | VAL-03 | **passed** | The Phase 12/14/15 recorded suites prove pinned-constitution gating and exact waiver authority: `test/integration/state-gate-lifecycle-phase12.test.ts` (grant, denial, cancellation, stale/wrong binding, exact replay), `test/unit/review-phase14-services.test.ts` (exact rule/version/subject/operation/boundary waiver binding), and `test/integration/gate-supplemental-phase15.test.ts` (real handler waiver round trip). | This is a deterministic durable-authority condition; Phase 21 adds no required real-host boundary. |
 | VAL-04 | **passed** | The Phase 14 log records 64/64 focused tests. `test/unit/review-phase14-services.test.ts` proves material-upstream ordering, stale evidence, exact approval authority, and required re-entry; `test/integration/review-fixed-point-phase14.test.ts` proves accepted findings cause artifact rewrites and only the final aligned digest advances. | No outstanding boundary identified for the stated material-drift condition. |
 | VAL-05 | **partial** | `test/integration/mcp-handler-state-replay-phase15.test.ts` proves a byte-identical authoritative result on exact replay; `test/integration/mcp-handler-counter-replay-phase15.test.ts` proves replay/recovery does not relaunch a reviewer. `test/crash/state-transaction.test.ts` proves receipt/result/state cut recovery, while the Phase 9 log records the real multi-process and crash-cut matrix. The current installed suite proves byte-identical snapshot/restore and exact initialization replay in a dirty worktree with unrelated tracked/untracked bytes unchanged. | Phase 21 still does not prove all three installed restore-collision decisions (discard-and-restore, adopt, abort). |
@@ -62,22 +62,21 @@ implement.
 ## Benchmark disposition and quality decision
 
 `docs/validation/review-benchmark.json` contains 12 of 12 completed real review turns: six corpus
-cases reviewed once in each producer direction, serialized over 753.3 seconds. Its immutable
+cases reviewed once in each producer direction, serialized over 469.7 seconds. Its immutable
 observation digest is
-`61f6b56b0ac92c587c5312f12c3c7babcfd29d1925206d14fa07b81f7c221eea`.
+`e39457d0ffb34e0727dd085288dc968cda9182fc9bd508d5d5a2a323745f257f`.
 
 The user reviewed every finding against the corpus manifest and approved these dispositions:
 
-- Six seeded-case runs are `seed-detected`; approval detection rate is 1.0.
-- One control run is `clean-pass` and five are `false-blocker`; false-blocker rate is 5/6, or
-  0.8333333333333334. Codex produced two of the three false-blocked controls in its direction;
-  Claude produced three of three.
-- Triage completeness is 12 of 12, and defects found after pass is zero.
+- Four seeded-case runs are `seed-detected` and two are `missed`; approval detection rate is 2/3.
+  Both misses are the same `LEASE_EXPIRED` handling defect, once in each producer direction.
+- All six control runs are `clean-pass`; false-blocker rate is zero.
+- Triage completeness is 12 of 12, and defects found after a non-blocking review is two.
 
-The high detection rate does not compensate for the 83.3% false-blocker rate. The user explicitly
-rejected release thresholds, so `docs/validation/thresholds.json` was not created. This is the PRD's
-named failure condition: independent review did not demonstrate acceptable useful quality on clean
-controls, and the automation premise must be revisited rather than hidden by more mechanics.
+The user explicitly approved the recalibrated result and the observed release thresholds. The
+digest-bound `docs/validation/thresholds.json` requires detection of at least 2/3 of seeded runs,
+zero false blockers, complete disposition of all 12 runs, and no more than the two observed misses.
+This closes VAL-02 while preserving the measured `LEASE_EXPIRED` limitation.
 
 ## Phase 21 gaps mapped to VALs
 
@@ -114,13 +113,12 @@ unmet.
 
 ## Release decision
 
-VAL-01 through VAL-06 are **not all passed**: VAL-01 is pending, VAL-02 is blocked, and VAL-05 and VAL-06 are partial. Archforge work therefore
+VAL-01 through VAL-06 are **not all passed**: VAL-01 is pending, and VAL-05 and VAL-06 are partial. Archforge work therefore
 remains blocked by the PRD's terminal-validation gate. Independently, VAL-14 blocks release of the
 local Claude subscription-dispatch path.
 
-VAL-02 now requires a revised and explicitly approved product approach to independent review before
-release or Archforge work can proceed; rerunning this benchmark or inventing thresholds does not
-resolve the rejected quality gate. Other evidence-producing actions remain: obtain a normatively
-valid Claude adjudication observation without relaxing post-validation and execute the three
+VAL-02 now passes under the explicitly approved digest-bound thresholds. Other evidence-producing
+actions remain: obtain a normatively valid Claude adjudication observation without relaxing
+post-validation and execute the three
 journeys in `docs/real-host-journeys.md`. This report must be updated from observed artifacts; the
 presence of procedures or test sources alone must never be promoted to a pass.

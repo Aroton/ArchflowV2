@@ -88,11 +88,18 @@ const rubric = parseRubricV1({
   schema_version: "1",
   kind: "artifact",
   mode: "adversarial",
-  criteria: [{
-    id: "substantive-correctness",
-    text: "Report defects that require producer action: contradictions, unmet requirements, missing handling for stated failure paths, or designs that violate stated constraints. Do not report style preferences, restatements, or speculative hardening.",
-    blocking: true,
-  }],
+  criteria: [
+    {
+      id: "substantive-correctness",
+      text: "Report a blocking defect only when it requires producer action, and cite the specific artifact statement it contradicts or stated requirement it leaves unmet; citation is necessary but not sufficient. The violation must follow from the artifact's own text without assuming implementation behavior, ordering, or environment it does not specify. A contradiction that depends on such an assumption, or a debatable reading of whether stated text satisfies a criterion, is not blocking. Missing handling is a defect only for a condition the artifact claims to cover or a stated requirement demands. Local edge-case handling belongs to the implementer. A sound artifact is expected to yield zero blocking findings; that is successful review, not under-performance.",
+      blocking: true,
+    },
+    {
+      id: "advisory-observations",
+      text: "Use non-blocking findings for completeness suggestions, debatable readings, and observations, including handling for conditions outside the artifact's stated scope. Do not inflate them into blockers merely to report them.",
+      blocking: false,
+    },
+  ],
 });
 const rubricDigest = canonicalJsonDigest(rubric as unknown as PlainJsonValue);
 const phase = parsePhaseInstanceId("prd");
@@ -130,6 +137,29 @@ const benchmarkAvailable = benchmarkEnabled() && realHostsAvailable();
 requireRealHostsAvailable(!benchmarkEnabled() || benchmarkAvailable);
 
 describe("Phase 21 benchmark digest contract", () => {
+  it("pins the recalibrated rubric and unchanged twelve-run matrix without real model calls", async () => {
+    expect(rubric.criteria).toEqual([
+      {
+        id: "substantive-correctness",
+        text: "Report a blocking defect only when it requires producer action, and cite the specific artifact statement it contradicts or stated requirement it leaves unmet; citation is necessary but not sufficient. The violation must follow from the artifact's own text without assuming implementation behavior, ordering, or environment it does not specify. A contradiction that depends on such an assumption, or a debatable reading of whether stated text satisfies a criterion, is not blocking. Missing handling is a defect only for a condition the artifact claims to cover or a stated requirement demands. Local edge-case handling belongs to the implementer. A sound artifact is expected to yield zero blocking findings; that is successful review, not under-performance.",
+        blocking: true,
+      },
+      {
+        id: "advisory-observations",
+        text: "Use non-blocking findings for completeness suggestions, debatable readings, and observations, including handling for conditions outside the artifact's stated scope. Do not inflate them into blockers merely to report them.",
+        blocking: false,
+      },
+    ]);
+
+    const manifest = await loadManifest();
+    expect(directions).toEqual([
+      { id: "claude-to-codex", producer_family: "claude", reviewer_family: "codex" },
+      { id: "codex-to-claude", producer_family: "codex", reviewer_family: "claude" },
+    ]);
+    expect(repeatCount).toBe(1);
+    expect(manifest.value.cases.length * directions.length * repeatCount).toBe(12);
+  });
+
   it("keeps human dispositions and derived metrics outside the immutable observation digest", () => {
     const observationPayload = {
       schema_version: "1",
@@ -165,6 +195,39 @@ describe("Phase 21 benchmark digest contract", () => {
       runs: [{ run_id: "case-1-claude-to-codex-r1", verdict: "pass" }],
     })).not.toBe(document.benchmark_result_digest);
   });
+
+  it("binds approved thresholds to the current immutable observation and human scoring", async () => {
+    const benchmark = JSON.parse(await readFile(resultPath, "utf8")) as {
+      readonly benchmark_result_digest: string;
+      readonly human_scoring: { readonly primary_metrics: PlainJsonValue };
+    };
+    const thresholds = JSON.parse(await readFile(
+      join(process.cwd(), "docs", "validation", "thresholds.json"),
+      "utf8",
+    )) as {
+      readonly benchmark_result_digest: string;
+      readonly observed_metrics: {
+        readonly approval_detection_rate: number;
+        readonly defects_found_after_pass: number;
+        readonly false_blocker_rate: number;
+        readonly triage_completeness: number;
+      };
+    };
+
+    expect(thresholds.benchmark_result_digest).toBe(benchmark.benchmark_result_digest);
+    expect(thresholds.observed_metrics).toEqual({
+      approval_detection_rate: 2 / 3,
+      defects_found_after_pass: 2,
+      false_blocker_rate: 0,
+      triage_completeness: 12,
+    });
+    expect(benchmark.human_scoring.primary_metrics).toEqual({
+      approval_detection_rate: 2 / 3,
+      defects_found_after_pass: { status: "complete", value: 2 },
+      false_blocker_rate: 0,
+      triage_completeness: { status: "complete", value: 12 },
+    });
+  });
 });
 
 async function loadManifest(): Promise<Readonly<{ bytes: Uint8Array; value: CorpusManifest }>> {
@@ -188,6 +251,7 @@ describe.skipIf(!benchmarkAvailable)("Phase 21 real-host review-quality benchmar
     const benchmarkInput = {
       schema_version: "1",
       corpus_manifest_sha256: sha256Bytes(manifest.bytes),
+      rubric_digest: rubricDigest,
       disposition_vocabulary: manifest.value.disposition_vocabulary,
       directions: directions.map((direction) => ({
         id: direction.id,
@@ -316,6 +380,7 @@ describe.skipIf(!benchmarkAvailable)("Phase 21 real-host review-quality benchmar
     const observationPayload = {
       schema_version: "1",
       benchmark_input_digest: benchmarkInputDigest,
+      rubric_digest: rubricDigest,
       run_conditions: {
         serialized_model_turn_count: plannedTurns,
         repeat_count_per_direction: repeatCount,

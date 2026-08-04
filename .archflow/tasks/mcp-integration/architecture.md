@@ -844,7 +844,7 @@ REQ-01 and host-registration crash safety were added to this phase on 2026-08-04
 
 **Scope**: Run real supported Claude→Codex and Codex→Claude journeys, clean normal initialization plus policy/config mismatch cases, server-absent checkpoint journeys, upgrade journeys, multi-phase non-collision, representative snapshot growth/caps/retention/maintenance/secret rejection, dirty restore and `restore-collision` decisions, interruption/resume, optional gate review, selected-CLI own-auth plus prohibited-access canaries/output scans, and the review/policy/drift corpus. Set thresholds from results.
 
-**In progress 2026-08-04.** Provider-specific transport-schema projections now adapt the unchanged normative review/adjudication schemas to the installed Claude and Codex structured-output subsets; every returned document is still post-validated by the normative parser before server attestation. Both real counter-review directions and Codex adjudication succeed. Claude adjudication reached structured output but one observed response was correctly rejected for contradictory matched/uncertain rule lists. The 12-turn review benchmark detected all six seeded defects but produced human-confirmed blockers on five of six clean controls (83.3% false-blocker rate); the user rejected thresholds, so `VAL-02` is blocked and the automation premise is reopened. The current tracked bundle `9788624d71e48a3b683af3112f0f12e2fc735f7cd598a508e07f2d2e25d92499` is risk-accepted, reproduced, and passes the installed nine-slice journey. Phase 21 remains incomplete pending a revised approved review approach and the operator-executed VAL-01/VAL-09/VAL-12 journeys.
+**In progress 2026-08-04.** Provider-specific transport-schema projections adapt the unchanged normative review/adjudication schemas to the installed Claude and Codex structured-output subsets; every returned document is still post-validated before server attestation. After the first benchmark's 83.3% false-blocker failure, the approved rubric recalibration was re-measured over the unchanged 12-turn matrix. It detected four of six seeded runs, missed the same `LEASE_EXPIRED` defect in both directions, and produced zero false blockers across six controls. The user approved those observed thresholds, so `VAL-02` passes with its measured limitation recorded. The tracked bundle `9788624d71e48a3b683af3112f0f12e2fc735f7cd598a508e07f2d2e25d92499` is risk-accepted, reproduced, and passes the installed nine-slice journey. Phase 21 remains incomplete pending the operator-executed VAL-01/VAL-09/VAL-12 journeys and the remaining partial installed boundaries.
 
 **Success Criteria**:
 
@@ -855,7 +855,7 @@ REQ-01 and host-registration crash safety were added to this phase on 2026-08-04
 - [ ] Clean normal initialization reaches revision 1 only from the committed approved policy base; missing/uncommitted/mismatched bases fail. Manual initialization/checkpoints and greatest-chain recovery produce equivalent conservative authority.
 - [ ] Every supported real host/provider proves the selected first-party CLI's own subscription authentication works in both producer directions while ArchFlow handles no credential values, API-key/provider routing is scrubbed, and repository/global/other-family/unrelated-secret canaries remain inaccessible/unemitted; shared selected-CLI own-auth access alone does not fail the run.
 - [ ] A real task reaches the snapshot boundaries, receives `SNAPSHOT_LIMIT` above either cap without partial authority, retains all current/evidence chains, records a safe maintenance prune, and rejects a secret-bearing checkpoint before Git projection.
-- [ ] The approved corpus thresholds demonstrate substantive defect detection and acceptable false blockers; failure of `VAL-02` reopens the automation premise.
+- [x] The approved corpus thresholds demonstrate substantive defect detection and acceptable false blockers; the measured two-direction miss is recorded without claiming perfect detection.
 
 ### Phase 22: Release Packaging, Support Matrix, and Documentation Consistency
 
@@ -900,7 +900,7 @@ REQ-01 and host-registration crash safety were added to this phase on 2026-08-04
 | 18 | Manual and Degraded Recovery Workflow | COMPLETE (2026-08-03) |
 | 19 | Legacy Upgrade Workflow | COMPLETE (2026-08-04) |
 | 20 | Reliability and Security Matrices | COMPLETE (2026-08-04) |
-| 21 | Real-Host E2E and Review-Quality Validation | IN PROGRESS (2026-08-04; VAL-02 blocked) |
+| 21 | Real-Host E2E and Review-Quality Validation | IN PROGRESS (2026-08-04; VAL-02 passed) |
 | 22 | Release Packaging, Support Matrix, and Documentation Consistency | Not Started |
 
 ---
