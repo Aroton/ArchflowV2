@@ -8,11 +8,12 @@ This repo contains one portable Agent Skills source of truth in `skills/`. The i
 
 ## Skills
 
-The canonical set contains seven portable skills:
+The canonical set contains eight portable skills:
 
 | Skill | Purpose |
 |---------|---------|
 | `/archflow-init` | Initialize repository assets and project-scoped MCP registrations |
+| `/archflow-upgrade <legacy-source> <task>` | Stage a legacy task into a distinct canonical task and guide its migration audit |
 | `/archflow-explore` | Explore codebase, produce persistent context references |
 | `/archflow-prd <task>` | Research + create PRD for a task |
 | `/archflow-design <task>` | Design architecture + phases for a task |
@@ -20,7 +21,7 @@ The canonical set contains seven portable skills:
 | `/archflow-phase-impl <task> N` | Implement, verify, review, and commit phase N (fresh session) |
 | `/archflow-status [task]` | Check status and next action |
 
-In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-explore`, `$archflow-prd`, `$archflow-design`, `$archflow-phase-design`, `$archflow-phase-impl`, and `$archflow-status`.
+In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-upgrade`, `$archflow-explore`, `$archflow-prd`, `$archflow-design`, `$archflow-phase-design`, `$archflow-phase-impl`, and `$archflow-status`.
 
 ## How It Works
 

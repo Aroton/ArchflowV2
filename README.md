@@ -1,6 +1,6 @@
 # ArchFlow
 
-A lightweight, human-centered development workflow for Claude Code and Codex. Seven portable Agent Skills turn vague ideas into structured implementations with human review at every stage.
+A lightweight, human-centered development workflow for Claude Code and Codex. Eight portable Agent Skills turn vague ideas into structured implementations with human review at every stage.
 
 ## What It Does
 
@@ -18,6 +18,16 @@ ArchFlow guides you through a structured development process:
 /archflow-phase-design my-feature 1   Design phase 1 (review, approve)
 /archflow-phase-impl my-feature 1     Implement phase 1 (fresh session)
 /archflow-phase-design my-feature 2   ...until done
+```
+
+An in-flight legacy task takes an explicit side path into a new task, then rejoins the ordinary PRD and design flow:
+
+```
+/archflow-upgrade .archflow/tasks/legacy-task new-task
+       |
+/archflow-prd new-task
+       |
+/archflow-design new-task
 ```
 
 The phase skills marshal the MCP-backed workflow and stop at durable human approval gates. Before each document advances, self-review, independent counter-review, triage, and adjudication evidence must reach a fixed point. Every gate also offers an optional ready-to-run prompt for the configured opposite producer family.
@@ -47,7 +57,7 @@ From the repository you want to initialize, run `/archflow-init` in Claude Code 
 project MCP registrations, then reports the host approval/trust steps that still require you.
 It does not create a task, commit changes, or claim that host approval has completed.
 
-> **Self-hosting note:** The rewritten phase skills require MCP-initialized tasks. This repository's own `mcp-integration` task still uses the legacy layout, so installing now replaces the skills being used to build that legacy task. Phase 19 owns its migration; you choose when to run the installer.
+> **Self-hosting note:** Phase 19 ships and proves the legacy upgrade path, while this repository deliberately finishes its own `mcp-integration` task under the legacy system. For any in-flight legacy task, either finish it with the legacy tooling or run `archflow-upgrade` into a distinct new task. ArchFlow never performs a silent in-place conversion.
 
 ## Usage
 
@@ -61,7 +71,17 @@ From the repository you want ArchFlow to manage:
 
 In Codex, run `$archflow-init`. Review and commit the repository assets before creating a task; initialization itself creates no task and makes no commit.
 
-### 2. Explore (optional)
+### 2. Upgrade an In-Flight Legacy Task
+
+Choose this path instead of silently converting an existing task:
+
+```
+/archflow-upgrade .archflow/tasks/legacy-task new-task
+```
+
+In Codex, run `$archflow-upgrade .archflow/tasks/legacy-task new-task`. The source and destination must be in the same repository, and the destination must be a distinct task. The skill stages the selected legacy bytes without modifying the source, initializes the new task, reruns the canonical PRD and design approval pipelines, opens the migration audit, and resumes at the phase derived from imported implementation logs. Use its explicit exclusion list when you intend to redo the last implemented phase. Legacy documents and reviews remain historical material, never approval evidence.
+
+### 3. Explore (optional)
 
 Map an existing codebase before starting work:
 
@@ -74,7 +94,7 @@ In Codex, replace the leading `/` with `$`; for example, `$archflow-explore`.
 
 Produces `.archflow/context/` reference docs that all other skills use.
 
-### 3. Define Requirements
+### 4. Define Requirements
 
 ```
 /archflow-prd my-feature
@@ -82,7 +102,7 @@ Produces `.archflow/context/` reference docs that all other skills use.
 
 Creates or revises `.archflow/tasks/my-feature/prd.md`, then drives its review evidence and explicit artifact-approval gate.
 
-### 4. Design Architecture
+### 5. Design Architecture
 
 ```
 /archflow-design my-feature
@@ -90,7 +110,7 @@ Creates or revises `.archflow/tasks/my-feature/prd.md`, then drives its review e
 
 Creates or revises the technical design and phase plan at `.archflow/tasks/my-feature/design.md`, then drives its review evidence and explicit artifact-approval gate. Finite plans use consecutive exact `### Phase N: Name` headings starting at 1. An intentionally open-ended plan instead uses `<!-- archflow:phase-plan:open-ended -->` with no phase headings; malformed or ambiguous plans cannot be approved.
 
-### 5. Design Each Phase
+### 6. Design Each Phase
 
 ```
 /archflow-phase-design my-feature 1
@@ -100,7 +120,7 @@ Creates or revises `.archflow/tasks/my-feature/phases/1/design.md` and drives re
 
 Phases are sized to the implementation budget: each must fit one implementation session — orchestrated through sub-agents — without context compaction. If a design reveals more work than fits, the phase gets split and the technical design is updated.
 
-### 6. Implement Each Phase
+### 7. Implement Each Phase
 
 ```
 /archflow-phase-impl my-feature 1
@@ -110,7 +130,7 @@ Run this in a **fresh session** so the whole phase gets a clean context. It impl
 
 Later phases read the up-to-date `design.md` and prior `impl-notes.md` so they build on current decisions and interfaces.
 
-### 7. Check Status
+### 8. Check Status
 
 ```
 /archflow-status

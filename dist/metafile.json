@@ -7082,6 +7082,102 @@
         }
       ]
     },
+    "src/init/legacy-upgrade.ts": {
+      "bytes": 17284,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/config.js",
+          "path": "src/contracts/config.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/errors.js",
+          "path": "src/contracts/errors.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/fingerprints.js",
+          "path": "src/contracts/fingerprints.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/path-claims.js",
+          "path": "src/contracts/path-claims.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../repository/git.js",
+          "path": "src/repository/git.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../repository/identity.js",
+          "path": "src/repository/identity.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../repository/paths.js",
+          "path": "src/repository/paths.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/atomic.js",
+          "path": "src/state/atomic.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/authority.js",
+          "path": "src/state/authority.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/constitution.js",
+          "path": "src/state/constitution.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/layout.js",
+          "path": "src/state/layout.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/secret-scan.js",
+          "path": "src/state/secret-scan.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./task-initialization.js",
+          "path": "src/init/task-initialization.ts"
+        }
+      ]
+    },
     "src/init/registration.ts": {
       "bytes": 14284,
       "format": "esm",
@@ -7109,7 +7205,7 @@
       ]
     },
     "src/init/task-initialization.ts": {
-      "bytes": 6070,
+      "bytes": 7134,
       "format": "esm",
       "imports": [
         {
@@ -7180,7 +7276,7 @@
       ]
     },
     "src/local/commands.ts": {
-      "bytes": 21316,
+      "bytes": 21959,
       "format": "esm",
       "imports": [
         {
@@ -7376,6 +7472,11 @@
           "kind": "import-statement",
           "original": "../init/task-initialization.js",
           "path": "src/init/task-initialization.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../init/legacy-upgrade.js",
+          "path": "src/init/legacy-upgrade.ts"
         },
         {
           "kind": "import-statement",
@@ -8057,7 +8158,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 12089,
+      "bytes": 13696,
       "format": "esm",
       "imports": [
         {
@@ -8698,7 +8799,7 @@
       ]
     },
     "src/repository/paths.ts": {
-      "bytes": 27549,
+      "bytes": 28351,
       "format": "esm",
       "imports": [
         {
@@ -9298,7 +9399,7 @@
       ]
     },
     "src/state/gates.ts": {
-      "bytes": 125675,
+      "bytes": 129941,
       "format": "esm",
       "imports": [
         {
@@ -9309,7 +9410,17 @@
         {
           "external": true,
           "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
           "path": "node:crypto"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
         },
         {
           "external": true,
@@ -9343,8 +9454,18 @@
         },
         {
           "kind": "import-statement",
+          "original": "../contracts/durable-legacy-import.js",
+          "path": "src/contracts/durable-legacy-import.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "../contracts/evidence.js",
           "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
         },
         {
           "kind": "import-statement",
@@ -9485,7 +9606,7 @@
       ]
     },
     "src/state/initialization.ts": {
-      "bytes": 21800,
+      "bytes": 24495,
       "format": "esm",
       "imports": [
         {
@@ -9532,6 +9653,11 @@
           "kind": "import-statement",
           "original": "../contracts/mcp-tools.js",
           "path": "src/contracts/mcp-tools.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
         },
         {
           "kind": "import-statement",
@@ -10657,7 +10783,7 @@
       ]
     },
     "src/state/transitions.ts": {
-      "bytes": 12128,
+      "bytes": 13200,
       "format": "esm",
       "imports": [
         {
@@ -10695,7 +10821,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2105693,
+      "bytes": 2127082,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11123,6 +11249,16 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:child_process"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
         },
         {
           "external": true,
@@ -12160,14 +12296,17 @@
         "src/init/index.ts": {
           "bytesInOutput": 1563
         },
+        "src/init/legacy-upgrade.ts": {
+          "bytesInOutput": 14326
+        },
         "src/init/registration.ts": {
           "bytesInOutput": 11995
         },
         "src/init/task-initialization.ts": {
-          "bytesInOutput": 4383
+          "bytesInOutput": 5011
         },
         "src/local/commands.ts": {
-          "bytesInOutput": 16666
+          "bytesInOutput": 17209
         },
         "src/local/envelope.ts": {
           "bytesInOutput": 10905
@@ -12182,7 +12321,7 @@
           "bytesInOutput": 11180
         },
         "src/repository/git.ts": {
-          "bytesInOutput": 14329
+          "bytesInOutput": 15058
         },
         "src/repository/handoff.ts": {
           "bytesInOutput": 4606
@@ -12197,7 +12336,7 @@
           "bytesInOutput": 2782
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 10450
+          "bytesInOutput": 10862
         },
         "src/review/adjudication.ts": {
           "bytesInOutput": 2489
@@ -12215,7 +12354,7 @@
           "bytesInOutput": 2513
         },
         "src/state/constitution.ts": {
-          "bytesInOutput": 3589
+          "bytesInOutput": 5026
         },
         "src/state/document-artifact.ts": {
           "bytesInOutput": 4057
@@ -12236,7 +12375,7 @@
           "bytesInOutput": 29613
         },
         "src/state/initialization.ts": {
-          "bytesInOutput": 7710
+          "bytesInOutput": 10106
         },
         "src/state/layout.ts": {
           "bytesInOutput": 4370
@@ -12290,12 +12429,12 @@
           "bytesInOutput": 37
         },
         "src/state/transitions.ts": {
-          "bytesInOutput": 9422
+          "bytesInOutput": 10309
         }
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2758321,
+      "bytes": 2766614,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12548,6 +12687,16 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
         },
         {
           "external": true,
@@ -13523,7 +13672,7 @@
           "bytesInOutput": 312
         },
         "src/contracts/durable-legacy-import.ts": {
-          "bytesInOutput": 1553
+          "bytesInOutput": 1721
         },
         "src/contracts/durable-primitives.ts": {
           "bytesInOutput": 6957
@@ -13748,7 +13897,7 @@
           "bytesInOutput": 10413
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 9573
+          "bytesInOutput": 11029
         },
         "src/mcp/handlers/waiver.ts": {
           "bytesInOutput": 5516
@@ -13820,13 +13969,13 @@
           "bytesInOutput": 2065
         },
         "src/state/gates.ts": {
-          "bytesInOutput": 79409
+          "bytesInOutput": 82795
         },
         "src/state/implementation-manifest.ts": {
           "bytesInOutput": 15680
         },
         "src/state/initialization.ts": {
-          "bytesInOutput": 16856
+          "bytesInOutput": 19252
         },
         "src/state/layout.ts": {
           "bytesInOutput": 5029
@@ -13859,7 +14008,7 @@
           "bytesInOutput": 38240
         },
         "src/state/transitions.ts": {
-          "bytesInOutput": 9424
+          "bytesInOutput": 10311
         }
       }
     }

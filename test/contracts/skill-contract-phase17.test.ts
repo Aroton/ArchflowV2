@@ -15,6 +15,7 @@ import { classifyTaskPath } from "../../src/repository/paths.js";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const skillNames = [
   "archflow-init",
+  "archflow-upgrade",
   "archflow-explore",
   "archflow-prd",
   "archflow-design",

@@ -59,6 +59,11 @@ export interface ResolvedPath {
   readonly absolute: ResolvedTaskPath;
 }
 
+export type ResolvedSourcePath = Readonly<{
+  sourceRelative: RepositoryPathClaim;
+  absolute: ResolvedTaskPath;
+}>;
+
 export function gateRequestClaim(gateId: PathSafeId): TaskPathClaim {
   return parseTaskPathClaim(`decisions/${gateId}/request.json`);
 }
@@ -407,6 +412,20 @@ async function containedUnder(root: string, input: string): Promise<Containment>
 // ---------------------------------------------------------------------------
 // Resolvers
 // ---------------------------------------------------------------------------
+
+/** Resolves unclassified, read-only legacy material beneath one explicitly selected source root. */
+export async function resolveLegacySourcePath(options: {
+  readonly sourceRoot: string;
+  readonly claim: RepositoryPathClaim;
+  readonly context: RepositoryOperationContext;
+}): Promise<ProjectResult<ResolvedSourcePath>> {
+  const contained = await containedUnder(options.sourceRoot, options.claim);
+  if (contained.kind === "io") return fail(ioError(options.context));
+  if (contained.kind === "escape") {
+    return fail(pathEscape(options.context.task_id, "repository-source"));
+  }
+  return ok(Object.freeze({ sourceRelative: options.claim, absolute: contained.absolute }));
+}
 
 /**
  * Resolves a task-frame claim. Two containment checks run, because they answer two different

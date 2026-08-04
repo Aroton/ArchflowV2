@@ -40,6 +40,7 @@ import type { GateRequestV1 } from "../contracts/durable-gate.js";
 import type { SupplementalReviewRecordV1 } from "../contracts/supplemental-record.js";
 import { runInit } from "../init/index.js";
 import { stageTaskInitialization } from "../init/task-initialization.js";
+import { stageLegacyUpgrade } from "../init/legacy-upgrade.js";
 import { computeCallEnvelope } from "./envelope.js";
 import {
   classifyManualWorkflowStatus,
@@ -52,7 +53,7 @@ export const LOCAL_COMMANDS = Object.freeze([
   "validate", "hash", "render", "snapshot", "restore", "maintain", "decide",
   "gate-counter", "status", "reconcile", "import", "checkpoint", "init", "task-init",
   "envelope", "build-document", "build-implementation-output",
-  "manual-status", "manual-next", "manual-handoff",
+  "manual-status", "manual-next", "manual-handoff", "upgrade",
 ] as const);
 export type LocalCommand = typeof LOCAL_COMMANDS[number];
 const maintenanceRecordV1Validator = createJsonSchemaValidator<MaintenanceRecordV1>(maintenanceRecordSchema, [primitivesSchema, pathClaimSchema]);
@@ -209,6 +210,18 @@ export async function runLocalCommand(input: CommandInput): Promise<PlainJsonVal
     return stageTaskInitialization({
       working_directory: input.working_directory,
       task_id: parseTaskSlug(input.task_id),
+    });
+  }
+  if (input.command === "upgrade") {
+    const value = recordValue(input);
+    return stageLegacyUpgrade({
+      working_directory: input.working_directory,
+      source_root: String(value.source_root),
+      task_id: String(value.task_id ?? input.task_id),
+      policy_base_commit: String(value.policy_base_commit),
+      import_baseline_commit: String(value.import_baseline_commit),
+      code_baseline_commit: String(value.code_baseline_commit),
+      ...(value.exclude === undefined ? {} : { exclude: value.exclude as unknown as readonly string[] }),
     });
   }
   if (input.command === "validate") return validateArtifact(recordValue(input));

@@ -78,7 +78,17 @@ async function setup(kind: "normal" | "legacy" | "chain" = "normal") {
       constitution_root: ".archflow/constitution" as never }, config_digest: subject.config_digest,
     workflow_digest: subject.workflow_digest, constitution_digest: subject.constitution_digest };
   let artifact: TaskInitializationV1 | LegacyImportInitializationV1 | ManualCheckpointImportV1 = kind === "legacy"
-    ? { ...common, import_baseline_commit: headCommit } as LegacyImportInitializationV1
+    ? {
+        ...common,
+        import_baseline_commit: headCommit,
+        mapping: (common as LegacyImportInitializationV1).mapping.map((entry) => ({
+          ...entry,
+          destination_path: entry.destination_path.replace(
+            ".archflow/tasks/imported/",
+            `.archflow/tasks/${taskId}/`,
+          ) as typeof entry.destination_path,
+        })),
+      } as LegacyImportInitializationV1
     : common as TaskInitializationV1;
   let callPhase = "prd";
   let callStep = "produce";

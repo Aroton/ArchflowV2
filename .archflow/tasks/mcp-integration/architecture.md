@@ -801,14 +801,16 @@ The full suite passed 1,163 of 1,166 tests. The three failures are exactly the i
 
 **Scope**: Add `archflow-upgrade` and its offline orchestrator: narrow selected-source read, immutable destination staging, explicit policy-base selection, no-state initialization manifest transition, mapping into existing phase instances, current-pipeline reruns, phase implementation-output audits, migration gate kind, and normal/manual interruption/replay. Use this repository's current legacy `.archflow/tasks/...` layout as an upgrade fixture and document release handling for users whose legacy tasks are in flight.
 
+**Implemented 2026-08-04.** `archflow-local upgrade` now stages a same-repository legacy source byte-for-byte under a distinct content-addressed import, persists the authenticated initialization manifest, derives canonical mappings and the resume phase, and emits the audit context without writing state. The server validates mapping structure, admits a non-successor design jump only with a current authenticated migration-audit approval and a matching retained manifest, and leaves the ordinary phase-1 successor available when no jump is requested. The `archflow-upgrade` skill guides PRD/design reruns, audit, manual initialization, and resume; the legacy fixture, real handlers, bundled helper, and tracked reproducible release prove the path.
+
 **Success Criteria**:
 
-- [ ] Source bytes remain identical; destination staging is content-addressed and an interrupted/prepared import never initializes state.
-- [ ] Exact replay returns the committed initialized destination, while changed source/destination/policy/config inputs or collisions stop without overwrite; the destination's whole config is pinned by its initialization manifest.
-- [ ] Imported PRD/design/phases are unapproved/historical until existing current-digest pipelines approve them; no migration phase instance exists.
-- [ ] Completed code is validated only by `phase-impl-<n>` implementation manifests and an explicit migration gate, with separate approved policy and import/code baselines.
-- [ ] Pure manual upgrade begins with a validating legacy-initialization checkpoint and later server recovery adopts its chain without changing the source or replaying decisions.
-- [ ] The repository's current legacy task layout upgrades through the same fixture path, and release guidance tells users with in-flight tasks how to finish in legacy tooling or checkpoint/handoff into a distinct upgraded task without silent in-place conversion.
+- [x] Source bytes remain identical; destination staging is content-addressed and an interrupted/prepared import never initializes state.
+- [x] Exact replay returns the committed initialized destination, while changed source/destination/policy/config inputs or collisions stop without overwrite; the destination's whole config is pinned by its initialization manifest.
+- [x] Imported PRD/design/phases are unapproved/historical until existing current-digest pipelines approve them; no migration phase instance exists.
+- [x] Completed code is validated only by `phase-impl-<n>` implementation manifests and an explicit migration gate, with separate approved policy and import/code baselines.
+- [x] Pure manual upgrade begins with a validating legacy-initialization checkpoint and later server recovery adopts its chain without changing the source or replaying decisions.
+- [x] The repository's current legacy task layout upgrades through the same fixture path, and release guidance tells users with in-flight tasks how to finish in legacy tooling or checkpoint/handoff into a distinct upgraded task without silent in-place conversion.
 
 ### Phase 20: Reliability and Security Matrices
 
@@ -892,7 +894,7 @@ The full suite passed 1,163 of 1,166 tests. The three failures are exactly the i
 | 16 | Installer, Initialization, and Host Registration | COMPLETE (2026-07-31) |
 | 17 | Normal-Mode Thin Phase Skills and Truthful Status | COMPLETE (2026-08-03) |
 | 18 | Manual and Degraded Recovery Workflow | COMPLETE (2026-08-03) |
-| 19 | Legacy Upgrade Workflow | Not Started |
+| 19 | Legacy Upgrade Workflow | COMPLETE (2026-08-04) |
 | 20 | Reliability and Security Matrices | Not Started |
 | 21 | Real-Host E2E and Review-Quality Validation | Not Started |
 | 22 | Release Packaging, Support Matrix, and Documentation Consistency | Not Started |

@@ -1,5 +1,5 @@
 {
-  "bundle_digest": "1f83196572e000c09d3c185b3b2c7f91e334fda474a10e2b6cb2e294288936a0",
+  "bundle_digest": "52e5ab4d4a824925dc0a9690294ad1b27580356e383c42f0b1e463327d92bf2f",
   "entry_bindings": [
     {
       "handler_authority": "mcp-tool-handler",
@@ -17,7 +17,7 @@
     "Focused source review is not a general proof of absence.",
     "Live handler behavior may change when bundled schemas or validation paths change."
   ],
-  "observed_on": "2026-08-03",
+  "observed_on": "2026-08-04",
   "record_type": "focused-inert-reachability",
   "schema_version": "1",
   "trusted_schema_compilation_reachable": true,

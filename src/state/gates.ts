@@ -1,5 +1,7 @@
 import { constants as fsConstants } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { canonicalDocument, canonicalJsonDigest, parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
@@ -17,7 +19,9 @@ import type { ApprovalRef, CommittedIntentRef, TaskStateV1, WaiverRef } from "..
 import { intentOutcomeDigest, intentReceiptDigest, parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
 import { createCommittedIntentSubject, createPreparedIntentSubject, openGateFrozenStateDigest, validateDurableSemantics } from "../contracts/durable.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
+import { parseLegacyImportInitialization } from "../contracts/durable-legacy-import.js";
 import { parsePathSafeId, parseSafeCode, parseSafeId, parseSafeInteger, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
+import { decodePhaseInstance, encodePhaseInstance, parsePositiveSafePhaseNumber, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import { computeGateContextDigest, computeGateId } from "../contracts/fingerprints.js";
 import {
   gateDecisionEffect,
@@ -188,6 +192,64 @@ async function readCanonical<T extends PlainJsonValue>(
   } finally {
     await handle?.close().catch(() => undefined);
   }
+}
+
+/** Finds the initialization manifest whose canonical digest authenticates a legacy import. */
+export async function findLegacyImportResumePhase(
+  dependencies: Pick<GateLifecycleDependencies, "runner">,
+  authority: TransactionAuthority,
+  state: TaskStateV1,
+): Promise<ProjectResult<PhaseInstanceId | undefined>> {
+  let names: string[];
+  try {
+    names = await readdir(join(authority.task_root, "imports"));
+  } catch (error) {
+    return (error as { code?: unknown } | null)?.code === "ENOENT"
+      ? ok(undefined)
+      : issue("STATE_INVALID", state, "legacy-import-manifest-missing");
+  }
+  const matches: CanonicalDocument<ReturnType<typeof parseLegacyImportInitialization>>[] = [];
+  for (const name of names.filter((entry) => /^[a-f0-9]{64}$/u.test(entry)).sort()) {
+    const resolved = await resolveTaskPath({
+      runner: dependencies.runner,
+      taskId: authority.task_id,
+      claim: parseTaskPathClaim(`imports/${name}/manifest.json`),
+      expectedClass: "import",
+      context: authority.context,
+    });
+    if (!resolved.ok) return resolved;
+    const document = await readCanonical(
+      resolved.value,
+      "legacy import initialization manifest",
+      parseLegacyImportInitialization,
+    );
+    if (document !== "missing" && document !== "invalid" && document.digest === state.initialization_digest) {
+      matches.push(document);
+    }
+  }
+  if (matches.length === 0) return ok(undefined);
+  if (matches.length > 1) return issue("STATE_INVALID", state, "legacy-import-manifest-ambiguous");
+  let highest = 0;
+  for (const entry of matches[0]!.value.mapping) {
+    const decoded = decodePhaseInstance(entry.phase_instance);
+    if (decoded.kind === "phase-impl") highest = Math.max(highest, Number(decoded.phase));
+  }
+  return ok(encodePhaseInstance({
+    kind: "phase-design",
+    phase: parsePositiveSafePhaseNumber(highest + 1),
+  }));
+}
+
+async function loadLegacyImportResumePhase(
+  dependencies: Pick<GateLifecycleDependencies, "runner">,
+  authority: TransactionAuthority,
+  state: TaskStateV1,
+): Promise<ProjectResult<PhaseInstanceId>> {
+  const found = await findLegacyImportResumePhase(dependencies, authority, state);
+  if (!found.ok) return found;
+  return found.value === undefined
+    ? issue("STATE_INVALID", state, "legacy-import-manifest-missing")
+    : ok(found.value);
 }
 
 function supplementalGate(outcome: SupplementalReviewOutcome): Readonly<{ prior_gate_id: PathSafeId; task_id: GateRequestV1["task_id"]; phase_instance: string; subject_digest: Sha256Digest; input_fingerprint: Sha256Digest }> {
@@ -870,6 +932,34 @@ export async function openDurableGate(
         }
         const changed = input.input_fingerprint !== reference.input_fingerprint;
         if ((!changed && context.adoption_candidate !== undefined) || (context.adoption_candidate !== undefined && (context.adoption_candidate.changed_input_fingerprint !== input.input_fingerprint || context.adoption_candidate.proposed_generation_digest !== context.current_generation_digest))) return issue("CONTRACT_INVALID", undefined, "restore-adoption-candidate-invalid");
+      }
+      if (input.kind === "migration-audit") {
+        const reference = [...current.value.authoritative_results].reverse().find((item) =>
+          item.phase_instance === "design" && item.step === "produce");
+        if (
+          input.phase_instance !== "design" ||
+          current.value.phase_instance !== "design" ||
+          current.value.step !== "adjudicate" ||
+          current.value.status !== "succeeded" ||
+          reference === undefined ||
+          dependencies.load_retained_result === undefined
+        ) return issue("STATE_INVALID", current.value, "migration-audit-design-result-missing");
+        const retained = await dependencies.load_retained_result(reference);
+        if (!retained.ok) return retained;
+        const subject = retained.value.prepared.manifest.value.artifact_digest;
+        if (
+          input.subject_digest !== subject ||
+          !current.value.approvals.some((approval) =>
+            approval.gate_kind === "artifact-approval" && approval.subject_digest === subject)
+        ) return issue("STATE_INVALID", current.value, "migration-audit-design-not-approved");
+        const resume = await loadLegacyImportResumePhase(dependencies, input.authority, current.value);
+        if (!resume.ok) return resume;
+        const decoded = decodePhaseInstance(resume.value);
+        if (
+          decoded.kind !== "phase-design" ||
+          current.value.planned_final_phase === undefined ||
+          Number(decoded.phase) > Number(current.value.planned_final_phase)
+        ) return issue("STATE_INVALID", current.value, "migration-audit-phase-plan-insufficient");
       }
       const waiver = waiverContext(input.context);
       if (waiver !== undefined && input.waiver_origin_gate_id !== undefined && input.waiver_origin_gate_id !== waiver.origin.origin_gate_id) return issue("CONTRACT_INVALID", undefined, "waiver-origin-gate-mismatch");

@@ -11,6 +11,7 @@ import {
 import { parseTaskPathClaim } from "../../contracts/path-claims.js";
 import { planCheckpointAdoption } from "../../state/checkpoints.js";
 import {
+  findLegacyImportResumePhase,
   loadAuthenticatedGateApproval,
   type AuthenticatedGateApproval,
 } from "../../state/gates.js";
@@ -180,6 +181,7 @@ export async function handleState(
         }
         let completionSubjectDigest;
         let commitObserved = false;
+        let legacyResumePhase;
         const authenticatedGateApprovals: AuthenticatedGateApproval[] = [];
         const completionSignal =
           artifact === undefined &&
@@ -218,6 +220,40 @@ export async function handleState(
             }
           }
         }
+        const decodedTarget = decodePhaseInstance(call.input.phase_instance);
+        const legacyJumpSignal =
+          artifact === undefined &&
+          current.value.phase_instance === "design" &&
+          current.value.step === "adjudicate" &&
+          current.value.status === "succeeded" &&
+          decodedTarget.kind === "phase-design" &&
+          Number(decodedTarget.phase) > 1;
+        if (legacyJumpSignal) {
+          const resolved = await findLegacyImportResumePhase(
+            services.dependencies,
+            services.authority,
+            current.value,
+          );
+          if (!resolved.ok) return resolved;
+          legacyResumePhase = resolved.value;
+          if (legacyResumePhase !== undefined) {
+            const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
+            if (!produce.ok) return produce;
+            for (const approval of current.value.approvals) {
+              if (
+                approval.gate_kind !== "migration-audit" ||
+                approval.subject_digest !== produce.value.artifact_digest
+              ) continue;
+              const loaded = await loadAuthenticatedGateApproval(
+                services.dependencies,
+                services.authority,
+                approval,
+              );
+              if (!loaded.ok) return loaded;
+              authenticatedGateApprovals.push(loaded.value);
+            }
+          }
+        }
         const next = planStateTransition({
           current: current.value,
           target: {
@@ -238,6 +274,7 @@ export async function handleState(
           ...(preparedResult === undefined ? {} : { result_reference: preparedResult.reference }),
           ...(completionSubjectDigest === undefined ? {} : { completion_subject_digest: completionSubjectDigest }),
           commit_observed: commitObserved,
+          ...(legacyResumePhase === undefined ? {} : { legacy_resume_phase: legacyResumePhase }),
           ...(authenticatedGateApprovals.length === 0 ? {} : {
             authenticated_gate_approvals: authenticatedGateApprovals,
           }),

@@ -21,7 +21,7 @@
   "mapping": [
     {
       "legacy_path": "legacy/docs/design.md",
-      "destination_path": ".archflow/tasks/imported/architecture.md",
+      "destination_path": ".archflow/tasks/imported/design.md",
       "phase_instance": "design",
       "disposition": "historical"
     },

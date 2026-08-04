@@ -5,6 +5,7 @@ import type { AuthoritativeResultRef, TaskStateV1 } from "../contracts/durable-s
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import type { SafeInteger, Sha256Digest } from "../contracts/evidence.js";
 import { decodePhaseInstance, encodePhaseInstance, parsePositiveSafePhaseNumber } from "../contracts/phase-instance.js";
+import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import { assertPlainJson } from "../contracts/plain-json.js";
 import { WORKFLOW_V1 } from "../contracts/workflow.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
@@ -31,6 +32,7 @@ export type TransitionPlanInput = Readonly<{
   completion_subject_digest?: Sha256Digest;
   authenticated_gate_approvals?: readonly AuthenticatedGateApproval[];
   commit_observed?: boolean;
+  legacy_resume_phase?: PhaseInstanceId;
 }>;
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
@@ -85,7 +87,23 @@ function sameSubject(current: TaskStateV1, target: TransitionTarget): boolean {
   return current.phase_instance === target.phase_instance && current.step === target.step;
 }
 
-function legalMovement(current: TaskStateV1, target: TransitionTarget): boolean {
+function hasAuthenticatedMigrationAudit(input: TransitionPlanInput): boolean {
+  if (input.legacy_resume_phase === undefined || input.target.phase_instance !== input.legacy_resume_phase) return false;
+  for (const authenticated of input.authenticated_gate_approvals ?? []) {
+    assertAuthenticatedGateApproval(authenticated);
+    if (
+      authenticated.approval.gate_kind === "migration-audit" &&
+      authenticated.request.kind === "migration-audit" &&
+      authenticated.request.phase_instance === "design" &&
+      authenticated.request.subject_digest === authenticated.approval.subject_digest &&
+      authenticated.decision.envelope.payload.decision === "accept-import-audit"
+    ) return true;
+  }
+  return false;
+}
+
+function legalMovement(input: TransitionPlanInput): boolean {
+  const { current, target } = input;
   if (current.terminal !== undefined || current.open_gate !== undefined) return false;
   if (sameSubject(current, target)) {
     if (current.status === "running") {
@@ -109,6 +127,13 @@ function legalMovement(current: TaskStateV1, target: TransitionTarget): boolean 
       target.step === steps[index + 1] &&
       target.attempt === current.attempt;
   }
+  if (
+    current.phase_instance === "design" &&
+    target.step === "produce" &&
+    target.attempt === 1 &&
+    target.phase_instance !== nextPhase(current.phase_instance) &&
+    hasAuthenticatedMigrationAudit(input)
+  ) return true;
   const following = nextPhase(current.phase_instance);
   return following !== undefined &&
     target.phase_instance === following &&
@@ -244,7 +269,7 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     input.target.phase_instance !== input.current.phase_instance &&
     !committedOutput
   ) return invalid(input, from, to);
-  if (!legalMovement(input.current, input.target) || !artifactMatches(input) || !resultReferenceMatches(input)) {
+  if (!legalMovement(input) || !artifactMatches(input) || !resultReferenceMatches(input)) {
     return invalid(input, from, to);
   }
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parsePathSafeId, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
-import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
+import { encodePhaseInstance, parsePhaseInstanceId, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import { planStateTransition } from "../../src/state/transitions.js";
 
@@ -111,6 +111,28 @@ describe("planStateTransition", () => {
       recomputed_input_fingerprint: D("8"),
     });
     expect(skipped.ok ? undefined : skipped.error.code).toBe("TRANSITION_INVALID");
+  });
+
+  it("keeps the ordinary design successor available when a later legacy resume phase exists", () => {
+    const current = state({
+      phase_instance: parsePhaseInstanceId("design"),
+      status: "succeeded",
+      step: "adjudicate",
+      attempt: parseSafeInteger(1),
+    });
+    const result = planStateTransition({
+      current,
+      target: {
+        phase_instance: phase("phase-design", 1),
+        step: "produce",
+        status: "running",
+        attempt: parseSafeInteger(1),
+        input_fingerprint: D("8"),
+      },
+      recomputed_input_fingerprint: D("8"),
+      legacy_resume_phase: phase("phase-design", 4),
+    });
+    expect(result.ok).toBe(true);
   });
 
   it("does not advance an implementation phase until its authorized commit is observed", () => {

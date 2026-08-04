@@ -47859,6 +47859,10 @@ var legacyImportInitializationV1Schema = external_exports.object({
   mapping: external_exports.array(legacyMappingEntryV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("destination_path")), "mapping must be sorted by destination_path with no duplicates"),
   staged_payload_refs: external_exports.array(stagedPayloadRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("legacy_path")), "staged_payload_refs must be sorted by legacy_path with no duplicates")
 }).strict();
+function parseLegacyImportInitialization(value) {
+  assertPlainJson(value, "legacy import initialization");
+  return legacyImportInitializationV1Schema.parse(value);
+}
 
 // src/contracts/durable-task-initialization.ts
 var sha256Digest3 = sha256DigestV1Schema;
@@ -53835,7 +53839,7 @@ async function openResolved(path2, flags) {
 
 // src/dispatch/cli.ts
 import { stat as stat2, writeFile } from "node:fs/promises";
-import { join as join5 } from "node:path";
+import { join as join6 } from "node:path";
 
 // src/contracts/durable.ts
 import { isDeepStrictEqual as isDeepStrictEqual6 } from "node:util";
@@ -60867,6 +60871,8 @@ function sameJson(left, right) {
 
 // src/state/gates.ts
 import { constants as fsConstants4 } from "node:fs";
+import { readdir as readdir2 } from "node:fs/promises";
+import { join as join5 } from "node:path";
 import { isDeepStrictEqual as isDeepStrictEqual9 } from "node:util";
 
 // src/state/gate-wait.ts
@@ -61516,6 +61522,49 @@ async function readCanonical(path2, label, parse3) {
     await handle?.close().catch(() => void 0);
   }
 }
+async function findLegacyImportResumePhase(dependencies, authority, state) {
+  let names;
+  try {
+    names = await readdir2(join5(authority.task_root, "imports"));
+  } catch (error51) {
+    return error51?.code === "ENOENT" ? ok6(void 0) : issue2("STATE_INVALID", state, "legacy-import-manifest-missing");
+  }
+  const matches = [];
+  for (const name of names.filter((entry) => /^[a-f0-9]{64}$/u.test(entry)).sort()) {
+    const resolved = await resolveTaskPath({
+      runner: dependencies.runner,
+      taskId: authority.task_id,
+      claim: parseTaskPathClaim(`imports/${name}/manifest.json`),
+      expectedClass: "import",
+      context: authority.context
+    });
+    if (!resolved.ok) return resolved;
+    const document2 = await readCanonical(
+      resolved.value,
+      "legacy import initialization manifest",
+      parseLegacyImportInitialization
+    );
+    if (document2 !== "missing" && document2 !== "invalid" && document2.digest === state.initialization_digest) {
+      matches.push(document2);
+    }
+  }
+  if (matches.length === 0) return ok6(void 0);
+  if (matches.length > 1) return issue2("STATE_INVALID", state, "legacy-import-manifest-ambiguous");
+  let highest = 0;
+  for (const entry of matches[0].value.mapping) {
+    const decoded = decodePhaseInstance(entry.phase_instance);
+    if (decoded.kind === "phase-impl") highest = Math.max(highest, Number(decoded.phase));
+  }
+  return ok6(encodePhaseInstance({
+    kind: "phase-design",
+    phase: parsePositiveSafePhaseNumber(highest + 1)
+  }));
+}
+async function loadLegacyImportResumePhase(dependencies, authority, state) {
+  const found = await findLegacyImportResumePhase(dependencies, authority, state);
+  if (!found.ok) return found;
+  return found.value === void 0 ? issue2("STATE_INVALID", state, "legacy-import-manifest-missing") : ok6(found.value);
+}
 function supplementalGate(outcome) {
   return outcome.action === "decline" ? outcome.gate : outcome.review;
 }
@@ -61891,6 +61940,18 @@ async function openDurableGate(dependencies, input) {
         }
         const changed = input.input_fingerprint !== reference.input_fingerprint;
         if (!changed && context2.adoption_candidate !== void 0 || context2.adoption_candidate !== void 0 && (context2.adoption_candidate.changed_input_fingerprint !== input.input_fingerprint || context2.adoption_candidate.proposed_generation_digest !== context2.current_generation_digest)) return issue2("CONTRACT_INVALID", void 0, "restore-adoption-candidate-invalid");
+      }
+      if (input.kind === "migration-audit") {
+        const reference = [...current.value.authoritative_results].reverse().find((item) => item.phase_instance === "design" && item.step === "produce");
+        if (input.phase_instance !== "design" || current.value.phase_instance !== "design" || current.value.step !== "adjudicate" || current.value.status !== "succeeded" || reference === void 0 || dependencies.load_retained_result === void 0) return issue2("STATE_INVALID", current.value, "migration-audit-design-result-missing");
+        const retained = await dependencies.load_retained_result(reference);
+        if (!retained.ok) return retained;
+        const subject = retained.value.prepared.manifest.value.artifact_digest;
+        if (input.subject_digest !== subject || !current.value.approvals.some((approval) => approval.gate_kind === "artifact-approval" && approval.subject_digest === subject)) return issue2("STATE_INVALID", current.value, "migration-audit-design-not-approved");
+        const resume = await loadLegacyImportResumePhase(dependencies, input.authority, current.value);
+        if (!resume.ok) return resume;
+        const decoded = decodePhaseInstance(resume.value);
+        if (decoded.kind !== "phase-design" || current.value.planned_final_phase === void 0 || Number(decoded.phase) > Number(current.value.planned_final_phase)) return issue2("STATE_INVALID", current.value, "migration-audit-phase-plan-insufficient");
       }
       const waiver = waiverContext(input.context);
       if (waiver !== void 0 && input.waiver_origin_gate_id !== void 0 && input.waiver_origin_gate_id !== waiver.origin.origin_gate_id) return issue2("CONTRACT_INVALID", void 0, "waiver-origin-gate-mismatch");
@@ -62666,7 +62727,16 @@ function nextPhase(instance) {
 function sameSubject(current, target2) {
   return current.phase_instance === target2.phase_instance && current.step === target2.step;
 }
-function legalMovement(current, target2) {
+function hasAuthenticatedMigrationAudit(input) {
+  if (input.legacy_resume_phase === void 0 || input.target.phase_instance !== input.legacy_resume_phase) return false;
+  for (const authenticated of input.authenticated_gate_approvals ?? []) {
+    assertAuthenticatedGateApproval(authenticated);
+    if (authenticated.approval.gate_kind === "migration-audit" && authenticated.request.kind === "migration-audit" && authenticated.request.phase_instance === "design" && authenticated.request.subject_digest === authenticated.approval.subject_digest && authenticated.decision.envelope.payload.decision === "accept-import-audit") return true;
+  }
+  return false;
+}
+function legalMovement(input) {
+  const { current, target: target2 } = input;
   if (current.terminal !== void 0 || current.open_gate !== void 0) return false;
   if (sameSubject(current, target2)) {
     if (current.status === "running") {
@@ -62684,6 +62754,7 @@ function legalMovement(current, target2) {
   if (index + 1 < steps.length) {
     return target2.phase_instance === current.phase_instance && target2.step === steps[index + 1] && target2.attempt === current.attempt;
   }
+  if (current.phase_instance === "design" && target2.step === "produce" && target2.attempt === 1 && target2.phase_instance !== nextPhase(current.phase_instance) && hasAuthenticatedMigrationAudit(input)) return true;
   const following = nextPhase(current.phase_instance);
   return following !== void 0 && target2.phase_instance === following && target2.step === pipeline(following)[0] && target2.attempt === 1;
 }
@@ -62757,7 +62828,7 @@ function planStateTransition(value) {
     return ok7(Object.freeze({ ...preserved2, terminal: "complete" }));
   }
   if (decodedCurrent.kind === "phase-impl" && input.current.step === "adjudicate" && input.current.status === "succeeded" && input.target.phase_instance !== input.current.phase_instance && !committedOutput) return invalid(input, from, to);
-  if (!legalMovement(input.current, input.target) || !artifactMatches(input) || !resultReferenceMatches(input)) {
+  if (!legalMovement(input) || !artifactMatches(input) || !resultReferenceMatches(input)) {
     return invalid(input, from, to);
   }
   const { revision: _revision, committed_intent: _intent, ...preserved } = input.current;
@@ -64487,7 +64558,7 @@ var claudeAdapter = Object.freeze({
     if (route.effort === "ultra") {
       return fail11(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
-    const mcpConfigPath = join5(workspace.root, "empty-mcp.json");
+    const mcpConfigPath = join6(workspace.root, "empty-mcp.json");
     await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
     return Object.freeze({
       adapter: "claude-cli",
@@ -64569,8 +64640,8 @@ var codexAdapter = Object.freeze({
     assertRoute("codex-cli", route);
     assertPlainJson(outputSchema, "CLI output schema");
     const schema = structuredClone(outputSchema);
-    const schemaPath = join5(workspace.root, `${envelope.result_kind}.schema.json`);
-    const outputPath = join5(workspace.root, "final-output.json");
+    const schemaPath = join6(workspace.root, `${envelope.result_kind}.schema.json`);
+    const outputPath = join6(workspace.root, "final-output.json");
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}
 `, { encoding: "utf8", mode: 384 });
     const disabled = CODEX_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]);
@@ -64683,7 +64754,7 @@ function mintAdjudicationObservation(input) {
 // src/dispatch/workspace.ts
 import { mkdir as mkdir3, mkdtemp, realpath as realpath4, rm, symlink as symlink2 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute as isAbsolute4, join as join6, relative as relative4, resolve } from "node:path";
+import { isAbsolute as isAbsolute4, join as join7, relative as relative4, resolve } from "node:path";
 var FORWARDED_ENVIRONMENT = Object.freeze([
   "PATH",
   "LANG",
@@ -64700,13 +64771,13 @@ function isInside(parent, candidate) {
 function credentialPaths(adapter2, sourceHome, generatedHome) {
   if (adapter2 === "claude-cli") {
     return {
-      source: join6(sourceHome, ".claude", ".credentials.json"),
-      destination: join6(generatedHome, ".claude", ".credentials.json")
+      source: join7(sourceHome, ".claude", ".credentials.json"),
+      destination: join7(generatedHome, ".claude", ".credentials.json")
     };
   }
   return {
-    source: join6(sourceHome, ".codex", "auth.json"),
-    destination: join6(generatedHome, ".codex", "auth.json")
+    source: join7(sourceHome, ".codex", "auth.json"),
+    destination: join7(generatedHome, ".codex", "auth.json")
   };
 }
 async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd()) {
@@ -64717,10 +64788,10 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
   if (isInside(realRepositoryRoot, realTemporaryRoot)) {
     throw new Error("dispatch temporary directory must be outside the repository");
   }
-  const root = await mkdtemp(join6(realTemporaryRoot, "archflow-dispatch-"));
+  const root = await mkdtemp(join7(realTemporaryRoot, "archflow-dispatch-"));
   try {
-    const home = join6(root, "home");
-    const codexHome = join6(home, ".codex");
+    const home = join7(root, "home");
+    const codexHome = join7(home, ".codex");
     const sourceHome = resolve(process.env.HOME ?? homedir());
     const credential = credentialPaths(adapter2, sourceHome, home);
     await mkdir3(resolve(credential.destination, ".."), { recursive: true });
@@ -66761,6 +66832,50 @@ function operationFor2(artifact) {
   if (artifact.artifact_kind === "manual-checkpoint-import") return "adopt-manual-checkpoint-import";
   throw new TypeError("revision-0 initialization received a non-initialization artifact");
 }
+function phaseForLegacyDestination(taskId, destinationPath) {
+  const prefix = `.archflow/tasks/${taskId}/`;
+  if (!destinationPath.startsWith(prefix)) return void 0;
+  const relativePath = destinationPath.slice(prefix.length);
+  if (relativePath === "prd.md" || relativePath === "design.md") {
+    return relativePath === "prd.md" ? "prd" : "design";
+  }
+  const document2 = /^phases\/([1-9][0-9]*)\/(design|impl-notes)\.md$/u.exec(relativePath);
+  if (document2 !== null) {
+    const phase4 = Number(document2[1]);
+    if (!Number.isSafeInteger(phase4)) return void 0;
+    return `${document2[2] === "design" ? "phase-design" : "phase-impl"}-${phase4}`;
+  }
+  const review = /^reviews\/(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)\.(?:self|counter|triage|adjudication)\.md$/u.exec(relativePath) ?? /^reviews\/(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)\.gate-counter\.[a-z0-9][a-z0-9-]*\.md$/u.exec(relativePath);
+  if (review === null) return void 0;
+  try {
+    decodePhaseInstance(review[1]);
+    return review[1];
+  } catch {
+    return void 0;
+  }
+}
+function validateLegacyMapping(initialization) {
+  const staged = new Set(initialization.staged_payload_refs.map((entry) => entry.legacy_path));
+  const prefix = `.archflow/tasks/${initialization.task_id}/`;
+  for (const entry of initialization.mapping) {
+    if (!entry.destination_path.startsWith(prefix)) {
+      const classified2 = classifyTaskPath(
+        initialization.task_id,
+        parseTaskPathClaim(`.archflow/tasks/${initialization.task_id}/${entry.destination_path}`)
+      );
+      if (!classified2.ok) return classified2;
+      throw new TypeError("task-prefixed destination unexpectedly classified as task-relative");
+    }
+    const claim = parseTaskPathClaim(entry.destination_path.slice(prefix.length));
+    const classified = classifyTaskPath(initialization.task_id, claim);
+    if (!classified.ok) return classified;
+    if (!staged.has(entry.legacy_path)) return contract("legacy-mapping-payload-missing");
+    if (phaseForLegacyDestination(initialization.task_id, entry.destination_path) !== entry.phase_instance) {
+      return contract("legacy-mapping-phase-mismatch");
+    }
+  }
+  return ok14(void 0);
+}
 async function validateLiveInitialization(dependencies, request, initialization) {
   const taskRoot = `.archflow/tasks/${request.authority.task_id}`;
   const expectedPaths = {
@@ -66848,6 +66963,10 @@ async function identifyStateInitialization(dependencies, request, evidence) {
   const artifactDocument = canonicalDocument(artifact);
   const artifactSemantics = validateDurableSemantics({ artifact: artifactDocument });
   if (!artifactSemantics.ok) return artifactSemantics;
+  if (initialization.artifact_kind === "legacy-import-initialization") {
+    const mapping = validateLegacyMapping(initialization);
+    if (!mapping.ok) return mapping;
+  }
   const stateResult = initialState(request.call, artifact, evidence);
   if (!stateResult.ok) return stateResult;
   const preparedState = canonicalDocument(stateResult.value);
@@ -68421,6 +68540,7 @@ async function handleState(call, context2) {
         }
         let completionSubjectDigest;
         let commitObserved = false;
+        let legacyResumePhase;
         const authenticatedGateApprovals2 = [];
         const completionSignal = artifact === void 0 && decodePhaseInstance(current.value.phase_instance).kind === "phase-impl" && current.value.step === "adjudicate" && current.value.status === "succeeded";
         if (completionSignal) {
@@ -68456,6 +68576,31 @@ async function handleState(call, context2) {
             }
           }
         }
+        const decodedTarget = decodePhaseInstance(call.input.phase_instance);
+        const legacyJumpSignal = artifact === void 0 && current.value.phase_instance === "design" && current.value.step === "adjudicate" && current.value.status === "succeeded" && decodedTarget.kind === "phase-design" && Number(decodedTarget.phase) > 1;
+        if (legacyJumpSignal) {
+          const resolved = await findLegacyImportResumePhase(
+            services.dependencies,
+            services.authority,
+            current.value
+          );
+          if (!resolved.ok) return resolved;
+          legacyResumePhase = resolved.value;
+          if (legacyResumePhase !== void 0) {
+            const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
+            if (!produce.ok) return produce;
+            for (const approval of current.value.approvals) {
+              if (approval.gate_kind !== "migration-audit" || approval.subject_digest !== produce.value.artifact_digest) continue;
+              const loaded = await loadAuthenticatedGateApproval(
+                services.dependencies,
+                services.authority,
+                approval
+              );
+              if (!loaded.ok) return loaded;
+              authenticatedGateApprovals2.push(loaded.value);
+            }
+          }
+        }
         const next = planStateTransition({
           current: current.value,
           target: {
@@ -68470,6 +68615,7 @@ async function handleState(call, context2) {
           ...preparedResult === void 0 ? {} : { result_reference: preparedResult.reference },
           ...completionSubjectDigest === void 0 ? {} : { completion_subject_digest: completionSubjectDigest },
           commit_observed: commitObserved,
+          ...legacyResumePhase === void 0 ? {} : { legacy_resume_phase: legacyResumePhase },
           ...authenticatedGateApprovals2.length === 0 ? {} : {
             authenticated_gate_approvals: authenticatedGateApprovals2
           }

@@ -3,7 +3,9 @@ import { dirname, join } from "node:path";
 
 import { canonicalJsonDigest, parseGitOid, sha256Bytes } from "../contracts/canonical.js";
 import { parseConfigYaml } from "../contracts/config.js";
+import type { GitOid } from "../contracts/canonical.js";
 import type { TaskInitializationV1 } from "../contracts/durable-task-initialization.js";
+import type { Sha256Digest, TaskSlug } from "../contracts/evidence.js";
 import {
   createProjectError,
   type ProjectError,
@@ -26,6 +28,7 @@ import {
 import { discoverWorktree, resolveRepositoryIdentity } from "../repository/identity.js";
 import { PINNED_WORKFLOW_PATH, resolvePinnedConstitution } from "../state/constitution.js";
 import { parseWorkflowYaml } from "../contracts/workflow.js";
+import type { RootBoundGitRunner } from "../repository/identity.js";
 
 export type StageTaskInitializationInput = {
   readonly working_directory: string;
@@ -42,17 +45,20 @@ function errno(error: unknown, code: string): boolean {
   return error instanceof Error && (error as NodeJS.ErrnoException).code === code;
 }
 
-function policyBaseInvalid(commit: TaskInitializationV1["policy_base_commit"]): ProjectError {
+export function commitDigest(
+  commit: GitOid,
+  digest_kind: string,
+): Sha256Digest {
+  return canonicalJsonDigest({ schema_version: "1", digest_kind, commit });
+}
+
+export function policyBaseInvalid(commit: TaskInitializationV1["policy_base_commit"]): ProjectError {
   return createProjectError("POLICY_BASE_INVALID", {
-    expected_digest: canonicalJsonDigest({
-      schema_version: "1",
-      digest_kind: "policy-base-commit",
-      commit,
-    }),
+    expected_digest: commitDigest(commit, "policy-base-commit"),
   });
 }
 
-async function createTaskConfig(root: string, taskId: string): Promise<Uint8Array> {
+export async function createTaskConfig(root: string, taskId: string): Promise<Uint8Array> {
   const taskConfig = join(root, ".archflow", "tasks", taskId, "config.yaml");
   try {
     return new Uint8Array(await readFile(taskConfig));
@@ -72,6 +78,43 @@ async function createTaskConfig(root: string, taskId: string): Promise<Uint8Arra
   } catch (error) {
     if (!errno(error, "EEXIST")) throw error;
     return new Uint8Array(await readFile(taskConfig));
+  }
+}
+
+export function canonicalTaskPaths(taskId: TaskSlug) {
+  const taskRoot = `.archflow/tasks/${taskId}`;
+  return Object.freeze({
+    task_root: parseRepositoryPathClaim(taskRoot),
+    config: parseRepositoryPathClaim(`${taskRoot}/config.yaml`),
+    state: parseRepositoryPathClaim(`${taskRoot}/state.json`),
+    workflow: PINNED_WORKFLOW_PATH,
+    constitution_root: parseRepositoryPathClaim(".archflow/constitution"),
+  });
+}
+
+export async function resolveInitializationPolicyBase(
+  runner: RootBoundGitRunner,
+  commit: GitOid,
+  context: RepositoryOperationContext,
+): Promise<ProjectResult<Readonly<{ constitution_digest: Sha256Digest; workflow_digest: Sha256Digest }>>> {
+  const constitution = await resolvePinnedConstitution(runner, commit, context);
+  if (!constitution.ok) return constitution;
+  try {
+    const workflowEntry = await readCommitTreeBlob(runner, commit, PINNED_WORKFLOW_PATH);
+    if (workflowEntry === undefined) return fail(policyBaseInvalid(commit));
+    const workflowBytes = await readGitBlobBytes(runner, workflowEntry.oid);
+    try {
+      parseWorkflowYaml(decoder.decode(workflowBytes), "pinned workflow");
+    } catch {
+      return fail(policyBaseInvalid(commit));
+    }
+    return ok(Object.freeze({
+      constitution_digest: constitution.value.digest,
+      workflow_digest: sha256Bytes(workflowBytes),
+    }));
+  } catch (error) {
+    if (error instanceof GitInvocationError) return fail(projectErrorForGitFailure(error, runner, context));
+    throw error;
   }
 }
 
@@ -115,18 +158,8 @@ export async function stageTaskInitialization(
 
   try {
     const head = parseGitOid(await readHeadCommit(runner));
-    const constitution = await resolvePinnedConstitution(runner, head, context);
-    if (!constitution.ok) return constitution;
-    const workflowEntry = await readCommitTreeBlob(runner, head, PINNED_WORKFLOW_PATH);
-    if (workflowEntry === undefined) return fail(policyBaseInvalid(head));
-    const workflowBytes = await readGitBlobBytes(runner, workflowEntry.oid);
-    try {
-      parseWorkflowYaml(decoder.decode(workflowBytes), "pinned workflow");
-    } catch {
-      return fail(policyBaseInvalid(head));
-    }
-
-    const taskRoot = `.archflow/tasks/${taskId}`;
+    const policy = await resolveInitializationPolicyBase(runner, head, context);
+    if (!policy.ok) return policy;
     return ok(Object.freeze({
       schema_version: "1",
       artifact_kind: "task-initialization",
@@ -134,16 +167,10 @@ export async function stageTaskInitialization(
       repository_identity_digest: repository.value.digest,
       code_baseline_commit: head,
       policy_base_commit: head,
-      constitution_digest: constitution.value.digest,
-      workflow_digest: sha256Bytes(workflowBytes),
+      constitution_digest: policy.value.constitution_digest,
+      workflow_digest: policy.value.workflow_digest,
       config_digest: computePinnedConfigDigest(configBytes),
-      canonical_paths: Object.freeze({
-        task_root: parseRepositoryPathClaim(taskRoot),
-        config: parseRepositoryPathClaim(`${taskRoot}/config.yaml`),
-        state: parseRepositoryPathClaim(`${taskRoot}/state.json`),
-        workflow: PINNED_WORKFLOW_PATH,
-        constitution_root: parseRepositoryPathClaim(".archflow/constitution"),
-      }),
+      canonical_paths: canonicalTaskPaths(taskId),
     }));
   } catch (error) {
     if (error instanceof GitInvocationError) {

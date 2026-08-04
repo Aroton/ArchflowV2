@@ -31,10 +31,11 @@ import {
   type ParsedToolCall,
   type ToolSuccess,
 } from "../contracts/mcp-tools.js";
+import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import { parseTaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { verifyRepositoryIdentity } from "../repository/identity.js";
-import { resolveTaskPath, type ResolvedPath } from "../repository/paths.js";
+import { classifyTaskPath, resolveTaskPath, type ResolvedPath } from "../repository/paths.js";
 import { AtomicReplaceError } from "./atomic.js";
 import { assertInternalTransactionAuthority } from "./authority.js";
 import { identifyTransactionRequest } from "./request.js";
@@ -76,6 +77,56 @@ function operationFor(artifact: DurableArtifact): IntentReceiptV1["operation"] {
   if (artifact.artifact_kind === "legacy-import-initialization") return "adopt-legacy-import-initialization" as IntentReceiptV1["operation"];
   if (artifact.artifact_kind === "manual-checkpoint-import") return "adopt-manual-checkpoint-import" as IntentReceiptV1["operation"];
   throw new TypeError("revision-0 initialization received a non-initialization artifact");
+}
+
+function phaseForLegacyDestination(
+  taskId: string,
+  destinationPath: string,
+): PhaseInstanceId | undefined {
+  const prefix = `.archflow/tasks/${taskId}/`;
+  if (!destinationPath.startsWith(prefix)) return undefined;
+  const relativePath = destinationPath.slice(prefix.length);
+  if (relativePath === "prd.md" || relativePath === "design.md") {
+    return relativePath === "prd.md" ? "prd" as PhaseInstanceId : "design" as PhaseInstanceId;
+  }
+  const document = /^phases\/([1-9][0-9]*)\/(design|impl-notes)\.md$/u.exec(relativePath);
+  if (document !== null) {
+    const phase = Number(document[1]);
+    if (!Number.isSafeInteger(phase)) return undefined;
+    return `${document[2] === "design" ? "phase-design" : "phase-impl"}-${phase}` as PhaseInstanceId;
+  }
+  const review = /^reviews\/(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)\.(?:self|counter|triage|adjudication)\.md$/u.exec(relativePath) ??
+    /^reviews\/(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)\.gate-counter\.[a-z0-9][a-z0-9-]*\.md$/u.exec(relativePath);
+  if (review === null) return undefined;
+  try {
+    decodePhaseInstance(review[1]);
+    return review[1] as PhaseInstanceId;
+  } catch {
+    return undefined;
+  }
+}
+
+function validateLegacyMapping(initialization: LegacyImportInitializationV1): ProjectResult<void> {
+  const staged = new Set(initialization.staged_payload_refs.map((entry) => entry.legacy_path));
+  const prefix = `.archflow/tasks/${initialization.task_id}/`;
+  for (const entry of initialization.mapping) {
+    if (!entry.destination_path.startsWith(prefix)) {
+      const classified = classifyTaskPath(
+        initialization.task_id,
+        parseTaskPathClaim(`.archflow/tasks/${initialization.task_id}/${entry.destination_path}`),
+      );
+      if (!classified.ok) return classified;
+      throw new TypeError("task-prefixed destination unexpectedly classified as task-relative");
+    }
+    const claim = parseTaskPathClaim(entry.destination_path.slice(prefix.length));
+    const classified = classifyTaskPath(initialization.task_id, claim);
+    if (!classified.ok) return classified;
+    if (!staged.has(entry.legacy_path)) return contract("legacy-mapping-payload-missing");
+    if (phaseForLegacyDestination(initialization.task_id, entry.destination_path) !== entry.phase_instance) {
+      return contract("legacy-mapping-phase-mismatch");
+    }
+  }
+  return ok(undefined);
 }
 
 async function validateLiveInitialization(
@@ -204,6 +255,10 @@ export async function identifyStateInitialization(
   const artifactDocument = canonicalDocument(artifact);
   const artifactSemantics = validateDurableSemantics({ artifact: artifactDocument });
   if (!artifactSemantics.ok) return artifactSemantics;
+  if (initialization.artifact_kind === "legacy-import-initialization") {
+    const mapping = validateLegacyMapping(initialization);
+    if (!mapping.ok) return mapping;
+  }
   const stateResult = initialState(request.call, artifact, evidence);
   if (!stateResult.ok) return stateResult;
   const preparedState = canonicalDocument(stateResult.value);
