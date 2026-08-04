@@ -14,7 +14,7 @@
 - Claude review output exposed finding-ID and severity/blocking inconsistencies after broad constraint stripping. The projection was narrowed to retain supported simple patterns and to encode the finite blocking relationship. Only the complex task-slug negative-lookahead is replaced by a simple transport pattern; exact task-slug validation remains local.
 - One real Claude adjudication returned a matched rule in both matched and uncertain lists. Normative validation correctly refused attestation. No combinatorial cross-array transport-schema generator or weakened adjudication rule was added.
 - The real benchmark completed all 12 serialized turns in 753.3 seconds. Its 83.3% human-confirmed false-blocker rate failed `VAL-02`; thresholds were explicitly rejected instead of being tuned to pass. This reopens the architecture's central automation premise.
-- The current installed six-slice suite covers initialization/pinning, manual checkpoint/import, snapshot/restore and cap behavior, and normal/manual upgrade convergence. Dirty MCP replay, restore collisions, maintenance pruning, two-phase evidence-path noncollision, and secret-output rejection remain recorded gaps rather than copied in-process harnesses.
+- The current installed nine-slice suite covers initialization/pinning, dirty exact replay, manual checkpoint/import, snapshot/restore and cap behavior, recorded maintenance pruning, pre-projection secret rejection, and normal/manual upgrade convergence. Restore collisions and two-phase evidence-path noncollision remain recorded gaps because reproducing the full production state/gate/evidence harness solely at the launcher boundary is disproportionate for this prototype.
 
 ### Patterns Established
 
@@ -43,11 +43,11 @@
 ### Verification
 
 - `npm run check` passed on the final tracked bundle: 160 ordinary test files (156 passed, 4 opt-in skipped), 1,698 passed tests, 21 contract files / 476 tests, 13 MCP-runtime files / 119 tests, typecheck, dependency/notices policies, MCP boundary checks, temporary build, release smoke/mutations, and byte-identical reproduction.
-- The current installed terminal journey passed 6/6 against tracked `dist/`. The review benchmark passed 2/2 and completed 12 real serialized model turns. Focused transport projection and dispatch verification passed 59/59 before final gate verification.
+- The current installed terminal journey passed 9/9 against tracked `dist/`; the three added slices perform no model dispatch or credential access. The review benchmark passed 2/2 and completed 12 real serialized model turns. Focused transport projection and dispatch verification passed 59/59 before final gate verification.
 - Tracked MCP digest is `9788624d71e48a3b683af3112f0f12e2fc735f7cd598a508e07f2d2e25d92499`; dependency inventory digest is `6836db3d7e77b1cf9cb19c0a0c063ff6cfaee5f50e92fdeea28241fb31ec5777`; manifest digest is `eba09ea777891f468405f390c92970ab1f80339d5c24cc3eaae7517f064fe418`; legal-review digest is `2838becf08e5199b7eb341d2d6123a9ba0037319e3f13207c79f995e6bb3d242`.
 
 ### Remaining Work Before Phase Completion
 
 - Re-design and explicitly approve the review approach in response to blocked `VAL-02`; do not invent thresholds for the rejected 83.3% false-blocker result.
 - Execute and record the two VAL-01 producer journeys, VAL-12 server-absent/manual journey, and VAL-09 real-client timeout/negotiation observations from `docs/real-host-journeys.md`.
-- Decide whether the recorded partial installed boundaries (VAL-05/VAL-16 and the mapped maintenance/secret/collision gaps) require additional installed slices before the next review gate.
+- Decide whether the remaining partial installed boundaries (VAL-05 restore collisions and VAL-16 two-phase evidence noncollision) justify reproducing the full retained-result/gate/evidence harness before the next review gate.

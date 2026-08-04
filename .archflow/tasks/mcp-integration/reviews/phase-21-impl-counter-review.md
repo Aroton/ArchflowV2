@@ -128,3 +128,85 @@ proves disposition edits preserve the digest and observation edits change it.
 `detectManagedPolicyPaths(paths)` is now an exported narrow detection seam. The real-host preflight
 suite creates one temporary present path and one absent path and proves the production detector
 returns exactly the present path, independently of developer-machine policy state.
+
+## Checkpoint Follow-up Review
+
+Scope: the uncommitted increment across `test/real-host/terminal-journey.test.ts`,
+`docs/release-validation.md`, `.archflow/tasks/mcp-integration/architecture.md`, and the Phase 21
+implementation log, reviewed against the phase design, `.archflow/context/`, and the prior review
+above. Verification re-run locally: `npm run typecheck` is clean, and
+`ARCHFLOW_REAL_HOSTS=1 npx vitest run test/real-host/terminal-journey.test.ts` passes **9/9 in
+51.1 s** against the tracked `dist/` — the log's `9/9` claim and the architecture's "nine-slice"
+wording are accurate.
+
+**No blockers.** The three added slices are sound, and each is at the launcher boundary the design
+pins:
+
+- The dirty replay (`:408-427`) exercises the genuine committed-intent replay path, not a
+  coincidence: `computeRequestDigest` (`src/state/request.ts:12-30`) excludes `expected_revision`,
+  so the second call's digest and fingerprint match the receipt and `authenticateCommitted`
+  (`src/state/transaction.ts:710-725`) returns the recorded outcome. A non-replay would have
+  produced revision 2 and failed `toEqual(first)`.
+- The maintenance slice (`:429-460`) matches production order — `performMaintenance`
+  (`src/state/maintenance.ts:169-181`) installs the record before any deletion, so the test title's
+  "before deleting" is true — and `toMatchObject` on `deletions` pins exactly one permitted deletion.
+- The secret slice (`:462-488`) reaches the projection-preparation scanner
+  (`src/state/snapshots.ts:576-584`), which runs before any projection entry is planned or written,
+  and the durable-tree digest plus `state.json` bytes prove no advancement. Writing canonical
+  `state.json` bytes to construct the phase-impl fixture is the established pattern here
+  (`test/unit/state-gates.test.ts:126`, `test/crash/state-transaction.test.ts:139`), not a
+  deviation.
+
+Three findings, all in the written record rather than the code.
+
+- **major — `docs/release-validation.md:34-38` still reports the installed run as "all six
+  implemented scenarios passed."** The same change set raises the suite to nine slices, and the
+  VAL-05, VAL-06, and gaps entries in that document now cite the three new slices as evidence. The
+  report's own preamble states that installed evidence is an *observed run*, and it is the artifact
+  Phase 22 consumes; leaving the count at six contradicts the rows immediately below it and
+  understates the run I re-observed as 9/9. **Resolution:** update the count in that paragraph to
+  the nine scenarios actually implemented and passing.
+
+- **major — VAL-06 now claims "No outstanding boundary identified" while the same document still
+  records an unresolved VAL-06 deviation.** Line 49's *Remaining* column was changed from "The
+  Phase 21 terminal success-criteria omissions … remain recorded below rather than being claimed by
+  this VAL pass" to a claim of no outstanding boundary, but lines 89-95 still state that a result
+  one byte above the result cap fails at durable-schema validation rather than returning
+  `SNAPSHOT_LIMIT`, and that this "remains a deviation from the Phase 21 success criterion requiring
+  `SNAPSHOT_LIMIT` above either cap." The maintenance and secret slices closed two of the three
+  recorded VAL-06 gaps; the result-cap classification is not one of them, and the pointer to it was
+  deleted anyway. By the report's own definitions — and by the accepted resolution of Major 5 above,
+  that a non-empty remaining boundary is by definition `partial` — the row now overstates. This is
+  the "coverage boast" the phase's human-judgement clause exists to catch. **Resolution:** keep the
+  strengthened evidence, restore the result-cap classification to VAL-06's *Remaining* column, and
+  either mark VAL-06 `partial` or state explicitly why that classification is not a required VAL-06
+  boundary.
+
+- **major — the log's stated reason for the remaining VAL-05/VAL-16 gaps is not the real one, and
+  it is the premise the next gate decision rests on.** The Deviations entry now says restore
+  collisions and two-phase evidence noncollision "remain recorded gaps because the installed
+  launchers provide no seam for injecting the retained result/gate/evidence authority those paths
+  require." That is contradicted by this same increment: `installedImplementationFixture`
+  (`test/real-host/terminal-journey.test.ts:210-234`) injects durable task authority by writing
+  canonical `state.json` bytes, the pre-existing snapshot slice injects a complete retained result
+  manifest through `archflow-local snapshot`, and `archflow_gate` is one of the five tools the same
+  installed stdio server already exposes (`src/contracts/tool-names.ts:1-7`) — only the
+  `archflow_state`-hardcoded `mcpState` helper would need generalizing. The honest reason is the
+  second half of that same sentence, that reproducing the harness at the launcher boundary is
+  disproportionate for this prototype, which is a sound call under the repository's engineering
+  priorities. The "Remaining Work" bullet asks the user to decide whether to close these gaps before
+  the next review gate; recording an absent seam rather than a cost tradeoff makes that decision on
+  a false premise. **Resolution:** drop the "no seam" claim from the log (and any wording it feeds
+  in `docs/release-validation.md`), and keep the proportionality reason as the recorded rationale.
+
+### Checkpoint Follow-up Triage
+
+- **Stale six-scenario count — accepted and resolved.** `docs/release-validation.md` now records the
+  observed 9/9 installed run, matching the suite and the Phase 21 log.
+- **VAL-06 overstatement — accepted and resolved.** VAL-06 is now `partial`; its Remaining column
+  names the unresolved result-cap classification while retaining the proof that no partial authority
+  is installed. The release-decision summary includes VAL-06 among the partial validations.
+- **Absent-seam rationale — accepted and resolved.** The Phase 21 log no longer claims the installed
+  launchers lack a seam. It records only the actual proportionality decision: reproducing the full
+  production state/gate/evidence harness at the launcher boundary is disproportionate for this
+  prototype.

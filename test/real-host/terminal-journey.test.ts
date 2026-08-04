@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { canonicalJsonDigest, gitBlobOid, sha256Bytes } from "../../src/contracts/canonical.js";
+import { canonicalDocument, canonicalJsonDigest, gitBlobOid, sha256Bytes } from "../../src/contracts/canonical.js";
 import { deriveDeclaredSnapshotDigest, RESULT_BYTE_CAP, TASK_BYTE_CAP } from "../../src/state/snapshots.js";
 import { realHostsEnabled } from "../helpers/real-host.js";
 
@@ -203,6 +203,50 @@ async function adopt(root: string, task: string, artifact: any, intent: string, 
   }, intent);
 }
 
+function taskState(root: string, task: string): any {
+  return JSON.parse(readFileSync(join(root, ".archflow", "tasks", task, "state.json"), "utf8"));
+}
+
+function writeTaskState(root: string, task: string, state: any): void {
+  writeFileSync(join(root, ".archflow", "tasks", task, "state.json"), canonicalDocument(state).bytes);
+}
+
+async function replayInitialization(root: string, task: string, artifact: any, intent: string): Promise<any> {
+  const draft = {
+    schema_version: "1", task_id: task, intent_id: intent, expected_revision: 1,
+    input_fingerprint: "0".repeat(64), phase_instance: "prd", step: "produce", status: "running", artifact,
+  };
+  const envelope = local(root, task, "envelope", { tool: "archflow_state", input: draft });
+  expect(envelope.value).toMatchObject({ ok: true });
+  return mcpState(root, { ...draft, input_fingerprint: envelope.value.value.input_fingerprint }, `${intent}-replay`);
+}
+
+async function installedImplementationFixture(root: string, task: string, content: string, intent: string) {
+  const staged = local(root, task, "task-init").value.value;
+  expect(await adopt(root, task, staged, `${intent}-init`)).toMatchObject({ ok: true, value: { revision: 1 } });
+  const current = taskState(root, task);
+  const implementationState = {
+    ...current,
+    phase_instance: "phase-impl-1",
+    step: "produce",
+    status: "running",
+  };
+  writeTaskState(root, task, implementationState);
+  writeFileSync(join(root, "README.md"), content);
+  const artifact = local(root, task, "build-implementation-output", {
+    phase_instance: "phase-impl-1",
+    step: "produce",
+    base_commit: git(root, "rev-parse", "HEAD"),
+    outputs: ["README.md"],
+    restore_targets: ["README.md"],
+    parent_documents: [],
+    declared_inputs: [],
+    input_fingerprint: implementationState.input_fingerprint,
+  });
+  expect(artifact.value).toMatchObject({ ok: true, value: { artifact_kind: "implementation-output" } });
+  return { artifact: artifact.value.value, state: implementationState };
+}
+
 beforeAll(() => {
   if (!enabled) return;
   const developerHome = process.env.HOME;
@@ -359,6 +403,88 @@ describe.skipIf(!enabled)("installed terminal journeys", () => {
     expect(local(root, task, "snapshot", {
       manifest: taskOverflow.manifest, retained_task_bytes: TASK_BYTE_CAP, payloads: [taskOverflow.payload],
     }).value).toMatchObject({ ok: false, error: { code: "SNAPSHOT_LIMIT" } });
+  }, TIMEOUT);
+
+  it("replays initialization exactly in a dirty worktree without touching unrelated bytes", async () => {
+    const root = makeRepository("dirty-replay");
+    expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
+    commitPolicy(root);
+    const task = "dirty-replay-task";
+    const staged = local(root, task, "task-init").value.value;
+    const first = await adopt(root, task, staged, "installed-dirty-init");
+    expect(first).toMatchObject({ ok: true, value: { revision: 1 } });
+    const taskRoot = join(root, ".archflow", "tasks", task);
+    const authorityBefore = digestTree([taskRoot]);
+    writeFileSync(join(root, "README.md"), "unrelated tracked dirty bytes\n");
+    writeFileSync(join(root, "unrelated-untracked.bin"), Buffer.from([0, 255, 1, 254]));
+    const trackedBefore = readFileSync(join(root, "README.md"));
+    const untrackedBefore = readFileSync(join(root, "unrelated-untracked.bin"));
+
+    expect(await replayInitialization(root, task, staged, "installed-dirty-init")).toEqual(first);
+    expect(digestTree([taskRoot])).toBe(authorityBefore);
+    expect(readFileSync(join(root, "README.md"))).toEqual(trackedBefore);
+    expect(readFileSync(join(root, "unrelated-untracked.bin"))).toEqual(untrackedBefore);
+  }, TIMEOUT);
+
+  it("records a safe installed maintenance prune before deleting an unreachable attempt", async () => {
+    const root = makeRepository("maintenance");
+    expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
+    commitPolicy(root);
+    const task = "maintenance-task";
+    const staged = local(root, task, "task-init").value.value;
+    expect(await adopt(root, task, staged, "installed-maintenance-init"))
+      .toMatchObject({ ok: true, value: { revision: 1 } });
+    const orphan = join(root, ".archflow", "tasks", task, "attempts", "phase-impl-21", "orphan.json");
+    mkdirSync(dirname(orphan), { recursive: true });
+    writeFileSync(orphan, "installed orphan attempt\n");
+
+    expect(local(root, task, "maintain", {
+      maintenance_id: "phase21-installed-prune",
+      human_reason: "remove unreachable installed journey attempt",
+    }).value).toEqual({ record: "created", deleted: 1 });
+    expect(existsSync(orphan)).toBe(false);
+    const record = JSON.parse(readFileSync(
+      join(root, ".archflow", "tasks", task, "maintenance", "phase21-installed-prune.json"),
+      "utf8",
+    ));
+    expect(record).toMatchObject({
+      performed_at_revision: 1,
+      deletions: [{
+        path: `.archflow/tasks/${task}/attempts/phase-impl-21/orphan.json`,
+        category: "unreferenced-attempt",
+        byte_count: Buffer.byteLength("installed orphan attempt\n"),
+      }],
+      total_bytes_deleted: Buffer.byteLength("installed orphan attempt\n"),
+    });
+    expect(record.reachability_proof_digest).toMatch(/^[0-9a-f]{64}$/u);
+  }, TIMEOUT);
+
+  it("rejects a secret-bearing implementation output before projection or state advancement", async () => {
+    const root = makeRepository("secret-output");
+    expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
+    commitPolicy(root);
+    const task = "secret-output-task";
+    const secret = "ghp_" + "0123456789abcdefghijklmnopqrstuvwxyz";
+    const fixture = await installedImplementationFixture(root, task, `${secret}\n`, "installed-secret");
+    expect(fixture.artifact.secret_scan).toMatchObject({ outcome: "detected" });
+    const stateBefore = readFileSync(join(root, ".archflow", "tasks", task, "state.json"));
+    const readmeBefore = readFileSync(join(root, "README.md"));
+    const taskRoot = join(root, ".archflow", "tasks", task);
+    const durableBefore = digestTree([taskRoot]);
+    const draft = {
+      schema_version: "1", task_id: task, intent_id: "installed-secret-output",
+      expected_revision: fixture.state.revision, input_fingerprint: "0".repeat(64),
+      phase_instance: "phase-impl-1", step: "produce", status: "succeeded", artifact: fixture.artifact,
+    };
+    const envelope = local(root, task, "envelope", { tool: "archflow_state", input: draft });
+    expect(envelope.value).toMatchObject({ ok: true });
+    const rejected = await mcpState(root, {
+      ...draft, input_fingerprint: envelope.value.value.input_fingerprint,
+    }, "installed-secret-output");
+    expect(rejected).toMatchObject({ ok: false, error: { code: "SECRET_DETECTED" } });
+    expect(readFileSync(join(root, "README.md"))).toEqual(readmeBefore);
+    expect(readFileSync(join(root, ".archflow", "tasks", task, "state.json"))).toEqual(stateBefore);
+    expect(digestTree([taskRoot])).toBe(durableBefore);
   }, TIMEOUT);
 
   it("runs normal and manual legacy upgrades through installed launchers, preserving source and rerun authority", async () => {
