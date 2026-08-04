@@ -119,8 +119,9 @@ describe("package.json dependencies and scripts", () => {
     }
   });
 
-  it("adds no script, and leaves `check` running the test suite exactly once", () => {
+  it("keeps opt-in real-host scripts outside `check` and runs the ordinary suite exactly once", () => {
     expect(Object.keys(manifest.scripts).sort()).toEqual([
+      "bench:review",
       "build:temp",
       "check",
       "check:dependencies",
@@ -139,9 +140,12 @@ describe("package.json dependencies and scripts", () => {
       "test:mcp-runtime",
       "test:notices-policy",
       "test:phase4-mcp-boundary-policy",
+      "test:real-host",
       "test:unit",
       "typecheck",
     ]);
     expect(manifest.scripts["check"]?.split("npm test").length).toBe(2);
+    expect(manifest.scripts["check"]).not.toContain("test:real-host");
+    expect(manifest.scripts["check"]).not.toContain("bench:review");
   });
 });

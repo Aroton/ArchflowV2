@@ -12,6 +12,8 @@
     "test:unit": "vitest run test/unit",
     "test:contracts": "vitest run test/contracts",
     "test:mcp-runtime": "vitest run test/unit/mcp-*.test.ts test/integration/mcp-stdio.test.ts",
+    "test:real-host": "vitest run --no-file-parallelism test/real-host",
+    "bench:review": "vitest run test/real-host/review-benchmark.test.ts",
     "probe:phase4-mcp-compatibility": "node scripts/probe-phase-4-mcp-compatibility.mjs",
     "build:temp": "node scripts/build-temp.mjs",
     "release:stage": "node scripts/build-release.mjs",

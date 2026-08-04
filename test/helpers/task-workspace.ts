@@ -25,6 +25,8 @@ export type TaskWorkspaceOptions = Readonly<{
   taskId: string;
   label?: string;
   operation?: string;
+  /** Complete replacement bytes for the scaffolded `.archflow/config.yaml`. */
+  configBytes?: Uint8Array;
 }>;
 
 export type TaskWorkspace = Readonly<{
@@ -69,6 +71,9 @@ export async function createTaskWorkspace(options: TaskWorkspaceOptions): Promis
 
     const scaffolded = await scaffoldRepositoryAssets({ working_directory: root });
     if (!scaffolded.ok) throw new Error(scaffolded.error.code);
+    if (options.configBytes !== undefined) {
+      writeFileSync(join(root, ".archflow", "config.yaml"), options.configBytes);
+    }
     git(root, "add", "--", ".gitattributes", ".archflow/workflow.yaml", ".archflow/constitution", ".archflow/config.yaml");
     git(root, "commit", "-q", "-m", "approve policy");
 

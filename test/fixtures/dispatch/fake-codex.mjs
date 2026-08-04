@@ -26,7 +26,12 @@ if (argv[0] === "login" && argv[1] === "status") {
     process.stderr.write("Not logged in\n");
     process.exit(1);
   }
-  process.stdout.write("Logged in using ChatGPT\n");
+  if (scenario.trim() === "auth-stderr" || scenario.trim() === "auth-duplicate") {
+    process.stderr.write("WARNING: isolated home could not install PATH aliases\n");
+  }
+  const channel = scenario.trim() === "auth-stderr" || scenario.trim() === "auth-duplicate" ? process.stderr : process.stdout;
+  channel.write("Logged in using ChatGPT\n");
+  if (scenario.trim() === "auth-duplicate") process.stdout.write("Logged in using ChatGPT\n");
   process.exit(0);
 }
 process.stdin.resume();

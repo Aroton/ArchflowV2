@@ -47136,6 +47136,164 @@ var CODEX_DISABLED_FEATURES = Object.freeze([
   "plugin_sharing",
   "skill_search"
 ]);
+var HOST_SCHEMA_METADATA = /* @__PURE__ */ new Set(["$schema", "$id"]);
+var CLAUDE_UNSUPPORTED_SCHEMA_KEYWORDS = /* @__PURE__ */ new Set([
+  "minimum",
+  "maximum",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+  "multipleOf",
+  "minLength",
+  "maxLength",
+  "format",
+  "minItems",
+  "maxItems",
+  "uniqueItems",
+  "minProperties",
+  "maxProperties"
+]);
+function projectSchemaNode(value, adapter2) {
+  if (Array.isArray(value)) return value.map((item) => projectSchemaNode(item, adapter2));
+  if (value === null || typeof value !== "object") return value;
+  const projected = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (HOST_SCHEMA_METADATA.has(key) || key.startsWith("x-archflow-") || key === "allOf" || adapter2 === "claude-cli" && CLAUDE_UNSUPPORTED_SCHEMA_KEYWORDS.has(key) || adapter2 === "codex-cli" && key === "uniqueItems") continue;
+    projected[key] = projectSchemaNode(child, adapter2);
+  }
+  return projected;
+}
+function scalarType(value) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  if (typeof value === "string") return "string";
+  if (typeof value === "number") return "number";
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "object") return "object";
+  return void 0;
+}
+function codexStrictNode(value) {
+  if (Array.isArray(value)) return value.map(codexStrictNode);
+  if (value === null || typeof value !== "object") return value;
+  const node = Object.fromEntries(Object.entries(value).map(([key, child]) => [key, codexStrictNode(child)]));
+  if (node.type === void 0 && node.const !== void 0) node.type = scalarType(node.const) ?? "string";
+  if (node.type === void 0 && Array.isArray(node.enum) && node.enum.length > 0) {
+    const types = new Set(node.enum.map(scalarType));
+    if (types.size === 1 && !types.has(void 0)) node.type = [...types][0];
+  }
+  if (node.type === "object" && node.properties !== null && typeof node.properties === "object" && !Array.isArray(node.properties)) {
+    node.required = Object.keys(node.properties);
+  }
+  return node;
+}
+function codexMechanicalSchema(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  const mechanical = value;
+  const properties = mechanical.properties;
+  if (properties === null || typeof properties !== "object" || Array.isArray(properties)) return value;
+  const base2 = properties;
+  const branch = (states, digests) => {
+    const selected = {
+      mechanism: base2.mechanism,
+      state: { type: "string", enum: [...states] },
+      ...Object.fromEntries(digests.map((name) => [name, base2[name]])),
+      details: base2.details
+    };
+    return { type: "object", additionalProperties: false, properties: selected, required: Object.keys(selected) };
+  };
+  return {
+    type: "object",
+    anyOf: [
+      branch(["current", "stale"], ["subject_digest", "evidence_digest"]),
+      branch(["missing", "unknown"], []),
+      branch(["failed", "digest-mismatch"], []),
+      branch(["failed", "digest-mismatch"], ["subject_digest"]),
+      branch(["failed", "digest-mismatch"], ["evidence_digest"]),
+      branch(["failed", "digest-mismatch"], ["subject_digest", "evidence_digest"])
+    ]
+  };
+}
+function hostFindingSchema(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  const finding = value;
+  const properties = finding.properties;
+  if (properties === null || typeof properties !== "object" || Array.isArray(properties)) return value;
+  const base2 = properties;
+  const branch = (severities, blocking) => {
+    const selected = {
+      ...base2,
+      severity: { type: "string", enum: [...severities] },
+      blocking: { type: "boolean", const: blocking }
+    };
+    return { type: "object", additionalProperties: false, properties: selected, required: Object.keys(selected) };
+  };
+  return {
+    type: "object",
+    anyOf: [
+      branch(["blocker"], true),
+      branch(["major", "minor"], false)
+    ]
+  };
+}
+function hostTaskSlugSchema(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  return {
+    ...value,
+    // Both hosts accept ordinary regex patterns but not the normative reserved-name lookaheads.
+    // The exact task-slug parser still runs during local output validation and attestation.
+    pattern: "^[a-z0-9][a-z0-9._-]{0,63}$"
+  };
+}
+function projectCliOutputSchema(outputSchema, resultKind, adapter2, subject) {
+  assertPlainJson(outputSchema, "CLI output schema");
+  const snapshot = structuredClone(outputSchema);
+  const projected = projectSchemaNode(snapshot, adapter2);
+  if (projected === null || typeof projected !== "object" || Array.isArray(projected)) {
+    throw new TypeError("CLI output schema must be an object");
+  }
+  let root = projected;
+  const definitions = root.$defs;
+  if (definitions !== null && typeof definitions === "object" && !Array.isArray(definitions)) {
+    const named = definitions;
+    const common3 = { ...named, taskSlug: hostTaskSlugSchema(named.taskSlug) };
+    root = {
+      ...root,
+      $defs: resultKind === "review" ? { ...common3, finding: hostFindingSchema(common3.finding) } : common3
+    };
+  }
+  if (adapter2 === "codex-cli" && resultKind === "adjudication") {
+    const codexDefinitions = root.$defs;
+    if (codexDefinitions !== null && typeof codexDefinitions === "object" && !Array.isArray(codexDefinitions)) {
+      const common3 = codexDefinitions;
+      root = {
+        ...root,
+        $defs: { ...common3, mechanical: codexMechanicalSchema(common3.mechanical) }
+      };
+    }
+  }
+  const bindingKeys = resultKind === "review" ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family"] : ["task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_evidence_set_digest"];
+  if (subject !== void 0) {
+    const properties = root.properties;
+    if (properties === null || typeof properties !== "object" || Array.isArray(properties)) {
+      throw new TypeError("CLI output schema must declare properties");
+    }
+    const bound = { ...properties };
+    for (const key of bindingKeys) {
+      const value = subject[key];
+      if (value !== void 0) bound[key] = { const: structuredClone(value) };
+    }
+    root = { ...root, properties: bound };
+  }
+  return adapter2 === "codex-cli" ? codexStrictNode(root) : root;
+}
+function envelopeSubject(envelope) {
+  const decoded = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes));
+  assertPlainJson(decoded, "dispatch envelope");
+  if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) throw new TypeError("dispatch envelope must be an object");
+  const subject = decoded.subject;
+  if (subject === void 0) return {};
+  if (subject === null || typeof subject !== "object" || Array.isArray(subject)) throw new TypeError("dispatch envelope subject must be an object");
+  return subject;
+}
 var dispatchQueue = Promise.resolve();
 var CliAdapterError = class extends Error {
   constructor(project_error, cli_version) {
@@ -47179,7 +47337,7 @@ function exactVersion(adapter2, output) {
   const match = adapter2 === "claude-cli" ? /^(\d+\.\d+\.\d+) \(Claude Code\)$/u.exec(text3) : /^codex-cli (\d+\.\d+\.\d+)$/u.exec(text3);
   return match?.[1] ?? "unrecognized";
 }
-async function existingPaths(paths) {
+async function detectManagedPolicyPaths(paths) {
   const observations = await Promise.all(paths.map(async (path2) => {
     try {
       await stat2(path2);
@@ -47232,10 +47390,11 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
       loggedIn = false;
     }
   } else if (adapter2 === "codex-cli" && authResult.exit_code === 0) {
-    loggedIn = /^Logged in(?:\s|$)/u.test(authResult.stdout.toString("utf8").trim());
+    const successLines = [authResult.stdout, authResult.stderr].flatMap((channel) => channel.toString("utf8").split(/\r?\n/u)).filter((line) => /^Logged in(?:\s|$)/u.test(line.trim()));
+    loggedIn = successLines.length >= 1;
   }
   if (!loggedIn) return fail16(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version2);
-  const managedPolicyPaths = await existingPaths(policyPaths);
+  const managedPolicyPaths = await detectManagedPolicyPaths(policyPaths);
   return Object.freeze({
     cli_version: version2,
     managed_policy_present: managedPolicyPaths.length > 0,
@@ -47272,7 +47431,7 @@ function classifyMessage(adapter2, message) {
   if (/\b(?:not logged in|login required|authentication (?:failed|required)|unauthorized|invalid credentials?)\b/iu.test(message)) {
     return createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 });
   }
-  if (/\b(?:model|deployment)\b.*\b(?:not found|unsupported|does not exist|unknown|invalid)\b/iu.test(message) || /\b(?:not found|unsupported|does not exist|unknown|invalid)\b.*\b(?:model|deployment)\b/iu.test(message)) {
+  if (/\b(?:model|deployment)\b.*\b(?:not found|not supported|unsupported|does not exist|unknown|invalid)\b/iu.test(message) || /\b(?:not found|not supported|unsupported|does not exist|unknown|invalid)\b.*\b(?:model|deployment)\b/iu.test(message)) {
     const model = modelFromMessage(message);
     if (model !== void 0) return createProjectError("UNSUPPORTED_MODEL", { model });
   }
@@ -47332,8 +47491,7 @@ var claudeAdapter = Object.freeze({
   ),
   async buildInvocation(envelope, route, workspace, outputSchema) {
     assertRoute("claude-cli", route);
-    assertPlainJson(outputSchema, "CLI output schema");
-    const schema = structuredClone(outputSchema);
+    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "claude-cli", envelopeSubject(envelope));
     if (route.effort === "ultra") {
       return fail16(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
@@ -47417,8 +47575,7 @@ var codexAdapter = Object.freeze({
   ),
   async buildInvocation(envelope, route, workspace, outputSchema) {
     assertRoute("codex-cli", route);
-    assertPlainJson(outputSchema, "CLI output schema");
-    const schema = structuredClone(outputSchema);
+    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "codex-cli", envelopeSubject(envelope));
     const schemaPath = join5(workspace.root, `${envelope.result_kind}.schema.json`);
     const outputPath = join5(workspace.root, "final-output.json");
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}

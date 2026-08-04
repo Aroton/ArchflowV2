@@ -1,0 +1,64 @@
+{
+  "schema_version": "1",
+  "disposition_vocabulary": {
+    "seeded": [
+      "seed-detected",
+      "unrelated-blocker",
+      "missed"
+    ],
+    "control": [
+      "clean-pass",
+      "false-blocker"
+    ]
+  },
+  "cases": [
+    {
+      "id": "retention-contradiction",
+      "artifact": "seeded-retention-contradiction.md",
+      "artifact_sha256": "9f57633bc7b1beb8bb6222fefc33c0d52e7c10fa273b88e67e82b0676daa1809",
+      "kind": "seeded",
+      "expected_outcome": "blocking-finding",
+      "seeded_defect": "The audit-record example persists the raw bearer token even though the requirements prohibit durable storage of the token or any reversible representation."
+    },
+    {
+      "id": "unhandled-error-path",
+      "artifact": "seeded-unhandled-error-path.md",
+      "artifact_sha256": "e77248bbbdf48179b2aa88cfdfe58e4c51e530205e840a35d8ac392244917871",
+      "kind": "seeded",
+      "expected_outcome": "blocking-finding",
+      "seeded_defect": "The contract requires a worker receiving LEASE_EXPIRED to stop uploading and preserve resumability, but the worker flow and error-handling design never handle that named result."
+    },
+    {
+      "id": "offline-constraint",
+      "artifact": "seeded-offline-constraint.md",
+      "artifact_sha256": "24e95656898e6953d0e71a6f91e06fa5506bee44429a74e76f531a89a379a313",
+      "kind": "seeded",
+      "expected_outcome": "blocking-finding",
+      "seeded_defect": "The validator assumes it can download its schema at startup even though every command is required to work on an air-gapped workstation."
+    },
+    {
+      "id": "atomic-profile-update",
+      "artifact": "control-atomic-profile-update.md",
+      "artifact_sha256": "fac5c039904c07220b88dbe1ed327075c10fd4b93d091beb7a7ba1e55ee989a8",
+      "kind": "control",
+      "expected_outcome": "pass",
+      "seeded_defect": null
+    },
+    {
+      "id": "bounded-upload",
+      "artifact": "control-bounded-upload.md",
+      "artifact_sha256": "ff98aa804d1f1bed521d64440093aff518b8793d8e4a5e6cd0f2d47cd0f47bbf",
+      "kind": "control",
+      "expected_outcome": "pass",
+      "seeded_defect": null
+    },
+    {
+      "id": "offline-schema-bundle",
+      "artifact": "control-offline-schema-bundle.md",
+      "artifact_sha256": "68be571173d7e194fdde2f19e71c0d236d3c21e2a0b959d16ec8cfb122c9f770",
+      "kind": "control",
+      "expected_outcome": "pass",
+      "seeded_defect": null
+    }
+  ]
+}

@@ -844,6 +844,8 @@ REQ-01 and host-registration crash safety were added to this phase on 2026-08-04
 
 **Scope**: Run real supported Claude→Codex and Codex→Claude journeys, clean normal initialization plus policy/config mismatch cases, server-absent checkpoint journeys, upgrade journeys, multi-phase non-collision, representative snapshot growth/caps/retention/maintenance/secret rejection, dirty restore and `restore-collision` decisions, interruption/resume, optional gate review, selected-CLI own-auth plus prohibited-access canaries/output scans, and the review/policy/drift corpus. Set thresholds from results.
 
+**In progress 2026-08-04.** Provider-specific transport-schema projections now adapt the unchanged normative review/adjudication schemas to the installed Claude and Codex structured-output subsets; every returned document is still post-validated by the normative parser before server attestation. Both real counter-review directions and Codex adjudication succeed. Claude adjudication reached structured output but one observed response was correctly rejected for contradictory matched/uncertain rule lists. The 12-turn review benchmark detected all six seeded defects but produced human-confirmed blockers on five of six clean controls (83.3% false-blocker rate); the user rejected thresholds, so `VAL-02` is blocked and the automation premise is reopened. The current tracked bundle `9788624d71e48a3b683af3112f0f12e2fc735f7cd598a508e07f2d2e25d92499` is risk-accepted, reproduced, and passes the installed six-slice journey. Phase 21 remains incomplete pending a revised approved review approach and the operator-executed VAL-01/VAL-09/VAL-12 journeys.
+
 **Success Criteria**:
 
 - [ ] `VAL-01` through `VAL-13` and `VAL-15` through `VAL-17` have reproducible evidence; `VAL-01` through `VAL-06` pass before any Archforge work begins.
@@ -898,7 +900,7 @@ REQ-01 and host-registration crash safety were added to this phase on 2026-08-04
 | 18 | Manual and Degraded Recovery Workflow | COMPLETE (2026-08-03) |
 | 19 | Legacy Upgrade Workflow | COMPLETE (2026-08-04) |
 | 20 | Reliability and Security Matrices | COMPLETE (2026-08-04) |
-| 21 | Real-Host E2E and Review-Quality Validation | Not Started |
+| 21 | Real-Host E2E and Review-Quality Validation | IN PROGRESS (2026-08-04; VAL-02 blocked) |
 | 22 | Release Packaging, Support Matrix, and Documentation Consistency | Not Started |
 
 ---

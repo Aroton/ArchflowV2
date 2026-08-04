@@ -290,7 +290,7 @@ describe("createDispatchCoordinator", () => {
       connection_id: "coordinator-boundary",
       startup_repository_candidate: { working_directory: h.repository },
     }).initialize({
-      client: { name: "codex", version: "0.146.0" },
+      client: { name: "codex-mcp-client", version: "0.146.0" },
       host: "codex",
       protocol_version: "2025-11-25",
     });

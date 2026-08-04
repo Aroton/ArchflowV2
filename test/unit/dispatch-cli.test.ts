@@ -5,18 +5,25 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { canonicalJsonBytes } from "../../src/contracts/canonical.js";
+import { parseAndDeriveAdjudication } from "../../src/contracts/adjudication.js";
+import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
+import { parseAndDeriveReview } from "../../src/contracts/review.js";
 import adjudicationSchema from "../../src/contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
 import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
+import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
 import type { HostIdentity } from "../../src/contracts/hosts.js";
 import type { DispatchChildResult } from "../../src/dispatch/process.js";
 import {
   CliAdapterError,
+  projectCliOutputSchema,
   selectCliAdapter,
   serializeDispatch,
 } from "../../src/dispatch/cli.js";
 import type { DispatchRoute } from "../../src/dispatch/routing.js";
 import type { DispatchWorkspace } from "../../src/dispatch/workspace.js";
 import type { DispatchEnvelope } from "../../src/review/envelopes.js";
+import validAdjudication from "../fixtures/contracts/adjudication/valid.json" with { type: "json" };
+import validReview from "../fixtures/contracts/review/valid.json" with { type: "json" };
 
 const bytes = (value: string): Buffer => Buffer.from(value, "utf8");
 const result = (value: Partial<DispatchChildResult> = {}): DispatchChildResult => Object.freeze({
@@ -28,9 +35,9 @@ const result = (value: Partial<DispatchChildResult> = {}): DispatchChildResult =
 });
 const envelope: DispatchEnvelope = Object.freeze({
   result_kind: "review",
-  bytes: bytes('{"schema_version":"1"}\n'),
+  bytes: bytes('{"schema_version":"1","subject":{}}\n'),
   digest: "d".repeat(64) as never,
-  byte_count: 23,
+  byte_count: 36,
 });
 
 async function workspace(): Promise<DispatchWorkspace> {
@@ -142,7 +149,7 @@ describe("CLI invocation construction", () => {
   it.each([
     ["claude", "claude-cli"],
     ["codex", "codex-cli"],
-  ] as const)("passes the adjudication schema through the %s adapter without stripping custom keywords", async (_name, id) => {
+  ] as const)("passes the projected adjudication host schema through the %s adapter", async (_name, id) => {
     const target = await workspace();
     const adapter = id === "claude-cli"
       ? selectCliAdapter("codex", { allow_claude_dispatch: true })
@@ -157,11 +164,131 @@ describe("CLI invocation construction", () => {
       : await readFile(invocation.argv[invocation.argv.indexOf("--output-schema") + 1]!, "utf8");
     const parsed = JSON.parse(schemaText) as Record<string, unknown>;
 
-    expect(schemaText).toContain("x-archflow-adjudication-semantics");
-    expect(parsed).toEqual(adjudicationSchema);
+    expect(schemaText).not.toMatch(/(?:"\$schema"|"\$id"|"allOf"|"x-archflow-)/u);
+    expect(parsed).toEqual(projectCliOutputSchema(adjudicationSchema as PlainJsonValue, "adjudication", id));
+    expect(parsed).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      required: adjudicationSchema.required,
+    });
     if (id === "codex-cli") {
       expect(invocation.argv[invocation.argv.indexOf("--output-schema") + 1]).toMatch(/adjudication\.schema\.json$/u);
+      const mechanical = ((parsed.$defs as Record<string, unknown>).mechanical as Record<string, unknown>);
+      expect(mechanical).toMatchObject({ type: "object", anyOf: expect.any(Array) });
+      for (const branch of mechanical.anyOf as Array<Record<string, unknown>>) {
+        expect(branch).toMatchObject({ type: "object", additionalProperties: false });
+        expect(branch.required).toEqual(Object.keys(branch.properties as Record<string, unknown>));
+      }
+    } else {
+      expect(schemaText).not.toMatch(/"(?:minimum|maximum|minLength|minItems|maxItems|uniqueItems)"/u);
     }
+  });
+
+  it("projects review schema keywords without mutating or inventing an unbound review identity", () => {
+    const before = structuredClone(reviewSchema);
+    const projected = projectCliOutputSchema(reviewSchema as PlainJsonValue, "review", "codex-cli") as Record<string, unknown>;
+    const properties = projected.properties as Record<string, unknown>;
+
+    expect(reviewSchema).toEqual(before);
+    expect(JSON.stringify(projected)).not.toMatch(/(?:"\$schema"|"\$id"|"allOf"|"x-archflow-)/u);
+    expect(projected).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      required: reviewSchema.required,
+    });
+    expect(properties).toMatchObject({
+      step: { type: "string", enum: ["self_review", "counter_review"] },
+      role: { type: "string", enum: ["self-review", "counter-review", "gate-counter-review"] },
+    });
+    const definitions = projected.$defs as Record<string, Record<string, unknown>>;
+    expect(definitions.taskSlug).toMatchObject({
+      type: "string",
+      pattern: "^[a-z0-9][a-z0-9._-]{0,63}$",
+    });
+    expect(definitions.id).toMatchObject({ pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" });
+    const finding = definitions.finding!;
+    expect(finding).toMatchObject({ type: "object", anyOf: expect.any(Array) });
+    for (const branch of finding.anyOf as Array<Record<string, unknown>>) {
+      expect(branch).toMatchObject({ type: "object", additionalProperties: false });
+      expect(branch.required).toEqual(Object.keys(branch.properties as Record<string, unknown>));
+    }
+    expect(JSON.stringify(projected)).toMatch(/"pattern"/u);
+    expect(JSON.stringify(projected)).toMatch(/"minimum"/u);
+    expect(JSON.stringify(projected)).toMatch(/"maximum"/u);
+  });
+
+  it("binds host-visible review identity fields to the server-derived envelope subject", () => {
+    const subject = Object.fromEntries([
+      "task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family",
+    ].map((key) => [key, validReview[key as keyof typeof validReview]])) as Record<string, PlainJsonValue>;
+    const projected = projectCliOutputSchema(reviewSchema as PlainJsonValue, "review", "claude-cli", subject) as Record<string, unknown>;
+    const properties = projected.properties as Record<string, Record<string, unknown>>;
+
+    for (const [key, value] of Object.entries(subject)) expect(properties[key]).toEqual({ const: value });
+  });
+
+  it("preserves a supplied self-review identity instead of coercing it to counter-review", () => {
+    const projected = projectCliOutputSchema(reviewSchema as PlainJsonValue, "review", "claude-cli", {
+      step: "self_review",
+      role: "self-review",
+    }) as Record<string, unknown>;
+    const properties = projected.properties as Record<string, Record<string, unknown>>;
+
+    expect(properties.step).toEqual({ const: "self_review" });
+    expect(properties.role).toEqual({ const: "self-review" });
+  });
+
+  it("keeps Claude-supported simple patterns while simplifying only the task-slug lookahead", () => {
+    const projected = projectCliOutputSchema(reviewSchema as PlainJsonValue, "review", "claude-cli") as Record<string, unknown>;
+    const definitions = projected.$defs as Record<string, Record<string, unknown>>;
+    expect(definitions.id).toMatchObject({ pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" });
+    expect(definitions.digest).toMatchObject({ pattern: "^[0-9a-f]{64}$" });
+    expect(definitions.nonBlank).toMatchObject({ pattern: "\\S" });
+    expect(definitions.phaseInstance).toMatchObject({ pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" });
+    expect(definitions.taskSlug).toMatchObject({ pattern: "^[a-z0-9][a-z0-9._-]{0,63}$" });
+    expect(JSON.stringify(projected)).not.toContain("(?!");
+    const finding = definitions.finding!;
+    expect(finding).toMatchObject({ type: "object", anyOf: expect.any(Array) });
+    for (const branch of finding.anyOf as Array<Record<string, unknown>>) {
+      expect(branch).toMatchObject({ type: "object", additionalProperties: false });
+      expect(branch.required).toEqual(Object.keys(branch.properties as Record<string, unknown>));
+    }
+
+    const validateProjected = createJsonSchemaValidator<Record<string, unknown>>(projected);
+    const invalid = structuredClone(validReview) as Record<string, unknown>;
+    const findings = invalid.findings as Array<Record<string, unknown>>;
+    findings[0]!.finding_id = "Invalid Finding Id";
+    expect(() => validateProjected.assert(invalid, "Claude projected finding id")).toThrow();
+    findings[0]!.finding_id = "valid-finding-id";
+    findings[0]!.blocking = false;
+    expect(() => validateProjected.assert(invalid, "Claude projected finding severity")).toThrow();
+  });
+
+  it("keeps normative semantic rejection after the host transport projection", () => {
+    const projectedReview = projectCliOutputSchema(reviewSchema as PlainJsonValue, "review", "codex-cli");
+    const validateProjectedReview = createJsonSchemaValidator<Record<string, unknown>>(projectedReview as Record<string, unknown>);
+    const invalidFinding = structuredClone(validReview) as Record<string, unknown>;
+    const invalidFindingItems = invalidFinding.findings as Array<Record<string, unknown>>;
+    invalidFindingItems[0]!.blocking = false;
+    expect(() => validateProjectedReview.assert(invalidFinding, "projected review finding")).toThrow();
+    invalidFindingItems[0]!.blocking = true;
+    invalidFindingItems[0]!.finding_id = "Invalid Finding Id";
+    expect(() => validateProjectedReview.assert(invalidFinding, "projected review finding id")).toThrow();
+
+    const invalidReview = structuredClone(validReview) as Record<string, unknown>;
+    invalidReview.verdict = "pass";
+    expect(() => validateProjectedReview.assert(invalidReview, "projected review")).not.toThrow();
+    expect(() => parseAndDeriveReview(invalidReview)).toThrow();
+
+    const projectedAdjudication = projectCliOutputSchema(adjudicationSchema as PlainJsonValue, "adjudication", "claude-cli");
+    const validateProjectedAdjudication = createJsonSchemaValidator<Record<string, unknown>>(projectedAdjudication as Record<string, unknown>);
+    const invalidAdjudication = structuredClone(validAdjudication) as Record<string, unknown>;
+    const ruleFindings = invalidAdjudication.rule_findings as Array<Record<string, unknown>>;
+    const mechanical = ruleFindings[0]!.enforced_by as Array<Record<string, unknown>>;
+    delete mechanical[0]!.subject_digest;
+    delete mechanical[0]!.evidence_digest;
+    expect(() => validateProjectedAdjudication.assert(invalidAdjudication, "projected adjudication")).not.toThrow();
+    expect(() => parseAndDeriveAdjudication(invalidAdjudication)).toThrow();
   });
 });
 
@@ -194,6 +321,7 @@ describe("CLI output contracts and failure classification", () => {
   it.each([
     ["auth", "Authentication required", "AUTH_UNAVAILABLE"],
     ["model", "Model 'gpt-unknown-codex' is not found", "UNSUPPORTED_MODEL"],
+    ["current model", "The 'gpt-unknown-codex' model is not supported when using Codex with a ChatGPT account", "UNSUPPORTED_MODEL"],
     ["rate", "Too many requests", "RATE_LIMITED"],
   ])("classifies %s failures with schema-safe parameters", (_label, message, code) => {
     const event = bytes(`${JSON.stringify({ type: "turn.failed", error: { message } })}\n`);

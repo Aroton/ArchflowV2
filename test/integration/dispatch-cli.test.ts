@@ -96,4 +96,18 @@ describe("CLI adapter preflight", () => {
       : selectCliAdapter("claude");
     expect(await rejectedCode(adapter.preflight(target))).toBe("AUTH_UNAVAILABLE");
   });
+
+  it("accepts the current Codex login success line from stderr", async () => {
+    const codex = await fakeWorkspace("codex", "auth-stderr");
+    await expect(selectCliAdapter("claude").preflight(codex)).resolves.toMatchObject({
+      cli_version: "0.146.0",
+    });
+  });
+
+  it("accepts duplicate Codex login success lines across stdout and stderr", async () => {
+    const codex = await fakeWorkspace("codex", "auth-duplicate");
+    await expect(selectCliAdapter("claude").preflight(codex)).resolves.toMatchObject({
+      cli_version: "0.146.0",
+    });
+  });
 });

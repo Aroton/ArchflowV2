@@ -94,6 +94,180 @@ export type CliDispatchOptions = Readonly<{
   allow_claude_dispatch?: boolean;
 }>;
 
+const HOST_SCHEMA_METADATA = new Set(["$schema", "$id"]);
+const CLAUDE_UNSUPPORTED_SCHEMA_KEYWORDS = new Set([
+  "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+  "minLength", "maxLength", "format",
+  "minItems", "maxItems", "uniqueItems",
+  "minProperties", "maxProperties",
+]);
+
+function projectSchemaNode(value: PlainJsonValue, adapter: AdapterId): PlainJsonValue {
+  if (Array.isArray(value)) return value.map((item) => projectSchemaNode(item, adapter));
+  if (value === null || typeof value !== "object") return value;
+  const projected: Record<string, PlainJsonValue> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (HOST_SCHEMA_METADATA.has(key) || key.startsWith("x-archflow-") || key === "allOf" ||
+        (adapter === "claude-cli" && CLAUDE_UNSUPPORTED_SCHEMA_KEYWORDS.has(key)) ||
+        (adapter === "codex-cli" && key === "uniqueItems")) continue;
+    projected[key] = projectSchemaNode(child, adapter);
+  }
+  return projected;
+}
+
+function scalarType(value: PlainJsonValue): "string" | "number" | "boolean" | "null" | "array" | "object" | undefined {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  if (typeof value === "string") return "string";
+  if (typeof value === "number") return "number";
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "object") return "object";
+  return undefined;
+}
+
+function codexStrictNode(value: PlainJsonValue): PlainJsonValue {
+  if (Array.isArray(value)) return value.map(codexStrictNode);
+  if (value === null || typeof value !== "object") return value;
+  const node = Object.fromEntries(Object.entries(value).map(([key, child]) => [key, codexStrictNode(child)])) as Record<string, PlainJsonValue>;
+  if (node.type === undefined && node.const !== undefined) node.type = scalarType(node.const) ?? "string";
+  if (node.type === undefined && Array.isArray(node.enum) && node.enum.length > 0) {
+    const types = new Set(node.enum.map(scalarType));
+    if (types.size === 1 && !types.has(undefined)) node.type = [...types][0]!;
+  }
+  if (node.type === "object" && node.properties !== null && typeof node.properties === "object" && !Array.isArray(node.properties)) {
+    node.required = Object.keys(node.properties);
+  }
+  return node;
+}
+
+function codexMechanicalSchema(value: PlainJsonValue): PlainJsonValue {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  const mechanical = value as Readonly<Record<string, PlainJsonValue>>;
+  const properties = mechanical.properties;
+  if (properties === null || typeof properties !== "object" || Array.isArray(properties)) return value;
+  const base = properties as Readonly<Record<string, PlainJsonValue>>;
+  const branch = (states: readonly string[], digests: readonly ("subject_digest" | "evidence_digest")[]): PlainJsonValue => {
+    const selected = {
+      mechanism: base.mechanism!,
+      state: { type: "string", enum: [...states] },
+      ...Object.fromEntries(digests.map((name) => [name, base[name]!])),
+      details: base.details!,
+    };
+    return { type: "object", additionalProperties: false, properties: selected, required: Object.keys(selected) };
+  };
+  return {
+    type: "object",
+    anyOf: [
+      branch(["current", "stale"], ["subject_digest", "evidence_digest"]),
+      branch(["missing", "unknown"], []),
+      branch(["failed", "digest-mismatch"], []),
+      branch(["failed", "digest-mismatch"], ["subject_digest"]),
+      branch(["failed", "digest-mismatch"], ["evidence_digest"]),
+      branch(["failed", "digest-mismatch"], ["subject_digest", "evidence_digest"]),
+    ],
+  };
+}
+
+function hostFindingSchema(value: PlainJsonValue): PlainJsonValue {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  const finding = value as Readonly<Record<string, PlainJsonValue>>;
+  const properties = finding.properties;
+  if (properties === null || typeof properties !== "object" || Array.isArray(properties)) return value;
+  const base = properties as Readonly<Record<string, PlainJsonValue>>;
+  const branch = (severities: readonly string[], blocking: boolean): PlainJsonValue => {
+    const selected = {
+      ...base,
+      severity: { type: "string", enum: [...severities] },
+      blocking: { type: "boolean", const: blocking },
+    };
+    return { type: "object", additionalProperties: false, properties: selected, required: Object.keys(selected) };
+  };
+  return {
+    type: "object",
+    anyOf: [
+      branch(["blocker"], true),
+      branch(["major", "minor"], false),
+    ],
+  };
+}
+
+function hostTaskSlugSchema(value: PlainJsonValue): PlainJsonValue {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  return {
+    ...(value as Readonly<Record<string, PlainJsonValue>>),
+    // Both hosts accept ordinary regex patterns but not the normative reserved-name lookaheads.
+    // The exact task-slug parser still runs during local output validation and attestation.
+    pattern: "^[a-z0-9][a-z0-9._-]{0,63}$",
+  };
+}
+
+/**
+ * Projects the two normative output contracts to the structured-output subset accepted by both
+ * installed hosts. Conditional semantics remain enforced by local parsing and attestation after
+ * output; required fields and closed object shapes remain in the transport schema.
+ */
+export function projectCliOutputSchema(
+  outputSchema: PlainJsonValue,
+  resultKind: DispatchEnvelope["result_kind"],
+  adapter: AdapterId,
+  subject?: Readonly<Record<string, PlainJsonValue>>,
+): PlainJsonValue {
+  assertPlainJson(outputSchema, "CLI output schema");
+  const snapshot = structuredClone(outputSchema);
+  const projected = projectSchemaNode(snapshot, adapter);
+  if (projected === null || typeof projected !== "object" || Array.isArray(projected)) {
+    throw new TypeError("CLI output schema must be an object");
+  }
+  let root = projected as Readonly<Record<string, PlainJsonValue>>;
+  const definitions = root.$defs;
+  if (definitions !== null && typeof definitions === "object" && !Array.isArray(definitions)) {
+    const named = definitions as Readonly<Record<string, PlainJsonValue>>;
+    const common: Record<string, PlainJsonValue> = { ...named, taskSlug: hostTaskSlugSchema(named.taskSlug!) };
+    root = {
+      ...root,
+      $defs: resultKind === "review"
+        ? { ...common, finding: hostFindingSchema(common.finding!) }
+        : common,
+    };
+  }
+  if (adapter === "codex-cli" && resultKind === "adjudication") {
+    const codexDefinitions = root.$defs;
+    if (codexDefinitions !== null && typeof codexDefinitions === "object" && !Array.isArray(codexDefinitions)) {
+      const common = codexDefinitions as Readonly<Record<string, PlainJsonValue>>;
+      root = {
+        ...root,
+        $defs: { ...common, mechanical: codexMechanicalSchema(common.mechanical!) },
+      };
+    }
+  }
+  const bindingKeys = resultKind === "review"
+    ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family"]
+    : ["task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_evidence_set_digest"];
+  if (subject !== undefined) {
+    const properties = root.properties;
+    if (properties === null || typeof properties !== "object" || Array.isArray(properties)) {
+      throw new TypeError("CLI output schema must declare properties");
+    }
+    const bound = { ...(properties as Readonly<Record<string, PlainJsonValue>>) };
+    for (const key of bindingKeys) {
+      const value = subject[key];
+      if (value !== undefined) bound[key] = { const: structuredClone(value) };
+    }
+    root = { ...root, properties: bound };
+  }
+  return adapter === "codex-cli" ? codexStrictNode(root) : root;
+}
+
+function envelopeSubject(envelope: DispatchEnvelope): Readonly<Record<string, PlainJsonValue>> {
+  const decoded: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes));
+  assertPlainJson(decoded, "dispatch envelope");
+  if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) throw new TypeError("dispatch envelope must be an object");
+  const subject = (decoded as Readonly<Record<string, PlainJsonValue>>).subject;
+  if (subject === undefined) return {};
+  if (subject === null || typeof subject !== "object" || Array.isArray(subject)) throw new TypeError("dispatch envelope subject must be an object");
+  return subject as Readonly<Record<string, PlainJsonValue>>;
+}
+
 let dispatchQueue: Promise<void> = Promise.resolve();
 
 /**
@@ -175,7 +349,8 @@ function exactVersion(adapter: AdapterId, output: Uint8Array): string {
   return match?.[1] ?? "unrecognized";
 }
 
-async function existingPaths(paths: readonly string[]): Promise<readonly string[]> {
+/** Detects present managed-policy paths; exported for the real-host positive-branch probe. */
+export async function detectManagedPolicyPaths(paths: readonly string[]): Promise<readonly string[]> {
   const observations = await Promise.all(paths.map(async (path) => {
     try {
       await stat(path);
@@ -239,11 +414,14 @@ async function preflight(
       loggedIn = false;
     }
   } else if (adapter === "codex-cli" && authResult.exit_code === 0) {
-    loggedIn = /^Logged in(?:\s|$)/u.test(authResult.stdout.toString("utf8").trim());
+    const successLines = [authResult.stdout, authResult.stderr]
+      .flatMap((channel) => channel.toString("utf8").split(/\r?\n/u))
+      .filter((line) => /^Logged in(?:\s|$)/u.test(line.trim()));
+    loggedIn = successLines.length >= 1;
   }
   if (!loggedIn) return fail(createProjectError("AUTH_UNAVAILABLE", { adapter }), version);
 
-  const managedPolicyPaths = await existingPaths(policyPaths);
+  const managedPolicyPaths = await detectManagedPolicyPaths(policyPaths);
   return Object.freeze({
     cli_version: version,
     managed_policy_present: managedPolicyPaths.length > 0,
@@ -284,8 +462,8 @@ function classifyMessage(adapter: AdapterId, message: string): ProjectError | un
   if (/\b(?:not logged in|login required|authentication (?:failed|required)|unauthorized|invalid credentials?)\b/iu.test(message)) {
     return createProjectError("AUTH_UNAVAILABLE", { adapter });
   }
-  if (/\b(?:model|deployment)\b.*\b(?:not found|unsupported|does not exist|unknown|invalid)\b/iu.test(message) ||
-      /\b(?:not found|unsupported|does not exist|unknown|invalid)\b.*\b(?:model|deployment)\b/iu.test(message)) {
+  if (/\b(?:model|deployment)\b.*\b(?:not found|not supported|unsupported|does not exist|unknown|invalid)\b/iu.test(message) ||
+      /\b(?:not found|not supported|unsupported|does not exist|unknown|invalid)\b.*\b(?:model|deployment)\b/iu.test(message)) {
     const model = modelFromMessage(message);
     if (model !== undefined) return createProjectError("UNSUPPORTED_MODEL", { model });
   }
@@ -365,8 +543,7 @@ const claudeAdapter: CliAdapter = Object.freeze({
     outputSchema: PlainJsonValue,
   ) {
     assertRoute("claude-cli", route);
-    assertPlainJson(outputSchema, "CLI output schema");
-    const schema = structuredClone(outputSchema);
+    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "claude-cli", envelopeSubject(envelope));
     if (route.effort === "ultra") {
       return fail(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
@@ -447,8 +624,7 @@ const codexAdapter: CliAdapter = Object.freeze({
     outputSchema: PlainJsonValue,
   ) {
     assertRoute("codex-cli", route);
-    assertPlainJson(outputSchema, "CLI output schema");
-    const schema = structuredClone(outputSchema);
+    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "codex-cli", envelopeSubject(envelope));
     const schemaPath = join(workspace.root, `${envelope.result_kind}.schema.json`);
     const outputPath = join(workspace.root, "final-output.json");
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
