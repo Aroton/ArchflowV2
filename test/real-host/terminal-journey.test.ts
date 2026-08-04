@@ -20,7 +20,13 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest, gitBlobOid, sha256Bytes } from "../../src/contracts/canonical.js";
-import { deriveDeclaredSnapshotDigest, RESULT_BYTE_CAP, TASK_BYTE_CAP } from "../../src/state/snapshots.js";
+import { currentEvidenceSetRef } from "../../src/contracts/trust.js";
+import {
+  deriveDeclaredSnapshotDigest,
+  projectionGenerationDigest,
+  RESULT_BYTE_CAP,
+  TASK_BYTE_CAP,
+} from "../../src/state/snapshots.js";
 import { realHostsEnabled } from "../helpers/real-host.js";
 
 // These slices install and exercise the bundled launchers without model dispatch or credential
@@ -103,7 +109,13 @@ function structured(response: Record<string, any>): any {
   return response.result?.structuredContent;
 }
 
-async function mcpState(root: string, input: unknown, requestId: string): Promise<any> {
+async function mcpTool(
+  root: string,
+  tool: "archflow_gate" | "archflow_state",
+  input: unknown,
+  requestId: string,
+  whileWaiting?: () => Promise<void>,
+): Promise<any> {
   const child = spawn("archflow-mcp", [], { cwd: root, env: installedEnvironment, stdio: ["pipe", "pipe", "pipe"] });
   const stdout: Buffer[] = [];
   const stderr: Buffer[] = [];
@@ -131,9 +143,17 @@ async function mcpState(root: string, input: unknown, requestId: string): Promis
   child.stdin.write(`${[
     JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
     JSON.stringify({ jsonrpc: "2.0", id: requestId, method: "tools/call", params: {
-      name: "archflow_state", arguments: input,
+      name: tool, arguments: input,
     } }),
   ].join("\n")}\n`);
+  if (whileWaiting !== undefined) {
+    try {
+      await whileWaiting();
+    } catch (error) {
+      child.kill("SIGKILL");
+      throw error;
+    }
+  }
   await waitForLines(2);
   child.stdin.end();
   const exit = await new Promise<number | null>((resolveExit, reject) => {
@@ -146,6 +166,64 @@ async function mcpState(root: string, input: unknown, requestId: string): Promis
   const response = lines.find((line) => line.id === requestId);
   expect(response, `${Buffer.concat(stderr).toString("utf8")}\nstdout=${Buffer.concat(stdout).toString("utf8")}`).toBeDefined();
   return structured(response);
+}
+
+async function mcpState(root: string, input: unknown, requestId: string): Promise<any> {
+  return mcpTool(root, "archflow_state", input, requestId);
+}
+
+async function waitForFile(path: string): Promise<void> {
+  const deadline = Date.now() + TIMEOUT;
+  while (!existsSync(path)) {
+    if (Date.now() >= deadline) throw new Error(`timed out waiting for ${path}`);
+    await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+  }
+}
+
+function generationDigest(bytes: Buffer): string {
+  return projectionGenerationDigest({
+    state: "present", file_type: "regular", mode: "100644",
+    size_bytes: bytes.byteLength, content_digest: sha256Bytes(bytes),
+  });
+}
+
+function installedEvidence(subjectDigest: string): any {
+  return currentEvidenceSetRef([
+    {
+      role: "self-review", evidence_digest: sha256Bytes(Buffer.from(`self:${subjectDigest}`)),
+      assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude",
+      independence: "same-family-self",
+    },
+    {
+      role: "counter-review", evidence_digest: sha256Bytes(Buffer.from(`counter:${subjectDigest}`)),
+      assurance: "server-attested", producer_family: "claude", reviewer_family: "codex",
+      independence: "opposite-family",
+    },
+  ] as never);
+}
+
+async function decideInstalledGate(root: string, task: string, decision: string): Promise<any> {
+  const gatePath = join(root, ".archflow", "tasks", task, "gate.json");
+  await waitForFile(gatePath);
+  const gate = JSON.parse(readFileSync(gatePath, "utf8"));
+  const status = local(root, task, "status");
+  expect(status.value).toMatchObject({ ok: true, value: { open_gate: { gate_id: gate.gate_id } } });
+  const template = structuredClone(status.value.value.open_gate.decision_templates.find(
+    (candidate: any) => candidate.payload?.decision === decision,
+  ));
+  expect(template, `missing ${decision} template in ${gatePath}`).toBeDefined();
+  template.payload.reason = `Installed ${decision} decision`;
+  if (decision === "adopt-as-new-generation") {
+    template.payload.rationale = "The changed installed generation is intentional";
+  }
+  template.human_provenance = {
+    schema_version: "1", actor_class: "human", assurance: "declared-local-trace",
+    channel: "archflow-local", decision_event_id: `installed-${decision}`,
+    helper_invocation_id: `installed-${decision}-helper`, recorded_at: new Date().toISOString(),
+  };
+  const written = local(root, task, "decide", { kind: "interface", value: template });
+  expect(written.value).toMatchObject({ ok: true, value: { gate_id: gate.gate_id } });
+  return template;
 }
 
 function commitPolicy(root: string): string {
@@ -178,7 +256,8 @@ function snapshotFixture(task: string, state: any, bytes: Buffer, retained: numb
       artifact_digest: canonicalJsonDigest(artifact), source_artifact: artifact,
       input_fingerprint: state.input_fingerprint, snapshot_digest: snapshotDigest, outputs: [output], projections,
       accounting: {
-        schema_version: "1", result_bytes: byteCount, task_bytes: Math.min(TASK_BYTE_CAP, retained + byteCount),
+        schema_version: "1", result_bytes: Math.min(RESULT_BYTE_CAP, byteCount),
+        task_bytes: Math.min(TASK_BYTE_CAP, retained + byteCount),
         result_byte_cap: RESULT_BYTE_CAP, task_byte_cap: TASK_BYTE_CAP,
         counted_entries: [{ path, storage: "raw-payload", stored_bytes: byteCount }],
         measured_at_revision: state.revision,
@@ -245,6 +324,69 @@ async function installedImplementationFixture(root: string, task: string, conten
   });
   expect(artifact.value).toMatchObject({ ok: true, value: { artifact_kind: "implementation-output" } });
   return { artifact: artifact.value.value, state: implementationState };
+}
+
+async function installedRestoreCollisionFixture(
+  root: string,
+  task: string,
+  intent: string,
+  changedFingerprint: boolean,
+) {
+  expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
+  commitPolicy(root);
+  const staged = local(root, task, "task-init").value.value;
+  expect(await adopt(root, task, staged, `${intent}-init`)).toMatchObject({ ok: true, value: { revision: 1 } });
+
+  const target = join(root, ".archflow", "tasks", task, "prd.md");
+  const retained = Buffer.from("retained installed generation\n");
+  writeFileSync(target, retained);
+  let state = taskState(root, task);
+  const built = local(root, task, "build-document", {
+    phase_instance: "prd", step: "produce", document_path: "prd.md",
+    declared_inputs: [], input_fingerprint: state.input_fingerprint,
+  });
+  expect(built.value).toMatchObject({ ok: true, value: { artifact_kind: "document" } });
+  const produceDraft = {
+    schema_version: "1", task_id: task, intent_id: `${intent}-produce`,
+    expected_revision: state.revision, input_fingerprint: "0".repeat(64),
+    phase_instance: "prd", step: "produce", status: "succeeded", artifact: built.value.value,
+  };
+  const produceEnvelope = local(root, task, "envelope", { tool: "archflow_state", input: produceDraft });
+  expect(produceEnvelope.value).toMatchObject({ ok: true });
+  const produced = await mcpState(root, {
+    ...produceDraft, input_fingerprint: produceEnvelope.value.value.input_fingerprint,
+  }, `${intent}-produce`);
+  expect(produced, JSON.stringify(produced)).toMatchObject({ ok: true, value: { revision: 2 } });
+
+  state = taskState(root, task);
+  const retainedFingerprint = state.authoritative_results.at(-1).input_fingerprint;
+  if (changedFingerprint) {
+    writeFileSync(join(root, "README.md"), "changed declared input for installed adoption\n");
+    const { committed_intent: _committedIntent, ...stateWithoutIntent } = state;
+    state = {
+      ...stateWithoutIntent,
+      input_fingerprint: canonicalJsonDigest({
+        schema_version: "1",
+        prior_input_fingerprint: retainedFingerprint,
+        changed_input_digest: sha256Bytes(readFileSync(join(root, "README.md"))),
+      }),
+    };
+    // This fixture begins at the recovery boundary: durable state already records the changed
+    // input fingerprint whose exact authority the installed restore gate must require and bind.
+    writeTaskState(root, task, state);
+    expect(state.input_fingerprint).not.toBe(retainedFingerprint);
+  }
+
+  const collision = Buffer.from("intentional installed collision\n");
+  writeFileSync(target, collision);
+  return {
+    artifact: built.value.value,
+    collision,
+    retained,
+    retainedFingerprint,
+    state,
+    target,
+  };
 }
 
 beforeAll(() => {
@@ -395,10 +537,19 @@ describe.skipIf(!enabled)("installed terminal journeys", () => {
     const resultLimited = local(root, task, "snapshot", {
       manifest: resultOverflow.manifest, retained_task_bytes: 0, payloads: [resultOverflow.payload],
     });
-    // The durable schema rejects an over-cap declared result before prepareSnapshot can classify
-    // it as SNAPSHOT_LIMIT. Pin that installed boundary separately from the retained-task cap.
-    expect(resultLimited).toMatchObject({ status: 1, value: undefined });
-    expect(resultLimited.stderr).toContain("/accounting/result_bytes must be <= 26214400");
+    expect(resultLimited.value).toMatchObject({
+      ok: false,
+      error: {
+        code: "SNAPSHOT_LIMIT",
+        diagnostic: {
+          parameters: {
+            limit_scope: "result",
+            current_bytes: RESULT_BYTE_CAP + 1,
+            byte_cap: RESULT_BYTE_CAP,
+          },
+        },
+      },
+    });
     const taskOverflow = snapshotFixture(task, state, Buffer.from("x"), TASK_BYTE_CAP);
     expect(local(root, task, "snapshot", {
       manifest: taskOverflow.manifest, retained_task_bytes: TASK_BYTE_CAP, payloads: [taskOverflow.payload],
@@ -424,6 +575,93 @@ describe.skipIf(!enabled)("installed terminal journeys", () => {
     expect(digestTree([taskRoot])).toBe(authorityBefore);
     expect(readFileSync(join(root, "README.md"))).toEqual(trackedBefore);
     expect(readFileSync(join(root, "unrelated-untracked.bin"))).toEqual(untrackedBefore);
+  }, TIMEOUT);
+
+  it.each([
+    ["discard-and-restore", false],
+    ["adopt-as-new-generation", true],
+    ["abort", false],
+  ] as const)("resolves an installed restore collision with %s", async (decision, changedFingerprint) => {
+    const root = makeRepository(`restore-${decision}`);
+    const task = `restore-${decision}`;
+    const fixture = await installedRestoreCollisionFixture(
+      root,
+      task,
+      `installed-${decision}`,
+      changedFingerprint,
+    );
+    const before = taskState(root, task);
+    const subjectDigest = canonicalJsonDigest(fixture.artifact);
+    const context: any = {
+      path: "prd.md",
+      recorded_generation_digest: generationDigest(fixture.retained),
+      current_generation_digest: generationDigest(fixture.collision),
+    };
+    if (decision === "adopt-as-new-generation") {
+      const authority = {
+        purpose: "restore-adoption",
+        proposed_generation_digest: context.current_generation_digest,
+        changed_input_fingerprint: before.input_fingerprint,
+      };
+      context.adoption_candidate = {
+        ...authority,
+        link_digest: canonicalJsonDigest({ schema_version: "1", ...authority }),
+      };
+      expect(before.input_fingerprint).not.toBe(fixture.retainedFingerprint);
+    }
+    const draft = {
+      schema_version: "1", task_id: task, intent_id: `installed-${decision}-gate`,
+      expected_revision: before.revision, input_fingerprint: before.input_fingerprint,
+      phase_instance: "prd", summary: `Resolve installed ${decision} collision`,
+      subject_digest: subjectDigest, current_evidence: installedEvidence(subjectDigest),
+      kind: "restore-collision", context,
+    };
+    const envelope = local(root, task, "envelope", { tool: "archflow_gate", input: draft });
+    expect(envelope.value).toMatchObject({ ok: true, value: { input_fingerprint: before.input_fingerprint } });
+    const resolved = await mcpTool(
+      root,
+      "archflow_gate",
+      draft,
+      `installed-${decision}-gate`,
+      async () => { await decideInstalledGate(root, task, decision); },
+    );
+    expect(resolved).toMatchObject({
+      ok: true,
+      value: { kind: "restore-collision", decision: { payload: { decision } } },
+    });
+
+    const after = taskState(root, task);
+    if (decision === "discard-and-restore") {
+      expect(readFileSync(fixture.target)).toEqual(fixture.retained);
+      expect(after.approvals).toHaveLength(before.approvals.length + 1);
+    } else if (decision === "adopt-as-new-generation") {
+      expect(readFileSync(fixture.target)).toEqual(fixture.collision);
+      expect(resolved.value.decision.payload).toMatchObject({
+        adoption_authority: context.adoption_candidate,
+        rationale: "The changed installed generation is intentional",
+      });
+      expect(after.approvals).toHaveLength(before.approvals.length + 1);
+    } else {
+      expect(readFileSync(fixture.target)).toEqual(fixture.collision);
+      expect(after.approvals).toEqual(before.approvals);
+      expect({
+        phase_instance: after.phase_instance,
+        step: after.step,
+        status: after.status,
+        attempt: after.attempt,
+        input_fingerprint: after.input_fingerprint,
+        authoritative_results: after.authoritative_results,
+      }).toEqual({
+        phase_instance: before.phase_instance,
+        step: before.step,
+        status: before.status,
+        attempt: before.attempt,
+        input_fingerprint: before.input_fingerprint,
+        authoritative_results: before.authoritative_results,
+      });
+    }
+    expect(existsSync(join(root, ".archflow", "tasks", task, "gate.json"))).toBe(false);
+    expect(existsSync(join(root, ".archflow", "tasks", task, "gate.decision"))).toBe(false);
   }, TIMEOUT);
 
   it("records a safe installed maintenance prune before deleting an unreachable attempt", async () => {

@@ -40,27 +40,22 @@ intentional: record only its exit status as `logged in`, never its raw output.
 ## Observe real MCP negotiation without recording payloads
 
 The ordinary `claude mcp get` and `codex mcp get` commands show resolved configuration; they do not
-show the protocol era or identity actually delivered on the wire. Before the VAL-01 journeys, use a
-dedicated disposable repository to observe one connection from each real client. This procedure
+show the protocol era or identity actually delivered on the wire. Before the VAL-01 journeys, run
+one connection from each real client in an existing checkout the operator already trusts, with
+process-scoped MCP configuration. Never approve or persist project trust for a temporary probe
+directory: a path written during this run is not durable authority for unrelated future contents.
+This procedure
 records only process IDs, timestamps, method names, negotiated protocol versions, and the
 client/server name and version fields. It never records request arguments, environment variables,
 auth output, stderr, or arbitrary `_meta` content.
 
-Initialize a new scratch repository, then create the observer outside both the source checkout and
-the journey repositories:
+Create only a disposable log directory and resolve the trusted source checkout explicitly:
 
 ```bash
-export MCP_PROBE_REPO="$(mktemp -d "${TMPDIR:-/tmp}/archflow-mcp-wire.XXXXXX")"
 export MCP_PROBE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/archflow-mcp-wire-log.XXXXXX")"
 export ARCHFLOW_MCP_REAL="$(command -v archflow-mcp)"
-cd "$MCP_PROBE_REPO"
-git init -q -b main
-git config user.name "ArchFlow Journey Operator"
-git config user.email "archflow-journey@example.invalid"
-printf '# ArchFlow MCP wire observation\n' > README.md
-git add -- README.md
-git commit -q -m 'Initialize MCP wire observation'
-archflow-local init >/dev/null
+export MCP_PROBE_SOURCE="$(git rev-parse --show-toplevel)"
+test -n "$MCP_PROBE_SOURCE"
 ```
 
 Create `$MCP_PROBE_DIR/observe-mcp.mjs` with these exact contents and make it owner-executable:
@@ -139,31 +134,20 @@ child.on("exit", (code, signal) => {
 chmod 700 "$MCP_PROBE_DIR/observe-mcp.mjs"
 ```
 
-Point only this disposable repository's two project registrations at the observer. The scripts
-below preserve the configured timeout fields and pass the real launcher as an argument:
+Create a process-scoped Claude configuration in the disposable log directory. Do not edit the
+trusted checkout's `.mcp.json`, `.codex/config.toml`, or either client's remembered project state:
 
 ```bash
 export MCP_PROBE_WRAPPER="$MCP_PROBE_DIR/observe-mcp.mjs"
+export MCP_PROBE_NODE="$(command -v node)"
 node <<'NODE'
 const fs = require("node:fs");
-const path = ".mcp.json";
-const value = JSON.parse(fs.readFileSync(path, "utf8"));
-value.mcpServers.archflow.command = process.execPath;
-value.mcpServers.archflow.args = [process.env.MCP_PROBE_WRAPPER, process.env.ARCHFLOW_MCP_REAL];
-fs.writeFileSync(path, JSON.stringify(value, null, 2) + "\n");
-NODE
-
-node <<'NODE'
-const fs = require("node:fs");
-const path = ".codex/config.toml";
-const source = fs.readFileSync(path, "utf8");
-const begin = "# >>> archflow managed MCP server >>>";
-const end = "# <<< archflow managed MCP server <<<";
-const start = source.indexOf(begin);
-const finish = source.indexOf(end, start);
-if (start < 0 || finish < start) process.exit(1);
-const block = `${begin}\n[mcp_servers.archflow]\ncommand = ${JSON.stringify(process.execPath)}\nargs = [${JSON.stringify(process.env.MCP_PROBE_WRAPPER)}, ${JSON.stringify(process.env.ARCHFLOW_MCP_REAL)}]\nstartup_timeout_sec = 30\ntool_timeout_sec = 3600\n${end}`;
-fs.writeFileSync(path, source.slice(0, start) + block + source.slice(finish + end.length));
+const value = { mcpServers: { archflow: {
+  type: "stdio",
+  command: process.execPath,
+  args: [process.env.MCP_PROBE_WRAPPER, process.env.ARCHFLOW_MCP_REAL],
+} } };
+fs.writeFileSync(`${process.env.MCP_PROBE_DIR}/claude-probe.json`, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 });
 NODE
 ```
 
@@ -174,11 +158,18 @@ without asking the model to inspect repository content or calling a workflow too
 ```bash
 : > "$MCP_PROBE_DIR/claude-wire.jsonl"
 chmod 600 "$MCP_PROBE_DIR/claude-wire.jsonl"
-ARCHFLOW_MCP_OBSERVATION_LOG="$MCP_PROBE_DIR/claude-wire.jsonl" claude
+cd "$MCP_PROBE_SOURCE"
+ARCHFLOW_MCP_OBSERVATION_LOG="$MCP_PROBE_DIR/claude-wire.jsonl" \
+  claude --strict-mcp-config --mcp-config "$MCP_PROBE_DIR/claude-probe.json"
 
 : > "$MCP_PROBE_DIR/codex-wire.jsonl"
 chmod 600 "$MCP_PROBE_DIR/codex-wire.jsonl"
-ARCHFLOW_MCP_OBSERVATION_LOG="$MCP_PROBE_DIR/codex-wire.jsonl" codex -C "$MCP_PROBE_REPO"
+codex -C "$MCP_PROBE_SOURCE" \
+  -c "mcp_servers.archflow.command=\"$MCP_PROBE_NODE\"" \
+  -c "mcp_servers.archflow.args=[\"$MCP_PROBE_WRAPPER\",\"$ARCHFLOW_MCP_REAL\"]" \
+  -c 'mcp_servers.archflow.startup_timeout_sec=30' \
+  -c 'mcp_servers.archflow.tool_timeout_sec=3600' \
+  -c "mcp_servers.archflow.env={ARCHFLOW_MCP_OBSERVATION_LOG=\"$MCP_PROBE_DIR/codex-wire.jsonl\"}"
 ```
 
 For each log, record in the applicable journey evidence file:
@@ -194,8 +185,9 @@ For each log, record in the applicable journey evidence file:
 If the installed client has no status action that initiates a connection without a model turn, or
 if neither an initialize record nor a request `_meta.clientInfo` record appears, retain the
 sanitized log, record the practical limitation, and leave the negotiation criterion unmet. Do not
-enable debug logging or capture raw wire messages as a workaround. Delete the disposable probe
-repository after copying only the selected observations into the evidence file.
+enable debug logging or capture raw wire messages as a workaround. Delete the disposable log
+directory after copying only the selected observations into the evidence file. This procedure must
+create no remembered project-trust entry.
 
 Record the completed journeys in these files; they are evidence outputs, not inputs to a journey:
 
@@ -248,22 +240,25 @@ claude mcp get archflow | tee "$CLAUDE_JOURNEY_LOG/claude-mcp-get.txt"
 node -e 'const fs=require("node:fs"); const v=JSON.parse(fs.readFileSync(".mcp.json","utf8")); console.log(v.mcpServers.archflow.timeout)'
 ```
 
-The last command must print `3600000`. If Claude reports the project server as pending, open a
-Claude session and approve the project-scoped server through Claude's own trust UI before starting
-the workflow. Then start the real producer session:
+The last command must print `3600000`. Do not approve remembered workspace trust for this temporary
+path. Run each skill as a non-interactive, non-persisted invocation; Claude documents that print
+mode skips the workspace-trust dialog, so this relies only on the operator's current-session trust
+in the scratch bytes:
 
 ```bash
-claude --model claude-opus-5 --effort high '/archflow-prd val01-claude'
+claude -p --no-session-persistence --permission-mode auto --output-format stream-json --verbose \
+  --model claude-opus-5 --effort high $'/archflow-prd val01-claude\n\nCreate a two-phase validation task. Phase 1 creates notes.txt containing phase one; phase 2 appends phase two. No other product behavior is in scope.'
 ```
 
-Give the agent this brief when requested: “Create a two-phase validation task. Phase 1 creates
-`notes.txt` containing `phase one`; phase 2 appends `phase two`. No other product behavior is in
-scope.” Continue in the same interactive session with the exact skill and arguments returned by
-durable status (`/archflow-design val01-claude`, then phase-design and phase-impl for phases 1 and
-2). At every gate, require the agent to show the live gate ID, request, decision templates, and
+The initial prompt includes the complete brief because a non-interactive invocation cannot ask the
+operator for it later. Run a fresh non-persisted invocation with the exact skill and arguments returned by durable
+status (`/archflow-design val01-claude`, then phase-design and phase-impl for phases 1 and 2). At
+every gate, require the agent to show the live gate ID, request, decision templates, and
 optional counter-review prompt. Choose the decision yourself. At each commit-authorization, first
 authorize through the gate, then separately inspect the staged diff and explicitly confirm or deny
-the Git commit.
+the Git commit in a fresh invocation. Confirm afterwards that the temporary path is absent from
+Claude's remembered project state; if the client wrote one despite print mode, purge that exact
+path before continuing.
 
 ### VAL-09 Claude timeout observation
 
@@ -345,16 +340,18 @@ codex mcp get archflow --json | tee "$CODEX_JOURNEY_LOG/codex-mcp-get.json"
 node -e 'const v=require(process.env.CODEX_JOURNEY_LOG+"/codex-mcp-get.json"); console.log(v.startup_timeout_sec, v.tool_timeout_sec)'
 ```
 
-The last command must print `30 3600`. Start Codex, complete its repository-trust prompt yourself,
-and run the producer skill:
+The last command must print `30 3600`. Do not accept or retain project trust for this temporary
+path. Run each skill through an ephemeral non-interactive Codex invocation:
 
 ```bash
-codex -C "$CODEX_JOURNEY_REPO" -m gpt-5.6-sol -c 'model_reasoning_effort="xhigh"' '$archflow-prd val01-codex'
+codex exec --ephemeral --skip-git-repo-check -s workspace-write -C "$CODEX_JOURNEY_REPO" \
+  -m gpt-5.6-sol -c 'model_reasoning_effort="xhigh"' \
+  $'$archflow-prd val01-codex\n\nCreate a two-phase validation task. Phase 1 creates notes.txt containing phase one; phase 2 appends phase two. No other product behavior is in scope.'
 ```
 
-Use the same two-phase brief as the Claude journey. Continue in that interactive session with the
-exact `$archflow-design`, `$archflow-phase-design`, and `$archflow-phase-impl` action returned by
-durable status until both phases are complete. Apply the same human-gate and separate commit rules:
+Use the same two-phase brief as the Claude journey. Run a fresh ephemeral invocation for each exact
+`$archflow-design`, `$archflow-phase-design`, and `$archflow-phase-impl` action returned by durable
+status until both phases are complete. Apply the same human-gate and separate commit rules:
 the agent presents; the operator decides; authorization precedes staging; explicit commit
 confirmation follows inspection.
 
