@@ -67551,6 +67551,8 @@ async function readRetainedResult(runner, authority, reference) {
   }));
 }
 async function createProductionServices(input) {
+  const atomic = input.atomic ?? createAtomicWriter();
+  const gateSecretScanner = input.gate_secret_scanner ?? createSecretlintScanner();
   const provisionalPhase = input.phase_instance ?? "prd";
   const provisionalContext = context(input, provisionalPhase, parseSafeInteger(1));
   const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), provisionalContext);
@@ -67582,14 +67584,14 @@ async function createProductionServices(input) {
   const dependencies = Object.freeze({
     runner: discovered.value,
     environment: environment.value,
-    atomic: createAtomicWriter(),
+    atomic,
     projection_writer: createProjectionWriter(),
     lock: createTaskLock(),
     resolve_input_fingerprint: resolver,
     read_state: readTaskState,
     read_config: readTaskConfig,
     read_receipt: readIntentReceipt,
-    gate_secret_scanner: createSecretlintScanner(),
+    gate_secret_scanner: gateSecretScanner,
     read_retained_task_bytes: async (excluded) => {
       const current = await readTaskState(authority.state);
       if (current.kind !== "canonical") return parseSafeInteger(0);

@@ -46,6 +46,29 @@ function repository(): string {
 const D = (character: string) => character.repeat(64) as TaskStateV1["input_fingerprint"];
 
 describe("production dependency assembly", () => {
+  it("uses caller-supplied atomic and gate secret-scanner capabilities", async () => {
+    const root = repository();
+    const atomic = createAtomicWriter();
+    const gateSecretScanner: SecretScanner = Object.freeze({
+      scan: async () => Object.freeze({
+        schema_version: "1" as const,
+        outcome: "clean" as const,
+        detector_set_id: parseSafeId("injected-scanner"),
+        scanned_paths: Object.freeze([]),
+      }),
+    });
+    const services = await createProductionServices({
+      working_directory: root,
+      task_id: task,
+      operation: parseSafeCode("production-overrides"),
+      atomic,
+      gate_secret_scanner: gateSecretScanner,
+    });
+    if (!services.ok) throw new Error(services.error.code);
+    expect(services.value.dependencies.atomic).toBe(atomic);
+    expect(services.value.dependencies.gate_secret_scanner).toBe(gateSecretScanner);
+  });
+
   it("uses the caller phase only for bootstrap, then rebuilds authority from committed phase and attempt", async () => {
     const root = repository();
     const input = { working_directory: root, task_id: task, operation: parseSafeCode("production-test"), phase_instance: requestedPhase };

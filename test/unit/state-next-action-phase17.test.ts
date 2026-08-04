@@ -126,6 +126,12 @@ describe("deriveNextAction", () => {
       .toBe("import-manual-checkpoints");
   });
 
+  it("directs intentional pinned-config changes to a new task or explicit upgrade", () => {
+    const next = deriveNextAction(input({ config_verified: false }));
+    expect(next).toMatchObject({ code: "restore-pinned-config", human_required: true });
+    expect(next.detail).toContain("new task or the explicit upgrade flow");
+  });
+
   it("does not guess between ambiguous retained successor receipts", () => {
     expect(deriveNextAction(input({
       reconciliation_blocking_reasons: ["retained-receipt-ambiguity"],

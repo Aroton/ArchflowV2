@@ -1,4 +1,5 @@
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, rmdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,6 +32,13 @@ import {
 const roots: string[] = [];
 const children = new Set<ChildProcess>();
 const childProgram = new URL("../fixtures/state-transaction-child.mjs", import.meta.url);
+// The crash children are executable JavaScript fixtures without declaration files.
+// @ts-expect-error fixture module intentionally has no TypeScript declarations
+const transactionCuts = (await import("../fixtures/state-transaction-child.mjs")).CUT_POINTS as readonly string[];
+// @ts-expect-error fixture module intentionally has no TypeScript declarations
+const phase10Cuts = (await import("../fixtures/state-phase10-child.mjs")).CUT_POINTS as readonly string[];
+// @ts-expect-error fixture module intentionally has no TypeScript declarations
+const phase12Cuts = (await import("../fixtures/state-phase12-gate-child.mjs")).CUT_POINTS as readonly string[];
 const gitEnvironment: NodeJS.ProcessEnv = {
   ...process.env,
   GIT_CONFIG_GLOBAL: "/dev/null",
@@ -205,8 +213,7 @@ async function run(
   return { result, prepare };
 }
 
-type CrashCutPoint = "receipt-temp" | "receipt-link" | "state-replace-before" | "state-replace-after" |
-  "result-payload-link" | "result-manifest-link";
+type CrashCutPoint = string;
 
 function startCrashChild(input: Fixture, cutPoint: CrashCutPoint): ChildProcess {
   const child = spawn(process.execPath, [
@@ -228,6 +235,15 @@ function startResultChild(input: Fixture, action: "run-result-transaction" | "ru
   const child = spawn(process.execPath, [
     childProgram.pathname, action, input.taskRoot, input.call.input.intent_id,
     String(input.call.input.expected_revision), ...(cutPoint === undefined ? [] : [cutPoint]),
+  ], { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe", "ipc"] });
+  children.add(child);
+  return child;
+}
+
+function startManualCheckpointChild(input: Fixture): ChildProcess {
+  const child = spawn(process.execPath, [
+    childProgram.pathname, "run-crash-manual-checkpoint", input.taskRoot,
+    "unused-intent", "1", "manual-checkpoint-link",
   ], { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe", "ipc"] });
   children.add(child);
   return child;
@@ -255,6 +271,21 @@ async function clearAbandonedLock(input: Fixture): Promise<void> {
   const lockPath = join(input.taskRoot, ".transaction-lock");
   expect(await readdir(input.taskRoot)).toContain(".transaction-lock");
   await rmdir(lockPath);
+}
+
+async function expectAuthorityAtPriorOrNext(input: Fixture, resultExpected: boolean): Promise<number> {
+  const observed = await readTaskState(input.authority.state);
+  expect(observed.kind).toBe("canonical");
+  if (observed.kind !== "canonical") throw new Error("state authority is unavailable");
+  expect([1, 2]).toContain(observed.document.value.revision);
+  if (observed.document.value.revision === 1) {
+    expect(observed.document.value.committed_intent).toBeUndefined();
+    expect(observed.document.value.authoritative_results).toEqual([]);
+  } else {
+    expect(observed.document.value.committed_intent?.intent_id).toBe("crash-intent");
+    expect(observed.document.value.authoritative_results).toHaveLength(resultExpected ? 1 : 0);
+  }
+  return observed.document.value.revision;
 }
 
 function startLockChild(taskRoot: string): ChildProcess {
@@ -288,23 +319,48 @@ function childEvent(child: ChildProcess, type: "entered" | "failed" | "cut" | "r
 }
 
 describe("state transaction crash boundaries", () => {
-  it("leaves result bytes non-authoritative after a manifest cut and safely retries the exact installation", async () => {
+  for (const cutPoint of ["result-payload-link", "result-manifest-link"] as const) {
+    it(`leaves installed result material non-authoritative at ${cutPoint} and safely retries`, async () => {
+      const input = await fixture();
+      const killed = startResultChild(input, "run-crash-result-transaction", cutPoint);
+      const cut = await childEvent(killed, "cut");
+      await new Promise<void>((resolve) => killed.once("exit", () => resolve()));
+      expect(cut).toMatchObject({ point: cutPoint });
+      expect(await readFile(String(cut.path))).not.toHaveLength(0);
+      expect(await expectAuthorityAtPriorOrNext(input, true)).toBe(1);
+      await clearAbandonedLock(input);
+      const retry = startResultChild(input, "run-result-transaction");
+      const result = await childEvent(retry, "result");
+      expect(result).toMatchObject({ ok: true, revision: 2, replayed: false, prepareCalls: 1 });
+      expect(await expectAuthorityAtPriorOrNext(input, true)).toBe(2);
+    });
+  }
+
+  for (const cutPoint of ["projection-replace-before", "projection-replace-after"] as const) {
+    it(`keeps a ${cutPoint} projection outside durable authority and safely retries`, async () => {
+      const input = await fixture();
+      const killed = startResultChild(input, "run-crash-result-transaction", cutPoint);
+      await childEvent(killed, "cut");
+      await new Promise<void>((resolve) => killed.once("exit", () => resolve()));
+      expect(await expectAuthorityAtPriorOrNext(input, true)).toBe(1);
+      const projection = join(input.taskRoot, "phases", "result.md");
+      expect(existsSync(projection)).toBe(cutPoint === "projection-replace-after");
+      await clearAbandonedLock(input);
+      const retry = startResultChild(input, "run-result-transaction");
+      expect(await childEvent(retry, "result")).toMatchObject({ ok: true, revision: 2 });
+      expect(await readFile(projection, "utf8")).toBe("retained-result\n");
+      expect(await expectAuthorityAtPriorOrNext(input, true)).toBe(2);
+    });
+  }
+
+  it("keeps a linked manual checkpoint outside state authority", async () => {
     const input = await fixture();
-    const killed = startResultChild(input, "run-crash-result-transaction", "result-manifest-link");
-    const cut = await childEvent(killed, "cut");
-    await new Promise<void>((resolve) => killed.once("exit", () => resolve()));
-    expect(cut).toMatchObject({ point: "result-manifest-link" });
+    const child = startManualCheckpointChild(input);
+    const cut = await childEvent(child, "cut");
+    await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    expect(cut).toMatchObject({ point: "manual-checkpoint-link" });
     expect(await readFile(String(cut.path))).not.toHaveLength(0);
-    expect((await readTaskState(input.authority.state))).toMatchObject({
-      kind: "canonical", document: { value: { revision: 1, authoritative_results: [] } },
-    });
-    await clearAbandonedLock(input);
-    const retry = startResultChild(input, "run-result-transaction");
-    const result = await childEvent(retry, "result");
-    expect(result).toMatchObject({ ok: true, revision: 2, replayed: false, prepareCalls: 1 });
-    expect((await readTaskState(input.authority.state))).toMatchObject({
-      kind: "canonical", document: { value: { revision: 2, authoritative_results: [{ result_id: "result-crash-intent" }] } },
-    });
+    expect(await expectAuthorityAtPriorOrNext(input, false)).toBe(1);
   });
 
   it("resumes a result receipt after SIGKILL without invoking preparation", async () => {
@@ -312,11 +368,12 @@ describe("state transaction crash boundaries", () => {
     const killed = startResultChild(input, "run-crash-result-transaction", "receipt-link");
     await childEvent(killed, "cut");
     await new Promise<void>((resolve) => killed.once("exit", () => resolve()));
-    expect((await readTaskState(input.authority.state))).toMatchObject({ kind: "canonical", document: { value: { revision: 1 } } });
+    expect(await expectAuthorityAtPriorOrNext(input, true)).toBe(1);
     await clearAbandonedLock(input);
     const retry = startResultChild(input, "run-result-transaction");
     const result = await childEvent(retry, "result");
     expect(result).toMatchObject({ ok: true, revision: 2, replayed: false, prepareCalls: 0 });
+    expect(await expectAuthorityAtPriorOrNext(input, true)).toBe(2);
   });
 
   it("survives SIGKILL after receipt temp sync and safely prepares again", async () => {
@@ -325,16 +382,14 @@ describe("state transaction crash boundaries", () => {
     const abandoned = String(cut.path);
     expect(await readFile(abandoned)).not.toHaveLength(0);
     expect(await readdir(join(input.taskRoot, "intents"))).not.toContain("crash-intent.json");
-    expect((await readTaskState(input.authority.state))).toMatchObject({
-      kind: "canonical",
-      document: { value: { revision: 1 } },
-    });
+    expect(await expectAuthorityAtPriorOrNext(input, false)).toBe(1);
     await clearAbandonedLock(input);
 
     const attempt = await run(input, createAtomicWriter());
     expect(attempt.result).toMatchObject({ ok: true, value: { replayed: false } });
     expect(attempt.prepare.calls()).toBe(1);
     expect(await readFile(abandoned)).not.toHaveLength(0);
+    expect(await expectAuthorityAtPriorOrNext(input, false)).toBe(2);
   });
 
   it("survives SIGKILL after receipt link and resumes without preparing again", async () => {
@@ -342,15 +397,13 @@ describe("state transaction crash boundaries", () => {
     const cut = await killAtRealCut(input, "receipt-link");
     expect(await readFile(String(cut.path))).not.toHaveLength(0);
     expect(await readFile(join(input.taskRoot, "intents", "crash-intent.json"))).not.toHaveLength(0);
-    expect((await readTaskState(input.authority.state))).toMatchObject({
-      kind: "canonical",
-      document: { value: { revision: 1 } },
-    });
+    expect(await expectAuthorityAtPriorOrNext(input, false)).toBe(1);
     await clearAbandonedLock(input);
 
     const restart = await run(input, createAtomicWriter());
     expect(restart.result).toMatchObject({ ok: true, value: { replayed: false, state: { value: { revision: 2 } } } });
     expect(restart.prepare.calls()).toBe(0);
+    expect(await expectAuthorityAtPriorOrNext(input, false)).toBe(2);
   });
 
   it("survives SIGKILL before state replacement and resumes the installed receipt", async () => {
@@ -358,25 +411,20 @@ describe("state transaction crash boundaries", () => {
     const cut = await killAtRealCut(input, "state-replace-before");
     expect(await readFile(String(cut.path))).not.toHaveLength(0);
     expect(await readFile(join(input.taskRoot, "intents", "crash-intent.json"))).not.toHaveLength(0);
-    expect((await readTaskState(input.authority.state))).toMatchObject({
-      kind: "canonical",
-      document: { value: { revision: 1 } },
-    });
+    expect(await expectAuthorityAtPriorOrNext(input, false)).toBe(1);
     await clearAbandonedLock(input);
 
     const restart = await run(input, createAtomicWriter());
     expect(restart.result).toMatchObject({ ok: true, value: { replayed: false, state: { value: { revision: 2 } } } });
     expect(restart.prepare.calls()).toBe(0);
+    expect(await expectAuthorityAtPriorOrNext(input, false)).toBe(2);
   });
 
   it("survives SIGKILL after state replacement and authenticates exact replay", async () => {
     const input = await fixture();
     await killAtRealCut(input, "state-replace-after");
     expect(await readFile(join(input.taskRoot, "intents", "crash-intent.json"))).not.toHaveLength(0);
-    expect((await readTaskState(input.authority.state))).toMatchObject({
-      kind: "canonical",
-      document: { value: { revision: 2, committed_intent: { intent_id: "crash-intent" } } },
-    });
+    expect(await expectAuthorityAtPriorOrNext(input, false)).toBe(2);
     await clearAbandonedLock(input);
 
     const retryCall = parseToolCall("archflow_state", { ...input.call.input, expected_revision: 2 });
@@ -412,7 +460,11 @@ describe("state transaction crash boundaries", () => {
       readFile(new URL(`../../src/state/${name}`, import.meta.url), "utf8")
     ))).join("\n");
     expect(source).not.toMatch(/process\.env|ARCHFLOW[_-].*(?:FAULT|CUT)|fault[_-]?hook/iu);
-    const bundle = await readFile(new URL("../../dist/archflow-mcp.mjs", import.meta.url), "utf8");
-    expect(bundle).not.toMatch(/run-crash-transaction|receipt-temp|receipt-link|state-replace-before|state-replace-after/u);
+    const cutPattern = new RegExp([...new Set([...transactionCuts, ...phase10Cuts, ...phase12Cuts])]
+      .map((cut) => JSON.stringify(cut).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join("|"), "u");
+    for (const bundleName of ["archflow-mcp.mjs", "archflow-local.mjs"]) {
+      const bundle = await readFile(new URL(`../../dist/${bundleName}`, import.meta.url), "utf8");
+      expect(bundle).not.toMatch(cutPattern);
+    }
   });
 });

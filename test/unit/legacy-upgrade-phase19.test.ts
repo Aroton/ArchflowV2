@@ -24,6 +24,7 @@ import type { RepositoryOperationContext } from "../../src/repository/git.js";
 import { resolveLegacySourcePath } from "../../src/repository/paths.js";
 import { findLegacyImportResumePhase } from "../../src/state/gates.js";
 import { createProductionServices } from "../../src/state/production.js";
+import { createProjectionWriter } from "../../src/state/atomic.js";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -74,6 +75,32 @@ const context: RepositoryOperationContext = Object.freeze({
 });
 
 describe("Phase 19 legacy upgrade", () => {
+  it("routes staging writes through the supplied projection writer", async () => {
+    const { root, source, head } = await fixture();
+    const shipped = createProjectionWriter();
+    const written: string[] = [];
+    const staged = await stageLegacyUpgrade({
+      working_directory: root,
+      source_root: source,
+      task_id: "destination",
+      policy_base_commit: head,
+      import_baseline_commit: head,
+      code_baseline_commit: head,
+      projection_writer: Object.freeze({
+        replaceRegular: async (path, bytes, executable) => {
+          written.push(path.absolute);
+          await shipped.replaceRegular(path, bytes, executable);
+        },
+        replaceSymlink: shipped.replaceSymlink,
+        remove: shipped.remove,
+      }),
+    });
+    expect(staged.ok).toBe(true);
+    if (!staged.ok) return;
+    expect(written).toHaveLength(staged.value.staged_paths.length);
+    expect(written.some((path) => path.endsWith("/manifest.json"))).toBe(true);
+  });
+
   it("resolves only beneath an arbitrary read-only source frame", async () => {
     const root = mkdtempSync(join(tmpdir(), "archflow-legacy-resolver-"));
     roots.push(root);

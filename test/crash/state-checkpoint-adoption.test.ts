@@ -35,7 +35,7 @@ const message = (child: ChildProcess, type: string): Promise<Record<string, unkn
   child.on("error", reject);
 });
 
-function start(taskRoot: string, cut: "receipt-only" | "state-before" | "state-after" | "none"): ChildProcess {
+function start(taskRoot: string, cut: "phase10-receipt-only" | "state-before" | "state-after" | "none"): ChildProcess {
   const child = spawn(process.execPath, [childProgram.pathname, "adopt", taskRoot, cut], {
     cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
@@ -89,7 +89,7 @@ async function setup() {
 }
 
 describe("whole-chain adoption crash cuts", () => {
-  for (const cut of ["receipt-only", "state-before", "state-after"] as const) {
+  for (const cut of ["phase10-receipt-only", "state-before", "state-after"] as const) {
     it(`exposes only prior or complete head at ${cut}`, async () => {
       const fixture = await setup(); const child = start(fixture.taskRoot, cut); await message(child, "cut");
       await new Promise<void>((resolve) => child.once("exit", () => resolve()));
@@ -139,7 +139,7 @@ describe("whole-chain adoption crash cuts", () => {
 
   it("re-reads and resumes an exact retained adoption receipt", async () => {
     const fixture = await setup();
-    const crashed = start(fixture.taskRoot, "receipt-only"); await message(crashed, "cut");
+    const crashed = start(fixture.taskRoot, "phase10-receipt-only"); await message(crashed, "cut");
     await new Promise<void>((resolve) => crashed.once("exit", () => resolve()));
     const lockPlan = await inspectAbandonedTaskLock(fixture.authority);
     await removeConfirmedAbandonedTaskLock(fixture.authority, lockPlan, true);
@@ -151,7 +151,7 @@ describe("whole-chain adoption crash cuts", () => {
 
   it("rejects a retained adoption receipt whose prepared head differs from the request artifact", async () => {
     const fixture = await setup();
-    const crashed = start(fixture.taskRoot, "receipt-only"); await message(crashed, "cut");
+    const crashed = start(fixture.taskRoot, "phase10-receipt-only"); await message(crashed, "cut");
     await new Promise<void>((resolve) => crashed.once("exit", () => resolve()));
     const receiptPath = join(fixture.taskRoot, "intents", "adopt-checkpoints.json");
     const receipt = JSON.parse(await readFile(receiptPath, "utf8")) as {
@@ -172,7 +172,7 @@ describe("whole-chain adoption crash cuts", () => {
 
   it("returns INTENT_MISMATCH for a substituted-chain retry of a retained adoption intent", async () => {
     const fixture = await setup();
-    const crashed = start(fixture.taskRoot, "receipt-only"); await message(crashed, "cut");
+    const crashed = start(fixture.taskRoot, "phase10-receipt-only"); await message(crashed, "cut");
     await new Promise<void>((resolve) => crashed.once("exit", () => resolve()));
     const inputPath = join(fixture.taskRoot, "phase10-child-input.json");
     const input = JSON.parse(await readFile(inputPath, "utf8")) as {

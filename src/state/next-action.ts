@@ -124,7 +124,12 @@ export function deriveNextAction(input: NextActionInput): NextAction {
       : action("initialize-repository", "Initialize ArchFlow in this repository.", false);
   }
   if (input.config_verified !== true) {
-    return action("restore-pinned-config", "Restore the task's digest-pinned configuration before continuing.", true, state);
+    return action(
+      "restore-pinned-config",
+      "Restore the task's digest-pinned configuration before continuing; an intentional configuration change requires a new task or the explicit upgrade flow.",
+      true,
+      state,
+    );
   }
   const finding = input.reconciliation_findings?.[0];
   if (finding !== undefined) {

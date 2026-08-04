@@ -8,6 +8,7 @@ import { parseSafeInteger, type SafeCode, type SafeInteger, type TaskSlug } from
 import { parseToolCall } from "../contracts/mcp-tools.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim, type RepositoryPathClaim } from "../contracts/path-claims.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
+import type { SecretScanner } from "../contracts/secret-scan.js";
 import { parseSupplementalReviewRecord } from "../contracts/supplemental-record.js";
 import type { GitEnvironment, RepositoryOperationContext } from "../repository/git.js";
 import { createGitRunner, preflightGit, readGitBlobBytes, readGitBlobProjectedBytes } from "../repository/git.js";
@@ -21,7 +22,7 @@ import {
   type ResolvedPath,
   type ResolvedTaskPath,
 } from "../repository/paths.js";
-import { createAtomicWriter, createProjectionWriter } from "./atomic.js";
+import { createAtomicWriter, createProjectionWriter, type AtomicWriter } from "./atomic.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
 import { createProductionInputFingerprintResolver } from "./fingerprint-readers.js";
 import type { GateLifecycleDependencies } from "./gates.js";
@@ -54,11 +55,13 @@ export type ProductionServices = Readonly<{
   dependencies: GateLifecycleDependencies;
 }>;
 
-type ProductionInput = Readonly<{
+export type ProductionInput = Readonly<{
   working_directory: string;
   task_id: TaskSlug;
   operation: SafeCode;
   phase_instance?: PhaseInstanceId;
+  atomic?: AtomicWriter;
+  gate_secret_scanner?: SecretScanner;
 }>;
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
@@ -385,6 +388,8 @@ export function resolveInstalledManualResult(
 
 /** Resolves repository authority and binds every production state/gate dependency. */
 export async function createProductionServices(input: ProductionInput): Promise<ProjectResult<ProductionServices>> {
+  const atomic = input.atomic ?? createAtomicWriter();
+  const gateSecretScanner = input.gate_secret_scanner ?? createSecretlintScanner();
   const provisionalPhase = input.phase_instance ?? ("prd" as PhaseInstanceId);
   const provisionalContext = context(input, provisionalPhase, parseSafeInteger(1));
   const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), provisionalContext);
@@ -422,14 +427,14 @@ export async function createProductionServices(input: ProductionInput): Promise<
   const dependencies: GateLifecycleDependencies = Object.freeze({
     runner: discovered.value,
     environment: environment.value,
-    atomic: createAtomicWriter(),
+    atomic,
     projection_writer: createProjectionWriter(),
     lock: createTaskLock(),
     resolve_input_fingerprint: resolver,
     read_state: readTaskState,
     read_config: readTaskConfig,
     read_receipt: readIntentReceipt,
-    gate_secret_scanner: createSecretlintScanner(),
+    gate_secret_scanner: gateSecretScanner,
     read_retained_task_bytes: async (excluded) => {
       const current = await readTaskState(authority.state);
       if (current.kind !== "canonical") return parseSafeInteger(0);

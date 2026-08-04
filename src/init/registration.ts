@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { mkdir, open, readFile, rename, unlink, type FileHandle } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import type { AdapterId } from "../contracts/review.js";
@@ -96,6 +97,23 @@ async function readOptional(path: string): Promise<string | undefined> {
   }
 }
 
+/** Atomically replaces an ArchFlow-serialized host configuration in its own directory. */
+async function replaceHostConfig(path: string, source: string): Promise<void> {
+  const temporary = join(dirname(path), `.${basename(path)}.${process.pid}.${randomUUID()}.tmp`);
+  let handle: FileHandle | undefined;
+  try {
+    handle = await open(temporary, "wx", 0o644);
+    await handle.writeFile(source, "utf8");
+    await handle.sync();
+    await handle.close();
+    handle = undefined;
+    await rename(temporary, path);
+  } finally {
+    await handle?.close().catch(() => undefined);
+    await unlink(temporary).catch(() => undefined);
+  }
+}
+
 type McpJson = { mcpServers: Record<string, unknown> };
 
 function parseMcpJson(source: string | undefined): ProjectResult<McpJson> {
@@ -177,7 +195,7 @@ export async function registerClaudeProject(input: RegistrationInput): Promise<P
     if (entry.timeout !== CLAUDE_MCP_TIMEOUT_MS) registration = registration === "created" ? "created" : "updated";
     entry.timeout = CLAUDE_MCP_TIMEOUT_MS;
     const serialized = `${JSON.stringify({ mcpServers: after.value.mcpServers }, null, 2)}\n`;
-    if (serialized !== beforeSource) await writeFile(path, serialized, "utf8");
+    if (serialized !== beforeSource) await replaceHostConfig(path, serialized);
 
     let get: CommandResult;
     try {
@@ -292,7 +310,7 @@ export async function registerCodexProject(input: RegistrationInput): Promise<Pr
     }
     if (next !== before) {
       await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, next, "utf8");
+      await replaceHostConfig(path, next);
     }
 
     let get: CommandResult;

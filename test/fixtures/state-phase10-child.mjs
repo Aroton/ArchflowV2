@@ -1,10 +1,21 @@
 import { readFile, link, open, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 
+export const CUT_POINTS = Object.freeze([
+  "phase10-receipt-only",
+  "state-before",
+  "state-after",
+]);
+
+if (typeof process.send === "function" && process.argv[1] === fileURLToPath(import.meta.url)) {
 const [, , action, taskRoot, cutPoint] = process.argv;
-if ((action !== "initialize" && action !== "adopt") || taskRoot === undefined || typeof process.send !== "function") {
+if ((action !== "initialize" && action !== "adopt") || taskRoot === undefined) {
   throw new Error("phase 10 child requires initialize|adopt, a task root, and IPC");
+}
+if (cutPoint !== "none" && (cutPoint === undefined || !CUT_POINTS.includes(cutPoint))) {
+  throw new Error(`unknown phase 10 cut ${String(cutPoint)}`);
 }
 const taskId = taskRoot.split("/").at(-1);
 const repository = taskRoot.slice(0, -(`/.archflow/tasks/${taskId}`).length);
@@ -56,7 +67,7 @@ try {
         if (error?.code === "EEXIST") return "exists";
         throw error;
       } finally { await unlink(temporary).catch(() => undefined); }
-      if (cutPoint === "receipt-only") await killAt(cutPoint, path.absolute);
+      if (cutPoint === "phase10-receipt-only") await killAt(cutPoint, path.absolute);
       return "created";
     },
     replace: async (path, bytes) => {
@@ -113,4 +124,5 @@ try {
   process.exitCode = 1;
 } finally {
   await vite.close();
+}
 }

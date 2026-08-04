@@ -43872,10 +43872,10 @@ function enactsReentry(record3) {
   return record3.kind === "review-trigger" && decision2 === "revise" || record3.kind === "adjudication-failure" && decision2 === "revise" || record3.kind === "material-drift" && decision2 === "revise-current" || record3.kind === "attempts-exhausted" && (decision2 === "retry-once" || decision2 === "revise");
 }
 function exactOpenGateMatches(state, request) {
-  const open7 = state.open_gate;
-  if (open7 === void 0 || open7.gate_id !== request.gate_id || open7.gate_kind !== request.kind || open7.subject_digest !== request.subject_digest || open7.context_digest !== request.context_digest || open7.opened_at_revision !== request.opened_at_revision || state.revision !== request.opened_at_revision || state.phase_instance !== request.phase_instance) return false;
+  const open8 = state.open_gate;
+  if (open8 === void 0 || open8.gate_id !== request.gate_id || open8.gate_kind !== request.kind || open8.subject_digest !== request.subject_digest || open8.context_digest !== request.context_digest || open8.opened_at_revision !== request.opened_at_revision || state.revision !== request.opened_at_revision || state.phase_instance !== request.phase_instance) return false;
   const { open_gate: _open, committed_intent: _intent, ...base2 } = state;
-  return open7.frozen_state_digest === openGateFrozenStateDigest(base2);
+  return open8.frozen_state_digest === openGateFrozenStateDigest(base2);
 }
 async function planGateAuthorizedReentry(dependencies, authority, current, request, record3) {
   if (!enactsReentry(record3)) throw new TypeError("gate record does not authorize re-entry");
@@ -44897,10 +44897,10 @@ function preservesGateRefs(current, checkpoint) {
   return current.approvals.every((reference) => checkpoint.approvals.some((candidate) => isDeepStrictEqual8(candidate, reference))) && current.waivers.every((reference) => checkpoint.waivers.some((candidate) => isDeepStrictEqual8(candidate, reference)));
 }
 function authenticatedClosedGate(prior, checkpoint, evidence) {
-  const open7 = prior?.open_gate;
-  if (open7 === void 0 || checkpoint.open_gate !== void 0) return void 0;
-  const pair = evidence.gates.get(open7.gate_id);
-  return pair !== void 0 && pair.request.gate_id === open7.gate_id && pair.request.kind === open7.gate_kind && pair.request.subject_digest === open7.subject_digest && pair.request.context_digest === open7.context_digest && pair.request.opened_at_revision === open7.opened_at_revision && pair.decision.gate_id === open7.gate_id ? pair : void 0;
+  const open8 = prior?.open_gate;
+  if (open8 === void 0 || checkpoint.open_gate !== void 0) return void 0;
+  const pair = evidence.gates.get(open8.gate_id);
+  return pair !== void 0 && pair.request.gate_id === open8.gate_id && pair.request.kind === open8.gate_kind && pair.request.subject_digest === open8.subject_digest && pair.request.context_digest === open8.context_digest && pair.request.opened_at_revision === open8.opened_at_revision && pair.decision.gate_id === open8.gate_id ? pair : void 0;
 }
 function isAuthenticatedRetryLanding(cursor, checkpoint, pair) {
   if (pair?.decision.outcome !== "decided" || gateDecisionEffect(pair.decision.envelope.payload) !== "retry") return false;
@@ -46364,6 +46364,8 @@ function resolveInstalledManualResult(result, authority) {
   return facts;
 }
 async function createProductionServices(input) {
+  const atomic = input.atomic ?? createAtomicWriter();
+  const gateSecretScanner = input.gate_secret_scanner ?? createSecretlintScanner();
   const provisionalPhase = input.phase_instance ?? "prd";
   const provisionalContext = context(input, provisionalPhase, parseSafeInteger(1));
   const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), provisionalContext);
@@ -46395,14 +46397,14 @@ async function createProductionServices(input) {
   const dependencies = Object.freeze({
     runner: discovered.value,
     environment: environment.value,
-    atomic: createAtomicWriter(),
+    atomic,
     projection_writer: createProjectionWriter(),
     lock: createTaskLock(),
     resolve_input_fingerprint: resolver,
     read_state: readTaskState,
     read_config: readTaskConfig,
     read_receipt: readIntentReceipt,
-    gate_secret_scanner: createSecretlintScanner(),
+    gate_secret_scanner: gateSecretScanner,
     read_retained_task_bytes: async (excluded) => {
       const current = await readTaskState(authority.state);
       if (current.kind !== "canonical") return parseSafeInteger(0);
@@ -47549,8 +47551,8 @@ function adjudicationGateSatisfied(state, retained, subject, gate) {
   ) !== void 0);
 }
 function adjudicationGatePending(state, gate) {
-  const open7 = state.open_gate;
-  return open7 !== void 0 && open7.gate_kind === gate.kind && open7.subject_digest === gate.subject_digest && open7.context_digest === computeGateContextDigest(gate.kind, gate.context);
+  const open8 = state.open_gate;
+  return open8 !== void 0 && open8.gate_kind === gate.kind && open8.subject_digest === gate.subject_digest && open8.context_digest === computeGateContextDigest(gate.kind, gate.context);
 }
 function dispositionState(retained, reviews, triage) {
   const self2 = reviews?.reviews[0]?.evidence;
@@ -47754,7 +47756,12 @@ function deriveNextAction(input) {
     return input.repository_initialized ? action("create-task", "Create durable state for this task.", false) : action("initialize-repository", "Initialize ArchFlow in this repository.", false);
   }
   if (input.config_verified !== true) {
-    return action("restore-pinned-config", "Restore the task's digest-pinned configuration before continuing.", true, state);
+    return action(
+      "restore-pinned-config",
+      "Restore the task's digest-pinned configuration before continuing; an intentional configuration change requires a new task or the explicit upgrade flow.",
+      true,
+      state
+    );
   }
   const finding = input.reconciliation_findings?.[0];
   if (finding !== void 0) {
@@ -50997,8 +51004,9 @@ async function collectInitDiagnostics(input) {
 
 // src/init/registration.ts
 import { spawn as spawn2 } from "node:child_process";
-import { mkdir as mkdir5, readFile as readFile6, writeFile as writeFile2 } from "node:fs/promises";
-import { dirname as dirname5, join as join13 } from "node:path";
+import { randomUUID as randomUUID3 } from "node:crypto";
+import { mkdir as mkdir5, open as open6, readFile as readFile6, rename as rename3, unlink as unlink3 } from "node:fs/promises";
+import { basename as basename3, dirname as dirname5, join as join13 } from "node:path";
 var CLAUDE_MCP_TIMEOUT_MS = 36e5;
 var CODEX_TOOL_TIMEOUT_SEC = 3600;
 var CODEX_STARTUP_TIMEOUT_SEC = 30;
@@ -51074,6 +51082,21 @@ async function readOptional(path2) {
     throw error51;
   }
 }
+async function replaceHostConfig(path2, source) {
+  const temporary = join13(dirname5(path2), `.${basename3(path2)}.${process.pid}.${randomUUID3()}.tmp`);
+  let handle;
+  try {
+    handle = await open6(temporary, "wx", 420);
+    await handle.writeFile(source, "utf8");
+    await handle.sync();
+    await handle.close();
+    handle = void 0;
+    await rename3(temporary, path2);
+  } finally {
+    await handle?.close().catch(() => void 0);
+    await unlink3(temporary).catch(() => void 0);
+  }
+}
 function parseMcpJson(source) {
   if (source === void 0) return ok25({ mcpServers: {} });
   let value;
@@ -51147,7 +51170,7 @@ async function registerClaudeProject(input) {
     entry.timeout = CLAUDE_MCP_TIMEOUT_MS;
     const serialized = `${JSON.stringify({ mcpServers: after.value.mcpServers }, null, 2)}
 `;
-    if (serialized !== beforeSource) await writeFile2(path2, serialized, "utf8");
+    if (serialized !== beforeSource) await replaceHostConfig(path2, serialized);
     let get;
     try {
       get = await runCommand("claude", ["mcp", "get", "archflow"], input.working_directory, input.environment);
@@ -51247,7 +51270,7 @@ async function registerCodexProject(input) {
     }
     if (next !== before) {
       await mkdir5(dirname5(path2), { recursive: true });
-      await writeFile2(path2, next, "utf8");
+      await replaceHostConfig(path2, next);
     }
     let get;
     try {
@@ -51313,7 +51336,7 @@ async function runInit(input) {
 }
 
 // src/init/task-initialization.ts
-import { mkdir as mkdir6, open as open6, readFile as readFile7 } from "node:fs/promises";
+import { mkdir as mkdir6, open as open7, readFile as readFile7 } from "node:fs/promises";
 import { dirname as dirname6, join as join14 } from "node:path";
 var decoder4 = new TextDecoder("utf-8", { fatal: true });
 var ok26 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
@@ -51339,7 +51362,7 @@ async function createTaskConfig(root, taskId) {
   const template = new Uint8Array(await readFile7(join14(root, ".archflow", "config.yaml")));
   await mkdir6(dirname6(taskConfig), { recursive: true });
   try {
-    const handle = await open6(taskConfig, "wx");
+    const handle = await open7(taskConfig, "wx");
     try {
       await handle.writeFile(template);
     } finally {
@@ -51674,7 +51697,7 @@ async function stageLegacyUpgrade(input) {
       mapping: Object.freeze(mapping),
       staged_payload_refs: Object.freeze(stagedRefs)
     });
-    const writer = createProjectionWriter();
+    const writer = input.projection_writer ?? createProjectionWriter();
     const stagedPaths = [];
     const stagedByLegacy = /* @__PURE__ */ new Map();
     for (const file2 of selected.value.files) {

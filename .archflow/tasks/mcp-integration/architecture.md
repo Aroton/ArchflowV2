@@ -826,13 +826,13 @@ REQ-01 and host-registration crash safety were added to this phase on 2026-08-04
 
 **Success Criteria**:
 
-- [ ] Every crash point leaves committed prior/next state or precise non-advancing repair, with prepared material never inferred as success.
-- [ ] Same-filesystem races yield one winner plus `STATE_CONFLICT`; independent-clone concurrency is documented as unsupported and locally undetectable before divergence, while divergent histories/conflicts are detected, remain non-authoritative, and pass preserve-both-heads repair plus clean one-writer handoff tests.
-- [ ] Path, sandbox, managed-context, secret, descendant, and malformed-decision attacks read/write no undeclared repository data and create no pass/approval.
-- [ ] Every config-byte mutation, including routing/model/effort and semantically equivalent rewrites, returns `PINNED_CONFIG_MISMATCH` before dispatch/transition and status gives the new-task/upgrade guidance.
-- [ ] The selected CLI may use its own subscription store, but ArchFlow never handles credential values; repository/global/other-family/unrelated-secret canaries remain unreadable/unemitted, and API-key/provider-routing sentinels are absent. Lack of this proof marks the matrix entry unsupported.
-- [ ] Binary/mode/rename/delete restore, manual recovery, and legacy staging remain collision-safe under fault injection; tracked canonical blob/tree identities remain stable across attributes, LF/CRLF and `core.autocrlf`, `core.fileMode`, executable-bit, and symlink checkout cases.
-- [ ] Boundary and over-limit payload matrices prove 25 MiB/result and 250 MiB/task enforcement, no truncation/hidden authority, authoritative/evidence retention, maintenance reachability records, and pre-projection secret rejection under crashes and retries.
+- [x] Every crash point leaves committed prior/next state or precise non-advancing repair, with prepared material never inferred as success.
+- [x] Same-filesystem races yield one winner plus `STATE_CONFLICT`; independent-clone concurrency is documented as unsupported and locally undetectable before divergence, while divergent histories/conflicts are detected, remain non-authoritative, and pass preserve-both-heads repair plus clean one-writer handoff tests.
+- [x] Path, sandbox, managed-context, secret, descendant, and malformed-decision attacks read/write no undeclared repository data and create no pass/approval.
+- [x] Every config-byte mutation, including routing/model/effort and semantically equivalent rewrites, returns `PINNED_CONFIG_MISMATCH` before dispatch/transition and status gives the new-task/upgrade guidance.
+- [x] The selected CLI may use its own subscription store, but ArchFlow never handles credential values; repository/global/other-family/unrelated-secret canaries remain unreadable/unemitted, and API-key/provider-routing sentinels are absent. Lack of this proof marks the matrix entry unsupported.
+- [x] Binary/mode/rename/delete restore, manual recovery, and legacy staging remain collision-safe under fault injection; tracked canonical blob/tree identities remain stable across attributes, LF/CRLF and `core.autocrlf`, `core.fileMode`, executable-bit, and symlink checkout cases.
+- [x] Boundary and over-limit payload matrices prove 25 MiB/result and 250 MiB/task enforcement, no truncation/hidden authority, authoritative/evidence retention, maintenance reachability records, and pre-projection secret rejection under crashes and retries.
 
 ### Phase 21: Real-Host E2E and Review-Quality Validation
 
@@ -897,7 +897,7 @@ REQ-01 and host-registration crash safety were added to this phase on 2026-08-04
 | 17 | Normal-Mode Thin Phase Skills and Truthful Status | COMPLETE (2026-08-03) |
 | 18 | Manual and Degraded Recovery Workflow | COMPLETE (2026-08-03) |
 | 19 | Legacy Upgrade Workflow | COMPLETE (2026-08-04) |
-| 20 | Reliability and Security Matrices | Not Started |
+| 20 | Reliability and Security Matrices | COMPLETE (2026-08-04) |
 | 21 | Real-Host E2E and Review-Quality Validation | Not Started |
 | 22 | Release Packaging, Support Matrix, and Documentation Consistency | Not Started |
 

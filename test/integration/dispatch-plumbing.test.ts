@@ -1,4 +1,4 @@
-import { access, chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 
@@ -116,6 +116,27 @@ async function observation(workspace: DispatchWorkspace): Promise<Observation> {
   return JSON.parse(await readFile(join(workspace.root, "plumbing-observation.json"), "utf8")) as Observation;
 }
 
+async function waitForFile(path: string): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (await stat(path).then(() => true, () => false)) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`timed out waiting for ${path}`);
+}
+
+async function waitForProcessExit(pid: number): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
+      throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`process ${pid} survived process-group termination`);
+}
+
 describe("Phase 13 dispatch plumbing proof", () => {
   it.each([
     ["claude", "codex-cli"],
@@ -168,6 +189,28 @@ describe("Phase 13 dispatch plumbing proof", () => {
       }
       await expect(access(workspace.root)).rejects.toMatchObject({ code: "ENOENT" });
     }
+  });
+
+  it.runIf(process.platform !== "win32")("reaps an in-group grandchild when dispatch is cancelled", async () => {
+    const root = await mkdtemp(join(tmpdir(), "archflow-dispatch-grandchild-"));
+    scratchRoots.push(root);
+    const fixture = new URL("../fixtures/dispatch/grandchild.mjs", import.meta.url);
+    const controller = new AbortController();
+    const pending = runDispatchChild({
+      adapter: "codex-cli",
+      command: process.execPath,
+      argv: [fixture.pathname],
+      cwd: root,
+      env: { PATH: dirname(process.execPath) },
+      signal: controller.signal,
+    });
+    await waitForFile(join(root, "grandchild-pid"));
+    const childPid = Number((await readFile(join(root, "child-pid"), "utf8")).trim());
+    const grandchildPid = Number((await readFile(join(root, "grandchild-pid"), "utf8")).trim());
+
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ project_error: { code: "CANCELLED" } });
+    await Promise.all([waitForProcessExit(childPid), waitForProcessExit(grandchildPid)]);
   });
 
   it("bounds the Codex final file independently while its JSONL remains small", async () => {

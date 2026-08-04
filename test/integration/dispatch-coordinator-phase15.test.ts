@@ -11,7 +11,7 @@ import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contra
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
-import { DispatchProcessError } from "../../src/dispatch/process.js";
+import { DispatchProcessError, scanDispatchOutput } from "../../src/dispatch/process.js";
 import type { DispatchRoute } from "../../src/dispatch/routing.js";
 import { createGitRunner, preflightGit, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
@@ -162,7 +162,8 @@ describe("createDispatchCoordinator", () => {
 
     expect(result.cli_version).toBe("0.146.0");
     expect(JSON.parse(Buffer.from(result.extracted_output_bytes).toString("utf8"))).toEqual({ schema_version: "1" });
-    expect(await attemptRecord(h.repository)).toMatchObject({
+    const persistedAttempt = await attemptRecord(h.repository);
+    expect(persistedAttempt).toMatchObject({
       schema_version: "1",
       task_id: TASK,
       phase_instance: PHASE,
@@ -172,6 +173,9 @@ describe("createDispatchCoordinator", () => {
       managed_policy_present: expect.any(Boolean),
       managed_policy_paths: expect.any(Array),
     });
+    const canaries = ["credential-canary-7429", "routing-sentinel-1836"];
+    const persistedDiagnostics = Buffer.from(JSON.stringify(persistedAttempt));
+    expect(scanDispatchOutput({ stdout: persistedDiagnostics, stderr: Buffer.alloc(0) }, canaries)).toEqual([]);
   });
 
   it("dispatches from a Codex host through the assembled Claude CLI coordinator", async () => {

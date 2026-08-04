@@ -41,7 +41,7 @@ import {
   resolveLegacySourcePath,
   resolveTaskPath,
 } from "../repository/paths.js";
-import { createProjectionWriter } from "../state/atomic.js";
+import { createProjectionWriter, type ProjectionWriter } from "../state/atomic.js";
 import { createInternalTransactionAuthority } from "../state/authority.js";
 import { detectTaskLocalConstitutionEdit } from "../state/constitution.js";
 import { ensureTaskProjectionParent } from "../state/layout.js";
@@ -62,6 +62,7 @@ export type StageLegacyUpgradeInput = Readonly<{
   import_baseline_commit: string;
   code_baseline_commit: string;
   exclude?: readonly string[];
+  projection_writer?: ProjectionWriter;
 }>;
 
 export type StagedLegacyUpgrade = Readonly<{
@@ -300,7 +301,7 @@ export async function stageLegacyUpgrade(input: StageLegacyUpgradeInput): Promis
       mapping: Object.freeze(mapping),
       staged_payload_refs: Object.freeze(stagedRefs),
     });
-    const writer = createProjectionWriter();
+    const writer = input.projection_writer ?? createProjectionWriter();
     const stagedPaths: string[] = [];
     const stagedByLegacy = new Map<string, string>();
     for (const file of selected.value.files) {

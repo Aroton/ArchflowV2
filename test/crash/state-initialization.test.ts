@@ -40,7 +40,7 @@ const message = (child: ChildProcess, type: string): Promise<Record<string, unkn
   child.on("error", reject);
 });
 
-function start(taskRoot: string, cut: "receipt-only" | "state-before" | "state-after" | "none"): ChildProcess {
+function start(taskRoot: string, cut: "phase10-receipt-only" | "state-before" | "state-after" | "none"): ChildProcess {
   const child = spawn(process.execPath, [childProgram.pathname, "initialize", taskRoot, cut], {
     cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
@@ -115,7 +115,7 @@ async function setup(kind: "normal" | "legacy" | "chain" = "normal") {
 }
 
 describe("revision-0 crash cuts", () => {
-  for (const cut of ["receipt-only", "state-before", "state-after"] as const) {
+  for (const cut of ["phase10-receipt-only", "state-before", "state-after"] as const) {
     it(`leaves prior or complete revision 1 at ${cut}`, async () => {
       const fixture = await setup();
       const child = start(fixture.taskRoot, cut); await message(child, "cut");
@@ -133,6 +133,22 @@ describe("revision-0 crash cuts", () => {
       expect(result).toMatchObject({ ok: true, revision: 1 });
     }, 20_000);
   }
+
+  it("leaves legacy-import initialization uncommitted at the state-before smoke cut", async () => {
+    const fixture = await setup("legacy");
+    const child = start(fixture.taskRoot, "state-before");
+    await message(child, "cut");
+    await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    expect((await readTaskState(fixture.authority.state)).kind).toBe("missing");
+    expect(existsSync(join(fixture.taskRoot, "intents", "initialize.json"))).toBe(true);
+    const plan = await inspectAbandonedTaskLock(fixture.authority);
+    await removeConfirmedAbandonedTaskLock(fixture.authority, plan, true);
+    const resumed = start(fixture.taskRoot, "none");
+    expect(await message(resumed, "result")).toMatchObject({ ok: true, revision: 1 });
+    const final = await readTaskState(fixture.authority.state);
+    expect(final.kind).toBe("canonical");
+    if (final.kind === "canonical") expect(final.document.value.revision).toBe(1);
+  }, 20_000);
 
   for (const [label, mutate] of [
     ["wrong canonical paths", (artifact: Record<string, any>) => { artifact.canonical_paths.state = ".archflow/tasks/other/state.json"; }],

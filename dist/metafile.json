@@ -7083,7 +7083,7 @@
       ]
     },
     "src/init/legacy-upgrade.ts": {
-      "bytes": 17284,
+      "bytes": 17374,
       "format": "esm",
       "imports": [
         {
@@ -7179,13 +7179,18 @@
       ]
     },
     "src/init/registration.ts": {
-      "bytes": 14284,
+      "bytes": 15005,
       "format": "esm",
       "imports": [
         {
           "external": true,
           "kind": "import-statement",
           "path": "node:child_process"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
         },
         {
           "external": true,
@@ -10093,7 +10098,7 @@
       ]
     },
     "src/state/next-action.ts": {
-      "bytes": 7507,
+      "bytes": 7624,
       "format": "esm",
       "imports": [
         {
@@ -10150,7 +10155,7 @@
       ]
     },
     "src/state/production.ts": {
-      "bytes": 24247,
+      "bytes": 24512,
       "format": "esm",
       "imports": [
         {
@@ -10821,7 +10826,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2127082,
+      "bytes": 2127935,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11249,6 +11254,11 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:child_process"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
         },
         {
           "external": true,
@@ -12297,10 +12307,10 @@
           "bytesInOutput": 1563
         },
         "src/init/legacy-upgrade.ts": {
-          "bytesInOutput": 14326
+          "bytesInOutput": 14353
         },
         "src/init/registration.ts": {
-          "bytesInOutput": 11995
+          "bytesInOutput": 12596
         },
         "src/init/task-initialization.ts": {
           "bytesInOutput": 5011
@@ -12396,13 +12406,13 @@
           "bytesInOutput": 27877
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 5068
+          "bytesInOutput": 5184
         },
         "src/state/produce-subject.ts": {
           "bytesInOutput": 3540
         },
         "src/state/production.ts": {
-          "bytesInOutput": 17060
+          "bytesInOutput": 17169
         },
         "src/state/read.ts": {
           "bytesInOutput": 2325
@@ -12434,7 +12444,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2766614,
+      "bytes": 2766723,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13990,7 +14000,7 @@
           "bytesInOutput": 6002
         },
         "src/state/production.ts": {
-          "bytesInOutput": 11817
+          "bytesInOutput": 11926
         },
         "src/state/read.ts": {
           "bytesInOutput": 2325

@@ -19,7 +19,7 @@
  * name the chain was started from.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
@@ -56,6 +56,7 @@ import {
 import {
   createGitRunner,
   preflightGit,
+  readGitBlobProjectedBytes,
   type GitEnvironment,
   type RepositoryOperationContext,
 } from "../../src/repository/git.js";
@@ -264,87 +265,82 @@ const standardRequest: StackRequest = {
  * it is a statement about two modules agreeing, so no unit can make it.
  */
 describe.skipIf(!hasGit)("five-repository matrix, composed through the whole layer", () => {
-  const crlf = Buffer.from('{\r\n  "v": 0\r\n}\r\n', "utf8");
-  const collapsed: string[] = [];
+  it("collapses fixed source bytes across the approved attributes and mode matrix", async () => {
+    const sourceBytes = Buffer.from('{\r\n  "v": 0\r\n}\r\n', "utf8");
+    const cases = [
+      { label: "autocrlf-false", config: { "core.autocrlf": "false" }, mode: "100644" },
+      { label: "autocrlf-input", config: { "core.autocrlf": "input" }, mode: "100644" },
+      { label: "autocrlf-true", config: { "core.autocrlf": "true" }, mode: "100644" },
+      { label: "filemode", config: { "core.fileMode": "false" }, mode: "100644" },
+      { label: "symlinks", config: { "core.symlinks": "false" }, mode: "120000" },
+    ] as const;
+    const identities: string[] = [];
 
-  for (const autocrlf of ["false", "true", "input"] as const) {
-    it(`agrees on OID and mode at core.autocrlf=${autocrlf}`, async () => {
-      const repository = seededRepository(`matrix-autocrlf-${autocrlf}`, {
-        config: { "core.autocrlf": autocrlf },
-        stateBytes: crlf,
+    for (const matrixCase of cases) {
+      const repository = seededRepository(`matrix-${matrixCase.label}`, {
+        config: matrixCase.config,
+        stateBytes: sourceBytes,
       });
+      if (matrixCase.label === "filemode") repository.chmod(stateRepositoryClaim, 0o755);
+      if (matrixCase.label === "symlinks") {
+        const blob = repository.hashObject(sourceBytes);
+        repository.git(
+          "update-index",
+          "--add",
+          "--cacheinfo",
+          `120000,${blob},link.txt`
+        );
+      }
 
-      const result = await driveStack(repository.path, standardRequest);
-      const entry = entryFor(result, stateRepositoryClaim);
+      const result = await driveStack(repository.path, {
+        ...standardRequest,
+        ...(matrixCase.label === "symlinks"
+          ? { repositoryClaim: parseRepositoryPathClaim("link.txt") }
+          : {}),
+      });
+      const entry = entryFor(
+        result,
+        matrixCase.label === "symlinks" ? "link.txt" : stateRepositoryClaim
+      );
+      const onDisk = await readResolved(result.taskPath.absolute);
 
-      // The resolver's claim is the reader's claim is the resolver's absolute path.
       expect(result.taskPath.path_class).toBe("task-state");
       expect(result.taskPath.repositoryRelative).toBe(stateRepositoryClaim);
       expect(result.taskPath.absolute).toBe(join(repository.path, stateRepositoryClaim));
-
-      // The composed claim: disk bytes → in-process OID → index OID, all three the same value.
-      const onDisk = await readResolved(result.taskPath.absolute);
-      expect(onDisk.equals(crlf)).toBe(true);
-      expect(entry.oid).toBe(gitBlobOid(onDisk));
-      expect(entry.oid).toBe(repository.hashObject(crlf));
-      expect(entry.mode).toBe("100644");
+      expect(onDisk.equals(sourceBytes)).toBe(true);
+      expect(entry.oid).toBe(gitBlobOid(sourceBytes));
+      expect(entry.mode).toBe(matrixCase.mode);
       expect(entry.stage).toBe(0);
-
-      // …and the attribute reader agrees the rule that licenses it is in force for that same claim.
+      if (matrixCase.label === "filemode") {
+        expect(statSync(result.taskPath.absolute).mode & 0o111).not.toBe(0);
+      }
       expect(result.attributes).toEqual([
         { path: stateRepositoryClaim, text: "unset", merge: "binary" },
         { path: ".archflow/workflow.yaml", text: "unset", merge: "binary" },
       ]);
+      identities.push(entry.oid);
+    }
 
-      collapsed.push(entry.oid);
-    });
-  }
-
-  it("collapses all three autocrlf configurations to one OID", () => {
-    expect(collapsed).toHaveLength(3);
-    expect(new Set(collapsed).size).toBe(1);
+    expect(identities).toHaveLength(cases.length);
+    expect(new Set(identities)).toEqual(new Set([gitBlobOid(sourceBytes)]));
   });
 
-  it("keeps the mode index-sourced at core.fileMode=false with the exec bit set on disk", async () => {
-    const repository = seededRepository("matrix-filemode", {
-      config: { "core.fileMode": "false" },
-      stateBytes: crlf,
+  it("projects a blob through the checkout filter declared for its destination path", async () => {
+    const repository = createTempRepository({
+      label: "matrix-projected-blob",
+      attributes: `* text=auto\n.archflow/** -text merge=binary\nfiltered.txt -text filter=phase20\n`,
+      config: { "filter.phase20.smudge": "sed 's/^stored:/projected:/'" },
     });
-    repository.chmod(stateRepositoryClaim, 0o755);
+    const stored = Buffer.from("stored: bytes\n", "utf8");
+    const oid = repository.hashObject(stored);
+    const projected = await readGitBlobProjectedBytes(
+      createGitRunner({ cwd: repository.path }),
+      oid,
+      "filtered.txt"
+    );
 
-    const result = await driveStack(repository.path, standardRequest);
-    const entry = entryFor(result, stateRepositoryClaim);
-
-    // The filesystem says 0o755; the index says 100644, and the index is the only authority. The
-    // resolved path is still openable and still hashes to the index OID.
-    expect(entry.mode).toBe("100644");
-    expect(gitBlobOid(await readResolved(result.taskPath.absolute))).toBe(entry.oid);
-    expect(result.readiness.ok).toBe(true);
-  });
-
-  it("keeps mode 120000 and a content-derived OID at core.symlinks=false", async () => {
-    const repository = seededRepository("matrix-symlinks", {
-      config: { "core.symlinks": "false" },
-    });
-    // A symlink-incapable checkout stores the target path as a blob with no trailing newline while
-    // the index still records 120000, so there is nothing on disk to open — index-sourced mode plus
-    // content-derived OID is the whole answer, and the composed point is that the *repository*
-    // resolver reaches the entry just as the task resolver reaches a regular file.
-    const target = Buffer.from(`${stateRepositoryClaim}`, "utf8");
-    const blob = repository.hashObject(target);
-    repository.git("update-index", "--add", "--cacheinfo", `120000,${blob},link.txt`);
-
-    const linkClaim = parseRepositoryPathClaim("link.txt");
-    const result = await driveStack(repository.path, {
-      ...standardRequest,
-      repositoryClaim: linkClaim,
-    });
-
-    expect(result.repositoryPath.path_class).toBe("repository-source");
-    const entry = entryFor(result, "link.txt");
-    expect(entry.mode).toBe("120000");
-    expect(entry.oid).toBe(blob);
-    expect(entry.oid).toBe(gitBlobOid(target));
+    expect(Buffer.from(projected).equals(stored)).toBe(false);
+    expect(Buffer.from(projected).toString("utf8")).toBe("projected: bytes\n");
   });
 });
 

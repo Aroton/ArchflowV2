@@ -1,13 +1,17 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, relative, resolve } from "node:path";
+import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createProjectError, createProtocolError } from "../../src/contracts/errors.js";
+import { runDispatchChild } from "../../src/dispatch/process.js";
+import { startMcpRuntime, type McpRuntimeHandle } from "../../src/mcp/sdk-adapter.js";
+import type { ToolHandlerRegistry } from "../../src/mcp/server.js";
 import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
 import adversarial from "../fixtures/mcp/runtime/adversarial-bytes.json" with { type: "json" };
 import calls from "../fixtures/mcp/runtime/calls.json" with { type: "json" };
@@ -43,6 +47,7 @@ interface RunningRuntime {
 
 let outputDirectory = "";
 let runtimeBundle = "";
+const lifecycleRoots: string[] = [];
 
 function startRuntime(): RunningRuntime {
   const child = spawn(process.execPath, [runtimeBundle], {
@@ -178,7 +183,89 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (outputDirectory !== "") await rm(outputDirectory, { recursive: true, force: true });
+  await Promise.all(lifecycleRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
+
+interface LifecycleRuntime {
+  readonly input: PassThrough;
+  readonly output: PassThrough;
+  readonly handle: McpRuntimeHandle;
+  readonly lines: string[];
+  readonly send: (message: unknown) => void;
+}
+
+async function waitForPath(path: string): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (await stat(path).then(() => true, () => false)) return;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+  }
+  throw new Error(`timed out waiting for ${path}`);
+}
+
+async function waitForPidExit(pid: number): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
+      throw error;
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+  }
+  throw new Error(`process ${pid} survived MCP lifecycle termination`);
+}
+
+function pidIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+    throw error;
+  }
+}
+
+async function lifecycleRuntime(root: string): Promise<LifecycleRuntime> {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const lines: string[] = [];
+  let buffered = "";
+  output.on("data", (chunk: Buffer) => {
+    buffered += chunk.toString("utf8");
+    for (;;) {
+      const newline = buffered.indexOf("\n");
+      if (newline < 0) break;
+      lines.push(buffered.slice(0, newline));
+      buffered = buffered.slice(newline + 1);
+    }
+  });
+  const fixture = new URL("../fixtures/dispatch/grandchild.mjs", import.meta.url);
+  const handlers: ToolHandlerRegistry = {
+    archflow_state: async (_call, context) => runDispatchChild({
+      adapter: "codex-cli",
+      command: process.execPath,
+      argv: [fixture.pathname],
+      cwd: root,
+      env: { PATH: dirname(process.execPath) },
+      signal: context.signal,
+      cancellation_source: "client",
+    }),
+  };
+  const handle = await startMcpRuntime({ input, output, workingDirectory: root, handlers });
+  const send = (message: unknown): void => { input.write(jsonLine(message)); };
+  send(initialize.request);
+  while (lines.length < 1) await new Promise((resolveWait) => setTimeout(resolveWait, 5));
+  send(initialize.initialized);
+  return { input, output, handle, lines, send };
+}
+
+async function lifecyclePids(root: string): Promise<readonly [number, number]> {
+  await waitForPath(resolve(root, "grandchild-pid"));
+  return [
+    Number((await readFile(resolve(root, "child-pid"), "utf8")).trim()),
+    Number((await readFile(resolve(root, "grandchild-pid"), "utf8")).trim()),
+  ];
+}
 
 describe("bundled MCP stdio runtime", () => {
   it("emits the byte-exact initialize response and exits cleanly on EOF", async () => {
@@ -297,3 +384,50 @@ describe("bundled MCP stdio runtime", () => {
     }
   });
 }, TEST_TIMEOUT_MS);
+
+describe("MCP stdio dispatch lifecycle", () => {
+  it.runIf(process.platform !== "win32")("forwards notifications/cancelled to an in-flight dispatch process group", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "archflow-mcp-cancel-dispatch-"));
+    lifecycleRoots.push(root);
+    const runtime = await lifecycleRuntime(root);
+    try {
+      runtime.send({
+        jsonrpc: "2.0",
+        id: "dispatch-call",
+        method: "tools/call",
+        params: { name: "archflow_state", arguments: calls.valid_disabled.params.arguments },
+      });
+      const pids = await lifecyclePids(root);
+      runtime.send({
+        jsonrpc: "2.0",
+        method: "notifications/cancelled",
+        params: { requestId: "dispatch-call", reason: "stop" },
+      });
+      await Promise.all(pids.map(waitForPidExit));
+      await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+      expect(runtime.lines).toHaveLength(1);
+    } finally {
+      await runtime.handle.close();
+    }
+  });
+
+  it.runIf(process.platform !== "win32")("observes shutdown return before its in-flight dispatch process group is reaped", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "archflow-mcp-close-dispatch-"));
+    lifecycleRoots.push(root);
+    const runtime = await lifecycleRuntime(root);
+    runtime.send({
+      jsonrpc: "2.0",
+      id: "dispatch-call",
+      method: "tools/call",
+      params: { name: "archflow_state", arguments: calls.valid_disabled.params.arguments },
+    });
+    const pids = await lifecyclePids(root);
+
+    await runtime.handle.close();
+    const aliveWhenCloseResolved = pids.filter(pidIsAlive);
+    await Promise.all(pids.map(waitForPidExit));
+    expect(aliveWhenCloseResolved).toEqual(pids);
+    expect(await runtime.handle.closed).toEqual({ reason: "caller-close", close_failed: false });
+    expect(runtime.lines).toHaveLength(1);
+  });
+});

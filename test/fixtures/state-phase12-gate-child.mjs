@@ -1,9 +1,24 @@
 import { createServer } from "vite";
 import { basename } from "node:path";
+import { fileURLToPath } from "node:url";
 
+export const CUT_POINTS = Object.freeze([
+  "request-created",
+  "archive-created",
+  "receipt-created",
+  "gate-published",
+  "state-opened",
+  "state-resolved",
+  "interface-remove-before",
+]);
+
+if (typeof process.send === "function" && process.argv[1] === fileURLToPath(import.meta.url)) {
 const [, , action, taskRoot, intentId = "gate-intent", digestByte = "8", cut = "none"] = process.argv;
-if (action === undefined || taskRoot === undefined || typeof process.send !== "function") {
+if (action === undefined || taskRoot === undefined) {
   throw new Error("phase 12 gate child requires an action, task root, and IPC");
+}
+if (cut !== "none" && !CUT_POINTS.includes(cut)) {
+  throw new Error(`unknown phase 12 gate cut ${cut}`);
 }
 
 const vite = await createServer({ appType: "custom", clearScreen: false, logLevel: "silent", server: { middlewareMode: true } });
@@ -136,4 +151,5 @@ try {
   process.send({ type: "failed", message: error instanceof Error ? error.message : String(error), stack: error?.stack });
 } finally {
   await vite.close();
+}
 }

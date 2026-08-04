@@ -154,7 +154,16 @@ describe("computeTaskStatus", () => {
     writeFileSync(join(h.services.authority.task_root, "gate.json"), canonicalDocument(active).bytes);
     writeFileSync(h.services.authority.config.absolute, `${configText}max_attempts: 4\n`);
     const status = await computeTaskStatus(h.services.dependencies, h.services.authority);
-    expect(status).toMatchObject({ ok: true, value: { config: { verified: false }, next_action: { code: "restore-pinned-config" } } });
+    expect(status).toMatchObject({
+      ok: true,
+      value: {
+        config: { verified: false },
+        next_action: {
+          code: "restore-pinned-config",
+          detail: expect.stringContaining("new task or the explicit upgrade flow"),
+        },
+      },
+    });
     if (status.ok) {
       expect(status.value.blocking_reasons).toContain("active-gate-request-missing");
       expect(status.value).not.toHaveProperty("open_gate");

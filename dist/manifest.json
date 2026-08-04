@@ -86,16 +86,16 @@
   ],
   "artifacts": [
     {
-      "digest": "77f78f91f371c6ed41dcb43cc16541006af93f2a80a93f5ffc48c09eb9d170b7",
+      "digest": "b29193860007eecbe4bc05d694ae3fd88a96e2dc905d4fcc37bc2a5ee78f0f58",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 2127082
+      "size": 2127935
     },
     {
-      "digest": "52e5ab4d4a824925dc0a9690294ad1b27580356e383c42f0b1e463327d92bf2f",
+      "digest": "3ac59d3481a435801442a09761a104d49984a4b2fff9145ea7b58900a6823aba",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 2766614
+      "size": 2766723
     },
     {
       "digest": "a0421bd8ac95f0efe2215f3bf8a5f3b213b654651a8f596f5fabbc77351414e7",
@@ -104,7 +104,7 @@
       "size": 937
     },
     {
-      "digest": "bb5512a18d38df8b6057c1bf8db6ac3b4e7e2f21f498656ea3272e3472c099a0",
+      "digest": "4f2a366bf0ebfdff1f1fa703831216ae9b06d1e3cb7114071fdc66c282d9cfe9",
       "path": "legal/review.json",
       "role": "legal-review",
       "size": 42993
@@ -246,10 +246,10 @@
       "role": "manifest"
     },
     {
-      "digest": "2983f66187ee1c63e5f3b6eaa66a010997253f223ad7b94808d00209907651f9",
+      "digest": "7ebc5728480636ff2f34dee0ec2ef0ceb1dbf6862b8cf654a974932e10644590",
       "path": "metafile.json",
       "role": "metafile",
-      "size": 407720
+      "size": 407958
     }
   ],
   "build_entries": [
@@ -268,7 +268,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "52e5ab4d4a824925dc0a9690294ad1b27580356e383c42f0b1e463327d92bf2f",
+  "bundle_digest": "3ac59d3481a435801442a09761a104d49984a4b2fff9145ea7b58900a6823aba",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -4455,24 +4455,24 @@
       "size": 2873
     },
     {
-      "bytes_in_output": 14326,
-      "digest": "9869a5b87d45c44868d64f4de55d157e89e612870ca8cdcf8055fe2f6e4f0558",
+      "bytes_in_output": 14353,
+      "digest": "e282fab356366f3f45aadaaea0d4952e32a23acf39856e1971f6ad112e7d2c61",
       "key": "src/init/legacy-upgrade.ts",
       "origin": {
         "kind": "repository",
         "path": "src/init/legacy-upgrade.ts"
       },
-      "size": 17284
+      "size": 17374
     },
     {
-      "bytes_in_output": 11995,
-      "digest": "334412a9874a73dfb62053c758c6f2571482e0d819cf4cfa44de351cc71fd4c6",
+      "bytes_in_output": 12596,
+      "digest": "94cde2bb1a96af50fe2f62746ba98d8033341c2f50f24693b16aa5edd4ad74e1",
       "key": "src/init/registration.ts",
       "origin": {
         "kind": "repository",
         "path": "src/init/registration.ts"
       },
-      "size": 14284
+      "size": 15005
     },
     {
       "bytes_in_output": 5011,
@@ -4985,14 +4985,14 @@
       "size": 34348
     },
     {
-      "bytes_in_output": 5068,
-      "digest": "8a065f1f84ed8a3baeca36288b6750b6d97a4c56da9a4713bf4be5f1fbc51259",
+      "bytes_in_output": 5184,
+      "digest": "bc49d62e81d7eae67724f81ce4c14907394294b7cdfff3179678d6d8e47389b5",
       "key": "src/state/next-action.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/next-action.ts"
       },
-      "size": 7507
+      "size": 7624
     },
     {
       "bytes_in_output": 9542,
@@ -5005,14 +5005,14 @@
       "size": 8806
     },
     {
-      "bytes_in_output": 28877,
-      "digest": "3ebb64f03390c0e8347339e3fe99e244a5f87cb9f41b2bffcca5acb0e1133168",
+      "bytes_in_output": 29095,
+      "digest": "86e744e0d2c0dc8e5eefdc13ed8469a5a5a4d82be0638b60d1fcb36a08d52617",
       "key": "src/state/production.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/production.ts"
       },
-      "size": 24247
+      "size": 24512
     },
     {
       "bytes_in_output": 4650,
@@ -6303,7 +6303,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "52e5ab4d4a824925dc0a9690294ad1b27580356e383c42f0b1e463327d92bf2f",
+      "output_digest": "3ac59d3481a435801442a09761a104d49984a4b2fff9145ea7b58900a6823aba",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -6712,7 +6712,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "77f78f91f371c6ed41dcb43cc16541006af93f2a80a93f5ffc48c09eb9d170b7",
+      "output_digest": "b29193860007eecbe4bc05d694ae3fd88a96e2dc905d4fcc37bc2a5ee78f0f58",
       "output_path": "archflow-local.mjs"
     }
   ],
@@ -6788,7 +6788,7 @@
     }
   },
   "legal_review": {
-    "digest": "bb5512a18d38df8b6057c1bf8db6ac3b4e7e2f21f498656ea3272e3472c099a0",
+    "digest": "4f2a366bf0ebfdff1f1fa703831216ae9b06d1e3cb7114071fdc66c282d9cfe9",
     "payload_path": "legal/review.json",
     "source_path": "release/legal-review.json"
   },
@@ -6866,7 +6866,7 @@
       "size": 1060
     },
     {
-      "digest": "957b06c19dae4d960e8238ba9e99d26d5ef9cf407e68e4d48501dd78711749fe",
+      "digest": "38b7773ce4901d48f4845392c695758f60a12a0503c6b7fe6c281818ddf1a41c",
       "path": "release/evidence/focused-inert-reachability.json",
       "size": 910
     },
@@ -6876,12 +6876,12 @@
       "size": 424
     },
     {
-      "digest": "56c3aecdffc7aa6fd10c49d6803a2c2d52b21d8348b0d12aa2a66db9f56ef975",
+      "digest": "793485cc893c2305f7f2ce519110f7af3159cdcede4995d071ea79a576f793d6",
       "path": "release/evidence/user-risk-acceptance.json",
-      "size": 773
+      "size": 832
     },
     {
-      "digest": "bb5512a18d38df8b6057c1bf8db6ac3b4e7e2f21f498656ea3272e3472c099a0",
+      "digest": "4f2a366bf0ebfdff1f1fa703831216ae9b06d1e3cb7114071fdc66c282d9cfe9",
       "path": "release/legal-review.json",
       "size": 42993
     },
@@ -7116,9 +7116,9 @@
       "size": 3289
     },
     {
-      "digest": "c67d7c1eb45a54cc1087a9df5135dd8f2412b2aec4732e1730aee7c02f8e2e7e",
+      "digest": "2b99a09330c8feccd0d353f06c6830553e0c18461fbadcfe410948135ccc46d9",
       "path": "test/integration/mcp-stdio.test.ts",
-      "size": 11643
+      "size": 16675
     },
     {
       "digest": "dae39c5f090afb101fcf636e81614453a6ea1b5092788fe91d637658abde1b2f",

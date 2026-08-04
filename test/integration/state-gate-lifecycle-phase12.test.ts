@@ -14,9 +14,10 @@ import type { ConstitutionRegistry } from "../../src/contracts/constitution.js";
 import type { GateDecisionRecordV1, GateRequestV1 } from "../../src/contracts/durable-gate.js";
 import type { IntentReceiptV1 } from "../../src/contracts/durable-intent.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
-import { parseSafeCode, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parsePathSafeId, parseSafeCode, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import type { GateDecisionEnvelope, WaiverOriginRef } from "../../src/contracts/gates.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
+import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import { computeInputFingerprint, type InputFingerprintSubject } from "../../src/contracts/fingerprints.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
@@ -25,7 +26,7 @@ import { discoverWorktree, type RootBoundGitRunner } from "../../src/repository/
 import type { ResolvedPath, ResolvedTaskPath } from "../../src/repository/paths.js";
 import { AtomicReplaceError, createAtomicWriter, createProjectionWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "../../src/state/authority.js";
-import { importGateDecisions, openDurableGate, resolveDurableGate, runDurableGate, type GateLifecycleDependencies, type GateOpenInput } from "../../src/state/gates.js";
+import { advanceManualGate, importGateDecisions, openDurableGate, resolveDurableGate, runDurableGate, type GateLifecycleDependencies, type GateOpenInput } from "../../src/state/gates.js";
 import { readIntentReceipt, readTaskState } from "../../src/state/read.js";
 import type { TransactionDependencies } from "../../src/state/transaction.js";
 import type { SupplementalReviewOutcome } from "../../src/contracts/supplemental.js";
@@ -154,6 +155,34 @@ function gatePath(h: Harness): string { return join(h.authority.task_root, "gate
 function archivePath(h: Harness, gateId: string): string { return join(h.authority.task_root, "decisions", gateId, "decision.json"); }
 function reviewPath(h: Harness, gateId: string): string { return join(h.authority.task_root, "reviews", `${PHASE}.gate-counter.${gateId}.md`); }
 
+type RefusalPostcondition = Readonly<{
+  revision: number;
+  approvals: TaskStateV1["approvals"];
+  receipt: Uint8Array | undefined;
+}>;
+
+async function refusalPostcondition(h: Harness, intentId: string): Promise<RefusalPostcondition> {
+  const state = await readTaskState(h.authority.state);
+  if (state.kind !== "canonical") throw new Error("state unavailable");
+  const receiptPath = join(h.authority.task_root, "intents", `${intentId}.json`);
+  return {
+    revision: state.document.value.revision,
+    approvals: structuredClone(state.document.value.approvals),
+    receipt: existsSync(receiptPath) ? readFileSync(receiptPath) : undefined,
+  };
+}
+
+async function expectRefusalDidNotAdvance(
+  h: Harness,
+  intentId: string,
+  before: RefusalPostcondition,
+): Promise<void> {
+  const after = await refusalPostcondition(h, intentId);
+  expect(after.revision).toBe(before.revision);
+  expect(after.approvals).toEqual(before.approvals);
+  expect(after.receipt).toEqual(before.receipt);
+}
+
 function supplementalEvidence(request: GateRequestV1) {
   return {
     schema_version: "1",
@@ -224,7 +253,12 @@ function supplementalFor(h: Harness, gateId: GateOpenInput["intent_id"], evidenc
   return { action, review, accepted_triage_digest: D("4"), old_subject_digest: D("9"), new_subject_digest: D("8"), reason: "Superseded by revision" };
 }
 
-async function restoreFixture(h: Harness, changedInput: boolean): Promise<Readonly<{
+async function restoreFixture(
+  h: Harness,
+  changedInput: boolean,
+  scanner?: SecretScanner,
+  gitTracked = false,
+): Promise<Readonly<{
   input: GateOpenInput;
   dependencies: GateLifecycleDependencies;
   target: ResolvedPath;
@@ -255,7 +289,7 @@ async function restoreFixture(h: Harness, changedInput: boolean): Promise<Readon
     entries: [{
       path: repositoryPath, target, observed_before: currentCapture.observation,
       desired: { state: "present", file_type: "regular", mode: "100644", bytes: desired },
-      rollback: currentCapture.rollback, git_tracked: false, disposition: "collision",
+      rollback: currentCapture.rollback, git_tracked: gitTracked, disposition: "collision",
     }],
     collisions: [{ path: repositoryPath, path_class: "document" }],
     collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"],
@@ -271,7 +305,7 @@ async function restoreFixture(h: Harness, changedInput: boolean): Promise<Readon
       replaceSymlink: async (...args) => { writerEvents.push("replace-symlink"); await realWriter.replaceSymlink(...args); },
       remove: async (...args) => { writerEvents.push("remove"); await realWriter.remove(...args); },
     },
-    gate_secret_scanner: { scan: async (candidates) => ({ schema_version: "1", outcome: "clean", detector_set_id: parseSafeId("test"), scanned_paths: candidates.map((item) => item.virtual_path) }) },
+    gate_secret_scanner: scanner ?? { scan: async (candidates) => ({ schema_version: "1", outcome: "clean", detector_set_id: parseSafeId("test"), scanned_paths: candidates.map((item) => item.virtual_path) }) },
   };
   const context = {
     path: parseTaskPathClaim("phases/restored.md"), recorded_generation_digest: desiredDigest, current_generation_digest: currentDigest,
@@ -762,12 +796,18 @@ describe("Phase 12 durable gate lifecycle", () => {
 
   it("leaves a wrong-binding decision pending and rejects foreign manual import", async () => {
     const h = await harness();
-    const opened = await openDurableGate(h.dependencies, gateInput(h));
+    const input = gateInput(h);
+    const opened = await openDurableGate(h.dependencies, input);
     if (!opened.ok) throw new Error("gate open failed");
     writeFileSync(decisionPath(h), canonicalDocument({ ...envelope(opened.value.request.value), subject_digest: D("b") }).bytes);
+    const before = await refusalPostcondition(h, input.intent_id);
     const rejected = await resolveDurableGate(h.dependencies, h.authority, opened.value.gate_id);
     expect(rejected.ok).toBe(false);
-    if (!rejected.ok) expect(rejected.error.code).toBe("GATE_DECISION_INVALID");
+    if (!rejected.ok) {
+      expect(rejected.error.code).toBe("GATE_DECISION_INVALID");
+      expect(rejected.error.diagnostic.parameters).toMatchObject({ issue_code: "decision-binding-invalid" });
+    }
+    await expectRefusalDidNotAdvance(h, input.intent_id, before);
     const state = await readTaskState(h.authority.state);
     expect(state.kind).toBe("canonical");
     if (state.kind === "canonical") expect(state.document.value.open_gate?.gate_id).toBe(opened.value.gate_id);
@@ -782,6 +822,113 @@ describe("Phase 12 durable gate lifecycle", () => {
     } as GateDecisionRecordV1;
     const closedState = initialState(h.authority);
     expect(() => importGateDecisions(closedState, [{ request: foreignRequest, decision: foreignDecision }])).toThrow(/foreign/u);
+  });
+
+  it("refuses every unreadable decision shape without advancing durable authority", async () => {
+    for (const issueCode of ["decision-missing", "decision-noncanonical", "decision-invalid"] as const) {
+      const h = await harness();
+      const baseInput = gateInput(h, `refused-${issueCode}`);
+      const input: GateOpenInput = issueCode === "decision-invalid"
+        ? {
+            ...baseInput,
+            kind: "review-trigger",
+            context: {
+              matched_rules: [{ rule_id: "review-required", rule_version: 1 }],
+              uncertain_rules: [],
+              eligible_waiver_rules: [],
+              waiver_scope: { operation: "review-trigger", boundary: "subject" },
+            },
+          }
+        : baseInput;
+      const opened = await openDurableGate(h.dependencies, input);
+      if (!opened.ok) throw new Error("gate open failed");
+      if (issueCode === "decision-noncanonical") writeFileSync(decisionPath(h), "{not canonical json");
+      if (issueCode === "decision-invalid") {
+        const request = opened.value.request.value;
+        writeFileSync(decisionPath(h), canonicalDocument({
+          schema_version: "1", gate_id: request.gate_id, task_id: request.task_id,
+          phase_instance: request.phase_instance, kind: request.kind,
+          subject_digest: request.subject_digest, context_digest: request.context_digest,
+          human_provenance: PROVENANCE,
+          payload: { decision: "revise", reason: "Revise current artifact" },
+        }).bytes);
+      }
+      const before = await refusalPostcondition(h, input.intent_id);
+      let refused;
+      let observedLocks = 0;
+      if (issueCode === "decision-invalid") {
+        let locks = 0;
+        const dependencies: GateLifecycleDependencies = {
+          ...h.dependencies,
+          lock: {
+            runExclusive: async <T>(_root: ResolvedTaskPath, work: () => Promise<T>) => {
+              locks += 1;
+              observedLocks = locks;
+              if (locks === 3) writeFileSync(decisionPath(h), "{not canonical json");
+              return work();
+            },
+          },
+        };
+        refused = await runDurableGate(dependencies, { ...input, signal: new AbortController().signal });
+      } else {
+        refused = await resolveDurableGate(h.dependencies, h.authority, opened.value.gate_id);
+      }
+      expect(refused.ok, `${issueCode} locks=${observedLocks}`).toBe(false);
+      if (!refused.ok) {
+        expect(refused.error.code, issueCode).toBe("GATE_DECISION_INVALID");
+        expect(refused.error.diagnostic.parameters, issueCode).toMatchObject({ issue_code: issueCode });
+      }
+      await expectRefusalDidNotAdvance(h, input.intent_id, before);
+      expect(existsSync(archivePath(h, opened.value.gate_id))).toBe(false);
+    }
+  });
+
+  it("refuses competing gate identities at each active-gate entry arm", async () => {
+    const h = await harness();
+    const input = gateInput(h, "active-gate-owner");
+    const opened = await openDurableGate(h.dependencies, input);
+    if (!opened.ok) throw new Error("gate open failed");
+    const before = await refusalPostcondition(h, input.intent_id);
+
+    const competing = await openDurableGate(h.dependencies, gateInput(h, "active-gate-competitor"));
+    expect(competing).toMatchObject({ ok: false, error: { code: "GATE_ACTIVE" } });
+    await expectRefusalDidNotAdvance(h, input.intent_id, before);
+
+    const foreignGateId = parsePathSafeId("foreign-gate-id");
+    const foreignRoot = join(h.authority.task_root, "decisions", foreignGateId);
+    mkdirSync(foreignRoot, { recursive: true });
+    writeFileSync(join(foreignRoot, "request.json"), canonicalDocument(opened.value.request.value).bytes);
+    const wrongResolution = await resolveDurableGate(h.dependencies, h.authority, foreignGateId);
+    expect(wrongResolution).toMatchObject({ ok: false, error: { code: "GATE_ACTIVE" } });
+    await expectRefusalDidNotAdvance(h, input.intent_id, before);
+
+    const current = await readTaskState(h.authority.state);
+    if (current.kind !== "canonical") throw new Error("state unavailable");
+    const manual = await advanceManualGate({
+      dependencies: h.dependencies,
+      transaction_authority: h.authority,
+      manual_authority: {},
+      state: current.document.value,
+      action: {
+        kind: "publish",
+        selector: {
+          kind: "gate",
+          gate_kind: "artifact-approval",
+          summary: "Competing manual gate",
+          context: { artifact_kind: "phase-implementation" },
+        },
+      },
+      resolve_publish_material: () => ({
+        schema_version: "1",
+        ok: true,
+        value: {
+          subject_digest: opened.value.request.value.subject_digest,
+          current_evidence: opened.value.request.value.current_evidence,
+        },
+      }),
+    });
+    expect(manual).toMatchObject({ ok: false, error: { code: "GATE_ACTIVE" } });
+    await expectRefusalDidNotAdvance(h, input.intent_id, before);
   });
 
   it("binds waiver mode to the exact origin marker and scope for grant, denial, and cancellation", async () => {
@@ -1079,6 +1226,50 @@ describe("Phase 12 durable gate lifecycle", () => {
     expect(resolved.ok).toBe(true);
     expect(readFileSync(restore.target.absolute)).toEqual(Buffer.from(restore.desired));
     expect(restore.writerEvents).toEqual(["replace-regular"]);
+  });
+
+  it("rejects a secret detected while replanning discard-and-restore without advancing the gate", async () => {
+    const h = await harness();
+    const counter = { calls: 0 };
+    const scanner: SecretScanner = {
+      scan: async (candidates) => {
+        counter.calls += 1;
+        const candidate = candidates[0];
+        if (candidate === undefined) throw new TypeError("expected a restore projection candidate");
+        return {
+          schema_version: "1",
+          outcome: "detected",
+          detector_set_id: parseSafeId("phase20-test"),
+          findings: [{
+            detector_id: parseSafeId("test-secret"),
+            path_class: candidate.path_class,
+            virtual_path: candidate.virtual_path,
+            line: parseSafeInteger(1),
+            column: parseSafeInteger(1),
+          }],
+        };
+      },
+    };
+    const restore = await restoreFixture(h, false, scanner, true);
+    const opened = await openDurableGate(restore.dependencies, restore.input);
+    expect(opened.ok).toBe(true);
+    if (!opened.ok) return;
+    const beforeTarget = readFileSync(restore.target.absolute);
+    const beforeState = await refusalPostcondition(h, restore.input.intent_id);
+    writeFileSync(decisionPath(h), canonicalDocument(restoreEnvelope(opened.value.request.value, "discard-and-restore")).bytes);
+
+    const rejected = await runDurableGate(restore.dependencies, { ...restore.input, signal: new AbortController().signal });
+
+    expect(rejected.ok).toBe(false);
+    if (!rejected.ok) expect(rejected.error.code, JSON.stringify(rejected.error)).toBe("SECRET_DETECTED");
+    expect(counter.calls).toBe(1);
+    expect(restore.writerEvents).toEqual([]);
+    expect(readFileSync(restore.target.absolute)).toEqual(beforeTarget);
+    await expectRefusalDidNotAdvance(h, restore.input.intent_id, beforeState);
+    const state = await readTaskState(h.authority.state);
+    expect(state.kind).toBe("canonical");
+    if (state.kind === "canonical") expect(state.document.value.open_gate?.gate_id).toBe(opened.value.gate_id);
+    expect(existsSync(archivePath(h, opened.value.gate_id))).toBe(true);
   });
 
   it("rejects stale restore generations without a projection write", async () => {
