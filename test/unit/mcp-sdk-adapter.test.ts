@@ -141,6 +141,32 @@ describe("MCP SDK adapter", () => {
     await valid.handle.close();
   });
 
+  it("survives real recorded Claude Code clientInfo with extra fields through connection-ready", async () => {
+    // Recorded from Claude Code 2.1.221: initialize succeeds via the SDK, but connection-ready
+    // re-parses this clientInfo after initialized; a strict client schema killed the server here
+    // before tools/list could answer (Phase 21 Amendment 2).
+    const runtime = await harness();
+    runtime.send(initialize(0, {
+      name: "claude-code",
+      title: "Claude Code",
+      version: "2.1.221",
+      description: "Anthropic's agentic coding tool",
+      websiteUrl: "https://claude.com/claude-code"
+    }));
+    await runtime.waitForLines(1);
+    runtime.input.write(
+      `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n` +
+      `${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })}\n`
+    );
+    await runtime.waitForLines(2);
+    expect(JSON.parse(runtime.lines[1]!)).toEqual({
+      jsonrpc: "2.0",
+      id: 1,
+      result: { tools: ADVERTISED_TOOL_CATALOGUE }
+    });
+    await runtime.handle.close();
+  });
+
   it("recovers missing and non-object arguments at the authentic boundary", async () => {
     const runtime = await harness();
     await ready(runtime);

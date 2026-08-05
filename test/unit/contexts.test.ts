@@ -66,7 +66,14 @@ describe("transport-neutral contexts", () => {
       icons: [{ src: "https://example.test/icon.png", mimeType: "image/png", sizes: ["64x64"] }],
       websiteUrl: "https://example.test",
     } as const satisfies Implementation;
-    expect(() => parseClientImplementation(sdkImplementation)).toThrow();
+    // Hosts own their self-description: extra clientInfo fields are stripped, never fatal
+    // (Phase 21 Amendment 2). Real Claude Code sends title/description/websiteUrl.
+    const fromFull = parseClientImplementation(sdkImplementation);
+    expect(fromFull).toEqual({ name: "", version: sdkImplementation.version });
+    expect(Object.isFrozen(fromFull)).toBe(true);
+    expect(() => parseClientImplementation({ name: "client", version: 1 })).toThrow();
+    expect(() => parseClientImplementation({ name: "client" })).toThrow();
+
     const projected: { name: string; version: string } = { name: sdkImplementation.name, version: sdkImplementation.version };
     const parsed = parseClientImplementation(projected);
     projected.name = "changed";
@@ -77,7 +84,8 @@ describe("transport-neutral contexts", () => {
     expect(connection.initialization_candidates.client).toEqual(parsed);
     expect(connection.initialization_candidates.client).not.toBe(parsed);
     expect(Object.isFrozen(connection.initialization_candidates.client)).toBe(true);
-    expect(() => startup("connection-full-client").initialize(initialization(sdkImplementation))).toThrow();
+    const fullConnection = startup("connection-full-client").initialize(initialization(sdkImplementation));
+    expect(fullConnection.initialization_candidates.client).toEqual({ name: "", version: sdkImplementation.version });
   });
 
   it("rejects fake and spread invocation contexts and keeps the connection factory direct-only", () => {

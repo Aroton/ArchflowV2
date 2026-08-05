@@ -15,7 +15,10 @@ const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
 const text = z.string().min(1).max(4096).regex(/\S/u);
 const version = z.string().regex(/^[A-Za-z0-9.-]{1,64}$/u);
 const requestIdSchema = z.union([z.string(), z.number().int().safe()]);
-const clientImplementationSchema = z.object({ name: z.string(), version: z.string() }).strict();
+// Hosts own their self-description: real clients send extra clientInfo fields (Claude Code
+// 2.1.221 adds title/description/websiteUrl). Default Zod object parsing strips unknown keys,
+// so the durable ConnectionContext client shape stays exactly {name, version}.
+const clientImplementationSchema = z.object({ name: z.string(), version: z.string() });
 const startupSchema = z.object({ connection_id: id, startup_repository_candidate: z.object({ working_directory: text }).strict() }).strict();
 const initializationSchema = z.object({ client: clientImplementationSchema, host: z.enum(["claude", "codex", "unknown"]), protocol_version: version }).strict();
 const invocationSchema = z.object({ invocation_id: id, transport_metadata: z.object({ request_id: requestIdSchema, operation: z.literal("tools/call") }).strict() }).strict();

@@ -138,4 +138,24 @@ Edge cases to exercise deliberately: the unsupported-model slug path with a slug
 **Implemented 2026-08-04.** The benchmark and all four production rubrics now share the same blocking burden-of-proof and non-blocking advisory criteria while retaining their task-specific checks. The unchanged 12-run matrix produced four seeded detections, two misses of the same `LEASE_EXPIRED` defect, six clean controls, and zero false blockers. The user approved the observed thresholds bound to digest `e39457d0ffb34e0727dd085288dc968cda9182fc9bd508d5d5a2a323745f257f`; `VAL-02` passes with the two-direction miss recorded as a limitation.
 
 ---
-*Designed: 2026-08-04. Amendment 1 added 2026-08-04 after the first benchmark measurement.*
+
+## Amendment 2: Real-Host Client-Info Compatibility (2026-08-04)
+
+**Trigger.** VAL-01 is blocked: neither operator journey can start because the installed server dies during real-host tool discovery. Claude Code 2.1.221 reports `connected · tools fetch failed`; Codex 0.146.0 made two initialization attempts without reaching healthy status. The Phase 21 log's remaining-work list requires this fix to land in a newly approved implementation scope before the VAL-01 journeys, VAL-09 timeout observation, or VAL-12 manual journey can execute.
+
+**Diagnosis (root cause proven by one-variable reproduction).** `clientImplementationSchema` in `src/contracts/contexts.ts` is `z.object({ name, version }).strict()`. Claude Code 2.1.221 actually sends `clientInfo` as `{name, title, version, description, websiteUrl}`. `initialize` succeeds because the SDK owns that exchange, but on `notifications/initialized` the `connection-ready` action in `src/mcp/sdk-adapter.ts` replays the SDK's stored clientInfo through `startup.initialize(...)` → `initializationSchema.parse` → the strict client schema throws on the extra keys → the surrounding `catch` calls `terminate("protocol-fatal")` → the server prints `ARCHFLOW_MCP_TRANSPORT_ERROR` and exits 1 before answering `tools/list`. A frame-logging wrapper under a real `claude -p --strict-mcp-config` invocation captured the exact failing exchange (initialize → response → `initialized`+`tools/list` in one chunk → stderr diagnostic → exit 1, no response), and a paired driver reproduces it deterministically: full real clientInfo crashes; the same frames with `{name, version}` return the complete five-tool catalogue. This is also the probable cause of Codex's two failed attempts (Codex clientInfo shape to be confirmed during revalidation). Existing tests missed it because every harness sends minimal `{name, version}` clientInfo, and the Phase 21 negotiation probe recorded fields from the initialize *request*, which the crash postdates.
+
+**Decision.** Tolerate and project host-supplied clientInfo at the boundary instead of rejecting it: remove `.strict()` from `clientImplementationSchema` only. Zod 4's default object behavior strips unknown keys, so the parsed value — and therefore the durable `ConnectionContext.initialization_candidates.client` shape — remains exactly `{name, version}`; no persisted shape widens and no digest changes meaning. The outer `initializationSchema`/`startupSchema` stay strict because this runtime constructs those objects itself. `deriveHostIdentity` already matches on `name` alone and needs no change. No weakening of any other validation: hosts own their self-description; every other strict boundary validates values this codebase authors.
+
+**Scope.**
+
+1. `src/contracts/contexts.ts`: the one-schema change above.
+2. Regression tests: drive the runtime with the recorded real Claude Code clientInfo bytes through the exact failing frame pattern (`initialized` + `tools/list` in one chunk after initialize) and assert the catalogue answers; keep a minimal-clientInfo case. Place alongside the existing suites in `test/unit/mcp-sdk-adapter.test.ts` / `test/integration/mcp-stdio.test.ts`.
+3. Rebuild and republish the tracked bundle (`dist/`, manifest and digests) through the existing `npm run check` reproduction gate; reinstall to `~/.archflow/bundle`.
+4. Revalidation, in order: real-host tool-discovery health for both clients (recording Codex's actual clientInfo shape); then the blocked Phase 21 items — VAL-01 operator journeys per `docs/real-host-journeys.md` (human-driven, all gates stop for the user), VAL-09 pending-call timeout observation, VAL-12 server-absent/manual journey. Update `docs/release-validation.md` rows and the Phase 21 log from observed results only.
+5. Out of scope: any tools/list catalogue-size change (the 1.3 MB catalogue transferred cleanly once clientInfo parsed), any other schema loosening, and VAL-16 (remains partial by explicit user decision).
+
+**Stopping rule.** If revalidation shows a second independent host incompatibility beyond clientInfo shape, record it as a new finding and stop for user direction rather than widening this amendment.
+
+---
+*Designed: 2026-08-04. Amendment 1 added 2026-08-04 after the first benchmark measurement. Amendment 2 added 2026-08-04 after root-causing the real-host tool-discovery failure.*

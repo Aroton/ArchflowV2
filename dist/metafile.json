@@ -5282,7 +5282,7 @@
       ]
     },
     "src/contracts/contexts.ts": {
-      "bytes": 4800,
+      "bytes": 5058,
       "format": "esm",
       "imports": [
         {
@@ -12444,7 +12444,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2773983,
+      "bytes": 2773974,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13664,7 +13664,7 @@
           "bytesInOutput": 2351
         },
         "src/contracts/contexts.ts": {
-          "bytesInOutput": 3281
+          "bytesInOutput": 3272
         },
         "src/contracts/durable-checkpoint.ts": {
           "bytesInOutput": 11550
