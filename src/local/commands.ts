@@ -21,9 +21,9 @@ import { createJsonSchemaValidator } from "../contracts/validators.js";
 import maintenanceRecordSchema from "../contracts/schemas/v1/maintenance-record.schema.json" with { type: "json" };
 import primitivesSchema from "../contracts/schemas/v1/primitives.schema.json" with { type: "json" };
 import pathClaimSchema from "../contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
-import { gateCounterReviewClaim, gateRequestClaim, gateSupplementalReviewClaim, openResolved, resolveTaskPath } from "../repository/paths.js";
+import { gateCounterReviewClaim, gateRequestClaim, gateSupplementalReviewClaim, openResolved, resolveTaskPath, type ResolvedTaskPath } from "../repository/paths.js";
 import { createManualGateFile, writeGateDecisionInterface } from "../state/gates.js";
-import { ensureDecisionDirectory, ensureManualCheckpointDirectory } from "../state/layout.js";
+import { ensureDecisionDirectory, ensureManualCheckpointDirectory, ensureTaskProjectionParent } from "../state/layout.js";
 import { ensurePayloadParent, ensureResultDirectory } from "../state/layout.js";
 import { computeMaintenanceProof, performMaintenance } from "../state/maintenance.js";
 import { enumerateMaintenanceCandidates, enumerateMaintenanceManifests, enumerateMaintenanceRoots } from "../state/maintenance-roots.js";
@@ -171,6 +171,7 @@ async function gateCounter(input: CommandInput): Promise<PlainJsonValue | Projec
   const projection = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateCounterReviewClaim(record.phase_instance, record.gate_id), expectedClass: "review", context: authority.context });
   if (!projection.ok) return projection;
   if (dependencies.projection_writer === undefined) throw new TypeError("projection writer is unavailable");
+  await ensureTaskProjectionParent(authority, projection.value.absolute as ResolvedTaskPath);
   await dependencies.projection_writer.replaceRegular(projection.value, reviewProjection, false);
   return { record_digest: document.digest, projection_digest: record.projection_digest, installation };
 }

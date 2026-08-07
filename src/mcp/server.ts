@@ -12,6 +12,7 @@ import {
 } from "../contracts/mcp-tools.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { isToolName, type ToolName } from "../contracts/tool-names.js";
+import { reportInternalError } from "./diagnostics.js";
 
 export type ToolHandler<K extends ToolName> = (
   call: Extract<ParsedToolCall, { readonly name: K }>,
@@ -117,7 +118,8 @@ function invalidInput<K extends ToolName>(tool: K, issueCode: string): ToolBound
   return projectFailure(tool, "CONTRACT_INVALID", { tool, issue_code: issueCode });
 }
 
-function internalFailure<K extends ToolName>(tool: K, context: InvocationContext): ToolBoundaryOutcome {
+function internalFailure<K extends ToolName>(tool: K, context: InvocationContext, error: unknown): ToolBoundaryOutcome {
+  reportInternalError(context.invocation_id, error);
   return projectFailure(tool, "INTERNAL_ERROR", { correlation_id: context.invocation_id });
 }
 
@@ -211,16 +213,16 @@ export function createToolBoundary(handlers: ToolHandlerRegistry): ToolBoundary 
       let returned: unknown;
       try {
         returned = await handler(classified.call, context);
-      } catch {
-        return internalFailure(name, context);
+      } catch (error) {
+        return internalFailure(name, context, error);
       }
 
       try {
         validateProjectResultStructure(classified.call, returned);
         const copied = copyJson(returned as PlainJsonValue);
         return projectOutcome(name, validateProjectResultStructure(classified.call, copied));
-      } catch {
-        return internalFailure(name, context);
+      } catch (error) {
+        return internalFailure(name, context, error);
       }
     }
   };

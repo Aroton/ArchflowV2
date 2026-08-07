@@ -36987,12 +36987,14 @@ var AtomicReplaceError = class extends Error {
   operation;
   target_may_have_changed;
   collision;
+  errno;
   constructor(input) {
     super(`atomic ${input.operation} failed`);
     this.name = "AtomicReplaceError";
     this.operation = input.operation;
     this.target_may_have_changed = input.target_may_have_changed;
     this.collision = input.collision;
+    if (input.errno !== void 0) this.errno = input.errno;
   }
 };
 function errnoOf2(error51) {
@@ -37036,7 +37038,8 @@ async function createExclusive(path2, bytes) {
     throw new AtomicReplaceError({
       operation: "create-exclusive",
       target_may_have_changed: linkAttempted,
-      collision: errnoOf2(error51) === "EEXIST"
+      collision: errnoOf2(error51) === "EEXIST",
+      errno: errnoOf2(error51)
     });
   } finally {
     if (handle !== void 0) {
@@ -37062,7 +37065,8 @@ async function removeGateInterface(path2) {
       throw new AtomicReplaceError({
         operation: "replace",
         target_may_have_changed: false,
-        collision: false
+        collision: false,
+        errno: errnoOf2(error51)
       });
     }
   }
@@ -37095,8 +37099,13 @@ async function replaceRegularBytes(target2, bytes, mode) {
     handle = void 0;
     renameAttempted = true;
     await rename(temporary, target2);
-  } catch {
-    throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: renameAttempted, collision: false });
+  } catch (error51) {
+    throw new AtomicReplaceError({
+      operation: "replace",
+      target_may_have_changed: renameAttempted,
+      collision: false,
+      errno: errnoOf2(error51)
+    });
   } finally {
     await handle?.close().catch(() => void 0);
     await unlink(temporary).catch(() => void 0);
@@ -37115,8 +37124,13 @@ async function replaceSymlink(path2, target2) {
     created = true;
     await rename(temporary, path2.absolute);
     created = false;
-  } catch {
-    throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: created, collision: false });
+  } catch (error51) {
+    throw new AtomicReplaceError({
+      operation: "replace",
+      target_may_have_changed: created,
+      collision: false,
+      errno: errnoOf2(error51)
+    });
   } finally {
     if (created) await unlink(temporary).catch(() => void 0);
   }
@@ -37127,7 +37141,12 @@ async function remove(path2) {
     await unlink(path2.absolute);
   } catch (error51) {
     if (errnoOf2(error51) !== "ENOENT") {
-      throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: false, collision: false });
+      throw new AtomicReplaceError({
+        operation: "replace",
+        target_may_have_changed: false,
+        collision: false,
+        errno: errnoOf2(error51)
+      });
     }
   }
 }
@@ -37268,12 +37287,14 @@ import { constants as fsConstants2 } from "node:fs";
 import { lstat, mkdir } from "node:fs/promises";
 import { isAbsolute as isAbsolute2, join as join3, relative as relative2, sep as sep2 } from "node:path";
 var ResultLayoutError = class extends Error {
-  constructor(stage) {
+  constructor(stage, errno3) {
     super(`result layout ${stage} failed`);
     this.stage = stage;
     this.name = "ResultLayoutError";
+    if (errno3 !== void 0) this.errno = errno3;
   }
   stage;
+  errno;
 };
 var DecisionLayoutError = class extends Error {
   constructor(stage) {
@@ -37323,7 +37344,7 @@ async function ensureRealDirectory(path2) {
   try {
     await mkdir(path2);
   } catch (error51) {
-    if (errnoOf3(error51) !== "EEXIST") throw new ResultLayoutError("create");
+    if (errnoOf3(error51) !== "EEXIST") throw new ResultLayoutError("create", errnoOf3(error51));
   }
   const directoryFlag = fsConstants2.O_DIRECTORY ?? 0;
   let handle;
@@ -37334,7 +37355,7 @@ async function ensureRealDirectory(path2) {
     if (!(await handle.stat()).isDirectory()) throw new ResultLayoutError("verify");
   } catch (error51) {
     if (error51 instanceof ResultLayoutError) throw error51;
-    throw new ResultLayoutError("verify");
+    throw new ResultLayoutError("verify", errnoOf3(error51));
   } finally {
     await handle?.close().catch(() => void 0);
   }
@@ -45046,6 +45067,12 @@ function reduceAuthenticatedManualChain(input) {
 
 // src/state/transaction.ts
 var MAX_RECEIPT_BYTES = 1024 * 1024;
+var PERMANENT_PROJECTION_ISSUES = Object.freeze({
+  ENOENT: "projection-parent-missing",
+  ENOTDIR: "projection-parent-not-directory",
+  EACCES: "projection-target-access-denied",
+  EPERM: "projection-target-access-denied"
+});
 
 // src/contracts/internal/test-capabilities.ts
 function createVerifiedEvidenceReference(evidence) {
@@ -52036,6 +52063,7 @@ async function gateCounter(input) {
   const projection = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateCounterReviewClaim(record3.phase_instance, record3.gate_id), expectedClass: "review", context: authority.context });
   if (!projection.ok) return projection;
   if (dependencies.projection_writer === void 0) throw new TypeError("projection writer is unavailable");
+  await ensureTaskProjectionParent(authority, projection.value.absolute);
   await dependencies.projection_writer.replaceRegular(projection.value, reviewProjection, false);
   return { record_digest: document2.digest, projection_digest: record3.projection_digest, installation };
 }

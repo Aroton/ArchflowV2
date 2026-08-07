@@ -167,6 +167,16 @@ describe("createAtomicWriter.replace", () => {
     });
   });
 
+  it("preserves the underlying errno when the replace target parent is missing", async () => {
+    const root = await temporaryRoot();
+    const target = join(root, "missing", "state.json");
+
+    const error = await atomicFailure(
+      createAtomicWriter().replace(resolved(target, "task-state"), new Uint8Array([1])),
+    );
+    expect(error.errno).toBe("ENOENT");
+  });
+
   it("marks failures after the rename attempt as potentially changed", async () => {
     const root = await temporaryRoot();
     const target = join(root, "state.json");

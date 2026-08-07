@@ -15,9 +15,12 @@ export class IntentLayoutError extends Error {
 }
 
 export class ResultLayoutError extends Error {
-  public constructor(public readonly stage: "create" | "verify") {
+  public readonly errno?: string;
+
+  public constructor(public readonly stage: "create" | "verify", errno?: string | undefined) {
     super(`result layout ${stage} failed`);
     this.name = "ResultLayoutError";
+    if (errno !== undefined) this.errno = errno;
   }
 }
 
@@ -123,7 +126,7 @@ async function ensureRealDirectory(path: ResolvedTaskPath): Promise<void> {
   try {
     await mkdir(path);
   } catch (error) {
-    if (errnoOf(error) !== "EEXIST") throw new ResultLayoutError("create");
+    if (errnoOf(error) !== "EEXIST") throw new ResultLayoutError("create", errnoOf(error));
   }
   const directoryFlag = (fsConstants as { O_DIRECTORY?: number }).O_DIRECTORY ?? 0;
   let handle;
@@ -134,7 +137,7 @@ async function ensureRealDirectory(path: ResolvedTaskPath): Promise<void> {
     if (!(await handle.stat()).isDirectory()) throw new ResultLayoutError("verify");
   } catch (error) {
     if (error instanceof ResultLayoutError) throw error;
-    throw new ResultLayoutError("verify");
+    throw new ResultLayoutError("verify", errnoOf(error));
   } finally {
     await handle?.close().catch(() => undefined);
   }

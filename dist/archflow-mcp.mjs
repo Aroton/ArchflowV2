@@ -48730,6 +48730,14 @@ function correlateProjectResult(call, expectation, result) {
   return result;
 }
 
+// src/mcp/diagnostics.ts
+function reportInternalError(correlationId, error51) {
+  const detail = error51 instanceof Error ? error51.stack ?? error51.message : String(error51);
+  process.stderr.write(`archflow INTERNAL_ERROR correlation_id=${correlationId}
+${detail}
+`);
+}
+
 // src/mcp/server.ts
 var protocolErrors = /* @__PURE__ */ new WeakSet();
 var boundaries = /* @__PURE__ */ new WeakSet();
@@ -48778,7 +48786,8 @@ function projectFailure(tool2, code, parameters) {
 function invalidInput(tool2, issueCode) {
   return projectFailure(tool2, "CONTRACT_INVALID", { tool: tool2, issue_code: issueCode });
 }
-function internalFailure(tool2, context2) {
+function internalFailure(tool2, context2, error51) {
+  reportInternalError(context2.invocation_id, error51);
   return projectFailure(tool2, "INTERNAL_ERROR", { correlation_id: context2.invocation_id });
 }
 function copyRegistry(handlers) {
@@ -48862,15 +48871,15 @@ function createToolBoundary(handlers) {
       let returned;
       try {
         returned = await handler(classified.call, context2);
-      } catch {
-        return internalFailure(name, context2);
+      } catch (error51) {
+        return internalFailure(name, context2, error51);
       }
       try {
         validateProjectResultStructure(classified.call, returned);
         const copied = copyJson(returned);
         return projectOutcome(name, validateProjectResultStructure(classified.call, copied));
-      } catch {
-        return internalFailure(name, context2);
+      } catch (error51) {
+        return internalFailure(name, context2, error51);
       }
     }
   };
@@ -55171,12 +55180,14 @@ var AtomicReplaceError = class extends Error {
   operation;
   target_may_have_changed;
   collision;
+  errno;
   constructor(input) {
     super(`atomic ${input.operation} failed`);
     this.name = "AtomicReplaceError";
     this.operation = input.operation;
     this.target_may_have_changed = input.target_may_have_changed;
     this.collision = input.collision;
+    if (input.errno !== void 0) this.errno = input.errno;
   }
 };
 function errnoOf2(error51) {
@@ -55220,7 +55231,8 @@ async function createExclusive(path2, bytes) {
     throw new AtomicReplaceError({
       operation: "create-exclusive",
       target_may_have_changed: linkAttempted,
-      collision: errnoOf2(error51) === "EEXIST"
+      collision: errnoOf2(error51) === "EEXIST",
+      errno: errnoOf2(error51)
     });
   } finally {
     if (handle !== void 0) {
@@ -55246,7 +55258,8 @@ async function removeGateInterface(path2) {
       throw new AtomicReplaceError({
         operation: "replace",
         target_may_have_changed: false,
-        collision: false
+        collision: false,
+        errno: errnoOf2(error51)
       });
     }
   }
@@ -55279,8 +55292,13 @@ async function replaceRegularBytes(target2, bytes, mode) {
     handle = void 0;
     renameAttempted = true;
     await rename(temporary, target2);
-  } catch {
-    throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: renameAttempted, collision: false });
+  } catch (error51) {
+    throw new AtomicReplaceError({
+      operation: "replace",
+      target_may_have_changed: renameAttempted,
+      collision: false,
+      errno: errnoOf2(error51)
+    });
   } finally {
     await handle?.close().catch(() => void 0);
     await unlink(temporary).catch(() => void 0);
@@ -55299,8 +55317,13 @@ async function replaceSymlink(path2, target2) {
     created = true;
     await rename(temporary, path2.absolute);
     created = false;
-  } catch {
-    throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: created, collision: false });
+  } catch (error51) {
+    throw new AtomicReplaceError({
+      operation: "replace",
+      target_may_have_changed: created,
+      collision: false,
+      errno: errnoOf2(error51)
+    });
   } finally {
     if (created) await unlink(temporary).catch(() => void 0);
   }
@@ -55311,7 +55334,12 @@ async function remove(path2) {
     await unlink(path2.absolute);
   } catch (error51) {
     if (errnoOf2(error51) !== "ENOENT") {
-      throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: false, collision: false });
+      throw new AtomicReplaceError({
+        operation: "replace",
+        target_may_have_changed: false,
+        collision: false,
+        errno: errnoOf2(error51)
+      });
     }
   }
 }
@@ -55460,12 +55488,14 @@ var IntentLayoutError = class extends Error {
   stage;
 };
 var ResultLayoutError = class extends Error {
-  constructor(stage) {
+  constructor(stage, errno) {
     super(`result layout ${stage} failed`);
     this.stage = stage;
     this.name = "ResultLayoutError";
+    if (errno !== void 0) this.errno = errno;
   }
   stage;
+  errno;
 };
 var DecisionLayoutError = class extends Error {
   constructor(stage) {
@@ -55539,7 +55569,7 @@ async function ensureRealDirectory(path2) {
   try {
     await mkdir(path2);
   } catch (error51) {
-    if (errnoOf3(error51) !== "EEXIST") throw new ResultLayoutError("create");
+    if (errnoOf3(error51) !== "EEXIST") throw new ResultLayoutError("create", errnoOf3(error51));
   }
   const directoryFlag = fsConstants2.O_DIRECTORY ?? 0;
   let handle;
@@ -55550,7 +55580,7 @@ async function ensureRealDirectory(path2) {
     if (!(await handle.stat()).isDirectory()) throw new ResultLayoutError("verify");
   } catch (error51) {
     if (error51 instanceof ResultLayoutError) throw error51;
-    throw new ResultLayoutError("verify");
+    throw new ResultLayoutError("verify", errnoOf3(error51));
   } finally {
     await handle?.close().catch(() => void 0);
   }
@@ -55573,6 +55603,17 @@ async function ensurePayloadParent(authority, digest11, target2) {
   const rel = relative2(root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) throw new TypeError("payload parent escaped result directory");
   await mkdir(parent, { recursive: true });
+}
+async function ensureTaskProjectionParent(authority, target2) {
+  assertInternalTransactionAuthority(authority);
+  const parent = join3(target2, "..");
+  const rel = relative2(authority.task_root, parent);
+  if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) return;
+  let current = authority.task_root;
+  for (const part of rel.split(sep2).filter((candidate) => candidate !== "" && candidate !== ".")) {
+    current = join3(current, part);
+    await ensureRealDirectory(current);
+  }
 }
 
 // src/state/checkpoints.ts
@@ -63408,6 +63449,22 @@ function taskIssue(task_id, issue_code) {
 function io3(authority, operation) {
   return fail9(createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt }));
 }
+var PERMANENT_PROJECTION_ISSUES = Object.freeze({
+  ENOENT: "projection-parent-missing",
+  ENOTDIR: "projection-parent-not-directory",
+  EACCES: "projection-target-access-denied",
+  EPERM: "projection-target-access-denied"
+});
+function projectionWriteFailure(error51, authority, task_id) {
+  if (error51 instanceof ResultLayoutError && error51.stage === "verify") {
+    return taskIssue(task_id, "projection-parent-not-directory");
+  }
+  if (error51 instanceof ResultLayoutError || error51 instanceof AtomicReplaceError) {
+    const issue4 = error51.errno === void 0 ? void 0 : PERMANENT_PROJECTION_ISSUES[error51.errno];
+    return issue4 === void 0 ? io3(authority, "result-projection-apply") : taskIssue(task_id, issue4);
+  }
+  return void 0;
+}
 function mismatch(expected_digest, observed_digest) {
   return fail9(createProjectError("INTENT_MISMATCH", { expected_digest, observed_digest }));
 }
@@ -63900,7 +63957,17 @@ async function installResultFacts(dependencies, authority, current, facts, repla
     facts.plan.worktree_root
   );
   if (!installed.ok) return installed;
-  const projected = await applyProjectionPlan(dependencies.projection_writer, facts.plan.projection_plan);
+  let projected;
+  try {
+    for (const entry of facts.plan.projection_plan.entries) {
+      await ensureTaskProjectionParent(authority, entry.target.absolute);
+    }
+    projected = await applyProjectionPlan(dependencies.projection_writer, facts.plan.projection_plan);
+  } catch (error51) {
+    const classified = projectionWriteFailure(error51, authority, current.value.task_id);
+    if (classified === void 0) throw error51;
+    return classified;
+  }
   if (projected.outcome !== "applied") {
     return fail9(createProjectError("SNAPSHOT_INVALID", {
       snapshot_digest: facts.plan.prepared.manifest.value.snapshot_digest,
@@ -66581,6 +66648,7 @@ async function mapHandlerErrors(correlationId, run) {
       return Object.freeze({ schema_version: "1", ok: false, error: projectError });
     }
     if (error51 instanceof TypeError) throw error51;
+    reportInternalError(correlationId, error51);
     return Object.freeze({
       schema_version: "1",
       ok: false,

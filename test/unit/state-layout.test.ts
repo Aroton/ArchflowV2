@@ -11,7 +11,8 @@ import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/con
 import { createGitRunner, preflightGit, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "../../src/state/authority.js";
-import { ensureAttemptDirectory, ensureDecisionDirectory, ensureIntentDirectory, ensureManualCheckpointDirectory, type DecisionLayoutError, type IntentLayoutError } from "../../src/state/layout.js";
+import { ensureAttemptDirectory, ensureDecisionDirectory, ensureIntentDirectory, ensureManualCheckpointDirectory, ensureTaskProjectionParent, type DecisionLayoutError, type IntentLayoutError, type ResultLayoutError } from "../../src/state/layout.js";
+import type { ResolvedTaskPath } from "../../src/repository/paths.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -104,6 +105,43 @@ describe("decision directory layout", () => {
     symlinkSync(external, join(second.value.task_root, "decisions", "gate-1"), "dir");
     await expect(ensureDecisionDirectory(second.value, parsePathSafeId("gate-1")))
       .rejects.toMatchObject({ stage: "verify" } satisfies Partial<DecisionLayoutError>);
+  });
+});
+
+describe("projection parent layout", () => {
+  it("creates nested projection parents inside the task root idempotently", async () => {
+    const { value } = await authority();
+    const target = join(value.task_root, "reviews", "prd.self.md") as ResolvedTaskPath;
+    await ensureTaskProjectionParent(value, target);
+    await ensureTaskProjectionParent(value, target);
+    expect((await lstat(join(value.task_root, "reviews"))).isDirectory()).toBe(true);
+
+    const nested = join(value.task_root, "results", "extra", "deep.md") as ResolvedTaskPath;
+    await ensureTaskProjectionParent(value, nested);
+    expect((await lstat(join(value.task_root, "results", "extra"))).isDirectory()).toBe(true);
+  });
+
+  it("leaves projection targets outside the task root untouched", async () => {
+    const { root, value } = await authority();
+    const outside = join(root, "src", "generated.ts") as ResolvedTaskPath;
+    await ensureTaskProjectionParent(value, outside);
+    await expect(lstat(join(root, "src"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects a symlinked parent segment with a verify-stage error carrying no filesystem path", async () => {
+    const external = realpathSync(mkdtempSync(join(tmpdir(), "archflow-projection-layout-target-")));
+    roots.push(external);
+    const { value } = await authority();
+    symlinkSync(external, join(value.task_root, "reviews"), "dir");
+    const target = join(value.task_root, "reviews", "prd.self.md") as ResolvedTaskPath;
+    try {
+      await ensureTaskProjectionParent(value, target);
+      throw new Error("expected ensureTaskProjectionParent to reject");
+    } catch (error) {
+      expect(error).toMatchObject({ stage: "verify" } satisfies Partial<ResultLayoutError>);
+      expect((error as Error).message).not.toContain(value.task_root);
+    }
+    expect((await lstat(join(value.task_root, "reviews"))).isSymbolicLink()).toBe(true);
   });
 });
 

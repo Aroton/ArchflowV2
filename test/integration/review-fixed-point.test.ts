@@ -460,9 +460,6 @@ async function prepareEvidence(
     await mkdir(dirname(payload.target.absolute), { recursive: true });
   }
   await mkdir(dirname(prepared.value.manifest_target.absolute), { recursive: true });
-  for (const entry of prepared.value.projection_plan.entries) {
-    await mkdir(dirname(entry.target.absolute), { recursive: true });
-  }
   return prepared.value;
 }
 
@@ -740,9 +737,6 @@ async function commitCounter(
           await mkdir(dirname(payload.target.absolute), { recursive: true });
         }
         await mkdir(dirname(prepared.value.manifest_target.absolute), { recursive: true });
-        for (const entry of prepared.value.projection_plan.entries) {
-          await mkdir(dirname(entry.target.absolute), { recursive: true });
-        }
       }
       return prepared;
     },
@@ -1071,9 +1065,6 @@ async function commitAdjudication(
           await mkdir(dirname(payload.target.absolute), { recursive: true });
         }
         await mkdir(dirname(prepared.value.manifest_target.absolute), { recursive: true });
-        for (const entry of prepared.value.projection_plan.entries) {
-          await mkdir(dirname(entry.target.absolute), { recursive: true });
-        }
       }
       return prepared;
     },

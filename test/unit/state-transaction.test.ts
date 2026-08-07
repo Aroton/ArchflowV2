@@ -958,6 +958,65 @@ describe("mature state transaction kernel", () => {
     expect(readFileSync(target.absolute)).toEqual(Buffer.from(desired));
   });
 
+  async function projectionWriteResult(h: Harness, thrown: AtomicReplaceError) {
+    h.dependencies = { ...h.dependencies, projection_writer: {
+      replaceRegular: async () => { throw thrown; },
+      replaceSymlink: async () => undefined,
+      remove: async () => undefined,
+    } };
+    const parsed = call(7, "succeeded", "intent-1", true);
+    const base = preparer(h, parsed);
+    const desired = new TextEncoder().encode("projected\n");
+    const targetPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/phases/phase-9-output.md`);
+    const target: ResolvedPath = { absolute: join(h.root, targetPath) as ResolvedTaskPath, repositoryRelative: targetPath, path_class: "document" };
+    const snapshot = documentResultFixture(h, desired);
+    const reference = { phase_instance: PHASE, step: "produce" as const, result_digest: snapshot.prepared.result_digest,
+      result_id: parseSafeId("state:8"), input_fingerprint: FINGERPRINT, manifest_path: snapshot.manifestPath };
+    return runStateTransaction(h.dependencies, request(h.authority, parsed), async (current, identified) => {
+      const transaction = await base(current, identified);
+      if (!transaction.ok) return transaction;
+      return { ...transaction, value: { ...transaction.value,
+        next_state: { ...transaction.value.next_state, authoritative_results: [reference] },
+        result_installation: prepareResultInstallation({
+          reference,
+          prepared: snapshot.prepared,
+          manifest_target: snapshot.manifestTarget,
+          projection_plan: {
+            entries: [{ path: targetPath, target, observed_before: { state: "absent" },
+              desired: { state: "present", file_type: "regular", mode: "100644", bytes: desired }, disposition: "restore-ready" }],
+            collisions: [], collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"],
+          },
+          worktree_root: h.runner.location.worktreeRoot as ResolvedTaskPath,
+        }),
+      } };
+    });
+  }
+
+  it("classifies a permanent projection write failure as non-retryable task damage", async () => {
+    const h = await harness();
+    const result = await projectionWriteResult(h, new AtomicReplaceError({
+      operation: "replace", target_may_have_changed: false, collision: false, errno: "EACCES",
+    }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("TASK_INVALID");
+    expect(result.error.retryable).toBe(false);
+    expect(result.error.diagnostic.parameters).toMatchObject({ issue_code: "projection-target-access-denied" });
+  });
+
+  it("keeps unclassifiable projection write failures retryable", async () => {
+    for (const errno of ["EIO", undefined] as const) {
+      const h = await harness();
+      const result = await projectionWriteResult(h, new AtomicReplaceError({
+        operation: "replace", target_may_have_changed: false, collision: false, errno,
+      }));
+      expect(result.ok, String(errno)).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code, String(errno)).toBe("IO_ERROR");
+      expect(result.error.retryable, String(errno)).toBe(true);
+    }
+  });
+
   it("runs CAS before receipt/config and requires refreshed CAS for exact replay", async () => {
     const h = await harness();
     const original = call(7);

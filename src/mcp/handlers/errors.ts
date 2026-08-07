@@ -6,6 +6,7 @@ import { DispatchProcessError } from "../../dispatch/process.js";
 import { DispatchRoutingError } from "../../dispatch/routing.js";
 import { AdjudicationServiceError } from "../../review/adjudication.js";
 import { ReviewEnvelopeError } from "../../review/envelopes.js";
+import { reportInternalError } from "../diagnostics.js";
 
 type TypedProjectError =
   | DispatchRoutingError
@@ -41,6 +42,7 @@ export async function mapHandlerErrors<K extends ToolName>(
       return Object.freeze({ schema_version: "1", ok: false, error: projectError });
     }
     if (error instanceof TypeError) throw error;
+    reportInternalError(correlationId, error);
     return Object.freeze({
       schema_version: "1",
       ok: false,

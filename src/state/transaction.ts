@@ -47,9 +47,11 @@ import type { InputFingerprintResolver } from "./fingerprint.js";
 import { identifyTransactionRequest } from "./request.js";
 import {
   IntentLayoutError,
+  ResultLayoutError,
   ensureIntentDirectory,
   ensurePayloadParent,
   ensureResultDirectory,
+  ensureTaskProjectionParent,
 } from "./layout.js";
 import { assertInternalCheckpointAdoptionPlan } from "./checkpoints.js";
 import type {
@@ -206,6 +208,34 @@ function taskIssue(task_id: TaskStateV1["task_id"], issue_code: string): Project
 
 function io(authority: TransactionAuthority, operation: string): ProjectResult<never> {
   return fail(createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt }));
+}
+
+const PERMANENT_PROJECTION_ISSUES: Readonly<Record<string, string>> = Object.freeze({
+  ENOENT: "projection-parent-missing",
+  ENOTDIR: "projection-parent-not-directory",
+  EACCES: "projection-target-access-denied",
+  EPERM: "projection-target-access-denied",
+});
+
+/**
+ * Classifies a projection-parent or projection-write failure without leaking
+ * filesystem paths: permanent conditions become non-retryable TASK_INVALID
+ * issue codes, everything else stays retryable IO_ERROR. Returns undefined for
+ * errors that are not filesystem outcomes so the caller can rethrow them.
+ */
+function projectionWriteFailure(
+  error: unknown,
+  authority: TransactionAuthority,
+  task_id: TaskStateV1["task_id"],
+): ProjectResult<never> | undefined {
+  if (error instanceof ResultLayoutError && error.stage === "verify") {
+    return taskIssue(task_id, "projection-parent-not-directory");
+  }
+  if (error instanceof ResultLayoutError || error instanceof AtomicReplaceError) {
+    const issue = error.errno === undefined ? undefined : PERMANENT_PROJECTION_ISSUES[error.errno];
+    return issue === undefined ? io(authority, "result-projection-apply") : taskIssue(task_id, issue);
+  }
+  return undefined;
 }
 
 function mismatch(expected_digest: Sha256Digest, observed_digest: Sha256Digest): ProjectResult<never> {
@@ -847,7 +877,17 @@ async function installResultFacts(
     facts.plan.worktree_root,
   );
   if (!installed.ok) return installed;
-  const projected = await applyProjectionPlan(dependencies.projection_writer, facts.plan.projection_plan);
+  let projected;
+  try {
+    for (const entry of facts.plan.projection_plan.entries) {
+      await ensureTaskProjectionParent(authority, entry.target.absolute as ResolvedTaskPath);
+    }
+    projected = await applyProjectionPlan(dependencies.projection_writer, facts.plan.projection_plan);
+  } catch (error) {
+    const classified = projectionWriteFailure(error, authority, current.value.task_id);
+    if (classified === undefined) throw error;
+    return classified;
+  }
   if (projected.outcome !== "applied") {
     return fail(createProjectError("SNAPSHOT_INVALID", {
       snapshot_digest: facts.plan.prepared.manifest.value.snapshot_digest,

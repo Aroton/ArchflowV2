@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import { createProjectError, createProtocolError } from "../../src/contracts/errors.js";
@@ -12,6 +12,10 @@ import {
   createToolBoundary,
   type ToolBoundaryOutcome
 } from "../../src/mcp/server.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const digest = "a".repeat(64);
 const stateInput = {
@@ -321,6 +325,7 @@ describe("SDK-free MCP tool boundary", () => {
       expectProjectFailure(outcome, "archflow_state", item.expectedCode, item.expectedParameters);
     }
 
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     for (const item of [
       { label: "contract", returned: { schema_version: "1", ok: false, error: createProjectError("CONTRACT_INVALID", { tool: "archflow_gate", issue_code: "input-invalid" }) } },
       { label: "result", returned: { schema_version: "1", ok: false, error: createProjectError("RESULT_INVALID", { tool: "archflow_gate", result_id: "result-1" }) } },
@@ -343,6 +348,7 @@ describe("SDK-free MCP tool boundary", () => {
   });
 
   it("reduces malformed, substituted, thrown, and rejected handler results to correlation-only internal errors", async () => {
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     const cases = [
       { label: "malformed", handler: () => ({ schema_version: "1", ok: true, value: { secret: "handler prose" } }) },
       { label: "cross-tool", handler: () => ({ schema_version: "1", ok: true, value: { path: "phases/3/review.md", verdict: "pass", blocking_count: 0, revision: 3 } }) },
@@ -359,6 +365,13 @@ describe("SDK-free MCP tool boundary", () => {
       const serialized = JSON.stringify(outcome);
       expect(serialized).not.toContain("secret");
       expect(serialized).not.toContain("handler prose");
+      expect(
+        write.mock.calls.map(([chunk]) => String(chunk)).join(""),
+        item.label,
+      ).toContain(`correlation_id=${invocationId}`);
     }
+    const logged = write.mock.calls.map(([chunk]) => String(chunk)).join("");
+    expect(logged).toContain("raw synchronous secret");
+    expect(logged).toContain("raw asynchronous secret");
   });
 });

@@ -23,17 +23,20 @@ export class AtomicReplaceError extends Error {
   public readonly operation: "create-exclusive" | "replace";
   public readonly target_may_have_changed: boolean;
   public readonly collision: boolean;
+  public readonly errno?: string;
 
   public constructor(input: Readonly<{
     operation: "create-exclusive" | "replace";
     target_may_have_changed: boolean;
     collision: boolean;
+    errno?: string | undefined;
   }>) {
     super(`atomic ${input.operation} failed`);
     this.name = "AtomicReplaceError";
     this.operation = input.operation;
     this.target_may_have_changed = input.target_may_have_changed;
     this.collision = input.collision;
+    if (input.errno !== undefined) this.errno = input.errno;
   }
 }
 
@@ -90,6 +93,7 @@ async function createExclusive(path: ResolvedPath, bytes: Uint8Array): Promise<E
       operation: "create-exclusive",
       target_may_have_changed: linkAttempted,
       collision: errnoOf(error) === "EEXIST",
+      errno: errnoOf(error),
     });
   } finally {
     if (handle !== undefined) {
@@ -119,6 +123,7 @@ async function removeGateInterface(path: ResolvedPath): Promise<void> {
         operation: "replace",
         target_may_have_changed: false,
         collision: false,
+        errno: errnoOf(error),
       });
     }
   }
@@ -149,8 +154,13 @@ async function replaceRegularBytes(target: string, bytes: Uint8Array, mode: numb
     handle = undefined;
     renameAttempted = true;
     await rename(temporary, target);
-  } catch {
-    throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: renameAttempted, collision: false });
+  } catch (error) {
+    throw new AtomicReplaceError({
+      operation: "replace",
+      target_may_have_changed: renameAttempted,
+      collision: false,
+      errno: errnoOf(error),
+    });
   } finally {
     await handle?.close().catch(() => undefined);
     await unlink(temporary).catch(() => undefined);
@@ -171,8 +181,13 @@ async function replaceSymlink(path: ResolvedPath, target: string): Promise<void>
     created = true;
     await rename(temporary, path.absolute);
     created = false;
-  } catch {
-    throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: created, collision: false });
+  } catch (error) {
+    throw new AtomicReplaceError({
+      operation: "replace",
+      target_may_have_changed: created,
+      collision: false,
+      errno: errnoOf(error),
+    });
   } finally {
     if (created) await unlink(temporary).catch(() => undefined);
   }
@@ -184,7 +199,12 @@ async function remove(path: ResolvedPath): Promise<void> {
     await unlink(path.absolute);
   } catch (error) {
     if (errnoOf(error) !== "ENOENT") {
-      throw new AtomicReplaceError({ operation: "replace", target_may_have_changed: false, collision: false });
+      throw new AtomicReplaceError({
+        operation: "replace",
+        target_may_have_changed: false,
+        collision: false,
+        errno: errnoOf(error),
+      });
     }
   }
 }

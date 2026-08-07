@@ -237,7 +237,6 @@ describe("production supplemental gate round trip", () => {
     const waiverGateId = electedStatus.open_gate!.gate_id;
     const waiverRequest = parseGateRequest(JSON.parse(readFileSync(join(elected.authority.task_root, "decisions", waiverGateId, "request.json"), "utf8")));
     const record = recordFor(waiverRequest);
-    mkdirSync(join(elected.authority.task_root, "reviews"), { recursive: true });
     await runLocalCommand({ command: "gate-counter", working_directory: elected.root, task_id: TASK, value: record });
     const required = await boundary.invoke("archflow_waiver", waiverHandlerInput(electedInput), invocation(elected.root, new AbortController().signal, "waiver-review-required"));
     expect(required).toMatchObject({ kind: "project-result", result: { ok: false, error: { code: "SUPPLEMENTAL_REVIEW_REQUIRED" } } });
@@ -270,7 +269,6 @@ describe("production supplemental gate round trip", () => {
     const gateId = electedStatus.open_gate!.gate_id;
     const request = JSON.parse(readFileSync(join(elected.authority.task_root, "decisions", gateId, "request.json"), "utf8")) as GateRequestV1;
     const record = recordFor(request);
-    mkdirSync(join(elected.authority.task_root, "reviews"), { recursive: true });
     await runLocalCommand({ command: "gate-counter", working_directory: elected.root, task_id: TASK, value: record });
     const installedStatus = await liveStatus(elected.root);
     const ingest = installedStatus.open_gate!.supplemental_outcomes.find((item) => item.action === "ingest");

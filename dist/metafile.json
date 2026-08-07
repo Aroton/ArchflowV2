@@ -7281,7 +7281,7 @@
       ]
     },
     "src/local/commands.ts": {
-      "bytes": 21959,
+      "bytes": 22104,
       "format": "esm",
       "imports": [
         {
@@ -7784,6 +7784,11 @@
         }
       ]
     },
+    "src/mcp/diagnostics.ts": {
+      "bytes": 486,
+      "format": "esm",
+      "imports": []
+    },
     "src/mcp/framing.ts": {
       "bytes": 3378,
       "format": "esm",
@@ -7952,7 +7957,7 @@
       ]
     },
     "src/mcp/handlers/errors.ts": {
-      "bytes": 1794,
+      "bytes": 1898,
       "format": "esm",
       "imports": [
         {
@@ -7984,6 +7989,11 @@
           "kind": "import-statement",
           "original": "../../review/envelopes.js",
           "path": "src/review/envelopes.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../diagnostics.js",
+          "path": "src/mcp/diagnostics.ts"
         }
       ]
     },
@@ -8386,7 +8396,7 @@
       "imports": []
     },
     "src/mcp/server.ts": {
-      "bytes": 9506,
+      "bytes": 9661,
       "format": "esm",
       "imports": [
         {
@@ -8423,6 +8433,11 @@
           "kind": "import-statement",
           "original": "../contracts/tool-names.js",
           "path": "src/contracts/tool-names.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./diagnostics.js",
+          "path": "src/mcp/diagnostics.ts"
         }
       ]
     },
@@ -9060,7 +9075,7 @@
       ]
     },
     "src/state/atomic.ts": {
-      "bytes": 6711,
+      "bytes": 7080,
       "format": "esm",
       "imports": [
         {
@@ -9717,7 +9732,7 @@
       ]
     },
     "src/state/layout.ts": {
-      "bytes": 7829,
+      "bytes": 7973,
       "format": "esm",
       "imports": [
         {
@@ -10672,7 +10687,7 @@
       ]
     },
     "src/state/transaction.ts": {
-      "bytes": 50212,
+      "bytes": 51824,
       "format": "esm",
       "imports": [
         {
@@ -10826,7 +10841,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2136173,
+      "bytes": 2136902,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -12316,7 +12331,7 @@
           "bytesInOutput": 5011
         },
         "src/local/commands.ts": {
-          "bytesInOutput": 17209
+          "bytesInOutput": 17283
         },
         "src/local/envelope.ts": {
           "bytesInOutput": 11199
@@ -12358,7 +12373,7 @@
           "bytesInOutput": 9224
         },
         "src/state/atomic.ts": {
-          "bytesInOutput": 5349
+          "bytesInOutput": 5674
         },
         "src/state/authority.ts": {
           "bytesInOutput": 2513
@@ -12388,7 +12403,7 @@
           "bytesInOutput": 10106
         },
         "src/state/layout.ts": {
-          "bytesInOutput": 4370
+          "bytesInOutput": 4473
         },
         "src/state/lock.ts": {
           "bytesInOutput": 2272
@@ -12436,7 +12451,7 @@
           "bytesInOutput": 23978
         },
         "src/state/transaction.ts": {
-          "bytesInOutput": 37
+          "bytesInOutput": 264
         },
         "src/state/transitions.ts": {
           "bytesInOutput": 10309
@@ -12444,7 +12459,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2773974,
+      "bytes": 2776426,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13879,6 +13894,9 @@
         "src/main.ts": {
           "bytesInOutput": 340
         },
+        "src/mcp/diagnostics.ts": {
+          "bytesInOutput": 247
+        },
         "src/mcp/framing.ts": {
           "bytesInOutput": 2638
         },
@@ -13889,7 +13907,7 @@
           "bytesInOutput": 4934
         },
         "src/mcp/handlers/errors.ts": {
-          "bytesInOutput": 859
+          "bytesInOutput": 908
         },
         "src/mcp/handlers/gate.ts": {
           "bytesInOutput": 2786
@@ -13922,7 +13940,7 @@
           "bytesInOutput": 4970
         },
         "src/mcp/server.ts": {
-          "bytesInOutput": 6301
+          "bytesInOutput": 6404
         },
         "src/mcp/session.ts": {
           "bytesInOutput": 15516
@@ -13955,7 +13973,7 @@
           "bytesInOutput": 9748
         },
         "src/state/atomic.ts": {
-          "bytesInOutput": 5349
+          "bytesInOutput": 5674
         },
         "src/state/authority.ts": {
           "bytesInOutput": 2513
@@ -13988,7 +14006,7 @@
           "bytesInOutput": 19252
         },
         "src/state/layout.ts": {
-          "bytesInOutput": 5029
+          "bytesInOutput": 5634
         },
         "src/state/lock.ts": {
           "bytesInOutput": 2272
@@ -14015,7 +14033,7 @@
           "bytesInOutput": 25712
         },
         "src/state/transaction.ts": {
-          "bytesInOutput": 38240
+          "bytesInOutput": 39336
         },
         "src/state/transitions.ts": {
           "bytesInOutput": 10311
