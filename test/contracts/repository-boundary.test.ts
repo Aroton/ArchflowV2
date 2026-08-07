@@ -94,7 +94,7 @@ describe("package.json dependencies and scripts", () => {
     scripts: Readonly<Record<string, string>>;
   }>;
 
-  it("admits only the exact Phase 11 runtime baseline and Node 24 engine line", () => {
+  it("admits only the exact runtime baseline and Node 24 engine line", () => {
     expect(manifest.dependencies).toEqual({
       "@modelcontextprotocol/server": "2.0.0",
       "@secretlint/core": "13.0.4",
@@ -125,10 +125,10 @@ describe("package.json dependencies and scripts", () => {
       "build:temp",
       "check",
       "check:dependencies",
+      "check:mcp-sdk-boundary",
       "check:notices",
-      "check:phase4-mcp-boundary",
       "check:release",
-      "probe:phase4-mcp-compatibility",
+      "probe:mcp-sdk-compatibility",
       "release:check",
       "release:mutations",
       "release:reproduce",
@@ -138,8 +138,8 @@ describe("package.json dependencies and scripts", () => {
       "test",
       "test:contracts",
       "test:mcp-runtime",
+      "test:mcp-sdk-boundary-policy",
       "test:notices-policy",
-      "test:phase4-mcp-boundary-policy",
       "test:real-host",
       "test:unit",
       "typecheck",

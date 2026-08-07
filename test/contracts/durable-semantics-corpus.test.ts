@@ -537,7 +537,7 @@ describe("rank 5 — the output-entry residue", () => {
    * `test/contracts/repository-boundary.test.ts:28-38`). Phase 10 classifies and verifies both
    * endpoints. This test records the deferral rather than pretending the check exists.
    */
-  it("5a: a genuinely cross-class rename is accepted, pending Phase 10", () => {
+  it("5a: a genuinely cross-class rename is accepted, pending byte-level verification", () => {
     expectAccept({ artifact: artifactDoc(renamed(".archflow/tasks/demo/review/legacy-review.md")) });
   });
 

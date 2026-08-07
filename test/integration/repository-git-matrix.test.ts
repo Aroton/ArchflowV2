@@ -328,8 +328,8 @@ describe.skipIf(!hasGit)("five-repository matrix, composed through the whole lay
   it("projects a blob through the checkout filter declared for its destination path", async () => {
     const repository = createTempRepository({
       label: "matrix-projected-blob",
-      attributes: `* text=auto\n.archflow/** -text merge=binary\nfiltered.txt -text filter=phase20\n`,
-      config: { "filter.phase20.smudge": "sed 's/^stored:/projected:/'" },
+      attributes: `* text=auto\n.archflow/** -text merge=binary\nfiltered.txt -text filter=projection\n`,
+      config: { "filter.projection.smudge": "sed 's/^stored:/projected:/'" },
     });
     const stored = Buffer.from("stored: bytes\n", "utf8");
     const oid = repository.hashObject(stored);
@@ -507,7 +507,7 @@ describe.skipIf(!hasGit)("forced conflict on an .archflow/ file", () => {
 // 6. Phase 10 divergence preservation and clean handoff
 // ---------------------------------------------------------------------------
 
-describe.skipIf(!hasGit)("Phase 10 preserve-both-heads and clean handoff", () => {
+describe.skipIf(!hasGit)("preserve-both-heads and clean handoff", () => {
   it("blocks on conflict, preserves both divergent heads, and records the explicit clean successor", async () => {
     const upstream = seededRepository("handoff-upstream", { directoryName: "upstream ré po" });
     upstream.write(`.archflow/tasks/${TASK_ID}/config.yaml`, "task: mcp-integration\n");

@@ -32,13 +32,13 @@ async function attemptRecord(workspace: TaskWorkspace): Promise<Record<string, u
   return JSON.parse(await readFile(join(directory, names[0]!), "utf8")) as Record<string, unknown>;
 }
 
-describe.skipIf(!REAL_HOSTS_AVAILABLE)("Phase 21 real-host failure classes", () => {
+describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host failure classes", () => {
   it("classifies a real Codex invalid-model rejection as UNSUPPORTED_MODEL", async () => {
     const workspace = await createTaskWorkspace({ taskId: "real-failure-model", label: "real-failure-model" });
     const route: DispatchRoute = {
       adapter: "codex-cli",
       family: "codex",
-      model: "gpt-model-does-not-exist-phase21",
+      model: "gpt-model-does-not-exist",
       effort: "xhigh",
     };
     try {

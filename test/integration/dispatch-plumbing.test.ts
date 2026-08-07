@@ -137,7 +137,7 @@ async function waitForProcessExit(pid: number): Promise<void> {
   throw new Error(`process ${pid} survived process-group termination`);
 }
 
-describe("Phase 13 dispatch plumbing proof", () => {
+describe("dispatch plumbing proof", () => {
   it.each([
     ["claude", "codex-cli"],
     ["codex", "claude-cli"],

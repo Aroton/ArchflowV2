@@ -136,7 +136,7 @@ function buildBenchmarkDocument(
 const benchmarkAvailable = benchmarkEnabled() && realHostsAvailable();
 requireRealHostsAvailable(!benchmarkEnabled() || benchmarkAvailable);
 
-describe("Phase 21 benchmark digest contract", () => {
+describe("benchmark digest contract", () => {
   it("pins the recalibrated rubric and unchanged twelve-run matrix without real model calls", async () => {
     expect(rubric.criteria).toEqual([
       {
@@ -242,7 +242,7 @@ async function loadManifest(): Promise<Readonly<{ bytes: Uint8Array; value: Corp
   return { bytes, value };
 }
 
-describe.skipIf(!benchmarkAvailable)("Phase 21 real-host review-quality benchmark", () => {
+describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () => {
   it("records both opposite-family directions without asserting a quality threshold", async () => {
     const manifest = await loadManifest();
     const plannedTurns = manifest.value.cases.length * directions.length * repeatCount;

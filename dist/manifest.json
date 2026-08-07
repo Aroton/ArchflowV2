@@ -6811,9 +6811,9 @@
       "size": 807
     },
     {
-      "digest": "01d12ca38a1035b6439066ed3646ec7df46d2b82666d9a6f47531d045aaf7736",
+      "digest": "76a86601de73ed59d9e20baa039b1c3484006f6f77d1e10219546b6a4ca52166",
       "path": ".github/workflows/ci.yml",
-      "size": 1340
+      "size": 1331
     },
     {
       "digest": "2db5e218f7a44660b2e220b0b9f46f7eb9b90fd755a865bd39a0d7cf9df4756d",
@@ -6856,9 +6856,9 @@
       "size": 72615
     },
     {
-      "digest": "4b2c29c641a1d10a1036e28e1510eb75a35aaa0e3cdc241d2487c07e0e58c9b0",
+      "digest": "8b7b0b7c8fb7f2ed39ca8cb8b125224cef93febf013663713eeed83d6cf90eac",
       "path": "package.json",
-      "size": 2435
+      "size": 2405
     },
     {
       "digest": "6282adc7c1d1304f245ff5877a2824b05b53f9842dc658282610c981505f0caf",

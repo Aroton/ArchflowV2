@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - run: npm ci
-      - run: npm run probe:phase4-mcp-compatibility
+      - run: npm run probe:mcp-sdk-compatibility
       - run: npm run typecheck
       - run: npm run test:mcp-runtime
       - run: npm test
@@ -30,8 +30,8 @@ jobs:
       - run: npm run check:dependencies
       - run: npm run check:notices
       - run: npm run test:notices-policy
-      - run: npm run check:phase4-mcp-boundary
-      - run: npm run test:phase4-mcp-boundary-policy
+      - run: npm run check:mcp-sdk-boundary
+      - run: npm run test:mcp-sdk-boundary-policy
       - run: npm run release:check -- --payload dist
       - run: npm run release:smoke -- --payload dist
       - run: npm run release:mutations

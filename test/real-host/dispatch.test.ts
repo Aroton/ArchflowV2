@@ -189,7 +189,7 @@ function adjudicationSemanticDiagnostic(value: unknown): string {
   }
 }
 
-describe.skipIf(!REAL_HOSTS_AVAILABLE)("Phase 21 real-host production dispatch", () => {
+describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
   for (const direction of directions) {
     it(`returns schema-valid, server-attested review evidence for ${direction.name}`, async () => {
       const saved = {
@@ -347,7 +347,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("Phase 21 real-host production dispatch",
           step: "adjudicate" as const,
           subject_digest: sha256Bytes(encoder.encode(artifact)),
           input_fingerprint: canonicalJsonDigest({ adjudication: direction.name }),
-          pinned_constitution_digest: canonicalJsonDigest({ constitution: "phase-21" }),
+          pinned_constitution_digest: canonicalJsonDigest({ constitution: "pinned-test" }),
           approved_upstream_digests: [],
           source_evidence_set_digest: sourceEvidenceSetDigest,
           invocation_id: parseSafeId(`invocation-${taskId}`),

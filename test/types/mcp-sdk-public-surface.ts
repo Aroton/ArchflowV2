@@ -25,7 +25,7 @@ const transport = {
 } satisfies Transport;
 
 const server = new Server(
-  { name: "phase-4-type-probe", version: "0.0.0" },
+  { name: "mcp-sdk-type-probe", version: "0.0.0" },
   { supportedProtocolVersions: ["2025-11-25"] }
 );
 server.oninitialized = (): void => undefined;

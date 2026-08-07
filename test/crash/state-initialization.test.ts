@@ -17,7 +17,7 @@ import { createInternalTransactionAuthority } from "../../src/state/authority.js
 import { inspectAbandonedTaskLock, removeConfirmedAbandonedTaskLock } from "../../src/state/lock.js";
 import { readTaskState } from "../../src/state/read.js";
 
-const childProgram = new URL("../fixtures/state-phase10-child.mjs", import.meta.url);
+const childProgram = new URL("../fixtures/state-checkpoint-child.mjs", import.meta.url);
 const roots: string[] = [];
 const children = new Set<ChildProcess>();
 const env: NodeJS.ProcessEnv = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null",
@@ -40,7 +40,7 @@ const message = (child: ChildProcess, type: string): Promise<Record<string, unkn
   child.on("error", reject);
 });
 
-function start(taskRoot: string, cut: "phase10-receipt-only" | "state-before" | "state-after" | "none"): ChildProcess {
+function start(taskRoot: string, cut: "checkpoint-receipt-only" | "state-before" | "state-after" | "none"): ChildProcess {
   const child = spawn(process.execPath, [childProgram.pathname, "initialize", taskRoot, cut], {
     cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
@@ -109,13 +109,13 @@ async function setup(kind: "normal" | "legacy" | "chain" = "normal") {
       repository_identity_digest: authority.value.repository_identity_digest, import_mode: "initial", chain: [first, second] });
     callStep = "self_review";
   }
-  await writeFile(join(taskRoot, "phase10-child-input.json"), JSON.stringify({ context, subject, call: { schema_version: "1", task_id: taskId,
+  await writeFile(join(taskRoot, "checkpoint-child-input.json"), JSON.stringify({ context, subject, call: { schema_version: "1", task_id: taskId,
     intent_id: "initialize", expected_revision: 0, input_fingerprint: fingerprint, phase_instance: callPhase, step: callStep, status: callStatus, artifact } }));
   return { taskRoot, authority: authority.value };
 }
 
 describe("revision-0 crash cuts", () => {
-  for (const cut of ["phase10-receipt-only", "state-before", "state-after"] as const) {
+  for (const cut of ["checkpoint-receipt-only", "state-before", "state-after"] as const) {
     it(`leaves prior or complete revision 1 at ${cut}`, async () => {
       const fixture = await setup();
       const child = start(fixture.taskRoot, cut); await message(child, "cut");
@@ -157,7 +157,7 @@ describe("revision-0 crash cuts", () => {
   ] as const) {
     it(`rejects ${label} before receipt installation`, async () => {
       const fixture = await setup();
-      const inputPath = join(fixture.taskRoot, "phase10-child-input.json");
+      const inputPath = join(fixture.taskRoot, "checkpoint-child-input.json");
       const input = JSON.parse(await readFile(inputPath, "utf8")) as { call: { artifact: Record<string, any> } };
       mutate(input.call.artifact);
       await writeFile(inputPath, JSON.stringify(input));
@@ -172,7 +172,7 @@ describe("revision-0 crash cuts", () => {
   for (const field of ["import_baseline_commit", "code_baseline_commit"] as const) {
     it(`validates the legacy ${field} as a current-repository commit`, async () => {
       const fixture = await setup("legacy");
-      const inputPath = join(fixture.taskRoot, "phase10-child-input.json");
+      const inputPath = join(fixture.taskRoot, "checkpoint-child-input.json");
       const input = JSON.parse(await readFile(inputPath, "utf8")) as { call: { artifact: Record<string, unknown> } };
       input.call.artifact[field] = "3".repeat(40);
       await writeFile(inputPath, JSON.stringify(input));
@@ -190,7 +190,7 @@ describe("revision-0 crash cuts", () => {
     const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], {
       cwd: repository, env, encoding: "utf8", input: "not a commit\n",
     }).trim();
-    const inputPath = join(fixture.taskRoot, "phase10-child-input.json");
+    const inputPath = join(fixture.taskRoot, "checkpoint-child-input.json");
     const input = JSON.parse(await readFile(inputPath, "utf8")) as { call: { artifact: Record<string, unknown> } };
     input.call.artifact.policy_base_commit = blob;
     await writeFile(inputPath, JSON.stringify(input));
@@ -213,7 +213,7 @@ describe("revision-0 crash cuts", () => {
 
   it("rejects an illegal workflow jump inside an initial chain before receipt", async () => {
     const fixture = await setup("chain");
-    const inputPath = join(fixture.taskRoot, "phase10-child-input.json");
+    const inputPath = join(fixture.taskRoot, "checkpoint-child-input.json");
     const input = JSON.parse(await readFile(inputPath, "utf8")) as {
       call: { step: string; artifact: { chain: Array<Record<string, unknown>> } };
     };
@@ -231,7 +231,7 @@ describe("revision-0 crash cuts", () => {
     const fixture = await setup();
     const first = start(fixture.taskRoot, "none");
     expect(await message(first, "result")).toMatchObject({ ok: true, revision: 1 });
-    const inputPath = join(fixture.taskRoot, "phase10-child-input.json");
+    const inputPath = join(fixture.taskRoot, "checkpoint-child-input.json");
     const input = JSON.parse(await readFile(inputPath, "utf8")) as { call: { artifact: Record<string, unknown> } };
     input.call.artifact.code_baseline_commit = "4".repeat(40);
     await writeFile(inputPath, JSON.stringify(input));

@@ -16,7 +16,7 @@ import { createInternalTransactionAuthority } from "../../src/state/authority.js
 import { inspectAbandonedTaskLock, removeConfirmedAbandonedTaskLock } from "../../src/state/lock.js";
 import { readTaskState } from "../../src/state/read.js";
 
-const childProgram = new URL("../fixtures/state-phase10-child.mjs", import.meta.url);
+const childProgram = new URL("../fixtures/state-checkpoint-child.mjs", import.meta.url);
 const roots: string[] = [];
 const children = new Set<ChildProcess>();
 const env: NodeJS.ProcessEnv = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null",
@@ -35,7 +35,7 @@ const message = (child: ChildProcess, type: string): Promise<Record<string, unkn
   child.on("error", reject);
 });
 
-function start(taskRoot: string, cut: "phase10-receipt-only" | "state-before" | "state-after" | "none"): ChildProcess {
+function start(taskRoot: string, cut: "checkpoint-receipt-only" | "state-before" | "state-after" | "none"): ChildProcess {
   const child = spawn(process.execPath, [childProgram.pathname, "adopt", taskRoot, cut], {
     cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
@@ -82,14 +82,14 @@ async function setup() {
     predecessor: { revision: first.revision, checkpoint_digest: checkpointSelfDigest(first) } } as unknown as ManualCheckpointV1;
   const artifact = parseManualCheckpointImport({ schema_version: "1", artifact_kind: "manual-checkpoint-import", task_id: taskId,
     repository_identity_digest: state.repository_identity_digest, import_mode: "state-anchored", state_anchor: anchor, chain: [first, second] });
-  await writeFile(join(taskRoot, "phase10-child-input.json"), JSON.stringify({ context, subject, call: { schema_version: "1", task_id: taskId,
+  await writeFile(join(taskRoot, "checkpoint-child-input.json"), JSON.stringify({ context, subject, call: { schema_version: "1", task_id: taskId,
     intent_id: "adopt-checkpoints", expected_revision: state.revision, input_fingerprint: fingerprint, phase_instance: context.phase_instance,
     step: "produce", status: "running", artifact } }));
   return { taskRoot, authority: authority.value, prior: state.revision, head: second.revision };
 }
 
 describe("whole-chain adoption crash cuts", () => {
-  for (const cut of ["phase10-receipt-only", "state-before", "state-after"] as const) {
+  for (const cut of ["checkpoint-receipt-only", "state-before", "state-after"] as const) {
     it(`exposes only prior or complete head at ${cut}`, async () => {
       const fixture = await setup(); const child = start(fixture.taskRoot, cut); await message(child, "cut");
       await new Promise<void>((resolve) => child.once("exit", () => resolve()));
@@ -100,7 +100,7 @@ describe("whole-chain adoption crash cuts", () => {
       expect(existsSync(join(fixture.taskRoot, "checkpoints"))).toBe(false);
       const plan = await inspectAbandonedTaskLock(fixture.authority); await removeConfirmedAbandonedTaskLock(fixture.authority, plan, true);
       if (cut === "state-after") {
-        const inputPath = join(fixture.taskRoot, "phase10-child-input.json");
+        const inputPath = join(fixture.taskRoot, "checkpoint-child-input.json");
         const input = JSON.parse(await readFile(inputPath, "utf8")) as { call: { expected_revision: number } };
         input.call.expected_revision = fixture.prior + 1;
         await writeFile(inputPath, JSON.stringify(input));
@@ -120,7 +120,7 @@ describe("whole-chain adoption crash cuts", () => {
   ] as const) {
     it(`rejects call/head ${field} mismatch through the transaction kernel`, async () => {
       const fixture = await setup();
-      const inputPath = join(fixture.taskRoot, "phase10-child-input.json");
+      const inputPath = join(fixture.taskRoot, "checkpoint-child-input.json");
       const input = JSON.parse(await readFile(inputPath, "utf8")) as { call: Record<string, unknown> };
       input.call[field] = replacement;
       await writeFile(inputPath, JSON.stringify(input));
@@ -139,7 +139,7 @@ describe("whole-chain adoption crash cuts", () => {
 
   it("re-reads and resumes an exact retained adoption receipt", async () => {
     const fixture = await setup();
-    const crashed = start(fixture.taskRoot, "phase10-receipt-only"); await message(crashed, "cut");
+    const crashed = start(fixture.taskRoot, "checkpoint-receipt-only"); await message(crashed, "cut");
     await new Promise<void>((resolve) => crashed.once("exit", () => resolve()));
     const lockPlan = await inspectAbandonedTaskLock(fixture.authority);
     await removeConfirmedAbandonedTaskLock(fixture.authority, lockPlan, true);
@@ -151,7 +151,7 @@ describe("whole-chain adoption crash cuts", () => {
 
   it("rejects a retained adoption receipt whose prepared head differs from the request artifact", async () => {
     const fixture = await setup();
-    const crashed = start(fixture.taskRoot, "phase10-receipt-only"); await message(crashed, "cut");
+    const crashed = start(fixture.taskRoot, "checkpoint-receipt-only"); await message(crashed, "cut");
     await new Promise<void>((resolve) => crashed.once("exit", () => resolve()));
     const receiptPath = join(fixture.taskRoot, "intents", "adopt-checkpoints.json");
     const receipt = JSON.parse(await readFile(receiptPath, "utf8")) as {
@@ -172,9 +172,9 @@ describe("whole-chain adoption crash cuts", () => {
 
   it("returns INTENT_MISMATCH for a substituted-chain retry of a retained adoption intent", async () => {
     const fixture = await setup();
-    const crashed = start(fixture.taskRoot, "phase10-receipt-only"); await message(crashed, "cut");
+    const crashed = start(fixture.taskRoot, "checkpoint-receipt-only"); await message(crashed, "cut");
     await new Promise<void>((resolve) => crashed.once("exit", () => resolve()));
-    const inputPath = join(fixture.taskRoot, "phase10-child-input.json");
+    const inputPath = join(fixture.taskRoot, "checkpoint-child-input.json");
     const input = JSON.parse(await readFile(inputPath, "utf8")) as {
       call: { artifact: { chain: Array<Record<string, unknown>> } };
     };

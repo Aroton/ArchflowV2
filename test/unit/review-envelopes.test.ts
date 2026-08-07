@@ -30,7 +30,7 @@ const subject = (): DispatchSubject => ({
 });
 
 const input = (): ReviewEnvelopeInput => ({
-  artifact: "# Phase 13\n\nEnvelope contract.\n",
+  artifact: "# Review Subject\n\nEnvelope contract.\n",
   rubric: {
     schema_version: "1",
     kind: "implementation",
@@ -55,7 +55,7 @@ const adjudicationSubject = (): AdjudicationSubject => ({
 });
 
 const adjudicationInput = (): AdjudicationEnvelopeInput => ({
-  artifact: "# Phase 14\n\nImplemented artifact.\n",
+  artifact: "# Adjudication Subject\n\nImplemented artifact.\n",
   rules: [{
     id: "safe-paths",
     version: 2,

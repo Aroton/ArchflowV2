@@ -36,9 +36,9 @@ const childProgram = new URL("../fixtures/state-transaction-child.mjs", import.m
 // @ts-expect-error fixture module intentionally has no TypeScript declarations
 const transactionCuts = (await import("../fixtures/state-transaction-child.mjs")).CUT_POINTS as readonly string[];
 // @ts-expect-error fixture module intentionally has no TypeScript declarations
-const phase10Cuts = (await import("../fixtures/state-phase10-child.mjs")).CUT_POINTS as readonly string[];
+const checkpointChildCuts = (await import("../fixtures/state-checkpoint-child.mjs")).CUT_POINTS as readonly string[];
 // @ts-expect-error fixture module intentionally has no TypeScript declarations
-const phase12Cuts = (await import("../fixtures/state-phase12-gate-child.mjs")).CUT_POINTS as readonly string[];
+const gateChildCuts = (await import("../fixtures/state-gate-child.mjs")).CUT_POINTS as readonly string[];
 const gitEnvironment: NodeJS.ProcessEnv = {
   ...process.env,
   GIT_CONFIG_GLOBAL: "/dev/null",
@@ -460,7 +460,7 @@ describe("state transaction crash boundaries", () => {
       readFile(new URL(`../../src/state/${name}`, import.meta.url), "utf8")
     ))).join("\n");
     expect(source).not.toMatch(/process\.env|ARCHFLOW[_-].*(?:FAULT|CUT)|fault[_-]?hook/iu);
-    const cutPattern = new RegExp([...new Set([...transactionCuts, ...phase10Cuts, ...phase12Cuts])]
+    const cutPattern = new RegExp([...new Set([...transactionCuts, ...checkpointChildCuts, ...gateChildCuts])]
       .map((cut) => JSON.stringify(cut).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join("|"), "u");
     for (const bundleName of ["archflow-mcp.mjs", "archflow-local.mjs"]) {
       const bundle = await readFile(new URL(`../../dist/${bundleName}`, import.meta.url), "utf8");

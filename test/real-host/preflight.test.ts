@@ -42,7 +42,7 @@ async function waitForLines(lines: readonly string[], count: number): Promise<vo
   throw new Error(`timed out waiting for ${String(count)} MCP responses`);
 }
 
-describe.skipIf(!REAL_HOSTS_AVAILABLE)("Phase 21 real-host preflight", () => {
+describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host preflight", () => {
   it("accepts exact real version and authentication shapes through production preflight", async () => {
     const claudeVersion = command("claude", ["--version"]);
     const codexVersion = command("codex", ["--version"]);
@@ -143,7 +143,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("Phase 21 real-host preflight", () => {
 
     const workspace = await createTaskWorkspace({ taskId: "real-preflight-pii", label: "real-preflight-pii" });
     const route: DispatchRoute = {
-      adapter: "claude-cli", family: "claude", model: "claude-model-does-not-exist-phase21", effort: "high",
+      adapter: "claude-cli", family: "claude", model: "claude-model-does-not-exist", effort: "high",
     };
     const envelope: DispatchEnvelope = {
       result_kind: "review", bytes: encoder.encode("{}\n"), digest: "d".repeat(64) as never, byte_count: 3,

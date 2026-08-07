@@ -107,7 +107,7 @@ describe("decision directory layout", () => {
   });
 });
 
-describe("phase 15 directory layouts", () => {
+describe("task directory layouts", () => {
   it("creates verified manual-checkpoint and phase-attempt hierarchies idempotently", async () => {
     const { value } = await authority();
     await ensureManualCheckpointDirectory(value);

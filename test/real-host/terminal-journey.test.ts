@@ -677,12 +677,12 @@ describe.skipIf(!enabled)("installed terminal journeys", () => {
     writeFileSync(orphan, "installed orphan attempt\n");
 
     expect(local(root, task, "maintain", {
-      maintenance_id: "phase21-installed-prune",
+      maintenance_id: "installed-prune",
       human_reason: "remove unreachable installed journey attempt",
     }).value).toEqual({ record: "created", deleted: 1 });
     expect(existsSync(orphan)).toBe(false);
     const record = JSON.parse(readFileSync(
-      join(root, ".archflow", "tasks", task, "maintenance", "phase21-installed-prune.json"),
+      join(root, ".archflow", "tasks", task, "maintenance", "installed-prune.json"),
       "utf8",
     ));
     expect(record).toMatchObject({
