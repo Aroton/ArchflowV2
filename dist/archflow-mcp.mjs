@@ -96,23 +96,23 @@ var require_code2 = __commonJS({
     };
     exports._Code = _Code;
     exports.nil = new _Code("");
-    function _(strs, ...args) {
+    function _(strs, ...args2) {
       const code = [strs[0]];
       let i = 0;
-      while (i < args.length) {
-        addCodeArg(code, args[i]);
+      while (i < args2.length) {
+        addCodeArg(code, args2[i]);
         code.push(strs[++i]);
       }
       return new _Code(code);
     }
     exports._ = _;
     var plus = new _Code("+");
-    function str(strs, ...args) {
+    function str(strs, ...args2) {
       const expr = [safeStringify(strs[0])];
       let i = 0;
-      while (i < args.length) {
+      while (i < args2.length) {
         expr.push(plus);
-        addCodeArg(expr, args[i]);
+        addCodeArg(expr, args2[i]);
         expr.push(plus, safeStringify(strs[++i]));
       }
       optimize(expr);
@@ -667,10 +667,10 @@ var require_codegen2 = __commonJS({
       }
     };
     var Func = class extends BlockNode {
-      constructor(name, args, async) {
+      constructor(name, args2, async) {
         super();
         this.name = name;
-        this.args = args;
+        this.args = args2;
         this.async = async;
       }
       render(opts) {
@@ -945,8 +945,8 @@ var require_codegen2 = __commonJS({
         return this;
       }
       // `function` heading (or definition if funcBody is passed)
-      func(name, args = code_1.nil, async, funcBody) {
-        this._blockNode(new Func(name, args, async));
+      func(name, args2 = code_1.nil, async, funcBody) {
+        this._blockNode(new Func(name, args2, async));
         if (funcBody)
           this.code(funcBody).endFunc();
         return this;
@@ -1040,13 +1040,13 @@ var require_codegen2 = __commonJS({
     }
     exports.not = not;
     var andCode = mappend(exports.operators.AND);
-    function and(...args) {
-      return args.reduce(andCode);
+    function and(...args2) {
+      return args2.reduce(andCode);
     }
     exports.and = and;
     var orCode = mappend(exports.operators.OR);
-    function or(...args) {
-      return args.reduce(orCode);
+    function or(...args2) {
+      return args2.reduce(orCode);
     }
     exports.or = or;
     function mappend(op) {
@@ -1779,8 +1779,8 @@ var require_code3 = __commonJS({
       ];
       if (it.opts.dynamicRef)
         valCxt.push([names_1.default.dynamicAnchors, names_1.default.dynamicAnchors]);
-      const args = (0, codegen_1._)`${dataAndSchema}, ${gen.object(...valCxt)}`;
-      return context2 !== codegen_1.nil ? (0, codegen_1._)`${func}.call(${context2}, ${args})` : (0, codegen_1._)`${func}(${args})`;
+      const args2 = (0, codegen_1._)`${dataAndSchema}, ${gen.object(...valCxt)}`;
+      return context2 !== codegen_1.nil ? (0, codegen_1._)`${func}.call(${context2}, ${args2})` : (0, codegen_1._)`${func}(${args2})`;
     }
     exports.callValidateCode = callValidateCode;
     var newRegExp = (0, codegen_1._)`new RegExp`;
@@ -8001,7 +8001,7 @@ var require_common = __commonJS({
         let enableOverride = null;
         let namespacesCache;
         let enabledCache;
-        function debug2(...args) {
+        function debug2(...args2) {
           if (!debug2.enabled) {
             return;
           }
@@ -8012,28 +8012,28 @@ var require_common = __commonJS({
           self2.prev = prevTime;
           self2.curr = curr;
           prevTime = curr;
-          args[0] = createDebug.coerce(args[0]);
-          if (typeof args[0] !== "string") {
-            args.unshift("%O");
+          args2[0] = createDebug.coerce(args2[0]);
+          if (typeof args2[0] !== "string") {
+            args2.unshift("%O");
           }
           let index = 0;
-          args[0] = args[0].replace(/%([a-zA-Z%])/g, (match, format) => {
+          args2[0] = args2[0].replace(/%([a-zA-Z%])/g, (match, format) => {
             if (match === "%%") {
               return "%";
             }
             index++;
             const formatter = createDebug.formatters[format];
             if (typeof formatter === "function") {
-              const val = args[index];
+              const val = args2[index];
               match = formatter.call(self2, val);
-              args.splice(index, 1);
+              args2.splice(index, 1);
               index--;
             }
             return match;
           });
-          createDebug.formatArgs.call(self2, args);
+          createDebug.formatArgs.call(self2, args2);
           const logFn = self2.log || createDebug.log;
-          logFn.apply(self2, args);
+          logFn.apply(self2, args2);
         }
         debug2.namespace = namespace;
         debug2.useColors = createDebug.useColors();
@@ -8255,16 +8255,16 @@ var require_browser = __commonJS({
       typeof navigator !== "undefined" && navigator.userAgent && (m = navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/)) && parseInt(m[1], 10) >= 31 || // Double check webkit in userAgent just in case we are in a worker
       typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/);
     }
-    function formatArgs(args) {
-      args[0] = (this.useColors ? "%c" : "") + this.namespace + (this.useColors ? " %c" : " ") + args[0] + (this.useColors ? "%c " : " ") + "+" + module.exports.humanize(this.diff);
+    function formatArgs(args2) {
+      args2[0] = (this.useColors ? "%c" : "") + this.namespace + (this.useColors ? " %c" : " ") + args2[0] + (this.useColors ? "%c " : " ") + "+" + module.exports.humanize(this.diff);
       if (!this.useColors) {
         return;
       }
       const c = "color: " + this.color;
-      args.splice(1, 0, c, "color: inherit");
+      args2.splice(1, 0, c, "color: inherit");
       let index = 0;
       let lastC = 0;
-      args[0].replace(/%[a-zA-Z%]/g, (match) => {
+      args2[0].replace(/%[a-zA-Z%]/g, (match) => {
         if (match === "%%") {
           return;
         }
@@ -8273,7 +8273,7 @@ var require_browser = __commonJS({
           lastC = index;
         }
       });
-      args.splice(lastC, 0, c);
+      args2.splice(lastC, 0, c);
     }
     exports.log = console.debug || console.log || (() => {
     });
@@ -8439,16 +8439,16 @@ var require_node = __commonJS({
     function useColors() {
       return "colors" in exports.inspectOpts ? Boolean(exports.inspectOpts.colors) : tty.isatty(process.stderr.fd);
     }
-    function formatArgs(args) {
+    function formatArgs(args2) {
       const { namespace: name, useColors: useColors2 } = this;
       if (useColors2) {
         const c = this.color;
         const colorCode = "\x1B[3" + (c < 8 ? c : "8;5;" + c);
         const prefix = `  ${colorCode};1m${name} \x1B[0m`;
-        args[0] = prefix + args[0].split("\n").join("\n" + prefix);
-        args.push(colorCode + "m+" + module.exports.humanize(this.diff) + "\x1B[0m");
+        args2[0] = prefix + args2[0].split("\n").join("\n" + prefix);
+        args2.push(colorCode + "m+" + module.exports.humanize(this.diff) + "\x1B[0m");
       } else {
-        args[0] = getDate() + name + " " + args[0];
+        args2[0] = getDate() + name + " " + args2[0];
       }
     }
     function getDate() {
@@ -8457,8 +8457,8 @@ var require_node = __commonJS({
       }
       return (/* @__PURE__ */ new Date()).toISOString() + " ";
     }
-    function log(...args) {
-      return process.stderr.write(util.formatWithOptions(exports.inspectOpts, ...args) + "\n");
+    function log(...args2) {
+      return process.stderr.write(util.formatWithOptions(exports.inspectOpts, ...args2) + "\n");
     }
     function save(namespaces) {
       if (namespaces) {
@@ -17273,8 +17273,8 @@ function parsedType(data) {
   }
   return t;
 }
-function issue(...args) {
-  const [iss, input, inst] = args;
+function issue(...args2) {
+  const [iss, input, inst] = args2;
   if (typeof iss === "string") {
     return {
       message: iss,
@@ -17665,20 +17665,20 @@ var httpProtocol = /^https?$/;
 var e164 = /^\+[1-9]\d{6,14}$/;
 var dateSource = `(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))`;
 var date = /* @__PURE__ */ new RegExp(`^${dateSource}$`);
-function timeSource(args) {
+function timeSource(args2) {
   const hhmm = `(?:[01]\\d|2[0-3]):[0-5]\\d`;
-  const regex = typeof args.precision === "number" ? args.precision === -1 ? `${hhmm}` : args.precision === 0 ? `${hhmm}:[0-5]\\d` : `${hhmm}:[0-5]\\d\\.\\d{${args.precision}}` : `${hhmm}(?::[0-5]\\d(?:\\.\\d+)?)?`;
+  const regex = typeof args2.precision === "number" ? args2.precision === -1 ? `${hhmm}` : args2.precision === 0 ? `${hhmm}:[0-5]\\d` : `${hhmm}:[0-5]\\d\\.\\d{${args2.precision}}` : `${hhmm}(?::[0-5]\\d(?:\\.\\d+)?)?`;
   return regex;
 }
-function time(args) {
-  return new RegExp(`^${timeSource(args)}$`);
+function time(args2) {
+  return new RegExp(`^${timeSource(args2)}$`);
 }
-function datetime(args) {
-  const time3 = timeSource({ precision: args.precision });
+function datetime(args2) {
+  const time3 = timeSource({ precision: args2.precision });
   const opts = ["Z"];
-  if (args.local)
+  if (args2.local)
     opts.push("");
-  if (args.offset)
+  if (args2.offset)
     opts.push(`([+-](?:[01]\\d|2[0-3]):[0-5]\\d)`);
   const timeRegex = `${time3}(?:${opts.join("|")})`;
   return new RegExp(`^${dateSource}T(?:${timeRegex})$`);
@@ -18268,11 +18268,11 @@ var $ZodCheckOverwrite = /* @__PURE__ */ $constructor("$ZodCheckOverwrite", (ins
 
 // node_modules/zod/v4/core/doc.js
 var Doc = class {
-  constructor(args = []) {
+  constructor(args2 = []) {
     this.content = [];
     this.indent = 0;
     if (this)
-      this.args = args;
+      this.args = args2;
   }
   indented(fn) {
     this.indent += 1;
@@ -18295,10 +18295,10 @@ var Doc = class {
   }
   compile() {
     const F = Function;
-    const args = this?.args;
+    const args2 = this?.args;
     const content = this?.content ?? [``];
     const lines = [...content.map((x) => `  ${x}`)];
-    return new F(...args, lines.join("\n"));
+    return new F(...args2, lines.join("\n"));
   }
 };
 
@@ -20276,8 +20276,8 @@ var $ZodFunction = /* @__PURE__ */ $constructor("$ZodFunction", (inst, def2) => 
     if (typeof func !== "function") {
       throw new Error("implement() must be called with a function");
     }
-    return function(...args) {
-      const parsedArgs = inst._def.input ? parse(inst._def.input, args) : args;
+    return function(...args2) {
+      const parsedArgs = inst._def.input ? parse(inst._def.input, args2) : args2;
       const result = Reflect.apply(func, this, parsedArgs);
       if (inst._def.output) {
         return parse(inst._def.output, result);
@@ -20289,8 +20289,8 @@ var $ZodFunction = /* @__PURE__ */ $constructor("$ZodFunction", (inst, def2) => 
     if (typeof func !== "function") {
       throw new Error("implementAsync() must be called with a function");
     }
-    return async function(...args) {
-      const parsedArgs = inst._def.input ? await parseAsync(inst._def.input, args) : args;
+    return async function(...args2) {
+      const parsedArgs = inst._def.input ? await parseAsync(inst._def.input, args2) : args2;
       const result = await Reflect.apply(func, this, parsedArgs);
       if (inst._def.output) {
         return await parseAsync(inst._def.output, result);
@@ -20316,22 +20316,22 @@ var $ZodFunction = /* @__PURE__ */ $constructor("$ZodFunction", (inst, def2) => 
     }
     return payload;
   };
-  inst.input = (...args) => {
+  inst.input = (...args2) => {
     const F = inst.constructor;
-    if (Array.isArray(args[0])) {
+    if (Array.isArray(args2[0])) {
       return new F({
         type: "function",
         input: new $ZodTuple({
           type: "tuple",
-          items: args[0],
-          rest: args[1]
+          items: args2[0],
+          rest: args2[1]
         }),
         output: inst._def.output
       });
     }
     return new F({
       type: "function",
-      input: args[0],
+      input: args2[0],
       output: inst._def.output
     });
   };
@@ -28869,11 +28869,11 @@ var ZodType = /* @__PURE__ */ $constructor("ZodType", (inst, def2) => {
       globalRegistry.add(cl, { description });
       return cl;
     },
-    meta(...args) {
-      if (args.length === 0)
+    meta(...args2) {
+      if (args2.length === 0)
         return globalRegistry.get(this);
       const cl = this.clone();
-      globalRegistry.add(cl, args[0]);
+      globalRegistry.add(cl, args2[0]);
       return cl;
     },
     isOptional() {
@@ -28903,29 +28903,29 @@ var _ZodString = /* @__PURE__ */ $constructor("_ZodString", (inst, def2) => {
   inst.minLength = bag.minimum ?? null;
   inst.maxLength = bag.maximum ?? null;
   _installLazyMethods(inst, "_ZodString", {
-    regex(...args) {
-      return this.check(_regex(...args));
+    regex(...args2) {
+      return this.check(_regex(...args2));
     },
-    includes(...args) {
-      return this.check(_includes(...args));
+    includes(...args2) {
+      return this.check(_includes(...args2));
     },
-    startsWith(...args) {
-      return this.check(_startsWith(...args));
+    startsWith(...args2) {
+      return this.check(_startsWith(...args2));
     },
-    endsWith(...args) {
-      return this.check(_endsWith(...args));
+    endsWith(...args2) {
+      return this.check(_endsWith(...args2));
     },
-    min(...args) {
-      return this.check(_minLength(...args));
+    min(...args2) {
+      return this.check(_minLength(...args2));
     },
-    max(...args) {
-      return this.check(_maxLength(...args));
+    max(...args2) {
+      return this.check(_maxLength(...args2));
     },
-    length(...args) {
-      return this.check(_length(...args));
+    length(...args2) {
+      return this.check(_length(...args2));
     },
-    nonempty(...args) {
-      return this.check(_minLength(1, ...args));
+    nonempty(...args2) {
+      return this.check(_minLength(1, ...args2));
     },
     lowercase(params) {
       return this.check(_lowercase(params));
@@ -28936,8 +28936,8 @@ var _ZodString = /* @__PURE__ */ $constructor("_ZodString", (inst, def2) => {
     trim() {
       return this.check(_trim());
     },
-    normalize(...args) {
-      return this.check(_normalize(...args));
+    normalize(...args2) {
+      return this.check(_normalize(...args2));
     },
     toLowerCase() {
       return this.check(_toLowerCase());
@@ -29428,11 +29428,11 @@ var ZodObject = /* @__PURE__ */ $constructor("ZodObject", (inst, def2) => {
     omit(mask) {
       return util_exports.omit(this, mask);
     },
-    partial(...args) {
-      return util_exports.partial(ZodOptional, this, args[0]);
+    partial(...args2) {
+      return util_exports.partial(ZodOptional, this, args2[0]);
     },
-    required(...args) {
-      return util_exports.required(ZodNonOptional, this, args[0]);
+    required(...args2) {
+      return util_exports.required(ZodNonOptional, this, args2[0]);
     }
   });
 });
@@ -29579,10 +29579,10 @@ var ZodMap = /* @__PURE__ */ $constructor("ZodMap", (inst, def2) => {
   inst._zod.processJSONSchema = (ctx, json2, params) => mapProcessor(inst, ctx, json2, params);
   inst.keyType = def2.keyType;
   inst.valueType = def2.valueType;
-  inst.min = (...args) => inst.check(_minSize(...args));
+  inst.min = (...args2) => inst.check(_minSize(...args2));
   inst.nonempty = (params) => inst.check(_minSize(1, params));
-  inst.max = (...args) => inst.check(_maxSize(...args));
-  inst.size = (...args) => inst.check(_size(...args));
+  inst.max = (...args2) => inst.check(_maxSize(...args2));
+  inst.size = (...args2) => inst.check(_size(...args2));
 });
 function map(keyType, valueType, params) {
   return new ZodMap({
@@ -29596,10 +29596,10 @@ var ZodSet = /* @__PURE__ */ $constructor("ZodSet", (inst, def2) => {
   $ZodSet.init(inst, def2);
   ZodType.init(inst, def2);
   inst._zod.processJSONSchema = (ctx, json2, params) => setProcessor(inst, ctx, json2, params);
-  inst.min = (...args) => inst.check(_minSize(...args));
+  inst.min = (...args2) => inst.check(_minSize(...args2));
   inst.nonempty = (params) => inst.check(_minSize(1, params));
-  inst.max = (...args) => inst.check(_maxSize(...args));
-  inst.size = (...args) => inst.check(_size(...args));
+  inst.max = (...args2) => inst.check(_maxSize(...args2));
+  inst.size = (...args2) => inst.check(_size(...args2));
 });
 function set(valueType, params) {
   return new ZodSet({
@@ -29998,11 +29998,11 @@ function _instanceof(cls, params = {}) {
   };
   return inst;
 }
-var stringbool = (...args) => _stringbool({
+var stringbool = (...args2) => _stringbool({
   Codec: ZodCodec,
   Boolean: ZodBoolean,
   String: ZodString
-}, ...args);
+}, ...args2);
 function json(params) {
   const jsonSchema = lazy(() => {
     return union([string2(params), number2(), boolean2(), _null3(), array(jsonSchema), record(string2(), jsonSchema)]);
@@ -35908,23 +35908,23 @@ var require_code$1 = /* @__PURE__ */ __commonJSMin(((exports) => {
   };
   exports._Code = _Code;
   exports.nil = new _Code("");
-  function _(strs, ...args) {
+  function _(strs, ...args2) {
     const code = [strs[0]];
     let i = 0;
-    while (i < args.length) {
-      addCodeArg(code, args[i]);
+    while (i < args2.length) {
+      addCodeArg(code, args2[i]);
       code.push(strs[++i]);
     }
     return new _Code(code);
   }
   exports._ = _;
   const plus = new _Code("+");
-  function str(strs, ...args) {
+  function str(strs, ...args2) {
     const expr = [safeStringify(strs[0])];
     let i = 0;
-    while (i < args.length) {
+    while (i < args2.length) {
       expr.push(plus);
-      addCodeArg(expr, args[i]);
+      addCodeArg(expr, args2[i]);
       expr.push(plus, safeStringify(strs[++i]));
     }
     optimize(expr);
@@ -36469,10 +36469,10 @@ var require_codegen = /* @__PURE__ */ __commonJSMin(((exports) => {
     }
   };
   var Func = class extends BlockNode {
-    constructor(name, args, async) {
+    constructor(name, args2, async) {
       super();
       this.name = name;
-      this.args = args;
+      this.args = args2;
       this.async = async;
     }
     render(opts) {
@@ -36697,8 +36697,8 @@ var require_codegen = /* @__PURE__ */ __commonJSMin(((exports) => {
       this._nodes.length = len;
       return this;
     }
-    func(name, args = code_1.nil, async, funcBody) {
-      this._blockNode(new Func(name, args, async));
+    func(name, args2 = code_1.nil, async, funcBody) {
+      this._blockNode(new Func(name, args2, async));
       if (funcBody) this.code(funcBody).endFunc();
       return this;
     }
@@ -36780,13 +36780,13 @@ var require_codegen = /* @__PURE__ */ __commonJSMin(((exports) => {
   }
   exports.not = not;
   const andCode = mappend(exports.operators.AND);
-  function and(...args) {
-    return args.reduce(andCode);
+  function and(...args2) {
+    return args2.reduce(andCode);
   }
   exports.and = and;
   const orCode = mappend(exports.operators.OR);
-  function or(...args) {
-    return args.reduce(orCode);
+  function or(...args2) {
+    return args2.reduce(orCode);
   }
   exports.or = or;
   function mappend(op) {
@@ -37416,8 +37416,8 @@ var require_code = /* @__PURE__ */ __commonJSMin(((exports) => {
       [names_1.default.rootData, names_1.default.rootData]
     ];
     if (it.opts.dynamicRef) valCxt.push([names_1.default.dynamicAnchors, names_1.default.dynamicAnchors]);
-    const args = (0, codegen_1._)`${dataAndSchema}, ${gen.object(...valCxt)}`;
-    return context2 !== codegen_1.nil ? (0, codegen_1._)`${func}.call(${context2}, ${args})` : (0, codegen_1._)`${func}(${args})`;
+    const args2 = (0, codegen_1._)`${dataAndSchema}, ${gen.object(...valCxt)}`;
+    return context2 !== codegen_1.nil ? (0, codegen_1._)`${func}.call(${context2}, ${args2})` : (0, codegen_1._)`${func}(${args2})`;
   }
   exports.callValidateCode = callValidateCode;
   const newRegExp = (0, codegen_1._)`new RegExp`;
@@ -48811,20 +48811,20 @@ function copyRegistry(handlers) {
   }
   return deepFreeze3(copied);
 }
-function classifyVersionedArgs(tool2, args) {
+function classifyVersionedArgs(tool2, args2) {
   try {
-    assertPlainJson(args, `${tool2} input`);
+    assertPlainJson(args2, `${tool2} input`);
   } catch {
     return { outcome: invalidInput(tool2, "input-not-object") };
   }
-  if (args === null || typeof args !== "object" || Array.isArray(args)) {
+  if (args2 === null || typeof args2 !== "object" || Array.isArray(args2)) {
     return { outcome: invalidInput(tool2, "input-not-object") };
   }
   let hasSchemaVersion;
   let descriptor;
   try {
-    hasSchemaVersion = Object.hasOwn(args, "schema_version");
-    descriptor = Object.getOwnPropertyDescriptor(args, "schema_version");
+    hasSchemaVersion = Object.hasOwn(args2, "schema_version");
+    descriptor = Object.getOwnPropertyDescriptor(args2, "schema_version");
   } catch {
     return { outcome: invalidInput(tool2, "input-not-object") };
   }
@@ -48844,7 +48844,7 @@ function classifyVersionedArgs(tool2, args) {
     };
   }
   try {
-    return { call: parseToolCall(tool2, args) };
+    return { call: parseToolCall(tool2, args2) };
   } catch {
     return { outcome: invalidInput(tool2, "input-invalid") };
   }
@@ -48852,14 +48852,14 @@ function classifyVersionedArgs(tool2, args) {
 function createToolBoundary(handlers) {
   const registry2 = copyRegistry(handlers);
   const boundary = {
-    invoke: async (name, args, context2) => {
+    invoke: async (name, args2, context2) => {
       if (typeof name !== "string") throw new TypeError("a string tool name is required");
       assertAuthenticInvocationContext(context2);
       if (!isToolName(name)) {
         const toolNameDigest = createHash3("sha256").update(name, "utf8").digest("hex");
         return protocolOutcome(createProtocolError("TOOL_NOT_FOUND", { tool_name_digest: toolNameDigest }));
       }
-      const classified = classifyVersionedArgs(name, args);
+      const classified = classifyVersionedArgs(name, args2);
       if ("outcome" in classified) return classified.outcome;
       const handler = registry2[name];
       if (handler === void 0) {
@@ -53286,12 +53286,12 @@ async function startMcpRuntime(options) {
       throw new ProtocolError(-32603, "Internal error");
     }
     try {
-      const args = record3.argumentsCandidate.present ? record3.argumentsCandidate.value : void 0;
+      const args2 = record3.argumentsCandidate.present ? record3.argumentsCandidate.value : void 0;
       const invocation = createInvocationContext(connection, {
         invocation_id: record3.requestToken,
         transport_metadata: { request_id: record3.externalId, operation: "tools/call" }
       }, ctx.mcpReq.signal);
-      const outcome = await boundary.invoke(record3.nameCandidate.value, args, invocation);
+      const outcome = await boundary.invoke(record3.nameCandidate.value, args2, invocation);
       applyActions(session.acceptSdkMessage({
         kind: "tool-boundary-outcome",
         requestToken: record3.requestToken,
@@ -55857,13 +55857,13 @@ var EventEmitter = class {
     listenerSet?.add(listener);
     this.#listeners.set(type, listenerSet);
   }
-  emit(type, ...args) {
+  emit(type, ...args2) {
     const listenerSet = this.#listeners.get(type);
     if (!listenerSet) {
       return;
     }
     for (const listenerSetElement of listenerSet) {
-      listenerSetElement(...args);
+      listenerSetElement(...args2);
     }
   }
   off(type, listener) {
@@ -55898,10 +55898,10 @@ var PromiseEventEmitter = class {
   on(event, listener) {
     return this.events.on(event, listener);
   }
-  emit(event, ...args) {
+  emit(event, ...args2) {
     const promises = [];
     this.events.listeners(event).forEach((listener) => {
-      promises.push(listener(...args));
+      promises.push(listener(...args2));
     });
     return Promise.all(promises);
   }
@@ -57198,18 +57198,18 @@ function requireLodash_sortby() {
       }
     })();
     var nodeIsTypedArray = nodeUtil && nodeUtil.isTypedArray;
-    function apply(func, thisArg, args) {
-      switch (args.length) {
+    function apply(func, thisArg, args2) {
+      switch (args2.length) {
         case 0:
           return func.call(thisArg);
         case 1:
-          return func.call(thisArg, args[0]);
+          return func.call(thisArg, args2[0]);
         case 2:
-          return func.call(thisArg, args[0], args[1]);
+          return func.call(thisArg, args2[0], args2[1]);
         case 3:
-          return func.call(thisArg, args[0], args[1], args[2]);
+          return func.call(thisArg, args2[0], args2[1], args2[2]);
       }
-      return func.apply(thisArg, args);
+      return func.apply(thisArg, args2);
     }
     function arrayMap(array2, iteratee) {
       var index = -1, length = array2 ? array2.length : 0, result = Array(length);
@@ -57672,14 +57672,14 @@ function requireLodash_sortby() {
     function baseRest(func, start) {
       start = nativeMax(start === void 0 ? func.length - 1 : start, 0);
       return function() {
-        var args = arguments, index = -1, length = nativeMax(args.length - start, 0), array2 = Array(length);
+        var args2 = arguments, index = -1, length = nativeMax(args2.length - start, 0), array2 = Array(length);
         while (++index < length) {
-          array2[index] = args[start + index];
+          array2[index] = args2[start + index];
         }
         index = -1;
         var otherArgs = Array(start + 1);
         while (++index < start) {
-          otherArgs[index] = args[index];
+          otherArgs[index] = args2[index];
         }
         otherArgs[start] = array2;
         return apply(func, this, otherArgs);
@@ -58034,11 +58034,11 @@ function requireLodash_sortby() {
         throw new TypeError(FUNC_ERROR_TEXT);
       }
       var memoized = function() {
-        var args = arguments, key = resolver ? resolver.apply(this, args) : args[0], cache = memoized.cache;
+        var args2 = arguments, key = resolver ? resolver.apply(this, args2) : args2[0], cache = memoized.cache;
         if (cache.has(key)) {
           return cache.get(key);
         }
-        var result = func.apply(this, args);
+        var result = func.apply(this, args2);
         memoized.cache = cache.set(key, result);
         return result;
       };
@@ -68973,17 +68973,26 @@ function createToolHandlers() {
 }
 
 // src/main.ts
-void runMcpProcess(
-  {
-    input: process3.stdin,
-    output: process3.stdout,
-    diagnostic: process3.stderr,
-    workingDirectory: process3.cwd(),
-    handlers: createToolHandlers(),
-    signals: process3,
-    setExitCode: (code) => {
-      process3.exitCode = code;
-    }
-  },
-  startMcpRuntime
-);
+var args = process3.argv.slice(2);
+if (args.includes("--help") || args.includes("-h")) {
+  process3.stdout.write("usage: archflow-mcp\n  stdio MCP server: speaks MCP JSON-RPC on stdin/stdout and takes no arguments\n");
+} else if (args.length > 0) {
+  process3.stderr.write(`archflow-mcp takes no arguments (got: ${args.join(" ")}); it is a stdio MCP server speaking MCP JSON-RPC on stdin/stdout
+`);
+  process3.exitCode = 1;
+} else {
+  void runMcpProcess(
+    {
+      input: process3.stdin,
+      output: process3.stdout,
+      diagnostic: process3.stderr,
+      workingDirectory: process3.cwd(),
+      handlers: createToolHandlers(),
+      signals: process3,
+      setExitCode: (code) => {
+        process3.exitCode = code;
+      }
+    },
+    startMcpRuntime
+  );
+}

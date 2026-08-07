@@ -29,6 +29,12 @@ case "${1:-}" in
     ;;
 esac
 
+if [ "$#" -gt 1 ]; then
+  echo "Unexpected extra arguments: $*" >&2
+  echo "Usage: ./install.sh [--claude|--codex]" >&2
+  exit 1
+fi
+
 if ! command -v node >/dev/null 2>&1; then
   echo "ArchFlow requires Node $(node -p 'require(process.argv[1]).engines.node' "$SCRIPT_DIR/package.json" 2>/dev/null || echo '^24.15.0'); node was not found on PATH." >&2
   exit 1

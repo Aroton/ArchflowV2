@@ -56,7 +56,7 @@ describe("archflow-local process", () => {
     });
 
     expect(result).toEqual({ code: 1, signal: null });
-    expect(stderr).toContain("unsupported undefined value at task slug");
+    expect(stderr).toContain("status requires --task <task>");
     child.stdin.destroy();
   }, TEST_TIMEOUT_MS);
 });

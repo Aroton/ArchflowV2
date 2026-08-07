@@ -51966,14 +51966,38 @@ var LOCAL_COMMANDS = Object.freeze([
   "manual-handoff",
   "upgrade"
 ]);
+var LOCAL_COMMAND_CONTRACTS = Object.freeze({
+  validate: { payload: '{"kind":<artifact kind>,"value":<artifact>}', task: "ignored" },
+  hash: { payload: "<any plain-JSON value>", task: "ignored" },
+  render: { payload: '{"kind":"review"|"adjudication","value":<review or adjudication artifact>}', task: "ignored" },
+  snapshot: { payload: '{"manifest":<result manifest>,"payloads":[...],"retained_task_bytes":<n>}', task: "required" },
+  restore: { payload: '{"result_digest":<sha256>,"output_path":<path>}', task: "required" },
+  maintain: { payload: '{"maintenance_id":<id>,"human_reason":<text>}', task: "required" },
+  decide: { payload: '{"kind":"request"|"decision"|"interface","value":<document>}', task: "required" },
+  "gate-counter": { payload: "<supplemental review record from the counter-review recipe>", task: "required" },
+  status: { payload: null, task: "required" },
+  reconcile: { payload: '{"recorded_projections":[...],"current_projections":[...],"active_heads":{...}}', task: "required" },
+  import: { payload: "<manual-checkpoint-import document>", task: "ignored" },
+  checkpoint: { payload: "<manual checkpoint chain extension>", task: "required" },
+  init: { payload: null, task: "ignored" },
+  "task-init": { payload: null, task: "required" },
+  envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
+  "build-document": { payload: "<document artifact input>", task: "required" },
+  "build-implementation-output": { payload: "<implementation output input>", task: "required" },
+  "manual-status": { payload: null, task: "required" },
+  "manual-next": { payload: "<selector/source artifact requested by manual-status>", task: "required" },
+  "manual-handoff": { payload: '{"expected_head":<digest>,"initialization"?:<task-init artifact>}', task: "required" },
+  upgrade: { payload: "<legacy staging descriptor>", task: "optional" }
+});
+var INPUT_FREE_COMMANDS = new Set(LOCAL_COMMANDS.filter((command) => LOCAL_COMMAND_CONTRACTS[command].payload === null));
 var maintenanceRecordV1Validator = createJsonSchemaValidator(maintenance_record_schema_default, [primitives_schema_default, path_claim_schema_default]);
 function requireValue(input) {
-  assertPlainJson(input.value, "local command input");
+  assertPlainJson(input.value, `${input.command} input payload`);
   return structuredClone(input.value);
 }
 function recordValue(input) {
   const value = requireValue(input);
-  if (value === null || Array.isArray(value) || typeof value !== "object") throw new TypeError("local command input must be an object");
+  if (value === null || Array.isArray(value) || typeof value !== "object") throw new TypeError(`${input.command} input payload must be a JSON object`);
   return value;
 }
 function validateArtifact(value) {
@@ -52242,17 +52266,30 @@ async function runLocalCommand(input) {
 }
 
 // src/local/main.ts
-var INPUT_FREE_COMMANDS = /* @__PURE__ */ new Set(["status", "manual-status", "init", "task-init"]);
-var NO_PAYLOAD_MESSAGE = "no payload provided: pass --input <json-file> or pipe JSON on stdin";
-async function readInput(path2) {
-  if (path2 === void 0 && process3.stdin.isTTY === true) throw new TypeError(NO_PAYLOAD_MESSAGE);
+function usageText() {
+  return [
+    "usage: archflow-local <command> [--task <task>] [--input <json-file>]",
+    "       payload commands read JSON from --input <json-file>, or from stdin when --input is omitted",
+    "       input-free commands never read stdin",
+    "commands (payload; --task):",
+    ...LOCAL_COMMANDS.map((command) => {
+      const contract2 = LOCAL_COMMAND_CONTRACTS[command];
+      const payload = contract2.payload === null ? "no payload" : `payload ${contract2.payload}`;
+      return `  ${command.padEnd(29)}${payload}; --task ${contract2.task}`;
+    }),
+    ""
+  ].join("\n");
+}
+async function readInput(command, path2) {
+  const missingPayload = () => new TypeError(path2 === void 0 ? `${command} requires an input payload (--input <json-file> or stdin); expected: ${LOCAL_COMMAND_CONTRACTS[command].payload}` : `${command} requires an input payload; ${path2} is empty; expected: ${LOCAL_COMMAND_CONTRACTS[command].payload}`);
+  if (path2 === void 0 && process3.stdin.isTTY === true) throw missingPayload();
   const bytes = path2 === void 0 ? await new Promise((resolve2, reject) => {
     const chunks = [];
     process3.stdin.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
     process3.stdin.once("end", () => resolve2(Buffer.concat(chunks)));
     process3.stdin.once("error", reject);
   }) : await readFile9(path2);
-  if (bytes.byteLength === 0) throw new TypeError(path2 === void 0 ? NO_PAYLOAD_MESSAGE : `no payload provided: ${path2} is empty`);
+  if (bytes.byteLength === 0) throw missingPayload();
   try {
     return JSON.parse(bytes.toString("utf8"));
   } catch (error51) {
@@ -52267,18 +52304,17 @@ async function main() {
     options: { task: { type: "string" }, input: { type: "string" }, help: { type: "boolean", short: "h" } }
   });
   if (parsed.values.help || parsed.positionals.length === 0) {
-    process3.stdout.write([
-      "usage: node dist/archflow-local.mjs <command> [--task <task>] [--input <json-file>]",
-      "       payload is read from --input <json-file>, or from stdin when --input is omitted",
-      `commands: ${LOCAL_COMMANDS.join(", ")}`,
-      `input-free commands (never read stdin): ${[...INPUT_FREE_COMMANDS].join(", ")}`,
-      ""
-    ].join("\n"));
+    process3.stdout.write(usageText());
     return;
   }
-  if (parsed.positionals.length !== 1 || !LOCAL_COMMANDS.includes(parsed.positionals[0])) throw new TypeError("unknown archflow-local command");
+  if (parsed.positionals.length !== 1 || !LOCAL_COMMANDS.includes(parsed.positionals[0])) {
+    throw new TypeError(`unknown archflow-local command "${parsed.positionals.join(" ")}"; run archflow-local --help for the command list`);
+  }
   const command = parsed.positionals[0];
-  const value = INPUT_FREE_COMMANDS.has(command) ? void 0 : await readInput(parsed.values.input);
+  if (LOCAL_COMMAND_CONTRACTS[command].task === "required" && parsed.values.task === void 0) {
+    throw new TypeError(`${command} requires --task <task>`);
+  }
+  const value = INPUT_FREE_COMMANDS.has(command) ? void 0 : await readInput(command, parsed.values.input);
   const result = await runLocalCommand({ command, working_directory: process3.cwd(), ...parsed.values.task === void 0 ? {} : { task_id: parsed.values.task }, ...value === void 0 ? {} : { value } });
   assertPlainJson(result, "local command result");
   process3.stdout.write(canonicalJsonBytes(result));

@@ -268,6 +268,23 @@ async function lifecyclePids(root: string): Promise<readonly [number, number]> {
 }
 
 describe("bundled MCP stdio runtime", () => {
+  it("prints usage for --help instead of waiting on stdin", () => {
+    const result = spawnSync(process.execPath, [runtimeBundle, "--help"], {
+      cwd: repositoryRoot, encoding: "utf8", timeout: PROCESS_TIMEOUT_MS,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("usage: archflow-mcp");
+    expect(result.stdout).toContain("takes no arguments");
+  });
+
+  it("rejects unexpected arguments instead of waiting on stdin", () => {
+    const result = spawnSync(process.execPath, [runtimeBundle, "--bogus"], {
+      cwd: repositoryRoot, encoding: "utf8", timeout: PROCESS_TIMEOUT_MS,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("archflow-mcp takes no arguments (got: --bogus)");
+  });
+
   it("emits the byte-exact initialize response and exits cleanly on EOF", async () => {
     const result = await complete([Buffer.from(jsonLine(initialize.request))]);
 

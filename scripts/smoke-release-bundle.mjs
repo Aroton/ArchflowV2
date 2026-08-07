@@ -292,7 +292,11 @@ export async function smokeReleasePayload(payloadRoot) {
     const moduleCanary = await proveModuleCanaryIsolation({ copiedPayload, ambientRoot, env, guard });
     const localHelp = await runChild({ argv: ["--require", guard, copiedLocalBundle, "--help"], cwd: copiedPayload, env, input: Buffer.alloc(0) });
     assertCleanExit(localHelp, "guarded local helper help");
-    assert.match(localHelp.stdout.toString("utf8"), /commands: validate, hash, render, snapshot, restore, maintain, decide, gate-counter, status, reconcile, import, checkpoint/u);
+    const localHelpText = localHelp.stdout.toString("utf8");
+    assert.match(localHelpText, /usage: archflow-local <command>/u);
+    assert.match(localHelpText, /^ {2}render {2,}payload \{"kind":"review"\|"adjudication"/mu);
+    assert.match(localHelpText, /^ {2}status {2,}no payload; --task required/mu);
+    assert.match(localHelpText, /^ {2}envelope {2,}payload \{"tool":<tool name>/mu);
     await assertGuardNegative({ cwd: copiedPayload, env, guard });
     return {
       bundles: ["archflow-mcp.mjs", "archflow-local.mjs"],

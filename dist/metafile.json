@@ -7281,7 +7281,7 @@
       ]
     },
     "src/local/commands.ts": {
-      "bytes": 22104,
+      "bytes": 24415,
       "format": "esm",
       "imports": [
         {
@@ -7572,7 +7572,7 @@
       ]
     },
     "src/local/main.ts": {
-      "bytes": 2938,
+      "bytes": 3561,
       "format": "esm",
       "imports": [
         {
@@ -7759,7 +7759,7 @@
       ]
     },
     "src/main.ts": {
-      "bytes": 512,
+      "bytes": 974,
       "format": "esm",
       "imports": [
         {
@@ -10841,7 +10841,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2136902,
+      "bytes": 2139495,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -12331,13 +12331,13 @@
           "bytesInOutput": 5011
         },
         "src/local/commands.ts": {
-          "bytesInOutput": 17283
+          "bytesInOutput": 19325
         },
         "src/local/envelope.ts": {
           "bytesInOutput": 11199
         },
         "src/local/main.ts": {
-          "bytesInOutput": 2583
+          "bytesInOutput": 3134
         },
         "src/local/manual-workflow.ts": {
           "bytesInOutput": 37673
@@ -12459,7 +12459,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2776426,
+      "bytes": 2777048,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12839,7 +12839,7 @@
           "bytesInOutput": 34870
         },
         "node_modules/@modelcontextprotocol/server/dist/ajvProvider-CEoC__sr.mjs": {
-          "bytesInOutput": 272022
+          "bytesInOutput": 272039
         },
         "node_modules/@modelcontextprotocol/server/dist/chunk-Br0eD_fh.mjs": {
           "bytesInOutput": 1403
@@ -12875,7 +12875,7 @@
           "bytesInOutput": 91
         },
         "node_modules/@secretlint/core/module/helper/promise-event-emitter.js": {
-          "bytesInOutput": 1431
+          "bytesInOutput": 1435
         },
         "node_modules/@secretlint/core/module/index.js": {
           "bytesInOutput": 3543
@@ -12908,7 +12908,7 @@
           "bytesInOutput": 329
         },
         "node_modules/@secretlint/secretlint-rule-preset-recommend/module/index.js": {
-          "bytesInOutput": 134351
+          "bytesInOutput": 134368
         },
         "node_modules/ajv-formats/dist/formats.js": {
           "bytesInOutput": 12298
@@ -12926,10 +12926,10 @@
           "bytesInOutput": 2982
         },
         "node_modules/ajv/dist/compile/codegen/code.js": {
-          "bytesInOutput": 4837
+          "bytesInOutput": 4843
         },
         "node_modules/ajv/dist/compile/codegen/index.js": {
-          "bytesInOutput": 23968
+          "bytesInOutput": 23976
         },
         "node_modules/ajv/dist/compile/codegen/scope.js": {
           "bytesInOutput": 5324
@@ -13079,7 +13079,7 @@
           "bytesInOutput": 538
         },
         "node_modules/ajv/dist/vocabularies/code.js": {
-          "bytesInOutput": 6231
+          "bytesInOutput": 6234
         },
         "node_modules/ajv/dist/vocabularies/core/id.js": {
           "bytesInOutput": 362
@@ -13181,16 +13181,16 @@
           "bytesInOutput": 1384
         },
         "node_modules/debug/src/browser.js": {
-          "bytesInOutput": 4717
+          "bytesInOutput": 4723
         },
         "node_modules/debug/src/common.js": {
-          "bytesInOutput": 5950
+          "bytesInOutput": 5961
         },
         "node_modules/debug/src/index.js": {
           "bytesInOutput": 313
         },
         "node_modules/debug/src/node.js": {
-          "bytesInOutput": 4328
+          "bytesInOutput": 4336
         },
         "node_modules/fast-deep-equal/index.js": {
           "bytesInOutput": 1304
@@ -13457,7 +13457,7 @@
           "bytesInOutput": 736
         },
         "node_modules/zod/v4/classic/schemas.js": {
-          "bytesInOutput": 45671
+          "bytesInOutput": 45710
         },
         "node_modules/zod/v4/core/api.js": {
           "bytesInOutput": 22887
@@ -13469,7 +13469,7 @@
           "bytesInOutput": 2090
         },
         "node_modules/zod/v4/core/doc.js": {
-          "bytesInOutput": 924
+          "bytesInOutput": 928
         },
         "node_modules/zod/v4/core/errors.js": {
           "bytesInOutput": 4684
@@ -13490,19 +13490,19 @@
           "bytesInOutput": 3794
         },
         "node_modules/zod/v4/core/regexes.js": {
-          "bytesInOutput": 7520
+          "bytesInOutput": 7531
         },
         "node_modules/zod/v4/core/registries.js": {
           "bytesInOutput": 1330
         },
         "node_modules/zod/v4/core/schemas.js": {
-          "bytesInOutput": 66155
+          "bytesInOutput": 66166
         },
         "node_modules/zod/v4/core/to-json-schema.js": {
           "bytesInOutput": 11455
         },
         "node_modules/zod/v4/core/util.js": {
-          "bytesInOutput": 19881
+          "bytesInOutput": 19883
         },
         "node_modules/zod/v4/core/versions.js": {
           "bytesInOutput": 54
@@ -13892,7 +13892,7 @@
           "bytesInOutput": 2333
         },
         "src/main.ts": {
-          "bytesInOutput": 340
+          "bytesInOutput": 803
         },
         "src/mcp/diagnostics.ts": {
           "bytesInOutput": 247
@@ -13934,13 +13934,13 @@
           "bytesInOutput": 3937
         },
         "src/mcp/sdk-adapter.ts": {
-          "bytesInOutput": 15150
+          "bytesInOutput": 15152
         },
         "src/mcp/send-queue.ts": {
           "bytesInOutput": 4970
         },
         "src/mcp/server.ts": {
-          "bytesInOutput": 6404
+          "bytesInOutput": 6414
         },
         "src/mcp/session.ts": {
           "bytesInOutput": 15516

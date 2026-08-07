@@ -9,6 +9,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { parseSafeCode, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
+import { LOCAL_COMMANDS, LOCAL_COMMAND_CONTRACTS } from "../../src/local/commands.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { stageTaskInitialization } from "../../src/init/task-initialization.js";
 import { runStateInitialization } from "../../src/state/initialization.js";
@@ -122,10 +123,34 @@ describe("payload input modes and error taxonomy", () => {
     expect(built).toMatchObject({ status: 0, value: { ok: true, value: { artifact_kind: "document", document_path: "prd.md" } } });
   }, TIMEOUT);
 
-  it("reports a missing payload when stdin is empty and --input is absent", () => {
+  it("names the command's input contract when stdin is empty and --input is absent", () => {
     const result = cliStdin(repositoryRoot, "envelope", "");
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("no payload provided: pass --input");
+    expect(result.stderr).toContain("envelope requires an input payload (--input <json-file> or stdin)");
+    expect(result.stderr).toContain('expected: {"tool":<tool name>,"input":<tool input>}');
+  });
+
+  it("names render's expected payload shape when called without input", () => {
+    const result = cliStdin(repositoryRoot, "render", "");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("render requires an input payload (--input <json-file> or stdin)");
+    expect(result.stderr).toContain('expected: {"kind":"review"|"adjudication"');
+  });
+
+  it("lists every command's input contract in the usage output", () => {
+    const result = spawnSync(process.execPath, [localBundle, "--help"], {
+      cwd: repositoryRoot, encoding: "utf8", timeout: TIMEOUT,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("usage: archflow-local <command>");
+    const lines = result.stdout.split("\n");
+    for (const command of LOCAL_COMMANDS) {
+      const contract = LOCAL_COMMAND_CONTRACTS[command];
+      const line = lines.find((candidate) => candidate.startsWith(`  ${command} `));
+      expect(line, `usage line for ${command}`).toBeDefined();
+      expect(line).toContain(contract.payload === null ? "no payload" : `payload ${contract.payload}`);
+      expect(line).toContain(`--task ${contract.task}`);
+    }
   });
 
   it("reports invalid JSON with its source for stdin payloads", () => {

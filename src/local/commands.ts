@@ -56,6 +56,39 @@ export const LOCAL_COMMANDS = Object.freeze([
   "manual-status", "manual-next", "manual-handoff", "upgrade",
 ] as const);
 export type LocalCommand = typeof LOCAL_COMMANDS[number];
+
+export type LocalCommandContract = Readonly<{
+  payload: string | null;   // null = input-free: never reads stdin
+  task: "required" | "optional" | "ignored";
+}>;
+
+export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommandContract>> = Object.freeze({
+  validate: { payload: '{"kind":<artifact kind>,"value":<artifact>}', task: "ignored" },
+  hash: { payload: "<any plain-JSON value>", task: "ignored" },
+  render: { payload: '{"kind":"review"|"adjudication","value":<review or adjudication artifact>}', task: "ignored" },
+  snapshot: { payload: '{"manifest":<result manifest>,"payloads":[...],"retained_task_bytes":<n>}', task: "required" },
+  restore: { payload: '{"result_digest":<sha256>,"output_path":<path>}', task: "required" },
+  maintain: { payload: '{"maintenance_id":<id>,"human_reason":<text>}', task: "required" },
+  decide: { payload: '{"kind":"request"|"decision"|"interface","value":<document>}', task: "required" },
+  "gate-counter": { payload: "<supplemental review record from the counter-review recipe>", task: "required" },
+  status: { payload: null, task: "required" },
+  reconcile: { payload: '{"recorded_projections":[...],"current_projections":[...],"active_heads":{...}}', task: "required" },
+  import: { payload: "<manual-checkpoint-import document>", task: "ignored" },
+  checkpoint: { payload: "<manual checkpoint chain extension>", task: "required" },
+  init: { payload: null, task: "ignored" },
+  "task-init": { payload: null, task: "required" },
+  envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
+  "build-document": { payload: "<document artifact input>", task: "required" },
+  "build-implementation-output": { payload: "<implementation output input>", task: "required" },
+  "manual-status": { payload: null, task: "required" },
+  "manual-next": { payload: "<selector/source artifact requested by manual-status>", task: "required" },
+  "manual-handoff": { payload: '{"expected_head":<digest>,"initialization"?:<task-init artifact>}', task: "required" },
+  upgrade: { payload: "<legacy staging descriptor>", task: "optional" },
+});
+
+export const INPUT_FREE_COMMANDS: ReadonlySet<LocalCommand> =
+  new Set(LOCAL_COMMANDS.filter((command) => LOCAL_COMMAND_CONTRACTS[command].payload === null));
+
 const maintenanceRecordV1Validator = createJsonSchemaValidator<MaintenanceRecordV1>(maintenanceRecordSchema, [primitivesSchema, pathClaimSchema]);
 
 type CommandInput = Readonly<{
@@ -66,13 +99,13 @@ type CommandInput = Readonly<{
 }>;
 
 function requireValue(input: CommandInput): PlainJsonValue {
-  assertPlainJson(input.value, "local command input");
+  assertPlainJson(input.value, `${input.command} input payload`);
   return structuredClone(input.value);
 }
 
 function recordValue(input: CommandInput): Record<string, PlainJsonValue> {
   const value = requireValue(input);
-  if (value === null || Array.isArray(value) || typeof value !== "object") throw new TypeError("local command input must be an object");
+  if (value === null || Array.isArray(value) || typeof value !== "object") throw new TypeError(`${input.command} input payload must be a JSON object`);
   return value as Record<string, PlainJsonValue>;
 }
 

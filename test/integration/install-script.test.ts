@@ -97,6 +97,17 @@ afterEach(async () => {
 });
 
 describe("installer", () => {
+  it("rejects unexpected extra arguments before doing any work", () => {
+    const result = spawnSync("bash", [join(repositoryRoot, "install.sh"), "--claude", "--bogus"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      timeout: TEST_TIMEOUT_MS,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Unexpected extra arguments: --claude --bogus");
+    expect(result.stderr).toContain("Usage: ./install.sh [--claude|--codex]");
+  });
+
   it("installs a verified offline bundle and prunes only previously owned skill files", async () => {
     const root = await checkoutCopy();
     const home = join(root, "home");
