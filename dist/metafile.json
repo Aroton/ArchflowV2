@@ -6790,7 +6790,7 @@
       ]
     },
     "src/dispatch/cli.ts": {
-      "bytes": 29418,
+      "bytes": 29528,
       "format": "esm",
       "imports": [
         {
@@ -6841,7 +6841,7 @@
       ]
     },
     "src/dispatch/coordinator.ts": {
-      "bytes": 4983,
+      "bytes": 6498,
       "format": "esm",
       "imports": [
         {
@@ -6892,7 +6892,7 @@
       ]
     },
     "src/dispatch/process.ts": {
-      "bytes": 9652,
+      "bytes": 10100,
       "format": "esm",
       "imports": [
         {
@@ -10841,7 +10841,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2139495,
+      "bytes": 2139814,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -12304,7 +12304,7 @@
           "bytesInOutput": 20617
         },
         "src/dispatch/process.ts": {
-          "bytesInOutput": 7067
+          "bytesInOutput": 7386
         },
         "src/dispatch/routing.ts": {
           "bytesInOutput": 2091
@@ -12459,7 +12459,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2777048,
+      "bytes": 2778514,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13880,10 +13880,10 @@
           "bytesInOutput": 22945
         },
         "src/dispatch/coordinator.ts": {
-          "bytesInOutput": 3022
+          "bytesInOutput": 4169
         },
         "src/dispatch/process.ts": {
-          "bytesInOutput": 7067
+          "bytesInOutput": 7386
         },
         "src/dispatch/routing.ts": {
           "bytesInOutput": 2091

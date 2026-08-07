@@ -9,13 +9,16 @@ import type { DispatchEnvelope } from "../review/envelopes.js";
 import { resolveTaskPath } from "../repository/paths.js";
 import {
   CliAdapterError,
+  exitClass,
   selectCliAdapter,
   type CliPreflight,
 } from "./cli.js";
 import {
   DispatchProcessError,
   runDispatchChild,
+  type DispatchChildResult,
   type DispatchChildSpec,
+  type DispatchFailureChannels,
 } from "./process.js";
 import type { DispatchRoute } from "./routing.js";
 import { createDispatchWorkspace } from "./workspace.js";
@@ -46,12 +49,28 @@ function failureCode(error: unknown): string | undefined {
   return undefined;
 }
 
+const CHANNEL_TAIL_BYTE_CAP = 4096;
+
+function channelTail(channel: Uint8Array): string {
+  const bytes = channel.byteLength > CHANNEL_TAIL_BYTE_CAP
+    ? channel.subarray(channel.byteLength - CHANNEL_TAIL_BYTE_CAP)
+    : channel;
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+type AttemptTelemetry = Readonly<{
+  started_at: string;
+  duration_ms: number;
+  child_result: DispatchChildResult | undefined;
+}>;
+
 async function writeAttemptRecord(
   input: DispatchCoordinatorInput,
   attemptId: string,
   route: DispatchRoute,
   preflight: CliPreflight | undefined,
   error: unknown,
+  telemetry: AttemptTelemetry,
 ): Promise<void> {
   const writer = input.dependencies.projection_writer;
   if (writer === undefined) return;
@@ -67,6 +86,11 @@ async function writeAttemptRecord(
   if (!target.ok) return;
 
   const code = failureCode(error);
+  const failed = error !== undefined;
+  const channels: DispatchFailureChannels | DispatchChildResult | undefined = telemetry.child_result
+    ?? (error instanceof DispatchProcessError ? error.channels : undefined);
+  const stdoutTail = failed && channels !== undefined ? channelTail(channels.stdout) : "";
+  const stderrTail = failed && channels !== undefined ? channelTail(channels.stderr) : "";
   const record = {
     schema_version: "1",
     attempt_id: attemptId,
@@ -76,14 +100,21 @@ async function writeAttemptRecord(
     family: route.family,
     model: route.model,
     effort: route.effort,
-    cancellation_source: input.cancellation_source,
-    status: error === undefined ? "succeeded" : "failed",
+    status: failed ? "failed" : "succeeded",
+    started_at: telemetry.started_at,
+    duration_ms: telemetry.duration_ms,
     ...(preflight === undefined ? {} : {
       cli_version: preflight.cli_version,
       managed_policy_present: preflight.managed_policy_present,
       managed_policy_paths: [...preflight.managed_policy_paths],
     }),
     ...(code === undefined ? {} : { failure_code: code }),
+    ...(code === "CANCELLED" ? { cancellation_source: input.cancellation_source } : {}),
+    ...(failed && telemetry.child_result !== undefined
+      ? { exit_class: exitClass(telemetry.child_result) }
+      : {}),
+    ...(stdoutTail === "" ? {} : { stdout_tail: stdoutTail }),
+    ...(stderrTail === "" ? {} : { stderr_tail: stderrTail }),
   } satisfies PlainJsonValue;
   await writer.replaceRegular(target.value, canonicalJsonBytes(record), false);
 }
@@ -104,8 +135,10 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
       allow_claude_dispatch: input.allow_claude_dispatch,
     });
     const attemptId = randomUUID();
+    const startedAt = new Date();
     let preflight: CliPreflight | undefined;
     let primaryError: unknown;
+    let childResult: DispatchChildResult | undefined;
     let workspace: Awaited<ReturnType<typeof createDispatchWorkspace>> | undefined;
 
     try {
@@ -116,23 +149,27 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
         input.cancellation_source,
       );
       const invocation = await adapter.buildInvocation(envelope, route, workspace, outputSchema);
-      const result = await runDispatchChild({
+      childResult = await runDispatchChild({
         ...invocation,
         signal: input.signal,
         cancellation_source: input.cancellation_source,
       });
-      const failure = adapter.classifyFailure(result);
+      const failure = adapter.classifyFailure(childResult);
       if (failure !== undefined) throw new CliAdapterError(failure);
       return Object.freeze({
         cli_version: preflight.cli_version,
-        extracted_output_bytes: adapter.parseOutput(result),
+        extracted_output_bytes: adapter.parseOutput(childResult),
       });
     } catch (error) {
       primaryError = error;
       throw error;
     } finally {
       await workspace?.dispose().catch(() => undefined);
-      await writeAttemptRecord(input, attemptId, route, preflight, primaryError).catch(() => undefined);
+      await writeAttemptRecord(input, attemptId, route, preflight, primaryError, {
+        started_at: startedAt.toISOString(),
+        duration_ms: Date.now() - startedAt.getTime(),
+        child_result: childResult,
+      }).catch(() => undefined);
     }
   };
 }

@@ -49,7 +49,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-async function harness(mode: "success" | "hang-version" | "hang-child") {
+async function harness(mode: "success" | "hang-version" | "hang-child" | "fail-child") {
   const root = await realpath(await mkdtemp(join(tmpdir(), "archflow-dispatch-coordinator-")));
   roots.push(root);
   const repository = join(root, "repository");
@@ -76,6 +76,7 @@ if (argv.length === 1 && argv[0] === "--version") {
   process.stdout.write("Logged in using ChatGPT\\n");
 } else {
   ${mode === "hang-child" ? `await writeFile(${JSON.stringify("__CHILD_STARTED__")}, "started\\n"); setInterval(() => undefined, 1000);` : ""}
+  ${mode === "fail-child" ? 'process.stderr.write("stream error: exceeded retry limit\\n"); process.exit(3);' : ""}
   process.stdin.resume();
   process.stdin.on("end", async () => {
     await writeFile(argv[argv.indexOf("-o") + 1], '{"schema_version":"1"}\\n');
@@ -172,7 +173,13 @@ describe("createDispatchCoordinator", () => {
       cli_version: "0.146.0",
       managed_policy_present: expect.any(Boolean),
       managed_policy_paths: expect.any(Array),
+      started_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      duration_ms: expect.any(Number),
     });
+    expect(persistedAttempt).not.toHaveProperty("cancellation_source");
+    expect(persistedAttempt).not.toHaveProperty("exit_class");
+    expect(persistedAttempt).not.toHaveProperty("stdout_tail");
+    expect(persistedAttempt).not.toHaveProperty("stderr_tail");
     const canaries = ["credential-canary-7429", "routing-sentinel-1836"];
     const persistedDiagnostics = Buffer.from(JSON.stringify(persistedAttempt));
     expect(scanDispatchOutput({ stdout: persistedDiagnostics, stderr: Buffer.alloc(0) }, canaries)).toEqual([]);
@@ -266,6 +273,39 @@ describe("createDispatchCoordinator", () => {
     });
     await expect(readdir(join(h.repository, ".archflow", "tasks", TASK, "results")))
       .rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("persists exit class and bounded channel tails when the dispatch child fails", async () => {
+    const h = await harness("fail-child");
+    const coordinator = createDispatchCoordinator({
+      authority: h.authority,
+      dependencies: h.dependencies,
+      host: "claude",
+      repository_root: h.repository,
+      phase_instance: PHASE,
+      signal: new AbortController().signal,
+      cancellation_source: "client",
+      allow_claude_dispatch: false,
+    });
+
+    const pending = withDispatchEnvironment(h, () =>
+      coordinator(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue));
+    await expect(pending).rejects.toMatchObject({
+      project_error: { code: "PROCESS_FAILED" },
+    });
+    const persistedAttempt = await attemptRecord(h.repository);
+    expect(persistedAttempt).toMatchObject({
+      adapter: "codex-cli",
+      status: "failed",
+      failure_code: "PROCESS_FAILED",
+      exit_class: "exit-3",
+      stderr_tail: "stream error: exceeded retry limit\n",
+      cli_version: "0.146.0",
+      started_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      duration_ms: expect.any(Number),
+    });
+    expect(persistedAttempt).not.toHaveProperty("cancellation_source");
+    expect(persistedAttempt).not.toHaveProperty("stdout_tail");
   });
 
   it("preserves a real coordinator classification through the live tool boundary", async () => {

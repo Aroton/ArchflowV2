@@ -442,7 +442,8 @@ function assertRoute(adapter: AdapterId, route: DispatchRoute): void {
   }
 }
 
-function exitClass(result: DispatchChildResult): string {
+/** Describes how a child ended (exit-N / signal-name) for failure diagnostics and attempt records. */
+export function exitClass(result: DispatchChildResult): string {
   if (result.exit_code !== null) return `exit-${String(result.exit_code)}`;
   if (result.signal !== null) return `signal-${result.signal.toLowerCase()}`;
   return "unknown-exit";

@@ -64198,12 +64198,14 @@ var DISPATCH_TIMEOUT_MS = 3e5;
 var DISPATCH_OUTPUT_BYTE_CAP = 8 * 1024 * 1024;
 var TERMINATION_GRACE_MS = 250;
 var DispatchProcessError = class extends Error {
-  constructor(project_error) {
+  constructor(project_error, channels) {
     super(project_error.code);
     this.project_error = project_error;
+    this.channels = channels;
     this.name = "DispatchProcessError";
   }
   project_error;
+  channels;
 };
 var fail10 = (error51) => {
   throw new DispatchProcessError(error51);
@@ -64355,22 +64357,28 @@ async function runDispatchChild(spec) {
   clearTimeout(timeout);
   if (escalation !== void 0) clearTimeout(escalation);
   spec.signal.removeEventListener("abort", abort);
+  const failWithChannels = (error51) => {
+    throw new DispatchProcessError(error51, Object.freeze({
+      stdout: Buffer.concat(stdoutChunks, stdoutBytes),
+      stderr: Buffer.concat(stderrChunks, stderrBytes)
+    }));
+  };
   if (spawnError !== void 0) return classifySpawnError(spec.adapter, spawnError);
   if (termination === "cancelled") {
-    return fail10(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
+    return failWithChannels(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
   }
   if (termination === "timeout") {
-    return fail10(createProjectError("TIMEOUT", { adapter: spec.adapter, attempt: 1, limit_ms: timeoutMs }));
+    return failWithChannels(createProjectError("TIMEOUT", { adapter: spec.adapter, attempt: 1, limit_ms: timeoutMs }));
   }
   if (termination === "overflow") {
-    return fail10(createProjectError("OUTPUT_OVERFLOW", {
+    return failWithChannels(createProjectError("OUTPUT_OVERFLOW", {
       adapter: spec.adapter,
       byte_count: overflowBytes,
       byte_cap: byteCap
     }));
   }
   if (termination === "io") {
-    return fail10(createProjectError("IO_ERROR", { operation: ioOperation, attempt: 1 }));
+    return failWithChannels(createProjectError("IO_ERROR", { operation: ioOperation, attempt: 1 }));
   }
   const stdout = Buffer.concat(stdoutChunks, stdoutBytes);
   const stderr = Buffer.concat(stderrChunks, stderrBytes);
@@ -65048,7 +65056,12 @@ function failureCode(error51) {
   }
   return void 0;
 }
-async function writeAttemptRecord(input, attemptId, route, preflight2, error51) {
+var CHANNEL_TAIL_BYTE_CAP = 4096;
+function channelTail(channel) {
+  const bytes = channel.byteLength > CHANNEL_TAIL_BYTE_CAP ? channel.subarray(channel.byteLength - CHANNEL_TAIL_BYTE_CAP) : channel;
+  return new TextDecoder("utf-8").decode(bytes);
+}
+async function writeAttemptRecord(input, attemptId, route, preflight2, error51, telemetry) {
   const writer = input.dependencies.projection_writer;
   if (writer === void 0) return;
   await ensureAttemptDirectory(input.authority, input.phase_instance);
@@ -65061,6 +65074,10 @@ async function writeAttemptRecord(input, attemptId, route, preflight2, error51) 
   });
   if (!target2.ok) return;
   const code = failureCode(error51);
+  const failed = error51 !== void 0;
+  const channels = telemetry.child_result ?? (error51 instanceof DispatchProcessError ? error51.channels : void 0);
+  const stdoutTail = failed && channels !== void 0 ? channelTail(channels.stdout) : "";
+  const stderrTail = failed && channels !== void 0 ? channelTail(channels.stderr) : "";
   const record3 = {
     schema_version: "1",
     attempt_id: attemptId,
@@ -65070,14 +65087,19 @@ async function writeAttemptRecord(input, attemptId, route, preflight2, error51) 
     family: route.family,
     model: route.model,
     effort: route.effort,
-    cancellation_source: input.cancellation_source,
-    status: error51 === void 0 ? "succeeded" : "failed",
+    status: failed ? "failed" : "succeeded",
+    started_at: telemetry.started_at,
+    duration_ms: telemetry.duration_ms,
     ...preflight2 === void 0 ? {} : {
       cli_version: preflight2.cli_version,
       managed_policy_present: preflight2.managed_policy_present,
       managed_policy_paths: [...preflight2.managed_policy_paths]
     },
-    ...code === void 0 ? {} : { failure_code: code }
+    ...code === void 0 ? {} : { failure_code: code },
+    ...code === "CANCELLED" ? { cancellation_source: input.cancellation_source } : {},
+    ...failed && telemetry.child_result !== void 0 ? { exit_class: exitClass(telemetry.child_result) } : {},
+    ...stdoutTail === "" ? {} : { stdout_tail: stdoutTail },
+    ...stderrTail === "" ? {} : { stderr_tail: stderrTail }
   };
   await writer.replaceRegular(target2.value, canonicalJsonBytes(record3), false);
 }
@@ -65091,8 +65113,10 @@ function createDispatchCoordinator(input) {
       allow_claude_dispatch: input.allow_claude_dispatch
     });
     const attemptId = randomUUID2();
+    const startedAt = /* @__PURE__ */ new Date();
     let preflight2;
     let primaryError;
+    let childResult;
     let workspace;
     try {
       workspace = await createDispatchWorkspace(adapter2.id, input.repository_root);
@@ -65102,23 +65126,27 @@ function createDispatchCoordinator(input) {
         input.cancellation_source
       );
       const invocation = await adapter2.buildInvocation(envelope, route, workspace, outputSchema);
-      const result = await runDispatchChild({
+      childResult = await runDispatchChild({
         ...invocation,
         signal: input.signal,
         cancellation_source: input.cancellation_source
       });
-      const failure2 = adapter2.classifyFailure(result);
+      const failure2 = adapter2.classifyFailure(childResult);
       if (failure2 !== void 0) throw new CliAdapterError(failure2);
       return Object.freeze({
         cli_version: preflight2.cli_version,
-        extracted_output_bytes: adapter2.parseOutput(result)
+        extracted_output_bytes: adapter2.parseOutput(childResult)
       });
     } catch (error51) {
       primaryError = error51;
       throw error51;
     } finally {
       await workspace?.dispose().catch(() => void 0);
-      await writeAttemptRecord(input, attemptId, route, preflight2, primaryError).catch(() => void 0);
+      await writeAttemptRecord(input, attemptId, route, preflight2, primaryError, {
+        started_at: startedAt.toISOString(),
+        duration_ms: Date.now() - startedAt.getTime(),
+        child_result: childResult
+      }).catch(() => void 0);
     }
   };
 }

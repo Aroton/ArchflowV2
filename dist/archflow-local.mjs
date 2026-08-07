@@ -46950,12 +46950,14 @@ var DISPATCH_TIMEOUT_MS = 3e5;
 var DISPATCH_OUTPUT_BYTE_CAP = 8 * 1024 * 1024;
 var TERMINATION_GRACE_MS = 250;
 var DispatchProcessError = class extends Error {
-  constructor(project_error) {
+  constructor(project_error, channels) {
     super(project_error.code);
     this.project_error = project_error;
+    this.channels = channels;
     this.name = "DispatchProcessError";
   }
   project_error;
+  channels;
 };
 var fail15 = (error51) => {
   throw new DispatchProcessError(error51);
@@ -47107,22 +47109,28 @@ async function runDispatchChild(spec) {
   clearTimeout(timeout);
   if (escalation !== void 0) clearTimeout(escalation);
   spec.signal.removeEventListener("abort", abort);
+  const failWithChannels = (error51) => {
+    throw new DispatchProcessError(error51, Object.freeze({
+      stdout: Buffer.concat(stdoutChunks, stdoutBytes),
+      stderr: Buffer.concat(stderrChunks, stderrBytes)
+    }));
+  };
   if (spawnError !== void 0) return classifySpawnError(spec.adapter, spawnError);
   if (termination === "cancelled") {
-    return fail15(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
+    return failWithChannels(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
   }
   if (termination === "timeout") {
-    return fail15(createProjectError("TIMEOUT", { adapter: spec.adapter, attempt: 1, limit_ms: timeoutMs }));
+    return failWithChannels(createProjectError("TIMEOUT", { adapter: spec.adapter, attempt: 1, limit_ms: timeoutMs }));
   }
   if (termination === "overflow") {
-    return fail15(createProjectError("OUTPUT_OVERFLOW", {
+    return failWithChannels(createProjectError("OUTPUT_OVERFLOW", {
       adapter: spec.adapter,
       byte_count: overflowBytes,
       byte_cap: byteCap
     }));
   }
   if (termination === "io") {
-    return fail15(createProjectError("IO_ERROR", { operation: ioOperation, attempt: 1 }));
+    return failWithChannels(createProjectError("IO_ERROR", { operation: ioOperation, attempt: 1 }));
   }
   const stdout = Buffer.concat(stdoutChunks, stdoutBytes);
   const stderr = Buffer.concat(stderrChunks, stderrBytes);
