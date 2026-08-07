@@ -29,7 +29,7 @@ If `next_action` is `initialize-repository`, stop and direct the user to `archfl
 
 For each pipeline step, call `archflow_state` with `status: "running"` before doing its work. The skill records the terminal `succeeded` or `failed` state for `produce`, `self_review`, and `triage`. `archflow_counter_review` and `archflow_adjudicate` install their own successful terminal state; do not send a second successful state transition after either tool returns.
 
-Every non-produce tool request uses one `archflow-local envelope --task <task>` pass over the complete proposed tool input, then uses the returned `input_fingerprint` in the tool call. A produce request is two-pass:
+Pipe every `archflow-local` payload as JSON directly on stdin (for example `printf '%s' '<json>' | archflow-local envelope --task <task>`); never write it to a scratch file — `--input <json-file>` remains supported but is unnecessary for generated input. Every non-produce tool request uses one `archflow-local envelope --task <task>` pass over the complete proposed tool input, then uses the returned `input_fingerprint` in the tool call. A produce request is two-pass:
 
 1. Draft `.archflow/tasks/<task>/prd.md`, then run `archflow-local build-document --task <task>` for `phase_instance: "prd"`, `step: "produce"`, `document_path: "prd.md"`, and an empty `declared_inputs` array, initially using the fingerprint reported by status.
 2. Run `archflow-local envelope --task <task>` over the complete `archflow_state` request. Substitute its fingerprint into both the request and the document artifact's `input_fingerprint`.

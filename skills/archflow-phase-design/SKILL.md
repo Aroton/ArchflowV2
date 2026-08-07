@@ -27,7 +27,7 @@ Run `archflow-local status --task <task>`, check the result's JSON `ok` field, p
 
 Call `archflow_state` with `status: "running"` before each pipeline step. Record the terminal exit for `produce`, `self_review`, and `triage` only. `archflow_counter_review` and `archflow_adjudicate` install their own successful exits.
 
-Every non-produce call uses one `archflow-local envelope --task <task>` pass over the complete proposed input. Produce uses two passes:
+Pipe every `archflow-local` payload as JSON directly on stdin (for example `printf '%s' '<json>' | archflow-local envelope --task <task>`); never write it to a scratch file — `--input <json-file>` remains supported but is unnecessary for generated input. Every non-produce call uses one `archflow-local envelope --task <task>` pass over the complete proposed input. Produce uses two passes:
 
 1. Draft `phases/<phase-number>/design.md`. Run `archflow-local build-document --task <task>` with the current phase instance, `step: "produce"`, `document_path: "phases/<phase-number>/design.md"`, and sorted declared inputs for `.archflow/tasks/<task>/design.md` and `.archflow/tasks/<task>/prd.md`.
 2. Run `archflow-local envelope --task <task>` over the complete `archflow_state` request and substitute the returned fingerprint into both the request and artifact.

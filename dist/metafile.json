@@ -7501,7 +7501,7 @@
       ]
     },
     "src/local/envelope.ts": {
-      "bytes": 13766,
+      "bytes": 14073,
       "format": "esm",
       "imports": [
         {
@@ -7572,7 +7572,7 @@
       ]
     },
     "src/local/main.ts": {
-      "bytes": 2262,
+      "bytes": 2938,
       "format": "esm",
       "imports": [
         {
@@ -10826,7 +10826,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2135195,
+      "bytes": 2136173,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -12319,10 +12319,10 @@
           "bytesInOutput": 17209
         },
         "src/local/envelope.ts": {
-          "bytesInOutput": 10905
+          "bytesInOutput": 11199
         },
         "src/local/main.ts": {
-          "bytesInOutput": 1899
+          "bytesInOutput": 2583
         },
         "src/local/manual-workflow.ts": {
           "bytesInOutput": 37673

@@ -46844,7 +46844,12 @@ async function computeCallEnvelope(services2, value) {
     throw new TypeError("call envelope input must be an object");
   }
   const tool2 = Reflect.get(snapshot, "tool");
-  if (!isToolName(tool2)) throw new TypeError("call envelope tool is invalid");
+  if (tool2 === void 0) {
+    throw new TypeError(`call envelope input is missing "tool": expected {"tool": <one of ${TOOL_NAMES.join(" | ")}>, "input": <tool input>}`);
+  }
+  if (!isToolName(tool2)) {
+    throw new TypeError(`call envelope tool ${JSON.stringify(tool2)} is not recognized: expected {"tool": <one of ${TOOL_NAMES.join(" | ")}>, "input": <tool input>}`);
+  }
   const call = parseToolCall(tool2, Reflect.get(snapshot, "input"));
   const fingerprint = await fingerprintFor(services2, call);
   if (!fingerprint.ok) return fingerprint;
@@ -52210,15 +52215,21 @@ async function runLocalCommand(input) {
 
 // src/local/main.ts
 var INPUT_FREE_COMMANDS = /* @__PURE__ */ new Set(["status", "manual-status", "init", "task-init"]);
+var NO_PAYLOAD_MESSAGE = "no payload provided: pass --input <json-file> or pipe JSON on stdin";
 async function readInput(path2) {
+  if (path2 === void 0 && process3.stdin.isTTY === true) throw new TypeError(NO_PAYLOAD_MESSAGE);
   const bytes = path2 === void 0 ? await new Promise((resolve2, reject) => {
     const chunks = [];
     process3.stdin.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
     process3.stdin.once("end", () => resolve2(Buffer.concat(chunks)));
     process3.stdin.once("error", reject);
   }) : await readFile9(path2);
-  if (bytes.byteLength === 0) return void 0;
-  return JSON.parse(bytes.toString("utf8"));
+  if (bytes.byteLength === 0) throw new TypeError(path2 === void 0 ? NO_PAYLOAD_MESSAGE : `no payload provided: ${path2} is empty`);
+  try {
+    return JSON.parse(bytes.toString("utf8"));
+  } catch (error51) {
+    throw new TypeError(`invalid JSON payload from ${path2 ?? "stdin"}: ${error51 instanceof Error ? error51.message : String(error51)}`);
+  }
 }
 async function main() {
   const parsed = parseArgs({
@@ -52228,9 +52239,13 @@ async function main() {
     options: { task: { type: "string" }, input: { type: "string" }, help: { type: "boolean", short: "h" } }
   });
   if (parsed.values.help || parsed.positionals.length === 0) {
-    process3.stdout.write(`usage: node dist/archflow-local.mjs <command> [--task <task>] [--input <json-file>]
-commands: ${LOCAL_COMMANDS.join(", ")}
-`);
+    process3.stdout.write([
+      "usage: node dist/archflow-local.mjs <command> [--task <task>] [--input <json-file>]",
+      "       payload is read from --input <json-file>, or from stdin when --input is omitted",
+      `commands: ${LOCAL_COMMANDS.join(", ")}`,
+      `input-free commands (never read stdin): ${[...INPUT_FREE_COMMANDS].join(", ")}`,
+      ""
+    ].join("\n"));
     return;
   }
   if (parsed.positionals.length !== 1 || !LOCAL_COMMANDS.includes(parsed.positionals[0])) throw new TypeError("unknown archflow-local command");

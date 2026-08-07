@@ -8,7 +8,10 @@ import { LOCAL_COMMANDS, runLocalCommand, type LocalCommand } from "./commands.j
 
 const INPUT_FREE_COMMANDS = new Set<LocalCommand>(["status", "manual-status", "init", "task-init"]);
 
+const NO_PAYLOAD_MESSAGE = "no payload provided: pass --input <json-file> or pipe JSON on stdin";
+
 async function readInput(path: string | undefined): Promise<unknown> {
+  if (path === undefined && process.stdin.isTTY === true) throw new TypeError(NO_PAYLOAD_MESSAGE);
   const bytes = path === undefined
     ? await new Promise<Buffer>((resolve, reject) => {
         const chunks: Buffer[] = [];
@@ -17,8 +20,12 @@ async function readInput(path: string | undefined): Promise<unknown> {
         process.stdin.once("error", reject);
       })
     : await readFile(path);
-  if (bytes.byteLength === 0) return undefined;
-  return JSON.parse(bytes.toString("utf8"));
+  if (bytes.byteLength === 0) throw new TypeError(path === undefined ? NO_PAYLOAD_MESSAGE : `no payload provided: ${path} is empty`);
+  try {
+    return JSON.parse(bytes.toString("utf8"));
+  } catch (error) {
+    throw new TypeError(`invalid JSON payload from ${path ?? "stdin"}: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 async function main(): Promise<void> {
@@ -27,7 +34,13 @@ async function main(): Promise<void> {
     options: { task: { type: "string" }, input: { type: "string" }, help: { type: "boolean", short: "h" } },
   });
   if (parsed.values.help || parsed.positionals.length === 0) {
-    process.stdout.write(`usage: node dist/archflow-local.mjs <command> [--task <task>] [--input <json-file>]\ncommands: ${LOCAL_COMMANDS.join(", ")}\n`);
+    process.stdout.write([
+      "usage: node dist/archflow-local.mjs <command> [--task <task>] [--input <json-file>]",
+      "       payload is read from --input <json-file>, or from stdin when --input is omitted",
+      `commands: ${LOCAL_COMMANDS.join(", ")}`,
+      `input-free commands (never read stdin): ${[...INPUT_FREE_COMMANDS].join(", ")}`,
+      "",
+    ].join("\n"));
     return;
   }
   if (parsed.positionals.length !== 1 || !LOCAL_COMMANDS.includes(parsed.positionals[0] as LocalCommand)) throw new TypeError("unknown archflow-local command");

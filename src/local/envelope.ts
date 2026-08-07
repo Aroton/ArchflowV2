@@ -9,7 +9,7 @@ import { parseToolCall, type ParsedToolCall } from "../contracts/mcp-tools.js";
 import { parseTaskPathClaim, type TaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import type { ModelFamily } from "../contracts/review.js";
-import { isToolName, type ToolName } from "../contracts/tool-names.js";
+import { TOOL_NAMES, isToolName, type ToolName } from "../contracts/tool-names.js";
 import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
 import { gateCounterReviewClaim, gateDecisionClaim, gateRequestClaim, resolveTaskPath } from "../repository/paths.js";
 import { identifyStateInitialization } from "../state/initialization.js";
@@ -185,7 +185,12 @@ export async function computeCallEnvelope(
     throw new TypeError("call envelope input must be an object");
   }
   const tool = Reflect.get(snapshot, "tool");
-  if (!isToolName(tool)) throw new TypeError("call envelope tool is invalid");
+  if (tool === undefined) {
+    throw new TypeError(`call envelope input is missing "tool": expected {"tool": <one of ${TOOL_NAMES.join(" | ")}>, "input": <tool input>}`);
+  }
+  if (!isToolName(tool)) {
+    throw new TypeError(`call envelope tool ${JSON.stringify(tool)} is not recognized: expected {"tool": <one of ${TOOL_NAMES.join(" | ")}>, "input": <tool input>}`);
+  }
   const call = parseToolCall(tool, Reflect.get(snapshot, "input"));
   const fingerprint = await fingerprintFor(services, call);
   if (!fingerprint.ok) return fingerprint;
