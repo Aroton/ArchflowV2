@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "archflow": {
+      "type": "stdio",
+      "command": "archflow-mcp",
+      "args": [],
+      "env": {},
+      "timeout": 3600000
+    }
+  }
+}
