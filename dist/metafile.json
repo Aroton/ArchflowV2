@@ -6790,7 +6790,7 @@
       ]
     },
     "src/dispatch/cli.ts": {
-      "bytes": 29528,
+      "bytes": 30277,
       "format": "esm",
       "imports": [
         {
@@ -6841,7 +6841,7 @@
       ]
     },
     "src/dispatch/coordinator.ts": {
-      "bytes": 6498,
+      "bytes": 7071,
       "format": "esm",
       "imports": [
         {
@@ -6892,7 +6892,7 @@
       ]
     },
     "src/dispatch/process.ts": {
-      "bytes": 10100,
+      "bytes": 10258,
       "format": "esm",
       "imports": [
         {
@@ -6944,9 +6944,14 @@
       ]
     },
     "src/dispatch/workspace.ts": {
-      "bytes": 2903,
+      "bytes": 6349,
       "format": "esm",
       "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:child_process"
+        },
         {
           "external": true,
           "kind": "import-statement",
@@ -7281,9 +7286,19 @@
       ]
     },
     "src/local/build-request.ts": {
-      "bytes": 5601,
+      "bytes": 20572,
       "format": "esm",
       "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/config.js",
+          "path": "src/contracts/config.ts"
+        },
         {
           "kind": "import-statement",
           "original": "../contracts/errors.js",
@@ -7306,8 +7321,38 @@
         },
         {
           "kind": "import-statement",
+          "original": "../contracts/review.js",
+          "path": "src/contracts/review.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/rubric.js",
+          "path": "src/contracts/rubric.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/triage.js",
+          "path": "src/contracts/triage.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/vocabulary.js",
+          "path": "src/contracts/vocabulary.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../dispatch/routing.js",
+          "path": "src/dispatch/routing.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "../state/document-artifact.js",
           "path": "src/state/document-artifact.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/evidence-results.js",
+          "path": "src/state/evidence-results.ts"
         },
         {
           "kind": "import-statement",
@@ -7318,6 +7363,21 @@
           "kind": "import-statement",
           "original": "../state/phase-documents.js",
           "path": "src/state/phase-documents.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/produce-subject.js",
+          "path": "src/state/produce-subject.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/request-templates.js",
+          "path": "src/state/request-templates.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/status.js",
+          "path": "src/state/status.ts"
         },
         {
           "kind": "import-statement",
@@ -7332,7 +7392,7 @@
       ]
     },
     "src/local/commands.ts": {
-      "bytes": 24735,
+      "bytes": 24992,
       "format": "esm",
       "imports": [
         {
@@ -7957,7 +8017,7 @@
       ]
     },
     "src/mcp/handlers/counter-review.ts": {
-      "bytes": 8698,
+      "bytes": 9891,
       "format": "esm",
       "imports": [
         {
@@ -7979,6 +8039,11 @@
           "kind": "import-statement",
           "original": "../../dispatch/coordinator.js",
           "path": "src/dispatch/coordinator.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../repository/git.js",
+          "path": "src/repository/git.ts"
         },
         {
           "kind": "import-statement",
@@ -9090,7 +9155,7 @@
       ]
     },
     "src/review/envelopes.ts": {
-      "bytes": 18260,
+      "bytes": 20401,
       "format": "esm",
       "imports": [
         {
@@ -10607,7 +10672,7 @@
       ]
     },
     "src/state/request-templates.ts": {
-      "bytes": 9345,
+      "bytes": 9592,
       "format": "esm",
       "imports": [
         {
@@ -10751,7 +10816,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 37952,
+      "bytes": 41294,
       "format": "esm",
       "imports": [
         {
@@ -11041,7 +11106,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2157311,
+      "bytes": 2172414,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -12402,7 +12467,7 @@
           "bytesInOutput": 5991
         },
         "src/contracts/rubric.ts": {
-          "bytesInOutput": 915
+          "bytesInOutput": 1023
         },
         "src/contracts/schemas/v1/active-gate.schema.json": {
           "bytesInOutput": 4339
@@ -12501,7 +12566,7 @@
           "bytesInOutput": 1586
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 20617
+          "bytesInOutput": 20933
         },
         "src/dispatch/process.ts": {
           "bytesInOutput": 7386
@@ -12531,10 +12596,10 @@
           "bytesInOutput": 5011
         },
         "src/local/build-request.ts": {
-          "bytesInOutput": 3697
+          "bytesInOutput": 16438
         },
         "src/local/commands.ts": {
-          "bytesInOutput": 19587
+          "bytesInOutput": 19844
         },
         "src/local/envelope.ts": {
           "bytesInOutput": 12041
@@ -12648,7 +12713,7 @@
           "bytesInOutput": 5880
         },
         "src/state/request-templates.ts": {
-          "bytesInOutput": 6299
+          "bytesInOutput": 6535
         },
         "src/state/request.ts": {
           "bytesInOutput": 3172
@@ -12660,7 +12725,7 @@
           "bytesInOutput": 25553
         },
         "src/state/status.ts": {
-          "bytesInOutput": 25034
+          "bytesInOutput": 26479
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 264
@@ -12671,7 +12736,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2820539,
+      "bytes": 2824724,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12999,6 +13064,11 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:child_process"
         },
         {
           "external": true,
@@ -14104,10 +14174,10 @@
           "bytesInOutput": 1586
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 22945
+          "bytesInOutput": 23261
         },
         "src/dispatch/coordinator.ts": {
-          "bytesInOutput": 4169
+          "bytesInOutput": 4424
         },
         "src/dispatch/process.ts": {
           "bytesInOutput": 7386
@@ -14116,7 +14186,7 @@
           "bytesInOutput": 2091
         },
         "src/dispatch/workspace.ts": {
-          "bytesInOutput": 2333
+          "bytesInOutput": 4425
         },
         "src/main.ts": {
           "bytesInOutput": 803
@@ -14131,7 +14201,7 @@
           "bytesInOutput": 17633
         },
         "src/mcp/handlers/counter-review.ts": {
-          "bytesInOutput": 6493
+          "bytesInOutput": 7004
         },
         "src/mcp/handlers/errors.ts": {
           "bytesInOutput": 908
@@ -14197,7 +14267,7 @@
           "bytesInOutput": 4115
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 12088
+          "bytesInOutput": 13099
         },
         "src/review/fixed-point.ts": {
           "bytesInOutput": 9748

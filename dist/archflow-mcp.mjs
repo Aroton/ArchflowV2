@@ -64868,7 +64868,7 @@ function deepFreeze6(value) {
 // src/dispatch/process.ts
 import { spawn } from "node:child_process";
 import { open as open4, stat } from "node:fs/promises";
-var DISPATCH_TIMEOUT_MS = 3e5;
+var DISPATCH_TIMEOUT_MS = 9e5;
 var DISPATCH_OUTPUT_BYTE_CAP = 8 * 1024 * 1024;
 var TERMINATION_GRACE_MS = 250;
 var DispatchProcessError = class extends Error {
@@ -65474,7 +65474,7 @@ var claudeAdapter = Object.freeze({
         "-p",
         "--safe-mode",
         "--tools",
-        "",
+        workspace.repository_view_root === void 0 ? "" : "Read,Grep,Glob",
         "--disable-slash-commands",
         "--strict-mcp-config",
         "--mcp-config",
@@ -65491,7 +65491,7 @@ var claudeAdapter = Object.freeze({
         "--effort",
         route.effort
       ]),
-      cwd: workspace.root,
+      cwd: workspace.repository_view_root ?? workspace.root,
       env: workspace.env,
       stdin: envelope.bytes
     });
@@ -65563,8 +65563,10 @@ var codexAdapter = Object.freeze({
         "--strict-config",
         "-s",
         "read-only",
+        // The already read-only sandbox targets the repository view when one is materialized;
+        // schema and output files deliberately stay in workspace.root, outside the view.
         "-C",
-        workspace.root,
+        workspace.repository_view_root ?? workspace.root,
         "--json",
         "--output-schema",
         schemaPath,
@@ -65658,6 +65660,7 @@ function mintAdjudicationObservation(input) {
 }
 
 // src/dispatch/workspace.ts
+import { spawn as spawn2 } from "node:child_process";
 import { mkdir as mkdir3, mkdtemp, realpath as realpath4, rm, symlink as symlink2 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute as isAbsolute4, join as join7, relative as relative4, resolve } from "node:path";
@@ -65721,6 +65724,55 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
     await rm(root, { recursive: true, force: true });
     throw error51;
   }
+}
+var GIT_OID2 = /^[0-9a-f]{40}$/u;
+async function materializeRepositoryView(workspace, repositoryRoot, commit) {
+  if (!GIT_OID2.test(commit)) {
+    throw new TypeError("repository view commit must be a full lowercase git object id");
+  }
+  const view = join7(workspace.root, "repo");
+  await mkdir3(view, { recursive: true });
+  await new Promise((resolvePipeline, reject) => {
+    const archive = spawn2("git", ["-C", repositoryRoot, "archive", "--format=tar", commit], {
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const extract = spawn2("tar", ["-x", "-C", view], { stdio: ["pipe", "ignore", "pipe"] });
+    extract.stdin.on("error", () => void 0);
+    archive.stdout.pipe(extract.stdin);
+    const stderrChunks = [];
+    archive.stderr.on("data", (chunk) => stderrChunks.push(chunk));
+    extract.stderr.on("data", (chunk) => stderrChunks.push(chunk));
+    let archiveExit;
+    let extractExit;
+    let settled = false;
+    const settle = (error51) => {
+      if (settled) return;
+      settled = true;
+      if (error51 === void 0) resolvePipeline();
+      else reject(error51);
+    };
+    const finish = () => {
+      if (archiveExit === void 0 || extractExit === void 0) return;
+      if (archiveExit === 0 && extractExit === 0) {
+        settle();
+        return;
+      }
+      const detail = Buffer.concat(stderrChunks).toString("utf8").trim();
+      settle(new Error(`repository view materialization failed: ${detail === "" ? "archive pipeline exited nonzero" : detail}`));
+    };
+    archive.on("error", (error51) => settle(new Error(`git archive failed to spawn: ${error51.message}`)));
+    extract.on("error", (error51) => settle(new Error(`tar failed to spawn: ${error51.message}`)));
+    archive.on("close", (code) => {
+      archiveExit = code;
+      finish();
+    });
+    extract.on("close", (code) => {
+      extractExit = code;
+      finish();
+    });
+  });
+  await rm(join7(view, ".archflow", "tasks"), { recursive: true, force: true });
+  return Object.freeze({ ...workspace, repository_view_root: view });
 }
 
 // src/dispatch/coordinator.ts
@@ -65794,6 +65846,13 @@ function createDispatchCoordinator(input) {
     let workspace;
     try {
       workspace = await createDispatchWorkspace(adapter2.id, input.repository_root);
+      if (input.repository_view_commit !== void 0 && envelope.result_kind === "review") {
+        workspace = await materializeRepositoryView(
+          workspace,
+          input.repository_root,
+          input.repository_view_commit
+        );
+      }
       preflight2 = await adapter2.preflight(
         workspace,
         input.signal,
@@ -65923,6 +65982,7 @@ var PINNED_CONTEXT_KINDS = [
   "conventions",
   "repo-map"
 ];
+var REPOSITORY_VIEW_NOTE = "Your working directory is a read-only checkout of the repository at this commit, excluding .archflow/tasks. Use it to verify repository claims; the artifact and pinned context remain the review subject and take precedence on conflict.";
 var ReviewEnvelopeError = class extends Error {
   project_error;
   /** The serialized size that failed the byte cap, when that is what failed. */
@@ -66018,6 +66078,20 @@ function validateAdjudicationSubject(value) {
     source_evidence_set_digest: parseSha256Digest(value.source_evidence_set_digest),
     invocation_id: parseEvidenceId(value.invocation_id, "invocation_id"),
     result_id: parseEvidenceId(value.result_id, "result_id")
+  };
+}
+function validateWorkspace(value) {
+  exactFields2(value, ["kind", "commit", "note"], "review workspace binding");
+  if (value.kind !== "read-only-repository-checkout") {
+    throw new TypeError("review workspace kind must be read-only-repository-checkout");
+  }
+  if (value.note !== REPOSITORY_VIEW_NOTE) {
+    throw new TypeError("review workspace note must be the fixed literal");
+  }
+  return {
+    kind: value.kind,
+    commit: parseGitOid(value.commit),
+    note: value.note
   };
 }
 function parseNonBlank(value, label) {
@@ -66138,8 +66212,13 @@ function finishEnvelope(resultKind, envelope, digestKind) {
 }
 function buildReviewEnvelope(value) {
   const snapshot = materialize3(value);
-  exactFields2(snapshot, ["artifact", "rubric", "context", "subject"], "review envelope input");
+  exactFields2(
+    snapshot,
+    snapshot.workspace === void 0 ? ["artifact", "rubric", "context", "subject"] : ["artifact", "rubric", "context", "subject", "workspace"],
+    "review envelope input"
+  );
   if (typeof snapshot.artifact !== "string") throw new TypeError("review envelope artifact must be text");
+  const workspace = snapshot.workspace === void 0 ? void 0 : validateWorkspace(snapshot.workspace);
   const parsedRubric = parseRubricV1(snapshot.rubric);
   const rubric = {
     schema_version: parsedRubric.schema_version,
@@ -66156,6 +66235,7 @@ function buildReviewEnvelope(value) {
     artifact: snapshot.artifact,
     rubric,
     context: validateContext(snapshot.context),
+    ...workspace === void 0 ? {} : { workspace },
     subject: validateSubject(snapshot.subject)
   };
   return finishEnvelope("review", envelope, "dispatch-envelope");
@@ -69915,6 +69995,9 @@ function envelopeOverflowError(error51, subject, exclusions) {
     byte_cap: REVIEW_ENVELOPE_BYTE_CAP
   });
 }
+async function resolveRepositoryViewCommit(runner, artifact) {
+  return artifact.artifact_kind === "implementation-output" ? artifact.base_commit : readHeadCommit(runner);
+}
 async function handleCounterReview(call, context2) {
   return mapHandlerErrors(context2.invocation_id, async () => {
     const session = await openHandlerSession(call, context2);
@@ -69966,6 +70049,10 @@ async function handleCounterReview(call, context2) {
     });
     if (!context_entries.ok) return context_entries;
     const resultId = dispatchId("result", call.input.intent_id);
+    const repositoryViewCommit = await resolveRepositoryViewCommit(
+      services.runner,
+      produce.value.artifact
+    );
     const coordinator = createDispatchCoordinator({
       authority: services.authority,
       dependencies: services.dependencies,
@@ -69975,7 +70062,8 @@ async function handleCounterReview(call, context2) {
       signal: context2.signal,
       cancellation_source: "client",
       // Both producer directions are implemented; release authorization remains a separate gate.
-      allow_claude_dispatch: true
+      allow_claude_dispatch: true,
+      repository_view_commit: repositoryViewCommit
     });
     const retainedBytes = services.dependencies.read_retained_task_bytes;
     if (retainedBytes === void 0) throw new TypeError("retained byte accounting is unavailable");
@@ -70022,6 +70110,11 @@ async function handleCounterReview(call, context2) {
         artifact,
         rubric: call.input.rubric,
         context: context_entries.value,
+        workspace: {
+          kind: "read-only-repository-checkout",
+          commit: repositoryViewCommit,
+          note: REPOSITORY_VIEW_NOTE
+        },
         subject: {
           task_id: services.authority.task_id,
           phase_instance: state.value.phase_instance,
