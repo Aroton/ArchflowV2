@@ -1,61 +1,128 @@
-# Context notes for mcp-e2e-test PRD (gathered 2026-08-04)
+# Testing and Validation Baseline
 
-Sources: two Explore agents (implementation/test map; git-history validation timeline) plus live findings from this session. Raw inputs for drafting `.archflow/tasks/mcp-e2e-test/prd.md`.
+**Explored:** 2026-08-10
+**Commit:** `28c1021`
 
-## Session-observed defects (found organically, before PRD drafting)
+## Test runner and configuration
 
-1. `archflow-local task-init` on a canonically-uninitialized repo (no `.archflow/config.yaml`) maps template ENOENT to retryable `IO_ERROR` / `retry-unchanged-attempt` — permanent condition presented as transient; `status` said `create-task` instead of `initialize-repository`. (src/init/task-initialization.ts createTaskConfig; bundle line ~51519)
-2. Phase 21 installed-validation ran a real install into the operator's real `$HOME`, silently replacing legacy skills with canonical ones (`~/.claude/skills`, `~/.agents/skills`, `.archflow-installed` marker + bundle stamped Aug 4 19:36). Environment contamination between validation and daily use; user expected legacy skills.
+- Tests use Vitest 4.1.10 in the Node environment (`vitest.config.ts`). Its only include is `test/**/*.test.ts`; files without the `.test.ts` suffix are not runtime tests.
+- TypeScript validation is strict and emit-free (`tsconfig.json`): `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`, and `skipLibCheck: false`. The include covers `src/**/*.ts`, all `test/**/*.ts`, and `vitest.config.ts`.
+- `test/types/mcp-sdk-public-surface.ts` is therefore compile-time coverage exercised by `npm run typecheck`, not by Vitest.
+- The package supports Node `^24.15.0`. CI runs the validation matrix on exactly Node 24.15.0 and 24.18.0 (`.github/workflows/ci.yml`).
 
-## Test inventory (current)
+At this commit, `npm test -- --reporter=dot` passed locally: **168 files discovered, 164 passed, 4 skipped; 1,802 tests discovered, 1,777 passed, 25 skipped**. The skipped groups were the explicitly opt-in real-host suites. Expected failure-path tests write some `INTERNAL_ERROR` diagnostics to stderr while still passing.
 
-- 160 test files, ~1241 cases: unit 102 files/~768, contracts 21/~278, integration 28/~142 (real git repos, real child processes, real bundles, fake CLIs), crash 4/~30 (real SIGKILL at write cuts), real-host 5/~23 (opt-in `ARCHFLOW_REAL_HOSTS=1`; benchmark needs `ARCHFLOW_REVIEW_BENCHMARK=1`).
-- Run: `npm test`, `npm run check` (full gate), `npm run test:real-host` (opt-in, `--no-file-parallelism`), `npm run bench:review`.
-- CI (`.github/workflows/ci.yml`): full check on Node 24.15.0/24.18.0 + release stage/compare. CI never runs real-host or installed-launcher tests.
-- `install-script-phase16.test.ts` runs `install.sh --claude` into temp HOME (payload verification, PATH failure message). `terminal-journey.test.ts` (opt-in) installs from tracked dist/ into scratch HOME and drives installed launchers through 12 scenarios; asserts real `~/.claude/skills` byte-unchanged (yet the real install still happened separately — see defect 2).
+## Suite inventory by behavior
 
-## Phase 21 validation ledger (docs/release-validation.md @ HEAD 2090a4a)
+### Unit: `test/unit/` (106 files)
 
-- VAL-01 **blocked**: neither operator journey (Claude-producer, Codex-producer) executed; evidence files `docs/validation/journey-val01-claude.md`, `journey-val01-codex.md` do not exist. Post-Amendment-2, installed discovery verified healthy on both hosts (Claude enumerates 5 tools; Codex fetched catalogue, attempted archflow_state).
-- Amendment 2 root cause: strict clientInfo schema (extra fields from real hosts: Claude title/description/websiteUrl; Codex title) killed server at connection-ready before tools/list. Found only by manual probing — invisible to entire automated suite. Regression now unit-level only.
-- Open: non-interactive `codex exec` cancels MCP tool calls host-side ("user cancelled MCP tool call", no tools/call frame reaches server) — no real Codex tool call has ever landed on the server.
-- VAL-12 **pending**: server-absent manual journey unexecuted (`journey-val12-manual.md` missing).
-- VAL-09 **partial**: real pending-gate MCP timeout never observed; protocol-era mismatch (Codex requests 2025-06-18, server pins 2025-11-25) needs interoperability review; no automated era-mismatch test.
-- VAL-08 partial: real TIMEOUT / OUTPUT_OVERFLOW / RATE_LIMITED / logged-out AUTH_UNAVAILABLE fake-CLI-only by design.
-- VAL-02 closed: thresholds.json detection 2/3, false-blocker 0, bound to benchmark digest, explicit-user-approval. (Earlier 83.3% false-blocker failure superseded by rubric recalibration.)
-- VAL-07 partial (owner-accepted): no OS-enforced containment for dispatch children. VAL-16 partial (owner-accepted): no installed two-phase slice. VAL-14 blocked (external legal, Phase 22 owns).
-- Real Claude adjudication never produced a normatively valid observation (uncertain_rule_versions contradiction) — one real direction unproven.
-- MCP rev 2026-07-28 hosts spawn a probe child: every real connection starts the server twice; no assertion may depend on process count.
-- Runbook hygiene: journeys use process-scoped `--strict-mcp-config --mcp-config`, `claude -p --no-session-persistence`, `codex exec --ephemeral` to avoid granting durable trust to temp paths.
+The unit layer is broad and normally imports production modules directly.
 
-## Gap list (agent's raw findings)
+- **Durable contracts and validation:** canonical JSON/digests, plain-JSON input discipline, branded evidence/path claims, YAML/config/workflow parsing, durable documents, checkpoints, handoffs, maintenance, initialization, state, gates, implementation outputs, and semantic derivations. Representative files include `test/unit/plain-json.test.ts`, `test/unit/canonical.test.ts`, `test/unit/durable-state.test.ts`, `test/unit/durable-output-entry-matrix.test.ts`, and `test/unit/phase-instance.test.ts`.
+- **State authority and persistence:** initialization, transition ordering, transactions, atomic replacement, locks, snapshots, repair, reconciliation, checkpoints, gate interfaces/waiting, next-action derivation, retained maintenance, result manifests, and secret rejection/scanning. Representative files include `test/unit/state-transaction.test.ts`, `test/unit/state-gates.test.ts`, `test/unit/state-snapshot-restore-seam.test.ts`, `test/unit/state-repair.test.ts`, and `test/unit/secret-rejection.test.ts`.
+- **Repository/Git safety:** discovery and identity, resolved-path containment, index/history/object behavior, constitution reads, handoffs, and linked-worktree behavior. These tests use real temporary Git repositories where behavior cannot be represented by a fake runner; examples are `test/unit/repository-paths.test.ts`, `test/unit/repository-index.test.ts`, and `test/unit/repository-identity.test.ts`.
+- **MCP runtime:** framing, session state, send queue, SDK adapter, process runner, server, tools, handler authority/error mapping, replay/supersession, and cancellation/overflow translation. Representative files include `test/unit/mcp-framing.test.ts`, `test/unit/mcp-sdk-adapter.test.ts`, `test/unit/mcp-session.test.ts`, and `test/unit/mcp-handler-authority.test.ts`.
+- **Dispatch and review:** CLI policy/projection, routing and attestation, child-process lifecycle, isolated workspaces, pinned context, review envelopes/diffs, adjudication, counter-review, and service-level fixed-point behavior. See `test/unit/dispatch-cli.test.ts`, `test/unit/dispatch-process.test.ts`, `test/unit/review-services.test.ts`, and `test/unit/adjudication.test.ts`.
+- **Initialization and local/manual surfaces:** asset/config scaffolding, host registration crash safety, task initialization, legacy upgrade, local command dispatch, and manual workflow helpers. See `test/unit/init-registration-crash-safety.test.ts`, `test/unit/init-task-initialization.test.ts`, `test/unit/legacy-upgrade.test.ts`, and `test/unit/local-manual-workflow.test.ts`.
 
-1. No test drives server through a real MCP client library/host; `@modelcontextprotocol/client` forbidden by repository-boundary test; all protocol tests hand-roll JSON-RPC; terminal-journey fakes clientInfo itself. (Consequence: Amendment 2 class of bug.)
-2. No automated protocol-era-mismatch (2025-06-18 vs 2025-11-25) test.
-3. notifications/*, resources/*, prompts/*, sampling, protocol-level cancellation only covered by adversarial-bytes fixture.
-4. No skill is ever executed: skill tests grep SKILL.md text only; no "prompt → skill → MCP tool → durable state" test; archflow-explore/archflow-status/init agents have no contract test at all.
-5. Operator journeys (VAL-01 x2, VAL-12) never executed — manual runbooks in docs/real-host-journeys.md.
-6. Real-host suites never in CI; adapter drift vs real claude/codex versions undetected at merge.
-7. install.sh --codex and no-flag both-hosts paths not separately asserted (phase16 test uses --claude only).
-8. No test that a real host actually loads/connects via ArchFlow-written `.mcp.json`/`.codex/config.toml` (runbooks use process-scoped configs instead).
-9. Stale context docs: architecture.md/state-and-contracts.md claim inert runtime, miss src/init, src/local, src/mcp/handlers, real-host tests; wrong counts (76/10 vs actual 102/28).
-10. test/types/mcp-sdk-public-surface.ts not picked up by vitest glob (typecheck-only).
-11. Documented open boundaries (docs/reliability-security-limitations.md): no OS containment, dispatch child can read repo + real $HOME, Codex tool-surface emptiness unprovable, openResolved TOCTOU, setsid() escapees.
+Success cases are paired with representative boundary failures: malformed/non-plain inputs and split-observation getters; digest, revision, task, and phase mismatches; stale or contradictory evidence; traversal/symlink/class-confusion paths; lock and snapshot limits; secret-bearing output; process cancellation/overflow; and unsupported or unauthenticated host classifications.
 
-## Implementation map (abbrev)
+### Contract: `test/contracts/` (21 files)
 
-- Deliverables: archflow-mcp (src/main.ts → dist/archflow-mcp.mjs), archflow-local (src/local/main.ts → dist/archflow-local.mjs, 21 commands), 8 skills, scaffold assets. ~30.5k LoC TS, 162 files, 45 JSON Schemas.
-- Subsystems: src/mcp (framing/session/send-queue/server/sdk-adapter, pinned protocol 2025-11-25) + src/mcp/handlers (live 5-tool registry); src/contracts (Ajv+Zod dual, validateDurableSemantics); src/state (~30 files durable kernel, gates, checkpoints, manual mode, reconciliation); src/repository (git+path safety); src/dispatch (routing FAMILY_MISMATCH, cli adapters, workspace disposable HOME, coordinator); src/review (envelopes, counter-review, adjudication, fixed-point DEFAULT_MAX_ATTEMPTS=3); src/init; src/local (manual-workflow.ts 1008 lines).
-- 5 tools: archflow_state/counter_review/adjudicate/gate/waiver; CommonToolInput {schema_version, task_id, intent_id, expected_revision, input_fingerprint}.
-- Gates: 9 kinds, deterministic g-<sha256>, immutable decisions/ archive, disposable gate.json interface, supersession GATE_SUPERSEDED. Waiver = gate with origin re-authenticated from archived request+decision.
-- Install: install.sh verifies manifest sha256+size fail-closed, stages to ~/.archflow/bundle, launchers to ~/.local/bin, skills with .archflow-installed ownership manifest. Registration per-repo via archflow-local init (.mcp.json timeout 3600000; .codex/config.toml managed block).
-- Host identity from clientInfo.name: claude-code / codex-mcp-client / unknown.
+This layer pins agreement among TypeScript/Zod models, JSON Schemas, durable semantics, MCP-advertised schemas, skills, and release metadata.
 
-## User's brief
+- Schema registry and foundational/shared primitive agreement: `schema-registry.test.ts`, `foundational-schema-agreement.test.ts`, `shared-primitives-schema-agreement.test.ts`.
+- Durable structural and semantic corpora, mirror parity, gate/error/supplemental exhaustiveness, and result manifests: `durable-agreement.test.ts`, `durable-structural-corpus.test.ts`, `durable-semantics-corpus.test.ts`, `durable-gate.test.ts`, `gate-error-supplemental-exhaustive.test.ts`.
+- MCP catalogue/schema/runtime agreement: `mcp-advertised-schema.test.ts`, `mcp-contract-agreement.test.ts`.
+- Skill text and workflow trust boundaries: `skill-contract-canonical.test.ts`, `skill-contract-degraded-workflow.test.ts`, `skill-contract-upgrade.test.ts`.
+- Repository/package and release boundaries: `repository-boundary.test.ts`, `release-contracts.test.ts`, `canonical-parity.test.ts`.
 
-Task mcp-e2e-test: PRD defining what testing is missing to reach ~85% confidence everything works BEFORE manual testing begins. So: PRD should prioritize automated (or at least agent-executable) coverage that de-risks the manual operator journeys, not replace them.
+Fixtures under `test/fixtures/contracts/`, `test/fixtures/foundation/`, and `test/fixtures/mcp/` provide known-valid documents plus invalid traversal, contradictory review, malformed state, protocol, and adversarial-byte examples. Several corpus tests explicitly prove error precedence and total ordering, not merely acceptance/rejection.
 
-## Pending before PRD loop can run
+### Integration: `test/integration/` (32 files)
 
-- User reviews/commits scaffolding (.archflow/workflow.yaml, constitution/, config.yaml, .mcp.json, .codex/config.toml).
-- User approves archflow MCP server in Claude Code (/mcp or session restart); archflow_* tools not in this session yet.
+Integration tests assemble production services around real temporary repositories, real child processes, stdio framing, or generated bundles. They cover:
+
+- Repository discovery/object proofs/configuration matrices, linked worktrees, relocation, conflicts, and file-kind restore collisions (`repository-git-matrix.test.ts`, `repository-git-object-proofs.test.ts`, `manifest-file-kind-restore-matrix.test.ts`).
+- Durable state concurrency, lifecycle, projection, replay, reconciliation, gates/waivers, supplemental review, and fixed-point review (`state-transaction.test.ts`, `state-gate-lifecycle.test.ts`, `mcp-handler-state-replay.test.ts`, `review-fixed-point-live.test.ts`).
+- Full MCP stdio/tool-handler behavior, cancellation, handler isolation, adjudication, and counter-review replay (`mcp-stdio.test.ts`, `mcp-handlers.test.ts`, `isolation-handler-entry.test.ts`, `mcp-adjudicate-constitution-gate.test.ts`).
+- Dispatch plumbing/coordinator/CLI behavior through deterministic fake Claude and Codex children (`dispatch-plumbing.test.ts`, `dispatch-coordinator.test.ts`, `dispatch-cli.test.ts`).
+- Repository initialization, project registration, installer behavior, local CLI command/payload/stdin discipline, manual workflow, and legacy upgrade/fault recovery (`init-orchestration.test.ts`, `init-registration.test.ts`, `install-script.test.ts`, `local-cli-stdin-discipline.test.ts`, `manual-workflow.test.ts`, `legacy-staging-faults.test.ts`).
+- Offline release behavior (`release-offline.test.ts`).
+
+Representative failure coverage includes exact-replay versus stale-CAS behavior, two-process same-task races, non-plain handler output, illegal constitution changes, process cancellation, leaked plumbing bytes, registration collisions, interrupted legacy staging, dirty worktrees, and input-free CLI commands with stdin deliberately held open.
+
+### Crash: `test/crash/` (4 files)
+
+`state-transaction.test.ts`, `state-gate-lifecycle.test.ts`, `state-initialization.test.ts`, and `state-checkpoint-adoption.test.ts` spawn fixture children and inject real process termination at persistence cut points. They assert that restart exposes either prior or fully installed authority, exact retained receipts resume safely, substituted retries are rejected, abandoned locks require explicit repair, and partial projections/results never become authoritative. Crash-control fixtures live in `test/fixtures/*child.mjs` and `test/fixtures/crash-projection-writer.mjs`; production modules are also checked not to ship those controls.
+
+### Real-host and installed-distribution: `test/real-host/` (5 files)
+
+- `preflight.test.ts` probes installed/authenticated Claude and Codex versions, identity/auth shapes, unsolicited pre-initialize recovery, managed-policy reporting, and PII omission.
+- `dispatch.test.ts` makes real opposite-family review/adjudication calls and requires schema-valid, server-attested evidence; it rejects same-family routing before dispatch.
+- `failure-classes.test.ts` observes real unsupported-model and cancellation classifications.
+- `terminal-journey.test.ts` installs tracked `dist/` into a scratch home and exercises installed `archflow-local`/`archflow-mcp` slices including initialization, checkpoint/import, snapshot caps, dirty-worktree replay, maintenance, secret rejection, and legacy upgrade.
+- `review-benchmark.test.ts` pins the benchmark digest/threshold binding in ordinary runs; its actual twelve-call real-model matrix is separately gated.
+
+Real hosts are hermetic by default. `ARCHFLOW_REAL_HOSTS=1 npm run test:real-host` enables the suite and fails if both authenticated host CLIs are unavailable. The benchmark additionally requires `ARCHFLOW_REVIEW_BENCHMARK=1` (`ARCHFLOW_REAL_HOSTS=1 ARCHFLOW_REVIEW_BENCHMARK=1 npm run bench:review`). `test/helpers/real-host.ts` sanitizes package-local host shims from `PATH`, probes versions/authentication, and derives the long timeout from production dispatch. The terminal journey uses a scratch home and needs only the first opt-in; it does not dispatch a model or use credentials.
+
+## Fixtures and reusable harnesses
+
+- `test/helpers/temp-repository.ts` creates isolated Git repositories with global/system Git config disabled, deterministic author identity, `.gitattributes`, linked-worktree, relocation, object, and conflict helpers.
+- `test/helpers/task-workspace.ts` creates a committed policy base, stages revision-1 task initialization, and returns real production services for focused tests.
+- `test/helpers/resolved-constitution.ts` and `test/helpers/real-host.ts` supply constitution and host-specific seams.
+- `test/fixtures/dispatch/` contains deterministic fake Claude/Codex processes, protocol handshakes, plumbing children, and a grandchild-process fixture.
+- `test/fixtures/mcp/runtime/` contains initialize/call transcripts and adversarial bytes used by stdio and release smoke tests.
+- `test/fixtures/corpus/` contains seeded-defect/control artifacts plus adjudication and review scenarios; `test/integration/review-corpus.test.ts` and the real benchmark consume them.
+- `test/fixtures/legacy/`, `test/fixtures/init/`, and `test/fixtures/release/` cover legacy layouts, fake host registration, and hostile runtime/canary checks.
+
+Temporary repositories and homes are removed by harness cleanup. Git-related suites use availability gates; on a machine without Git those groups skip rather than synthesize Git behavior.
+
+## Validation and build commands
+
+Run from the package root:
+
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run test:unit
+npm run test:contracts
+npm run test:mcp-runtime
+npm run build:temp
+npm run check
+```
+
+`npm run check` is the local aggregate gate. In order it runs:
+
+1. `probe:mcp-sdk-compatibility` — asserts pinned `@modelcontextprotocol/server`/`core` 2.0.0 public runtime and declaration behavior, protocol 2025-11-25 behavior, and live npm `latest` dist-tags.
+2. `typecheck`.
+3. `test:mcp-runtime` — `test/unit/mcp-*.test.ts` plus `test/integration/mcp-stdio.test.ts`.
+4. `npm test`, then `test:contracts` again as an explicit contract gate.
+5. `build:temp` — esbuilds temporary contracts/runtime bundles under the OS temp directory, smoke-exercises them, and removes them.
+6. `check:dependencies` — exact direct and lockfile versions/licenses, approved dependency closure, and prohibited-package policy.
+7. `check:notices` plus `test:notices-policy` — inventory/retained-notice validation and changed/missing/unmapped mutation cases.
+8. `check:mcp-sdk-boundary` plus `test:mcp-sdk-boundary-policy` — SDK imports restricted to `src/mcp/sdk-adapter.ts`, with mutation cases for static/type/side-effect/dynamic/re-export/private-path violations.
+9. `check:release` — tracked `dist/` validation, hostile/offline bundle smoke, release-integrity mutations, and byte reproduction.
+
+There is no separate lint or formatter command in `package.json`. There is also no coverage command or enforced coverage threshold; `vitest.config.ts` only names `coverage/` as the report directory.
+
+## CI and release checks
+
+`.github/workflows/ci.yml` runs on every push and pull request with read-only contents permission. On each Node matrix entry it installs with `npm ci`, expands the local aggregate into individual visible steps, then:
+
+- validates tracked `dist/` and runs hostile/offline smoke, release mutation tests, and reproduction;
+- stages a fresh release into `$RUNNER_TEMP`, compares it with tracked `dist/`, and asserts the repository has no `.tmp` residue.
+
+Release validation is implemented by `scripts/release-support.mjs` and front ends in `scripts/check-release.mjs`, `scripts/build-release.mjs`, `scripts/reproduce-release.mjs`, `scripts/smoke-release-bundle.mjs`, and `scripts/test-release-integrity.mjs`. It checks manifest/artifact closure and digests, build/input provenance, declared runtime assets and legal material, bundle imports, copied-payload behavior under a hostile guard, exact stdio/adversarial transcripts, module/repository canaries, mutation rejection, safe staging/recovery, and reproducibility. `test/contracts/release-contracts.test.ts` and `test/integration/release-offline.test.ts` add schema and offline behavior coverage.
+
+## Known current limitations and gaps
+
+- **Real-host suites are intentionally outside `npm run check` and CI.** `test/contracts/repository-boundary.test.ts` pins this exclusion. Host/version/provider drift is found only when someone explicitly runs `test:real-host`; the benchmark has a second opt-in.
+- **Operator-level journeys remain separate evidence.** `docs/release-validation.md` records the two full producer journeys (VAL-01) as unexecuted, the server-absent manual journey (VAL-12) as pending, and a complete installed two-phase phase-design/phase-implementation slice (VAL-16) as an accepted gap. The automated terminal suite proves named slices, not an entire human workflow.
+- **Some real failure classes remain simulated.** The same report records real `TIMEOUT`, `OUTPUT_OVERFLOW`, `RATE_LIMITED`, and logged-out `AUTH_UNAVAILABLE` as fake-only by design (VAL-08), and no observed real host holding a pending gate through its resolved timeout (VAL-09).
+- **Real-host security evidence is bounded.** Fake and real dispatch tests check generated homes, scrubbed environment, canaries, output scanning, and PII omission, but `docs/release-validation.md` explicitly records no OS-enforced containment or proof against repository/global-instruction and persistence-capable-tool access (VAL-07).
+- **Platform coverage is narrow.** CI is Ubuntu-only. Process-group cancellation/reaping cases in `test/integration/dispatch-plumbing.test.ts` and `test/integration/mcp-stdio.test.ts` run only when `process.platform !== "win32"`; no Windows CI job proves the alternate path.
+- **No quantitative coverage gate exists.** Confidence comes from behavioral/corpus/mutation suites and the release matrix, not line/branch percentages.
+- **The compatibility probe requires network access.** `scripts/probe-mcp-sdk-compatibility.mjs` checks live npm dist-tags, so the full `npm run check` is not an air-gapped gate even though release runtime smoke itself is deliberately offline/hostile.
+- **Release-validation documentation is point-in-time evidence.** `docs/release-validation.md` is stamped 2026-08-04 and contains some evolving Phase 21 observations; use executed tests/artifacts and a newly recorded opt-in run when deciding present real-host status rather than treating candidate procedures as current proof.

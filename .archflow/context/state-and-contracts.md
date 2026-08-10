@@ -1,864 +1,440 @@
-# Durable State and Contracts Subsystem
+# Durable State and Protocol Contracts
 
-**Date:** 2026-07-31
-**Commit:** fccf3fb
+**Explored:** 2026-08-10
+**Commit:** `28c1021`
 
-Covers `src/contracts/` (41 files), `src/state/` (22 files), `src/review/` (4 files) — the dominant
-subsystem of this repo, ~14.5k lines. Repo-wide map, entry points, and build system live in
-`architecture.md`; this document is internals, invariants, and data shapes only.
+This document maps the repository's dominant trust subsystem: `src/contracts/`, `src/state/`,
+`src/review/`, the MCP handlers in `src/mcp/handlers/`, and the offline/helper surface in
+`src/local/`. It describes current behavior, not a desired design.
 
----
+## 1. Authority layers
 
-## 1. Layering, in one picture
-
+```text
+src/contracts/**
+  Pure JSON shapes, parsers, canonical bytes, digests, state/gate semantics
+        ↓
+src/state/**
+  Authenticated reads, transition planning, immutable installs, transactions, gates,
+  reconciliation, status, manual checkpoint/import support
+        ↓
+src/review/**
+  Evidence envelopes, counter-review, triage/adjudication, fixed-point assessment
+        ↓
+src/mcp/handlers/** and src/local/**
+  Connected and offline protocol surfaces
 ```
-src/contracts/**   pure format + semantics. NO filesystem, NO git, NO process.
-      ▲                  MUST NOT import src/repository/**  (enforced: test/contracts/repository-boundary.test.ts:27-39)
-      │
-src/state/**       durable I/O kernel: locks, atomic writes, transactions, gates, snapshots.
-      ▲
-src/review/**      evidence services: counter-review, adjudication, fixed-point decision.
-      ▲
-src/mcp, src/dispatch, src/repository   (outside this document)
-```
 
-Two directions of authority:
+`src/contracts/**` does not inspect the filesystem, Git, or processes. A digest-shaped value is a
+reference until the state/repository layer resolves and authenticates it. Contract parsers throw on
+programmer/input-discipline violations; state and handler paths normally express expected failures
+as `ProjectResult<T>` from `src/contracts/errors.ts`.
 
-- **Downward:** `state/` and `review/` call `contracts/` for every parse, digest, and semantic check.
-  They never re-implement a rule.
-- **Never upward:** a contract module cannot observe a byte on disk. Every "is this actually true"
-  check that needs the filesystem or git lives in `state/`.
+Two rules are load-bearing throughout this graph:
 
-### Universal conventions
+- Persisted shapes reachable from a `CanonicalDocument<T extends PlainJsonValue>` root are declared
+  with `type`, not `interface`; declaration merging and missing implicit index signatures would
+  weaken or break the exact persisted shape.
+- Caller-owned objects are checked once with `assertPlainJson`, cloned with `structuredClone`, and
+  only then inspected. `src/contracts/plain-json.ts` rejects accessors, non-enumerable data fields,
+  symbol keys, cycles, sparse arrays, unsafe keys, non-finite numbers, exotic prototypes, and
+  descriptor mutation. Shell readers also require an own, enumerable data property.
 
-| Convention | Where | Rule |
-|---|---|---|
-| Contract parse functions **throw** | all `parse*` in `contracts/` | `TypeError` / `ZodError` / `ContractValidationError` |
-| State/kernel functions **return** | all of `state/`, `review/` | `ProjectResult<T>` (`errors.ts:82`) — never throw for a *semantic* disagreement |
-| A thrown error from a kernel path | everywhere | means a **defect in server code**, not bad agent data |
-| Errors are registry-constructed | `errors.ts:61-75` | `createProjectError(code, params)`; params are `.strict()` Zod per code |
-| Every persisted type is a `type` alias | all `durable-*.ts` | an `interface` anywhere in the graph breaks `CanonicalDocument<T extends PlainJsonValue>` with TS2344 |
-| Freeze + brand for authority | `WeakSet`/`WeakMap` + `unique symbol` | see §9 |
+## 2. Canonical bytes, schemas, and errors
 
----
-
-## 2. Canonical JSON is the root of everything
-
-`src/contracts/canonical.ts`
+`src/contracts/canonical.ts` is the byte authority:
 
 ```ts
 export interface CanonicalDocument<T extends PlainJsonValue> {
-  readonly bytes: Uint8Array;   // ordinal-sorted keys, 2-space indent, exactly one trailing \n, UTF-8
+  readonly bytes: Uint8Array;
   readonly value: T;
-  readonly digest: Sha256Digest; // sha256 over `bytes`
+  readonly digest: Sha256Digest;
 }
 ```
 
-- `canonicalJsonBytes` (`canonical.ts:66`) sorts **object keys** ordinally but **preserves array
-  order** — array order is semantic. Rejects `undefined` and non-finite numbers rather than emitting
-  `null`.
-- **Every array that is logically a *set* must therefore declare and enforce its own sort**, or two
-  callers hashing identical logical content get different digests. Sort rules are spelled per field
-  as `SET — sorted by <key>` in the durable type comments, and enforced by exactly one predicate
-  (`isSortedUniqueBy` + `tupleKey`, `validators.ts:93,109`) shared by the Zod mirror and the Ajv
-  keyword, so the two authorities cannot drift.
-- `parseCanonicalDocument` (`canonical.ts:119`) is the **byte authority**: fatal UTF-8 decode →
-  `JSON.parse` → `assertPlainJson` → re-render and **byte-compare**. Any non-canonical form (permuted
-  keys, wrong indent, missing/extra trailing newline, duplicate keys) is rejected. Anything read from
-  disk that must be trusted goes through this.
-- Domain-separated digests exist so unrelated subjects can never collide. Each wraps its subject with
-  `{schema_version, digest_kind, …}`:
+`canonicalJsonBytes` ordinal-sorts object keys, preserves array order, uses two-space JSON, UTF-8,
+and one trailing newline. `parseCanonicalDocument` performs fatal UTF-8 decoding, JSON parsing,
+plain-JSON validation, canonical re-rendering, and byte equality. Thus semantically similar but
+noncanonical JSON cannot become durable authority. Logical sets declare their own strict sort and
+uniqueness rules; `isSortedUniqueBy` and `tupleKey` in `src/contracts/validators.ts` are shared by
+Zod mirrors and Ajv custom keywords.
 
-| digest_kind | Function | File |
+Normative JSON Schemas live in `src/contracts/schemas/v1/`. Agent-supplied MCP shapes have a Zod
+mirror and are checked with `assertZodAgreement`; server-internal roots such as task state, intent
+receipts, result manifests, and maintenance records deliberately use JSON Schema as their only shape
+authority. `validateDurableSemantics` in `src/contracts/durable.ts` is the single cross-document
+semantic authority. Its evaluation order is intentional because only one project error is returned.
+
+Representative domain-separated identities from `src/contracts/fingerprints.ts`,
+`src/contracts/durable.ts`, `src/state/snapshots.ts`, and
+`src/state/implementation-manifest.ts` include:
+
+- input fingerprints over pinned workflow/config/constitution, phase, rubric, Git identities, and
+  declared inputs;
+- closed request digests over tool, repository/task identity, operation fields, and the recomputed
+  input fingerprint;
+- deterministic gate IDs and gate-context digests;
+- frozen open-gate state, declared-output snapshots, implementation diffs, Git index/worktree
+  identities, projection generations, and pinned constitution digests.
+
+`src/contracts/errors.ts` defines a closed registry of 55 project errors and four protocol errors.
+Each definition fixes owner, retryability, a strict parameter parser, projection, and next action.
+`parseProjectError`/`parseProtocolError` reconstruct the registry value and require deep equality, so
+serialized errors cannot forge metadata. Relevant human-flow outcomes are explicit errors:
+`SUPPLEMENTAL_REVIEW_REQUIRED`, `GATE_ACTIVE`, `GATE_DECISION_INVALID`, `GATE_CANCELLED`, and
+`GATE_SUPERSEDED`.
+
+## 3. Canonical persisted roots and paths
+
+Path classes are declared by `src/contracts/path-claims.ts`; templates and authenticated resolution
+live in `src/repository/paths.ts`.
+
+| Durable or projected object | Canonical task-relative path | Contract / authority |
 |---|---|---|
-| `open-gate-frozen-state` | `openGateFrozenStateDigest` | `durable.ts:97` |
-| `declared-output-snapshot` | `deriveSnapshotDigest` | `implementation-manifest.ts:106` |
-| `implementation-diff` | `deriveImplementationDiffDigest` | `implementation-manifest.ts:114` |
-| `declared-index-identity` / `declared-worktree-identity` | `implementation-manifest.ts:140,152` |
-| `projection-generation` | `projectionGenerationDigest` | `snapshots.ts:479` |
-| `gate-identity` | `computeGateId` → `g-<sha256>` | `fingerprints.ts:306` |
-| `gate-context` / `waiver-context` | `computeGateContextDigest` | `fingerprints.ts:321` |
-| `pinned-constitution` | `computePinnedConstitutionDigest` | `fingerprints.ts:193` |
-| `maintenance-reachability` | `computeMaintenanceProof` | `maintenance.ts:120` |
-| `policy-base-commit` | `invalidPolicyBase` | `state/constitution.ts:109` |
-| `history-identity` / `repository-candidate` | `canonical.ts:90,94` |
+| Task config | `config.yaml` | exact-byte digest pin; `config.schema.json` after YAML parse |
+| Task state | `state.json` | `TaskStateV1`; `task-state.schema.json` |
+| Intent receipt | `intents/<intent-id>.json` | `IntentReceiptV1`; immutable commit point |
+| Result manifest | `results/sha256/<result-digest>/manifest.json` | `ResultManifestV1`; content addressed and immutable |
+| Result payload | `results/sha256/<result-digest>/payload/<output-path>` | raw immutable bytes bound by manifest |
+| Gate archive | `decisions/<gate-id>/{request,decision}.json` | `GateRequestV1`, `GateDecisionRecordV1`; immutable |
+| Supplemental gate evidence | `decisions/<gate-id>/supplemental-review.json` | `SupplementalReviewRecordV1`; authenticated separately |
+| Human gate projection | `gate.json`, `gate.decision` | disposable `ActiveGateV1` plus human-authored response |
+| Maintenance record | `maintenance/<id>.json` | immutable `MaintenanceRecordV1` |
+| Manual checkpoint | `manual/checkpoints/<revision>-<digest>.json` | `ManualCheckpointV1` |
+| Projected docs | `prd.md`, `design.md`, `phases/<n>/{design,impl-notes}.md` | retained result projection |
+| Verification projection | `phases/<n>/verification.txt` | retained result projection |
+| Review projection | `reviews/<phase>.{self,counter,triage,adjudication}.md` and gate-counter form | retained evidence projection |
+| Import archive | `imports/<digest>/{manifest.json,payload/...}` | legacy import authority |
 
-Untagged whole-value digests (deliberately, so they compare against a stored self-digest):
-`canonicalJsonDigest(receipt)` (`durable-intent.ts:37`), `checkpointSelfDigest`
-(`durable-checkpoint.ts:349`), `intentOutcomeDigest`.
+Repository-scoped authority is `.archflow/workflow.yaml`, numbered files under
+`.archflow/constitution/`, and ordinary repository source outside `.archflow/`.
+`shared-constitution` and `task-branch-constitution` intentionally share a path template and are
+distinguished by the operation's expected class, not by path heuristics.
 
----
+`src/state/layout.ts` creates sensitive directories with no-follow and directory checks. Mutability
+is enforced in `src/state/atomic.ts`: `createExclusive` accepts immutable classes (intent,
+maintenance record, result manifest/payload, decision), `replace` accepts only task state and gate
+interfaces, and document/review files go through the bounded projection writer.
 
-## 3. Input discipline: validate-and-materialize once
+## 4. `TaskStateV1`: durable workflow authority
 
-`src/contracts/plain-json.ts` + the `ownDataSlot`/`materialize` idiom.
-
-`assertPlainJson` (`plain-json.ts:99`) rejects, recursively: accessor properties, **non-enumerable
-data properties** (`:85`), symbol keys, non-plain prototypes, cycles, sparse arrays, non-finite
-numbers, `__proto__`/`prototype`/`constructor` keys (`:7`), and values that **mutate while being
-inspected** (`assertDescriptorStable`, `:24`).
-
-The rule enforced across the whole subsystem (`durable.ts:252-268`, `fingerprints.ts:131`,
-`snapshots.ts:108`, `transaction.ts:255-266`, `maintenance.ts:54`, `reconciliation.ts:58`):
-
-> **Validate a caller-owned object once, then `structuredClone` it, and inspect only the clone.**
-
-Why it is load-bearing, not stylistic: an enumerable getter can return one value to a validation
-pass and a different value to a hashing pass. That is how an excluded field once reached a request
-digest that was supposed to reject it.
-
-The paired shell check (`ownDataField`, `durable.ts:228`) requires **both** `"value" in descriptor`
-**and** `descriptor.enumerable`:
-
-- rejecting accessors prevents split observation;
-- rejecting non-enumerable *data* properties (stable under repeated reads, so the accessor check does
-  not cover them) prevents a field invisible to `JSON.stringify`/`canonicalJsonBytes` — and therefore
-  to any digest — from being treated as present.
-
-A shell check that omits `enumerable` is weaker than `assertPlainJson` applied to its own contents.
-
----
-
-## 4. What is persisted, and where
-
-All durable state lives under the worktree at `.archflow/tasks/<task-id>/`. Path templates are the
-single authority in `src/repository/paths.ts:130-163` (task frame) and `:183-189` (repository frame);
-17 `PathClass` values are declared in `path-claims.ts:103-115`.
-
-| Class | On-disk template (task-relative) | Mutability | Root type | Shape authority |
-|---|---|---|---|---|
-| `task-state` | `state.json` | **replaced** | `TaskStateV1` | `task-state.schema.json` only (no Zod — deliberate) |
-| `intent` | `intents/<intent-id>.json` | **immutable, create-exclusive** | `IntentReceiptV1` | `intent-receipt.schema.json` only |
-| `result-manifest` | `results/sha256/<result-digest>/manifest.json` | **immutable** | `ResultManifestV1` | `result-manifest.schema.json` only |
-| `result-payload` | `results/sha256/<result-digest>/payload/<output-path>` | **immutable** | raw bytes | — |
-| `decision` | `decisions/<gate-id>/request.json`, `.../decision.json` | **immutable** | `GateRequestV1`, `GateDecisionRecordV1` | JSON Schema (+ Zod mirror for the record) |
-| `gate-interface` | `gate.json`, `gate.decision` | **replaced / deleted** | `ActiveGateV1`, human-authored decision | `active-gate.schema.json` |
-| `maintenance-record` | `maintenance/<id>.json` | **immutable** | `MaintenanceRecordV1` | JSON Schema only |
-| `manual-checkpoint` | `manual/checkpoints/<revision>-<digest>.json` | caller-owned | `ManualCheckpointV1` | Zod (agent-supplied) |
-| `document` | `prd.md`, `design.md`, `phases/<n>/{design,impl-notes}.md` | projected | — | — |
-| `review` | `reviews/<phase>.{self,counter,triage,adjudication}.md`, `reviews/<phase>.gate-counter.<gate-id>.md` | projected | — | — |
-| `attempt`, `import` | `attempts/…`, `imports/<digest>/…` | — | — | — |
-| `task-config` | `config.yaml` | read-only pin | YAML | `config.ts` |
-
-Repository frame: `.archflow/workflow.yaml` (`shared-workflow`), `.archflow/constitution/NN-*.md`
-(`shared-constitution` **and** `task-branch-constitution` — same template, distinguished by
-*operation*, narrowed by the caller's `expectedClass`, `paths.ts:176-182`), everything else outside
-`.archflow/` is `repository-source`.
-
-`.transaction-lock` (a directory) and `intents/`, `decisions/<gate>/`, `results/sha256/<d>/payload/`
-are created and verified by `state/layout.ts` with `O_NOFOLLOW | O_DIRECTORY` plus an `lstat`
-symlink check before use.
-
-### Two-authority rule for shapes
-
-| Situation | Authorities |
-|---|---|
-| Agent supplies it over MCP (`archflow_state.artifact`, gate inputs) | normative JSON Schema **and** a Zod mirror, proven equivalent by `assertZodAgreement` (`validators.ts:380`) |
-| Purely server-internal (`TaskStateV1`, `IntentReceiptV1`, `ResultManifestV1`, `MaintenanceRecordV1`) | **JSON Schema only.** Do not add a mirror — success criteria grep for one (`durable-state.ts:11-17`, `durable-maintenance.ts:7-10`) |
-
-`assertZodAgreement` fails if the two disagree on accept/reject, if either mutated the input, or if
-Zod *transformed* the value. Mirrors must be mirrors, never a second model.
-
----
-
-## 5. `TaskStateV1` — the durable state of truth
-
-`src/contracts/durable-state.ts:124-163`
+The root in `src/contracts/durable-state.ts` is approximately:
 
 ```ts
 type TaskStateV1 = {
-  schema_version: "1"; task_id: TaskSlug; repository_identity_digest: Sha256Digest;
-  revision: SafeInteger;            // >= 1, strictly monotonic
-  phase_instance: PhaseInstanceId;  // prd | design | phase-design-<n> | phase-impl-<n>
-  step: PipelineStep;               // produce | self_review | counter_review | triage | adjudicate
+  schema_version: "1";
+  task_id: TaskSlug;
+  repository_identity_digest: Sha256Digest;
+  revision: SafeInteger;                 // >= 1, monotonic
+  phase_instance: PhaseInstanceId;       // prd | design | phase-design-N | phase-impl-N
+  step: PipelineStep;                    // produce | self_review | counter_review | triage | adjudicate
   status: "running" | "succeeded" | "failed";
-  attempt: SafeInteger;             // >= 1
-  input_fingerprint: Sha256Digest;  // the IN-FLIGHT step's, not a completed one's
-  initialization_digest; config_digest; workflow_digest; constitution_digest; policy_base_commit;
-  authoritative_results: AuthoritativeResultRef[];  // SET sorted by (phase_instance, step)
-  approvals: ApprovalRef[];                          // SET sorted by gate_id
-  waivers: WaiverRef[];                              // SET sorted by gate_id
-  open_gate?: OpenGateRef;          // AT MOST ONE — a concurrent gate is unrepresentable
+  attempt: SafeInteger;                  // >= 1
+  input_fingerprint: Sha256Digest;       // current in-flight step
+  initialization_digest: Sha256Digest;
+  config_digest: Sha256Digest;
+  workflow_digest: Sha256Digest;
+  constitution_digest: Sha256Digest;
+  policy_base_commit: GitOid;
+  authoritative_results: AuthoritativeResultRef[];
+  approvals: ApprovalRef[];
+  waivers: WaiverRef[];
+  planned_final_phase?: SafeInteger;
+  open_gate?: OpenGateRef;
   committed_intent?: CommittedIntentRef;
   adopted_checkpoint?: AdoptedCheckpointRef;
   terminal?: "complete" | "abandoned";
 };
 ```
 
-Non-obvious invariants:
+Important invariants:
 
-- **The five pinned-input fields are deliberately duplicated** from the initialization document
-  (`repository_identity_digest`, `config_digest`, `workflow_digest`, `constitution_digest`,
-  `policy_base_commit`). `archflow-status` reads `state.json` alone. What keeps them honest is not
-  deduplication but **field-by-field comparison** in `validateDurableSemantics` rank 7
-  (`durable.ts:911-932`). Do not "normalize" this away.
-- **There is deliberately no recorded blocking reason.** It is a *function* of `open_gate`,
-  `terminal`, and attempt exhaustion; recording it would create a second source of truth
-  (`durable-state.ts:118-122`).
-- `input_fingerprint` is the *in-flight* step's. Per-result fingerprints live in
-  `authoritative_results[*].input_fingerprint`. Confusing the two silently breaks the only
-  pre-transition fingerprint guard.
-- Digest-shaped reference fields (`result_digest`, `gate_id`, `decision_digest`, …) are **references,
-  not authority**. `validateDurableSemantics` resolves none of them — its subject has no slot that
-  could carry the target. Resolution belongs to whoever materializes the target.
-- `open_gate.frozen_state_digest` = `openGateFrozenStateDigest(state)`, which hashes the state
-  **excluding `open_gate`** to avoid a digest cycle (`durable.ts:97`). `stateWithOpen`
-  (`gates.ts:191`) also strips `committed_intent` before computing it.
+- The repository/config/workflow/constitution/policy pins are duplicated from initialization so
+  status can read state without loading initialization. `validateDurableSemantics` compares the
+  copies field by field.
+- There is no persisted blocking reason; it is derived from terminal state, open gate, evidence,
+  reconciliation, and checkpoint facts.
+- `input_fingerprint` describes the in-flight step. Completed results retain their own fingerprints
+  in `authoritative_results`.
+- Result, approval, waiver, and committed-intent digests are references. Their consumers must load
+  and authenticate the named archives.
+- `authoritative_results` is sorted uniquely by `(phase_instance, step)`; approvals and waivers by
+  `gate_id`. Only one open gate is representable.
+- `planned_final_phase` is established from the approved design's consecutive phase headings.
+  `src/state/transitions.ts` can mark `terminal: "complete"` only when the current `phase-impl-N`
+  equals that value, the output is authenticated as committed at the target ref, and an exact
+  commit-authorization approval is authenticated.
 
----
+`planStateTransition` is pure. It checks the recomputed fingerprint before movement, enforces the
+fixed phase sequence (`prd → design → phase-design-1 → phase-impl-1 → ...`), validates artifact and
+result-reference correspondence, and accepts authenticated approval capabilities rather than raw
+approval-shaped objects. `legalRunStepStatus` is reused by status request templates so a generated
+request does not advertise an illegal movement.
 
-## 6. `validateDurableSemantics` — the single semantic authority
+Revision-zero initialization is separate in `src/state/initialization.ts`. It requires
+`expected_revision: 0`, an initialization artifact, and exactly `prd/produce/running`; it validates
+canonical task paths and commit objects. The general transition planner cannot mint revision 1.
 
-`src/contracts/durable.ts:374` (the file's whole 1055 lines are essentially this one function).
+## 5. Transactions, receipts, and replay
 
-**Exactly two exits, and only two:**
+`runStateTransaction` in `src/state/transaction.ts` serializes mutation under the task's
+`.transaction-lock` directory:
 
-| Exit | Meaning |
+```text
+read + canonically validate state
+  → verify repository identity and expected revision
+  → inspect immutable intents/<intent-id>.json
+  → recompute config/pins, input fingerprint, and request digest
+  → prepare result and next-state draft
+  → correlate branded result + validate durable semantics
+  → install payloads, manifest, and projections
+  → create intent receipt exclusively        (commit point)
+  → atomically replace state.json             (publication)
+  → reread and authenticate committed state
+```
+
+The ordering is the crash-recovery proof: retained bytes precede the receipt; the receipt precedes
+state publication. An existing intent is never blindly rerun:
+
+- If `state.committed_intent` names it, the receipt is authenticated and the original result is
+  replayed.
+- If it is the immediate successor, installation/publication is resumed from receipt authority.
+- If its request digest differs, the result is `INTENT_MISMATCH`.
+- If its resulting revision is already behind current state, the result is `INTENT_NOT_CURRENT`.
+- A future or malformed receipt makes task authority invalid rather than being guessed around.
+
+Ambiguous write failures invoke arbitration: reread state, compare it to planned final and
+predecessor digests, and return success, the original I/O failure, or `RECONCILIATION_REQUIRED`.
+`src/state/reconciliation-discovery.ts` and `src/state/reconciliation.ts` also surface retained
+receipt/projection disagreement to status.
+
+The task lock is not automatically stolen. `src/state/lock.ts` pins filesystem identity for an
+abandoned-lock plan and requires explicit human confirmation of no live writer before quarantine
+and removal.
+
+## 6. Retained results and projections
+
+`ResultManifestV1` in `src/contracts/durable-result-manifest.ts` embeds its source artifact and
+binds task/repository identity, phase, step, artifact digest, input fingerprint, declared snapshot,
+outputs, projections, accounting, and secret-scan result. The directory's `result_digest` is the
+canonical manifest digest; `snapshot_digest` is a separate domain-separated digest of declared
+outputs and projections.
+
+`src/state/snapshots.ts` validates raw payload length/digest, result and task byte caps, accounting,
+secret-scan status, and the declared snapshot. Installation writes payloads before the manifest.
+Existing immutable bytes are reused only when identical. Projection planning classifies each output
+as exact, restore-ready, or collision; application re-observes targets and attempts ordered rollback
+on drift. Lexical leaf paths are used when observing/mutating symlinks rather than a resolved
+referent path.
+
+`src/state/implementation-manifest.ts` authenticates implementation output against the base tree,
+index, and live worktree; recomputes declared identity/diff digests; and requires the supplied
+undeclared-change report to equal live Git state. `src/state/document-artifact.ts` performs the
+corresponding document-byte checks. `src/state/produce-subject.ts` reconstructs current and upstream
+review subjects from retained result authority.
+
+## 7. Review and fixed-point contracts
+
+The trust model is in `src/contracts/trust.ts` and private brands in
+`src/contracts/internal/trust-brands.ts`. A current evidence set is ordered:
+
+1. agent-declared self-review from the producer family;
+2. server-attested or degraded counter-review from the opposite family;
+3. optionally, gate-counter-review from the opposite family.
+
+Evidence digests must be unique and every slot binds the same task, phase, subject, fingerprint,
+rubric, and producer family. Production reconstruction happens through retained manifests in
+`src/state/evidence-results.ts`; callers cannot mint its internal authority brands.
+
+`validateTriage` requires exact coverage of every finding with consistent counts.
+`parseAndDeriveAdjudication` recomputes constitution/drift folds and evidence coverage;
+`crossCheckRuleFindings` in `src/review/adjudication.ts` checks active rule IDs, versions, order, and
+enforcement mechanisms. `assessCurrentEvidence` in `src/review/fixed-point.ts` derives the next
+workflow obligation (`self_review`, `counter_review`, `triage`, `adjudicate`, gate, advance, or
+attempt exhaustion) from retained authority. Approved upstreams and waivers are accepted only after
+their archived gate records are authenticated.
+
+Review envelopes in `src/review/envelopes.ts` and `src/review/pinned-context.ts` pin exact evidence
+bytes or bounded excerpts while retaining full digests. The byte cap prioritizes hand-written change
+context; omitted material remains explicitly named/unavailable rather than silently disappearing.
+
+## 8. Human gates, decisions, cancellation, and waiver
+
+Nine gate kinds are closed over `GateContractByKind` in `src/contracts/gates.ts`:
+
+| Kind | Main decision vocabulary |
 |---|---|
-| `return ProjectResult{ok:false}` | semantic disagreement, one of 5 pinned error codes |
-| `throw TypeError` | **input-discipline violation** — a defect in the calling server code |
+| `artifact-approval` | approve / revise / reject |
+| `review-trigger` | approve / revise / reject / waiver-requested |
+| `material-drift` | amend-upstream / revise-current / reject |
+| `adjudication-failure` | approve with exact resolutions / revise / reject / waiver-requested |
+| `attempts-exhausted` | retry-once / revise / abort |
+| `constitution-edit` | revert-edit / start-base-amendment / abort |
+| `commit-authorization` | authorize-commit / revise / abort |
+| `restore-collision` | discard-and-restore / adopt-as-new-generation / abort |
+| `migration-audit` | accept-import-audit / revise / abort |
 
-Structural failure never arrives here: the caller has already validated against the normative JSON
-Schema or Zod mirror. The only two structural residues are ranks 2 and 4 (phase-instance
-decodability), because the JSON `pattern` is weaker than `decodePhaseInstance`
-(`phase-instance.ts:39`, which rejects phase numbers past `MAX_SAFE_INTEGER`).
+Every ordinary decision is a `GateDecisionEnvelope` binding gate/task/phase/subject/context plus
+human provenance. Connected provenance binds connection/request identity; local provenance binds a
+helper invocation. `validateGateDecision` enforces rules that structure alone cannot: waiver rules
+must be eligible, adjudication resolutions must exactly cover non-waived failed/uncertain rules, and
+restore adoption authority must equal the context candidate.
 
-**The subject is a bag of independent slots** (`durable.ts:56-76`):
+The lifecycle in `src/state/gates.ts` is:
 
-```ts
-type DurableSemanticSubject = {
-  state?; artifact?; maintenance?; result_manifest?; gate_request?; gate_decision?;
-  intent_relation?: { mode: "prepared"; predecessor; receipt } | { mode: "committed"; state; receipt };
-};
+```text
+no open gate
+  → archive decisions/<id>/request.json
+  → set state.open_gate and publish reconstructible gate.json
+  → human writes gate.decision (or optional supplemental evidence arrives)
+  → archive decision.json
+  → apply non-advancing outcome, or install authenticated success receipt/approval/waiver
+  → clear state.open_gate and remove interface files
 ```
 
-Build the intent relation only through `createPreparedIntentSubject` / `createCommittedIntentSubject`
-(`durable.ts:78,87`).
+`gate_id` deterministically binds task identity, intent ID, and request digest. Archived request and
+decision files are immutable and races must agree byte-for-byte. `gate.json` and `gate.decision` are
+disposable interfaces: `gate.json` can be reconstructed from the request archive, and no interface
+projection is required to resolve authority already archived.
 
-**Evaluation order is normative, not incidental.** `ProjectResult` carries exactly one error, so the
-reported error is the minimum under *(rank, sub-rank, slot, collection path, index)*, and the clauses
-are written in that order. Rank summary:
+`buildGateDecisionTemplates` and `ActiveGateV1.decision_template` expose every resolver-accepted
+shape. Ordinary gates require `{payload,human_provenance}`; waiver gates require
+`{granted,scope,origin,notes,human_provenance}`; every gate also publishes the cancellation form
+`{cancelled,reason,human_provenance}`. A cancellation archives outcome `cancelled`, clears the open
+gate, and returns `GATE_CANCELLED`; it never implies approval. Supersession archives outcome
+`superseded`, clears the old gate without approval, and returns `GATE_SUPERSEDED` with old/new
+subjects.
 
-| Rank | What it checks | Lines |
+A waiver is a second gate bound to an exact archived `waiver-requested` origin. Authentication
+re-reads the origin request and decision and compares gate, rule/version, task, phase, subject,
+context, current evidence-set digest, scope, and decision digest. Granted waivers are scoped to
+operation plus subject/phase/task boundary and expire at task completion.
+
+## 9. Supplemental gate review
+
+`SupplementalReviewRecordV1` in `src/contracts/supplemental-record.ts` binds the open gate request,
+subject/context/fingerprint/current evidence, a complete degraded gate-counter review, its rendered
+projection digest, complete triage, and a derived `no-change | accepted-change` outcome. The parser
+recomputes both evidence and triage digests, checks all shared bindings, exact finding coverage and
+counts, and requires `accepted-change` iff at least one finding was accepted.
+
+The durable gate ledger accepts `decline`, `ingest`, and `triage-no-change`; `supersede` is archived
+as the gate decision outcome rather than inserted into the ledger. `currentSupplementalLedger`
+re-authenticates each non-decline entry against the supplemental archive. A projection entry alone
+is never evidence authority.
+
+`status.open_gate` publishes the decision templates, exact supplemental outcomes, a complete
+counter-review prompt, and—when an accepted change exists—the exact supersession material. The
+blocked gate/waiver call must be retried with the same intent and only the selected
+`supplemental_outcome` added. No-change can return to the separately authored human decision;
+accepted change supersedes the old gate and requires rebuilding the workflow subject.
+
+## 10. MCP tool contracts
+
+The five tools are fixed by `src/contracts/tool-names.ts`, `src/contracts/mcp-tools.ts`, and
+`src/contracts/schemas/v1/mcp-tools.schema.json`:
+
+| Tool | Purpose | Success identity |
 |---|---|---|
-| 1 | input discipline (own enumerable data slots, materialize) | 375-430 |
-| 2 | `state.phase_instance` **carriability** — must precede everything that reports `STATE_INVALID`, whose param runs the decoder under `.strict()` | 440-448 |
-| 3 | self-digest agreement per document; gate request↔decision binding; envelope binding; waiver origin binding | 450-501 |
-| 4a/4b | remaining phase-instance decodability; implementation-output ⇒ `phase-impl`; result-manifest ↔ source artifact correlation; receipt-local arithmetic | 503-695 |
-| 5 | manual-checkpoint import chain (see §11) | 697-818 |
-| 5a/5b/6 | rename `previous_path !== path`; `restore_targets ⊆ outputs[].path`; accounting sums + 1:1 output↔entry correspondence | 820-891 |
-| 7 | state ↔ artifact ↔ maintenance agreement, incl. the five duplicated pins | 899-932 |
-| 8 | in-flight `INPUT_FINGERPRINT_MISMATCH` (guarded on `(phase_instance, step)` equality — the guard is a **correctness condition, not an optimization**) | 944-954 |
-| 8a/8b | prepared-intent successorship; committed state = prepared state **plus only** the kernel-derived `committed_intent` | 957-1040 |
-| 9 | maintenance arithmetic and position vs. state revision | 1043-1052 |
+| `archflow_state` | initialize or record a state/step artifact | path, revision, status |
+| `archflow_counter_review` | dispatch and retain independent review | path, verdict, blocking count, revision |
+| `archflow_adjudicate` | derive and retain policy/drift adjudication | path, constitution, drift, triggers, revision |
+| `archflow_gate` | open/wait/resolve a typed human gate | typed decision, notes, revision |
+| `archflow_waiver` | open/wait/resolve exact-origin waiver | binding plus granted/expiry or denial, revision |
 
-`DURABLE_ISSUE_CODES` (`durable.ts:109-197`) names every emittable `issue_code` so the rejection
-corpus (`test/contracts/durable-semantics-corpus.test.ts`) asserts against the same literals the
-validator constructs. `INPUT_FINGERPRINT_MISMATCH` is deliberately absent — its params are exactly
-the two digests under `.strict()`, so it carries no `issue_code` and `createProjectError` throws if
-given one.
+Common input is `{schema_version, task_id, intent_id, expected_revision, input_fingerprint}`. Live
+successes echo `request_digest`; the field is optional only so old immutable receipts replay
+byte-identically. `parseToolCall` materializes, validates, freezes, and privately brands input.
+`identifyTransactionRequest` derives the closed request identity. Result validation and correlation
+then require tool, request/task/intent/fingerprint identity and exact expected success.
 
-Two deliberate non-goals, so nothing re-implements them:
+Handlers in `src/mcp/handlers/` are thin compositions over production services. `state.ts` selects
+initialization versus ordinary transaction and prepares document/implementation/evidence results;
+`counter-review.ts` and `adjudicate.ts` dispatch/reconstruct evidence; `gate.ts` and `waiver.ts`
+invoke the shared gate lifecycle; `replay.ts` authenticates retained outcomes. Handler failures are
+normalized through `handlers/errors.ts` without leaking arbitrary exceptions.
 
-- **No template-based path classification.** The class↔template tables are in `src/repository/paths.ts`,
-  which `contracts/**` may never import. A cross-class rename is *representable* here and not rejected.
-- **`payload_bytes`, `payload_digest`, `after.oid` are assertions here, never verified facts.** Nothing
-  in this module sees a byte. `CanonicalDocument.bytes` is never inspected. Byte/Git verification is
-  `state/implementation-manifest.ts` and `state/snapshots.ts`.
+## 11. Status, request templates, and helper CLI
 
----
+`computeTaskStatus` in `src/state/status.ts` is read-only and reconciliation-aware. `TaskStatusV1`
+reports degraded state facts, config verification, dispatch routes, expected self-review
+provenance, pinned constitution, current subject/evidence, open-gate interface material,
+reconciliation findings, optional commit-authorization input, blockers, and exactly one
+`next_action`.
 
-## 7. Validation layer
+`deriveNextAction` in `src/state/next-action.ts` is pure. Its ordering makes authority repair and
+human gates precede ordinary workflow work. `src/state/request-templates.ts` attaches an executable
+`{tool,input}` template when authenticated facts determine the mechanical fields. Judgment fields
+remain explicit placeholders. Most templates carry an all-zero fingerprint sentinel that is valid
+syntax but cannot authenticate directly.
 
-`src/contracts/validators.ts`
+`archflow-local envelope --task <task>` in `src/local/envelope.ts` is the normal request boundary:
 
-`createJsonSchemaValidator` (`:215`) builds an Ajv 2020 instance with `strict: true`,
-`allowUnionTypes: false`, `coerceTypes: false`, `removeAdditional: false`, `useDefaults: false`, and
-these custom keywords:
+- it parses the completed tool request;
+- internally recomputes the fingerprint from live pinned authority;
+- substitutes it only into the request and document/implementation artifact slots that contractually
+  carry it;
+- returns the exact `request.input`, `input_fingerprint`, and `request_digest`;
+- for state artifacts, returns `artifact_digest`;
+- for gates, returns deterministic paths and the complete optional counter-review prompt.
 
-| Keyword | Predicate | Note |
-|---|---|---|
-| `x-archflow-unique-by` | `hasUniqueObjectPropertyValues` (`:52`) | reads via descriptors, so an accessor yields `undefined` rather than firing a getter |
-| `x-archflow-sorted-unique` / `-by` | `isSortedUniqueBy` (`:93`) + `tupleKey` (`:109`) | **same exported functions the Zod mirrors call** |
-| `x-archflow-max-utf8-bytes` | byte-length bound | |
-| `x-archflow-nfc` | NFC normalization — **not expressible as a `pattern`**, so without it Ajv would accept NFD where Zod rejects, failing `assertZodAgreement` | |
-| `x-archflow-review-summary`, `-adjudication-semantics`, `-gate-semantics`, `-supplemental-semantics`, `-mcp-semantics`, `-result-expectation-semantics` | cross-field folds mirroring the Zod `superRefine`s | |
-| `x-archflow-effect` | annotation only (`valid: true`) | |
+One pass is sufficient, and passing its returned request back through envelope is a fixed point.
+Callers should invoke the MCP tool with `request.input` verbatim rather than transcribing digests.
 
-`tupleKey` joins components with `U+0000`, which is injective because every ID primitive and
-`path-claim.schema.json` reject `U+0000`–`U+001F`. The `":"`-joined `ruleKey` is deliberately **not**
-reused for ordering — `SafeId` admits `":"` and can collide across a component boundary.
+`src/local/commands.ts` exposes 22 commands. The command contract table is authoritative about
+whether a task is required and whether stdin is required. Input-free `init`, `task-init`, `status`,
+and `manual-status` never read stdin. Important builders are `build-document`,
+`build-implementation-output`, and `build-request`; inspection/recovery commands include
+`validate`, `hash`, `render`, `snapshot`, `restore`, `maintain`, `decide`, `gate-counter`,
+`reconcile`, `import`, and `checkpoint`.
 
-Compiled normative validators exported: `intentReceiptV1Validator`, `handoffRecordV1Validator`,
-`resultManifestV1Validator`, `gateRequestV1Validator`, `gateDecisionRecordV1Validator`,
-`activeGateV1Validator` (`:323-365`). `state/read.ts:49` compiles its own for `TaskStateV1`.
+## 12. Manual degraded workflow
 
-Primitive vocabulary (`evidence.ts:55-61`), all branded strings:
-`Sha256Digest` `^[0-9a-f]{64}$` · `SafeId` `[A-Za-z0-9][A-Za-z0-9._:-]{0,127}` · `PathSafeId` (same
-minus `:`) · `TaskSlug` (lowercase, ≤64) · `SafeCode` `[a-z0-9][a-z0-9_-]{0,63}` · `SafeVersion` ·
-`SafeInteger` (**admits 0** — every "revision" field pins its own `.min(1)`, called D8 in comments).
-`PathSafeId`/`TaskSlug` additionally reject Windows reserved device names and trailing dot/space
-(`evidence.ts:39-53`) because they are embedded as single path segments.
+Manual mode in `src/local/manual-workflow.ts` is deliberately lower assurance, not an alternate
+source of truth. `loadManualAuthority` selects one authenticated authority form: initial,
+state-anchored, or continuation. It loads retained manifests, verifies initialization and approved
+design authority, derives `planned_final_phase`, and mints a private `ManualAuthority` capability.
 
-Errors: `errors.ts` is a closed registry of 55 project codes + 4 protocol codes, each with owner,
-`retryable`, a `.strict()` parameter schema, and a `next_action`. `parseProjectError` (`:101`)
-round-trips a serialized error through `constructError` and requires deep equality — a serialized
-error cannot claim an owner/retryable/next_action that disagrees with the registry.
+`ManualCheckpointV1` and `ManualCheckpointImportV1` in
+`src/contracts/durable-checkpoint.ts` support:
 
----
+- initial revision 1 with embedded initialization;
+- continuation linked by predecessor revision and checkpoint digest;
+- state-anchored recovery linked to an authenticated state revision/digest.
 
-## 8. The transaction substrate and exact replay
+`selectGreatestValidChain` stops on forks, gaps, or foreign candidates rather than guessing.
+Checkpoint adoption replays transitions, requires the exact selected chain/head, and records
+`adopted_checkpoint`. `manual-status` provides one command-shaped next action; `manual-next` records
+actual milestones, results, terminal state, gate publication/resolution/supersession, or fallback
+material; `manual-handoff` creates the canonical import call. Manual gates publish all accepted
+decision templates and preserve the same cancellation, waiver-origin, supplemental-review, and
+immutable archive bindings as connected mode.
 
-`src/state/transaction.ts` — `runStateTransaction` (`:1016`).
+## 13. Change hazards and verification map
 
-### The durable protocol
+- Adding a durable field affects schema authority, canonical digests, exact-field checks, replay,
+  and possibly request selectors. Decide whether every new array is a set or sequence.
+- Keep `validateDurableSemantics` rank order and its separation between shape, semantic, and live
+  byte/Git checks.
+- Preserve install ordering: payload → manifest → projection → receipt → state.
+- Do not widen immutable versus replaceable path-class allowlists without revisiting crash recovery.
+- A new gate kind must update the type map, kind list, context and decision parsers, effects,
+  durable gate unions, templates, handler semantics, and schemas.
+- Do not use `--literal-pathspecs` with `:(top,literal)` Git pathspecs.
+- When reading through `Object.getOwnPropertyDescriptor`, require both a data `value` and
+  `enumerable`.
 
-Every mutating tool call carries a caller-chosen `intent_id`. The kernel commits at most once per
-intent, via an **immutable receipt as the commit point**:
+Representative tests:
 
-```
-                        ┌─ task lock (mkdir .transaction-lock, 10ms poll / 250ms deadline) ─┐
-1. read state.json  → parseCanonicalDocument + task-state schema + validateDurableSemantics
-2. verifyRepositoryIdentity(state.repository_identity_digest, authority)
-3. expected_revision === state.revision           else STATE_CONFLICT
-4. read intents/<intent_id>.json
-   ├─ EXISTS → handleExisting()  (§ replay, below)
-   └─ ABSENT →
-5. liveIdentification(): read config.yaml, compare to state.config_digest (PINNED_CONFIG_MISMATCH),
-      resolve_input_fingerprint → computeInputFingerprint → must equal call.input.input_fingerprint
-      → identifyTransactionRequest → request_digest
-6. caller's prepare(current, call) → PreparedTransaction { expectation, result, next_state }
-7. buildPlan(): correlateProjectResult, assertPreserved, validateResultInstallationBinding,
-      build IntentReceiptV1 (<= 1 MiB), committedState(receipt), validate prepared + committed
-8. installResultFacts()  — payloads then manifest (createExclusive), then projections
-9. atomic.createExclusive(intents/<id>.json, receipt.bytes)     ← THE COMMIT POINT
-10. atomic.replace(state.json, final.bytes)                      ← publication
-11. re-read state.json, re-validate committed subject
-                        └──────────────── lock released ─────────────────┘
-```
-
-**Ordering is the crash-recovery contract.** Immutable result bytes are installed before the receipt;
-the receipt is created before state is replaced. So every crash cut leaves either the prior state or
-a completely reconstructible successor.
-
-### Atomicity primitives — `src/state/atomic.ts`
-
-- `createExclusive` (`:57`): write to `.<name>.<pid>.<uuid>.tmp` → `fsync` → `link()` to target.
-  `EEXIST` ⇒ `"exists"`. **Only immutable classes are accepted**: `intent`, `maintenance-record`,
-  `result-manifest`, `result-payload`, `decision` (`:58-64`).
-- `replace` (`:104`): `write-file-atomic`; **only** `task-state` and `gate-interface` (`:105`).
-- `removeGateInterface`: only `gate-interface`.
-- `ProjectionWriter` (`:141-188`): only the 7 `PROJECTABLE` classes.
-
-`AtomicReplaceError.target_may_have_changed` is the signal that decides whether a failure can be
-reported as plain `IO_ERROR` or must go through arbitration.
-
-### Replay — `handleExisting` (`transaction.ts:905`)
-
-Given an existing receipt, the kernel classifies without re-running preparation:
-
-| Condition | Outcome |
+| Concern | Tests |
 |---|---|
-| `state.committed_intent.intent_id === intent_id` | `authenticateCommitted` → validate committed subject, re-derive `request_digest` from the receipt, rebuild the tool success from `receipt.outcome`, return `replayed: true` |
-| `receipt.prior_revision > state.revision` | `TASK_INVALID intent-receipt-future-revision` |
-| `receipt.resulting_revision <= state.revision` | `INTENT_NOT_CURRENT` |
-| otherwise (immediate successor) | re-drive `installPlan` with `receiptAlreadyExists: true` — re-installs retained result bytes via `load_retained_result`, then replaces state |
-
-Any receipt whose `request_digest` differs from the freshly recomputed one ⇒ `INTENT_MISMATCH`.
-**The same `intent_id` with different inputs is always a mismatch, never a silent overwrite.**
-
-### Arbitration — `arbitrate` (`transaction.ts:704`)
-
-When a write fails ambiguously or the lock release fails, the kernel re-reads `state.json` and:
-
-- digest === planned final ⇒ the write actually landed; verify receipt and return `replayed: false`;
-- digest === predecessor ⇒ nothing landed ⇒ `IO_ERROR` for the named operation;
-- neither ⇒ `RECONCILIATION_REQUIRED{recorded_digest, observed_digest}`;
-- state missing/noncanonical ⇒ `transaction-outcome-ambiguous`.
-
-### `assertPreserved` (`transaction.ts:272`)
-
-A `prepare` callback may **never** change identity/pins (`task_id`, repository identity,
-initialization, config, workflow, constitution, policy base) — that throws. It may only change
-`adopted_checkpoint`/`open_gate`/`approvals`/`waivers` if the prepared object is an authentic
-checkpoint-adoption plan (`assertInternalCheckpointAdoptionPlan`, `checkpoints.ts:43`, which
-re-derives the plan's `next_state` digest from a `WeakMap`). `NextStateDraft` structurally forbids
-carrying `revision` or `committed_intent` (`transaction.ts:83`, `materializeDraft` `:260`).
-
-### Revision 0 — `src/state/initialization.ts:419`
-
-`runStateInitialization` is the **only** state-absent transaction. It commits revision 1 exactly
-once, validates `canonical_paths` against the authenticated task root (`:76-89`), and resolves every
-declared commit with `rev-parse --verify --quiet <oid>^{commit}`. `planStateTransition` explicitly
-refuses initialization artifacts (`transitions.ts:123-126`) so revision 1 can only be minted here.
-
-### Crash coverage
-
-`test/crash/` drives real `SIGKILL` at enumerated cuts:
-`state-transaction.test.ts` (manifest cut, receipt temp-sync, receipt link, before/after state
-replace, abandoned lock), `state-initialization.test.ts`, `state-checkpoint-adoption.test.ts`,
-`state-gate-lifecycle-phase12.test.ts` (open cuts, resolve cuts, concurrent processes).
-
-### Lock — `src/state/lock.ts`
-
-`mkdir` of `<task_root>/.transaction-lock` is the mutex; `AsyncLocalStorage` rejects re-entrant
-acquisition of the same root (`:174`). An abandoned lock is **never** reclaimed automatically:
-`inspectAbandonedTaskLock` pins device/inode/birthtime/ctime and holds an open FD, and
-`removeConfirmedAbandonedTaskLock` requires an explicit `humanConfirmedNoLiveWriter` boolean and
-re-verifies identity through a quarantine rename before `rmdir` (`:103-151`).
-
----
-
-## 9. Authority brands (how "you can't fake this" is implemented)
-
-The pattern throughout: a module-private `WeakSet`/`WeakMap` plus a non-enumerable `unique symbol`
-property, an internal `create*`/`register*`, and an exported `assert*`/`authentic*`.
-
-| Brand | Minted by | Asserted by |
-|---|---|---|
-| `TransactionAuthority` | `createInternalTransactionAuthority` (`state/authority.ts:47`) | `assertInternalTransactionAuthority` — also checks the runner/environment pair matches the registry |
-| `ParsedToolCall` | `parseToolCall` (`mcp-tools.ts:110`) | `assertAuthenticParsedToolCall` (`:105`) |
-| `ResultExpectation` / `StructurallyValidProjectResult` | `createInternalResultExpectation` / `validateProjectResultStructure` | `correlateProjectResult` (`:180`) |
-| `InternalResultInstallation` | `prepareResultInstallation` (`transaction.ts:147`) | one-shot: consumed via `consumedResultInstallations` (`:526-529`) |
-| `TransactionOutcome` | `outcomeResult` (`transaction.ts:294`) | `assertAuthenticTransactionOutcome` (`:168`) |
-| `AuthenticatedGateApproval` | `loadAuthenticatedGateApproval` (`gates.ts:296`) | `assertAuthenticatedGateApproval` (`:72`) |
-| `ResolvedConstitution` | `resolvePinnedConstitution` (`state/constitution.ts:122`) | `assertResolvedConstitution` (`:50`) |
-| `CheckpointAdoptionPlan` | `planCheckpointAdoption` (`checkpoints.ts:69`) | `assertInternalCheckpointAdoptionPlan` (`:43`) |
-| `ObservationCapability`, `AuthorityLink`, `VerifiedReferencedEvidence`, `QualifiedEvidence`, `CurrentReviewSet(Authority)`, `ValidatedTriage` | `contracts/internal/trust-brands.ts` | same file |
-| `AbandonedTaskLockPlan` | `inspectAbandonedTaskLock` (`lock.ts:73`) | membership + FD identity |
-
----
-
-## 10. Gates, waivers, and manual decisions
-
-Format: `src/contracts/gates.ts` (197 dense lines) + `src/contracts/durable-gate.ts`.
-Lifecycle: `src/state/gates.ts` (1218 lines).
-
-### The gate contract table
-
-`GateContractByKind` (`gates.ts:31-41`) pairs each of the 9 kinds with its **context** shape and its
-**decision payload** union. `GATE_CONTRACTS` (`:118`) exposes the Zod pair per kind.
-
-| Kind | Decisions | Effect (`gates.ts:114`) |
-|---|---|---|
-| `artifact-approval` | approve / revise / reject | advance / retry / non-advancing |
-| `review-trigger` | approve / revise / reject / **waiver-requested** | … / redirect-waiver |
-| `material-drift` | amend-upstream / revise-current / reject | redirect-upstream / retry / non-advancing |
-| `adjudication-failure` | approve(+resolutions) / revise / reject / waiver-requested | |
-| `attempts-exhausted` | retry-once / revise / abort | retry / retry / non-advancing |
-| `constitution-edit` | revert-edit / start-base-amendment / abort | |
-| `commit-authorization` | authorize-commit / revise / abort | advance / retry / non-advancing |
-| `restore-collision` | discard-and-restore / **adopt-as-new-generation** / abort | advance / advance / non-advancing |
-| `migration-audit` | accept-import-audit / revise / abort | |
-
-`validateGateDecision` (`gates.ts:170`) adds the cross-field rules a schema cannot express:
-a `waiver-requested` rule must be in `eligible_waiver_rules`; an `adjudication-failure` `approve`
-must carry a **sorted exact set** of resolutions for every failed/uncertain rule that is *not*
-waiver-eligible; a `restore-collision` `adopt-as-new-generation` must deep-equal the context's
-`adoption_candidate`.
-
-### State machine
-
-```
-no gate ──openDurableGate──▶ open_gate set (revision+1, frozen_state_digest)
-                             + decisions/<gate-id>/request.json  (immutable, create-exclusive)
-                             + gate.json (ActiveGateV1 projection, replaceable)
-                                     │
-                          human writes gate.decision (mutable interface)
-                                     │
-              ┌──────────────────────┴──────────────────────┐
-              │                                              │
-   non-advancing / retry                              earnsReceipt(record)
-   resolveDurableGate (:914)                          resolveAdvancingGate (:1073)
-   archive decision.json → replace state              archive → installReceipt → replace state
-   → remove gate.json + gate.decision                 → remove gate.json + gate.decision
-```
-
-Key invariants:
-
-- **`gate_id` is deterministic**: `computeGateId({task_identity_digest, intent_id, request_digest})`
-  → `g-<sha256>` (`fingerprints.ts:306`). The same request re-derives the same gate, which is what
-  makes crash recovery and idempotent re-open possible.
-- **`decisions/<gate-id>/request.json` and `decision.json` are immutable** (`createExclusive`). A
-  losing racer sees `"exists"` and must agree byte-for-byte, else `gate-request-collision` /
-  `gate-resolution-race` / `gate-supersession-race`.
-- **`gate.json` / `gate.decision` are disposable projections.** They can be lost or corrupted without
-  stranding durable state: `openDurableGate` re-derives `gate.json` from the archived request
-  (`gates.ts:586-591`). Conversely a human-authored `gate.decision` found before state names the gate
-  is **preserved only if it binds this exact immutable request**, else removed (`:683-694`).
-- **`ActiveGateV1.decision_template` must enumerate every decision shape the resolver accepts** —
-  `["payload","human_provenance"]` for ordinary gates, `["granted","scope","origin","notes",
-  "human_provenance"]` for waiver gates, plus `cancellation_fields` always
-  (`durable-gate.ts:78-90`, built at `gates.ts:217-225`). Requiring a human to read server source to
-  learn a valid decision shape defeats the interface's purpose.
-- **Success receipts cannot be manufactured without an authenticated fingerprint.** `resolveDurableGate`
-  refuses an advancing/granted record with `gate-success-requires-run-service` /
-  `gate-success-receipt-resume-required` (`:957`, `:994`); only `runDurableGate` →
-  `resolveAdvancingGate`, which carries `input_fingerprint`, may install one.
-- **Waiting happens outside the lock.** `waitForGateInterface` (`gate-wait.ts:55`) polls at 500 ms and
-  returns only a *signal*; the resolver re-reads under the lock. A markdown supplemental review is a
-  wake-up signal only — the evidence is authenticated separately.
-
-### Waivers
-
-A waiver is itself a gate whose `context` is a `WaiverGateContext = { origin: WaiverOriginRef;
-rationale }` (`durable-gate.ts:35`). Presence of `"origin" in context` is the discriminator used
-everywhere (`waiverContext`, `gates.ts:230`).
-
-- `authenticateWaiverOrigin` (`gates.ts:397`) re-reads the origin gate's request+decision from disk
-  and requires the origin decision to be `decided` with payload `waiver-requested`, the same rule,
-  the same scope, the same `current_evidence.set_digest`, and `decision.digest ===
-  origin.origin_decision_digest`.
-- `allowed_decisions` for a waiver gate is `["grant","deny","cancel"]` (`gates.ts:673`).
-- A granted waiver appends a `WaiverRef` with `expires: "task-complete"` (`nextStateForRecord`,
-  `gates.ts:714`). `waiverInForce` (`fixed-point.ts:365`) requires `granted`, the exact
-  `rule_id`+`rule_version`, exact `subject_digest`, exact scope operation+boundary, and
-  `state.terminal === undefined`.
-
-### Gate-authorized re-entry
-
-`enactsReentry` (`gates.ts:722`) — `review-trigger:revise`, `adjudication-failure:revise`,
-`material-drift:revise-current`, `attempts-exhausted:{retry-once,revise}`. These do **not** append an
-approval; they plan a transition back to `produce/running` with `attempt+1` and a freshly resolved
-fingerprint (`planGateAuthorizedReentry`, `:747`). Preconditions: `exactOpenGateMatches` (including
-`frozen_state_digest`), `status === "succeeded"`, `step ∈ {triage, adjudicate}`.
-`validateCompletedReentry` (`:812`) replays this: at exactly `opened_at_revision + 1` the enacted
-landing state and its re-derived fingerprint must agree; beyond that, the immutable archived record
-plus the fact that state moved past its opened revision is the replay authority.
-
-### Manual/offline gates
-
-`createManualGateFile` (`gates.ts:1169`) is a no-clobber primitive for the offline helper.
-`importGateDecisions` (`:1189`) derives checkpoint-ready `approvals`/`waivers` from complete,
-request-bound manual pairs — and **throws if a live gate is open**.
-
-### Supplemental review ledger
-
-`SupplementalReviewOutcome` (`supplemental.ts:10-14`): `decline | ingest | triage-no-change |
-supersede`. The ledger lives on `ActiveGateV1.supplemental` and is copied into the decision record;
-a `supersede` entry is forbidden in the ledger itself (`durable-gate.ts:108-110`) and instead
-archives an `outcome: "superseded"` decision record (`gates.ts:607-618`).
-`currentSupplementalLedger` (`:444`) rebuilds the ledger from the projection and **re-authenticates
-each non-decline entry** against live gate-counter-review evidence (`authenticSupplementalReview`,
-`:472`) — a projection entry is never trusted on its own.
-
----
-
-## 11. Manual checkpoint chain and import
-
-`src/contracts/durable-checkpoint.ts`
-
-A `ManualCheckpointV1` is a degraded-assurance snapshot of state (`assurance: "degraded"` is a
-literal, `:246`) in three forms discriminated by revision and anchor (`superRefine`, `:269-288`):
-
-| Form | `revision` | Required | Forbidden |
-|---|---|---|---|
-| `InitialManualCheckpointV1` | `1` | `initialization` (embedded, full document) | `predecessor`, `state_anchor` |
-| `ContinuationManualCheckpointV1` | ≥2 | `predecessor: {revision, checkpoint_digest}` | `initialization`, `state_anchor` |
-| `StateAnchoredManualCheckpointV1` | ≥2 | `state_anchor: {anchor_kind:"state", state_revision, state_digest}` | `initialization`, `predecessor` |
-
-A `ManualCheckpointImportV1` wraps a chain with `import_mode: "initial" | "state-anchored" |
-"continuation"`; each mode requires and forbids specific anchor fields (`:308-335`).
-
-Chain rules are three small total functions, reused by both the validator and the selector:
-
-- `checkpointSelfBreak` (`:411`) — a continuation's revision is exactly `predecessor.revision + 1`
-  (or `state_anchor.state_revision + 1`).
-- `checkpointLinkBreak` (`:424`) — **revision before digest**: gap first, then predecessor-digest
-  mismatch.
-- `chainHeadBreak` (`:437`) — head agrees with the wrapper's anchor.
-
-`selectGreatestValidChain` (`:473`) picks the unique greatest linked chain from an unordered
-candidate set and **stops** rather than guessing: `"fork"` (≥2 heads or ≥2 successors), `"gap"`
-(an unconsumed candidate at or above the expected head revision), `"foreign-candidate"` (wrong task,
-wrong repository, or a differing `initialization_digest`).
-
-Ranks 5c–5t in `durable.ts:697-818` bind the whole thing: every checkpoint belongs to the wrapper's
-task and repository, every checkpoint names the head's `initialization_digest`, `initial` mode
-forbids a supplied state while the other two require one, and the supplied state must match the
-independently expected revision + digest + repository, with `adopted_checkpoint` **absent** for
-`state-anchored` (bootstrap) and **present and matching `predecessor`** for `continuation`.
-
-Adoption: `planCheckpointAdoption` (`checkpoints.ts:69`) replays the entire chain through
-`planStateTransition`, requires the selected chain to be *exactly* the supplied chain, requires the
-call's `(phase_instance, step, status, input_fingerprint)` to equal the chain head, and produces a
-successor naming `adopted_checkpoint = {head.revision, checkpointSelfDigest(head)}`. Initial-mode
-adoption goes through `state/initialization.ts:114` instead (revision 0 → 1).
-
----
-
-## 12. Snapshots, result manifests, and projections
-
-`src/state/snapshots.ts` + `src/contracts/durable-result-manifest.ts`
-
-```ts
-type ResultManifestV1 = {
-  task_id; repository_identity_digest; result_id; phase_instance; step;
-  artifact_digest;                 // canonical digest of the (unwrapped) source artifact
-  source_artifact: DocumentArtifactV1 | ImplementationOutputV1 | EvidenceArtifactV1;  // EMBEDDED
-  input_fingerprint;
-  snapshot_digest;                 // domain-separated DECLARED-OUTPUT snapshot, NOT the content address
-  outputs: OutputEntry[]; projections: ProjectionDigestRef[];
-  accounting: SnapshotAccountingV1; secret_scan: SecretScanResult;
-};
-```
-
-- **Content address vs. snapshot digest.** The manifest's *content address* is
-  `canonicalDocument(manifest).digest`, which names its directory
-  `results/sha256/<result-digest>/`. `snapshot_digest` is a different, domain-tagged digest of the
-  declared output scope, re-derivable by `deriveDeclaredSnapshotDigest(outputs, projections)`
-  (`snapshots.ts:57`). Confusing them is the most likely bug in this area.
-- The source artifact is **embedded**, so a later read re-establishes `artifact_digest` and every
-  duplicated wrapper fact without request-lifetime memory.
-- `OutputEntry` (`durable-primitives.ts:168-182`) is a **14-leaf flat union**, written out longhand:
-  `{add,modify,rename,delete} × {git-object,raw-payload} × {regular,symlink}` minus uninhabitable
-  combinations (`delete` is `git-object`-only and has no `after`). Two structural details:
-  - the leaves are flat, not intersections, because an intersection is not guaranteed the implicit
-    index signature that `CanonicalDocument` needs;
-  - the Zod schema is a **nested** `discriminatedUnion` (operation → storage → file_type,
-    `:247-263`) because flat options sharing a discriminator value, or a plain `z.union` inside a
-    `discriminatedUnion`, throw at **parse** time under the pinned `zod@4.4.3` — a build that only
-    constructs the schema looks fine.
-  - `git-object ⇒ stored_bytes === 0` is structural (`SnapshotAccountingEntry`, `:305-307`), not a
-    validator rule.
-- **Byte caps are declared twice and must stay in sync**: `snapshots.ts:36-37` (25 MiB result /
-  250 MiB task) and `durable-primitives.ts:310-312,318-319` (`26214400` / `262144000` as literal
-  types). Exceeding either ⇒ `SNAPSHOT_LIMIT{limit_scope, offending_paths (sorted), current_bytes,
-  byte_cap}`.
-
-Lifecycle:
-
-| Function | Line | Contract |
-|---|---|---|
-| `prepareSnapshot` | `:108` | validate+materialize once, re-derive `snapshot_digest`, verify every raw payload's length and sha256, preflight **both** caps, check declared accounting |
-| `installSnapshot` | `:218` | payloads **first**, manifest **last**; existing identical bytes are *reused*, never clobbered; disagreeing bytes ⇒ `immutable-install-disagreement` |
-| `readSnapshot` | `:237` | re-parse canonically, re-run `validateDurableSemantics`, re-derive snapshot digest, and for `git-object` outputs prove `base_commit` is an ancestor of HEAD and each blob's tree entry, size, and projected bytes |
-| `resolveExistingSnapshot` | `:352` | reuse an existing result only when `(phase_instance, step, input_fingerprint)` all match |
-| `restoreSnapshotOutput` | `:299` | reload one after-image from git or the retained payload |
-
-### Projections
-
-`ProjectionPlan` is the mutable-worktree side. `prepareProjectionPlan` (`:494`):
-
-1. materializes each `ProjectionSource` field-by-field through descriptors;
-2. **re-anchors `target.absolute` to the lexical worktree path** (`atLexicalLeaf`, `:102`;
-   `resolvePath(worktreeRoot, repositoryRelative)`) — `ResolvedPath.absolute` is realpath-normalized
-   for containment and therefore names a *symlink's referent*, which is wrong for mutation and leaf
-   observation. Same fix in `implementation-manifest.ts:177`;
-3. checks rename-pair consistency (source must go absent, destination must be currently absent);
-4. runs the secret scanner over git-tracked present bytes — `detected` **or** `unavailable` ⇒
-   `SECRET_DETECTED` (fail-closed, `:585-588`);
-5. classifies each entry `exact | restore-ready | collision`.
-
-`applyProjectionPlan` (`:632`) refuses if any collision exists, **re-observes every target twice**
-(whole-set precheck, then per-entry immediately before writing), and on drift performs an ordered
-`rollback` (`:654`) that re-verifies each applied after-image before undoing it, returning
-`rolled-back` or `repair-required`.
-
-`ImplementationOutputV1` verification is `state/implementation-manifest.ts:273` — it authenticates
-every declared output against the base tree, the index, and the live worktree, recomputes all four
-identity digests, and requires them to equal the supplied ones. It also requires the supplied
-`undeclared_changes` report to deep-equal the live `git` working set (`:326`).
-
----
-
-## 13. Fingerprints, request digests, and pins
-
-`src/contracts/fingerprints.ts`
-
-```ts
-type InputFingerprintSubject = {
-  schema_version; workflow_digest; config_digest; constitution_digest;
-  artifact_identities: GitIdentityRef[];   // SET sorted by path
-  upstream_identities: GitIdentityRef[];   // SET sorted by path
-  rubric_digest; phase_instance;
-  declared_inputs: DeclaredInputRef[];     // SET sorted by input_id
-};
-```
-
-- `computeInputFingerprint` (`:174`) sorts all three sets and **throws on a duplicate key** — two
-  entries claiming one key is a caller bug, not something this layer may silently resolve.
-- **The caller's `input_fingerprint` is always an assertion, never authority.** The server recomputes
-  it via `resolve_input_fingerprint` and compares (`transaction.ts:376-380`,
-  `initialization.ts:339-345`). Mismatch ⇒ `INPUT_FINGERPRINT_MISMATCH`.
-- `createInternalInputFingerprintResolver` (`state/fingerprint.ts:64`) refuses any caller-supplied
-  digest: it re-reads workflow and constitution digests and compares them against the state's pins
-  (`workflow-pin-mismatch`, `constitution-pin-mismatch`) before assembling the subject.
-- `computeRequestDigest` (`:292`) has **one closed field list** — schema version, tool, repository
-  identity, task identity, operation tag, that operation's `operation_fields`, and the recomputed
-  fingerprint. `closedOperationFields` (`:214`) calls `exactFields()` per operation, so an added or
-  missing field throws rather than silently changing (or not changing) the digest.
-  `ExactSelectorCoverage` (`:98-110`) is a compile-time proof that the selector key list covers
-  exactly the non-common input fields of every tool.
-- Config pinning is `sha256` over the **exact whole `config.yaml` bytes** (`:338`). There is
-  deliberately no re-pin, amendment, or upgrade field anywhere (D15 in
-  `durable-task-initialization.ts:24-27`). `PINNED_CONFIG_MISMATCH` carries only the two digests —
-  never config content.
-- The constitution digest is `computePinnedConstitutionDigest` over the *commit tree's* numbered rule
-  files (`state/constitution.ts:122`), never the worktree. `detectTaskLocalConstitutionEdit` (`:165`)
-  treats uncommitted bytes only as a wake-up signal; the comparison digest always comes from HEAD.
-
----
-
-## 14. Review evidence, triage, adjudication, fixed point
-
-Trust model: `src/contracts/trust.ts` + `src/contracts/internal/trust-brands.ts`.
-
-**Assurance** ∈ `agent-declared | server-attested | degraded`. A `CurrentEvidenceSetRef` is an
-ordered 2- or 3-tuple of slots with hard-coded role order and independence rules
-(`validateSlots`, `trust.ts:210`):
-
-| Slot | Role | Assurance | Independence |
-|---|---|---|---|
-| 0 | `self-review` | `agent-declared` | `same-family-self` (producer === reviewer family) |
-| 1 | `counter-review` | `server-attested` or `degraded` | `opposite-family` (producer ≠ reviewer) |
-| 2 (optional) | `gate-counter-review` + `gate_id` | `server-attested` or `degraded` | `opposite-family` |
-
-Evidence digests must be unique across slots. `set_digest` is sha256 over `JSON.stringify(slots)`
-(`currentEvidenceSetRef`, `:218`).
-
-- `observationSource` (`trust.ts:93`) is the only way to mint `server-attested` evidence: it requires
-  an `ObservationCapability` whose binding it re-reads from a private `WeakMap`, re-parses the raw
-  adapter bytes, and asserts every derived field equals the capability binding — including
-  `family !== producer_family` for reviews (**opposite-family is enforced at observation time**).
-- `loadCurrentReviewSet` (`state/evidence-results.ts:558`) is the **production** path to the branded
-  set: it reconstructs self+counter from retained result manifests on disk. Callers supply neither an
-  authority brand nor invented receipt/revision facts. `deriveCurrentEvidenceSet` (`:482`) re-checks
-  role, assurance, family relationship, and that both reviews share subject, fingerprint, rubric, and
-  producer family.
-- `validateTriage` (`triage.ts:53`) requires the dispositions to **exactly cover** every finding of
-  every current review — no duplicates, no foreign/stale refs, no omissions — and the
-  accepted/rejected counts to be consistent. Returns a branded `ValidatedTriage`.
-- `parseAndDeriveAdjudication` (`adjudication.ts:133`) recomputes the `constitution` and `drift`
-  folds and the matched/uncertain rule lists from `rule_findings`, requires `drift_findings` to
-  exactly cover `approved_upstream_digests` in order, and rejects "current" mechanical evidence bound
-  to the wrong subject or a `pass` compliance backed by non-current evidence.
-- `crossCheckRuleFindings` (`review/adjudication.ts:85`) adds the registry-dependent half: findings
-  must be exactly the active rules, in id order, at the right versions, with exactly the declared
-  enforcement mechanisms — and a rule with declared mechanisms can never be `pass`.
-- `assessCurrentEvidence` (`review/fixed-point.ts:263`) computes the next action purely from durable
-  state + retained manifests: `self_review → counter_review → triage → adjudicate →
-  adjudication-gate → advance`, with re-entry to `produce` when triage accepted findings or the
-  adjudication went stale, and `attempts-exhausted` when re-entry is required at
-  `attempt >= max_attempts` (default 3, `:32`). Attempt exhaustion is evaluated **only** when
-  re-entry is required.
-- `requireApprovedUpstreamDigests` (`:346`) refuses any upstream that lacks a durable
-  `artifact-approval` binding its exact digest.
-- Evidence is retained through the same result machinery as any other output:
-  `prepareEvidenceResult` (`evidence-results.ts:233`) renders deterministic markdown
-  (`contracts/renderers.ts`, which escapes control/bidi characters), builds a one-output manifest at
-  `.archflow/tasks/<task>/reviews/<phase>.<role>.md`, and requires a **clean** secret scan (`:313`).
-  `durable.ts:642-675` independently pins that exact path shape per evidence role.
-
----
-
-## 15. MCP tool contract surface
-
-`src/contracts/mcp-tools.ts` — 5 tools, closed:
-
-| Tool | Input | Success |
-|---|---|---|
-| `archflow_state` | `{…common, phase_instance, step, status, artifact?}` | `{path, revision, status}` |
-| `archflow_counter_review` | `{…common, artifact_path, rubric}` | `{path, verdict, blocking_count, revision}` |
-| `archflow_adjudicate` | `{…common, artifact_path, upstream_paths}` | `{path, constitution, drift, triggers, revision}` |
-| `archflow_gate` | `{…common, phase_instance, summary, subject_digest, current_evidence, supersedes?, supplemental_outcome?, kind, context}` | `{kind, decision (envelope), notes, revision}` |
-| `archflow_waiver` | `{…common, origin, rationale}` | `WaiverSuccess` (granted true/false variants) |
-
-`CommonToolInput` = `{schema_version, task_id, intent_id, expected_revision, input_fingerprint}`.
-`ToolContractMap` is proven exhaustive over `ToolName` at compile time (`:55-56`).
-
-Pipeline (all four steps are required, in order):
-
-1. `parseToolCall(name, value)` (`:110`) — deep clone, Zod parse, kind-specific re-parse for gate
-   context / evidence set / supplemental outcome, deep freeze, brand.
-2. `identifyTransactionRequest` (`state/request.ts:69`) — derives the `RequestDigestSubject` and binds
-   `request_digest` to the parsed call.
-3. `validateProjectResultStructure` (`:161`) — parses success against the per-tool schema plus
-   cross-checks (state status must equal the input status; gate envelope must bind kind/task/phase/
-   subject and `notes === payload.reason`; waiver result must bind its origin).
-4. `correlateProjectResult` (`:180`) — requires all three brands, matching tool, matching
-   `request_digest`/`task_id`/`intent_id`/`input_fingerprint`, and `expectation.success` deep-equal to
-   the result.
-
-`operationFor(call)` (`transaction.ts:214`) maps a call to the receipt's `operation` code; the same
-map appears in `request.ts:27-35` and `fingerprints.ts:223-231` as a `satisfies Record<…>` so a new
-artifact kind fails to compile in all three places.
-
----
-
-## 16. End-to-end walkthrough: recording a produced artifact
-
-`archflow_state{step: "produce", status: "succeeded", artifact: <ImplementationOutputV1>}`
-
-1. **Parse** — `parseToolCall("archflow_state", input)`; the artifact goes through the Zod mirror
-   (which the JSON Schema agrees with).
-2. **Authority** — `createInternalTransactionAuthority` resolves repository identity, task identity,
-   `task_root`, `state.json`, `config.yaml` as branded `ResolvedPath`s.
-3. **Verify bytes** — `verifyImplementationManifest` re-observes every declared path (lexical leaf,
-   not realpath), proves base-tree/index/worktree identity, and recomputes all four digests.
-4. **Prepare result** — build `ResultManifestV1`, `prepareSnapshot` (caps + payload identity), resolve
-   `results/sha256/<d>/manifest.json` and payload targets, `prepareProjectionPlan` (secret scan,
-   collision classification), then `prepareResultInstallation` mints a **one-shot** capability.
-5. **Transact** — `runStateTransaction`:
-   - lock; read + validate state; `expected_revision` check;
-   - recompute the input fingerprint and the request digest;
-   - `prepare()` returns `{expectation, result, next_state: planStateTransition(...), result_installation}`;
-   - `buildPlan` correlates, `assertPreserved`, `validateResultInstallationBinding` (paths must be
-     inside the authenticated task root, manifest path must equal the content-addressed template,
-     projection targets must match declared outputs), builds and validates the receipt and the
-     committed successor;
-   - install payloads → manifest → projections → `createExclusive(intent)` → `replace(state.json)`;
-   - re-read and re-validate; return `{state, outcome, replayed:false}`.
-6. **Gate** — the caller opens e.g. `commit-authorization`: `openDurableGate` re-derives `gate_id`,
-   archives `request.json`, publishes `gate.json`, and bumps state with `open_gate` +
-   `frozen_state_digest`. A human writes `gate.decision`. `runDurableGate` waits outside the lock,
-   then `resolveAdvancingGate` archives `decision.json`, installs a gate receipt, appends an
-   `ApprovalRef`, replaces state, and removes both interface files.
-
-Any crash cut leaves either the prior revision or a fully reconstructible successor; re-invoking with
-the same `intent_id` replays, and with different inputs returns `INTENT_MISMATCH`.
-
----
-
-## 17. Pitfalls when changing this subsystem
-
-1. **Never add a Zod mirror** for `TaskStateV1`, `IntentReceiptV1`, `ResultManifestV1`, or
-   `MaintenanceRecordV1`. Tests grep for one.
-2. **Never declare a persisted shape as an `interface`.** `type` alias only, transitively —
-   otherwise `CanonicalDocument<T extends PlainJsonValue>` fails with TS2344 at the root, and the
-   error blames the branded strings, not the declaration form.
-3. **Adding a field to a durable root changes every digest that covers it.** Check: the JSON Schema,
-   the Zod mirror (if any), `closedOperationFields` if it is request-bearing, and any
-   `exactFields`/`Object.keys(...).sort()` equality check that enumerates slots
-   (`durable.ts:405`, `transaction.ts:512-517`, `checkpoints.ts:72`).
-4. **Adding an array field requires deciding set-vs-sequence and declaring the sort**, in both
-   authorities, via `isSortedUniqueBy`/`tupleKey`.
-5. **Keep the rank order in `validateDurableSemantics`.** Moving a clause changes which error a given
-   invalid document reports, and the corpus tests assert exact codes. Rank 2 must stay before
-   anything that can report `STATE_INVALID`.
-6. **Preserve the write ordering** payload → manifest → projection → receipt → state. Reordering
-   breaks every crash test and the replay proof.
-7. **Widening `createExclusive`/`replace` path classes** (`atomic.ts:58-64`, `:105`) removes the
-   immutable/mutable partition that the whole recovery argument rests on.
-8. **A new gate kind** must be added to `GateContractByKind`, `GATE_KINDS`, `contexts`, `decisions`,
-   `effects` (exhaustive `satisfies`), the two `discriminatedUnion` ladders in `gates.ts:125-147`,
-   `DECISIONS` in `state/gates.ts:46`, and the matching JSON Schemas.
-9. **Never pass `--literal-pathspecs` alongside a `:(top,literal)` pathspec** — the flag disables
-   pathspec magic and the command silently selects nothing.
-10. **Read the lexical leaf, not `ResolvedPath.absolute`,** whenever you observe or mutate a target
-    that may be a symlink (`snapshots.ts:102`, `implementation-manifest.ts:176-177`).
-
----
-
-## 18. Test map
-
-| Area | Tests |
-|---|---|
-| Semantic corpus + structural corpus | `test/contracts/durable-semantics-corpus.test.ts`, `durable-structural-corpus.test.ts` |
-| Ajv ↔ Zod agreement | `durable-agreement.test.ts`, `foundational-schema-agreement.test.ts`, `review-schema-agreement.test.ts`, `gate-error-schema-agreement.test.ts`, `mcp-contract-agreement.test.ts` |
-| Canonical bytes parity with the release script | `canonical-parity.test.ts` |
-| Layering | `repository-boundary.test.ts` |
-| Schema registry completeness | `schema-registry.test.ts` |
-| Real-SIGKILL crash cuts | `test/crash/state-{transaction,initialization,checkpoint-adoption,gate-lifecycle-phase12}.test.ts` |
-
-Commands: `npm run typecheck`, `npm test`, `npm run test:contracts`, `npm run check` (full gate).
+| Durable structural/semantic authority and schema agreement | `test/contracts/durable-*.test.ts`, `test/contracts/*agreement.test.ts` |
+| Canonical bytes and schema registry | `test/contracts/canonical-parity.test.ts`, `test/contracts/schema-registry.test.ts` |
+| Transaction, gate, initialization, checkpoint crash cuts | `test/crash/state-*.test.ts` |
+| MCP parsing, handlers, replay, session, stdio | `test/integration/mcp-*.test.ts` |
+| Status and executable request round trips | `test/integration/status-request-roundtrip.test.ts`, `state-projection-fresh-task.test.ts` |
+| Local CLI stdin/payload/command contracts | `test/integration/local-cli-*.test.ts`, `local-envelope.test.ts` |
+| Manual workflow/import | `test/integration/manual-workflow.test.ts`, `legacy-upgrade.test.ts` |
+| Repository identity and Git path behavior | `test/integration/repository-git-*.test.ts` |
+
+Primary verification commands are `npm run typecheck`, `npm test`, `npm run test:contracts`, and
+`npm run check`.

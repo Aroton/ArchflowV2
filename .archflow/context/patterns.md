@@ -1,438 +1,211 @@
 # Codebase Patterns and Conventions
 
-**Date:** 2026-07-31
-**Commit:** fccf3fb
+**Explored:** 2026-08-10
+**Commit:** `28c1021`
+**Scope:** `archflow-mcp-server` (`src/`, `test/`, `scripts/`, and repository policy)
 
-Scope: the `archflow-mcp-server` TypeScript package (`src/`, `test/`, `scripts/`). No linter or formatter is configured — every convention below is enforced by hand, by `tsc`, or by a test.
+This is a strict TypeScript/Node package whose conventions are enforced primarily by the type checker, runtime validators, and tests. There is no configured linter or formatter. Match the surrounding file: contract registries intentionally use dense declarations, while state, repository, and MCP algorithms favor expanded control flow and rationale-heavy comments.
 
----
+## Module and formatting conventions
 
-## 1. Module and build conventions
+- The package is ESM (`"type": "module"`) and targets Node `^24.15.0`; TypeScript uses `NodeNext` module resolution and ES2024 (`package.json`, `tsconfig.json`).
+- Relative imports always use the emitted `.js` extension, including imports between `.ts` sources: `../contracts/errors.js` in `src/state/transaction.ts`.
+- Node built-ins use the `node:` prefix. Imports are normally grouped as Node built-ins, third-party packages, then relative modules, with blank lines between groups. `src/repository/git.ts` is representative.
+- `verbatimModuleSyntax` makes type imports explicit. Use `import type { ... }`, or a `type` specifier in a mixed import. `src/contracts/durable-document.ts` demonstrates both value and type imports from the same modules.
+- JSON modules use import attributes: `with { type: "json" }`, as in `src/contracts/validators.ts`. Runtime-relative assets and fixtures use `new URL(..., import.meta.url)`, as in `src/init/assets.ts` and `test/integration/mcp-stdio.test.ts`.
+- House formatting is two spaces, double quotes, semicolons, trailing commas in expanded calls/objects, and `readonly` fields by default. Numeric separators are used for limits and timeouts (`30_000`, `25 * 1024 * 1024`).
+- Strictness is deliberate: `strict`, `noUncheckedIndexedAccess`, and `exactOptionalPropertyTypes` are enabled, while `skipLibCheck` is false. Indexed accesses therefore commonly use a justified non-null assertion after an explicit length/cardinality check; see `src/contracts/errors.ts` and `src/repository/index-entries.ts`.
+- Long doc comments preserve design and security rationale, often tagged with requirement or design labels such as `D1`, `D11`, and `REQ-11`. Preserve that reasoning when changing the associated behavior; `src/contracts/durable-document.ts` is the clearest example.
 
-| Rule | Evidence |
-|---|---|
-| ESM only (`"type": "module"`), Node `^24.15.0` | `package.json:4-7` |
-| **Every relative import ends in `.js`**, even for `.ts` sources (`module: NodeNext`) | `src/contracts/errors.ts:4-11` |
-| JSON imported with an import attribute, never `readFile` in `src/` | `import taskStateSchema from "./schemas/v1/task-state.schema.json" with { type: "json" };` — `src/contracts/validators.ts:18` |
-| `verbatimModuleSyntax` is on → type-only imports **must** say `type` | `import type { Sha256Digest } from "./evidence.js";` `src/contracts/canonical.ts:5` |
-| `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `skipLibCheck: false` | `tsconfig.json` |
-| `tsc --noEmit` covers `src/**`, `test/**`, and `vitest.config.ts` | `tsconfig.json:14` |
-| Node builtins use the `node:` prefix always | `import { createHash } from "node:crypto";` |
+## Naming conventions
 
-`noUncheckedIndexedAccess` is why you constantly see `items[index - 1]!` and `slots[0]!` — non-null assertions after an index are house style, not sloppiness (`src/contracts/errors.ts:32`, `src/contracts/validators.ts:202`).
-
-### Import ordering
-
-Three groups separated by blank lines: `node:` builtins → third-party → relative. Relative imports are roughly path-sorted; value and type imports from the same module are often two adjacent statements.
-
-```ts
-import { z } from "zod";                                   // src/contracts/durable-document.ts:1
-                                                           //
-import type { DeclaredInputRef } from "./fingerprints.js"; // :3
-import { declaredInputRefV1Schema } from "./durable-primitives.js";
-import type { SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
-import { safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
-```
-
-### Formatting
-
-2-space indent, double quotes, semicolons, `readonly` on nearly every field. Line length is **not** capped: several contract modules deliberately pack one declaration per (very long) line to keep a whole registry visible at once — `src/contracts/errors.ts:34-75`, `src/contracts/contexts.ts:9-29`, `src/contracts/gates.ts:31-41`, `src/contracts/mcp-tools.ts:40-56`. Multi-line, prose-documented style is used in the algorithmic modules (`plain-json.ts`, `canonical.ts`, `atomic.ts`, `transaction.ts`). Match the file you are editing.
-
-Doc comments are unusually long and carry *decision rationale* with design-decision tags (`D1`, `D11`, `D19`, `REQ-14`). Preserve and extend them; they are how prior review conclusions survive.
-
----
-
-## 2. Naming conventions
-
-| Thing | Convention | Example |
+| Kind | Convention | Examples |
 |---|---|---|
-| Source files | kebab-case, `.ts` | `durable-implementation-output.ts`, `path-claims.ts` |
-| Domain grouping | one directory per layer: `contracts/`, `state/`, `repository/`, `mcp/`, `review/`, `dispatch/` | |
-| Persisted root types | `PascalCase` + `V1` suffix | `TaskStateV1`, `DocumentArtifactV1`, `IntentReceiptV1` |
-| Zod mirrors | `camelCaseV1Schema` | `documentArtifactV1Schema` (`durable-document.ts:80`) |
-| Compiled Ajv authorities | `camelCaseV1Validator` | `intentReceiptV1Validator` (`validators.ts:323`) |
-| Parse functions (throw) | `parseX` — 59 of them | `parseDocumentArtifact`, `parseTaskSlug`, `parseGitOid` |
-| Assertions | `assertX(value): asserts value is X` | `assertPlainJson`, `assertValidJsonSchema` |
-| Capability assertions | `assertAuthenticX` / `assertInternalX` | `assertAuthenticToolBoundary` (`mcp/server.ts:232`), `assertInternalTransactionAuthority` (`state/authority.ts:34`) |
-| Factories | `createX` returning a frozen object | `createAtomicWriter`, `createToolBoundary`, `createJsonSchemaValidator` |
-| Frozen constant tables | `UPPER_SNAKE` + `as const` (+ `Object.freeze` when exported as a value) | `TOOL_NAMES`, `GATE_KINDS`, `PIPELINE_STEPS`, `PROJECT_ERROR_DEFINITIONS` |
-| Error codes | `UPPER_SNAKE` string-literal union members | `"STATE_CONFLICT"`, `"PATH_ESCAPE"` |
-| Error `owner` / `next_action` | lowercase kebab | `"state"`, `"reread-and-retry-intent"` |
-| All JSON / persisted / wire fields | `snake_case` | `input_fingerprint`, `phase_instance`, `resulting_revision` |
-| Local TS variables & non-persisted params | `camelCase` | `recomputedInputFingerprint` |
-| MCP tool names | `archflow_` + snake_case | `archflow_state`, `archflow_counter_review` |
-| Schema `$id`s | `urn:archflow:schema:v1:<kebab-name>` (two legacy `https://archflow.dev/schemas/v1/...`) | `versions.ts:3-44` |
-| Schema files | `src/contracts/schemas/v1/<kebab-name>.schema.json` | |
-| Ajv custom keywords | `x-archflow-<kebab>` | `x-archflow-sorted-unique-by` (`validators.ts:277`) |
+| Source files | kebab-case | `durable-implementation-output.ts`, `state-results.ts` |
+| Source layers | directory by responsibility | `contracts/`, `repository/`, `state/`, `review/`, `dispatch/`, `mcp/`, `local/`, `init/` |
+| Exported types/classes | PascalCase | `TaskStateV1`, `GitInvocationError`, `TransactionDependencies` |
+| Persisted versioned shapes | PascalCase plus `V1` | `DocumentArtifactV1` in `src/contracts/durable-document.ts` |
+| Runtime schema mirrors | camelCase plus `V1Schema` | `documentArtifactV1Schema` |
+| Parsers | `parseX`, throwing on invalid input | `parseDocumentArtifact`, `parseGitOid` |
+| Assertion functions | `assertX`; authenticity assertions say `assertAuthenticX` or `assertInternalX` | `assertPlainJson`, `assertAuthenticTransactionOutcome`, `assertInternalTransactionAuthority` |
+| Factories | `createX`, usually returning a frozen object | `createGitRunner`, `createProjectError` |
+| Constant vocabularies/registries | `UPPER_SNAKE_CASE`, normally `as const` and/or frozen | `PIPELINE_STEPS`, `PROJECT_ERROR_DEFINITIONS` |
+| Persisted/wire JSON fields | snake_case | `input_fingerprint`, `phase_instance`, `projection_target` |
+| Internal locals/options | camelCase | `runnerMaxBuffer`, `materializedSpec` |
+| Error codes | upper snake case | `STATE_CONFLICT`, `PATH_ESCAPE` |
+| Error owners/actions | lowercase; actions are kebab-case | `"state"`, `"reread-and-retry-intent"` |
+| MCP tools | `archflow_` plus snake_case | `archflow_state`, `archflow_counter_review` |
+| Tests/files | behavior or exported-symbol name, never workflow phase number | `state-transaction.test.ts`, `local-cli-stdin-discipline.test.ts` |
 
-**Field naming is split by destination, not by language.** A type that is persisted or crosses the MCP boundary uses `snake_case` fields even though it is TypeScript (`TransactionAuthority` in `state/authority.ts:23-32` is `snake_case`); a purely internal options bag is `camelCase` — `resolveTaskPath({ runner, taskId, claim, expectedClass, context })` (`repository/paths.ts:413`).
+Vocabulary is represented as a constant tuple plus a derived union, not a TypeScript `enum`. For example, `PIPELINE_STEPS` and `PipelineStep` in `src/contracts/vocabulary.ts` let Zod, JSON Schema generation/validation, and TypeScript share one vocabulary.
 
-### Constant-union idiom
+## Type and contract conventions
 
-Enumerations are always a frozen array plus a derived type — never a TS `enum`:
+### Persisted graphs use type aliases
 
-```ts
-export const PIPELINE_STEPS = ["produce", "self_review", "counter_review", "triage", "adjudicate"] as const;
-export type PipelineStep = (typeof PIPELINE_STEPS)[number];
-// src/contracts/vocabulary.ts:2,7
-```
-
-The array is what Zod (`z.enum(PIPELINE_STEPS)`) and the JSON Schema `enum` both consume, so the vocabulary cannot drift.
-
----
-
-## 3. Type conventions
-
-### 3.1 The `type`-alias rule (the one newcomers break)
-
-**Any type reachable from a persisted root must be a `type` alias, never an `interface`.**
+Any type reachable from a persisted root must be declared with `type`, never `interface`. `CanonicalDocument<T extends PlainJsonValue>` checks the entire reachable graph, and TypeScript supplies the implicit string index signature needed by `PlainJsonValue` only for type aliases. An `interface` nested anywhere in the graph produces `TS2344: Index signature for type 'string' is missing` at the root.
 
 ```ts
-// src/contracts/durable-state.ts:19-21
-// Every type below is a `type` alias rather than an `interface` (D1): `CanonicalDocument<T extends
-// PlainJsonValue>` grants the implicit index signature it needs only to aliases, and it checks the
-// whole reachable graph, so an `interface` anywhere below the root fails the constraint at the root.
-
-export type TaskStateV1 = {
+export type DocumentArtifactV1 = {
   readonly schema_version: "1";
-  readonly task_id: TaskSlug;
-  readonly authoritative_results: readonly AuthoritativeResultRef[];   // AuthoritativeResultRef is also a `type`
-  readonly open_gate?: OpenGateRef;
+  readonly artifact_kind: "document";
+  // ...
 };
+// src/contracts/durable-document.ts
 ```
 
-The constraint that forces it: `CanonicalDocument<T extends PlainJsonValue>` (`src/contracts/canonical.ts:98-107`) and `PlainJsonObject`'s index signature (`plain-json.ts:3-5`). TypeScript grants implicit index signatures to type aliases only. An `interface` **anywhere in the reachable graph** — not just the root — fails with `TS2344: Index signature for type 'string' is missing`. Branded fields, optional properties, and `readonly` arrays are all fine; the *declaration form* is the sole cause. The rule also intentionally closes declaration merging on persisted names.
+This is about declaration form, not branded strings, optional properties, or readonly arrays. It also intentionally prevents declaration merging from widening a persisted shape beyond its JSON Schema. Interfaces remain normal for non-persisted service contracts such as `GitRunner` and `GitCommandSpec` in `src/repository/git.ts`, or MCP runtime controllers in `src/mcp/session.ts`.
 
-Same note repeated at every persisted root: `durable-document.ts:22-24`, `durable-implementation-output.ts:59-61`, `durable-task-initialization.ts:16`, `durable-legacy-import.ts:48`, `durable-maintenance.ts:10`, `durable-primitives.ts:15-16`.
+### Branded boundary values
 
-`interface` remains correct — and is used — for things that never reach a persisted root or a `PlainJsonValue` generic: `PlainJsonObject` itself, `CanonicalDocument`, `ErrorDefinition` (`errors.ts:16`), `ConnectionContext`/`InvocationContext` (`contexts.ts:9-10`), the tool contract map (`mcp-tools.ts:44-56`), `JsonSchemaValidator`. When such an interface *does* need to be hashed, the escape hatch is a generic conversion function, documented at `contracts/fingerprints.ts:124-129`.
+Digests, safe integers, task slugs, Git OIDs, path claims, and resolved paths are nominally branded primitives. Callers obtain them through strict `parseX` functions, not unchecked casts. See `src/contracts/evidence.ts`, `src/contracts/canonical.ts`, and `src/repository/paths.ts`. Path brands distinguish task-relative from repository-relative frames even where runtime schemas are structurally identical.
 
-### 3.2 Branded primitives
+### Discriminated unions and exhaustive registries
 
-Nominal string/number types via `declare const ...Brand: unique symbol`:
+- Wire and durable unions discriminate on stable literal fields such as `ok`, `artifact_kind`, `kind`, or `name`.
+- Exhaustive switches bind the remainder to `never`; `operationFor` in `src/state/transaction.ts` is representative.
+- Registries use `as const satisfies Record<Code, ...>` so a new vocabulary member cannot omit its definition. The project/protocol error registries in `src/contracts/errors.ts` are the dominant example.
+- Persisted arrays that model sets are required to be sorted and unique. They are validated, never silently sorted or deduplicated. Shared helpers such as `isSortedUniqueBy` and `tupleKey` in `src/contracts/validators.ts` keep Zod and Ajv behavior aligned.
 
-```ts
-// src/contracts/evidence.ts:5-24
-declare const sha256DigestBrand: unique symbol;
-export type Sha256Digest = string & { readonly [sha256DigestBrand]: true };
-export type SafeInteger = number & { readonly [safeIntegerBrand]: true };
-```
+## Validation and caller-owned objects
 
-The regex authority and the brand are joined by a cast at the schema, and a `parseX` is the only sanctioned way in:
+The package follows an assert-don't-filter model. Invalid input is rejected rather than coerced, stripped, defaulted, or normalized. Zod objects are strict, and Ajv is configured without type coercion, default insertion, or additional-property removal in `src/contracts/validators.ts`.
 
-```ts
-export const sha256DigestV1Schema = z.string().regex(/^[0-9a-f]{64}$/u);              // :55
-export const taskSlugV1Schema = pathSegmentSafe(z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/u)) as unknown as z.ZodType<TaskSlug>;  // :58
+### Plain JSON preflight
 
-export function parseSha256Digest(value: unknown): Sha256Digest {
-  assertPlainJson(value, "SHA-256 digest");
-  return sha256DigestV1Schema.parse(value) as Sha256Digest;
-}                                                                                     // :63-66
-```
-
-Branded path types work the same way (`ResolvedTaskPath`, `repository/paths.ts:54`). Brand casts on paths are treated as a security boundary: the state layer has exactly one and it is annotated as such (`state/layout.ts:39-42`).
-
-### 3.3 Discriminated unions and exhaustiveness
-
-Unions over a key are built by mapping the key union and indexing back, so adding a member is a compile error everywhere:
-
-```ts
-export type ProjectError = { readonly [K in ProjectErrorCode]: ErrorValue<ProjectErrorDefinitionByCode, K> }[ProjectErrorCode];  // errors.ts:80
-export type GateDecisionEnvelope<K extends GateKind = GateKind> =
-  { readonly [P in K]: GateDecisionEnvelopeBase & { readonly kind: P; readonly payload: GateDecisionPayload<P> } }[K];           // gates.ts:52
-```
-
-Switches end with a `never` binding, not a `default: throw`:
-
-```ts
-default: {
-  const exhaustive: never = call;
-  throw new TypeError(`unknown tool ${String((exhaustive as { name?: unknown }).name)}`);
-}                                                                                        // state/request.ts:62-65
-```
-
-Registries prove exhaustiveness with `as const satisfies Record<Code, …>` (`errors.ts:52`, `errors.ts:71`) or a compile-time witness constant that is then `void`ed (`mcp-tools.ts:57-58`, `fingerprints.ts:98-110`).
-
----
-
-## 4. Validation conventions
-
-### 4.1 Assert, don't filter
-
-Nothing is sanitized, stripped, or coerced. Input is either exactly right or it throws. Ajv is constructed with `coerceTypes: false, removeAdditional: false, useDefaults: false, strict: true, allowUnionTypes: false` (`validators.ts:219-227`), Zod objects are all `.strict()`, and a Zod mirror that *transformed* its input is itself an error (`validators.ts:404-406`).
-
-### 4.2 `assertPlainJson` is the first line of every parse boundary
+Every parse boundary begins with `assertPlainJson`. For example:
 
 ```ts
 export function parseDocumentArtifact(value: unknown): DocumentArtifactV1 {
   assertPlainJson(value, "document artifact");
   return documentArtifactV1Schema.parse(value);
-}                                                                          // durable-document.ts:98-101
+}
+// src/contracts/durable-document.ts
 ```
 
-`assertPlainJson` (`plain-json.ts:99`) rejects: non-finite numbers, non-plain prototypes, symbol keys, cycles, sparse arrays, the `__proto__`/`prototype`/`constructor` keys, **accessor properties**, **non-enumerable data properties**, and values that mutate mid-inspection (descriptors are re-read after recursion, `plain-json.ts:24-42`, `:90-93`).
+`src/contracts/plain-json.ts` rejects unsupported primitives, non-finite numbers, cycles, sparse arrays, symbol keys, dangerous own keys, non-plain prototypes, accessors, non-enumerable properties, and mutation during traversal. It re-reads descriptors and keys after recursive inspection to detect time-of-check/time-of-use changes.
 
-### 4.3 `Object.getOwnPropertyDescriptor` needs **both** `value` and `enumerable`
+### Descriptor checks require both data and enumerability
 
-The two checks guard different hazards and the pair appears everywhere a caller-owned object is read:
-
-```ts
-if (descriptor === undefined || !("value" in descriptor)) fail("accessor properties are not JSON values", propertyPath);
-if (!descriptor.enumerable) fail("non-enumerable properties are not JSON values", propertyPath);
-// plain-json.ts:84-85
-```
+When reading a caller-owned field through `Object.getOwnPropertyDescriptor`, require that the descriptor contains `value` and is `enumerable`:
 
 ```ts
 const descriptor = Object.getOwnPropertyDescriptor(value, field);
 if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
   throw new TypeError(`${label}.${field} must be an own enumerable data property`);
 }
-// state/transaction.ts:248-251 (`ownDataField`); same shape at validators.ts:64, mcp/server.ts:136, durable.ts:228
+// src/state/transaction.ts, ownDataField
 ```
 
-Rejecting accessors prevents *split observation* (a getter returning one value to validation and another to hashing). Rejecting non-enumerable data properties prevents a field invisible to `JSON.stringify`/`canonicalJsonBytes` — and therefore to every digest — from being treated as present.
+The checks prevent different hazards. Rejecting accessors prevents split observation from a getter. Rejecting non-enumerable data prevents a field invisible to `JSON.stringify`, canonical bytes, and their digests from being treated as authenticated input. The same convention appears in `src/contracts/durable.ts`, `src/mcp/session.ts`, and the transaction kernel.
 
-### 4.4 `structuredClone` before any second inspection
+### Materialize once before repeated inspection
 
-Validate once, materialize once, then read only the copy:
+Validate a caller-owned JSON object once, then `structuredClone` it and inspect only the clone. `materializeDraft` and `materializeFingerprint` in `src/state/transaction.ts` are representative. For wrapper objects that cannot themselves be plain JSON (for example, a canonical document containing `Uint8Array` bytes), first extract each own enumerable data slot, then validate and clone the JSON value; see `materialize` in `src/contracts/durable.ts`.
 
-```ts
-function materialize<T>(subject: T, label: string): T {
-  assertPlainJson(subject, label);
-  return structuredClone(subject) as T;
-}
-// contracts/fingerprints.ts:131-134 — rationale at :112-129
+This boundary is security-relevant: an enumerable getter can otherwise return one value during validation and another during hashing. The rule is “assert, then clone,” not repeated reads of the original.
+
+### Multiple authorities
+
+- JSON Schema is the serialized contract authority. Runtime schemas live under `src/contracts/schemas/v1/`.
+- Agent-supplied MCP shapes commonly also have strict Zod mirrors, and contract tests prove agreement through `assertZodAgreement` (`src/contracts/validators.ts`, `test/contracts/`).
+- Durable semantic checks that cross document boundaries are centralized in `validateDurableSemantics` (`src/contracts/durable.ts`) rather than duplicated in individual schemas.
+- A caller-supplied digest or fingerprint is an assertion, never authority. The server re-derives canonical digests and input fingerprints before comparison.
+
+## Error-handling conventions
+
+`src/contracts/errors.ts` is the central taxonomy. Each project or protocol error code has a strict parameter schema, owner, retryability flag, next action, and projection. `createProjectError` validates parameters and returns a frozen structure; `parseProjectError` reconstructs the expected value from the registry and compares it deeply, preventing callers from forging owner/retryability/action metadata.
+
+Error parameters are constrained identifiers, codes, versions, paths, counts, and digests. Do not include arbitrary exception text, filesystem paths, model output, or secrets. Hash hostile/unbounded subjects or map them to a stable safe code.
+
+The layer convention is:
+
+- Contract parsers and internal invariant checks throw `TypeError` or a typed subclass. Examples: `PlainJsonError` (`src/contracts/plain-json.ts`) and `GitInvocationError` (`src/repository/git.ts`).
+- Expected operational/domain failures exposed to callers use `ProjectResult<T>`, a frozen `ok: true | false` discriminated union. The state transaction kernel has local `ok` and `fail` constructors in `src/state/transaction.ts`.
+- Filesystem/process failures are first classified with typed errors carrying stable fields, then translated to project errors at a layer that has the required context. `projectErrorForGitFailure` and the projection failure mapping in `src/state/transaction.ts` illustrate this.
+- MCP handler failures are normalized by `mapHandlerErrors` in `src/mcp/handlers/errors.ts`. Known carried project errors are returned, programmer `TypeError`s are rethrown, and unknown failures are reported diagnostically but projected only as `INTERNAL_ERROR` with a correlation ID.
+- Protocol failures and project failures remain distinct at the MCP adapter boundary: protocol failures use JSON-RPC errors, while project failures are tool results marked as errors (`src/mcp/sdk-adapter.ts`).
+
+## State management and data access
+
+### Canonical serialization and immutability
+
+`src/contracts/canonical.ts` owns canonical JSON: ordinally sorted object keys, preserved array order, two-space indentation, UTF-8, and exactly one trailing newline. `CanonicalDocument<T>` binds frozen bytes, parsed value, and digest. Parsing re-renders and byte-compares, so semantically equivalent but noncanonical JSON is rejected.
+
+Durable objects and capability handles are commonly frozen. Authentic internal authority is carried by module-private `WeakSet`/`WeakMap` membership rather than a spoofable JSON field. Examples include transaction authority in `src/state/authority.ts` and result-installation capabilities/outcomes in `src/state/transaction.ts`.
+
+### Repository access
+
+- Git is invoked with argv arrays through `createGitRunner`; no shell command strings are built (`src/repository/git.ts`). Input bytes are copied before spawning, outputs and time are bounded, UTF-8 decoding is explicit, and absence is recognized only by a caller-declared exit-code-plus-diagnostic pair.
+- Use `:(top,literal)<claim>` by itself for worktree-root-anchored literal pathspecs. Never combine it with `--literal-pathspecs`: that disables pathspec magic and silently selects nothing. `readIndexEntries` in `src/repository/index-entries.ts` documents and implements the rule.
+- `git check-attr` accepts pathnames, not pathspecs. It therefore uses neither `:(top,literal)` nor `--literal-pathspecs`; see `src/repository/attributes.ts`.
+- Machine-readable Git output is normally NUL-delimited. Returned paths and result cardinality are validated rather than trusted (`src/repository/index-entries.ts`, `src/repository/attributes.ts`).
+- Paths enter as branded claims and are resolved through `src/repository/paths.ts`; consumers act on `ResolvedPath` values and re-check `path_class`. Avoid ad hoc concatenation for repository or task authority.
+
+### Durable writes and transaction ownership
+
+- `src/state/atomic.ts` centralizes exclusive immutable creation, atomic replacement, projection writes, and gate-interface removal. Operations are restricted by `path_class`; ordinary source code does not write durable files directly.
+- Immutable receipts/results are created exclusively. Replaceable projections such as `state.json` and the disposable human gate interface use atomic replacement.
+- `runStateTransaction` in `src/state/transaction.ts` is the write coordinator: authenticate request authority, acquire the task lock, recompute fingerprints/digests, prepare a draft that cannot set kernel-owned revision/intent fields, journal intent, publish canonical state, install retained results/projections, and arbitrate uncertain outcomes for replay.
+- State readers return classified unions such as canonical/missing/unreadable/noncanonical, leaving policy decisions to callers (`src/state/read.ts`).
+- I/O and state dependencies are injected through explicit dependency records, enabling deterministic unit and crash testing without weakening production boundaries.
+- The gate interface is a reconstructible projection, not authority. Durable gate records/state remain sufficient if it is missing or corrupt; rendering and resolution logic lives under `src/state/gates.ts`, `src/state/request-templates.ts`, and MCP gate handlers.
+
+## CLI and MCP conventions
+
+- `src/main.ts` is intentionally small: validate that the MCP executable received no arguments, then wire stdin/stdout/stderr into the runtime.
+- The local CLI parses the command before reading input. Commands in `INPUT_FREE_COMMANDS` never read stdin; payload commands read `--input` or stdin only after command classification (`src/local/main.ts`). This prevents input-free commands from hanging when a parent keeps stdin open.
+- Command and tool surfaces are table-driven (`src/local/commands.ts`, `src/mcp/tools.ts`), keeping advertised schemas, dispatch, and validation aligned.
+- Stdio protocol bytes stay off diagnostic output. MCP framing/session/send-queue responsibilities are split across `src/mcp/framing.ts`, `src/mcp/session.ts`, `src/mcp/send-queue.ts`, and `src/mcp/sdk-adapter.ts`.
+
+## Testing conventions
+
+Vitest runs in Node with explicit imports (`describe`, `it`, `expect`, hooks); globals and setup files are not configured (`vitest.config.ts`). Current test organization:
+
+| Directory | Files | Role |
+|---|---:|---|
+| `test/unit/` | 106 | Module-level behavior and boundary tests; dependencies are usually injected rather than module-mocked |
+| `test/contracts/` | 21 | JSON Schema/Zod agreement, cross-authority parity, durable structural and semantic corpora |
+| `test/integration/` | 32 | Real Git repositories, process wiring, local CLI, MCP handlers/stdio, initialization, replay, and state lifecycle |
+| `test/crash/` | 4 | Child-process fault injection and recovery/idempotence |
+| `test/real-host/` | 5 | Live host/preflight/terminal journeys and benchmark coverage |
+| `test/helpers/` | 4 | Reusable repository, workspace, constitution, and host harnesses |
+| `test/fixtures/` | 64 | JSON/YAML corpora, fake CLIs, legacy layouts, and crash helpers |
+| `test/types/` | 1 | Compile-only MCP SDK public-surface probe included by `tsc` |
+
+Representative practices:
+
+- Test names describe behavior and invariants, not the phase that introduced them. `test/integration/local-cli-stdin-discipline.test.ts` is a strong example.
+- `it.each` is used for representative input matrices; `Promise.allSettled` or parameterized helpers are used where all API variants must agree (`test/unit/plain-json.test.ts`, `test/unit/repository-git.test.ts`).
+- Temporary resources are registered and removed in `afterEach`/`afterAll`. Git fixtures neutralize global/system Git config and set deterministic author metadata; see `test/helpers/temp-repository.ts`.
+- Repository tests use real Git heavily because attributes, filters, index modes, symlinks, worktrees, and conflicts are part of the contract. `test/integration/repository-git-matrix.test.ts` and `test/integration/repository-git-object-proofs.test.ts` cover those boundaries.
+- Contract fixtures encode their expected verdict in names (`*.valid.json`, `invalid-*.json`) and are loaded relative to the test module, not `process.cwd()`.
+- Crash tests spawn fixture children, interrupt at controlled seams, and assert exact recovery or replay rather than merely checking that an error occurred.
+- Assertions favor exact equality for canonical bytes/documents and `toMatchObject` for large result envelopes where only selected contract fields matter.
+
+Common verification commands:
+
+```text
+npm run typecheck
+npm run test:unit
+npm run test:contracts
+npm run test:mcp-runtime
+npm test
+npm run check
 ```
 
-Same pattern named `materializeFingerprint`/`materializeDraft` (`transaction.ts:255-264`), `copy` (`contexts.ts:23`), `copyJson` (`mcp/server.ts:67`), `copyFreezeJson` (`trust.ts:70`). Boundary-crossing results are cloned **and re-validated** after the copy (`mcp/server.ts:219-221`).
-
-### 4.5 Dual authority: JSON Schema is normative, Zod is a mirror
-
-- A shape supplied by an agent across the MCP boundary gets **both** a `*.schema.json` (normative) and a Zod mirror, and a contract test proves they agree.
-- A purely server-internal shape gets **only** the JSON Schema plus `validateDurableSemantics`; adding a Zod mirror is explicitly forbidden and grepped for (`durable-state.ts:11-17`).
-- Shared predicates prevent drift: the Ajv keyword and the Zod `.refine()` call *the same exported function* — `isSortedUniqueBy` + `tupleKey` (`validators.ts:93,109`; used in `durable-document.ts:91` and `validators.ts:288`).
-
-```ts
-export function assertZodAgreement<T>(value, jsonValidator, zodSchema, label = "value"): T
-// validators.ts:380 — asserts plain JSON, snapshots via structuredClone, runs both authorities,
-// then fails on: mutation of input, disagreement, rejection, or Zod transforming the value.
-```
-
-Set-valued arrays are sorted+unique by contract, never deduplicated silently — a duplicate throws (`fingerprints.ts:148-156`).
-
----
-
-## 5. Error handling
-
-### 5.1 Two registries, table-driven
-
-`src/contracts/errors.ts` (105 dense lines) is the single authority. Two disjoint code unions:
-
-```ts
-export type ErrorOwner = "contracts" | "config" | "repository" | "paths" | "policy" | "state" | "intent"
-  | "snapshot" | "gate" | "routing" | "dispatch" | "sandbox" | "protocol" | "integrity";   // :13
-export type ProjectErrorCode  = "CONTRACT_INVALID" | … 53 codes …;                          // :19
-export type ProtocolErrorCode = "TOOL_NOT_FOUND" | "TOOL_DISABLED" | "UNSUPPORTED_PROTOCOL" | "INITIALIZATION_REPEATED";  // :20
-```
-
-Adding an error code is a **four-part edit**: the code union (`:19`), a strict Zod parameter schema (`:34-52`), a `defineError(owner, retryable, schema, action, projection)` entry (`:61-71`), and the JSON Schema `project-error.schema.json`. The `as const satisfies Record<Code, …>` on both tables makes a missing entry a type error, and `test/unit/errors.test.ts:9` pins the count at 53.
-
-### 5.2 Construction and parsing
-
-```ts
-const conflict = createProjectError("STATE_CONFLICT", { expected_revision: 2, observed_revision: 3 });
-// => { schema_version: "1", code: "STATE_CONFLICT", owner: "state", retryable: true,
-//      diagnostic: { template_id: "STATE_CONFLICT", parameters: {…} },
-//      next_action: "reread-and-retry-intent" }   (frozen)                            errors.ts:84-89
-```
-
-- Parameters are validated by a `StrictParameterParser` that runs `assertPlainJson` then a `.strict()` Zod object (`errors.ts:58`) — an extra key throws, so raw exception text can never leak into an error.
-- All parameter values are constrained primitives: digests, `safeCode`, `safeId`, `safeVersion`, `safeInteger`, path claims. Free text is never a parameter; a hostile subject is hashed instead (`TOOL_NOT_FOUND` carries `tool_name_digest`, `errors.ts:55`).
-- `parseProjectError` re-derives the value from the registry and `isDeepStrictEqual`s it against the input (`errors.ts:92-99`), so `owner`, `retryable`, and `next_action` cannot be forged in transit.
-
-### 5.3 Throw vs. return
-
-- **Contract layer (`src/contracts/`) throws.** `TypeError` subclasses: `PlainJsonError` (`plain-json.ts:9`), `ContractValidationError` (`validators.ts:40`), `ProtocolContextError` (`contexts.ts:12`). Marked in comments as `/** Throws, per the contract-layer convention. */` (`phase-instance.ts:64`, `durable-document.ts:97`).
-- **State/dispatch layers return `ProjectResult<T>`** — a discriminated result, never an exception, for anything a caller must handle:
-
-```ts
-export type ProjectResult<T> =
-  | { readonly schema_version: "1"; readonly ok: true;  readonly value: T }
-  | { readonly schema_version: "1"; readonly ok: false; readonly error: ProjectError };   // errors.ts:82
-
-const ok   = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
-const fail = <T = never>(error: ProjectError): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: false, error });
-// transaction.ts:185-186; local helpers `issue`/`stateIssue`/`taskIssue` at :188-200
-```
-
-Callers propagate with `if (!x.ok) return x;` (`transaction.ts:1001-1010`).
-
-- **Operational I/O throws typed classes carrying structured fields**, not messages: `AtomicReplaceError { operation, target_may_have_changed, collision }` (`atomic.ts:24-40`), `TaskLockError { stage }`, `IntentLayoutError` / `ResultLayoutError` / `DecisionLayoutError` each with `stage: "create" | "verify"` (`layout.ts:9-28`).
-- **Reads classify instead of throwing**, returning a `kind` union so the caller decides:
-
-```ts
-export type StateReadResult =
-  | Readonly<{ kind: "canonical"; document: CanonicalDocument<TaskStateV1> }>
-  | Readonly<{ kind: "missing" | "unreadable" | "noncanonical" }>;   // state/read.ts:23-25
-```
-
-### 5.4 Across the MCP boundary
-
-Two disjoint channels, decided in `src/mcp/server.ts` and rendered in `src/mcp/sdk-adapter.ts`:
-
-| Failure | Channel | Where |
-|---|---|---|
-| Protocol error (unknown tool, disabled tool, bad protocol, repeat init) | JSON-RPC `error`, codes `-32001…-32004`; `message` is the code, `data` is the full error | `PROTOCOL_CODES` `sdk-adapter.ts:98-108`, `protocolResponse` `:114-116` |
-| Project error (everything else) | JSON-RPC `result` with `isError: true`, the `ProjectResult` as `structuredContent` | `sdk-adapter.ts:136-142` |
-| Anything unexpected thrown by a handler | `INTERNAL_ERROR` project failure carrying only `correlation_id: context.invocation_id` | `mcp/server.ts:120-122, 211-224` |
-
-Input classification is staged and each stage yields a distinct `issue_code`: `input-not-object`, `schema-version-missing`, `schema-version-invalid`, `input-invalid`, plus `CONTRACT_VERSION_UNSUPPORTED` for a well-formed but unsupported version (`mcp/server.ts:146-186`). Handler exceptions are caught with bare `catch {}` on purpose — the thrown value never reaches the wire.
-
----
-
-## 6. Capability / authenticity pattern
-
-Trust is carried by object identity in a module-private `WeakSet`/`WeakMap` (18 such sets in `src/`), never by a checkable field.
-
-```ts
-const transactionAuthorityBrand: unique symbol = Symbol("TransactionAuthority");
-const authenticAuthorities = new WeakSet<object>();
-const authorityDependencies = new WeakMap<object, Readonly<{ runner: RootBoundGitRunner; environment: GitEnvironment }>>();
-
-export type TransactionAuthority = Readonly<{ … }> & { readonly [transactionAuthorityBrand]: true };
-
-export function assertInternalTransactionAuthority(value: TransactionAuthority, expected?): void {
-  if (!authenticAuthorities.has(value)) throw new TypeError("an authentic transaction authority is required");
-  …
-}
-// state/authority.ts:19-45
-```
-
-The minting recipe, repeated verbatim across the codebase: build the object → `Object.defineProperty` the brand symbol as `{ value: true, enumerable: false, writable: false, configurable: false }` → `Object.freeze` (or `deepFreeze`) → add to the `WeakSet` (`authority.ts:89-97`, `mcp/server.ts:71-84`). The non-enumerable brand keeps it out of `JSON.stringify` and every digest. Every consumer opens with the matching `assert*` call.
-
-`deepFreeze` is redefined locally in each module that needs it (`mcp/server.ts:59`, `contexts.ts:22`, `mcp/tools.ts:105`) — there is no shared utility module and none is wanted.
-
----
-
-## 7. State management and data access
-
-### 7.1 Canonical JSON is the only serialization
-
-```ts
-/** Ordinal-sorted keys, 2-space indent, exactly one trailing newline, UTF-8. */
-export function canonicalJsonBytes(value: PlainJsonValue): Uint8Array {
-  return encoder.encode(`${JSON.stringify(sortCanonical(value), null, 2)}\n`);
-}                                                                       // canonical.ts:65-68
-```
-
-Object keys sort by **ordinal** comparison (`a < b`, never `localeCompare`); **array order is preserved because it is semantic** (`canonical.ts:39-63`). `undefined` and non-finite numbers throw rather than being dropped or emitted as `null`. `sortCanonical` mirrors `sortCanonical` in `scripts/release-support.mjs`, and `test/contracts/canonical-parity.test.ts` proves it.
-
-`CanonicalDocument<T>` = `{ bytes, value, digest }`, always frozen (`canonical.ts:98-107`). Reading bytes back goes through `parseCanonicalDocument` (`:119-142`), which in strict order: fatal UTF-8 decode → `JSON.parse` → `assertPlainJson` → **re-render and byte-compare**. Any non-canonical form (permuted keys, wrong indent, missing/extra trailing newline, duplicate keys) is rejected, so bytes and value can never disagree.
-
-### 7.2 Digests
-
-```ts
-export function sha256Bytes(bytes: Uint8Array): Sha256Digest              // canonical.ts:70
-export function canonicalJsonDigest(value: PlainJsonValue): Sha256Digest  // canonical.ts:74
-export function gitBlobOid(content: Uint8Array): GitOid                   // canonical.ts:79
-```
-
-Digests over non-JSON subjects are **domain-tagged** with a versioned prefix so two domains can never collide, and the subject is hashed rather than carried (error parameters only accept `/^[0-9a-f]{64}$/`):
-
-```ts
-sha256Bytes(encoder.encode(`archflow:history-identity:v1:${oid}`));              // canonical.ts:91
-sha256Bytes(encoder.encode(`archflow:repository-candidate:v1:${absoluteCwd}`));  // :95
-```
-
-Set-valued collections are sorted before hashing; duplicate keys throw (`fingerprints.ts:140-156`). A caller-supplied `input_fingerprint` is always an assertion, never authority — the server recomputes it (`fingerprints.ts:169-174`).
-
-### 7.3 Atomic writes are class-gated
-
-`src/state/atomic.ts` exposes two frozen capability objects and refuses to write to the wrong `path_class`:
-
-| Operation | Mechanism | Allowed classes |
-|---|---|---|
-| `createExclusive` | temp file via `open(…, "wx")` → `writeAll` loop → `handle.sync()` → `link()` (EEXIST ⇒ `"exists"`) → unlink temp in `finally` | `intent`, `maintenance-record`, `result-manifest`, `result-payload`, `decision` (`atomic.ts:57-63`) |
-| `replace` | `write-file-atomic` | `task-state`, `gate-interface` (`:104-107`) |
-| `removeGateInterface` | `unlink`, ENOENT tolerated | `gate-interface` (`:120-135`) |
-| `replaceRegular` / `replaceSymlink` / `remove` | projection writer, `requireProjectable` gate | the 7 declared-output classes (`:141-147`) |
-
-Immutable artifacts are content-addressed and created exclusively; only `state.json` and the gate interface are replaced in place. Every failure becomes an `AtomicReplaceError` carrying `target_may_have_changed` so the caller can reason about crash recovery.
-
-Directory creation is equally paranoid: `mkdir` → `lstat` (reject symlink) → `openResolved` with `O_NOFOLLOW | O_DIRECTORY` → `fstat` (`state/layout.ts:37-64`).
-
-### 7.4 Transaction kernel and journal
-
-`runStateTransaction(dependencies, request, prepare)` (`state/transaction.ts:1016`) is the single write path:
-
-1. `assertInternalTransactionAuthority(request.authority, { runner, environment })` and `assertAuthenticParsedToolCall(request.call)`.
-2. Resolve the intent (journal) target, then take the task lock via `dependencies.lock.runExclusive(task_root, …)`.
-3. Recompute the input fingerprint; `identifyTransactionRequest` mints the `request_digest` from a per-tool `RequestDigestSubject` (`state/request.ts:12-86`).
-4. The caller-supplied `prepare` returns a `PreparedTransaction` whose `NextStateDraft` is structurally forbidden to carry `revision` or `committed_intent` (`transaction.ts:83-86`, enforced at `:260-264`) — the kernel owns revision monotonicity.
-5. Write the intent receipt with `createExclusive` (the journal), replace `state.json`, install the retained result.
-6. On a `TaskLockError` at release, `arbitrate(...)` reads the journal to decide whether the commit landed. Exclusive-create of the intent is what makes replay idempotent; `TransactionOutcome` reports `replayed: boolean`.
-
-All I/O is injected through `TransactionDependencies` (`:68-81`) — `runner`, `atomic`, `lock`, `read_state`, `read_config`, `read_receipt`, `resolve_input_fingerprint` — which is what makes the crash tests possible.
-
-### 7.5 Path resolution
-
-Paths are never concatenated ad hoc. A `TaskPathClaim` / `RepositoryPathClaim` (branded, schema-validated; the two frames are runtime-indistinguishable and distinguished only by brand and `$ref` — `durable-document.ts:33-36`) goes through `resolveTaskPath` / `resolveRepositoryPath` / `resolveDeclaredOutputPath` (`repository/paths.ts:413-604`), which return a `ResolvedPath { absolute, repositoryRelative, path_class }`. Consumers re-check `path_class` before acting (`state/read.ts:74,87,100`).
-
----
-
-## 8. Testing
-
-`vitest.config.ts` is minimal — `environment: "node"`, `include: ["test/**/*.test.ts"]`, coverage to `coverage/`. No setup files, no globals: every test imports `{ describe, expect, it }` from `vitest` explicitly.
-
-### Layout
-
-| Directory | Count | Purpose |
-|---|---|---|
-| `test/unit/` | 76 | One file per source module, named after it (`state-transaction.test.ts` ↔ `src/state/transaction.ts`). Real behaviour, few mocks; dependency injection rather than module mocking. |
-| `test/contracts/` | 16 | **Cross-authority agreement.** Compiles the `.schema.json` files with `createJsonSchemaValidator` and drives `assertZodAgreement` against the Zod mirrors; adversarial accept/reject corpora; `schema-registry.test.ts` proves `SCHEMA_IDS` ↔ schema files ↔ public exports stay in sync; `canonical-parity.test.ts` proves the TS and `.mjs` canonicalizers agree. Run separately via `npm run test:contracts`. |
-| `test/integration/` | 10 | Real subprocesses, real git repositories, real stdio (`mcp-stdio.test.ts` spawns the server and byte-compares framed output). |
-| `test/crash/` | 4 | Spawn a child from `test/fixtures/*-child.mjs`, kill it mid-transaction, assert recovery/replay. |
-| `test/fixtures/` | — | JSON/YAML corpora grouped by area (`contracts/durable/`, `foundation/`, `mcp/runtime/`, `corpus/`, `dispatch/`, `release/`), plus the `.mjs` crash children. |
-| `test/helpers/` | 2 | Reusable harnesses: `temp-repository.ts`, `resolved-constitution.ts`. |
-| `test/types/` | 1 | `mcp-sdk-public-surface.ts` — **not a test**; a compile-only probe of the MCP SDK's type surface, checked by `tsc` because `tsconfig.json` includes `test/**/*.ts`. |
-
-### Conventions
-
-- Fixture names encode verdict: `*.valid.json`, `invalid-traversal.json`, `state-invalid-artifact.json`.
-- Fixtures load via an import attribute (`import calls from "../fixtures/mcp/runtime/calls.json" with { type: "json" };`) or `new URL(..., import.meta.url)` + `readFile` — never a `process.cwd()`-relative path.
-- **Test helpers know nothing about `src/`.** `temp-repository.ts:1-11` states the rule explicitly, so a fixture bug can never be mistaken for a source bug. (`resolved-constitution.ts` is the deliberate exception: it builds a real capability from `src/`.)
-- Every git-touching test neutralizes ambient config:
-  ```ts
-  const GIT_ENV = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null",
-    GIT_AUTHOR_NAME: "ArchFlow Test", GIT_AUTHOR_EMAIL: "test@example.invalid", … };  // helpers/temp-repository.ts:33-41
-  ```
-- `describe` names the exported symbol (`describe("canonicalJsonBytes", …)`); `it` states the *invariant and its reason* ("preserves array order, which is semantic", "rejects duplicate keys, because the re-render is shorter").
-- Contract-test files open with a header stating the *authority line* — what this file proves and what deliberately belongs to a sibling file (`test/contracts/durable-structural-corpus.test.ts:37-56`).
-- Timeout constants are named and use numeric separators: `const TEST_TIMEOUT_MS = 20_000;`.
-
-### Commands
-
-```
-npm run typecheck        # tsc --noEmit over src, test, vitest.config.ts
-npm test                 # vitest run (everything)
-npm run test:unit | test:contracts | test:mcp-runtime
-npm run check            # full gate: probe → typecheck → tests → build → dependency/notice/boundary/release checks
-```
-
-CI (`.github/workflows/ci.yml`) runs the same steps individually across Node 24.15.0 and 24.18.0, and ends with `test ! -e .tmp`.
-
----
-
-## 9. Things a newcomer gets wrong
-
-1. Declaring a persisted shape as an `interface` — the error surfaces nowhere near the mistake, as `TS2344` at the `CanonicalDocument<T>` root. Use `type`.
-2. Omitting `.js` from a relative import.
-3. Reading a caller-supplied field with `obj.field` instead of `ownDataField` / `getOwnPropertyDescriptor` + `value` **and** `enumerable`.
-4. Inspecting a caller-owned object twice without `assertPlainJson` + `structuredClone` in between.
-5. Adding an error code in one place. It takes four: code union, parameter schema, `defineError` entry, JSON Schema — plus the count assertion in `test/unit/errors.test.ts`.
-6. Putting free text or an exception message into error parameters. Hash it, or use a `safeCode`.
-7. Filtering or coercing invalid input instead of throwing.
-8. Adding a Zod mirror to a server-internal durable root (`TaskStateV1`) — explicitly forbidden and grepped for.
-9. Writing files with `fs.writeFile` instead of the class-gated `AtomicWriter` / `ProjectionWriter`.
-10. Sorting object keys with `localeCompare`, or sorting an array during canonicalization (array order is semantic).
-11. Throwing from the state layer, where the contract is `ProjectResult<T>` — or returning a result from the contract layer, which throws.
+`npm run check` is the full local gate: SDK compatibility, typecheck, MCP runtime and full tests, contract tests, temporary build, dependency/notice policies, MCP SDK boundary policy, and release integrity/reproducibility checks. `.github/workflows/ci.yml` runs the same categories on Node 24.15.0 and 24.18.0.
+
+## High-risk convention checklist
+
+1. Use a `type` alias for every persisted root and everything reachable from it.
+2. At a caller-owned slot, require an own enumerable data descriptor; checking only for `value` is insufficient.
+3. Before inspecting caller-owned JSON more than once, run `assertPlainJson`, clone once, and inspect only the clone.
+4. Use `:(top,literal)` without `--literal-pathspecs`; pass plain pathnames to `check-attr`.
+5. Keep relative ESM imports suffixed with `.js`, and mark type-only imports.
+6. Reject or classify invalid input; do not coerce, filter, or silently normalize it.
+7. Recompute canonical digests/fingerprints rather than trusting caller assertions.
+8. Use the atomic/state transaction abstractions for durable writes and preserve `path_class` checks.
+9. Keep protocol errors, project results, typed internal exceptions, and diagnostic logs in their intended channels.
+10. Parse an input-free CLI command before considering stdin, and never read stdin for that command.
+11. Name code and tests for enduring behavior, never the workflow phase that produced them.
