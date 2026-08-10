@@ -1,0 +1,62 @@
+# workflow/SKILLS
+
+The eight skills are the human-facing entry points. They are prose playbooks — they enforce nothing themselves; every rule they state is backed (where mechanically possible) by the server. In Codex the same skills are invoked with `$` instead of `/`.
+
+## The set at a glance
+
+```mermaid
+flowchart LR
+    Init["/archflow-init<br/>set up repo + hosts"] --> Explore["/archflow-explore<br/>shared context docs"]
+    Explore -.-> PRD["/archflow-prd"]
+    Init -.-> PRD
+    PRD --> Design["/archflow-design"]
+    Design --> PD["/archflow-phase-design N"]
+    PD --> PI["/archflow-phase-impl N<br/>(fresh session)"]
+    PI -->|next phase| PD
+    Status["/archflow-status<br/>read-only, any time"]
+    Upgrade["/archflow-upgrade<br/>legacy task → canonical"] -.-> PRD
+```
+
+## archflow-init
+
+Runs `archflow-local init` from the repo root and relays its report verbatim. Init scaffolds `.archflow/` (workflow.yaml, constitution, config.yaml from templates), appends `.archflow/** -text merge=binary` to `.gitattributes` (this is what makes digests stable across platforms), and registers the MCP server with both hosts — a project-scoped `.mcp.json` entry for Claude Code, a fenced managed block in `.codex/config.toml` for Codex.
+
+Three things it deliberately never does: overwrite a diverged file (it refuses with `scaffold-diverged`), claim it passed a host's human approval/trust step (Claude approval and Codex repo trust are always the human's), or create task state or commits. **The human's commit of the scaffolded files is the policy approval** — that commit becomes each task's `policy_base_commit`.
+
+## archflow-explore
+
+Maps the repository into persistent, cross-task context documents: `.archflow/context/architecture.md`, `patterns.md`, `dependencies.md`. Heavy reading is delegated to parallel sub-agents; each document is stamped with the date and short commit hash so staleness is detectable. The only pre-workflow skill — it touches no MCP tools. Two human confirmations: before overwriting existing context, and before committing (`Archflow: Explore Codebase Context`).
+
+## archflow-prd
+
+Turns a request into `prd.md` through the full evidence pipeline. Its distinctive move: **before any clarifying conversation**, the user's request is written verbatim to `ask.md` — the counter-reviewer judges "ask fidelity" against exactly those bytes, so a mistranscribed ask is caught at review rather than shipped. Ends at a mandatory `artifact-approval` gate where the user sees `ask.md` alongside the PRD.
+
+## archflow-design
+
+Reads the approved PRD and writes `design.md`: boundaries, interfaces, risks, verification strategy, and the implementation phase plan. The plan is machine-readable by contract — consecutive `### Phase N: Name` headings, or an explicit open-ended marker; anything else fails closed at approval. The server derives `planned_final_phase` from the approved headings — the agent never authors it. Mandatory `artifact-approval` gate.
+
+## archflow-phase-design
+
+Designs one phase (`phases/<n>/design.md`): goal, files, work chunks, pinned cross-chunk interfaces, and *executable* verification steps. Writes no implementation code, and is explicit that "a phase design has no authority merely because its file exists" — only the durable `artifact-approval` gate confers it.
+
+## archflow-phase-impl
+
+The only skill that writes production code, and the most heavily gated. Requires durable state to say `phase-impl-<n>` before touching code. Runs every verification step from the phase design and saves the raw output to `phases/<n>/verification.txt` — the only verification evidence the counter-reviewer accepts. Keeps a structured log in `impl-notes.md` (decisions, deviations, patterns, gotchas, interfaces, evidence).
+
+Committing is a double lock: first the durable `commit-authorization` gate bound to the final diff, then a separate stop where the agent stages only declared outputs, shows the exact staged diff and message, and waits for explicit confirmation. Generated files must be marked `linguist-generated` so review capacity goes to hand-written change; an `ENVELOPE_OVERFLOW` means the phase is too big and should be split at the design gate, not trimmed to sneak under the cap.
+
+## archflow-status
+
+Strictly read-only. Runs `archflow-local manual-status --task <task>`, reports the mode (`normal` / `degraded` / `repair-required`) and **exactly one** recommended `next_action`. It refuses to infer progress from filenames, document contents, git history, or conversation — durable state is the only source. It surfaces open gates (with ready-to-write decision templates) but never resolves them.
+
+## archflow-upgrade
+
+Migrates a legacy flat-file task into the canonical layout. Governing principle: **stage, never convert.** Legacy files are copied byte-for-byte into a content-addressed import (after a mandatory secret scan), mapped into `draft` seeds (prd, design — inputs for redoing the work) and `historical` material (old phase docs, logs, reviews). The task then re-enters at the PRD and runs the *full* pipeline; a `migration-audit` gate at the approved design authorizes a guarded jump to the derived resume phase. The load-bearing rule: imported prose, history, and prior decisions are **never** approval evidence.
+
+## Shared conventions across skills
+
+- **Status is the driver loop.** Every skill starts steps from `archflow-local status` and follows the one `next_action`; after any gate resolves, it re-runs status rather than trusting memory.
+- **Compose, don't transcribe.** Requests are built by `archflow-local build-request`; the MCP call copies `request.tool` / `request.input` verbatim. Hand-copying digests between commands is forbidden.
+- **stdin vs `--input`:** small generated JSON is piped on stdin; anything carrying authored prose or quotes goes in a file passed with `--input`, because shell quoting silently corrupts prose.
+- **Exit codes are not the signal.** Command failures come back as `{"ok": false}` JSON with exit 0 — skills inspect the JSON, not the exit code.
+- **Degraded mode fails safe.** If the MCP server is down: `manual-status` → `manual-next` → `manual-handoff`, recording progress as checkpoints to fold back in later. If the helper is gone too, stop and reinstall with `./install.sh`.

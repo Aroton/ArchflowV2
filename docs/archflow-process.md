@@ -1,6 +1,6 @@
 # ArchFlow Process
 
-> **Stale:** This page documents the legacy skill-only workflow; Phase 22 will rewrite it for the MCP-backed workflow.
+> **Stale:** This page documents the legacy skill-only workflow. The maintained documentation for the MCP-backed workflow is the caps-named set starting at [OVERVIEW.md](OVERVIEW.md) (see `workflow/LIFECYCLE.md` for the current lifecycle).
 
 ## Overall Workflow
 

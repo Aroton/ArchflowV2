@@ -1,0 +1,67 @@
+# review/COUNTER-REVIEW
+
+Counter-review is the system's adversarial check: every artifact is reviewed by the *opposite model family* (Claude ⇄ Codex), dispatched by the server itself so the evidence is something the producer cannot author. This page covers the review envelope and the review flow; adjudication and waivers are in `ADJUDICATION.md`.
+
+## The dispatch envelope
+
+The envelope is a single JSON document — serialized, hashed, byte-capped at 1 MiB — that is the *entire* input to the reviewing child. It arrives on stdin; nothing else is prepended.
+
+```mermaid
+flowchart TB
+    subgraph ENV["Sealed envelope (≤ 1 MiB, digested)"]
+        A["artifact<br/>document bytes, or a tiered<br/>implementation change-set"]
+        R["rubric<br/>{id, text, blocking} triples"]
+        C["context — pinned evidence:<br/>user-ask · approved-upstream ·<br/>verification-transcript · interface-excerpt ·<br/>conventions · repo-map"]
+        S["subject — the binding:<br/>task, phase, digests, fingerprint,<br/>producer family"]
+        W["workspace (optional)<br/>read-only checkout declaration"]
+    end
+    ENV -->|stdin| Child["Opposite-family CLI<br/>+ read-only checkout at pinned commit"]
+    Child -->|JSON verdict + findings| Server
+```
+
+The shape is deliberately closed: field validation rejects any key not on the expected list, so producer history, prior findings, triage notes, and free-form instructions are *structurally unrepresentable* in a review request. The envelope digest makes the review a reproducible attestation about exactly those bytes.
+
+## Pinned context: evidence, not narrative
+
+"Pinning" means the **server itself** reads the evidence bytes from an immutable, authenticated source and records their SHA-256 — never the model, never a summary. Each context entry declares its status so no gap is silent:
+
+- `pinned` — full bytes plus digest.
+- `truncated` — a bounded head plus the full-file digest and byte count.
+- `unavailable` — a named gap the server could not fill.
+- `omitted-cap` — dropped to fit the byte cap; digest retained.
+
+The policy split is the key idea: absence that **contradicts durable authority** (the PRD's declared ask drifted; an upstream lost its approval; bytes don't match the retained projection) **fails closed** — no review happens. Every other gap becomes a named `unavailable` entry, which the rubric's non-blocking `unverifiable-claims` criterion turns into a finding. Findings prefixed `unverifiable-` mean "the reviewer lacked evidence," and triage must *reject* them with an `envelope-gap:` rationale — the fix for recurring gaps is better envelope assembly (or the reviewer's repo access), never pinning more bytes in.
+
+When the cap is hit, droppable context is replaced lowest-priority-first (`repo-map`, then `conventions`, then `interface-excerpt`). The user ask, approved upstreams, and verification transcript are never droppable — if they don't fit, the review fails closed.
+
+## The tiered change-set rendering
+
+Implementation reviews can't always embed whole files, so the artifact uses a three-tier ladder (in `src/state/produce-subject.ts`):
+
+| Tier | When | What ships |
+|---|---|---|
+| `embedded` | both sides ≤ 32 KiB | whole files — full context is where diff-invisible findings come from |
+| `unified-diff` | larger UTF-8 text | hand-rolled Myers diff with 40 context lines (generous on purpose — it approximates full-file review) |
+| `digest-only` | generated files (`linguist-generated`), lockfiles, non-UTF-8 | digest + byte count only |
+
+The diff is hand-rolled (`src/review/line-diff.ts`) because the runtime dependency set is frozen by release policy and shelling out to `diff` would break the renderer's deterministic, in-memory character. Every non-embedded entry still names its exact bytes by digest, so nothing is silently elided.
+
+If the envelope still overflows after tiering and cap relief, the result is `ENVELOPE_OVERFLOW` naming the five largest contributors. The intended human reading: a generated path belongs in `.gitattributes`; a hand-written one means the phase is too big for one sealed review pass and should be split at the design gate. There is deliberately no chunked multi-dispatch fallback — one subject, one attestation.
+
+## The flow, end to end
+
+1. **Produce** — the artifact is recorded durably; its digest becomes the subject digest.
+2. **Self-review** — the producer reviews its own work against the rubric.
+3. **Counter-review call** — `archflow_counter_review` with the artifact path, rubric, and fingerprint.
+4. **Server assembles** the review material (document text or tiered change set), pins context (failing closed on authority violations), seals the envelope under the cap, and materializes the read-only checkout — HEAD for documents, the attested `base_commit` for implementations (the reviewer sees the pre-change tree; changes travel only in the envelope).
+5. **Dispatch** — the opposite-family CLI runs headless (see `../mcp/DISPATCH.md`); output is parsed and bound to its provenance (adapter, CLI version, route, envelope digest).
+6. **Currency re-check** — if the artifact drifted mid-dispatch, the result is discarded (`counter-review-subject-not-current`).
+7. **Commit** — the evidence lands in a state transaction. A `fail` verdict is a successful recording, never an error.
+8. **Triage** — the producer dispositions every finding from both reviews; any accepted finding forces re-entry into produce with a new attempt (capped, default 3).
+9. **Adjudicate** — see `ADJUDICATION.md`.
+
+Editing the artifact changes its digest, which invalidates all downstream evidence — that currency rule (enforced by `src/review/fixed-point.ts`) is what makes the loop converge honestly. You iterate until produce, both reviews, triage, and adjudication all agree about the same bytes with no accepted findings.
+
+## Gate counter-reviews
+
+Separately from the pipeline, every human gate offers a ready-to-run counter-review recipe for the *other* client — a second terminal, a fully pinned prompt, and `archflow-local gate-counter` to ingest the result after verifying it binds the archived gate request field-for-field. Whether to run it is always the human's decision; the agent's job is only to offer it honestly.

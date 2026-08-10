@@ -55,6 +55,27 @@ All working files live in `.archflow/`. Tracked in git during development to pre
 
 Installs the shared skills to `~/.claude/skills/` and `~/.agents/skills/` for global availability.
 
+## Documentation
+
+Human-readable system documentation lives in `docs/` using a caps-naming convention: **caps-named files (`OVERVIEW.md`, `COMPLEXITY.md`, `section/FILE.md`) are the maintained documentation set**; lowercase files in `docs/` are historical working documents and are not kept current. The maintained set:
+
+```
+docs/
+  OVERVIEW.md              # whole-system map, glossary
+  COMPLEXITY.md            # per-subsystem simplification audit
+  workflow/LIFECYCLE.md    # phase graph, pipeline, gates, trust boundaries
+  workflow/SKILLS.md       # the eight skills
+  mcp/SERVER.md            # MCP server, five tools, protocol plumbing
+  mcp/DISPATCH.md          # child reviewer dispatch, sandbox, repo views
+  cli/COMMANDS.md          # archflow-local surface, build-request, degraded mode
+  review/COUNTER-REVIEW.md # dispatch envelopes, pinned context, review flow
+  review/ADJUDICATION.md   # constitution, waivers, durable decisions
+  contracts/CONTRACTS.md   # canonical JSON, digests, trust brands
+  state/DURABLE-STATE.md   # .archflow layout, transactions, state machine, git boundary
+```
+
+**Keep these current.** When a change alters behavior these pages describe — a tool, a command, a gate kind, an envelope rule, a state transition, a trust boundary — update the affected caps-named page in the same change. They are written for humans auditing the workflow: plain language, the *why* behind each system, mermaid diagrams; not API references.
+
 ## Engineering Priorities
 
 ArchFlow is an open-source prototype. Optimize for a useful, working, maintainable implementation—not hypothetical production, commercial, monetization, or release requirements.
