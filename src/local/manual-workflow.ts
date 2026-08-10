@@ -417,6 +417,12 @@ export async function buildCheckpointImportStateCall(
         tool: "archflow_state" as const,
         input_fingerprint: identified.value.input_fingerprint,
         request_digest: identified.value.request_digest,
+        // The verified head fingerprint is already embedded, so the call input is its own
+        // resolved request.
+        request: Object.freeze({
+          tool: "archflow_state" as const,
+          input: callInput as unknown as PlainJsonValue,
+        }),
         artifact_digest: canonicalJsonDigest(artifact),
       }),
     }));

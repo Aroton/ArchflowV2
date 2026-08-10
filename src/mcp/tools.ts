@@ -174,9 +174,34 @@ function reachableDefinitions(fragment: JsonObject, projected: ReadonlyMap<strin
   return definitions;
 }
 
+/**
+ * The advertised result projection replaces the full project-error union with this open summary
+ * of the fields every project error carries. The full union is ~36 KB and is reachable from all
+ * five result envelopes — measured at 179 KB of a 284 KB catalogue, nearly two thirds of the
+ * whole advertised surface. Advertised output schemas are host-side advisory; the server's own
+ * result validation still runs against the full normative union, and the summary is deliberately
+ * open (`additionalProperties: true`) so every real error object keeps validating against it.
+ */
+const ADVERTISED_ERROR_SUMMARY: JsonObject = {
+  type: "object",
+  required: ["code"],
+  properties: {
+    code: { type: "string" },
+    owner: { type: "string" },
+    retryable: { type: "boolean" },
+    next_action: { type: "string" }
+  },
+  additionalProperties: true
+};
+
 function standaloneSchema(name: ToolName, member: "input" | "result"): Readonly<JsonObject> {
   const projected = new Map<string, unknown>(
-    schemaDocuments.map(({ key, schema }) => [key, project(schema, key)])
+    schemaDocuments.map(({ key, schema }) => [
+      key,
+      member === "result" && key === "project-error"
+        ? structuredClone(ADVERTISED_ERROR_SUMMARY)
+        : project(schema, key)
+    ])
   );
   const fragment = project(schemaFragment(name, member), "mcp-tools") as JsonObject;
   return deepFreeze({

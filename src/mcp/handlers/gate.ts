@@ -73,6 +73,7 @@ export async function handleGate(
         decision,
         notes: decision.payload.reason,
         revision: outcome.value.state.value.revision,
+        request_digest: identified.request_digest,
       }) as ToolSuccess<"archflow_gate">,
     });
   });

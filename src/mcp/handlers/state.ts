@@ -158,6 +158,7 @@ export async function handleState(
           path: parseTaskPathClaim("state.json"),
           revision,
           status: call.input.status,
+          request_digest: identified.request_digest,
         });
         const expectation = createInternalResultExpectation({
           schema_version: "1",

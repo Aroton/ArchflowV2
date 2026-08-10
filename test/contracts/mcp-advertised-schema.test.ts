@@ -361,8 +361,10 @@ describe("advertised MCP tool catalogue", () => {
     }
 
     // Context-budget regression fence, not a precise contract: the unpruned catalogue
-    // serialized to 1,316,997 bytes, ~99% of it definitions no tool member referenced.
-    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(300_000);
+    // serialized to 1,316,997 bytes, ~99% of it definitions no tool member referenced;
+    // ref-reachable pruning brought it to 283,708 and the advertised error summary (the full
+    // project-error union stays normative and server-checked) to 105,478.
+    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(130_000);
   });
 
   it("deeply freezes the catalogue, descriptors, schemas, and schema descendants", () => {

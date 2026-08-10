@@ -141,11 +141,49 @@ describe("deriveNextAction", () => {
     })).code).toBe("inspect-state");
   });
 
-  it("runs produce immediately for a newly initialized or advanced phase", () => {
+  it("names the actual remaining produce work from the durable step status", () => {
+    // A newly initialized or advanced phase sits at produce-running: the entry write is already
+    // recorded, so the remaining work is the terminal result — never a repeat running entry.
     expect(deriveNextAction(input({
       state: state({ step: "produce", status: "running", authoritative_results: [] }),
       evidence_available: false,
-    }))).toMatchObject({ code: "run-step", step: "produce", human_required: false });
+    }))).toMatchObject({
+      code: "run-step", step: "produce", human_required: false,
+      detail: "Record the terminal produce result.",
+    });
+    expect(deriveNextAction(input({
+      state: state({ step: "produce", status: "failed", authoritative_results: [] }),
+      evidence_available: false,
+    }))).toMatchObject({
+      code: "run-step", step: "produce",
+      detail: "Retry the produce pipeline step.",
+    });
+    expect(deriveNextAction(input({
+      state: state({ step: "adjudicate", status: "succeeded", authoritative_results: [] }),
+      evidence_available: false,
+    }))).toMatchObject({
+      code: "run-step", step: "produce",
+      detail: "Run the produce pipeline step.",
+    });
+  });
+
+  it("advances a recorded self-review to the counter-review entry instead of repeating it", () => {
+    // The fixed point says next: "self_review" until both reviews retain; once the self-review
+    // is recorded, the only legal movement from self_review-succeeded is the counter_review
+    // entry, and the derived action must say so.
+    expect(deriveNextAction(input({
+      state: state({ step: "self_review", status: "succeeded" }),
+      assessment: assessment("self_review"),
+      evidence_available: false,
+    }))).toMatchObject({
+      code: "run-step", step: "counter_review",
+      detail: "Run the counter_review pipeline step.",
+    });
+    expect(deriveNextAction(input({
+      state: state({ step: "produce", status: "succeeded" }),
+      assessment: assessment("self_review"),
+      evidence_available: false,
+    }))).toMatchObject({ code: "run-step", step: "self_review" });
   });
 
   it("requires the phase-specific approval before advancing", () => {

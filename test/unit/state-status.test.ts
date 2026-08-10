@@ -119,11 +119,26 @@ describe("computeTaskStatus", () => {
       value: {
         config: { verified: true },
         routes: { producer: { family: "codex", model: "gpt-5.4" }, self_review: { family: "codex", model: "gpt-5.4" } },
+        expected_self_review_provenance: {
+          assurance: "agent-declared", producer_family: "codex", model_family: "codex",
+          model: "gpt-5.4", effort: "high",
+        },
         constitution: { active_rules: [{ id: "trust", version: 1, text: "Pinned rule text." }] },
       },
     });
     if (status.ok) expect(status.value).not.toHaveProperty("rubric_digest");
-    if (status.ok) expect(status.value.next_action).toMatchObject({ code: "run-step", step: "produce" });
+    if (!status.ok) return;
+    // The harness state is produce-running with no authoritative produce result: the derived
+    // action must name the terminal record, and its prefilled request must target succeeded —
+    // never the repeat running entry the server rejects. Mid-produce there is no subject yet,
+    // so subject_digest is correctly absent rather than stale.
+    expect(status.value.next_action).toMatchObject({
+      code: "run-step", step: "produce",
+      detail: "Record the terminal produce result.",
+      request: { tool: "archflow_state", input: { step: "produce", status: "succeeded" } },
+    });
+    expect(status.value.next_action.guidance).toContain("archflow-local envelope");
+    expect(status.value).not.toHaveProperty("subject_digest");
   });
 
   it("degrades config and missing gate archive disagreements without throwing", async () => {

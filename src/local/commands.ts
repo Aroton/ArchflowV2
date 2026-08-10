@@ -41,6 +41,7 @@ import type { SupplementalReviewRecordV1 } from "../contracts/supplemental-recor
 import { runInit } from "../init/index.js";
 import { stageTaskInitialization } from "../init/task-initialization.js";
 import { stageLegacyUpgrade } from "../init/legacy-upgrade.js";
+import { runBuildRequest } from "./build-request.js";
 import { computeCallEnvelope } from "./envelope.js";
 import {
   classifyManualWorkflowStatus,
@@ -52,7 +53,7 @@ import {
 export const LOCAL_COMMANDS = Object.freeze([
   "validate", "hash", "render", "snapshot", "restore", "maintain", "decide",
   "gate-counter", "status", "reconcile", "import", "checkpoint", "init", "task-init",
-  "envelope", "build-document", "build-implementation-output",
+  "envelope", "build-document", "build-implementation-output", "build-request",
   "manual-status", "manual-next", "manual-handoff", "upgrade",
 ] as const);
 export type LocalCommand = typeof LOCAL_COMMANDS[number];
@@ -80,6 +81,7 @@ export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommand
   envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
   "build-document": { payload: "<document artifact input>", task: "required" },
   "build-implementation-output": { payload: "<implementation output input>", task: "required" },
+  "build-request": { payload: '{"intent_id":<fresh id>,"document"?:{...},"implementation"?:{...}}', task: "required" },
   "manual-status": { payload: null, task: "required" },
   "manual-next": { payload: "<selector/source artifact requested by manual-status>", task: "required" },
   "manual-handoff": { payload: '{"expected_head":<digest>,"initialization"?:<task-init artifact>}', task: "required" },
@@ -312,6 +314,9 @@ export async function runLocalCommand(input: CommandInput): Promise<PlainJsonVal
       created.value.state,
       requireValue(input) as unknown as ImplementationOutputInput,
     );
+  }
+  if (input.command === "build-request") {
+    return runBuildRequest(created.value, requireValue(input) as PlainJsonValue);
   }
   if (input.command === "snapshot") {
     const value = recordValue(input);

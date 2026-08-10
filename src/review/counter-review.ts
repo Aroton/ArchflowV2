@@ -138,6 +138,7 @@ export async function runCounterReview(
         verdict: observed.evidence.verdict,
         blocking_count: observed.evidence.blocking_count,
         revision,
+        request_digest: identified.request_digest,
       });
       const expectation = createInternalResultExpectation({
         schema_version: "1",

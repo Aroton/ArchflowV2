@@ -122,6 +122,28 @@ describe("bundled local CLI", () => {
     expect(cli(fixture.root, "validate", { kind: "document", value: built.value.value }))
       .toMatchObject({ status: 0, value: { artifact_kind: "document" } });
 
+    // build-request composes the whole terminal produce request from one intent line: canonical
+    // document defaults, the built artifact, and internal fingerprint resolution — its output is
+    // exactly an envelope output, with nothing left to transcribe.
+    writeFileSync(join(bootstrap.value.authority.task_root, "ask.md"), "Ship the CLI.\n");
+    const composed = cli(fixture.root, "build-request", { intent_id: "produce-prd" });
+    expect(composed).toMatchObject({ status: 0, value: { ok: true, value: { tool: "archflow_state" } } });
+    const composedRequest = composed.value.value.request;
+    expect(composedRequest.input).toMatchObject({
+      task_id: task, intent_id: "produce-prd", step: "produce", status: "succeeded",
+      input_fingerprint: composed.value.value.input_fingerprint,
+      artifact: {
+        artifact_kind: "document", document_path: "prd.md",
+        input_fingerprint: composed.value.value.input_fingerprint,
+        declared_inputs: [{ input_id: "user-ask" }],
+      },
+    });
+    const composedFixedPoint = cli(fixture.root, "envelope", composedRequest);
+    expect(composedFixedPoint).toMatchObject({ status: 0, value: { ok: true, value: {
+      request_digest: composed.value.value.request_digest,
+      artifact_digest: composed.value.value.artifact_digest,
+    } } });
+
     const baseCommit = git(fixture.root, "rev-parse", "HEAD");
     writeFileSync(join(fixture.root, "README.md"), "repository changed\n");
     const implementation = cli(fixture.root, "build-implementation-output", {
@@ -161,29 +183,45 @@ describe("bundled local CLI", () => {
       ...common, intent_id: "produce-cli", phase_instance: "prd", step: "produce", status: "succeeded",
       artifact: { ...built.value.value, input_fingerprint: placeholder },
     };
-    const produceFirst = cli(fixture.root, "envelope", { tool: "archflow_state", input: produceTemplate });
-    expect(produceFirst).toMatchObject({ status: 0, value: { ok: true } });
-    const produceInput = {
-      ...produceTemplate,
-      input_fingerprint: produceFirst.value.value.input_fingerprint,
-      artifact: { ...produceTemplate.artifact, input_fingerprint: produceFirst.value.value.input_fingerprint },
-    };
-    const produceSecond = cli(fixture.root, "envelope", { tool: "archflow_state", input: produceInput });
-    expect(produceSecond).toMatchObject({ status: 0, value: { ok: true } });
+    // One envelope pass resolves the fingerprint into both bound places and returns the exact
+    // request the digests describe; no client-side substitute-and-rehash pass exists anymore.
+    const produce = cli(fixture.root, "envelope", { tool: "archflow_state", input: produceTemplate });
+    expect(produce).toMatchObject({ status: 0, value: { ok: true } });
+    const resolved = produce.value.value;
+    expect(resolved.request.tool).toBe("archflow_state");
+    expect(resolved.request.input.input_fingerprint).toBe(resolved.input_fingerprint);
+    expect(resolved.request.input.artifact.input_fingerprint).toBe(resolved.input_fingerprint);
     const identified = identifyTransactionRequest(
-      parseToolCall("archflow_state", produceInput),
+      parseToolCall("archflow_state", resolved.request.input),
       production.value.authority,
-      produceSecond.value.value.input_fingerprint,
+      resolved.input_fingerprint,
     );
-    expect(produceSecond.value.value.request_digest).toBe(identified.request_digest);
+    expect(resolved.request_digest).toBe(identified.request_digest);
+    // Envelope over its own output is a fixed point: same digests, same resolved request.
+    const fixedPoint = cli(fixture.root, "envelope", resolved.request);
+    expect(fixedPoint).toMatchObject({ status: 0, value: { ok: true, value: {
+      input_fingerprint: resolved.input_fingerprint,
+      request_digest: resolved.request_digest,
+    } } });
+    expect(fixedPoint.value.value.request).toEqual(resolved.request);
 
     const gateInput = {
       ...common, intent_id: "gate-cli", phase_instance: "prd", summary: "Approve PRD",
       subject_digest: digest("d"), current_evidence: evidence, kind: "artifact-approval",
       context: { artifact_kind: "prd" },
+      supplemental_outcome: {
+        action: "decline",
+        gate: { prior_gate_id: "prior-gate", task_id: task, phase_instance: "prd",
+          subject_digest: digest("d"), input_fingerprint: digest("9") },
+        reason: "Human explicitly declined the optional gate counter-review.",
+      },
     };
     const gate = cli(fixture.root, "envelope", { tool: "archflow_gate", input: gateInput });
     expect(gate).toMatchObject({ status: 0, value: { ok: true, value: { gate: { decision_path: "gate.decision" } } } });
+    // Resolution rewrites only the request's own fingerprint: the historical fingerprint a
+    // supplemental outcome pins must pass through byte-identical.
+    expect(gate.value.value.request.input.input_fingerprint).toBe(gate.value.value.input_fingerprint);
+    expect(gate.value.value.request.input.supplemental_outcome.gate.input_fingerprint).toBe(digest("9"));
     expect(gate.value.value.gate.gate_id).toBe(computeGateId({
       task_identity_digest: production.value.authority.task_identity_digest,
       intent_id: gateInput.intent_id as never,
@@ -245,5 +283,8 @@ describe("bundled local CLI", () => {
         ] }, kind: "artifact-approval", context: { artifact_kind: "prd" } },
     });
     expect(unavailable).toMatchObject({ status: 0, value: { ok: false, error: { code: "STATE_MISSING" } } });
+
+    const composerUnavailable = cli(fixture.root, "build-request", { intent_id: "no-state" });
+    expect(composerUnavailable).toMatchObject({ status: 0, value: { ok: false, error: { code: "STATE_MISSING" } } });
   }, TIMEOUT);
 });

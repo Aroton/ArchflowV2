@@ -125,6 +125,7 @@ export async function handleWaiver(
       ...(decision.granted ? { expires: "task-complete" as const } : {}),
       notes: decision.notes,
       revision: resolved.value.state.value.revision,
+      request_digest: identified.request_digest,
     }) as ToolSuccess<"archflow_waiver"> });
   });
 }

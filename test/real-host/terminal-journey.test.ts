@@ -275,10 +275,11 @@ async function adopt(root: string, task: string, artifact: any, intent: string, 
   };
   const envelope = local(root, task, "envelope", { tool: "archflow_state", input: draft });
   expect(envelope.value).toMatchObject({ ok: true });
+  // The resolved request is the tool call; only the deliberate artifact swap the forgery
+  // journeys exercise is layered on top of it.
   return mcpState(root, {
-    ...draft,
+    ...envelope.value.value.request.input,
     artifact: transmittedArtifact,
-    input_fingerprint: envelope.value.value.input_fingerprint,
   }, intent);
 }
 
@@ -297,7 +298,7 @@ async function replayInitialization(root: string, task: string, artifact: any, i
   };
   const envelope = local(root, task, "envelope", { tool: "archflow_state", input: draft });
   expect(envelope.value).toMatchObject({ ok: true });
-  return mcpState(root, { ...draft, input_fingerprint: envelope.value.value.input_fingerprint }, `${intent}-replay`);
+  return mcpState(root, envelope.value.value.request.input, `${intent}-replay`);
 }
 
 async function installedImplementationFixture(root: string, task: string, content: string, intent: string) {

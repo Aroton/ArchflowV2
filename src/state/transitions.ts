@@ -87,6 +87,30 @@ function sameSubject(current: TaskStateV1, target: TransitionTarget): boolean {
   return current.phase_instance === target.phase_instance && current.step === target.step;
 }
 
+/**
+ * The status a same-phase run-step request may legally target for `step` from `current`, derived
+ * from the same movement rules `legalMovement` enforces: mid-step work records its terminal
+ * result, a failed step re-enters running, a succeeded step hands off to its pipeline successor
+ * (or back to produce from triage/adjudicate). `undefined` means no run-step request from this
+ * state can legally target `step`, so no request template may honestly be emitted for it.
+ */
+export function legalRunStepStatus(
+  current: Pick<TaskStateV1, "phase_instance" | "step" | "status" | "terminal" | "open_gate">,
+  step: PipelineStep,
+): "running" | "succeeded" | undefined {
+  if (current.terminal !== undefined || current.open_gate !== undefined) return undefined;
+  if (current.step === step) {
+    if (current.status === "running") return "succeeded";
+    if (current.status === "failed") return "running";
+    return undefined;
+  }
+  if (current.status !== "succeeded") return undefined;
+  if ((current.step === "triage" || current.step === "adjudicate") && step === "produce") return "running";
+  const steps = pipeline(current.phase_instance);
+  const index = steps.indexOf(current.step);
+  return index >= 0 && steps[index + 1] === step ? "running" : undefined;
+}
+
 function hasAuthenticatedMigrationAudit(input: TransitionPlanInput): boolean {
   if (input.legacy_resume_phase === undefined || input.target.phase_instance !== input.legacy_resume_phase) return false;
   for (const authenticated of input.authenticated_gate_approvals ?? []) {

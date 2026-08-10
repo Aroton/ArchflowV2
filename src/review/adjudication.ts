@@ -443,6 +443,7 @@ export async function runAdjudication(
         drift: evidence.drift,
         triggers,
         revision,
+        request_digest: identified.request_digest,
       });
       const expectation = createInternalResultExpectation({
         schema_version: "1",

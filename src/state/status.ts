@@ -120,8 +120,27 @@ export type CommitAuthorizationInput = Readonly<{
 export type TaskStatusV1 = DegradedStatus & Readonly<{
   attempt?: number;
   input_fingerprint?: Sha256Digest;
+  /**
+   * The current review subject: the canonical digest of the whole retained produce artifact
+   * (`manifest.artifact_digest`), never the document's inner `content_digest`. Present whenever
+   * the current phase has an authoritative produce result — in particular at `self_review` time,
+   * so review artifacts are never built from a hand-derived subject.
+   */
+  subject_digest?: Sha256Digest;
   config: ConfigVerification;
   routes?: Readonly<{ producer: DispatchRoute; self_review: DispatchRoute }>;
+  /**
+   * The exact provenance an agent-declared self-review artifact must carry, derived from the
+   * pinned dispatch routes. Distinct from `evidence.self_review_provenance`, which reports what
+   * a retained review actually declared and exists only once both reviews are retained.
+   */
+  expected_self_review_provenance?: Readonly<{
+    assurance: "agent-declared";
+    producer_family: DispatchRoute["family"];
+    model_family: DispatchRoute["family"];
+    model: string;
+    effort: DispatchRoute["effort"];
+  }>;
   constitution?: Readonly<{
     digest: Sha256Digest;
     active_rules: readonly Readonly<{
@@ -768,8 +787,18 @@ export async function computeTaskStatus(
     status: state.status,
     attempt: state.attempt,
     input_fingerprint: state.input_fingerprint,
+    ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),
     config,
     ...(routes === undefined ? {} : { routes }),
+    ...(routes === undefined ? {} : {
+      expected_self_review_provenance: Object.freeze({
+        assurance: "agent-declared" as const,
+        producer_family: routes.producer.family,
+        model_family: routes.self_review.family,
+        model: routes.self_review.model,
+        effort: routes.self_review.effort,
+      }),
+    }),
     ...(constitutionStatus === undefined ? {} : { constitution: constitutionStatus }),
     ...(checkpointHead === undefined ? {} : { checkpoint_head_revision: checkpointHead }),
     ...(state.open_gate === undefined ? {} : { open_gate_id: state.open_gate.gate_id }),
@@ -786,8 +815,10 @@ function attachNextActionRequest(
   next: NextAction,
   facts: Parameters<typeof buildNextActionRequest>[1],
 ): NextAction {
-  const request = buildNextActionRequest(next, facts);
-  return request === undefined ? next : Object.freeze({ ...next, request });
+  const built = buildNextActionRequest(next, facts);
+  return built === undefined
+    ? next
+    : Object.freeze({ ...next, request: built.request, guidance: built.guidance });
 }
 
 /** Computes a read-only, explicitly degraded summary from durable local authority. */

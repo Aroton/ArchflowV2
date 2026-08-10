@@ -33,6 +33,13 @@ export type CallEnvelope = Readonly<{
   tool: ToolName;
   input_fingerprint: Sha256Digest;
   request_digest: Sha256Digest;
+  /**
+   * The fingerprint-resolved request in the one canonical shape: `request.input` is the exact
+   * tool input to call `tool` with, byte-equivalent to what `request_digest` identifies, and
+   * `request` itself is byte-acceptable envelope stdin. Resolution is a fixed point: running
+   * envelope over its own `request` returns the same digests.
+   */
+  request: Readonly<{ tool: ToolName; input: PlainJsonValue }>;
   artifact_digest?: Sha256Digest;
   gate?: Readonly<{
     gate_id: PathSafeId;
@@ -46,6 +53,35 @@ export type CallEnvelope = Readonly<{
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 const fail = <T = never>(error: ProjectError): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: false, error });
+
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const nested of Object.values(value)) deepFreeze(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+/**
+ * Substitutes the computed fingerprint into exactly the two places the tool contracts bind it:
+ * the request's own `input_fingerprint`, and — for document and implementation-output artifacts
+ * only — the embedded artifact's `input_fingerprint`, whose canonical digest the request digest
+ * folds in. Nothing else is rewritten: review and triage artifacts bind their fingerprint as an
+ * attested claim inside `evidence`, waiver origins pin their historical fingerprint, and retry
+ * chains carry prior fingerprints — all of those must pass through untouched.
+ */
+function resolveCallInput(call: ParsedToolCall, fingerprint: Sha256Digest): PlainJsonValue {
+  const input = structuredClone(call.input) as Record<string, unknown>;
+  input.input_fingerprint = fingerprint;
+  if (call.name === "archflow_state") {
+    const artifact = input.artifact as Record<string, unknown> | undefined;
+    if (artifact !== undefined &&
+        (artifact.artifact_kind === "document" || artifact.artifact_kind === "implementation-output")) {
+      artifact.input_fingerprint = fingerprint;
+    }
+  }
+  return input as PlainJsonValue;
+}
 
 function configuredProducerFamily(currentEvidence: CurrentEvidenceSetRef): ModelFamily {
   const families = new Set(currentEvidence.slots.map((slot) => slot.producer_family));
@@ -191,14 +227,21 @@ export async function computeCallEnvelope(
   if (!isToolName(tool)) {
     throw new TypeError(`call envelope tool ${JSON.stringify(tool)} is not recognized: expected {"tool": <one of ${TOOL_NAMES.join(" | ")}>, "input": <tool input>}`);
   }
-  const call = parseToolCall(tool, Reflect.get(snapshot, "input"));
-  const fingerprint = await fingerprintFor(services, call);
+  const draft = parseToolCall(tool, Reflect.get(snapshot, "input"));
+  const fingerprint = await fingerprintFor(services, draft);
   if (!fingerprint.ok) return fingerprint;
+  // Fingerprint resolution is internal: the caller's draft may embed any fingerprint (stale,
+  // sentinel, or already correct); the identified request is always the resolved one, so the
+  // returned digests describe exactly the bytes `request.input` carries. One envelope pass is
+  // therefore always sufficient, and envelope over its own output is a fixed point.
+  const resolvedInput = deepFreeze(resolveCallInput(draft, fingerprint.value));
+  const call = parseToolCall(tool, resolvedInput);
   const identified = identifyTransactionRequest(call as never, services.authority, fingerprint.value);
   const envelope: CallEnvelope = {
     tool,
     input_fingerprint: fingerprint.value,
     request_digest: identified.request_digest,
+    request: Object.freeze({ tool, input: resolvedInput }),
     ...(call.name === "archflow_state" && call.input.artifact !== undefined
       ? { artifact_digest: canonicalJsonDigest(call.input.artifact) }
       : {}),

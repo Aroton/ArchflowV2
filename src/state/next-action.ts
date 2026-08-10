@@ -30,13 +30,14 @@ export type NextActionCode =
   | "inspect-state";
 
 /**
- * A mechanically complete request for the named tool. Placeholder prose marks every field the
- * agent or human must author; all other fields are prefilled from authenticated status facts.
+ * A mechanically complete request for the named tool, in the one canonical request shape:
+ * `{tool, input}` is byte-acceptable `archflow-local envelope` stdin, and `input` is the tool
+ * call's argument object. Placeholder prose marks every field the agent or human must author;
+ * all other fields are prefilled from authenticated status facts.
  */
 export type NextActionRequest = Readonly<{
   tool: ToolName;
-  template: PlainJsonValue;
-  guidance: string;
+  input: PlainJsonValue;
 }>;
 
 export type NextAction = Readonly<{
@@ -49,6 +50,7 @@ export type NextAction = Readonly<{
   gate_id?: PathSafeId;
   gate_kind?: GateKind;
   request?: NextActionRequest;
+  guidance?: string;
 }>;
 
 export type AuthenticatedApprovalFact = Readonly<{
@@ -90,6 +92,18 @@ function action(
     ...(skill === undefined ? {} : { skill }),
     ...extra,
   });
+}
+
+/**
+ * Names the actual remaining work for a run-step action: a step already running needs its
+ * terminal result recorded, a failed step needs a retry entry, anything else needs its
+ * running entry. The recorded entry write is part of "running" the step, so the mid-step
+ * state must never be described as if the step had not started.
+ */
+function runStepDetail(state: TaskStateV1, step: PipelineStep): string {
+  if (state.step === step && state.status === "running") return `Record the terminal ${step} result.`;
+  if (state.step === step && state.status === "failed") return `Retry the ${step} pipeline step.`;
+  return `Run the ${step} pipeline step.`;
 }
 
 function matchingApproval(input: NextActionInput, kind: GateKind): boolean {
@@ -181,7 +195,7 @@ export function deriveNextAction(input: NextActionInput): NextAction {
   const currentProduce = state.authoritative_results.some((reference) =>
     reference.phase_instance === state.phase_instance && reference.step === "produce");
   if (!currentProduce) {
-    return action("run-step", "Run the produce pipeline step.", false, state, { step: "produce" });
+    return action("run-step", runStepDetail(state, "produce"), false, state, { step: "produce" });
   }
   const next = input.assessment?.next;
   if (next !== undefined) {
@@ -196,9 +210,16 @@ export function deriveNextAction(input: NextActionInput): NextAction {
             gate_kind: input.adjudication_gate_kind,
           });
     }
-    return action("run-step", `Run the ${next} pipeline step.`, false, state, { step: next });
+    // The fixed point reports next: "self_review" whenever the review *set* is underivable,
+    // including when the self-review itself is already recorded and only the counter-review is
+    // missing. From self_review-succeeded the only legal movement is the counter_review entry,
+    // so that is the action — a repeat self_review would be rejected by the transition law.
+    const step = next === "self_review" && state.step === "self_review" && state.status === "succeeded"
+      ? "counter_review"
+      : next;
+    return action("run-step", runStepDetail(state, step), false, state, { step });
   }
   return input.evidence_available === false
     ? action("inspect-state", "Inspect why current evidence is unavailable.", true, state)
-    : action("run-step", `Continue the ${state.step} pipeline step.`, false, state, { step: state.step });
+    : action("run-step", runStepDetail(state, state.step), false, state, { step: state.step });
 }
