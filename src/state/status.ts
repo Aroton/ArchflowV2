@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { canonicalJsonDigest, parseCanonicalDocument } from "../contracts/canonical.js";
-import { selectGreatestValidChain, type ChainAnchor } from "../contracts/durable-checkpoint.js";
+import { selectGreatestValidChain, type ChainAnchor, type ProjectionDigestRef } from "../contracts/durable-checkpoint.js";
 import { parseConfigYaml } from "../contracts/config.js";
 import { parseActiveGate, parseGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
@@ -36,7 +36,12 @@ import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduce
 import type { CurrentProduceSubject } from "./produce-subject.js";
 import { implementationOutputCommittedAtCurrentTarget } from "./implementation-manifest.js";
 import { discoverReconciliationInput } from "./reconciliation-discovery.js";
-import { activeGateHead, reconcileCurrentAuthority, type ReconciliationResult } from "./reconciliation.js";
+import {
+  activeGateHead,
+  reconcileCurrentAuthority,
+  type ReconciliationFinding,
+  type ReconciliationResult,
+} from "./reconciliation.js";
 import type { TransactionDependencies } from "./transaction.js";
 import { gateCounterReviewClaim } from "../repository/paths.js";
 
@@ -104,6 +109,16 @@ type OpenGateStatus = Readonly<{
   }>;
 }>;
 
+/**
+ * The reconciliation report status publishes: raw reconciliation truth minus any drift the
+ * current fixed-point re-entry authorizes. `archflow-local reconcile` keeps reporting the
+ * unfiltered result; only status — which alone can see the re-entry assessment — reclassifies.
+ * Suppressed paths stay visible in `expected_reentry_edits`, so the report never hides drift.
+ */
+export type StatusReconciliation = ReconciliationResult & Readonly<{
+  expected_reentry_edits?: readonly ProjectionDigestRef["path"][];
+}>;
+
 export type CommitAuthorizationInput = Readonly<{
   kind: "commit-authorization";
   subject_digest: Sha256Digest;
@@ -152,11 +167,51 @@ export type TaskStatusV1 = DegradedStatus & Readonly<{
     }>[];
   }>;
   open_gate?: OpenGateStatus;
-  reconciliation?: ReconciliationResult;
+  reconciliation?: StatusReconciliation;
   evidence?: StatusEvidence;
   gate_input?: CommitAuthorizationInput;
   next_action: NextAction;
 }>;
+
+/**
+ * Splits reconciliation findings into drift the current re-entry authorizes and everything else.
+ *
+ * A finding is an expected re-entry edit only when the fixed point requires re-entry
+ * (`assessment.reentry_required` — accepted triage findings or a stale adjudication, both of
+ * which authorize revising the produce artifact), the finding is a `projection-mismatch`, and
+ * the drifted path is one of the retained produce manifest's own projection paths. The last
+ * test is deliberately broad: if a produce manifest ever projects more than the document
+ * itself, every one of its projections becomes edit-tolerated during re-entry. Any other path
+ * or finding kind keeps blocking exactly as before.
+ */
+export function partitionExpectedReentryEdits(
+  findings: readonly ReconciliationFinding[],
+  assessment: EvidenceAssessment | undefined,
+  produceSubject: CurrentProduceSubject | undefined,
+): Readonly<{
+  remaining: readonly ReconciliationFinding[];
+  expected_reentry_edits: readonly ProjectionDigestRef["path"][];
+}> {
+  if (assessment?.reentry_required !== true || produceSubject === undefined) {
+    return Object.freeze({ remaining: findings, expected_reentry_edits: Object.freeze([]) });
+  }
+  const producePaths = new Set<string>(
+    produceSubject.retained.prepared.manifest.value.projections.map((projection) => projection.path),
+  );
+  const remaining: ReconciliationFinding[] = [];
+  const expected: ProjectionDigestRef["path"][] = [];
+  for (const finding of findings) {
+    if (finding.kind === "projection-mismatch" && producePaths.has(finding.path)) {
+      expected.push(finding.path);
+    } else {
+      remaining.push(finding);
+    }
+  }
+  return Object.freeze({
+    remaining: Object.freeze(remaining),
+    expected_reentry_edits: Object.freeze(expected),
+  });
+}
 
 /** Checkpoint revisions continue from adopted checkpoint authority, not from state CAS revisions. */
 export function manualCheckpointHeadIsPending(
@@ -384,7 +439,7 @@ async function gateStatus(
   });
 }
 
-async function currentTargetRef(dependencies: GateLifecycleDependencies): Promise<Readonly<{
+export async function currentTargetRef(dependencies: GateLifecycleDependencies): Promise<Readonly<{
   value: string;
   guidance: string;
 }>> {
@@ -536,7 +591,8 @@ export async function computeTaskStatus(
       reconciliation = reconcileCurrentAuthority(discovered.value);
       reconciliationBlockers = discovered.value.blocking_reasons ?? Object.freeze([]);
       blockers.push(...reconciliationBlockers);
-      blockers.push(...reconciliation.findings.map((finding) => finding.kind));
+      // Finding kinds join `blockers` only after the fixed-point assessment below exists, so
+      // expected re-entry edits can be recognized before they are treated as blocking drift.
     } else {
       blockers.push("reconciliation-unavailable");
     }
@@ -664,6 +720,25 @@ export async function computeTaskStatus(
     }
   }
 
+  let statusReconciliation: StatusReconciliation | undefined;
+  if (reconciliation !== undefined) {
+    const partitioned = partitionExpectedReentryEdits(
+      reconciliation.findings, assessment, produceSubject,
+    );
+    blockers.push(...partitioned.remaining.map((finding) => finding.kind));
+    statusReconciliation = Object.freeze({
+      ...reconciliation,
+      // Mirrors reconcileCurrentAuthority's classification derivation over the filtered set.
+      classification: partitioned.remaining.length === 0
+        ? "consistent" as const
+        : "reconciliation-required" as const,
+      findings: partitioned.remaining,
+      ...(partitioned.expected_reentry_edits.length === 0
+        ? {}
+        : { expected_reentry_edits: partitioned.expected_reentry_edits }),
+    });
+  }
+
   let evidence: StatusEvidence;
   try {
     const derived = deriveCurrentEvidenceSet(retained);
@@ -744,7 +819,7 @@ export async function computeTaskStatus(
     repository_initialized: true,
     state,
     config_verified: config.verified,
-    ...(reconciliation === undefined ? {} : { reconciliation_findings: reconciliation.findings }),
+    ...(statusReconciliation === undefined ? {} : { reconciliation_findings: statusReconciliation.findings }),
     reconciliation_blocking_reasons: Object.freeze([
       ...reconciliationBlockers,
       ...(gateBindingBlocker === undefined ? [] : [gateBindingBlocker]),
@@ -803,7 +878,7 @@ export async function computeTaskStatus(
     ...(checkpointHead === undefined ? {} : { checkpoint_head_revision: checkpointHead }),
     ...(state.open_gate === undefined ? {} : { open_gate_id: state.open_gate.gate_id }),
     ...(openGate === undefined ? {} : { open_gate: openGate }),
-    ...(reconciliation === undefined ? {} : { reconciliation }),
+    ...(statusReconciliation === undefined ? {} : { reconciliation: statusReconciliation }),
     evidence,
     ...(gateInput === undefined ? {} : { gate_input: gateInput }),
     blocking_reasons: Object.freeze([...new Set(blockers)]),

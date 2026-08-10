@@ -1,8 +1,12 @@
 # Review Envelope Context Contract
 
-The dispatched counter-review runs the opposite-family CLI in an empty temp workspace with only a
-digest-bound envelope on stdin. Accuracy comes from pinning both sides of every comparison the
-rubric asks for, never from opening the repository to the reviewer.
+The dispatched counter-review runs the opposite-family CLI in a disposable temp workspace with a
+digest-bound envelope on stdin. The sealed envelope is the authoritative review subject: both
+sides of every comparison the rubric adjudicates are pinned into it. Since the read-only
+repository checkout landed (below), the reviewer additionally gets verification substrate — a
+checkout of the repository at the reviewed commit — but the checkout never replaces the envelope:
+on any conflict the envelope's pinned bytes win, and the envelope's own `workspace` field says so
+in a fixed literal.
 
 ## What the envelope pins today
 
@@ -20,6 +24,52 @@ user ask are never droppable; drops start from the lowest cap priority (`repo-ma
 Fail-closed versus reviewable: absence that contradicts durable authority fails closed (missing or
 unapproved upstream, declared `ask.md` that drifted); everything else stays reviewable with an
 `unavailable` entry the rubric's `unverifiable-claims` criterion turns into a named finding.
+
+## Read-only repository checkout
+
+Every counter-review dispatch (all four steps: prd, design, phase-design, phase-impl) gets a
+read-only view of the repository so repository claims are verifiable instead of automatically
+`unverifiable-`. Adjudication dispatches never get one: the adjudicator judges exactly the sealed
+envelope.
+
+- **Materialization** (`src/dispatch/workspace.ts`, `materializeRepositoryView`):
+  `git archive --format=tar <commit> | tar -x` into `<workspace>/repo`, then `.archflow/tasks` is
+  removed. `git archive` — not `git worktree add` — is the load-bearing choice: the extracted tree
+  has no `.git` link back to the repository object database, so the tracked `.archflow/tasks/**`
+  blobs (producer self-review, triage) are unreachable and the reviewer-independence property of
+  the envelope (`src/review/envelopes.ts`) holds structurally. `.archflow/context/**` stays
+  readable — guidance, not authority.
+- **Commit choice** (`src/mcp/handlers/counter-review.ts`, `resolveRepositoryViewCommit`):
+  document subjects check out HEAD, the same authority the mechanical evidence pins read from;
+  implementation-output subjects check out the artifact's attested `base_commit`, so the reviewer
+  sees the pre-change tree and the changes themselves travel only in the envelope's change
+  entries.
+- **Per-adapter mechanics** (`src/dispatch/cli.ts`): the Codex child gets `-C <view>` under the
+  already read-only sandbox (`-s read-only`), with schema and output files kept in the workspace
+  root outside the view and `project_doc_max_bytes=0` still suppressing project docs. The Claude
+  child gets the view as its working directory and `--tools "Read,Grep,Glob"` instead of the
+  former empty tool list, with `--safe-mode`, `--disable-slash-commands`, the empty strict MCP
+  config, `--setting-sources ""`, and `--no-session-persistence` unchanged so the view's
+  `CLAUDE.md` and settings never become instructions.
+- **Envelope binding** (`src/review/envelopes.ts`): the child learns about the view through the
+  optional `workspace` envelope field — `{kind: "read-only-repository-checkout", commit, note}` —
+  never through prose prepended to stdin, which would break byte-provenance. The `note` is a
+  fixed literal and validation rejects anything else, so the field cannot smuggle caller
+  instructions. The field participates in the envelope digest.
+- **Containment caveat**: for the Claude child the view boundary is best-effort — reads outside
+  the view are not filesystem-prevented. The real repository path is never disclosed to the
+  child, and the Codex sandbox enforces read-only for its side.
+
+The `unverifiable-`/envelope-gap convention narrows accordingly: it now covers only evidence
+genuinely outside both the envelope and the checkout (an unpinned external document, a claim
+about runtime behavior, bytes excluded from both). A repository claim at the pinned commit is
+verifiable and must be verified, not deferred.
+
+The 1 MiB envelope byte cap is unchanged. It bounds the attested subject bytes, not what the
+reviewer may read, and it still matters as a phase-scoping signal for implementation change-sets —
+a change too large to seal is a change too large for one review pass. For document reviews it is
+now largely moot: documents are small, and the supporting evidence the cap used to squeeze can be
+read from the checkout instead.
 
 ## Change-set rendering tiers
 
@@ -56,8 +106,11 @@ There is no chunked multi-dispatch fallback: one subject, one attestation.
 `unverifiable-*` findings are the feedback loop. Triage rejects them with rationale and evidence
 beginning `envelope-gap: <missing evidence>` — they are contract gaps, not producer defects, and
 accepting one would force produce re-entry for a non-defect. The human gate lists them as an
-"Envelope gaps" section. A gap that recurs across tasks is the trigger for a new pinned entry
-kind: add it to `PINNED_CONTEXT_KINDS`, write its mechanical producer, and slot its cap priority —
+"Envelope gaps" section. With the read-only checkout in place, recurring envelope gaps should now
+be rare: most former gaps were repository files the reviewer could not see, and those are readable
+at the pinned commit. When a gap does recur across tasks despite the checkout — evidence outside
+both the envelope and the repository tree — the secondary path is a new pinned entry kind: add it
+to `PINNED_CONTEXT_KINDS`, write its mechanical producer, and slot its cap priority —
 deliberately, one kind at a time, never speculatively.
 
 ## Known limitations

@@ -4,7 +4,9 @@ import { open, stat } from "node:fs/promises";
 import { createProjectError, type ProjectError } from "../contracts/errors.js";
 import type { AdapterId } from "../contracts/review.js";
 
-export const DISPATCH_TIMEOUT_MS = 300_000;
+// Fifteen minutes: a reviewer exploring the read-only repository view legitimately runs
+// multi-minute; the timeout bounds a hung child, not a working one.
+export const DISPATCH_TIMEOUT_MS = 900_000;
 export const DISPATCH_OUTPUT_BYTE_CAP = 8 * 1024 * 1024;
 
 const TERMINATION_GRACE_MS = 250;

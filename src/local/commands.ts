@@ -81,7 +81,7 @@ export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommand
   envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
   "build-document": { payload: "<document artifact input>", task: "required" },
   "build-implementation-output": { payload: "<implementation output input>", task: "required" },
-  "build-request": { payload: '{"intent_id":<fresh id>,"document"?:{...},"implementation"?:{...}}', task: "required" },
+  "build-request": { payload: '{"intent_id":<fresh id>,"kind"?:"produce"|"running"|"self-review"|"triage"|"counter-review"|"adjudicate"|"gate",...kind facts: "step" (running), "document"/"implementation" (produce), "review":{rubric,findings,matched_rule_versions} (self-review), "dispositions":[...] (triage), "rubric" (counter-review), "summary" (gate)}', task: "required" },
   "manual-status": { payload: null, task: "required" },
   "manual-next": { payload: "<selector/source artifact requested by manual-status>", task: "required" },
   "manual-handoff": { payload: '{"expected_head":<digest>,"initialization"?:<task-init artifact>}', task: "required" },

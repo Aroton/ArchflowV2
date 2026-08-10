@@ -550,13 +550,18 @@ const claudeAdapter: CliAdapter = Object.freeze({
     }
     const mcpConfigPath = join(workspace.root, "empty-mcp.json");
     await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 0o600 });
+    // A review workspace with a materialized repository view runs the child inside the view with
+    // exactly the read-only tools (no write, bash, or network tools). `--setting-sources ""`,
+    // `--disable-slash-commands`, and the empty strict MCP config stay pinned so the view's own
+    // CLAUDE.md and settings never become instructions. Without a view (adjudication), every tool
+    // stays disabled exactly as before.
     return Object.freeze({
       adapter: "claude-cli",
       command: "claude",
       argv: Object.freeze([
         "-p",
         "--safe-mode",
-        "--tools", "",
+        "--tools", workspace.repository_view_root === undefined ? "" : "Read,Grep,Glob",
         "--disable-slash-commands",
         "--strict-mcp-config",
         "--mcp-config", mcpConfigPath,
@@ -567,7 +572,7 @@ const claudeAdapter: CliAdapter = Object.freeze({
         "--model", route.model,
         "--effort", route.effort,
       ]),
-      cwd: workspace.root,
+      cwd: workspace.repository_view_root ?? workspace.root,
       env: workspace.env,
       stdin: envelope.bytes,
     });
@@ -641,7 +646,9 @@ const codexAdapter: CliAdapter = Object.freeze({
         "--skip-git-repo-check",
         "--strict-config",
         "-s", "read-only",
-        "-C", workspace.root,
+        // The already read-only sandbox targets the repository view when one is materialized;
+        // schema and output files deliberately stay in workspace.root, outside the view.
+        "-C", workspace.repository_view_root ?? workspace.root,
         "--json",
         "--output-schema", schemaPath,
         "-o", outputPath,

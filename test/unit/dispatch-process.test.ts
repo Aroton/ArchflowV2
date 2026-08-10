@@ -53,7 +53,7 @@ async function projectFailure(promise: Promise<unknown>): Promise<DispatchProces
 
 describe("dispatch process runner", () => {
   it("pins the production timeout and per-channel output cap", () => {
-    expect(DISPATCH_TIMEOUT_MS).toBe(300_000);
+    expect(DISPATCH_TIMEOUT_MS).toBe(900_000);
     expect(DISPATCH_OUTPUT_BYTE_CAP).toBe(8 * 1024 * 1024);
   });
 

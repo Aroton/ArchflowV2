@@ -10,7 +10,9 @@ import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contra
 import { computeInputFingerprint } from "../../src/contracts/fingerprints.js";
 import { encodePhaseInstance, type PhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
+import { resolveRepositoryViewCommit } from "../../src/mcp/handlers/counter-review.js";
 import { createToolHandlers } from "../../src/mcp/handlers/index.js";
+import { REPOSITORY_VIEW_NOTE } from "../../src/review/envelopes.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
@@ -243,8 +245,11 @@ else {
   return { args, repository, bin, sourceHome, envelopePath, invocation };
 }
 
-function capturedEnvelope(path: string): { context: readonly Record<string, unknown>[] } {
-  return JSON.parse(readFileSync(path, "utf8")) as { context: readonly Record<string, unknown>[] };
+function capturedEnvelope(path: string): {
+  context: readonly Record<string, unknown>[];
+  workspace?: Record<string, unknown>;
+} {
+  return JSON.parse(readFileSync(path, "utf8")) as ReturnType<typeof capturedEnvelope>;
 }
 
 const saved = { PATH: process.env.PATH, HOME: process.env.HOME };
@@ -274,7 +279,8 @@ describe("counter-review pinned context integration", () => {
       kind: "project-result",
       result: { schema_version: "1", ok: true, value: { verdict: "pass" } },
     });
-    expect(capturedEnvelope(h.envelopePath).context).toEqual([{
+    const envelope = capturedEnvelope(h.envelopePath);
+    expect(envelope.context).toEqual([{
       kind: "user-ask",
       label: "ask.md",
       status: "pinned",
@@ -282,6 +288,19 @@ describe("counter-review pinned context integration", () => {
       encoding: "utf8",
       content: new TextDecoder().decode(ASK_BYTES),
     }]);
+    expect(envelope.workspace).toEqual({
+      kind: "read-only-repository-checkout",
+      commit: h.repository.git("rev-parse", "HEAD"),
+      note: REPOSITORY_VIEW_NOTE,
+    });
+  });
+
+  it("routes the reviewer checkout to the implementation base commit, not HEAD", async () => {
+    const base = parseGitOid("ab".repeat(20));
+    await expect(resolveRepositoryViewCommit(
+      {} as never,
+      { artifact_kind: "implementation-output", base_commit: base } as never,
+    )).resolves.toBe(base);
   });
 
   it("fails closed without dispatching when the declared ask has drifted", async () => {
@@ -326,7 +345,12 @@ describe("counter-review pinned context integration", () => {
       kind: "project-result",
       result: { schema_version: "1", ok: true, value: { verdict: "pass" } },
     });
-    const context = capturedEnvelope(h.envelopePath).context;
+    const envelope = capturedEnvelope(h.envelopePath);
+    expect(envelope.workspace).toMatchObject({
+      kind: "read-only-repository-checkout",
+      commit: h.repository.git("rev-parse", "HEAD"),
+    });
+    const context = envelope.context;
     expect(context.map((entry) => [entry.kind, entry.label, entry.status])).toEqual([
       ["approved-upstream", "prd.md", "pinned"],
       ["interface-excerpt", "tracked.txt", "pinned"],

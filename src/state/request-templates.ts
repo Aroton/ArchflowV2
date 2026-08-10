@@ -28,8 +28,8 @@ const TEMPLATE_FINGERPRINT_SENTINEL = "0".repeat(64);
 
 const TERMINAL_ARTIFACT_PLACEHOLDERS: Partial<Record<PipelineStep, string>> = {
   produce: "Replace with the complete document or implementation-output artifact; archflow-local build-request emits this entire request already completed and fingerprint-resolved.",
-  self_review: "Replace with the complete agent-declared self-review evidence artifact.",
-  triage: "Replace with the complete triage artifact.",
+  self_review: "Replace with the complete agent-declared self-review evidence artifact; archflow-local build-request (kind \"self-review\") composes this entire request from the rubric, findings, and matched rule versions.",
+  triage: "Replace with the complete triage artifact; archflow-local build-request (kind \"triage\") composes this entire request from the dispositions alone.",
 };
 
 export type NextActionRequestFacts = Readonly<{
@@ -79,7 +79,7 @@ function reviewPaths(state: TaskStateV1): PhaseReviewPaths {
   return phaseReviewPaths(state.phase_instance);
 }
 
-const APPROVAL_ARTIFACT_KINDS = {
+export const APPROVAL_ARTIFACT_KINDS = {
   "prd": "prd",
   "design": "design",
   "phase-design": "phase-design",

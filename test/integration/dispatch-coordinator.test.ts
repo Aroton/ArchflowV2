@@ -5,7 +5,9 @@ import { delimiter, dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import adjudicationSchema from "../../src/contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
 import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
+import { parseGitOid } from "../../src/contracts/canonical.js";
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
@@ -77,6 +79,17 @@ if (argv.length === 1 && argv[0] === "--version") {
 } else {
   ${mode === "hang-child" ? `await writeFile(${JSON.stringify("__CHILD_STARTED__")}, "started\\n"); setInterval(() => undefined, 1000);` : ""}
   ${mode === "fail-child" ? 'process.stderr.write("stream error: exceeded retry limit\\n"); process.exit(3);' : ""}
+  const { existsSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const target = argv.includes("-C") ? argv[argv.indexOf("-C") + 1] : null;
+  await writeFile(${JSON.stringify(join(root, "observed-invocation.json"))}, JSON.stringify({
+    argv,
+    view: target === null ? null : {
+      tracked: existsSync(join(target, "tracked.txt")),
+      git: existsSync(join(target, ".git")),
+      tasks: existsSync(join(target, ".archflow", "tasks")),
+    },
+  }));
   process.stdin.resume();
   process.stdin.on("end", async () => {
     await writeFile(argv[argv.indexOf("-o") + 1], '{"schema_version":"1"}\\n');
@@ -212,6 +225,77 @@ describe("createDispatchCoordinator", () => {
       status: "succeeded",
       cli_version: "2.1.220",
     });
+  });
+
+  it("materializes a read-only repository view for review dispatch and targets the child at it", async () => {
+    const h = await harness("success");
+    const head = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: h.repository, encoding: "utf8",
+    }).trim());
+    const coordinator = createDispatchCoordinator({
+      authority: h.authority,
+      dependencies: h.dependencies,
+      host: "claude",
+      repository_root: h.repository,
+      phase_instance: PHASE,
+      signal: new AbortController().signal,
+      cancellation_source: "client",
+      allow_claude_dispatch: false,
+      repository_view_commit: head,
+    });
+
+    const saved = { PATH: process.env.PATH, HOME: process.env.HOME };
+    // The materialization pipeline spawns real git and tar, so the full ambient PATH stays behind
+    // the fixture bin instead of the minimal node-only PATH the other cases use.
+    process.env.PATH = `${h.bin}${delimiter}${saved.PATH ?? dirname(process.execPath)}`;
+    process.env.HOME = h.sourceHome;
+    try {
+      const result = await coordinator(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue);
+      expect(result.cli_version).toBe("0.146.0");
+    } finally {
+      if (saved.PATH === undefined) delete process.env.PATH; else process.env.PATH = saved.PATH;
+      if (saved.HOME === undefined) delete process.env.HOME; else process.env.HOME = saved.HOME;
+    }
+
+    const observed = JSON.parse(await readFile(join(h.root, "observed-invocation.json"), "utf8")) as {
+      argv: string[];
+      view: { tracked: boolean; git: boolean; tasks: boolean };
+    };
+    const target = observed.argv[observed.argv.indexOf("-C") + 1]!;
+    const outputPath = observed.argv[observed.argv.indexOf("-o") + 1]!;
+    expect(target).toBe(join(dirname(outputPath), "repo"));
+    expect(observed.view).toEqual({ tracked: true, git: false, tasks: false });
+  });
+
+  it("never materializes a repository view for adjudication dispatch", async () => {
+    const h = await harness("success");
+    const head = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: h.repository, encoding: "utf8",
+    }).trim());
+    const coordinator = createDispatchCoordinator({
+      authority: h.authority,
+      dependencies: h.dependencies,
+      host: "claude",
+      repository_root: h.repository,
+      phase_instance: PHASE,
+      signal: new AbortController().signal,
+      cancellation_source: "client",
+      allow_claude_dispatch: false,
+      repository_view_commit: head,
+    });
+
+    await withDispatchEnvironment(h, () =>
+      coordinator(ROUTE, { ...ENVELOPE, result_kind: "adjudication" }, adjudicationSchema as PlainJsonValue));
+
+    const observed = JSON.parse(await readFile(join(h.root, "observed-invocation.json"), "utf8")) as {
+      argv: string[];
+      view: { tracked: boolean; git: boolean; tasks: boolean };
+    };
+    const target = observed.argv[observed.argv.indexOf("-C") + 1]!;
+    const outputPath = observed.argv[observed.argv.indexOf("-o") + 1]!;
+    expect(target).toBe(dirname(outputPath));
+    expect(target.endsWith("repo")).toBe(false);
+    expect(observed.view).toEqual({ tracked: false, git: false, tasks: false });
   });
 
   it("cancels during version preflight and still finalizes a failed attempt", async () => {

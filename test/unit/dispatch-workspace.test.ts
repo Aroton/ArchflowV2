@@ -1,10 +1,11 @@
-import { lstat, mkdir, mkdtemp, readlink, readdir, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { lstat, mkdir, mkdtemp, readFile, readlink, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createDispatchWorkspace } from "../../src/dispatch/workspace.js";
+import { createDispatchWorkspace, materializeRepositoryView } from "../../src/dispatch/workspace.js";
 
 const roots: string[] = [];
 
@@ -83,6 +84,63 @@ describe("dispatch workspace", () => {
       "dispatch temporary directory must be outside the repository",
     );
     expect(await readdir(nestedTemporary)).toEqual([]);
+  });
+
+  it("materializes a git-free repository view without task state and disposes it whole", async () => {
+    const sourceHome = await temporaryRoot("view-home");
+    const repository = await temporaryRoot("view-repository");
+    vi.stubEnv("HOME", sourceHome);
+    const env = {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_SYSTEM: "/dev/null",
+      GIT_AUTHOR_NAME: "ArchFlow Test",
+      GIT_AUTHOR_EMAIL: "test@example.invalid",
+      GIT_COMMITTER_NAME: "ArchFlow Test",
+      GIT_COMMITTER_EMAIL: "test@example.invalid",
+    };
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repository, env });
+    await mkdir(join(repository, "src"), { recursive: true });
+    await mkdir(join(repository, ".archflow", "context"), { recursive: true });
+    await mkdir(join(repository, ".archflow", "tasks", "example"), { recursive: true });
+    await writeFile(join(repository, "src", "index.ts"), "export {};\n");
+    await writeFile(join(repository, ".archflow", "context", "map.md"), "# context\n");
+    await writeFile(join(repository, ".archflow", "tasks", "example", "state.json"), "{}\n");
+    execFileSync("git", ["add", "."], { cwd: repository, env });
+    execFileSync("git", ["commit", "-qm", "seed"], { cwd: repository, env });
+    const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repository, env, encoding: "utf8" }).trim();
+
+    const base = await createDispatchWorkspace("codex-cli", repository);
+    const workspace = await materializeRepositoryView(base, repository, commit);
+    const view = workspace.repository_view_root!;
+    expect(view).toBe(join(workspace.root, "repo"));
+    await expect(readFile(join(view, "src", "index.ts"), "utf8")).resolves.toBe("export {};\n");
+    await expect(readFile(join(view, ".archflow", "context", "map.md"), "utf8")).resolves.toBe("# context\n");
+    await expect(lstat(join(view, ".git"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(lstat(join(view, ".archflow", "tasks"))).rejects.toMatchObject({ code: "ENOENT" });
+
+    await workspace.dispose();
+    await expect(lstat(workspace.root)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(lstat(base.root)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("refuses malformed view commits and fails closed on unresolvable ones", async () => {
+    const sourceHome = await temporaryRoot("view-failure-home");
+    const repository = await temporaryRoot("view-failure-repository");
+    vi.stubEnv("HOME", sourceHome);
+    execFileSync("git", ["init", "-q", "-b", "main"], {
+      cwd: repository,
+      env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" },
+    });
+    const workspace = await createDispatchWorkspace("codex-cli", repository);
+    try {
+      await expect(materializeRepositoryView(workspace, repository, "HEAD"))
+        .rejects.toThrow(/full lowercase git object id/u);
+      await expect(materializeRepositoryView(workspace, repository, "f".repeat(40)))
+        .rejects.toThrow(/repository view materialization failed/u);
+    } finally {
+      await workspace.dispose();
+    }
   });
 
   it("removes the workspace and makes disposal idempotent", async () => {

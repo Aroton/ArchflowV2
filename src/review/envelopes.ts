@@ -1,4 +1,4 @@
-import { canonicalJsonDigest } from "../contracts/canonical.js";
+import { canonicalJsonDigest, parseGitOid, type GitOid } from "../contracts/canonical.js";
 import { createProjectError, type ProjectError } from "../contracts/errors.js";
 import {
   parseSha256Digest,
@@ -80,11 +80,32 @@ export type PinnedContextEntry =
       readonly note: string;
     };
 
+/**
+ * The one fixed sentence the envelope may say about the reviewer's working directory. The note is
+ * a literal, never caller prose: prepending free text to stdin would break byte-provenance, and a
+ * variable note would reopen the instruction channel this envelope deliberately closes.
+ */
+export const REPOSITORY_VIEW_NOTE =
+  "Your working directory is a read-only checkout of the repository at this commit, excluding .archflow/tasks. Use it to verify repository claims; the artifact and pinned context remain the review subject and take precedence on conflict.";
+
+/**
+ * Declares the read-only repository checkout offered to a review child. Optional: adjudication
+ * envelopes never carry one, and a review envelope without it describes the historical empty
+ * workspace. The commit is the checkout's exact tree (HEAD for documents, the implementation's
+ * base commit for change sets).
+ */
+export type ReviewWorkspaceBinding = {
+  readonly kind: "read-only-repository-checkout";
+  readonly commit: GitOid;
+  readonly note: typeof REPOSITORY_VIEW_NOTE;
+};
+
 export type ReviewEnvelopeInput = {
   readonly artifact: string;
   readonly rubric: RubricV1;
   readonly context: readonly PinnedContextEntry[];
   readonly subject: DispatchSubject;
+  readonly workspace?: ReviewWorkspaceBinding;
 };
 
 export type DispatchEnvelope = Readonly<{
@@ -235,6 +256,21 @@ function validateAdjudicationSubject(value: AdjudicationSubject): AdjudicationSu
   };
 }
 
+function validateWorkspace(value: ReviewWorkspaceBinding): ReviewWorkspaceBinding {
+  exactFields(value, ["kind", "commit", "note"], "review workspace binding");
+  if (value.kind !== "read-only-repository-checkout") {
+    throw new TypeError("review workspace kind must be read-only-repository-checkout");
+  }
+  if (value.note !== REPOSITORY_VIEW_NOTE) {
+    throw new TypeError("review workspace note must be the fixed literal");
+  }
+  return {
+    kind: value.kind,
+    commit: parseGitOid(value.commit),
+    note: value.note,
+  };
+}
+
 function parseNonBlank(value: unknown, label: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new TypeError(`${label} must contain text`);
@@ -360,12 +396,21 @@ function finishEnvelope(
  * producer history, findings, triage, and agent instructions unrepresentable. `context` is the one
  * sanctioned channel for repository-derived evidence, and it admits only mechanically assembled,
  * digest-recorded entries in the closed `PINNED_CONTEXT_KINDS` vocabulary — never free-form
- * instructions or author-curated material.
+ * instructions or author-curated material. The optional `workspace` binding names the read-only
+ * repository checkout the dispatcher materializes; its note is a fixed literal so the field can
+ * never smuggle caller prose.
  */
 export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelope {
   const snapshot = materialize(value);
-  exactFields(snapshot, ["artifact", "rubric", "context", "subject"], "review envelope input");
+  exactFields(
+    snapshot,
+    snapshot.workspace === undefined
+      ? ["artifact", "rubric", "context", "subject"]
+      : ["artifact", "rubric", "context", "subject", "workspace"],
+    "review envelope input",
+  );
   if (typeof snapshot.artifact !== "string") throw new TypeError("review envelope artifact must be text");
+  const workspace = snapshot.workspace === undefined ? undefined : validateWorkspace(snapshot.workspace);
   const parsedRubric = parseRubricV1(snapshot.rubric);
   const rubric = {
     schema_version: parsedRubric.schema_version,
@@ -383,6 +428,7 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
     artifact: snapshot.artifact,
     rubric,
     context: validateContext(snapshot.context),
+    ...(workspace === undefined ? {} : { workspace }),
     subject: validateSubject(snapshot.subject),
   } as const satisfies PlainJsonValue;
   // Child-visible versioning is deliberately the first field. The shared canonical encoder sorts

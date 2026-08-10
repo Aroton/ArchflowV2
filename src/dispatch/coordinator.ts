@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { canonicalJsonBytes } from "../contracts/canonical.js";
+import { canonicalJsonBytes, type GitOid } from "../contracts/canonical.js";
 import type { HostIdentity } from "../contracts/hosts.js";
 import { parseTaskPathClaim } from "../contracts/path-claims.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
@@ -21,7 +21,7 @@ import {
   type DispatchFailureChannels,
 } from "./process.js";
 import type { DispatchRoute } from "./routing.js";
-import { createDispatchWorkspace } from "./workspace.js";
+import { createDispatchWorkspace, materializeRepositoryView } from "./workspace.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "../state/authority.js";
 import { ensureAttemptDirectory } from "../state/layout.js";
 import type { TransactionDependencies } from "../state/transaction.js";
@@ -35,6 +35,12 @@ export type DispatchCoordinatorInput = Readonly<{
   signal: AbortSignal;
   cancellation_source: NonNullable<DispatchChildSpec["cancellation_source"]>;
   allow_claude_dispatch: boolean;
+  /**
+   * When present, review dispatches get a read-only repository checkout at this commit as their
+   * working directory. Adjudication envelopes never materialize a view: the adjudicator judges
+   * exactly the sealed envelope.
+   */
+  repository_view_commit?: GitOid;
 }>;
 
 export type DispatchCoordinatorResult = Readonly<{
@@ -143,6 +149,13 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
 
     try {
       workspace = await createDispatchWorkspace(adapter.id, input.repository_root);
+      if (input.repository_view_commit !== undefined && envelope.result_kind === "review") {
+        workspace = await materializeRepositoryView(
+          workspace,
+          input.repository_root,
+          input.repository_view_commit,
+        );
+      }
       preflight = await adapter.preflight(
         workspace,
         input.signal,

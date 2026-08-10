@@ -40,12 +40,12 @@ const productionRubricSkills = [
   "archflow-phase-design",
   "archflow-phase-impl",
 ] as const;
-const architectureSubstantiveCalibration = "Report a blocking defect only when it requires producer action, and cite the artifact statement and the pinned evidence it contradicts. The violation must follow from artifact text or pinned evidence, never from assumed codebase behavior. A sound artifact is expected to yield zero blocking findings.";
+const architectureSubstantiveCalibration = "Report a blocking defect only when it requires producer action, and cite the artifact statement and the pinned or repository evidence it contradicts. The violation must follow from artifact text, pinned evidence, or repository evidence at the pinned commit, never from assumed codebase behavior. A sound artifact is expected to yield zero blocking findings.";
 const substantiveCalibration = {
-  "archflow-prd": "Report a blocking defect only when it requires producer action, and cite the specific artifact statement it contradicts or stated requirement it leaves unmet; citation is necessary but not sufficient. The violation must follow from the artifact's own text or pinned envelope evidence without assuming behavior the artifact does not specify. A sound artifact is expected to yield zero blocking findings; that is successful review, not under-performance.",
+  "archflow-prd": "Report a blocking defect only when it requires producer action, and cite the specific artifact statement it contradicts or stated requirement it leaves unmet; citation is necessary but not sufficient. The violation must follow from the artifact's own text, pinned envelope evidence, or repository evidence at the pinned commit, without assuming behavior the artifact does not specify. A sound artifact is expected to yield zero blocking findings; that is successful review, not under-performance.",
   "archflow-design": architectureSubstantiveCalibration,
   "archflow-phase-design": architectureSubstantiveCalibration,
-  "archflow-phase-impl": "Report a blocking defect only when it requires producer action, citing the changed bytes and the pinned phase design statement or evidence it violates. The violation must follow from pinned material, never from assumed behavior of unpinned code. A sound implementation is expected to yield zero blocking findings.",
+  "archflow-phase-impl": "Report a blocking defect only when it requires producer action, citing the changed bytes and the pinned phase design statement or evidence it violates. The violation must follow from pinned material or repository evidence at the pinned commit, never from assumed behavior of unpinned code. A sound implementation is expected to yield zero blocking findings.",
 } as const;
 const advisoryCalibration = {
   "archflow-prd": "Use non-blocking findings for completeness suggestions, debatable readings, and observations. Do not inflate them into blockers merely to report them.",
@@ -129,6 +129,7 @@ describe("canonical skill contracts", () => {
       expect(criteria.get("unverifiable-claims")?.blocking).toBe(false);
       expect(criteria.get("unverifiable-claims")?.text).toContain("non-blocking finding");
       expect(criteria.get("unverifiable-claims")?.text).toContain("finding_id beginning unverifiable-");
+      expect(criteria.get("unverifiable-claims")?.text).toContain("read-only repository checkout");
       if (name === "archflow-design" || name === "archflow-phase-design") {
         expect(criteria.get("phase-plan-soundness")).toEqual({
           id: "phase-plan-soundness",

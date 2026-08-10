@@ -146,6 +146,44 @@ describe("CLI invocation construction", () => {
     expect(invocation.final_output_path).toBe(invocation.argv[invocation.argv.indexOf("-o") + 1]);
   });
 
+  it("runs the Claude child inside the repository view with only read-only tools", async () => {
+    const target = await workspace();
+    const viewed: DispatchWorkspace = Object.freeze({ ...target, repository_view_root: join(target.root, "repo") });
+    const route: DispatchRoute = { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "max" };
+    const adapter = selectCliAdapter("codex", { allow_claude_dispatch: true });
+
+    const bare = await adapter.buildInvocation(envelope, route, target, reviewSchema);
+    expect(bare.cwd).toBe(target.root);
+    expect(bare.argv[bare.argv.indexOf("--tools") + 1]).toBe("");
+
+    const invocation = await adapter.buildInvocation(envelope, route, viewed, reviewSchema);
+    expect(invocation.cwd).toBe(viewed.repository_view_root);
+    expect(invocation.argv[invocation.argv.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
+    for (const pinned of ["--safe-mode", "--disable-slash-commands", "--strict-mcp-config", "--no-session-persistence"]) {
+      expect(invocation.argv).toContain(pinned);
+    }
+    expect(invocation.argv[invocation.argv.indexOf("--setting-sources") + 1]).toBe("");
+    expect(invocation.argv[invocation.argv.indexOf("--mcp-config") + 1]).toBe(join(target.root, "empty-mcp.json"));
+  });
+
+  it("points the Codex sandbox at the repository view while outputs stay outside it", async () => {
+    const target = await workspace();
+    const viewed: DispatchWorkspace = Object.freeze({ ...target, repository_view_root: join(target.root, "repo") });
+    const route: DispatchRoute = { adapter: "codex-cli", family: "codex", model: "gpt-5.3-codex", effort: "high" };
+    const adapter = selectCliAdapter("claude");
+
+    const bare = await adapter.buildInvocation(envelope, route, target, reviewSchema);
+    expect(bare.argv[bare.argv.indexOf("-C") + 1]).toBe(target.root);
+
+    const invocation = await adapter.buildInvocation(envelope, route, viewed, reviewSchema);
+    expect(invocation.argv[invocation.argv.indexOf("-C") + 1]).toBe(viewed.repository_view_root);
+    expect(invocation.argv).toContain("-s");
+    expect(invocation.argv[invocation.argv.indexOf("-s") + 1]).toBe("read-only");
+    expect(invocation.argv[invocation.argv.indexOf("--output-schema") + 1]).toBe(join(target.root, "review.schema.json"));
+    expect(invocation.argv[invocation.argv.indexOf("-o") + 1]).toBe(join(target.root, "final-output.json"));
+    expect(invocation.argv).toContain("project_doc_max_bytes=0");
+  });
+
   it.each([
     ["claude", "claude-cli"],
     ["codex", "codex-cli"],

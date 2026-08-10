@@ -4,9 +4,16 @@ import { createProjectError, type ProjectResult } from "../../contracts/errors.j
 import { parseSafeId } from "../../contracts/evidence.js";
 import type { ParsedToolCall, ToolSuccess } from "../../contracts/mcp-tools.js";
 import type { PlainJsonValue } from "../../contracts/plain-json.js";
+import type { GitOid } from "../../contracts/canonical.js";
 import { createDispatchCoordinator } from "../../dispatch/coordinator.js";
+import { readHeadCommit } from "../../repository/git.js";
+import type { RootBoundGitRunner } from "../../repository/identity.js";
 import { runCounterReview } from "../../review/counter-review.js";
-import { REVIEW_ENVELOPE_BYTE_CAP, ReviewEnvelopeError } from "../../review/envelopes.js";
+import {
+  REPOSITORY_VIEW_NOTE,
+  REVIEW_ENVELOPE_BYTE_CAP,
+  ReviewEnvelopeError,
+} from "../../review/envelopes.js";
 import { assembleReviewContext } from "../../review/pinned-context.js";
 import { prepareEvidenceResult } from "../../state/evidence-results.js";
 import {
@@ -57,6 +64,21 @@ export function envelopeOverflowError(
     current_bytes: error.envelope_byte_count ?? 0,
     byte_cap: REVIEW_ENVELOPE_BYTE_CAP,
   });
+}
+
+/**
+ * Chooses the commit for the reviewer's read-only repository checkout. Document subjects use the
+ * current HEAD — the same authority the mechanical evidence pins read from. Implementation-output
+ * subjects use the artifact's attested `base_commit`: the reviewer sees the pre-change tree, and
+ * the changes themselves travel in the envelope's change entries.
+ */
+export async function resolveRepositoryViewCommit(
+  runner: RootBoundGitRunner,
+  artifact: CurrentProduceSubject["artifact"],
+): Promise<GitOid> {
+  return artifact.artifact_kind === "implementation-output"
+    ? artifact.base_commit
+    : readHeadCommit(runner);
 }
 
 export async function handleCounterReview(
@@ -111,6 +133,9 @@ export async function handleCounterReview(
     if (!context_entries.ok) return context_entries;
 
     const resultId = dispatchId("result", call.input.intent_id);
+    const repositoryViewCommit = await resolveRepositoryViewCommit(
+      services.runner, produce.value.artifact,
+    );
     const coordinator = createDispatchCoordinator({
       authority: services.authority,
       dependencies: services.dependencies,
@@ -121,6 +146,7 @@ export async function handleCounterReview(
       cancellation_source: "client",
       // Both producer directions are implemented; release authorization remains a separate gate.
       allow_claude_dispatch: true,
+      repository_view_commit: repositoryViewCommit,
     });
     const retainedBytes = services.dependencies.read_retained_task_bytes;
     if (retainedBytes === undefined) throw new TypeError("retained byte accounting is unavailable");
@@ -164,6 +190,11 @@ export async function handleCounterReview(
         artifact,
         rubric: call.input.rubric,
         context: context_entries.value,
+        workspace: {
+          kind: "read-only-repository-checkout",
+          commit: repositoryViewCommit,
+          note: REPOSITORY_VIEW_NOTE,
+        },
         subject: {
           task_id: services.authority.task_id,
           phase_instance: state.value.phase_instance,
