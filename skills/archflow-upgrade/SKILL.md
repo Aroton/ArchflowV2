@@ -19,7 +19,7 @@ Stop if the helper rejects an unresolved task-local constitution edit or secretl
 
 Review the selected baselines, exclusion list, staged and unmapped paths, derived mapping, draft sources, and resume phase with the user before initialization. Explain that every selected regular file is staged byte-for-byte under the destination import, while an unmapped file remains historical material with no canonical document slot.
 
-Pass the returned initialization manifest unchanged to the first `archflow_state` request with `expected_revision: 0`. Use `archflow-local envelope --task <task>` for the complete request and its server-checked fingerprint. A successful initialization establishes only the new destination and its import identity; it does not approve, adopt, or complete any imported work.
+Pass the returned initialization manifest unchanged to the first `archflow_state` request with `expected_revision: 0`, `phase_instance: "prd"`, `step: "produce"`, and `status: "running"` — the canonical rerun starts at the PRD and the server rejects any other entry point; the resume jump happens only after the migration-audit gate. Use `archflow-local envelope --task <task>` for the complete request and its server-checked fingerprint. A successful initialization establishes only the new destination and its import identity; it does not approve, adopt, or complete any imported work.
 
 The resume phase is derived from the imported mapping as one past the highest mapped implementation log. Use `exclude` as the explicit lever when the human wants to omit the last implemented phase and redo it in the canonical workflow. Never declare or override a resume phase by hand.
 

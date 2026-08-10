@@ -23,7 +23,7 @@ Compute its `rubric_digest` by piping the rubric JSON to `archflow-local hash` o
 
 ## Durable loop and step ownership
 
-Run `archflow-local status --task <task>`, check the result's JSON `ok` field, perform exactly its `next_action`, and run status again after every durable action. Verify that `phase_instance` is `phase-design-<phase-number>` before writing this phase. If status selects another phase, a repair, or a human-required action, report that instead of bypassing it.
+Run `archflow-local status --task <task>`, check the result's JSON `ok` field, perform exactly its `next_action`, and run status again after every durable action. Verify that `phase_instance` is `phase-design-<phase-number>` before writing this phase. If status selects another phase, a repair, or a human-required action, report that instead of bypassing it. When `next_action` carries a prefilled `request` template, start from it verbatim, fill only its placeholder fields, and still authenticate the completed request through `archflow-local envelope` as usual.
 
 Call `archflow_state` with `status: "running"` before each pipeline step. Record the terminal exit for `produce`, `self_review`, and `triage` only. `archflow_counter_review` and `archflow_adjudicate` record their own successful exits.
 
@@ -31,7 +31,7 @@ Pipe every `archflow-local` payload as JSON directly on stdin (for example `prin
 
 1. Draft `phases/<phase-number>/design.md`. Run `archflow-local build-document --task <task>` with the current phase instance, `step: "produce"`, `document_path: "phases/<phase-number>/design.md"`, and sorted declared inputs for `.archflow/tasks/<task>/design.md` and `.archflow/tasks/<task>/prd.md`.
 2. Run `archflow-local envelope --task <task>` over the complete `archflow_state` request and substitute the returned fingerprint into both the request and artifact.
-3. Run `envelope` again over that substituted request for the true request digest, then call `archflow_state` with byte-equivalent input.
+3. Run `envelope` again over that substituted request for the true request digest, then call `archflow_state` with byte-equivalent input. If the first pass returned a fingerprint identical to the one already embedded, no substitution occurred and its request digest is already true — skip this second pass; it is needed only after an actual substitution.
 
 On a fingerprint mismatch, abandon the pending intent, use the returned expected digest and safe next action, rebuild with a fresh intent, and re-run status. A fingerprint mismatch does not itself authorize degraded mode; use a manual fallback only when the helper classifies an unavailable capability.
 
@@ -41,7 +41,7 @@ For `produce`, read `design.md`, `prd.md`, relevant context, the immediately pre
 
 Do not write implementation code in this skill. A phase design has no authority merely because its file exists.
 
-For `self_review`, apply every rubric criterion and pinned rule to the current artifact. Create the agent-declared review only from the current subject/fingerprint, the effective self-review route returned by status, and the locally hashed rubric. Record it through `archflow_state`; to preview its canonical projection, pipe `{"kind":"review","value":<that review artifact>}` to `archflow-local render` on stdin (`archflow-local --help` lists each command's payload).
+For `self_review`, apply every rubric criterion and pinned rule to the current artifact. Create the agent-declared review only from the current subject/fingerprint, the effective self-review route returned by status, and the locally hashed rubric. The review's `matched_rule_versions` field is required, and an empty array is the correct value when no pinned active rule matched the subject. Record it through `archflow_state`; to preview its canonical projection, pipe `{"kind":"review","value":<that review artifact>}` to `archflow-local render` on stdin (`archflow-local --help` lists each command's payload).
 
 For `counter_review`, call `archflow_counter_review` with `artifact_path: "phases/<phase-number>/design.md"` and the unchanged rubric. For `triage`, transcribe status's current evidence-set digest, canonical evidence digest order, and every finding identity. Disposition every finding exactly once; accepted findings revise the phase design and, when necessary, `design.md`, then re-enter production and fresh review. Findings whose finding_id begins `unverifiable-` report envelope-contract gaps, not producer defects: reject each with rationale and evidence beginning `envelope-gap: ` naming the missing evidence, and never accept one — acceptance forces produce re-entry for a non-defect. For `adjudicate`, call `archflow_adjudicate` with `artifact_path: "phases/<phase-number>/design.md"` and `upstream_paths: ["design.md","prd.md"]`.
 
