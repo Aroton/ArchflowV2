@@ -2,6 +2,8 @@ import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { GateKind } from "../contracts/gates.js";
 import type { PathSafeId, Sha256Digest } from "../contracts/evidence.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
+import type { PlainJsonValue } from "../contracts/plain-json.js";
+import type { ToolName } from "../contracts/tool-names.js";
 import { WORKFLOW_V1 } from "../contracts/workflow.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
 import type { EvidenceAssessment } from "../review/fixed-point.js";
@@ -27,6 +29,16 @@ export type NextActionCode =
   | "task-complete"
   | "inspect-state";
 
+/**
+ * A mechanically complete request for the named tool. Placeholder prose marks every field the
+ * agent or human must author; all other fields are prefilled from authenticated status facts.
+ */
+export type NextActionRequest = Readonly<{
+  tool: ToolName;
+  template: PlainJsonValue;
+  guidance: string;
+}>;
+
 export type NextAction = Readonly<{
   code: NextActionCode;
   detail: string;
@@ -36,6 +48,7 @@ export type NextAction = Readonly<{
   skill?: string;
   gate_id?: PathSafeId;
   gate_kind?: GateKind;
+  request?: NextActionRequest;
 }>;
 
 export type AuthenticatedApprovalFact = Readonly<{

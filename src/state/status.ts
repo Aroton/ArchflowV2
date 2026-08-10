@@ -31,6 +31,7 @@ import {
 } from "./gates.js";
 import { readManualCheckpoints } from "./manual-checkpoints.js";
 import { deriveNextAction, type NextAction } from "./next-action.js";
+import { buildNextActionRequest } from "./request-templates.js";
 import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject } from "./produce-subject.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
 import { implementationOutputCommittedAtCurrentTarget } from "./implementation-manifest.js";
@@ -430,7 +431,7 @@ export async function computeTaskStatus(
       state: "missing" as const,
       config: unavailableConfig(undefined, undefined, "status-authority-invalid"),
       blocking_reasons: Object.freeze(["status-authority-invalid"]),
-      next_action: next,
+      next_action: attachNextActionRequest(next, { task_id: authority.task_id }),
     }));
   }
 
@@ -442,7 +443,7 @@ export async function computeTaskStatus(
       state: "missing" as const,
       config: unavailableConfig(undefined, undefined, "state-unavailable"),
       blocking_reasons: Object.freeze([reason]),
-      next_action: next,
+      next_action: attachNextActionRequest(next, { task_id: authority.task_id }),
     }));
   }
   const stateDocument = stateRead.document;
@@ -749,6 +750,14 @@ export async function computeTaskStatus(
     const target = await currentTargetRef(dependencies);
     gateInput = buildCommitAuthorizationInput(produceSubject, evidence.current_evidence, target);
   }
+  const nextActionWithRequest = attachNextActionRequest(nextAction, {
+    task_id: authority.task_id,
+    state,
+    ...(evidence.available
+      ? { subject_digest: evidence.subject_digest, current_evidence: evidence.current_evidence }
+      : {}),
+    ...(gateInput === undefined ? {} : { commit_authorization: gateInput }),
+  });
 
   return ok(Object.freeze({
     task_id: authority.task_id,
@@ -769,8 +778,16 @@ export async function computeTaskStatus(
     evidence,
     ...(gateInput === undefined ? {} : { gate_input: gateInput }),
     blocking_reasons: Object.freeze([...new Set(blockers)]),
-    next_action: nextAction,
+    next_action: nextActionWithRequest,
   }));
+}
+
+function attachNextActionRequest(
+  next: NextAction,
+  facts: Parameters<typeof buildNextActionRequest>[1],
+): NextAction {
+  const request = buildNextActionRequest(next, facts);
+  return request === undefined ? next : Object.freeze({ ...next, request });
 }
 
 /** Computes a read-only, explicitly degraded summary from durable local authority. */
