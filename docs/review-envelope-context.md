@@ -21,6 +21,36 @@ Fail-closed versus reviewable: absence that contradicts durable authority fails 
 unapproved upstream, declared `ask.md` that drifted); everything else stays reviewable with an
 `unavailable` entry the rubric's `unverifiable-claims` criterion turns into a named finding.
 
+## Change-set rendering tiers
+
+Implementation review material renders each changed file at one of three tiers
+(`src/state/produce-subject.ts`), declared per entry by a `rendering` field so no elision is
+silent:
+
+- `embedded` — full before and after bytes, for files whose sides are each at most
+  `EMBED_WHOLE_BYTE_CEILING` (32 KiB). Full-file context is where diff-invisible findings come
+  from, so small files always ship whole.
+- `unified-diff` (`reason: "exceeds-embed-ceiling"`) — a wide-context unified diff
+  (`DIFF_CONTEXT_LINES`, 40 lines) for larger text files; both sides remain named by
+  `content_digest` and `byte_count`.
+- `digest-only` — path, digests, and byte counts with no content, with the reason declared:
+  `generated-attribute` (path marked `linguist-generated` in `.gitattributes`),
+  `excluded-basename` (known lockfiles), or `binary-content` (oversized non-UTF-8 bytes).
+
+Every non-embedded entry still names its exact bytes by digest, so the reviewer reports reduced
+visibility under `unverifiable-claims` — exactly like context statuses — and the human can check
+the digests against the retained result. Repositories opt content out of full rendering by
+marking it `linguist-generated`; the attribute file is itself part of any change set that edits
+it, so exclusions are visible to the reviewer they affect.
+
+When the assembled envelope still exceeds the cap after tiered rendering and cap relief, the
+counter-review fails with `ENVELOPE_OVERFLOW` (`next_action: reduce-review-subject`) naming the
+largest change-set contributors, the failed byte size, and the cap. A generated path in
+`offending_paths` belongs in `.gitattributes`; a hand-written one means the phase outgrew
+single-pass review and should be split at the design gate — the adjacent
+`phase-plan-soundness` criterion makes that scoping reviewable before implementation starts.
+There is no chunked multi-dispatch fallback: one subject, one attestation.
+
 ## How the contract grows
 
 `unverifiable-*` findings are the feedback loop. Triage rejects them with rationale and evidence

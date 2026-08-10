@@ -163,7 +163,7 @@ describe("exhaustive gate, error, and supplemental authority", () => {
         exercised += 1;
       }
     }
-    expect(exercised).toBe(58);
+    expect(exercised).toBe(59);
     expect(exercisedCodes).toEqual(new Set([...Object.keys(PROJECT_ERROR_DEFINITIONS), ...Object.keys(PROTOCOL_ERROR_DEFINITIONS)]));
   });
 

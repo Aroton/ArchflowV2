@@ -19,6 +19,7 @@ import {
   ARCHFLOW_ATTRIBUTES_REMEDIATION,
   ARCHFLOW_GITATTRIBUTES_RULE,
   checkArchflowAttributes,
+  checkGeneratedAttributes,
 } from "../../src/repository/attributes.js";
 import {
   createGitRunner,
@@ -314,6 +315,77 @@ describe.skipIf(!hasGit)("checkArchflowAttributes", () => {
       operation: "startup-check",
       attempt: 1,
     });
+  });
+});
+
+describe.skipIf(!hasGit)("checkGeneratedAttributes", () => {
+  it("marks generated only paths whose linguist-generated value is not unspecified, unset, or false", async () => {
+    const repository = newRepository("generated", {
+      attributes: [
+        "* text=auto",
+        "dist/* linguist-generated",
+        "vendor/lib.js linguist-generated=true",
+        "src/opted-out.ts linguist-generated=false",
+        "src/unset.ts -linguist-generated",
+      ].join("\n") + "\n",
+    });
+    commitAll(repository, "init");
+
+    const result = await checkGeneratedAttributes(
+      await boundRunnerAt(repository),
+      [
+        claim("dist/bundle.mjs"),
+        claim("vendor/lib.js"),
+        claim("src/opted-out.ts"),
+        claim("src/unset.ts"),
+        claim("src/plain.ts"),
+      ],
+      context
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect([...result.value].sort()).toEqual(["dist/bundle.mjs", "vendor/lib.js"]);
+  });
+
+  it("returns an empty set for no paths without running git", async () => {
+    const result = await checkGeneratedAttributes(
+      stubRunner(() => Promise.reject(new Error("must not run"))),
+      [],
+      context
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.value.size).toBe(0);
+  });
+
+  it("rejects any field count other than 3N rather than parsing it best-effort", async () => {
+    const paths = [claim("a.txt"), claim("b.txt")];
+    const triplets = paths.flatMap((path) => [path, "linguist-generated", "unspecified"]);
+
+    for (const fields of [triplets.slice(0, 5), [...triplets, "extra"], []]) {
+      const result = await checkGeneratedAttributes(
+        stubRunner(() => Promise.resolve(fields)),
+        paths,
+        context
+      );
+      expectTaskInvalid(result, "git-path-mismatch");
+    }
+  });
+
+  it("rejects a returned path or attribute name that is not the requested one", async () => {
+    const paths = [claim("a.txt")];
+    for (const fields of [
+      ["../a.txt", "linguist-generated", "set"],
+      ["a.txt", "text", "set"],
+    ]) {
+      const result = await checkGeneratedAttributes(
+        stubRunner(() => Promise.resolve(fields)),
+        paths,
+        context
+      );
+      expectTaskInvalid(result, "git-path-mismatch");
+    }
   });
 });
 

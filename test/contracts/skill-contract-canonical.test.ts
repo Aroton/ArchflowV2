@@ -53,6 +53,7 @@ const advisoryCalibration = {
   "archflow-phase-design": "Use non-blocking findings for completeness suggestions, debatable readings, and observations. Do not inflate them into blockers.",
   "archflow-phase-impl": "Use non-blocking findings for completeness suggestions, debatable readings, and observations. Do not inflate them into blockers.",
 } as const;
+const phasePlanSoundnessCalibration = "Each phase is independently verifiable, ordered by dependency, and scoped so its completion is observable. A well-scoped phase is also reviewable in one sealed pass — typically around 10-15 files of hand-written change; a phase expected to exceed that typically warrants splitting at design time or marking which of its outputs are generated rather than hand-written.";
 const taskSpecificCriteria = {
   "archflow-prd": ["ask-fidelity", "proportionality", "testable-requirements", "stated-assumptions"],
   "archflow-design": ["upstream-coverage", "interface-reality", "evidence-completeness", "proportionality", "phase-plan-soundness"],
@@ -128,6 +129,13 @@ describe("canonical skill contracts", () => {
       expect(criteria.get("unverifiable-claims")?.blocking).toBe(false);
       expect(criteria.get("unverifiable-claims")?.text).toContain("non-blocking finding");
       expect(criteria.get("unverifiable-claims")?.text).toContain("finding_id beginning unverifiable-");
+      if (name === "archflow-design" || name === "archflow-phase-design") {
+        expect(criteria.get("phase-plan-soundness")).toEqual({
+          id: "phase-plan-soundness",
+          text: phasePlanSoundnessCalibration,
+          blocking: true,
+        });
+      }
       expect([...criteria.keys()]).toEqual(expect.arrayContaining([...taskSpecificCriteria[name]]));
     }
   });

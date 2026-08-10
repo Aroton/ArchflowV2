@@ -62,6 +62,17 @@ describe("gate and error JSON Schema authority", () => {
     expect(protocolValidator.validate({ ...protocol, diagnostic: { ...protocol.diagnostic, parameters: { tool_name_digest: D, raw_name: "secret" } } })).toBe(false);
   });
 
+  it("makes ENVELOPE_OVERFLOW paths lexical, sorted, and unique in both authorities", () => {
+    const error = (offending_paths: string[]) => ({ schema_version: "1", code: "ENVELOPE_OVERFLOW", owner: "contracts", retryable: false, diagnostic: { template_id: "ENVELOPE_OVERFLOW", parameters: { offending_paths, current_bytes: 2_000_000, byte_cap: 1_048_576 } }, next_action: "reduce-review-subject" });
+    expect(projectValidator.validate(error(["dist/archflow-mcp.mjs", "package-lock.json"]))).toBe(true);
+    expect(parseProjectError(error(["dist/archflow-mcp.mjs"])).code).toBe("ENVELOPE_OVERFLOW");
+    for (const paths of [["z/file", "a/file"], ["a/file", "a/file"], ["../escape"], []]) {
+      const value = error(paths);
+      expect(projectValidator.validate(value), JSON.stringify(projectValidator.validate.errors)).toBe(false);
+      expect(() => parseProjectError(value)).toThrow();
+    }
+  });
+
   it("makes SNAPSHOT_LIMIT paths lexical, sorted, and unique in both authorities", () => {
     const error = (offending_paths: string[]) => ({ schema_version: "1", code: "SNAPSHOT_LIMIT", owner: "snapshot", retryable: false, diagnostic: { template_id: "SNAPSHOT_LIMIT", parameters: { limit_scope: "task", offending_paths, current_bytes: 2, byte_cap: 1 } }, next_action: "reduce-snapshot" });
     expect(projectValidator.validate(error(["a/file", "z/file"]))).toBe(true);

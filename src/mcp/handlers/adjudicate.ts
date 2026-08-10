@@ -22,6 +22,7 @@ import {
   loadProduceUpstreamSubject,
   readProduceProjection,
   renderProduceReviewMaterial,
+  resolveReviewExclusions,
   resolveProduceUpstreamBinding,
 } from "../../state/produce-subject.js";
 import { mapHandlerErrors } from "./errors.js";
@@ -93,8 +94,11 @@ export async function handleAdjudicate(
       services.runner, services.authority, produce.value, call.input.artifact_path,
     );
     if (!projection.ok) return projection;
+    const exclusions = await resolveReviewExclusions(
+      services.runner, produce.value, services.authority.context,
+    );
     let artifact: string;
-    try { artifact = renderProduceReviewMaterial(produce.value, projection.value); }
+    try { artifact = renderProduceReviewMaterial(produce.value, projection.value, exclusions); }
     catch {
       return fail(createProjectError("CONTRACT_INVALID", { tool: call.name, issue_code: "artifact-not-utf8" }));
     }

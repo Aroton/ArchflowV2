@@ -47,6 +47,34 @@ const PATH_MISMATCH = "git-path-mismatch" as SafeCode;
 /** Fields per requested path: two `<path>\0<attribute>\0<value>\0` triplets, `text` then `merge`. */
 const FIELDS_PER_PATH = 6;
 
+/**
+ * Basenames whose content is derived by a package manager rather than written by hand. Review
+ * material renders matching files digest-only even in repositories that never configured
+ * `linguist-generated`, because lockfile churn carries no review signal at any size.
+ */
+export const REVIEW_EXCLUDED_BASENAMES: ReadonlySet<string> = Object.freeze(new Set([
+  "package-lock.json",
+  "npm-shrinkwrap.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "bun.lock",
+  "bun.lockb",
+  "Cargo.lock",
+  "poetry.lock",
+  "uv.lock",
+  "Pipfile.lock",
+  "Gemfile.lock",
+  "composer.lock",
+  "go.sum",
+  "flake.lock",
+]));
+
+const GENERATED_ATTRIBUTE = "linguist-generated";
+/** One `<path>\0<attribute>\0<value>\0` triplet per path for the single attribute requested. */
+const GENERATED_FIELDS_PER_PATH = 3;
+/** `check-attr` values meaning "not generated": absent, explicitly unset, or `linguist-generated=false`. */
+const NOT_GENERATED_VALUES: ReadonlySet<string> = Object.freeze(new Set(["unspecified", "unset", "false"]));
+
 function ok<T>(value: T): ProjectResult<T> {
   return Object.freeze({ schema_version: "1", ok: true, value });
 }
@@ -130,4 +158,50 @@ export async function checkArchflowAttributes(
   }
 
   return ok<readonly AttributeCheck[]>(Object.freeze(checks));
+}
+
+/**
+ * Reports which of the claimed paths the repository marks `linguist-generated` — the
+ * ecosystem-standard `.gitattributes` marker for derived content. Any value other than
+ * `unspecified`, `unset`, or `false` (so `set`, `true`, or a custom string) marks the path
+ * generated. Reader discipline mirrors `checkArchflowAttributes`: `-z` NUL triplets, pinned
+ * cardinality, byte-equal path echo, root-bound runner.
+ */
+export async function checkGeneratedAttributes(
+  runner: RootBoundGitRunner,
+  paths: readonly RepositoryPathClaim[],
+  context: RepositoryOperationContext
+): Promise<ProjectResult<ReadonlySet<RepositoryPathClaim>>> {
+  if (paths.length === 0) return ok<ReadonlySet<RepositoryPathClaim>>(Object.freeze(new Set<RepositoryPathClaim>()));
+
+  let fields: readonly string[];
+  try {
+    fields = await runner.runNulFields({
+      argv: ["check-attr", "-z", GENERATED_ATTRIBUTE, "--", ...paths],
+      operation: CHECK_ATTR_OPERATION,
+    });
+  } catch (error) {
+    if (error instanceof GitInvocationError) {
+      return fail(projectErrorForGitFailure(error, runner, context));
+    }
+    throw error;
+  }
+
+  if (fields.length !== paths.length * GENERATED_FIELDS_PER_PATH) {
+    return fail(taskInvalid(context, PATH_MISMATCH));
+  }
+
+  const generated = new Set<RepositoryPathClaim>();
+  for (const [index, claim] of paths.entries()) {
+    const base = index * GENERATED_FIELDS_PER_PATH;
+    const echoedPath = fields[base];
+    const attributeName = fields[base + 1];
+    const value = fields[base + 2];
+    if (echoedPath !== claim || attributeName !== GENERATED_ATTRIBUTE || value === undefined) {
+      return fail(taskInvalid(context, PATH_MISMATCH));
+    }
+    if (!NOT_GENERATED_VALUES.has(value)) generated.add(claim);
+  }
+
+  return ok<ReadonlySet<RepositoryPathClaim>>(Object.freeze(generated));
 }

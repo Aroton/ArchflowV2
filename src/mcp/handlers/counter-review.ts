@@ -6,12 +6,17 @@ import type { ParsedToolCall, ToolSuccess } from "../../contracts/mcp-tools.js";
 import type { PlainJsonValue } from "../../contracts/plain-json.js";
 import { createDispatchCoordinator } from "../../dispatch/coordinator.js";
 import { runCounterReview } from "../../review/counter-review.js";
+import { REVIEW_ENVELOPE_BYTE_CAP, ReviewEnvelopeError } from "../../review/envelopes.js";
 import { assembleReviewContext } from "../../review/pinned-context.js";
 import { prepareEvidenceResult } from "../../state/evidence-results.js";
 import {
   loadCurrentProduceSubject,
   readProduceProjection,
   renderProduceReviewMaterial,
+  resolveReviewExclusions,
+  reviewChangeEntries,
+  type CurrentProduceSubject,
+  type ReviewExclusionReason,
 } from "../../state/produce-subject.js";
 import { mapHandlerErrors } from "./errors.js";
 import { resolvePreDispatchReplay } from "./replay.js";
@@ -22,6 +27,36 @@ const fail = <T>(error: ReturnType<typeof createProjectError>): ProjectResult<T>
 
 function dispatchId(prefix: string, value: string): ReturnType<typeof parseSafeId> {
   return parseSafeId(`${prefix}-${sha256Bytes(new TextEncoder().encode(value)).slice(0, 32)}`);
+}
+
+/**
+ * Translates a residual byte-cap failure — after cap relief exhausted every droppable context
+ * entry — into `ENVELOPE_OVERFLOW` naming the largest change-set contributors, so the producer
+ * knows to split the phase or mark generated content `linguist-generated` rather than guess at a
+ * bare byte count. Returns `undefined` (caller rethrows) for any other failure, or when no
+ * change entry can be named — the parameter schema requires at least one path.
+ */
+export function envelopeOverflowError(
+  error: unknown,
+  subject: CurrentProduceSubject,
+  exclusions: ReadonlyMap<string, ReviewExclusionReason>,
+): ReturnType<typeof createProjectError> | undefined {
+  if (!(error instanceof ReviewEnvelopeError)) return undefined;
+  const parameters: Readonly<Record<string, unknown>> = error.project_error.diagnostic.parameters;
+  if (parameters.issue_code !== "envelope-byte-cap") return undefined;
+  const encoder = new TextEncoder();
+  const offending = reviewChangeEntries(subject, exclusions)
+    .map((entry) => ({ path: entry.path, byte_count: encoder.encode(JSON.stringify(entry)).byteLength }))
+    .sort((left, right) => right.byte_count - left.byte_count)
+    .slice(0, 5)
+    .map((contributor) => contributor.path)
+    .sort((left, right) => left.localeCompare(right));
+  if (offending.length === 0) return undefined;
+  return createProjectError("ENVELOPE_OVERFLOW", {
+    offending_paths: offending,
+    current_bytes: error.envelope_byte_count ?? 0,
+    byte_cap: REVIEW_ENVELOPE_BYTE_CAP,
+  });
 }
 
 export async function handleCounterReview(
@@ -52,9 +87,12 @@ export async function handleCounterReview(
       services.runner, services.authority, produce.value, call.input.artifact_path,
     );
     if (!projection.ok) return projection;
+    const exclusions = await resolveReviewExclusions(
+      services.runner, produce.value, services.authority.context,
+    );
     let artifact: string;
     try {
-      artifact = renderProduceReviewMaterial(produce.value, projection.value);
+      artifact = renderProduceReviewMaterial(produce.value, projection.value, exclusions);
     } catch {
       return fail(createProjectError("CONTRACT_INVALID", {
         tool: call.name,
@@ -140,6 +178,10 @@ export async function handleCounterReview(
         },
       },
       projection_digest: projection.value.digest,
+    }).catch((error: unknown) => {
+      const overflow = envelopeOverflowError(error, produce.value, exclusions);
+      if (overflow !== undefined) return fail<never>(overflow);
+      throw error;
     });
     if (!result.ok) return result;
     return Object.freeze({

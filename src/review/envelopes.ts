@@ -131,11 +131,14 @@ export type AdjudicationEnvelopeInput = {
 
 export class ReviewEnvelopeError extends Error {
   public readonly project_error: ProjectError;
+  /** The serialized size that failed the byte cap, when that is what failed. */
+  public readonly envelope_byte_count?: number;
 
-  public constructor(projectError: ProjectError) {
+  public constructor(projectError: ProjectError, envelopeByteCount?: number) {
     super(`review envelope failed: ${projectError.code}`);
     this.name = "ReviewEnvelopeError";
     this.project_error = projectError;
+    if (envelopeByteCount !== undefined) this.envelope_byte_count = envelopeByteCount;
   }
 }
 
@@ -340,7 +343,10 @@ function finishEnvelope(
 ): DispatchEnvelope {
   const bytes = utf8.encode(`${JSON.stringify(envelope, null, 2)}\n`);
   if (bytes.byteLength > REVIEW_ENVELOPE_BYTE_CAP) {
-    throw new ReviewEnvelopeError(createProjectError("CONTRACT_INVALID", { issue_code: "envelope-byte-cap" }));
+    throw new ReviewEnvelopeError(
+      createProjectError("CONTRACT_INVALID", { issue_code: "envelope-byte-cap" }),
+      bytes.byteLength,
+    );
   }
   const digest = canonicalJsonDigest({
     ...(envelope as Readonly<Record<string, PlainJsonValue>>),
