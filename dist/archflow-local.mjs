@@ -30810,8 +30810,10 @@ function tryRepositoryPathClaim(value) {
 var TASK_PATH_CLASSES = [
   "task-config",
   "task-state",
+  "task-ask",
   "gate-interface",
   "document",
+  "verification-transcript",
   "review",
   "decision",
   "result-manifest",
@@ -31340,7 +31342,7 @@ var durable_primitives_schema_default = {
       ]
     },
     claimableOutputPathClass: {
-      $comment: "The 7 classes an implementation output may claim. The 10 server-owned classes are unrepresentable here rather than rejected by a rule.",
+      $comment: "The 8 classes an implementation output may claim. The 11 server-owned classes are unrepresentable here rather than rejected by a rule.",
       enum: [
         "document",
         "import",
@@ -31348,7 +31350,8 @@ var durable_primitives_schema_default = {
         "repository-source",
         "result-payload",
         "review",
-        "task-branch-constitution"
+        "task-branch-constitution",
+        "verification-transcript"
       ]
     },
     declaredInputRef: {
@@ -33428,8 +33431,10 @@ var secret_scan_result_schema_default = {
       enum: [
         "task-config",
         "task-state",
+        "task-ask",
         "gate-interface",
         "document",
+        "verification-transcript",
         "review",
         "decision",
         "result-manifest",
@@ -33959,7 +33964,8 @@ var CLAIMABLE_OUTPUT_PATH_CLASSES = [
   "repository-source",
   "result-payload",
   "review",
-  "task-branch-constitution"
+  "task-branch-constitution",
+  "verification-transcript"
 ];
 var gitOid = gitOidV1Schema;
 var safeInteger2 = safeIntegerV1Schema;
@@ -36728,12 +36734,17 @@ var anchored = (body) => new RegExp(`^${body}$`, "u");
 var TASK_CLASS_RULES = [
   { path_class: "task-config", pattern: anchored("config\\.yaml") },
   { path_class: "task-state", pattern: anchored("state\\.json") },
+  { path_class: "task-ask", pattern: anchored("ask\\.md") },
   { path_class: "gate-interface", pattern: anchored("gate\\.(?:json|decision)") },
   {
     path_class: "document",
     pattern: anchored(
       `(?:prd\\.md|design\\.md|phases/${PHASE_NUMBER}/design\\.md|phases/${PHASE_NUMBER}/impl-notes\\.md)`
     )
+  },
+  {
+    path_class: "verification-transcript",
+    pattern: anchored(`phases/${PHASE_NUMBER}/verification\\.txt`)
   },
   {
     path_class: "review",
@@ -36929,7 +36940,8 @@ var TASK_OUTPUT_CLASSES = /* @__PURE__ */ new Set([
   "import",
   "manual-checkpoint",
   "result-payload",
-  "review"
+  "review",
+  "verification-transcript"
 ]);
 async function resolveDeclaredOutputPath(options) {
   const { runner, taskId, claim, pathClass: pathClass3, context: context2 } = options;
@@ -37082,7 +37094,8 @@ var PROJECTABLE = /* @__PURE__ */ new Set([
   "repository-source",
   "result-payload",
   "review",
-  "task-branch-constitution"
+  "task-branch-constitution",
+  "verification-transcript"
 ]);
 function requireProjectable(path2) {
   if (!PROJECTABLE.has(path2.path_class)) throw new TypeError("projection requires a declared output path");
@@ -42446,7 +42459,8 @@ var claimableOutputClasses = /* @__PURE__ */ new Set([
   "repository-source",
   "result-payload",
   "review",
-  "task-branch-constitution"
+  "task-branch-constitution",
+  "verification-transcript"
 ]);
 function classifyOutputPath(authority, path2) {
   const prefix = `.archflow/tasks/${authority.task_id}/`;

@@ -58,7 +58,7 @@ export type DocumentArtifactV1 = {
   readonly step: PipelineStep;
   /** TASK-relative frame (D3). */
   readonly document_path: TaskPathClaim;
-  /** A const, not the 17-member `PathClass` union: a document artifact is always class `document`. */
+  /** A const, not the 18-member `PathClass` union: a document artifact is always class `document`. */
   readonly path_class: "document";
   /** `SafeInteger`, not `>= 1`: a zero-byte document is legal, so D8 forces no own minimum. */
   readonly byte_count: SafeInteger;

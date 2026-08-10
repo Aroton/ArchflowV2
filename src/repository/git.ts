@@ -458,6 +458,37 @@ export async function readCommitRangeChangedPaths(
   return Object.freeze(unique);
 }
 
+export type CommitTreePathListing = Readonly<{
+  paths: readonly string[];
+  truncated: boolean;
+}>;
+
+/**
+ * Recursively lists blob paths below the requested directories in an immutable commit tree, for
+ * mechanical repo-map evidence. Unlike the other bounded readers this truncates instead of
+ * throwing: a repo map is advisory evidence, and a visible truncation marker is more useful to a
+ * sealed reviewer than no listing at all.
+ */
+export async function readCommitTreePathListing(
+  runner: GitRunner,
+  commit: string,
+  directories: readonly string[],
+): Promise<CommitTreePathListing> {
+  const prefixes = [...new Set(directories)]
+    .map((directory) => directory === "" || directory === "." ? "." : directory.endsWith("/") ? directory : `${directory}/`);
+  if (prefixes.length === 0) return Object.freeze({ paths: Object.freeze([]), truncated: false });
+  const fields = await runner.runNulFields({
+    argv: ["ls-tree", "-r", "-z", "--name-only", commit, "--", ...prefixes],
+    operation: TREE_LIST_OPERATION,
+  });
+  const unique = [...new Set(fields)].sort();
+  const truncated = unique.length > MAX_COMMIT_TREE_ENTRIES;
+  return Object.freeze({
+    paths: Object.freeze(truncated ? unique.slice(0, MAX_COMMIT_TREE_ENTRIES) : unique),
+    truncated,
+  });
+}
+
 /** Resolves one revision to a commit through the shared bounded Git command boundary. */
 export async function resolveCommit(runner: GitRunner, revision: string): Promise<GitOid> {
   const oid = await runner.runText({

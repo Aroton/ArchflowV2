@@ -318,7 +318,7 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
               invocation_id: parseSafeId(`invocation-${runId}`),
               result_id: parseSafeId(`result-${runId}`),
             };
-            const envelope = buildReviewEnvelope({ artifact, rubric, subject });
+            const envelope = buildReviewEnvelope({ artifact, rubric, context: [], subject });
             const dispatched = await serializeDispatch(() =>
               dispatch(route, envelope, reviewOutputSchema as PlainJsonValue));
 

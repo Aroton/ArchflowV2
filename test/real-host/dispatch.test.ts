@@ -230,7 +230,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
           invocation_id: parseSafeId(`invocation-${direction.task}`),
           result_id: parseSafeId(`result-${direction.task}`),
         };
-        const envelope = buildReviewEnvelope({ artifact, rubric, subject });
+        const envelope = buildReviewEnvelope({ artifact, rubric, context: [], subject });
         const dispatch = createDispatchCoordinator({
           authority: workspace.services.authority,
           dependencies: workspace.services.dependencies,

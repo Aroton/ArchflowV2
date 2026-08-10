@@ -121,8 +121,10 @@ const anchored = (body: string): RegExp => new RegExp(`^${body}$`, "u");
  * |---------------------|-------------------------------------------------------------------------------------------|---------------------------------|
  * | `task-config`       | `config.yaml`                                                                               | —                               |
  * | `task-state`        | `state.json`                                                                                | —                               |
+ * | `task-ask`          | `ask.md`                                                                                    | —                               |
  * | `gate-interface`    | `gate.json` \| `gate.decision`                                                              | —                               |
  * | `document`          | `prd.md` \| `design.md` \| `phases/<n>/design.md` \| `phases/<n>/impl-notes.md`             | positive phase number           |
+ * | `verification-transcript` | `phases/<n>/verification.txt`                                                         | positive phase number           |
  * | `review`            | `reviews/<phase-instance>.{self,counter,triage,adjudication}.md` \| `reviews/<phase-instance>.gate-counter.<gate-id>.md` | phase instance; gate ID for the last form |
  * | `decision`          | `decisions/<gate-id>/request.json` \| `decisions/<gate-id>/decision.json` \| `decisions/<gate-id>/supplemental-review.json` | gate ID |
  * | `result-manifest`   | `results/sha256/<result-digest>/manifest.json`                                              | result digest                   |
@@ -139,12 +141,17 @@ const anchored = (body: string): RegExp => new RegExp(`^${body}$`, "u");
 const TASK_CLASS_RULES: readonly ClassRule<TaskPathClass>[] = [
   { path_class: "task-config", pattern: anchored("config\\.yaml") },
   { path_class: "task-state", pattern: anchored("state\\.json") },
+  { path_class: "task-ask", pattern: anchored("ask\\.md") },
   { path_class: "gate-interface", pattern: anchored("gate\\.(?:json|decision)") },
   {
     path_class: "document",
     pattern: anchored(
       `(?:prd\\.md|design\\.md|phases/${PHASE_NUMBER}/design\\.md|phases/${PHASE_NUMBER}/impl-notes\\.md)`
     ),
+  },
+  {
+    path_class: "verification-transcript",
+    pattern: anchored(`phases/${PHASE_NUMBER}/verification\\.txt`),
   },
   {
     path_class: "review",
@@ -548,6 +555,7 @@ const TASK_OUTPUT_CLASSES: ReadonlySet<ClaimableOutputPathClass> = new Set([
   "manual-checkpoint",
   "result-payload",
   "review",
+  "verification-transcript",
 ]);
 
 /**

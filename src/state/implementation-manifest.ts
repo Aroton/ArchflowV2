@@ -334,7 +334,7 @@ async function baseIdentity(
 
 const claimableOutputClasses: ReadonlySet<PathClass> = new Set([
   "document", "import", "manual-checkpoint", "repository-source", "result-payload", "review",
-  "task-branch-constitution",
+  "task-branch-constitution", "verification-transcript",
 ]);
 
 function classifyOutputPath(

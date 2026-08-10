@@ -69,6 +69,11 @@ export function toRepositoryPathClaim(taskId: TaskSlug, claim: TaskPathClaim): R
   return parseRepositoryPathClaim(`.archflow/tasks/${taskId}/${claim}`);
 }
 
+/** The verbatim user ask captured before PRD produce and pinned into PRD review envelopes. */
+export function userAskClaim(): TaskPathClaim {
+  return parseTaskPathClaim("ask.md");
+}
+
 export function selfReviewClaim(phaseInstance: PhaseInstanceId): TaskPathClaim {
   return parseTaskPathClaim(`reviews/${phaseInstance}.self.md`);
 }
@@ -101,8 +106,8 @@ export function tryRepositoryPathClaim(value: RawGitPath): RepositoryPathClaim |
 }
 
 export const TASK_PATH_CLASSES = [
-  "task-config", "task-state", "gate-interface", "document", "review",
-  "decision", "result-manifest", "result-payload", "intent", "attempt",
+  "task-config", "task-state", "task-ask", "gate-interface", "document", "verification-transcript",
+  "review", "decision", "result-manifest", "result-payload", "intent", "attempt",
   "manual-checkpoint", "maintenance-record", "import",
 ] as const;
 export const REPOSITORY_PATH_CLASSES = [

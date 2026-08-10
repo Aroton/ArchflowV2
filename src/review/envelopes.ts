@@ -30,9 +30,60 @@ export type DispatchSubject = {
   readonly result_id: string;
 };
 
+/**
+ * The closed vocabulary of evidence the server can pin alongside the artifact. Entries are always
+ * assembled mechanically from durable authority — never author-curated — and each phase of the
+ * context contract grows this enum rather than the envelope shape.
+ */
+export const PINNED_CONTEXT_KINDS = [
+  "user-ask", "approved-upstream", "verification-transcript",
+  "interface-excerpt", "conventions", "repo-map",
+] as const;
+export type PinnedContextKind = (typeof PINNED_CONTEXT_KINDS)[number];
+
+/**
+ * One pinned evidence entry. The `status` vocabulary makes every gap visible bytes the reviewer
+ * can name: `pinned` carries the evidence, `truncated` carries a bounded head plus the full-file
+ * digest, `unavailable` names evidence that could not be assembled, and `omitted-cap` names
+ * evidence dropped to fit the envelope byte cap while retaining its digest. A reviewer records
+ * gaps under the rubric's `unverifiable-claims` criterion instead of guessing.
+ */
+export type PinnedContextEntry =
+  | {
+      readonly kind: PinnedContextKind;
+      readonly label: string;
+      readonly status: "pinned";
+      readonly content_digest: Sha256Digest;
+      readonly encoding: "utf8" | "base64";
+      readonly content: string;
+    }
+  | {
+      readonly kind: PinnedContextKind;
+      readonly label: string;
+      readonly status: "truncated";
+      readonly content_digest: Sha256Digest;
+      readonly encoding: "utf8" | "base64";
+      readonly content: string;
+      readonly total_byte_count: number;
+    }
+  | {
+      readonly kind: PinnedContextKind;
+      readonly label: string;
+      readonly status: "unavailable";
+      readonly note: string;
+    }
+  | {
+      readonly kind: PinnedContextKind;
+      readonly label: string;
+      readonly status: "omitted-cap";
+      readonly content_digest: Sha256Digest;
+      readonly note: string;
+    };
+
 export type ReviewEnvelopeInput = {
   readonly artifact: string;
   readonly rubric: RubricV1;
+  readonly context: readonly PinnedContextEntry[];
   readonly subject: DispatchSubject;
 };
 
@@ -188,6 +239,57 @@ function parseNonBlank(value: unknown, label: string): string {
   return value;
 }
 
+function parseEncoding(value: unknown): "utf8" | "base64" {
+  if (value !== "utf8" && value !== "base64") {
+    throw new TypeError("pinned context encoding must be utf8 or base64");
+  }
+  return value;
+}
+
+function validateContext(values: readonly PinnedContextEntry[]): readonly PinnedContextEntry[] {
+  return values.map((value) => {
+    if (!(PINNED_CONTEXT_KINDS as readonly string[]).includes(value.kind)) {
+      throw new TypeError("pinned context kind is not in the closed vocabulary");
+    }
+    const kind = value.kind;
+    const label = parseNonBlank(value.label, "pinned context label");
+    switch (value.status) {
+      case "pinned":
+        exactFields(value, ["kind", "label", "status", "content_digest", "encoding", "content"], "pinned context entry");
+        return {
+          kind, label, status: value.status,
+          content_digest: parseSha256Digest(value.content_digest),
+          encoding: parseEncoding(value.encoding),
+          content: typeof value.content === "string" ? value.content : (() => { throw new TypeError("pinned context content must be text"); })(),
+        };
+      case "truncated":
+        exactFields(value, ["kind", "label", "status", "content_digest", "encoding", "content", "total_byte_count"], "truncated context entry");
+        if (!Number.isSafeInteger(value.total_byte_count) || value.total_byte_count < 1) {
+          throw new TypeError("truncated context total_byte_count must be a positive safe integer");
+        }
+        return {
+          kind, label, status: value.status,
+          content_digest: parseSha256Digest(value.content_digest),
+          encoding: parseEncoding(value.encoding),
+          content: typeof value.content === "string" ? value.content : (() => { throw new TypeError("truncated context content must be text"); })(),
+          total_byte_count: value.total_byte_count,
+        };
+      case "unavailable":
+        exactFields(value, ["kind", "label", "status", "note"], "unavailable context entry");
+        return { kind, label, status: value.status, note: parseNonBlank(value.note, "unavailable context note") };
+      case "omitted-cap":
+        exactFields(value, ["kind", "label", "status", "content_digest", "note"], "omitted context entry");
+        return {
+          kind, label, status: value.status,
+          content_digest: parseSha256Digest(value.content_digest),
+          note: parseNonBlank(value.note, "omitted context note"),
+        };
+      default:
+        throw new TypeError("pinned context status is invalid");
+    }
+  });
+}
+
 function validateRules(values: readonly AdjudicationRuleInput[]): readonly AdjudicationRuleInput[] {
   const rules = values.map((value) => {
     const expected = value.review_trigger === undefined
@@ -248,12 +350,15 @@ function finishEnvelope(
 }
 
 /**
- * Builds the sole Phase 13 child input. The closed input and subject shells deliberately make
- * producer history, findings, triage, repository context, and agent instructions unrepresentable.
+ * Builds the sole counter-review child input. The closed input and subject shells deliberately make
+ * producer history, findings, triage, and agent instructions unrepresentable. `context` is the one
+ * sanctioned channel for repository-derived evidence, and it admits only mechanically assembled,
+ * digest-recorded entries in the closed `PINNED_CONTEXT_KINDS` vocabulary — never free-form
+ * instructions or author-curated material.
  */
 export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelope {
   const snapshot = materialize(value);
-  exactFields(snapshot, ["artifact", "rubric", "subject"], "review envelope input");
+  exactFields(snapshot, ["artifact", "rubric", "context", "subject"], "review envelope input");
   if (typeof snapshot.artifact !== "string") throw new TypeError("review envelope artifact must be text");
   const parsedRubric = parseRubricV1(snapshot.rubric);
   const rubric = {
@@ -271,6 +376,7 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
     schema_version: "1",
     artifact: snapshot.artifact,
     rubric,
+    context: validateContext(snapshot.context),
     subject: validateSubject(snapshot.subject),
   } as const satisfies PlainJsonValue;
   // Child-visible versioning is deliberately the first field. The shared canonical encoder sorts

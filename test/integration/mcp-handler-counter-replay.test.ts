@@ -8,7 +8,7 @@ import { connectionContextFactory, createInvocationContext } from "../../src/con
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { computeInputFingerprint } from "../../src/contracts/fingerprints.js";
-import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
+import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { createToolHandlers } from "../../src/mcp/handlers/index.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
@@ -25,14 +25,15 @@ import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
 
 const TASK = parseTaskSlug("handler-counter-replay");
-const PHASE = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(15) });
-const ARTIFACT = "phases/15/design.md";
-const ARTIFACT_BYTES = new TextEncoder().encode("Approved phase design\n");
+// The PRD phase has no upstream-pinning prerequisites, keeping this fixture about replay alone.
+const PHASE = encodePhaseInstance({ kind: "prd" });
+const ARTIFACT = "prd.md";
+const ARTIFACT_BYTES = new TextEncoder().encode("# PRD\n\nRequirements.\n");
 const RUBRIC = {
   schema_version: "1",
-  kind: "implementation",
+  kind: "artifact",
   mode: "adversarial",
-  criteria: [{ id: "correctness", text: "The implementation follows the approved design.", blocking: true }],
+  criteria: [{ id: "correctness", text: "The artifact satisfies its stated requirements.", blocking: true }],
 } as const;
 const CONFIG = `schema_version: "1"
 roles:

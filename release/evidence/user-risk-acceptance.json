@@ -1,5 +1,5 @@
 {
-  "acceptance_text": "Accepted unchanged local-only fast-uri@3.1.0 exposure for MCP bundle digest 94763827d00bd7c0548bd5a3e660ad020682140fff00d27a4a99ed5533ddd570, accepted the documented asynchronous shutdown limitation, and authorized commit.",
+  "acceptance_text": "Accepted unchanged local-only fast-uri@3.1.0 exposure for MCP bundle digest ead9dc8805eccb737b28d989eee63c02e214be1809b95324ced446780deb0fb5, accepted the documented asynchronous shutdown limitation, and authorized commit.",
   "accepted_on": "2026-08-04",
   "advisory_ids": [
     "GHSA-4c8g-83qw-93j6",

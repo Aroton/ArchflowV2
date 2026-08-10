@@ -4,13 +4,17 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
 import { PROJECT_ERROR_DEFINITIONS } from "../../src/contracts/errors.js";
-import { parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
+import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
+import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { parseRubricV1 } from "../../src/contracts/rubric.js";
 import { TOOL_NAMES } from "../../src/contracts/tool-names.js";
 import { LOCAL_COMMANDS } from "../../src/local/commands.js";
 import { classifyTaskPath } from "../../src/repository/paths.js";
+import { buildReviewEnvelope } from "../../src/review/envelopes.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const skillNames = [
@@ -36,13 +40,24 @@ const productionRubricSkills = [
   "archflow-phase-design",
   "archflow-phase-impl",
 ] as const;
-const substantiveCalibration = "Report a blocking defect only when it requires producer action, and cite the specific artifact statement it contradicts or stated requirement it leaves unmet; citation is necessary but not sufficient. The violation must follow from the artifact's own text without assuming implementation behavior, ordering, or environment it does not specify. A contradiction that depends on such an assumption, or a debatable reading of whether stated text satisfies a criterion, is not blocking. Missing handling is a defect only for a condition the artifact claims to cover or a stated requirement demands. Local edge-case handling belongs to the implementer. A sound artifact is expected to yield zero blocking findings; that is successful review, not under-performance.";
-const advisoryCalibration = "Use non-blocking findings for completeness suggestions, debatable readings, and observations, including handling for conditions outside the artifact's stated scope. Do not inflate them into blockers merely to report them.";
+const architectureSubstantiveCalibration = "Report a blocking defect only when it requires producer action, and cite the artifact statement and the pinned evidence it contradicts. The violation must follow from artifact text or pinned evidence, never from assumed codebase behavior. A sound artifact is expected to yield zero blocking findings.";
+const substantiveCalibration = {
+  "archflow-prd": "Report a blocking defect only when it requires producer action, and cite the specific artifact statement it contradicts or stated requirement it leaves unmet; citation is necessary but not sufficient. The violation must follow from the artifact's own text or pinned envelope evidence without assuming behavior the artifact does not specify. A sound artifact is expected to yield zero blocking findings; that is successful review, not under-performance.",
+  "archflow-design": architectureSubstantiveCalibration,
+  "archflow-phase-design": architectureSubstantiveCalibration,
+  "archflow-phase-impl": "Report a blocking defect only when it requires producer action, citing the changed bytes and the pinned phase design statement or evidence it violates. The violation must follow from pinned material, never from assumed behavior of unpinned code. A sound implementation is expected to yield zero blocking findings.",
+} as const;
+const advisoryCalibration = {
+  "archflow-prd": "Use non-blocking findings for completeness suggestions, debatable readings, and observations. Do not inflate them into blockers merely to report them.",
+  "archflow-design": "Use non-blocking findings for completeness suggestions, debatable readings, and observations. Do not inflate them into blockers.",
+  "archflow-phase-design": "Use non-blocking findings for completeness suggestions, debatable readings, and observations. Do not inflate them into blockers.",
+  "archflow-phase-impl": "Use non-blocking findings for completeness suggestions, debatable readings, and observations. Do not inflate them into blockers.",
+} as const;
 const taskSpecificCriteria = {
-  "archflow-prd": ["brief-fitness", "completeness", "testable-requirements", "stated-assumptions"],
-  "archflow-design": ["prd-consistency", "requirement-coverage", "assumption-risk", "phase-sizing"],
-  "archflow-phase-design": ["chunk-seams", "scope-budget", "design-conformance", "integration-risk"],
-  "archflow-phase-impl": ["simplicity", "duplication", "design-conformance", "dead-code", "error-handling", "justified-abstraction"],
+  "archflow-prd": ["ask-fidelity", "proportionality", "testable-requirements", "stated-assumptions"],
+  "archflow-design": ["upstream-coverage", "interface-reality", "evidence-completeness", "proportionality", "phase-plan-soundness"],
+  "archflow-phase-design": ["upstream-coverage", "interface-reality", "evidence-completeness", "proportionality", "phase-plan-soundness"],
+  "archflow-phase-impl": ["design-conformance", "interface-fidelity", "verification-evidence", "simplicity", "duplication", "dead-code", "error-handling"],
 } as const;
 
 function skill(name: typeof skillNames[number]): string {
@@ -102,15 +117,61 @@ describe("canonical skill contracts", () => {
 
       expect(criteria.get("substantive-correctness")).toEqual({
         id: "substantive-correctness",
-        text: substantiveCalibration,
+        text: substantiveCalibration[name],
         blocking: true,
       });
       expect(criteria.get("advisory-observations")).toEqual({
         id: "advisory-observations",
-        text: advisoryCalibration,
+        text: advisoryCalibration[name],
         blocking: false,
       });
+      expect(criteria.get("unverifiable-claims")?.blocking).toBe(false);
+      expect(criteria.get("unverifiable-claims")?.text).toContain("non-blocking finding");
+      expect(criteria.get("unverifiable-claims")?.text).toContain("finding_id beginning unverifiable-");
       expect([...criteria.keys()]).toEqual(expect.arrayContaining([...taskSpecificCriteria[name]]));
+    }
+  });
+
+  it("routes envelope-gap findings through rejection and the human gate in every rubric skill", () => {
+    for (const name of productionRubricSkills) {
+      const source = skill(name);
+      expect(source).toContain("`unverifiable-`");
+      expect(source).toContain("`envelope-gap: `");
+      expect(source).toContain("Envelope gaps");
+      expect(source).toContain("never accept one");
+    }
+  });
+
+  it("keeps the architecture rubric shared and its envelope re-projection digest-stable", () => {
+    const literal = (name: typeof productionRubricSkills[number]): PlainJsonValue => {
+      const block = /```json\n([^\n]+)\n```/u.exec(skill(name));
+      return JSON.parse(block![1]!) as PlainJsonValue;
+    };
+    expect(canonicalJsonDigest(literal("archflow-design")))
+      .toBe(canonicalJsonDigest(literal("archflow-phase-design")));
+
+    for (const name of productionRubricSkills) {
+      const rubric = literal(name);
+      const rubricDigest = canonicalJsonDigest(rubric);
+      const envelope = buildReviewEnvelope({
+        artifact: "# Subject\n",
+        rubric: parseRubricV1(rubric),
+        context: [],
+        subject: {
+          task_id: parseTaskSlug("example"),
+          phase_instance: parsePhaseInstanceId("prd"),
+          role: "counter-review",
+          step: "counter_review",
+          subject_digest: parseSha256Digest("a".repeat(64)),
+          input_fingerprint: parseSha256Digest("b".repeat(64)),
+          rubric_digest: rubricDigest,
+          producer_family: "claude",
+          invocation_id: "invocation-1",
+          result_id: "result-1",
+        },
+      });
+      const visible = JSON.parse(new TextDecoder().decode(envelope.bytes)) as { rubric: PlainJsonValue };
+      expect(canonicalJsonDigest(visible.rubric)).toBe(rubricDigest);
     }
   });
 
@@ -128,6 +189,11 @@ describe("canonical skill contracts", () => {
         value: "document",
       });
     }
+    expect(classifyTaskPath(parseTaskSlug("example"), parseTaskPathClaim("ask.md"))).toEqual({
+      schema_version: "1",
+      ok: true,
+      value: "task-ask",
+    });
   });
 
   it("pins the finite and intentionally open-ended design phase-plan grammar", () => {

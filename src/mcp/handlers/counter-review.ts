@@ -6,6 +6,7 @@ import type { ParsedToolCall, ToolSuccess } from "../../contracts/mcp-tools.js";
 import type { PlainJsonValue } from "../../contracts/plain-json.js";
 import { createDispatchCoordinator } from "../../dispatch/coordinator.js";
 import { runCounterReview } from "../../review/counter-review.js";
+import { assembleReviewContext } from "../../review/pinned-context.js";
 import { prepareEvidenceResult } from "../../state/evidence-results.js";
 import {
   loadCurrentProduceSubject,
@@ -61,6 +62,16 @@ export async function handleCounterReview(
       }));
     }
 
+    const context_entries = await assembleReviewContext({
+      runner: services.runner,
+      authority: services.authority,
+      dependencies: services.dependencies,
+      state: state.value,
+      subject: produce.value,
+      projection_bytes: projection.value.bytes,
+    });
+    if (!context_entries.ok) return context_entries;
+
     const resultId = dispatchId("result", call.input.intent_id);
     const coordinator = createDispatchCoordinator({
       authority: services.authority,
@@ -114,6 +125,7 @@ export async function handleCounterReview(
       envelope: {
         artifact,
         rubric: call.input.rubric,
+        context: context_entries.value,
         subject: {
           task_id: services.authority.task_id,
           phase_instance: state.value.phase_instance,

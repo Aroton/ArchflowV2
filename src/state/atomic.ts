@@ -135,7 +135,7 @@ export function createAtomicWriter(): AtomicWriter {
 
 const PROJECTABLE = new Set([
   "attempt", "document", "import", "manual-checkpoint", "repository-source", "result-payload", "review",
-  "task-branch-constitution",
+  "task-branch-constitution", "verification-transcript",
 ]);
 
 function requireProjectable(path: ResolvedPath): void {

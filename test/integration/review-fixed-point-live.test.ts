@@ -668,6 +668,7 @@ else {
       envelope: {
         artifact: "before\n",
         rubric,
+        context: [],
         subject: {
           task_id: task, phase_instance: phase, role: "counter-review", step: "counter_review",
           subject_digest: before, input_fingerprint: call.input.input_fingerprint,

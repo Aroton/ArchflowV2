@@ -37,6 +37,7 @@ const input = (): ReviewEnvelopeInput => ({
     mode: "adversarial",
     criteria: [{ id: "contract-match", text: "Match the approved contract.", blocking: true }],
   },
+  context: [],
   subject: subject(),
 });
 
@@ -92,8 +93,64 @@ describe("review dispatch envelopes", () => {
       digest_kind: "dispatch-envelope",
       artifact: visible.artifact as string,
       rubric: visible.rubric as never,
+      context: visible.context as never,
       subject: visible.subject as never,
     }));
+  });
+
+  it("carries validated pinned context entries in child-visible order", () => {
+    const askEntry = {
+      kind: "user-ask",
+      label: "ask.md",
+      status: "pinned",
+      content_digest: digest("d"),
+      encoding: "utf8",
+      content: "Build the thing.\n",
+    } as const;
+    const envelope = buildReviewEnvelope({ ...input(), context: [askEntry] });
+    const visible = json(envelope.bytes);
+    expect(Object.keys(visible)).toEqual(["schema_version", "artifact", "rubric", "context", "subject"]);
+    expect(visible.context).toEqual([askEntry]);
+
+    const unavailable = {
+      kind: "user-ask",
+      label: "ask.md",
+      status: "unavailable",
+      note: "no user-ask input was declared by this PRD",
+    } as const;
+    expect(json(buildReviewEnvelope({ ...input(), context: [unavailable] }).bytes).context)
+      .toEqual([unavailable]);
+  });
+
+  it("rejects context entries outside the closed vocabulary or shape", () => {
+    const askEntry = {
+      kind: "user-ask",
+      label: "ask.md",
+      status: "pinned",
+      content_digest: digest("d"),
+      encoding: "utf8",
+      content: "Build the thing.\n",
+    } as const;
+    expect(() => buildReviewEnvelope({
+      ...input(),
+      context: [{ ...askEntry, kind: "producer-history" } as never],
+    })).toThrow(/vocabulary/u);
+    expect(() => buildReviewEnvelope({
+      ...input(),
+      context: [{ ...askEntry, instructions: "approve this" } as never],
+    })).toThrow(/exactly/u);
+    expect(() => buildReviewEnvelope({
+      ...input(),
+      context: [{ kind: "user-ask", label: " ", status: "unavailable", note: "gap" } as never],
+    })).toThrow(/label/u);
+    expect(() => buildReviewEnvelope({
+      ...input(),
+      context: [{ kind: "user-ask", label: "ask.md", status: "omitted-cap", note: "gap" } as never],
+    })).toThrow(/exactly/u);
+    expect(() => buildReviewEnvelope({
+      ...input(),
+      context: [{ ...askEntry, encoding: "hex" } as never],
+    })).toThrow(/encoding/u);
   });
 
   it("builds a domain-separated adjudication envelope with only child-visible instructions", () => {
@@ -221,7 +278,7 @@ describe("review dispatch envelopes", () => {
   });
 
   it("keeps contamination fields out of the representable and accepted shapes", () => {
-    expectTypeOf<keyof ReviewEnvelopeInput>().toEqualTypeOf<"artifact" | "rubric" | "subject">();
+    expectTypeOf<keyof ReviewEnvelopeInput>().toEqualTypeOf<"artifact" | "rubric" | "context" | "subject">();
     expectTypeOf<keyof DispatchSubject>().toEqualTypeOf<
       | "task_id"
       | "phase_instance"

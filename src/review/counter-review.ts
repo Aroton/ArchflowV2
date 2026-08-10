@@ -30,10 +30,8 @@ import {
 } from "../state/transaction.js";
 import { identifyTransactionRequest } from "../state/request.js";
 import { planStateTransition } from "../state/transitions.js";
-import {
-  buildReviewEnvelope,
-  type ReviewEnvelopeInput,
-} from "./envelopes.js";
+import { type DispatchEnvelope, type ReviewEnvelopeInput } from "./envelopes.js";
+import { buildReviewEnvelopeWithCap } from "./pinned-context.js";
 
 export type CounterReviewDispatchResult = Readonly<{
   cli_version: string;
@@ -44,7 +42,7 @@ export type RunCounterReviewDependencies = Readonly<{
   transaction: TransactionDependencies;
   dispatch: (
     route: DispatchRoute,
-    envelope: ReturnType<typeof buildReviewEnvelope>,
+    envelope: DispatchEnvelope,
     outputSchema: PlainJsonValue,
   ) => Promise<CounterReviewDispatchResult>;
   prepare_evidence: (
@@ -90,7 +88,7 @@ export async function runCounterReview(
     "counter-reviewer",
     input.producer_family,
   );
-  const envelope = buildReviewEnvelope(input.envelope);
+  const envelope = buildReviewEnvelopeWithCap(input.envelope);
   const dispatched = await serializeDispatch(() =>
     dependencies.dispatch(route, envelope, reviewOutputSchema as PlainJsonValue));
   const currentProjection = await dependencies.reobserve_projection_digest();

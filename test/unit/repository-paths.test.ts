@@ -171,15 +171,17 @@ interface TaskSample {
   readonly claims: readonly string[];
 }
 
-/** Every task-scoped class of the seventeen, with each template form the table pins. */
+/** Every task-scoped class of the nineteen, with each template form the table pins. */
 const TASK_SAMPLES: readonly TaskSample[] = [
   { path_class: "task-config", claims: ["config.yaml"] },
   { path_class: "task-state", claims: ["state.json"] },
+  { path_class: "task-ask", claims: ["ask.md"] },
   { path_class: "gate-interface", claims: ["gate.json", "gate.decision"] },
   {
     path_class: "document",
     claims: ["prd.md", "design.md", "phases/6/design.md", "phases/6/impl-notes.md"],
   },
+  { path_class: "verification-transcript", claims: ["phases/6/verification.txt"] },
   {
     path_class: "review",
     claims: [
@@ -236,13 +238,13 @@ const REPOSITORY_SAMPLES: readonly RepositorySample[] = [
   },
 ];
 
-describe.skipIf(!hasGit)("the seventeen-class table", () => {
+describe.skipIf(!hasGit)("the nineteen-class table", () => {
   it("covers every class exactly once across the two frames", () => {
     expect(TASK_SAMPLES.map((sample) => sample.path_class)).toEqual([...TASK_PATH_CLASSES]);
     expect(REPOSITORY_SAMPLES.map((sample) => sample.path_class)).toEqual([
       ...REPOSITORY_PATH_CLASSES,
     ]);
-    expect(TASK_SAMPLES.length + REPOSITORY_SAMPLES.length).toBe(17);
+    expect(TASK_SAMPLES.length + REPOSITORY_SAMPLES.length).toBe(19);
   });
 
   it("resolves every task-scoped class through the resolver that owns it", async () => {
@@ -882,6 +884,6 @@ describe("path brands", () => {
 
   it("keeps the class partition total over PathClass", () => {
     const all: readonly PathClass[] = [...TASK_PATH_CLASSES, ...REPOSITORY_PATH_CLASSES];
-    expect(all).toHaveLength(17);
+    expect(all).toHaveLength(19);
   });
 });

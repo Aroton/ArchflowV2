@@ -385,20 +385,20 @@ describe("D2 — the no-mirror half has exactly one shape model", () => {
  * unprotected, and no leaf chunk's test can see it.
  */
 describe("the claimable and server-owned class sets partition PATH_CLASSES", () => {
-  it("is a partition: 7 + 10 = 17, disjoint, union exact", () => {
+  it("is a partition: 8 + 11 = 19, disjoint, union exact", () => {
     const claimable = new Set<string>(CLAIMABLE_OUTPUT_PATH_CLASSES);
     const serverOwned = new Set<string>(SERVER_OWNED_PATH_CLASSES);
     const all = new Set<string>(PATH_CLASSES);
 
-    expect(claimable.size).toBe(7);
-    expect(serverOwned.size).toBe(10);
-    expect(all.size).toBe(17);
+    expect(claimable.size).toBe(8);
+    expect(serverOwned.size).toBe(11);
+    expect(all.size).toBe(19);
 
     expect([...claimable].filter((entry) => serverOwned.has(entry))).toEqual([]);
     expect([...claimable, ...serverOwned].sort()).toEqual([...all].sort());
   });
 
-  it("rejects an implementation output claiming each of the ten server-owned classes, structurally", () => {
+  it("rejects an implementation output claiming each of the eleven server-owned classes, structurally", () => {
     const target = MIRRORED.find((entry) => entry.name === "implementation-output") as Mirrored;
     for (const pathClass of SERVER_OWNED_PATH_CLASSES) {
       const mutated = clone(target.sample) as JsonObject;
@@ -408,7 +408,7 @@ describe("the claimable and server-owned class sets partition PATH_CLASSES", () 
     }
   });
 
-  it("accepts each of the seven claimable classes", () => {
+  it("accepts each of the eight claimable classes", () => {
     const target = MIRRORED.find((entry) => entry.name === "implementation-output") as Mirrored;
     for (const pathClass of CLAIMABLE_OUTPUT_PATH_CLASSES) {
       const mutated = clone(target.sample) as JsonObject;

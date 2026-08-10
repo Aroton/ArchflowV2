@@ -750,6 +750,7 @@ async function commitCounter(
     envelope: {
       artifact: `artifact-v${version}`,
       rubric,
+      context: [],
       subject: {
         task_id: task,
         phase_instance: phase,
