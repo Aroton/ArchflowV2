@@ -5719,7 +5719,7 @@
       ]
     },
     "src/contracts/errors.ts": {
-      "bytes": 20751,
+      "bytes": 21036,
       "format": "esm",
       "imports": [
         {
@@ -6265,7 +6265,7 @@
       }
     },
     "src/contracts/schemas/v1/project-error.schema.json": {
-      "bytes": 69384,
+      "bytes": 71182,
       "format": "esm",
       "imports": [],
       "with": {
@@ -7795,7 +7795,7 @@
       "imports": []
     },
     "src/mcp/handlers/adjudicate.ts": {
-      "bytes": 20899,
+      "bytes": 21065,
       "format": "esm",
       "imports": [
         {
@@ -7901,7 +7901,7 @@
       ]
     },
     "src/mcp/handlers/counter-review.ts": {
-      "bytes": 6632,
+      "bytes": 8698,
       "format": "esm",
       "imports": [
         {
@@ -7928,6 +7928,11 @@
           "kind": "import-statement",
           "original": "../../review/counter-review.js",
           "path": "src/review/counter-review.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../review/envelopes.js",
+          "path": "src/review/envelopes.ts"
         },
         {
           "kind": "import-statement",
@@ -8478,7 +8483,7 @@
       ]
     },
     "src/mcp/tools.ts": {
-      "bytes": 7852,
+      "bytes": 11590,
       "format": "esm",
       "imports": [
         {
@@ -8645,6 +8650,22 @@
           "kind": "import-statement",
           "original": "../contracts/tool-names.js",
           "path": "src/contracts/tool-names.ts"
+        }
+      ]
+    },
+    "src/repository/attributes.ts": {
+      "bytes": 8655,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/errors.js",
+          "path": "src/contracts/errors.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./git.js",
+          "path": "src/repository/git.ts"
         }
       ]
     },
@@ -9013,7 +9034,7 @@
       ]
     },
     "src/review/envelopes.ts": {
-      "bytes": 17979,
+      "bytes": 18260,
       "format": "esm",
       "imports": [
         {
@@ -9083,6 +9104,11 @@
           "path": "src/review/adjudication.ts"
         }
       ]
+    },
+    "src/review/line-diff.ts": {
+      "bytes": 6570,
+      "format": "esm",
+      "imports": []
     },
     "src/review/pinned-context.ts": {
       "bytes": 21029,
@@ -9697,7 +9723,7 @@
       ]
     },
     "src/state/initialization.ts": {
-      "bytes": 24495,
+      "bytes": 24933,
       "format": "esm",
       "imports": [
         {
@@ -10184,7 +10210,7 @@
       ]
     },
     "src/state/next-action.ts": {
-      "bytes": 7624,
+      "bytes": 8093,
       "format": "esm",
       "imports": [
         {
@@ -10200,7 +10226,7 @@
       ]
     },
     "src/state/produce-subject.ts": {
-      "bytes": 8806,
+      "bytes": 13978,
       "format": "esm",
       "imports": [
         {
@@ -10232,6 +10258,16 @@
           "kind": "import-statement",
           "original": "../contracts/phase-instance.js",
           "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../repository/attributes.js",
+          "path": "src/repository/attributes.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../review/line-diff.js",
+          "path": "src/review/line-diff.ts"
         },
         {
           "kind": "import-statement",
@@ -10503,6 +10539,17 @@
         }
       ]
     },
+    "src/state/request-templates.ts": {
+      "bytes": 7571,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
+        }
+      ]
+    },
     "src/state/request.ts": {
       "bytes": 4283,
       "format": "esm",
@@ -10627,7 +10674,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 35778,
+      "bytes": 36561,
       "format": "esm",
       "imports": [
         {
@@ -10729,6 +10776,11 @@
           "kind": "import-statement",
           "original": "./next-action.js",
           "path": "src/state/next-action.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./request-templates.js",
+          "path": "src/state/request-templates.ts"
         },
         {
           "kind": "import-statement",
@@ -10912,7 +10964,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2140243,
+      "bytes": 2148047,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -12237,7 +12289,7 @@
           "bytesInOutput": 41301
         },
         "src/contracts/errors.ts": {
-          "bytesInOutput": 14365
+          "bytesInOutput": 14631
         },
         "src/contracts/evidence.ts": {
           "bytesInOutput": 1826
@@ -12402,7 +12454,7 @@
           "bytesInOutput": 5011
         },
         "src/local/commands.ts": {
-          "bytesInOutput": 19325
+          "bytesInOutput": 19337
         },
         "src/local/envelope.ts": {
           "bytesInOutput": 11199
@@ -12411,10 +12463,13 @@
           "bytesInOutput": 3134
         },
         "src/local/manual-workflow.ts": {
-          "bytesInOutput": 37673
+          "bytesInOutput": 37685
         },
         "src/mcp/handlers/state-results.ts": {
           "bytesInOutput": 11180
+        },
+        "src/repository/attributes.ts": {
+          "bytesInOutput": 667
         },
         "src/repository/git.ts": {
           "bytesInOutput": 15058
@@ -12441,7 +12496,7 @@
           "bytesInOutput": 31
         },
         "src/review/fixed-point.ts": {
-          "bytesInOutput": 9224
+          "bytesInOutput": 9242
         },
         "src/state/atomic.ts": {
           "bytesInOutput": 5703
@@ -12465,13 +12520,13 @@
           "bytesInOutput": 2534
         },
         "src/state/gates.ts": {
-          "bytesInOutput": 56409
+          "bytesInOutput": 56611
         },
         "src/state/implementation-manifest.ts": {
           "bytesInOutput": 29642
         },
         "src/state/initialization.ts": {
-          "bytesInOutput": 10106
+          "bytesInOutput": 10306
         },
         "src/state/layout.ts": {
           "bytesInOutput": 4473
@@ -12486,10 +12541,10 @@
           "bytesInOutput": 6260
         },
         "src/state/manual-checkpoints.ts": {
-          "bytesInOutput": 21925
+          "bytesInOutput": 21937
         },
         "src/state/manual-import.ts": {
-          "bytesInOutput": 27877
+          "bytesInOutput": 27894
         },
         "src/state/next-action.ts": {
           "bytesInOutput": 5184
@@ -12498,16 +12553,19 @@
           "bytesInOutput": 3540
         },
         "src/state/production.ts": {
-          "bytesInOutput": 17169
+          "bytesInOutput": 17201
         },
         "src/state/read.ts": {
           "bytesInOutput": 2325
         },
         "src/state/reconciliation-discovery.ts": {
-          "bytesInOutput": 9415
+          "bytesInOutput": 9419
         },
         "src/state/reconciliation.ts": {
-          "bytesInOutput": 5870
+          "bytesInOutput": 5880
+        },
+        "src/state/request-templates.ts": {
+          "bytesInOutput": 5650
         },
         "src/state/request.ts": {
           "bytesInOutput": 3172
@@ -12519,7 +12577,7 @@
           "bytesInOutput": 25553
         },
         "src/state/status.ts": {
-          "bytesInOutput": 23978
+          "bytesInOutput": 24612
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 264
@@ -12530,7 +12588,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2796665,
+      "bytes": 2813117,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13318,7 +13376,7 @@
           "bytesInOutput": 4798
         },
         "node_modules/yaml/dist/compose/resolve-block-scalar.js": {
-          "bytesInOutput": 6953
+          "bytesInOutput": 6955
         },
         "node_modules/yaml/dist/compose/resolve-block-seq.js": {
           "bytesInOutput": 1858
@@ -13801,7 +13859,7 @@
           "bytesInOutput": 41314
         },
         "src/contracts/errors.ts": {
-          "bytesInOutput": 15599
+          "bytesInOutput": 15865
         },
         "src/contracts/evidence.ts": {
           "bytesInOutput": 1826
@@ -13900,7 +13958,7 @@
           "bytesInOutput": 1857
         },
         "src/contracts/schemas/v1/project-error.schema.json": {
-          "bytesInOutput": 66396
+          "bytesInOutput": 68126
         },
         "src/contracts/schemas/v1/result-manifest.schema.json": {
           "bytesInOutput": 4011
@@ -13987,10 +14045,10 @@
           "bytesInOutput": 2638
         },
         "src/mcp/handlers/adjudicate.ts": {
-          "bytesInOutput": 17483
+          "bytesInOutput": 17633
         },
         "src/mcp/handlers/counter-review.ts": {
-          "bytesInOutput": 5307
+          "bytesInOutput": 6493
         },
         "src/mcp/handlers/errors.ts": {
           "bytesInOutput": 908
@@ -14032,7 +14090,10 @@
           "bytesInOutput": 15516
         },
         "src/mcp/tools.ts": {
-          "bytesInOutput": 5223
+          "bytesInOutput": 7986
+        },
+        "src/repository/attributes.ts": {
+          "bytesInOutput": 2364
         },
         "src/repository/git.ts": {
           "bytesInOutput": 15805
@@ -14053,10 +14114,13 @@
           "bytesInOutput": 4064
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 11845
+          "bytesInOutput": 12088
         },
         "src/review/fixed-point.ts": {
           "bytesInOutput": 9748
+        },
+        "src/review/line-diff.ts": {
+          "bytesInOutput": 4941
         },
         "src/review/pinned-context.ts": {
           "bytesInOutput": 13731
@@ -14092,7 +14156,7 @@
           "bytesInOutput": 15680
         },
         "src/state/initialization.ts": {
-          "bytesInOutput": 19252
+          "bytesInOutput": 19429
         },
         "src/state/layout.ts": {
           "bytesInOutput": 5634
@@ -14104,7 +14168,7 @@
           "bytesInOutput": 27896
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 6002
+          "bytesInOutput": 8538
         },
         "src/state/production.ts": {
           "bytesInOutput": 11926
