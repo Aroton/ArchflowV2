@@ -261,5 +261,29 @@ describe("revision-0 state initialization", () => {
       });
     }
     expect(events).toEqual([]);
+
+    // Task initialization must enter the workflow at prd/produce/running; any other
+    // combination would write a revision-1 state no transition could have produced.
+    const entryPointMismatches = [
+      { intent_id: "wrong-phase", phase_instance: "design", step: "produce", status: "running" },
+      { intent_id: "wrong-step", phase_instance: "prd", step: "self_review", status: "running" },
+      { intent_id: "wrong-status", phase_instance: "prd", step: "produce", status: "succeeded" },
+    ] as const;
+    for (const mismatch of entryPointMismatches) {
+      const mismatchCall = parseToolCall("archflow_state", {
+        schema_version: "1", task_id: taskId, intent_id: mismatch.intent_id,
+        expected_revision: 0, input_fingerprint: fingerprint,
+        phase_instance: mismatch.phase_instance, step: mismatch.step, status: mismatch.status,
+        artifact,
+      });
+      const outcome = await runStateInitialization(dependencies, { authority, call: mismatchCall });
+      expect(outcome).toMatchObject({ ok: false, error: { code: "CONTRACT_INVALID" } });
+      if (!outcome.ok) {
+        expect(outcome.error.diagnostic.parameters).toMatchObject({
+          issue_code: "initialization-entry-point-mismatch",
+        });
+      }
+    }
+    expect(events).toEqual([]);
   });
 });

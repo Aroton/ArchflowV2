@@ -204,6 +204,13 @@ function initialState(
     return ok({ ...reduced.value.next_state, revision: 1 as TaskStateV1["revision"] });
   }
 
+  // Task and legacy-import initialization always enter the workflow at its first phase's
+  // pipeline head (WORKFLOW_V1.phases: "prd" / "produce"); any other combination would write
+  // a bogus revision-1 state that no later transition could have produced.
+  if (call.input.phase_instance !== "prd" || call.input.step !== "produce" || call.input.status !== "running") {
+    return contract("initialization-entry-point-mismatch");
+  }
+
   const state: TaskStateV1 = {
     schema_version: "1",
     task_id: initialization.task_id,
