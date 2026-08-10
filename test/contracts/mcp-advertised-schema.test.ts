@@ -26,29 +26,6 @@ interface MaterializedCase {
   readonly call?: unknown;
 }
 
-const expectedSchemaDocuments = [
-  "mcp-tools",
-  "primitives",
-  "path-claim",
-  "evidence-slots",
-  "rubric",
-  "gate-contract",
-  "gate-decision",
-  "supplemental-review",
-  "project-error",
-  "durable-primitives",
-  "task-state",
-  "task-initialization",
-  "legacy-import-initialization",
-  "document-artifact",
-  "implementation-output",
-  "manual-checkpoint",
-  "manual-checkpoint-import",
-  "secret-scan-result",
-  "review-evidence",
-  "triage"
-] as const;
-
 const schemaDocumentPaths = [
   "../../src/contracts/schemas/v1/mcp-tools.schema.json",
   "../../src/contracts/schemas/v1/primitives.schema.json",
@@ -312,7 +289,7 @@ describe("advertised MCP tool catalogue", () => {
     }
   });
 
-  it("pins object roots, the exact source closure, local references, and portable keywords", async () => {
+  it("pins object roots, local references, and portable keywords", async () => {
     const sourceDocuments = await Promise.all(schemaDocumentPaths.map(async (path) => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8")) as object));
     const sourceKeywords = new Set<string>();
     for (const document of sourceDocuments) visit(document, (value) => {
@@ -325,7 +302,6 @@ describe("advertised MCP tool catalogue", () => {
       for (const [member, schema] of [["input", descriptor.inputSchema], ["output", descriptor.outputSchema]] as const) {
         expect(schema.type, `${descriptor.name} ${member} root`).toBe("object");
         expect(schema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
-        expect(Object.keys(schema.$defs as object)).toEqual(expectedSchemaDocuments);
         visit(schema, (value, path) => {
           if (typeof value !== "object" || value === null || Array.isArray(value)) return;
           for (const [key, nested] of Object.entries(value)) {
@@ -337,6 +313,56 @@ describe("advertised MCP tool catalogue", () => {
         });
       }
     }
+  });
+
+  it("advertises exactly the reference-reachable definitions within the context-budget fence", () => {
+    const unescape = (token: string): string => token.replaceAll("~1", "/").replaceAll("~0", "~");
+    const assertExactReachableClosure = (schema: Readonly<Record<string, unknown>>, label: string): void => {
+      const reachable = new Set<string>();
+      const visitedReferences = new Set<string>();
+      const resolve = (reference: string): unknown => {
+        let node: unknown = schema;
+        for (const token of reference.slice("#/".length).split("/").map(unescape)) {
+          node = Array.isArray(node) ? node[Number(token)] : (node as Record<string, unknown>)[token];
+          expect(node, `${label} ${reference}`).toBeDefined();
+        }
+        return node;
+      };
+      const walk = (value: unknown): void => {
+        if (Array.isArray(value)) {
+          for (const entry of value) walk(entry);
+          return;
+        }
+        if (typeof value !== "object" || value === null) return;
+        for (const [key, entry] of Object.entries(value)) {
+          if (key === "$ref" && typeof entry === "string") {
+            expect(entry, `${label} reference form`).toMatch(/^#\/\$defs\/[^/]+/u);
+            reachable.add(unescape(entry.split("/")[2] as string));
+            if (!visitedReferences.has(entry)) {
+              visitedReferences.add(entry);
+              walk(resolve(entry));
+            }
+          } else {
+            walk(entry);
+          }
+        }
+      };
+      const { $defs, ...fragment } = schema;
+      walk(fragment);
+      expect([...Object.keys($defs as object)].sort(), label).toEqual([...reachable].sort());
+    };
+
+    for (const descriptor of ADVERTISED_TOOL_CATALOGUE) {
+      assertExactReachableClosure(descriptor.inputSchema, `${descriptor.name} input`);
+      assertExactReachableClosure(descriptor.outputSchema, `${descriptor.name} output`);
+      // The error union is a result-envelope concern; no tool input reaches it.
+      expect(Object.keys(descriptor.inputSchema.$defs as object)).not.toContain("project-error");
+      expect(Object.keys(descriptor.outputSchema.$defs as object)).toContain("project-error");
+    }
+
+    // Context-budget regression fence, not a precise contract: the unpruned catalogue
+    // serialized to 1,316,997 bytes, ~99% of it definitions no tool member referenced.
+    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(300_000);
   });
 
   it("deeply freezes the catalogue, descriptors, schemas, and schema descendants", () => {

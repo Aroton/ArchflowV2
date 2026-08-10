@@ -90,15 +90,100 @@ function schemaFragment(name: ToolName, member: "input" | "result"): JsonObject 
   return fragment;
 }
 
+function unescapePointerToken(token: string): string {
+  return token.replaceAll("~1", "/").replaceAll("~0", "~");
+}
+
+function parseLocalReference(reference: string): { key: string; tokens: readonly string[] } {
+  if (!reference.startsWith("#/$defs/")) throw new TypeError(`unexpected advertised schema reference: ${reference}`);
+  const [key, ...tokens] = reference.slice("#/$defs/".length).split("/").map(unescapePointerToken);
+  if (key === undefined || key === "") throw new TypeError(`unexpected advertised schema reference: ${reference}`);
+  return { key, tokens };
+}
+
+function resolvePointer(root: unknown, tokens: readonly string[], reference: string): unknown {
+  let node: unknown = root;
+  for (const token of tokens) {
+    if (Array.isArray(node)) node = node[Number(token)];
+    else if (isObject(node)) node = node[token];
+    else node = undefined;
+    if (node === undefined) throw new TypeError(`unresolvable advertised schema reference: ${reference}`);
+  }
+  return node;
+}
+
+function collectReferences(value: unknown, into: string[]): void {
+  if (Array.isArray(value)) {
+    for (const entry of value) collectReferences(entry, into);
+    return;
+  }
+  if (!isObject(value)) return;
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === "$ref" && typeof entry === "string") into.push(entry);
+    else collectReferences(entry, into);
+  }
+}
+
+/**
+ * Keeps a document subtree only where a reachable reference lands on or passes through it.
+ * Arrays on a pointer path are kept whole so sibling removal cannot renumber an index a
+ * reference depends on; object siblings off every marked path are dropped.
+ */
+function extractSubtrees(node: unknown, markedPaths: readonly (readonly string[])[]): unknown {
+  if (markedPaths.some((tokens) => tokens.length === 0)) return node;
+  if (!isObject(node)) return node;
+  const extracted: JsonObject = {};
+  for (const [key, entry] of Object.entries(node)) {
+    const descend = markedPaths.filter((tokens) => tokens[0] === key).map((tokens) => tokens.slice(1));
+    if (descend.length > 0) extracted[key] = extractSubtrees(entry, descend);
+  }
+  return extracted;
+}
+
+/**
+ * Advertised schemas carry only the $defs subtrees transitively reachable from the tool's own
+ * fragment. Inlining the whole corpus instead is correct but costs an MCP client two orders of
+ * magnitude more context than the fragment it came for: the shared block measured ~131 KB
+ * repeated per member, with the result-only project-error union alone a third of it.
+ */
+function reachableDefinitions(fragment: JsonObject, projected: ReadonlyMap<string, unknown>): JsonObject {
+  const marked = new Map<string, (readonly string[])[]>();
+  const visited = new Set<string>();
+  const pending: string[] = [];
+  collectReferences(fragment, pending);
+  while (pending.length > 0) {
+    const reference = pending.pop() as string;
+    const { key, tokens } = parseLocalReference(reference);
+    const pointer = `${key} ${JSON.stringify(tokens)}`;
+    if (visited.has(pointer)) continue;
+    visited.add(pointer);
+    const document = projected.get(key);
+    if (document === undefined) throw new TypeError(`unknown advertised schema document: ${reference}`);
+    const target = resolvePointer(document, tokens, reference);
+    const paths = marked.get(key);
+    if (paths === undefined) marked.set(key, [tokens]);
+    else paths.push(tokens);
+    collectReferences(target, pending);
+  }
+  const definitions: JsonObject = {};
+  for (const { key } of schemaDocuments) {
+    const paths = marked.get(key);
+    if (paths === undefined) continue;
+    definitions[key] = extractSubtrees(projected.get(key), paths);
+  }
+  return definitions;
+}
+
 function standaloneSchema(name: ToolName, member: "input" | "result"): Readonly<JsonObject> {
-  const definitions = Object.fromEntries(
+  const projected = new Map<string, unknown>(
     schemaDocuments.map(({ key, schema }) => [key, project(schema, key)])
   );
+  const fragment = project(schemaFragment(name, member), "mcp-tools") as JsonObject;
   return deepFreeze({
     $schema: JSON_SCHEMA_2020_12,
-    ...project(schemaFragment(name, member), "mcp-tools") as JsonObject,
+    ...fragment,
     type: "object",
-    $defs: definitions
+    $defs: reachableDefinitions(fragment, projected)
   });
 }
 
