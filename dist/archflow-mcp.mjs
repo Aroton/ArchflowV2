@@ -48661,11 +48661,11 @@ function bindParsedToolCallRequest(call, requestDigest) {
   return call;
 }
 var successSchemas = {
-  archflow_state: external_exports.object({ path: taskPathClaimV1Schema, revision: safeInteger6, status: external_exports.enum(["running", "succeeded", "failed"]) }).strict(),
-  archflow_counter_review: external_exports.object({ path: taskPathClaimV1Schema, verdict: external_exports.enum(["pass", "advisory", "fail"]), blocking_count: safeInteger6, revision: safeInteger6 }).strict(),
-  archflow_adjudicate: external_exports.object({ path: taskPathClaimV1Schema, constitution: external_exports.enum(CONSTITUTION_RESULTS), drift: external_exports.enum(DRIFT_RESULTS), triggers: external_exports.array(rule2), revision: safeInteger6 }).strict(),
-  archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: external_exports.unknown(), notes: text2, revision: safeInteger6 }).strict(),
-  archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text2, revision: safeInteger6 }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope, human_provenance: provenance, granted: external_exports.literal(false), notes: text2, revision: safeInteger6 }).strict()])
+  archflow_state: external_exports.object({ path: taskPathClaimV1Schema, revision: safeInteger6, status: external_exports.enum(["running", "succeeded", "failed"]), request_digest: digest7.optional() }).strict(),
+  archflow_counter_review: external_exports.object({ path: taskPathClaimV1Schema, verdict: external_exports.enum(["pass", "advisory", "fail"]), blocking_count: safeInteger6, revision: safeInteger6, request_digest: digest7.optional() }).strict(),
+  archflow_adjudicate: external_exports.object({ path: taskPathClaimV1Schema, constitution: external_exports.enum(CONSTITUTION_RESULTS), drift: external_exports.enum(DRIFT_RESULTS), triggers: external_exports.array(rule2), revision: safeInteger6, request_digest: digest7.optional() }).strict(),
+  archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: external_exports.unknown(), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict(),
+  archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope, human_provenance: provenance, granted: external_exports.literal(false), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict()])
 };
 function successFor(call, value) {
   const parsed = successSchemas[call.name].parse(value);
@@ -49284,47 +49284,92 @@ var mcp_tools_schema_default = {
   type: "object",
   "x-archflow-mcp-semantics": true,
   $defs: {
-    digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
-    id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId" },
-    taskSlug: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-    pathSafeId: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
+    digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$"
+    },
+    id: {
+      $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId"
+    },
+    taskSlug: {
+      $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+    },
+    pathSafeId: {
+      $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+    },
     text: {
       type: "string",
       minLength: 1,
       maxLength: 4096,
       pattern: "\\S"
     },
-    integer: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+    integer: {
+      type: "integer",
+      minimum: 0,
+      maximum: 9007199254740991
+    },
     phase: {
       type: "string",
       pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
     },
-    path: { $ref: "urn:archflow:schema:v1:path-claim" },
+    path: {
+      $ref: "urn:archflow:schema:v1:path-claim"
+    },
     durableArtifact: {
       oneOf: [
-        { $ref: "urn:archflow:schema:v1:task-initialization" },
-        { $ref: "urn:archflow:schema:v1:legacy-import-initialization" },
-        { $ref: "urn:archflow:schema:v1:document-artifact" },
-        { $ref: "urn:archflow:schema:v1:implementation-output" },
-        { $ref: "urn:archflow:schema:v1:manual-checkpoint-import" },
+        {
+          $ref: "urn:archflow:schema:v1:task-initialization"
+        },
+        {
+          $ref: "urn:archflow:schema:v1:legacy-import-initialization"
+        },
+        {
+          $ref: "urn:archflow:schema:v1:document-artifact"
+        },
+        {
+          $ref: "urn:archflow:schema:v1:implementation-output"
+        },
+        {
+          $ref: "urn:archflow:schema:v1:manual-checkpoint-import"
+        },
         {
           type: "object",
           additionalProperties: false,
-          required: ["schema_version", "artifact_kind", "evidence"],
+          required: [
+            "schema_version",
+            "artifact_kind",
+            "evidence"
+          ],
           properties: {
-            schema_version: { const: "1" },
-            artifact_kind: { const: "review-evidence" },
-            evidence: { $ref: "urn:archflow:schema:v1:review-evidence" }
+            schema_version: {
+              const: "1"
+            },
+            artifact_kind: {
+              const: "review-evidence"
+            },
+            evidence: {
+              $ref: "urn:archflow:schema:v1:review-evidence"
+            }
           }
         },
         {
           type: "object",
           additionalProperties: false,
-          required: ["schema_version", "artifact_kind", "evidence"],
+          required: [
+            "schema_version",
+            "artifact_kind",
+            "evidence"
+          ],
           properties: {
-            schema_version: { const: "1" },
-            artifact_kind: { const: "triage" },
-            evidence: { $ref: "urn:archflow:schema:v1:triage" }
+            schema_version: {
+              const: "1"
+            },
+            artifact_kind: {
+              const: "triage"
+            },
+            evidence: {
+              $ref: "urn:archflow:schema:v1:triage"
+            }
           }
         }
       ]
@@ -49332,9 +49377,14 @@ var mcp_tools_schema_default = {
     rule: {
       type: "object",
       additionalProperties: false,
-      required: ["rule_id", "rule_version"],
+      required: [
+        "rule_id",
+        "rule_version"
+      ],
       properties: {
-        rule_id: { $ref: "#/$defs/id" },
+        rule_id: {
+          $ref: "#/$defs/id"
+        },
         rule_version: {
           type: "integer",
           minimum: 1,
@@ -49345,19 +49395,40 @@ var mcp_tools_schema_default = {
     scope: {
       type: "object",
       additionalProperties: false,
-      required: ["operation", "boundary"],
+      required: [
+        "operation",
+        "boundary"
+      ],
       properties: {
-        operation: { enum: ["review-trigger", "adjudication-failure"] },
-        boundary: { enum: ["subject", "phase", "task"] }
+        operation: {
+          enum: [
+            "review-trigger",
+            "adjudication-failure"
+          ]
+        },
+        boundary: {
+          enum: [
+            "subject",
+            "phase",
+            "task"
+          ]
+        }
       }
     },
     currentEvidence: {
       type: "object",
       additionalProperties: false,
-      required: ["set_digest", "slots"],
+      required: [
+        "set_digest",
+        "slots"
+      ],
       properties: {
-        set_digest: { $ref: "#/$defs/digest" },
-        slots: { $ref: "urn:archflow:schema:v1:evidence-slots" }
+        set_digest: {
+          $ref: "#/$defs/digest"
+        },
+        slots: {
+          $ref: "urn:archflow:schema:v1:evidence-slots"
+        }
       }
     },
     common: {
@@ -49370,27 +49441,49 @@ var mcp_tools_schema_default = {
         "input_fingerprint"
       ],
       properties: {
-        schema_version: { const: "1" },
-        task_id: { $ref: "#/$defs/taskSlug" },
-        intent_id: { $ref: "#/$defs/pathSafeId" },
-        expected_revision: { $ref: "#/$defs/integer" },
-        input_fingerprint: { $ref: "#/$defs/digest" }
+        schema_version: {
+          const: "1"
+        },
+        task_id: {
+          $ref: "#/$defs/taskSlug"
+        },
+        intent_id: {
+          $ref: "#/$defs/pathSafeId"
+        },
+        expected_revision: {
+          $ref: "#/$defs/integer"
+        },
+        input_fingerprint: {
+          $ref: "#/$defs/digest"
+        }
       }
     },
     failure: {
       type: "object",
       additionalProperties: false,
-      required: ["schema_version", "ok", "error"],
+      required: [
+        "schema_version",
+        "ok",
+        "error"
+      ],
       properties: {
-        schema_version: { const: "1" },
-        ok: { const: false },
-        error: { $ref: "urn:archflow:schema:v1:project-error" }
+        schema_version: {
+          const: "1"
+        },
+        ok: {
+          const: false
+        },
+        error: {
+          $ref: "urn:archflow:schema:v1:project-error"
+        }
       }
     },
     archflow_state: {
       input: {
         allOf: [
-          { $ref: "#/$defs/common" },
+          {
+            $ref: "#/$defs/common"
+          },
           {
             type: "object",
             additionalProperties: false,
@@ -49405,12 +49498,24 @@ var mcp_tools_schema_default = {
               "status"
             ],
             properties: {
-              schema_version: { const: "1" },
-              task_id: { $ref: "#/$defs/taskSlug" },
-              intent_id: { $ref: "#/$defs/pathSafeId" },
-              expected_revision: { $ref: "#/$defs/integer" },
-              input_fingerprint: { $ref: "#/$defs/digest" },
-              phase_instance: { $ref: "#/$defs/phase" },
+              schema_version: {
+                const: "1"
+              },
+              task_id: {
+                $ref: "#/$defs/taskSlug"
+              },
+              intent_id: {
+                $ref: "#/$defs/pathSafeId"
+              },
+              expected_revision: {
+                $ref: "#/$defs/integer"
+              },
+              input_fingerprint: {
+                $ref: "#/$defs/digest"
+              },
+              phase_instance: {
+                $ref: "#/$defs/phase"
+              },
               step: {
                 enum: [
                   "produce",
@@ -49420,8 +49525,16 @@ var mcp_tools_schema_default = {
                   "adjudicate"
                 ]
               },
-              status: { enum: ["running", "succeeded", "failed"] },
-              artifact: { $ref: "#/$defs/durableArtifact" }
+              status: {
+                enum: [
+                  "running",
+                  "succeeded",
+                  "failed"
+                ]
+              },
+              artifact: {
+                $ref: "#/$defs/durableArtifact"
+              }
             }
           }
         ]
@@ -49429,24 +49542,53 @@ var mcp_tools_schema_default = {
       success: {
         type: "object",
         additionalProperties: false,
-        required: ["path", "revision", "status"],
+        required: [
+          "path",
+          "revision",
+          "status"
+        ],
         properties: {
-          path: { $ref: "#/$defs/path" },
-          revision: { $ref: "#/$defs/integer" },
-          status: { enum: ["running", "succeeded", "failed"] }
+          path: {
+            $ref: "#/$defs/path"
+          },
+          revision: {
+            $ref: "#/$defs/integer"
+          },
+          status: {
+            enum: [
+              "running",
+              "succeeded",
+              "failed"
+            ]
+          },
+          request_digest: {
+            $ref: "#/$defs/digest"
+          }
         }
       },
       result: {
         oneOf: [
-          { $ref: "#/$defs/failure" },
+          {
+            $ref: "#/$defs/failure"
+          },
           {
             type: "object",
             additionalProperties: false,
-            required: ["schema_version", "ok", "value"],
+            required: [
+              "schema_version",
+              "ok",
+              "value"
+            ],
             properties: {
-              schema_version: { const: "1" },
-              ok: { const: true },
-              value: { $ref: "#/$defs/archflow_state/success" }
+              schema_version: {
+                const: "1"
+              },
+              ok: {
+                const: true
+              },
+              value: {
+                $ref: "#/$defs/archflow_state/success"
+              }
             }
           }
         ]
@@ -49466,37 +49608,83 @@ var mcp_tools_schema_default = {
           "rubric"
         ],
         properties: {
-          schema_version: { const: "1" },
-          task_id: { $ref: "#/$defs/taskSlug" },
-          intent_id: { $ref: "#/$defs/pathSafeId" },
-          expected_revision: { $ref: "#/$defs/integer" },
-          input_fingerprint: { $ref: "#/$defs/digest" },
-          artifact_path: { $ref: "#/$defs/path" },
-          rubric: { $ref: "urn:archflow:schema:v1:rubric" }
+          schema_version: {
+            const: "1"
+          },
+          task_id: {
+            $ref: "#/$defs/taskSlug"
+          },
+          intent_id: {
+            $ref: "#/$defs/pathSafeId"
+          },
+          expected_revision: {
+            $ref: "#/$defs/integer"
+          },
+          input_fingerprint: {
+            $ref: "#/$defs/digest"
+          },
+          artifact_path: {
+            $ref: "#/$defs/path"
+          },
+          rubric: {
+            $ref: "urn:archflow:schema:v1:rubric"
+          }
         }
       },
       success: {
         type: "object",
         additionalProperties: false,
-        required: ["path", "verdict", "blocking_count", "revision"],
+        required: [
+          "path",
+          "verdict",
+          "blocking_count",
+          "revision"
+        ],
         properties: {
-          path: { $ref: "#/$defs/path" },
-          verdict: { enum: ["pass", "advisory", "fail"] },
-          blocking_count: { $ref: "#/$defs/integer" },
-          revision: { $ref: "#/$defs/integer" }
+          path: {
+            $ref: "#/$defs/path"
+          },
+          verdict: {
+            enum: [
+              "pass",
+              "advisory",
+              "fail"
+            ]
+          },
+          blocking_count: {
+            $ref: "#/$defs/integer"
+          },
+          revision: {
+            $ref: "#/$defs/integer"
+          },
+          request_digest: {
+            $ref: "#/$defs/digest"
+          }
         }
       },
       result: {
         oneOf: [
-          { $ref: "#/$defs/failure" },
+          {
+            $ref: "#/$defs/failure"
+          },
           {
             type: "object",
             additionalProperties: false,
-            required: ["schema_version", "ok", "value"],
+            required: [
+              "schema_version",
+              "ok",
+              "value"
+            ],
             properties: {
-              schema_version: { const: "1" },
-              ok: { const: true },
-              value: { $ref: "#/$defs/archflow_counter_review/success" }
+              schema_version: {
+                const: "1"
+              },
+              ok: {
+                const: true
+              },
+              value: {
+                $ref: "#/$defs/archflow_counter_review/success"
+              }
             }
           }
         ]
@@ -49516,41 +49704,97 @@ var mcp_tools_schema_default = {
           "upstream_paths"
         ],
         properties: {
-          schema_version: { const: "1" },
-          task_id: { $ref: "#/$defs/taskSlug" },
-          intent_id: { $ref: "#/$defs/pathSafeId" },
-          expected_revision: { $ref: "#/$defs/integer" },
-          input_fingerprint: { $ref: "#/$defs/digest" },
-          artifact_path: { $ref: "#/$defs/path" },
+          schema_version: {
+            const: "1"
+          },
+          task_id: {
+            $ref: "#/$defs/taskSlug"
+          },
+          intent_id: {
+            $ref: "#/$defs/pathSafeId"
+          },
+          expected_revision: {
+            $ref: "#/$defs/integer"
+          },
+          input_fingerprint: {
+            $ref: "#/$defs/digest"
+          },
+          artifact_path: {
+            $ref: "#/$defs/path"
+          },
           upstream_paths: {
             type: "array",
-            items: { $ref: "#/$defs/path" }
+            items: {
+              $ref: "#/$defs/path"
+            }
           }
         }
       },
       success: {
         type: "object",
         additionalProperties: false,
-        required: ["path", "constitution", "drift", "triggers", "revision"],
+        required: [
+          "path",
+          "constitution",
+          "drift",
+          "triggers",
+          "revision"
+        ],
         properties: {
-          path: { $ref: "#/$defs/path" },
-          constitution: { enum: ["pass", "fail", "uncertain"] },
-          drift: { enum: ["aligned", "incidental", "material"] },
-          triggers: { type: "array", items: { $ref: "#/$defs/rule" } },
-          revision: { $ref: "#/$defs/integer" }
+          path: {
+            $ref: "#/$defs/path"
+          },
+          constitution: {
+            enum: [
+              "pass",
+              "fail",
+              "uncertain"
+            ]
+          },
+          drift: {
+            enum: [
+              "aligned",
+              "incidental",
+              "material"
+            ]
+          },
+          triggers: {
+            type: "array",
+            items: {
+              $ref: "#/$defs/rule"
+            }
+          },
+          revision: {
+            $ref: "#/$defs/integer"
+          },
+          request_digest: {
+            $ref: "#/$defs/digest"
+          }
         }
       },
       result: {
         oneOf: [
-          { $ref: "#/$defs/failure" },
+          {
+            $ref: "#/$defs/failure"
+          },
           {
             type: "object",
             additionalProperties: false,
-            required: ["schema_version", "ok", "value"],
+            required: [
+              "schema_version",
+              "ok",
+              "value"
+            ],
             properties: {
-              schema_version: { const: "1" },
-              ok: { const: true },
-              value: { $ref: "#/$defs/archflow_adjudicate/success" }
+              schema_version: {
+                const: "1"
+              },
+              ok: {
+                const: true
+              },
+              value: {
+                $ref: "#/$defs/archflow_adjudicate/success"
+              }
             }
           }
         ]
@@ -49574,15 +49818,33 @@ var mcp_tools_schema_default = {
           "context"
         ],
         properties: {
-          schema_version: { const: "1" },
-          task_id: { $ref: "#/$defs/taskSlug" },
-          intent_id: { $ref: "#/$defs/pathSafeId" },
-          expected_revision: { $ref: "#/$defs/integer" },
-          input_fingerprint: { $ref: "#/$defs/digest" },
-          phase_instance: { $ref: "#/$defs/phase" },
-          summary: { $ref: "#/$defs/text" },
-          subject_digest: { $ref: "#/$defs/digest" },
-          current_evidence: { $ref: "#/$defs/currentEvidence" },
+          schema_version: {
+            const: "1"
+          },
+          task_id: {
+            $ref: "#/$defs/taskSlug"
+          },
+          intent_id: {
+            $ref: "#/$defs/pathSafeId"
+          },
+          expected_revision: {
+            $ref: "#/$defs/integer"
+          },
+          input_fingerprint: {
+            $ref: "#/$defs/digest"
+          },
+          phase_instance: {
+            $ref: "#/$defs/phase"
+          },
+          summary: {
+            $ref: "#/$defs/text"
+          },
+          subject_digest: {
+            $ref: "#/$defs/digest"
+          },
+          current_evidence: {
+            $ref: "#/$defs/currentEvidence"
+          },
           supersedes: {
             type: "object",
             additionalProperties: false,
@@ -49592,12 +49854,20 @@ var mcp_tools_schema_default = {
               "old_subject_digest"
             ],
             properties: {
-              superseded_gate_id: { $ref: "#/$defs/pathSafeId" },
-              accepted_triage_digest: { $ref: "#/$defs/digest" },
-              old_subject_digest: { $ref: "#/$defs/digest" }
+              superseded_gate_id: {
+                $ref: "#/$defs/pathSafeId"
+              },
+              accepted_triage_digest: {
+                $ref: "#/$defs/digest"
+              },
+              old_subject_digest: {
+                $ref: "#/$defs/digest"
+              }
             }
           },
-          supplemental_outcome: { $ref: "urn:archflow:schema:v1:supplemental-review" },
+          supplemental_outcome: {
+            $ref: "urn:archflow:schema:v1:supplemental-review"
+          },
           kind: {
             enum: [
               "artifact-approval",
@@ -49611,26 +49881,116 @@ var mcp_tools_schema_default = {
               "migration-audit"
             ]
           },
-          context: { type: "object" }
+          context: {
+            type: "object"
+          }
         },
-        allOf: [{
-          oneOf: [
-            { properties: { kind: { const: "artifact-approval" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/artifactApproval/properties/context" } } },
-            { properties: { kind: { const: "review-trigger" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/reviewTrigger/properties/context" } } },
-            { properties: { kind: { const: "material-drift" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/materialDrift/properties/context" } } },
-            { properties: { kind: { const: "adjudication-failure" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/adjudicationFailure/properties/context" } } },
-            { properties: { kind: { const: "attempts-exhausted" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/attemptsExhausted/properties/context" } } },
-            { properties: { kind: { const: "constitution-edit" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/constitutionEdit/properties/context" } } },
-            { properties: { kind: { const: "commit-authorization" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/commitAuthorization/properties/context" } } },
-            { properties: { kind: { const: "restore-collision" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/restoreCollision/properties/context" } } },
-            { properties: { kind: { const: "migration-audit" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/migrationAudit/properties/context" } } }
-          ]
-        }]
+        allOf: [
+          {
+            oneOf: [
+              {
+                properties: {
+                  kind: {
+                    const: "artifact-approval"
+                  },
+                  context: {
+                    $ref: "urn:archflow:schema:v1:gate-contract#/$defs/artifactApproval/properties/context"
+                  }
+                }
+              },
+              {
+                properties: {
+                  kind: {
+                    const: "review-trigger"
+                  },
+                  context: {
+                    $ref: "urn:archflow:schema:v1:gate-contract#/$defs/reviewTrigger/properties/context"
+                  }
+                }
+              },
+              {
+                properties: {
+                  kind: {
+                    const: "material-drift"
+                  },
+                  context: {
+                    $ref: "urn:archflow:schema:v1:gate-contract#/$defs/materialDrift/properties/context"
+                  }
+                }
+              },
+              {
+                properties: {
+                  kind: {
+                    const: "adjudication-failure"
+                  },
+                  context: {
+                    $ref: "urn:archflow:schema:v1:gate-contract#/$defs/adjudicationFailure/properties/context"
+                  }
+                }
+              },
+              {
+                properties: {
+                  kind: {
+                    const: "attempts-exhausted"
+                  },
+                  context: {
+                    $ref: "urn:archflow:schema:v1:gate-contract#/$defs/attemptsExhausted/properties/context"
+                  }
+                }
+              },
+              {
+                properties: {
+                  kind: {
+                    const: "constitution-edit"
+                  },
+                  context: {
+                    $ref: "urn:archflow:schema:v1:gate-contract#/$defs/constitutionEdit/properties/context"
+                  }
+                }
+              },
+              {
+                properties: {
+                  kind: {
+                    const: "commit-authorization"
+                  },
+                  context: {
+                    $ref: "urn:archflow:schema:v1:gate-contract#/$defs/commitAuthorization/properties/context"
+                  }
+                }
+              },
+              {
+                properties: {
+                  kind: {
+                    const: "restore-collision"
+                  },
+                  context: {
+                    $ref: "urn:archflow:schema:v1:gate-contract#/$defs/restoreCollision/properties/context"
+                  }
+                }
+              },
+              {
+                properties: {
+                  kind: {
+                    const: "migration-audit"
+                  },
+                  context: {
+                    $ref: "urn:archflow:schema:v1:gate-contract#/$defs/migrationAudit/properties/context"
+                  }
+                }
+              }
+            ]
+          }
+        ]
       },
       success: {
         type: "object",
         additionalProperties: false,
-        required: ["kind", "decision", "notes", "revision"],
+        required: [
+          "kind",
+          "decision",
+          "notes",
+          "revision"
+        ],
         properties: {
           kind: {
             enum: [
@@ -49645,22 +50005,43 @@ var mcp_tools_schema_default = {
               "migration-audit"
             ]
           },
-          decision: { $ref: "urn:archflow:schema:v1:gate-decision" },
-          notes: { $ref: "#/$defs/text" },
-          revision: { $ref: "#/$defs/integer" }
+          decision: {
+            $ref: "urn:archflow:schema:v1:gate-decision"
+          },
+          notes: {
+            $ref: "#/$defs/text"
+          },
+          revision: {
+            $ref: "#/$defs/integer"
+          },
+          request_digest: {
+            $ref: "#/$defs/digest"
+          }
         }
       },
       result: {
         oneOf: [
-          { $ref: "#/$defs/failure" },
+          {
+            $ref: "#/$defs/failure"
+          },
           {
             type: "object",
             additionalProperties: false,
-            required: ["schema_version", "ok", "value"],
+            required: [
+              "schema_version",
+              "ok",
+              "value"
+            ],
             properties: {
-              schema_version: { const: "1" },
-              ok: { const: true },
-              value: { $ref: "#/$defs/archflow_gate/success" }
+              schema_version: {
+                const: "1"
+              },
+              ok: {
+                const: true
+              },
+              value: {
+                $ref: "#/$defs/archflow_gate/success"
+              }
             }
           }
         ]
@@ -49680,11 +50061,21 @@ var mcp_tools_schema_default = {
           "rationale"
         ],
         properties: {
-          schema_version: { const: "1" },
-          task_id: { $ref: "#/$defs/taskSlug" },
-          intent_id: { $ref: "#/$defs/pathSafeId" },
-          expected_revision: { $ref: "#/$defs/integer" },
-          input_fingerprint: { $ref: "#/$defs/digest" },
+          schema_version: {
+            const: "1"
+          },
+          task_id: {
+            $ref: "#/$defs/taskSlug"
+          },
+          intent_id: {
+            $ref: "#/$defs/pathSafeId"
+          },
+          expected_revision: {
+            $ref: "#/$defs/integer"
+          },
+          input_fingerprint: {
+            $ref: "#/$defs/digest"
+          },
           origin: {
             type: "object",
             additionalProperties: false,
@@ -49700,19 +50091,41 @@ var mcp_tools_schema_default = {
               "scope"
             ],
             properties: {
-              origin_gate_id: { $ref: "#/$defs/pathSafeId" },
-              origin_decision_digest: { $ref: "#/$defs/digest" },
-              origin_context_digest: { $ref: "#/$defs/digest" },
-              task_id: { $ref: "#/$defs/taskSlug" },
-              phase_instance: { $ref: "#/$defs/phase" },
-              subject_digest: { $ref: "#/$defs/digest" },
-              current_evidence_set_digest: { $ref: "#/$defs/digest" },
-              rule: { $ref: "#/$defs/rule" },
-              scope: { $ref: "#/$defs/scope" }
+              origin_gate_id: {
+                $ref: "#/$defs/pathSafeId"
+              },
+              origin_decision_digest: {
+                $ref: "#/$defs/digest"
+              },
+              origin_context_digest: {
+                $ref: "#/$defs/digest"
+              },
+              task_id: {
+                $ref: "#/$defs/taskSlug"
+              },
+              phase_instance: {
+                $ref: "#/$defs/phase"
+              },
+              subject_digest: {
+                $ref: "#/$defs/digest"
+              },
+              current_evidence_set_digest: {
+                $ref: "#/$defs/digest"
+              },
+              rule: {
+                $ref: "#/$defs/rule"
+              },
+              scope: {
+                $ref: "#/$defs/scope"
+              }
             }
           },
-          rationale: { $ref: "#/$defs/text" },
-          supplemental_outcome: { $ref: "urn:archflow:schema:v1:supplemental-review" }
+          rationale: {
+            $ref: "#/$defs/text"
+          },
+          supplemental_outcome: {
+            $ref: "urn:archflow:schema:v1:supplemental-review"
+          }
         }
       },
       success: {
@@ -49732,40 +50145,110 @@ var mcp_tools_schema_default = {
           "revision"
         ],
         properties: {
-          origin_gate_id: { $ref: "#/$defs/pathSafeId" },
-          waiver_gate_id: { $ref: "#/$defs/pathSafeId" },
-          task_id: { $ref: "#/$defs/taskSlug" },
-          rule_id: { $ref: "#/$defs/id" },
-          rule_version: { $ref: "#/$defs/rule/properties/rule_version" },
-          subject_digest: { $ref: "#/$defs/digest" },
-          current_evidence_set_digest: { $ref: "#/$defs/digest" },
-          scope: { $ref: "#/$defs/scope" },
-          human_provenance: { oneOf: [{ $ref: "urn:archflow:schema:v1:gate-decision#/$defs/connected" }, { $ref: "urn:archflow:schema:v1:gate-decision#/$defs/local" }] },
-          granted: { type: "boolean" },
-          expires: { const: "task-complete" },
-          notes: { $ref: "#/$defs/text" },
-          revision: { $ref: "#/$defs/integer" }
+          origin_gate_id: {
+            $ref: "#/$defs/pathSafeId"
+          },
+          waiver_gate_id: {
+            $ref: "#/$defs/pathSafeId"
+          },
+          task_id: {
+            $ref: "#/$defs/taskSlug"
+          },
+          rule_id: {
+            $ref: "#/$defs/id"
+          },
+          rule_version: {
+            $ref: "#/$defs/rule/properties/rule_version"
+          },
+          subject_digest: {
+            $ref: "#/$defs/digest"
+          },
+          current_evidence_set_digest: {
+            $ref: "#/$defs/digest"
+          },
+          scope: {
+            $ref: "#/$defs/scope"
+          },
+          human_provenance: {
+            oneOf: [
+              {
+                $ref: "urn:archflow:schema:v1:gate-decision#/$defs/connected"
+              },
+              {
+                $ref: "urn:archflow:schema:v1:gate-decision#/$defs/local"
+              }
+            ]
+          },
+          granted: {
+            type: "boolean"
+          },
+          expires: {
+            const: "task-complete"
+          },
+          notes: {
+            $ref: "#/$defs/text"
+          },
+          revision: {
+            $ref: "#/$defs/integer"
+          },
+          request_digest: {
+            $ref: "#/$defs/digest"
+          }
         },
         allOf: [
           {
-            if: { properties: { granted: { const: true } } },
-            then: { properties: { expires: {} }, required: ["expires"] },
-            else: { not: { properties: { expires: {} }, required: ["expires"] } }
+            if: {
+              properties: {
+                granted: {
+                  const: true
+                }
+              }
+            },
+            then: {
+              properties: {
+                expires: {}
+              },
+              required: [
+                "expires"
+              ]
+            },
+            else: {
+              not: {
+                properties: {
+                  expires: {}
+                },
+                required: [
+                  "expires"
+                ]
+              }
+            }
           }
         ],
         unevaluatedProperties: false
       },
       result: {
         oneOf: [
-          { $ref: "#/$defs/failure" },
+          {
+            $ref: "#/$defs/failure"
+          },
           {
             type: "object",
             additionalProperties: false,
-            required: ["schema_version", "ok", "value"],
+            required: [
+              "schema_version",
+              "ok",
+              "value"
+            ],
             properties: {
-              schema_version: { const: "1" },
-              ok: { const: true },
-              value: { $ref: "#/$defs/archflow_waiver/success" }
+              schema_version: {
+                const: "1"
+              },
+              ok: {
+                const: true
+              },
+              value: {
+                $ref: "#/$defs/archflow_waiver/success"
+              }
             }
           }
         ]
@@ -49773,11 +50256,21 @@ var mcp_tools_schema_default = {
     }
   },
   oneOf: [
-    { $ref: "#/$defs/archflow_state/input" },
-    { $ref: "#/$defs/archflow_counter_review/input" },
-    { $ref: "#/$defs/archflow_adjudicate/input" },
-    { $ref: "#/$defs/archflow_gate/input" },
-    { $ref: "#/$defs/archflow_waiver/input" }
+    {
+      $ref: "#/$defs/archflow_state/input"
+    },
+    {
+      $ref: "#/$defs/archflow_counter_review/input"
+    },
+    {
+      $ref: "#/$defs/archflow_adjudicate/input"
+    },
+    {
+      $ref: "#/$defs/archflow_gate/input"
+    },
+    {
+      $ref: "#/$defs/archflow_waiver/input"
+    }
   ]
 };
 
@@ -53127,9 +53620,23 @@ function reachableDefinitions(fragment, projected) {
   }
   return definitions;
 }
+var ADVERTISED_ERROR_SUMMARY = {
+  type: "object",
+  required: ["code"],
+  properties: {
+    code: { type: "string" },
+    owner: { type: "string" },
+    retryable: { type: "boolean" },
+    next_action: { type: "string" }
+  },
+  additionalProperties: true
+};
 function standaloneSchema(name, member) {
   const projected = new Map(
-    schemaDocuments.map(({ key, schema }) => [key, project(schema, key)])
+    schemaDocuments.map(({ key, schema }) => [
+      key,
+      member === "result" && key === "project-error" ? structuredClone(ADVERTISED_ERROR_SUMMARY) : project(schema, key)
+    ])
   );
   const fragment = project(schemaFragment(name, member), "mcp-tools");
   return deepFreeze5({
@@ -66717,7 +67224,8 @@ async function runAdjudication(dependencies, input) {
         constitution: evidence.constitution,
         drift: evidence.drift,
         triggers,
-        revision
+        revision,
+        request_digest: identified.request_digest
       });
       const expectation = createInternalResultExpectation({
         schema_version: "1",
@@ -67954,6 +68462,9 @@ async function runStateInitialization(dependencies, request, evidence) {
     return io4(request, "task-lock-release");
   }
 }
+
+// src/state/request-templates.ts
+var TEMPLATE_FINGERPRINT_SENTINEL = "0".repeat(64);
 
 // src/mcp/handlers/state-results.ts
 var ok16 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
@@ -69334,7 +69845,8 @@ async function runCounterReview(dependencies, input) {
         path: counterReviewClaim(current.value.phase_instance),
         verdict: observed.evidence.verdict,
         blocking_count: observed.evidence.blocking_count,
-        revision
+        revision,
+        request_digest: identified.request_digest
       });
       const expectation = createInternalResultExpectation({
         schema_version: "1",
@@ -69596,7 +70108,8 @@ async function handleGate(call, context2) {
         kind: decision2.kind,
         decision: decision2,
         notes: decision2.payload.reason,
-        revision: outcome.value.state.value.revision
+        revision: outcome.value.state.value.revision,
+        request_digest: identified.request_digest
       })
     });
   });
@@ -69705,7 +70218,8 @@ async function handleState(call, context2) {
         const success2 = Object.freeze({
           path: parseTaskPathClaim("state.json"),
           revision,
-          status: call.input.status
+          status: call.input.status,
+          request_digest: identified.request_digest
         });
         const expectation = createInternalResultExpectation({
           schema_version: "1",
@@ -69918,7 +70432,8 @@ async function handleWaiver(call, context2) {
       granted: decision2.granted,
       ...decision2.granted ? { expires: "task-complete" } : {},
       notes: decision2.notes,
-      revision: resolved.value.state.value.revision
+      revision: resolved.value.state.value.revision,
+      request_digest: identified.request_digest
     }) });
   });
 }

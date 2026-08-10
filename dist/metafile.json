@@ -5909,7 +5909,7 @@
       "imports": []
     },
     "src/contracts/mcp-tools.ts": {
-      "bytes": 21122,
+      "bytes": 21927,
       "format": "esm",
       "imports": [
         {
@@ -6241,7 +6241,7 @@
       }
     },
     "src/contracts/schemas/v1/mcp-tools.schema.json": {
-      "bytes": 18352,
+      "bytes": 24864,
       "format": "esm",
       "imports": [],
       "with": {
@@ -7280,8 +7280,59 @@
         }
       ]
     },
+    "src/local/build-request.ts": {
+      "bytes": 5601,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/errors.js",
+          "path": "src/contracts/errors.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/plain-json.js",
+          "path": "src/contracts/plain-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/document-artifact.js",
+          "path": "src/state/document-artifact.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/implementation-manifest.js",
+          "path": "src/state/implementation-manifest.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/phase-documents.js",
+          "path": "src/state/phase-documents.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/transitions.js",
+          "path": "src/state/transitions.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./envelope.js",
+          "path": "src/local/envelope.ts"
+        }
+      ]
+    },
     "src/local/commands.ts": {
-      "bytes": 24415,
+      "bytes": 24735,
       "format": "esm",
       "imports": [
         {
@@ -7485,6 +7536,11 @@
         },
         {
           "kind": "import-statement",
+          "original": "./build-request.js",
+          "path": "src/local/build-request.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "./envelope.js",
           "path": "src/local/envelope.ts"
         },
@@ -7501,7 +7557,7 @@
       ]
     },
     "src/local/envelope.ts": {
-      "bytes": 14073,
+      "bytes": 16422,
       "format": "esm",
       "imports": [
         {
@@ -7608,7 +7664,7 @@
       ]
     },
     "src/local/manual-workflow.ts": {
-      "bytes": 49430,
+      "bytes": 49695,
       "format": "esm",
       "imports": [
         {
@@ -8008,7 +8064,7 @@
       ]
     },
     "src/mcp/handlers/gate.ts": {
-      "bytes": 3506,
+      "bytes": 3557,
       "format": "esm",
       "imports": [
         {
@@ -8183,7 +8239,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 13696,
+      "bytes": 13749,
       "format": "esm",
       "imports": [
         {
@@ -8284,7 +8340,7 @@
       ]
     },
     "src/mcp/handlers/waiver.ts": {
-      "bytes": 6947,
+      "bytes": 6996,
       "format": "esm",
       "imports": [
         {
@@ -8483,7 +8539,7 @@
       ]
     },
     "src/mcp/tools.ts": {
-      "bytes": 11590,
+      "bytes": 12578,
       "format": "esm",
       "imports": [
         {
@@ -8881,7 +8937,7 @@
       ]
     },
     "src/review/adjudication.ts": {
-      "bytes": 18593,
+      "bytes": 18644,
       "format": "esm",
       "imports": [
         {
@@ -8960,7 +9016,7 @@
       ]
     },
     "src/review/counter-review.ts": {
-      "bytes": 7095,
+      "bytes": 7146,
       "format": "esm",
       "imports": [
         {
@@ -10210,7 +10266,7 @@
       ]
     },
     "src/state/next-action.ts": {
-      "bytes": 8093,
+      "bytes": 9411,
       "format": "esm",
       "imports": [
         {
@@ -10222,6 +10278,17 @@
           "kind": "import-statement",
           "original": "../contracts/workflow.js",
           "path": "src/contracts/workflow.ts"
+        }
+      ]
+    },
+    "src/state/phase-documents.ts": {
+      "bytes": 3112,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
         }
       ]
     },
@@ -10540,13 +10607,23 @@
       ]
     },
     "src/state/request-templates.ts": {
-      "bytes": 7571,
+      "bytes": 9345,
       "format": "esm",
       "imports": [
         {
           "kind": "import-statement",
           "original": "../contracts/phase-instance.js",
           "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./phase-documents.js",
+          "path": "src/state/phase-documents.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./transitions.js",
+          "path": "src/state/transitions.ts"
         }
       ]
     },
@@ -10674,7 +10751,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 36561,
+      "bytes": 37952,
       "format": "esm",
       "imports": [
         {
@@ -10926,7 +11003,7 @@
       ]
     },
     "src/state/transitions.ts": {
-      "bytes": 13200,
+      "bytes": 14474,
       "format": "esm",
       "imports": [
         {
@@ -10964,7 +11041,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2148047,
+      "bytes": 2157311,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -12307,7 +12384,7 @@
           "bytesInOutput": 2015
         },
         "src/contracts/mcp-tools.ts": {
-          "bytesInOutput": 7871
+          "bytesInOutput": 8087
         },
         "src/contracts/path-claims.ts": {
           "bytesInOutput": 3328
@@ -12453,17 +12530,20 @@
         "src/init/task-initialization.ts": {
           "bytesInOutput": 5011
         },
+        "src/local/build-request.ts": {
+          "bytesInOutput": 3697
+        },
         "src/local/commands.ts": {
-          "bytesInOutput": 19337
+          "bytesInOutput": 19587
         },
         "src/local/envelope.ts": {
-          "bytesInOutput": 11199
+          "bytesInOutput": 12041
         },
         "src/local/main.ts": {
           "bytesInOutput": 3134
         },
         "src/local/manual-workflow.ts": {
-          "bytesInOutput": 37685
+          "bytesInOutput": 37911
         },
         "src/mcp/handlers/state-results.ts": {
           "bytesInOutput": 11180
@@ -12547,7 +12627,10 @@
           "bytesInOutput": 27894
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 5184
+          "bytesInOutput": 5576
+        },
+        "src/state/phase-documents.ts": {
+          "bytesInOutput": 1883
         },
         "src/state/produce-subject.ts": {
           "bytesInOutput": 3540
@@ -12565,7 +12648,7 @@
           "bytesInOutput": 5880
         },
         "src/state/request-templates.ts": {
-          "bytesInOutput": 5650
+          "bytesInOutput": 6299
         },
         "src/state/request.ts": {
           "bytesInOutput": 3172
@@ -12577,18 +12660,18 @@
           "bytesInOutput": 25553
         },
         "src/state/status.ts": {
-          "bytesInOutput": 24612
+          "bytesInOutput": 25034
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 264
         },
         "src/state/transitions.ts": {
-          "bytesInOutput": 10309
+          "bytesInOutput": 10932
         }
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2813117,
+      "bytes": 2820539,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13880,7 +13963,7 @@
           "bytesInOutput": 1889
         },
         "src/contracts/mcp-tools.ts": {
-          "bytesInOutput": 13557
+          "bytesInOutput": 13773
         },
         "src/contracts/path-claims.ts": {
           "bytesInOutput": 3395
@@ -13949,7 +14032,7 @@
           "bytesInOutput": 5845
         },
         "src/contracts/schemas/v1/mcp-tools.schema.json": {
-          "bytesInOutput": 17424
+          "bytesInOutput": 23918
         },
         "src/contracts/schemas/v1/path-claim.schema.json": {
           "bytesInOutput": 536
@@ -14054,7 +14137,7 @@
           "bytesInOutput": 908
         },
         "src/mcp/handlers/gate.ts": {
-          "bytesInOutput": 2786
+          "bytesInOutput": 2837
         },
         "src/mcp/handlers/index.ts": {
           "bytesInOutput": 256
@@ -14069,10 +14152,10 @@
           "bytesInOutput": 10413
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 11029
+          "bytesInOutput": 11082
         },
         "src/mcp/handlers/waiver.ts": {
-          "bytesInOutput": 5516
+          "bytesInOutput": 5565
         },
         "src/mcp/process-runner.ts": {
           "bytesInOutput": 3937
@@ -14090,7 +14173,7 @@
           "bytesInOutput": 15516
         },
         "src/mcp/tools.ts": {
-          "bytesInOutput": 7986
+          "bytesInOutput": 8356
         },
         "src/repository/attributes.ts": {
           "bytesInOutput": 2364
@@ -14108,10 +14191,10 @@
           "bytesInOutput": 10515
         },
         "src/review/adjudication.ts": {
-          "bytesInOutput": 12869
+          "bytesInOutput": 12920
         },
         "src/review/counter-review.ts": {
-          "bytesInOutput": 4064
+          "bytesInOutput": 4115
         },
         "src/review/envelopes.ts": {
           "bytesInOutput": 12088
@@ -14175,6 +14258,9 @@
         },
         "src/state/read.ts": {
           "bytesInOutput": 2325
+        },
+        "src/state/request-templates.ts": {
+          "bytesInOutput": 52
         },
         "src/state/request.ts": {
           "bytesInOutput": 3172
