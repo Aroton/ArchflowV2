@@ -5,7 +5,7 @@ description: Define, review, adjudicate, and obtain explicit approval for an Arc
 
 # Product Requirements Document
 
-Treat the argument as `<task>`. This is a normal-mode phase skill: durable state and every server-checked value come from the local helper and the five workflow tools. Work only in `.archflow/tasks/<task>/` plus shared `.archflow/context/`; never read another task's files.
+Treat the argument as `<task>`. This is a normal-mode phase skill: durable state and every server-checked value come from the local helper and the five workflow tools. Work only in `.archflow/tasks/<task>/` plus the shared documentation set under `docs/`; never read another task's files.
 
 ## Degraded operation
 

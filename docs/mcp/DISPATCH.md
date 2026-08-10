@@ -1,5 +1,7 @@
 # mcp/DISPATCH
 
+**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/dispatch/`
+
 Dispatch is how the server turns "get an independent review" into a real child process running the *other* model family's CLI. It exists so that counter-review and adjudication evidence is something the producer **cannot author** — the server itself spawns the reviewer, captures its bytes, and binds the output to its provenance.
 
 ## The flow

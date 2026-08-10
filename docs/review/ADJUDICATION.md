@@ -1,5 +1,7 @@
 # review/ADJUDICATION
 
+**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/review/adjudication.ts`, `src/state/gates.ts`, `assets/constitution/`
+
 Adjudication is the pipeline's final check: a third dispatch that judges the artifact against the repository's **constitution** — the versioned policy rules in `.archflow/constitution/`, pinned per task at a human-approved commit. It is *not* "reviewer A vs reviewer B" arbitration; disagreements between reviews are resolved earlier, by triage.
 
 ## The constitution

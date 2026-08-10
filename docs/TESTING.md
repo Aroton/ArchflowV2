@@ -1,7 +1,6 @@
-# Testing and Validation Baseline
+# TESTING
 
-**Explored:** 2026-08-10
-**Commit:** `28c1021`
+**Explored:** 2026-08-10 · **Commit:** `28c1021` · **Covers:** `test/`, `vitest.config.ts`, `.github/workflows/`
 
 ## Test runner and configuration
 
@@ -119,10 +118,10 @@ Release validation is implemented by `scripts/release-support.mjs` and front end
 ## Known current limitations and gaps
 
 - **Real-host suites are intentionally outside `npm run check` and CI.** `test/contracts/repository-boundary.test.ts` pins this exclusion. Host/version/provider drift is found only when someone explicitly runs `test:real-host`; the benchmark has a second opt-in.
-- **Operator-level journeys remain separate evidence.** `docs/release-validation.md` records the two full producer journeys (VAL-01) as unexecuted, the server-absent manual journey (VAL-12) as pending, and a complete installed two-phase phase-design/phase-implementation slice (VAL-16) as an accepted gap. The automated terminal suite proves named slices, not an entire human workflow.
+- **Operator-level journeys remain separate evidence.** `docs/validation/release-validation.md` records the two full producer journeys (VAL-01) as unexecuted, the server-absent manual journey (VAL-12) as pending, and a complete installed two-phase phase-design/phase-implementation slice (VAL-16) as an accepted gap. The automated terminal suite proves named slices, not an entire human workflow.
 - **Some real failure classes remain simulated.** The same report records real `TIMEOUT`, `OUTPUT_OVERFLOW`, `RATE_LIMITED`, and logged-out `AUTH_UNAVAILABLE` as fake-only by design (VAL-08), and no observed real host holding a pending gate through its resolved timeout (VAL-09).
-- **Real-host security evidence is bounded.** Fake and real dispatch tests check generated homes, scrubbed environment, canaries, output scanning, and PII omission, but `docs/release-validation.md` explicitly records no OS-enforced containment or proof against repository/global-instruction and persistence-capable-tool access (VAL-07).
+- **Real-host security evidence is bounded.** Fake and real dispatch tests check generated homes, scrubbed environment, canaries, output scanning, and PII omission, but `docs/validation/release-validation.md` explicitly records no OS-enforced containment or proof against repository/global-instruction and persistence-capable-tool access (VAL-07).
 - **Platform coverage is narrow.** CI is Ubuntu-only. Process-group cancellation/reaping cases in `test/integration/dispatch-plumbing.test.ts` and `test/integration/mcp-stdio.test.ts` run only when `process.platform !== "win32"`; no Windows CI job proves the alternate path.
 - **No quantitative coverage gate exists.** Confidence comes from behavioral/corpus/mutation suites and the release matrix, not line/branch percentages.
 - **The compatibility probe requires network access.** `scripts/probe-mcp-sdk-compatibility.mjs` checks live npm dist-tags, so the full `npm run check` is not an air-gapped gate even though release runtime smoke itself is deliberately offline/hostile.
-- **Release-validation documentation is point-in-time evidence.** `docs/release-validation.md` is stamped 2026-08-04 and contains some evolving Phase 21 observations; use executed tests/artifacts and a newly recorded opt-in run when deciding present real-host status rather than treating candidate procedures as current proof.
+- **Release-validation documentation is point-in-time evidence.** `docs/validation/release-validation.md` is stamped 2026-08-04 and contains some evolving Phase 21 observations; use executed tests/artifacts and a newly recorded opt-in run when deciding present real-host status rather than treating candidate procedures as current proof.

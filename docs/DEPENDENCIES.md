@@ -1,8 +1,6 @@
-# Dependencies and Integrations
+# DEPENDENCIES
 
-**Explored:** 2026-08-10
-
-**Commit:** `28c1021`
+**Explored:** 2026-08-10 · **Commit:** `28c1021` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, CI
 
 ## Runtime and package baseline
 
@@ -168,5 +166,5 @@ After `npm ci`, CI runs the SDK compatibility probe, typecheck, focused MCP test
 - Any direct dependency change must update the exact allowlist in `scripts/check-dependency-policy.mjs`, the lockfile, `THIRD_PARTY_NOTICES.md`, and release legal/provenance evidence as applicable.
 - The approved lockfile license set is closed: `0BSD`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`, `ISC`, and `MIT`. The policy also rejects Lightning CSS and specifically prohibited packages such as MCP framework/client packages, `execa`, and `proper-lockfile`.
 - Keep all production `@modelcontextprotocol/*` imports isolated to `src/mcp/sdk-adapter.ts` and public package roots.
-- Treat `docs/dependency-upgrades.md` as historical narrative, not current authority: it still describes the pre-stable MCP beta and the former `write-file-atomic` implementation. The executable authorities are `package.json`, `package-lock.json`, and the policy/release scripts.
+- The executable authorities for the dependency surface are `package.json`, `package-lock.json`, and the policy/release scripts — not narrative documents.
 - Real-host tests are capability probes that can spend provider quota and depend on installed CLI login state; they are not part of ordinary `npm test` or CI.

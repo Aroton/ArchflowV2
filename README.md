@@ -184,4 +184,4 @@ Planning docs are tracked in git during development to preserve progress across 
 
 ## Detailed Process Documentation
 
-See [docs/archflow-process.md](docs/archflow-process.md) for the legacy skill-only process diagrams. Phase 22 will replace them with the MCP-backed workflow documentation.
+See [docs/OVERVIEW.md](docs/OVERVIEW.md) for the maintained documentation set — the whole-system map, the workflow lifecycle and gates (`docs/workflow/`), and per-subsystem pages for the MCP server, CLI, review pipeline, contracts, and durable state.

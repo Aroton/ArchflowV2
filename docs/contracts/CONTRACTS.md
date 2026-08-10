@@ -1,5 +1,7 @@
 # contracts/CONTRACTS
 
+**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/contracts/`
+
 `src/contracts/` is the bottom layer: ~44 modules plus 41 JSON Schemas that define what a valid thing looks like and how to prove a thing is what it claims. Everything else imports from here; nothing here imports back out.
 
 The premise it serves: durable files in `.archflow/` are the system's *only* memory across sessions, and the things writing them are language models. So the whole layer is built around one idea — **nothing an agent says is trusted until the server has re-derived it.**

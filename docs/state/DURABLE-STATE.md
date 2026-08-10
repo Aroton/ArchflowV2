@@ -1,5 +1,7 @@
 # state/DURABLE-STATE
 
+**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/state/`, `src/repository/`
+
 Durable state is ArchFlow's memory and its authority. Every server answer — "what phase am I in?", "what do I do next?" — is recomputed from bytes on disk under `.archflow/`, never from session memory. This page covers where those bytes live, how writes stay safe, the state machine, and how drift is detected and repaired.
 
 ## The layout

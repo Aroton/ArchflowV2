@@ -106,8 +106,8 @@ const GIT_OID = /^[0-9a-f]{40}$/u;
  * no `.git` link back to the repository object database, so after `.archflow/tasks` is removed
  * the tracked task blobs (producer self-review, triage) are unreachable from the view — the
  * reviewer-independence property of `src/review/envelopes.ts` holds structurally, not by child
- * good behavior. `.archflow/context/**` stays readable: it is guidance, not authority. The
- * pipeline is a plain POSIX `git archive | tar -x`, matching this module's existing posture.
+ * good behavior. Tracked documentation (`docs/**`) stays readable: it is guidance, not authority.
+ * The pipeline is a plain POSIX `git archive | tar -x`, matching this module's existing posture.
  */
 export async function materializeRepositoryView(
   workspace: DispatchWorkspace,

@@ -5,7 +5,7 @@ description: Design and durably review one approved ArchFlow implementation phas
 
 # Phase Design
 
-Treat the arguments as `<task> <phase-number>`. Work only in `.archflow/tasks/<task>/` plus shared `.archflow/context/`; never read another task's files. The canonical artifact is `.archflow/tasks/<task>/phases/<phase-number>/design.md`. Durable status, not that document's status line, decides whether implementation may begin.
+Treat the arguments as `<task> <phase-number>`. Work only in `.archflow/tasks/<task>/` plus the shared documentation set under `docs/`; never read another task's files. The canonical artifact is `.archflow/tasks/<task>/phases/<phase-number>/design.md`. Durable status, not that document's status line, decides whether implementation may begin.
 
 ## Degraded operation
 

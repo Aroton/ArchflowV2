@@ -1,5 +1,7 @@
 # review/COUNTER-REVIEW
 
+**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/review/`, `src/state/produce-subject.ts`
+
 Counter-review is the system's adversarial check: every artifact is reviewed by the *opposite model family* (Claude ⇄ Codex), dispatched by the server itself so the evidence is something the producer cannot author. This page covers the review envelope and the review flow; adjudication and waivers are in `ADJUDICATION.md`.
 
 ## The dispatch envelope

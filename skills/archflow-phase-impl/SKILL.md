@@ -5,7 +5,7 @@ description: Implement, verify, review, log, authorize, and complete one durably
 
 # Phase Implementation
 
-Treat the arguments as `<task> <phase-number>`. Work only in `.archflow/tasks/<task>/`, the implementation paths authorized by its phase design, and shared `.archflow/context/`; never read another task's files. The canonical workflow artifact is `.archflow/tasks/<task>/phases/<phase-number>/impl-notes.md`.
+Treat the arguments as `<task> <phase-number>`. Work only in `.archflow/tasks/<task>/`, the implementation paths authorized by its phase design, and the shared documentation set under `docs/`; never read another task's files. The canonical workflow artifact is `.archflow/tasks/<task>/phases/<phase-number>/impl-notes.md`.
 
 Before changing code, run status and require durable authority for `phase_instance: "phase-impl-<phase-number>"`. A phase-design file or approval in conversation is insufficient. Never write code before the phase design is durably approved.
 

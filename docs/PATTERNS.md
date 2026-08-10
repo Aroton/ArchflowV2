@@ -1,8 +1,6 @@
-# Codebase Patterns and Conventions
+# PATTERNS
 
-**Explored:** 2026-08-10
-**Commit:** `28c1021`
-**Scope:** `archflow-mcp-server` (`src/`, `test/`, `scripts/`, and repository policy)
+**Explored:** 2026-08-10 · **Commit:** `28c1021` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
 
 This is a strict TypeScript/Node package whose conventions are enforced primarily by the type checker, runtime validators, and tests. There is no configured linter or formatter. Match the surrounding file: contract registries intentionally use dense declarations, while state, repository, and MCP algorithms favor expanded control flow and rationale-heavy comments.
 

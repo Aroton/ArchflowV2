@@ -1,5 +1,7 @@
 # cli/COMMANDS
 
+**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/local/`, `install.sh`
+
 `archflow-local` is the agent's local helper: it composes requests, reads status, and runs the degraded-mode fallback. It is deliberately *not* the authority — with two narrow exceptions (task initialization staging and the manual/degraded writers), it derives and verifies rather than writes.
 
 A packaging note that trips up maintainers: there is no `bin` entry in `package.json`. `install.sh` writes a shell shim into `~/.local/bin` that execs `node dist/archflow-local.mjs`; the source of truth is `src/local/main.ts`.

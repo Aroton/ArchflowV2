@@ -1,10 +1,12 @@
 # OVERVIEW
 
+**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** the whole repository
+
 ArchFlow is a governed development workflow for AI coding agents. A *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, survive an adversarial review by a **different model family**, and then stop and ask a human. The system's core belief, stated plainly:
 
 > **Nothing an agent says is trusted until the server has re-derived it.** The only authority is durable state on disk, written and verified by the server.
 
-This documentation set describes the system as built, aimed at humans auditing and iterating on the workflow. Caps-named files (like this one) are the maintained, human-readable documentation. Lowercase files in `docs/` are historical working documents from the project's own development.
+This documentation set describes the system as built, aimed at humans auditing and iterating on the workflow. Caps-named files (like this one) are the maintained, human-readable documentation, produced and refreshed by `/archflow-explore`. The one exception is `docs/validation/`: point-in-time validation evidence and benchmark data, not kept current by explore.
 
 ## The three surfaces
 

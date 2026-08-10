@@ -1,5 +1,7 @@
 # COMPLEXITY
 
+**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** the whole repository
+
 A per-subsystem audit of where the machinery is heaviest, what it buys, and what could be simplified. Written to support iterating on the workflow — each item states the concrete problem the complexity solves so a simplification can be judged against it, per the engineering priorities in CLAUDE.md.
 
 ## How to read this

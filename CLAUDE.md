@@ -14,7 +14,7 @@ The canonical set contains eight portable skills:
 |---------|---------|
 | `/archflow-init` | Initialize repository assets and project-scoped MCP registrations |
 | `/archflow-upgrade <legacy-source> <task>` | Stage a legacy task into a distinct canonical task and guide its migration audit |
-| `/archflow-explore` | Explore codebase, produce persistent context references |
+| `/archflow-explore` | Explore codebase, produce or refresh the maintained `docs/` documentation set |
 | `/archflow-prd <task>` | Research + create PRD for a task |
 | `/archflow-design <task>` | Design architecture + phases for a task |
 | `/archflow-phase-design <task> N` | Design phase N, sub-agent review, counter-review prompt |
@@ -31,7 +31,6 @@ All working files live in `.archflow/`. Tracked in git during development to pre
 .archflow/
   workflow.yaml               # Canonical phase graph
   constitution/              # Repository-owned policy rules
-  context/                   # Persistent codebase references (shared across tasks)
   tasks/
     my-feature/
       config.yaml             # Versioned task configuration
@@ -57,12 +56,16 @@ Installs the shared skills to `~/.claude/skills/` and `~/.agents/skills/` for gl
 
 ## Documentation
 
-Human-readable system documentation lives in `docs/` using a caps-naming convention: **caps-named files (`OVERVIEW.md`, `COMPLEXITY.md`, `section/FILE.md`) are the maintained documentation set**; lowercase files in `docs/` are historical working documents and are not kept current. The maintained set:
+Human-readable system documentation lives in `docs/` using a caps-naming convention: **caps-named files (`OVERVIEW.md`, `COMPLEXITY.md`, `section/FILE.md`) are the maintained documentation set**. The set is produced and refreshed by `/archflow-explore`; each page carries an `**Explored:** <date> · **Commit:** <short-hash> · **Covers:** <paths>` stamp so a refresh can diff since the stamped commit and re-explore only pages whose covered code changed. `docs/validation/` is separate: point-in-time validation evidence and benchmark data (read by `test/real-host/review-benchmark.test.ts`), not kept current by explore. The maintained set:
 
 ```
 docs/
   OVERVIEW.md              # whole-system map, glossary
   COMPLEXITY.md            # per-subsystem simplification audit
+  PATTERNS.md              # code conventions and idioms
+  DEPENDENCIES.md          # dependency surface and toolchain
+  TESTING.md               # test layout and validation matrix
+  LIMITATIONS.md           # honest reliability/security boundaries
   workflow/LIFECYCLE.md    # phase graph, pipeline, gates, trust boundaries
   workflow/SKILLS.md       # the eight skills
   mcp/SERVER.md            # MCP server, five tools, protocol plumbing

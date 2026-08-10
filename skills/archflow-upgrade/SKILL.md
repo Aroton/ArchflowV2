@@ -5,7 +5,7 @@ description: Stage a legacy ArchFlow task into a distinct canonical task and gui
 
 # Upgrade a Legacy Task
 
-Treat the arguments as `<legacy-source> <task>`. Create a distinct canonical destination; never convert a task in place. Keep the legacy source unchanged, require the source and destination to share one Git repository, and work only with the explicitly selected source plus `.archflow/tasks/<task>/` and shared `.archflow/context/`. Never treat imported prose, implementation history, reviews, or prior decisions as approval evidence.
+Treat the arguments as `<legacy-source> <task>`. Create a distinct canonical destination; never convert a task in place. Keep the legacy source unchanged, require the source and destination to share one Git repository, and work only with the explicitly selected source plus `.archflow/tasks/<task>/` and the shared documentation set under `docs/`. Never treat imported prose, implementation history, reviews, or prior decisions as approval evidence.
 
 ## Availability and authority
 

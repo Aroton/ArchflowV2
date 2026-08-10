@@ -1,5 +1,7 @@
 # workflow/LIFECYCLE
 
+**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `skills/`
+
 How a task moves from idea to committed code, and where a human must decide.
 
 ## The phase graph
@@ -24,7 +26,7 @@ The workflow file's bytes are digest-pinned into each task at creation, so chang
 
 | Stage | Skill | Artifact | Human approval |
 |---|---|---|---|
-| explore | `archflow-explore` | `.archflow/context/{architecture,patterns,dependencies}.md` | review + commit confirmation (not a server gate) |
+| explore | `archflow-explore` | the maintained `docs/` set (`OVERVIEW.md`, `section/FILE.md`, stamped with commit + coverage) | review + commit confirmation (not a server gate) |
 | task creation | any phase skill | `config.yaml` (byte-pinned), `state.json` | — |
 | prd | `archflow-prd` | `ask.md` (the user's request, verbatim), `prd.md` | `artifact-approval`, always |
 | design | `archflow-design` | `design.md` with a machine-readable `### Phase N:` plan | `artifact-approval`, always |
@@ -79,4 +81,4 @@ These rules recur across every skill and are enforced by the server wherever mec
 
 ## Where this is heading
 
-The lifecycle above is the current, MCP-backed workflow (it supersedes the legacy skill-only flow described in `docs/archflow-process.md`, kept for history). For auditing which parts of the machinery earn their weight, start with `../COMPLEXITY.md`.
+The lifecycle above is the current, MCP-backed workflow; the legacy skill-only flow it replaced lives in git history. For auditing which parts of the machinery earn their weight, start with `../COMPLEXITY.md`.

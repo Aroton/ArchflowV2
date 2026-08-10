@@ -1,5 +1,7 @@
 # mcp/SERVER
 
+**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/main.ts`, `src/mcp/`
+
 `archflow-mcp` is a stdio MCP server speaking newline-delimited JSON-RPC. It is the system's sole authority: the only writer of durable state and the only judge of request validity. It takes no arguments and has no other mode — `src/main.ts` is 28 lines that either print usage or start the runtime.
 
 ## The five tools

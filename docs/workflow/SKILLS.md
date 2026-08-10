@@ -1,5 +1,7 @@
 # workflow/SKILLS
 
+**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `skills/`, `src/init/`, `assets/`
+
 The eight skills are the human-facing entry points. They are prose playbooks — they enforce nothing themselves; every rule they state is backed (where mechanically possible) by the server. In Codex the same skills are invoked with `$` instead of `/`.
 
 ## The set at a glance
@@ -25,7 +27,7 @@ Three things it deliberately never does: overwrite a diverged file (it refuses w
 
 ## archflow-explore
 
-Maps the repository into persistent, cross-task context documents: `.archflow/context/architecture.md`, `patterns.md`, `dependencies.md`. Heavy reading is delegated to parallel sub-agents; each document is stamped with the date and short commit hash so staleness is detectable. The only pre-workflow skill — it touches no MCP tools. Two human confirmations: before overwriting existing context, and before committing (`Archflow: Explore Codebase Context`).
+Produces or refreshes the repository's maintained documentation set: caps-named pages in `docs/` (`OVERVIEW.md`, `section/FILE.md`), tracked in git and shared by humans, agent sessions, and reviewers. Heavy reading is delegated to parallel sub-agents — one per page — and each page carries an `Explored / Commit / Covers` stamp, so a later run can diff since the stamped commit and refresh only pages whose covered code changed. The only pre-workflow skill — it touches no MCP tools. Two human confirmations: before overwriting existing pages, and before committing (`Archflow: Explore Codebase Docs`).
 
 ## archflow-prd
 

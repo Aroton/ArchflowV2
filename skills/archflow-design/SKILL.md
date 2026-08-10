@@ -5,7 +5,7 @@ description: Design, review, adjudicate, and obtain explicit approval for an Arc
 
 # Task Design
 
-Treat the argument as `<task>`. Work only in `.archflow/tasks/<task>/` plus shared `.archflow/context/`; never read another task's files. The approved PRD is `.archflow/tasks/<task>/prd.md`, the design is `.archflow/tasks/<task>/design.md`, and durable status is the authority for whether this phase may run.
+Treat the argument as `<task>`. Work only in `.archflow/tasks/<task>/` plus the shared documentation set under `docs/`; never read another task's files. The approved PRD is `.archflow/tasks/<task>/prd.md`, the design is `.archflow/tasks/<task>/design.md`, and durable status is the authority for whether this phase may run.
 
 ## Degraded operation
 

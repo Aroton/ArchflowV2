@@ -1,4 +1,6 @@
-# Reliability and Security Limitations
+# LIMITATIONS
+
+**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/dispatch/`, `src/init/diagnostics.ts`
 
 ArchFlow is a local developer-workflow prototype, not a security sandbox. The controls below reduce accidental context leakage and constrain ordinary operation, but the listed cases are unsupported because the current implementation cannot prove the claimed boundary. A planted canary not appearing in output is evidence about that run; it is not proof that the child could not read the canary.
 
