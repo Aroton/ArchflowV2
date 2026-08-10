@@ -41,7 +41,7 @@ import type { SupplementalReviewRecordV1 } from "../contracts/supplemental-recor
 import { runInit } from "../init/index.js";
 import { stageTaskInitialization } from "../init/task-initialization.js";
 import { stageLegacyUpgrade } from "../init/legacy-upgrade.js";
-import { runBuildRequest } from "./build-request.js";
+import { BUILD_REQUEST_KINDS, runBuildRequest } from "./build-request.js";
 import { computeCallEnvelope } from "./envelope.js";
 import {
   classifyManualWorkflowStatus,
@@ -81,7 +81,7 @@ export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommand
   envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
   "build-document": { payload: "<document artifact input>", task: "required" },
   "build-implementation-output": { payload: "<implementation output input>", task: "required" },
-  "build-request": { payload: '{"intent_id":<fresh id>,"kind"?:"produce"|"running"|"self-review"|"triage"|"counter-review"|"adjudicate"|"gate",...kind facts: "step" (running), "document"/"implementation" (produce), "review":{rubric,findings,matched_rule_versions} (self-review), "dispositions":[...] (triage), "rubric" (counter-review), "summary" (gate)}', task: "required" },
+  "build-request": { payload: `{"intent_id":<fresh id>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},...kind facts: none (initialize), "step" (running), "document"/"implementation" (produce), "review":{rubric,findings,matched_rule_versions} (self-review), "dispositions":[...] (triage), "rubric" (counter-review), "summary" (gate)}`, task: "required" },
   "manual-status": { payload: null, task: "required" },
   "manual-next": { payload: "<selector/source artifact requested by manual-status>", task: "required" },
   "manual-handoff": { payload: '{"expected_head":<digest>,"initialization"?:<task-init artifact>}', task: "required" },

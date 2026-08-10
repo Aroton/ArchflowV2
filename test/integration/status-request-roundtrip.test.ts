@@ -264,12 +264,23 @@ describe("status-derived requests execute against the real handlers", () => {
       criteria: [{ id: "scope", text: "Check scope against the ask.", blocking: true }],
     };
 
-    // create-task is the one request build-request cannot compose (no durable state yet).
+    // Before state exists, initialize is the only kind build-request accepts; every other kind
+    // still refuses with STATE_MISSING.
+    expect(await h.buildRequestError({ intent_id: "early-0", kind: "produce" })).toBe("STATE_MISSING");
     const created = await h.status();
-    const createRequest = derivedRequest(created);
-    createRequest.input.artifact = fixture.initialization as unknown as PlainJsonValue;
-    const createResolved = await h.envelope(createRequest as unknown as PlainJsonValue);
-    await h.invoke(createResolved.request.tool, createResolved.request.input);
+    expect(created.next_action).toMatchObject({ code: "create-task" });
+    const createComposed = await h.buildRequest({ intent_id: "initialize-1", kind: "initialize" });
+    expect(createComposed.request.tool).toBe("archflow_state");
+    expect(createComposed.request.input).toMatchObject({
+      expected_revision: 0, phase_instance: "prd", step: "produce", status: "running",
+      artifact: fixture.initialization,
+    });
+    // Envelope over the composed initialize request is the same fixed point as every other kind.
+    const createReplay = await h.envelope(createComposed.request as unknown as PlainJsonValue);
+    expect(createReplay.request_digest).toBe(createComposed.request_digest);
+    await h.invoke(createComposed.request.tool, createComposed.request.input);
+    // Once durable state exists, initialize refuses with the transition law's own answer.
+    expect(await h.buildRequestError({ intent_id: "late-1", kind: "initialize" })).toBe("TRANSITION_INVALID");
     writeFileSync(join(fixture.root, ".archflow", "tasks", task, "ask.md"), "Build the composer proof.\n");
     writeFileSync(join(fixture.root, ".archflow", "tasks", task, "prd.md"), "# PRD\n\nComposer requirements.\n");
 

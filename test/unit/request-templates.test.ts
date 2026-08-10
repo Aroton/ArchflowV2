@@ -6,8 +6,9 @@ import type { SafeInteger, Sha256Digest, TaskSlug } from "../../src/contracts/ev
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import type { CurrentEvidenceSetRef } from "../../src/contracts/trust.js";
 import type { PipelineStep } from "../../src/contracts/vocabulary.js";
+import { BUILD_REQUEST_KINDS } from "../../src/local/build-request.js";
 import type { NextAction } from "../../src/state/next-action.js";
-import { buildNextActionRequest } from "../../src/state/request-templates.js";
+import { buildNextActionRequest, type BuiltNextActionRequest } from "../../src/state/request-templates.js";
 import type { CommitAuthorizationInput } from "../../src/state/status.js";
 import { legalRunStepStatus, planStateTransition } from "../../src/state/transitions.js";
 
@@ -63,6 +64,7 @@ describe("next-action request templates", () => {
       status: "running",
     });
     assertFrozenPlainJson(request?.request.input);
+    expect((request?.request.input as { artifact?: unknown }).artifact).toContain("build-request");
     // Placeholder prose must not survive ingress: the artifact placeholder violates its field's
     // contract, so an unedited template cannot become a real call. The fingerprint sentinel is
     // parseable on purpose (envelope must be able to process the completed template) but can
@@ -267,6 +269,74 @@ describe("run-step template legality", () => {
         });
         expect(plan.ok, `${step}-${status} -> ${target}-${derived}`).toBe(true);
       }
+    }
+  });
+
+  it("every emitted prefill maps onto a build-request composer kind", () => {
+    // The guard for the create-task class of gap: a prefill without a composer kind forces the
+    // client back to hand-assembly, so any future next-action prefill must either map here or
+    // deliberately emit no request at all (waiver, adjudication gates, repository init, human
+    // judgment codes are exempt by construction).
+    function composerKindFor(code: string, built: BuiltNextActionRequest): string {
+      if (code === "create-task") return "initialize";
+      const input = built.request.input as { step?: string; status?: string };
+      switch (built.request.tool) {
+        case "archflow_counter_review": return "counter-review";
+        case "archflow_adjudicate": return "adjudicate";
+        case "archflow_gate": return "gate";
+        case "archflow_state":
+          if (input.status === "running") return "running";
+          if (input.status === "succeeded" && input.step === "produce") return "produce";
+          if (input.status === "succeeded" && input.step === "self_review") return "self-review";
+          if (input.status === "succeeded" && input.step === "triage") return "triage";
+          break;
+      }
+      throw new Error(`no build-request kind composes the ${code} prefill ${JSON.stringify(built.request)}`);
+    }
+
+    const emitted: Array<readonly [string, BuiltNextActionRequest]> = [];
+    const createTask = buildNextActionRequest(action({ code: "create-task" }), { task_id: taskId });
+    if (createTask !== undefined) emitted.push(["create-task", createTask]);
+    for (const step of steps) for (const status of statuses) for (const target of steps) {
+      const built = buildNextActionRequest(
+        action({ code: "run-step", step: target }),
+        { task_id: taskId, state: stateAt("prd", step, status) },
+      );
+      if (built !== undefined) emitted.push(["run-step", built]);
+    }
+    const currentEvidence = { set_digest: "c".repeat(64), sources: [] } as unknown as CurrentEvidenceSetRef;
+    const artifactGate = buildNextActionRequest(
+      action({ code: "open-gate", gate_kind: "artifact-approval" }),
+      { task_id: taskId, state: stateAt("design"), subject_digest: subjectDigest, current_evidence: currentEvidence },
+    );
+    if (artifactGate !== undefined) emitted.push(["open-gate", artifactGate]);
+    const commitGate = buildNextActionRequest(
+      action({ code: "open-gate", gate_kind: "commit-authorization" }),
+      {
+        task_id: taskId,
+        state: stateAt("phase-impl-1"),
+        commit_authorization: {
+          kind: "commit-authorization",
+          subject_digest: subjectDigest,
+          current_evidence: currentEvidence,
+          context: {
+            target_ref: "refs/heads/main",
+            diff_digest: "d".repeat(64),
+            current_artifact_digests: [subjectDigest],
+            parent_document_digests: [],
+          },
+          target_ref_guidance: "Confirm the target ref.",
+        } as unknown as CommitAuthorizationInput,
+      },
+    );
+    if (commitGate !== undefined) emitted.push(["open-gate", commitGate]);
+
+    // The sweep must actually cover every prefill family, or the invariant proves nothing.
+    expect(emitted.length).toBeGreaterThanOrEqual(10);
+    const tools = new Set(emitted.map(([, built]) => built.request.tool));
+    expect([...tools].sort()).toEqual(["archflow_adjudicate", "archflow_counter_review", "archflow_gate", "archflow_state"]);
+    for (const [code, built] of emitted) {
+      expect(BUILD_REQUEST_KINDS).toContain(composerKindFor(code, built));
     }
   });
 

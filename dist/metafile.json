@@ -7286,7 +7286,7 @@
       ]
     },
     "src/local/build-request.ts": {
-      "bytes": 20572,
+      "bytes": 22603,
       "format": "esm",
       "imports": [
         {
@@ -7346,6 +7346,11 @@
         },
         {
           "kind": "import-statement",
+          "original": "../init/task-initialization.js",
+          "path": "src/init/task-initialization.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "../state/document-artifact.js",
           "path": "src/state/document-artifact.ts"
         },
@@ -7392,7 +7397,7 @@
       ]
     },
     "src/local/commands.ts": {
-      "bytes": 24992,
+      "bytes": 25021,
       "format": "esm",
       "imports": [
         {
@@ -10672,7 +10677,7 @@
       ]
     },
     "src/state/request-templates.ts": {
-      "bytes": 9592,
+      "bytes": 9725,
       "format": "esm",
       "imports": [
         {
@@ -11106,7 +11111,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2172414,
+      "bytes": 2173571,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -12596,10 +12601,10 @@
           "bytesInOutput": 5011
         },
         "src/local/build-request.ts": {
-          "bytesInOutput": 16438
+          "bytesInOutput": 17458
         },
         "src/local/commands.ts": {
-          "bytesInOutput": 19844
+          "bytesInOutput": 19852
         },
         "src/local/envelope.ts": {
           "bytesInOutput": 12041
@@ -12713,7 +12718,7 @@
           "bytesInOutput": 5880
         },
         "src/state/request-templates.ts": {
-          "bytesInOutput": 6535
+          "bytesInOutput": 6664
         },
         "src/state/request.ts": {
           "bytesInOutput": 3172

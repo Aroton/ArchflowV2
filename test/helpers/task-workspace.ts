@@ -13,11 +13,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { TaskInitializationV1 } from "../../src/contracts/durable-task-initialization.js";
-import { parseSafeCode, parseSha256Digest, parseTaskSlug, type TaskSlug } from "../../src/contracts/evidence.js";
+import { parseSafeCode, parseTaskSlug, type TaskSlug } from "../../src/contracts/evidence.js";
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { stageTaskInitialization } from "../../src/init/task-initialization.js";
-import { computeCallEnvelope } from "../../src/local/envelope.js";
+import { runBuildRequest } from "../../src/local/build-request.js";
 import { runStateInitialization } from "../../src/state/initialization.js";
 import { createProductionServices, type ProductionServices } from "../../src/state/production.js";
 
@@ -81,23 +81,12 @@ export async function createTaskWorkspace(options: TaskWorkspaceOptions): Promis
     if (!staged.ok) throw new Error(staged.error.code);
     const bootstrap = await createProductionServices({ working_directory: root, task_id: taskId, operation });
     if (!bootstrap.ok) throw new Error(bootstrap.error.code);
-    const draft = {
-      schema_version: "1" as const,
-      task_id: taskId,
+    const composed = await runBuildRequest(bootstrap.value, {
       intent_id: "initialize-task-workspace",
-      expected_revision: 0,
-      input_fingerprint: parseSha256Digest("0".repeat(64)),
-      phase_instance: "prd" as const,
-      step: "produce" as const,
-      status: "running" as const,
-      artifact: staged.value,
-    };
-    const envelope = await computeCallEnvelope(bootstrap.value, { tool: "archflow_state", input: draft });
-    if (!envelope.ok) throw new Error(envelope.error.code);
-    const call = parseToolCall("archflow_state", {
-      ...draft,
-      input_fingerprint: envelope.value.input_fingerprint,
+      kind: "initialize",
     });
+    if (!composed.ok) throw new Error(composed.error.code);
+    const call = parseToolCall("archflow_state", composed.value.request.input);
     const initialized = await runStateInitialization(bootstrap.value.dependencies, {
       authority: bootstrap.value.authority,
       call,

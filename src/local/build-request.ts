@@ -9,6 +9,7 @@ import { parseRubricV1 } from "../contracts/rubric.js";
 import { parseTriageCandidate, type TriageDisposition } from "../contracts/triage.js";
 import { PIPELINE_STEPS, type PipelineStep } from "../contracts/vocabulary.js";
 import { resolveDispatchRoute } from "../dispatch/routing.js";
+import { stageTaskInitialization } from "../init/task-initialization.js";
 import { buildDocumentArtifact, type DocumentArtifactInput } from "../state/document-artifact.js";
 import { deriveCurrentEvidenceSet, loadRetainedEvidence } from "../state/evidence-results.js";
 import { buildImplementationOutput, type ImplementationOutputInput } from "../state/implementation-manifest.js";
@@ -28,8 +29,14 @@ import { computeCallEnvelope, type CallEnvelope } from "./envelope.js";
 const fail = <T = never>(error: ProjectError): ProjectResult<T> =>
   Object.freeze({ schema_version: "1", ok: false, error });
 
+export const BUILD_REQUEST_KINDS = Object.freeze([
+  "initialize", "produce", "running", "self-review", "triage",
+  "counter-review", "adjudicate", "gate",
+] as const);
+export type BuildRequestKind = typeof BUILD_REQUEST_KINDS[number];
+
 const PAYLOAD_SHAPE =
-  '{"intent_id":<fresh id>,"kind"?:"produce"|"running"|"self-review"|"triage"|"counter-review"|"adjudicate"|"gate",' +
+  `{"intent_id":<fresh id>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},` +
   '"step"?:<pipeline step for kind running>,' +
   '"document"?:{...},"implementation"?:{...},' +
   '"review"?:{"rubric":<rubric object>,"findings":[...],"matched_rule_versions":[...]},' +
@@ -67,6 +74,42 @@ function mechanicalInput(
     expected_revision: state.revision,
     input_fingerprint: state.input_fingerprint,
   };
+}
+
+// Parseable on purpose so the draft passes tool-call parsing; computeCallEnvelope substitutes
+// the real fingerprint via the no-state initialization identity, so the sentinel never reaches
+// the server.
+const INITIALIZATION_FINGERPRINT_SENTINEL = "0".repeat(64);
+
+/**
+ * The one kind that is legal only before durable state exists. Staging must precede envelope
+ * resolution: it scaffolds the pinned task config that the initialization identity reads to
+ * resolve the fingerprint — which also makes this the one composer that writes, carried over
+ * from task-init because the envelope cannot resolve against a config that is not on disk.
+ */
+async function composeInitialize(
+  services: ProductionServices,
+  intentId: string,
+): Promise<ProjectResult<CallEnvelope>> {
+  const staged = await stageTaskInitialization({
+    working_directory: services.runner.location.worktreeRoot,
+    task_id: services.authority.task_id,
+  });
+  if (!staged.ok) return staged;
+  return computeCallEnvelope(services, {
+    tool: "archflow_state",
+    input: {
+      schema_version: "1",
+      task_id: services.authority.task_id,
+      intent_id: intentId,
+      expected_revision: 0,
+      input_fingerprint: INITIALIZATION_FINGERPRINT_SENTINEL,
+      phase_instance: "prd",
+      step: "produce",
+      status: "running",
+      artifact: staged.value as unknown as PlainJsonValue,
+    },
+  });
 }
 
 async function composeProduce(
@@ -458,7 +501,9 @@ async function composeGate(
  * targeted transition with the server's own movement rules, and resolves the whole request
  * through the call envelope, so `request.input` is the finished tool call with nothing left to
  * transcribe. Judgment content is never drafted here: findings, dispositions, rationales,
- * rubric bodies, and gate summaries come only from the payload.
+ * rubric bodies, and gate summaries come only from the payload. Kind "initialize" is the one
+ * request composed without durable state — it stages the initialization artifact itself and is
+ * refused once state exists.
  */
 export async function runBuildRequest(
   services: ProductionServices,
@@ -466,14 +511,19 @@ export async function runBuildRequest(
 ): Promise<ProjectResult<CallEnvelope>> {
   assertPlainJson(value, "build-request input");
   const snapshot = record(structuredClone(value), "build-request input");
+  const intentId = parsePathSafeId(String(snapshot.intent_id ?? ""));
+  const kind = snapshot.kind === undefined ? "produce" : String(snapshot.kind);
+  if (kind === "initialize") {
+    return services.state === undefined
+      ? composeInitialize(services, intentId)
+      : transitionInvalid(services.state.value, "initialize");
+  }
   if (services.state === undefined) {
     return fail(createProjectError("STATE_MISSING", {
       phase_instance: services.authority.context.phase_instance,
     }));
   }
   const state = services.state.value;
-  const intentId = parsePathSafeId(String(snapshot.intent_id ?? ""));
-  const kind = snapshot.kind === undefined ? "produce" : String(snapshot.kind);
 
   switch (kind) {
     case "produce": return composeProduce(services, state, intentId, snapshot);

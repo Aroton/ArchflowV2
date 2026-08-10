@@ -48132,7 +48132,7 @@ function phaseImplParentDocumentDefaults(phaseInstance3) {
 
 // src/state/request-templates.ts
 var TEMPLATE_INTENT_ID = "Choose a fresh intent id for this request.";
-var TEMPLATE_INITIALIZATION_ARTIFACT = "Paste the archflow-local task-init initialization artifact unchanged.";
+var TEMPLATE_INITIALIZATION_ARTIFACT = 'Replace with the task-initialization artifact; archflow-local build-request (kind "initialize") stages it and composes this entire request already completed and fingerprint-resolved.';
 var TEMPLATE_RUBRIC = "Supply the skill's stable rubric verbatim.";
 var TEMPLATE_SUMMARY = "Summarize the gate subject for the human reviewer.";
 var TEMPLATE_FINGERPRINT_SENTINEL = "0".repeat(64);
@@ -48187,7 +48187,7 @@ function buildNextActionRequest(next, facts) {
     }, envelopeGuidance(
       facts.task_id,
       "archflow_state",
-      "Run archflow-local task-init and replace the artifact placeholder with its returned initialization artifact unchanged; the server accepts no entry point other than prd/produce/running at expected_revision 0."
+      'archflow-local build-request (kind "initialize") stages the initialization artifact and composes this entire request already resolved; the server accepts no entry point other than prd/produce/running at expected_revision 0.'
     ));
   }
   const state = facts.state;
@@ -52306,7 +52306,17 @@ async function stageLegacyUpgrade(input) {
 
 // src/local/build-request.ts
 var fail27 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-var PAYLOAD_SHAPE = '{"intent_id":<fresh id>,"kind"?:"produce"|"running"|"self-review"|"triage"|"counter-review"|"adjudicate"|"gate","step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"review"?:{"rubric":<rubric object>,"findings":[...],"matched_rule_versions":[...]},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"rubric"?:<rubric object for kind counter-review>,"summary"?:<gate summary text>}';
+var BUILD_REQUEST_KINDS = Object.freeze([
+  "initialize",
+  "produce",
+  "running",
+  "self-review",
+  "triage",
+  "counter-review",
+  "adjudicate",
+  "gate"
+]);
+var PAYLOAD_SHAPE = `{"intent_id":<fresh id>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"review"?:{"rubric":<rubric object>,"findings":[...],"matched_rule_versions":[...]},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"rubric"?:<rubric object for kind counter-review>,"summary"?:<gate summary text>}`;
 function record3(value, name) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${name} must be an object; expected ${PAYLOAD_SHAPE}`);
@@ -52331,6 +52341,28 @@ function mechanicalInput(services2, state, intentId) {
     expected_revision: state.revision,
     input_fingerprint: state.input_fingerprint
   };
+}
+var INITIALIZATION_FINGERPRINT_SENTINEL = "0".repeat(64);
+async function composeInitialize(services2, intentId) {
+  const staged = await stageTaskInitialization({
+    working_directory: services2.runner.location.worktreeRoot,
+    task_id: services2.authority.task_id
+  });
+  if (!staged.ok) return staged;
+  return computeCallEnvelope(services2, {
+    tool: "archflow_state",
+    input: {
+      schema_version: "1",
+      task_id: services2.authority.task_id,
+      intent_id: intentId,
+      expected_revision: 0,
+      input_fingerprint: INITIALIZATION_FINGERPRINT_SENTINEL,
+      phase_instance: "prd",
+      step: "produce",
+      status: "running",
+      artifact: staged.value
+    }
+  });
 }
 async function composeProduce(services2, state, intentId, snapshot) {
   if (legalRunStepStatus(state, "produce") !== "succeeded") {
@@ -52660,14 +52692,17 @@ async function composeGate(services2, state, intentId, snapshot) {
 async function runBuildRequest(services2, value) {
   assertPlainJson(value, "build-request input");
   const snapshot = record3(structuredClone(value), "build-request input");
+  const intentId = parsePathSafeId(String(snapshot.intent_id ?? ""));
+  const kind = snapshot.kind === void 0 ? "produce" : String(snapshot.kind);
+  if (kind === "initialize") {
+    return services2.state === void 0 ? composeInitialize(services2, intentId) : transitionInvalid(services2.state.value, "initialize");
+  }
   if (services2.state === void 0) {
     return fail27(createProjectError("STATE_MISSING", {
       phase_instance: services2.authority.context.phase_instance
     }));
   }
   const state = services2.state.value;
-  const intentId = parsePathSafeId(String(snapshot.intent_id ?? ""));
-  const kind = snapshot.kind === void 0 ? "produce" : String(snapshot.kind);
   switch (kind) {
     case "produce":
       return composeProduce(services2, state, intentId, snapshot);
@@ -52731,7 +52766,7 @@ var LOCAL_COMMAND_CONTRACTS = Object.freeze({
   envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
   "build-document": { payload: "<document artifact input>", task: "required" },
   "build-implementation-output": { payload: "<implementation output input>", task: "required" },
-  "build-request": { payload: '{"intent_id":<fresh id>,"kind"?:"produce"|"running"|"self-review"|"triage"|"counter-review"|"adjudicate"|"gate",...kind facts: "step" (running), "document"/"implementation" (produce), "review":{rubric,findings,matched_rule_versions} (self-review), "dispositions":[...] (triage), "rubric" (counter-review), "summary" (gate)}', task: "required" },
+  "build-request": { payload: `{"intent_id":<fresh id>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},...kind facts: none (initialize), "step" (running), "document"/"implementation" (produce), "review":{rubric,findings,matched_rule_versions} (self-review), "dispositions":[...] (triage), "rubric" (counter-review), "summary" (gate)}`, task: "required" },
   "manual-status": { payload: null, task: "required" },
   "manual-next": { payload: "<selector/source artifact requested by manual-status>", task: "required" },
   "manual-handoff": { payload: '{"expected_head":<digest>,"initialization"?:<task-init artifact>}', task: "required" },

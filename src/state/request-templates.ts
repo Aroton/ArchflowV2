@@ -15,7 +15,7 @@ import { legalRunStepStatus } from "./transitions.js";
 // template submitted unedited fails closed. Judgment fields the agent or human must author are
 // only ever placeholders; mechanical fields arrive prefilled.
 const TEMPLATE_INTENT_ID = "Choose a fresh intent id for this request.";
-const TEMPLATE_INITIALIZATION_ARTIFACT = "Paste the archflow-local task-init initialization artifact unchanged.";
+const TEMPLATE_INITIALIZATION_ARTIFACT = "Replace with the task-initialization artifact; archflow-local build-request (kind \"initialize\") stages it and composes this entire request already completed and fingerprint-resolved.";
 const TEMPLATE_RUBRIC = "Supply the skill's stable rubric verbatim.";
 const TEMPLATE_SUMMARY = "Summarize the gate subject for the human reviewer.";
 
@@ -106,7 +106,7 @@ export function buildNextActionRequest(next: NextAction, facts: NextActionReques
     }, envelopeGuidance(
       facts.task_id,
       "archflow_state",
-      "Run archflow-local task-init and replace the artifact placeholder with its returned initialization artifact unchanged; the server accepts no entry point other than prd/produce/running at expected_revision 0.",
+      "archflow-local build-request (kind \"initialize\") stages the initialization artifact and composes this entire request already resolved; the server accepts no entry point other than prd/produce/running at expected_revision 0.",
     ));
   }
   const state = facts.state;

@@ -93,13 +93,20 @@ describe("bundled local CLI", () => {
   it("wires all envelopes, the no-state identification seam, builders, validation, and full status", async () => {
     const fixture = await repository();
     const placeholder = digest("0");
-    const initialInput = {
-      schema_version: "1", task_id: task, intent_id: "initialize-cli", expected_revision: 0,
-      input_fingerprint: placeholder, phase_instance: "prd", step: "produce", status: "running",
+    // build-request composes the entire revision-0 initialization request before any durable
+    // state exists; envelope over its output exercises the no-state identification seam and must
+    // land on the same digests.
+    const composedInit = cli(fixture.root, "build-request", { intent_id: "initialize-cli", kind: "initialize" });
+    expect(composedInit).toMatchObject({ status: 0, value: { ok: true, value: { tool: "archflow_state" } } });
+    const initialRequest = composedInit.value.value.request;
+    expect(initialRequest.input).toMatchObject({
+      task_id: task, intent_id: "initialize-cli", expected_revision: 0,
+      phase_instance: "prd", step: "produce", status: "running",
       artifact: fixture.initialization,
-    };
-    const first = cli(fixture.root, "envelope", { tool: "archflow_state", input: initialInput });
+    });
+    const first = cli(fixture.root, "envelope", initialRequest);
     expect(first).toMatchObject({ status: 0, value: { ok: true, value: { tool: "archflow_state" } } });
+    expect(first.value.value.request_digest).toBe(composedInit.value.value.request_digest);
 
     const bootstrap = await createProductionServices({
       working_directory: fixture.root, task_id: task, operation: parseSafeCode("cli-bootstrap"),
@@ -107,7 +114,7 @@ describe("bundled local CLI", () => {
     if (!bootstrap.ok || bootstrap.value.state !== undefined) throw new Error("bootstrap services unavailable");
     const initialized = await runStateInitialization(bootstrap.value.dependencies, {
       authority: bootstrap.value.authority,
-      call: parseToolCall("archflow_state", { ...initialInput, input_fingerprint: first.value.value.input_fingerprint }),
+      call: parseToolCall("archflow_state", initialRequest.input),
     });
     expect(initialized.ok).toBe(true);
     if (!initialized.ok) return;
