@@ -43,9 +43,11 @@ export const endsWithDotOrSpace = (component: string): boolean => /[. ]$/u.test(
 
 /**
  * The path-segment rules below mirror `src/contracts/schemas/v1/path-claim.schema.json` and the
- * `pathSafeId`/`taskSlug` `$defs` in `primitives.schema.json`. A trailing space needs no rule of its
- * own: neither character class admits a space anywhere. Both vocabularies are ASCII-only, so the
- * claim schema's NFC and UTF-8 byte-length rules are satisfied by construction.
+ * `pathSafeId`/`taskSlug` `$defs` in `primitives.schema.json`. Each `.regex()` carries its
+ * primitives pattern verbatim — lookaheads included — so a generated schema emits the same
+ * `pattern`; the refines restate the lookahead rules with named messages. A trailing space needs
+ * no rule of its own: neither character class admits a space anywhere. Both vocabularies are
+ * ASCII-only, so the claim schema's NFC and UTF-8 byte-length rules are satisfied by construction.
  */
 const pathSegmentSafe = <T extends z.ZodType<string>>(schema: T): T =>
   schema
@@ -54,8 +56,8 @@ const pathSegmentSafe = <T extends z.ZodType<string>>(schema: T): T =>
 
 export const sha256DigestV1Schema = z.string().regex(/^[0-9a-f]{64}$/u);
 export const safeIdV1Schema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
-export const pathSafeIdV1Schema = pathSegmentSafe(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u)) as unknown as z.ZodType<PathSafeId>;
-export const taskSlugV1Schema = pathSegmentSafe(z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/u)) as unknown as z.ZodType<TaskSlug>;
+export const pathSafeIdV1Schema = pathSegmentSafe(z.string().regex(/^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?$)(?!.*[. ]$)[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u)) as unknown as z.ZodType<PathSafeId>;
+export const taskSlugV1Schema = pathSegmentSafe(z.string().regex(/^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$/u)) as unknown as z.ZodType<TaskSlug>;
 export const safeCodeV1Schema = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/u);
 export const safeVersionV1Schema = z.string().regex(/^[A-Za-z0-9.-]{1,64}$/u);
 export const safeIntegerV1Schema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);

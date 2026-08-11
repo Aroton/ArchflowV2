@@ -6,8 +6,8 @@ import { MAINTENANCE_DELETION_CATEGORIES, type MaintenanceRecordV1 } from "../..
 import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
 
 /**
- * `maintenance-record` has exactly one shape authority (D2): `durable-maintenance.ts` declares no
- * Zod schema, so there is no `assertZodAgreement` here and there must not be.
+ * Structural coverage for `maintenance-record` against its compiled JSON Schema; the Zod mirror's
+ * agreement lives in `test/contracts/durable-maintenance-agreement.test.ts`.
  */
 const readJson = async (url: URL): Promise<Record<string, unknown>> =>
   JSON.parse(await readFile(url, "utf8")) as Record<string, unknown>;

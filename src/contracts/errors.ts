@@ -23,7 +23,7 @@ const tool = z.enum(TOOL_NAMES);
 const adapter = z.enum(["claude-cli", "codex-cli"] satisfies readonly AdapterId[]);
 const family = z.enum(["claude", "codex"] satisfies readonly ModelFamily[]);
 const gateKind = z.enum(GATE_KINDS);
-const phaseInstance = z.string().refine((value) => { try { decodePhaseInstance(value); return true; } catch { return false; } });
+const phaseInstance = z.string().regex(/^(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)$/u).refine((value) => { try { decodePhaseInstance(value); return true; } catch { return false; } });
 const object = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
 const digestPair = { expected_digest: sha256DigestV1Schema, observed_digest: sha256DigestV1Schema } as const;
 const pathClass = z.enum(PATH_CLASSES);

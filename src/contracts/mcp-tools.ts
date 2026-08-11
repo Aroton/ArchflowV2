@@ -96,16 +96,20 @@ export function parseStagedRequestReference(value: unknown): StagedRequestRefere
 }
 const counterInput = z.object({ ...common, artifact_path: taskPathClaimV1Schema, rubric: rubricV1Schema }).strict();
 const supersedes = z.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest, old_subject_digest: digest }).strict();
-const gateInput = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), supersedes: supersedes.optional(), supplemental_outcome: z.unknown().optional(), kind: z.enum(GATE_KINDS), context: z.unknown() }).strict();
+export const gateInputSchema = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), supersedes: supersedes.optional(), supplemental_outcome: z.unknown().optional(), kind: z.enum(GATE_KINDS), context: z.unknown() }).strict().superRefine((input, context) => {
+  try { parseGateContext(input.kind, input.context); } catch (error) { context.addIssue({ code: "custom", path: ["context"], message: error instanceof Error ? error.message : "invalid gate context" }); }
+  try { parseCurrentEvidenceSetRef(input.current_evidence); } catch (error) { context.addIssue({ code: "custom", path: ["current_evidence"], message: error instanceof Error ? error.message : "invalid current evidence" }); }
+});
 const waiverOrigin = z.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest, origin_context_digest: digest, task_id: taskSlugV1Schema, phase_instance: phase, subject_digest: digest, current_evidence_set_digest: digest, rule, scope }).strict();
-const waiverInput = z.object({ ...common, origin: waiverOrigin, rationale: text, supplemental_outcome: z.unknown().optional() }).strict();
+export const waiverInputSchema = z.object({ ...common, origin: waiverOrigin, rationale: text, supplemental_outcome: z.unknown().optional() }).strict().superRefine((input, context) => {
+  if (input.task_id !== input.origin.task_id) context.addIssue({ code: "custom", path: ["task_id"], message: "waiver task_id must match origin task_id" });
+});
 
 function inputFor<K extends ToolName>(name: K, value: unknown): ToolInput<K> {
-  const parsed = name === "archflow_state" ? stateInput.parse(value) : name === "archflow_counter_review" ? counterInput.parse(value) : name === "archflow_waiver" ? waiverInput.parse(value) : gateInput.parse(value);
-  if (name === "archflow_gate") { const v = parsed as z.infer<typeof gateInput>; parseGateContext(v.kind, v.context); return { ...v, current_evidence: parseCurrentEvidenceSetRef(v.current_evidence), ...(v.supplemental_outcome === undefined ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) }) } as ToolInput<K>; }
+  const parsed = name === "archflow_state" ? stateInput.parse(value) : name === "archflow_counter_review" ? counterInput.parse(value) : name === "archflow_waiver" ? waiverInputSchema.parse(value) : gateInputSchema.parse(value);
+  if (name === "archflow_gate") { const v = parsed as z.infer<typeof gateInputSchema>; return { ...v, current_evidence: parseCurrentEvidenceSetRef(v.current_evidence), ...(v.supplemental_outcome === undefined ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) }) } as ToolInput<K>; }
   if (name === "archflow_waiver") {
-    const v = parsed as z.infer<typeof waiverInput>;
-    if (v.task_id !== v.origin.task_id) throw new TypeError("waiver task_id must match origin task_id");
+    const v = parsed as z.infer<typeof waiverInputSchema>;
     return { ...v, ...(v.supplemental_outcome === undefined ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) }) } as ToolInput<K>;
   }
   return parsed as ToolInput<K>;
@@ -219,5 +223,10 @@ export function validateProjectFailureStructure<K extends ToolName>(name: K, val
 }
 export type ResultExpectationDataByTool = { readonly [P in ToolName]: ResultIdentityPayload<P> };
 export type ResultExpectation<K extends ToolName> = ResultExpectationDataByTool[K] & { readonly [resultExpectationBrand]: K };
-export function createInternalResultExpectation<K extends ToolName>(value: ResultIdentityPayload<K>): ResultExpectation<K> { assertPlainJson(value, "result expectation"); const base = z.object({ schema_version: z.literal("1"), tool: z.enum(TOOL_NAMES), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, input_fingerprint: digest, request_digest: digest, result_id: safeId, resulting_revision: safeInteger, success: z.unknown() }).strict().parse(value); const success = successSchemas[base.tool].parse(base.success) as ToolSuccess<K>; if (base.resulting_revision !== success.revision) throw new TypeError("expectation resulting revision must equal success revision"); const expectation = Object.assign({}, base, { success }) as unknown as ResultExpectation<K>; Object.defineProperty(expectation, resultExpectationBrand, { value: value.tool, enumerable: false, writable: false, configurable: false }); Object.freeze(expectation); resultExpectations.add(expectation); return expectation; }
+export const resultExpectationDataSchema = z.object({ schema_version: z.literal("1"), tool: z.enum(TOOL_NAMES), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, input_fingerprint: digest, request_digest: digest, result_id: safeId, resulting_revision: safeInteger, success: z.unknown() }).strict().superRefine((expectation, context) => {
+  const success = successSchemas[expectation.tool].safeParse(expectation.success);
+  if (!success.success) { context.addIssue({ code: "custom", path: ["success"], message: `invalid ${expectation.tool} success value` }); return; }
+  if (expectation.resulting_revision !== success.data.revision) context.addIssue({ code: "custom", path: ["resulting_revision"], message: "expectation resulting revision must equal success revision" });
+});
+export function createInternalResultExpectation<K extends ToolName>(value: ResultIdentityPayload<K>): ResultExpectation<K> { assertPlainJson(value, "result expectation"); const base = resultExpectationDataSchema.parse(value); const success = successSchemas[base.tool].parse(base.success) as ToolSuccess<K>; const expectation = Object.assign({}, base, { success }) as unknown as ResultExpectation<K>; Object.defineProperty(expectation, resultExpectationBrand, { value: value.tool, enumerable: false, writable: false, configurable: false }); Object.freeze(expectation); resultExpectations.add(expectation); return expectation; }
 export function correlateProjectResult<K extends ToolName>(call: Extract<RequestIdentifiedToolCall, { name: K }>, expectation: NoInfer<ResultExpectation<K>>, result: NoInfer<StructurallyValidProjectResult<K>>): ProjectResult<ToolSuccess<K>> { const requestDigest = requestDigests.get(call); if (requestDigest === undefined || !parsedCalls.has(call) || !resultExpectations.has(expectation) || !structuralResults.has(result)) throw new TypeError("authentic request/result identities are required"); if (expectation[resultExpectationBrand] !== call.name || result[structuralResultBrand] !== call.name || expectation.tool !== call.name) throw new TypeError("result correlation tool mismatch"); if (expectation.request_digest !== requestDigest || expectation.task_id !== call.input.task_id || expectation.intent_id !== call.input.intent_id || expectation.input_fingerprint !== call.input.input_fingerprint) throw new TypeError("expectation invocation mismatch"); if (result.ok && (expectation.resulting_revision !== result.value.revision || !isDeepStrictEqual(expectation.success, result.value))) throw new TypeError("result expectation mismatch"); return result; }

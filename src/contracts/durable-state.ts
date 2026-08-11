@@ -1,20 +1,28 @@
+import { z } from "zod";
+
 import type { GitOid } from "./canonical.js";
+import { gitOidV1Schema } from "./canonical.js";
 import type { PathSafeId, SafeId, SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
+import { pathSafeIdV1Schema, safeIdV1Schema, safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
 import type { GateKind, WaiverScope } from "./gates.js";
+import { GATE_KINDS } from "./gates.js";
 import type { RepositoryPathClaim } from "./path-claims.js";
+import { repositoryPathClaimV1Schema } from "./path-claims.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
+import { phaseInstanceIdV1Schema } from "./phase-instance.js";
+import { isSortedUniqueBy, tupleKey } from "./validators.js";
 import type { PipelineStep } from "./vocabulary.js";
+import { PIPELINE_STEPS } from "./vocabulary.js";
 
 /**
  * `state.json` — the durable state of truth for one task.
  *
- * **This module declares no Zod schema (D2), and it must not.** `TaskStateV1` is one of the phase's
- * two purely server-internal shapes: no agent ever supplies it across the MCP tool boundary, so
- * there is no untrusted-input parse boundary for a mirror to guard. `task-state.schema.json` is its
- * sole shape authority, and `validateDurableSemantics` is the sole authority for everything the
- * schema cannot express. This follows Phase 5's precedent, where `release-manifest.schema.json` has
- * JSON Schema authority and no TypeScript module at all. Do not add a mirror here; a success
- * criterion greps for one.
+ * `taskStateV1Schema` below is a Zod *mirror* of `task-state.schema.json`, written so Zod can become
+ * the single shape authority; the JSON Schema stays the runtime-authoritative validator, and nothing
+ * in production parses state through this mirror yet. The mirror is a mirror and never a second
+ * model: `test/contracts/durable-state-agreement.test.ts` proves the two authorities accept and
+ * reject the same values, and `validateDurableSemantics` remains the sole authority for everything
+ * neither shape language expresses.
  *
  * Every type below is a `type` alias rather than an `interface` (D1): `CanonicalDocument<T extends
  * PlainJsonValue>` grants the implicit index signature it needs only to aliases, and it checks the
@@ -172,3 +180,107 @@ export type TaskStateV1 = {
   readonly adopted_checkpoint?: AdoptedCheckpointRef;
   readonly terminal?: TerminalState;
 };
+
+const sha256Digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
+
+/**
+ * `>= 1` (D8) — mirrors every inline `{ "type": "integer", "minimum": 1, "maximum": 9007199254740991 }`
+ * in `task-state.schema.json`, which pins its own minimum rather than `$ref`ing `safeInteger`
+ * because `SafeInteger` admits `0` and there is no revision, attempt, phase, or rule version `0`.
+ */
+const positiveSafeInteger = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+
+/**
+ * Module-private mirrors of the `$defs` this schema owns (D21). Nothing outside this module
+ * composes them: every other root reaches the shapes by `$ref` and authors its own mirror.
+ */
+const authoritativeResultRefV1Schema = z.object({
+  phase_instance: phaseInstanceIdV1Schema,
+  step: z.enum(PIPELINE_STEPS),
+  result_digest: sha256Digest,
+  result_id: safeIdV1Schema,
+  input_fingerprint: sha256Digest,
+  manifest_path: repositoryPathClaimV1Schema,
+}).strict();
+
+const approvalRefV1Schema = z.object({
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: z.enum(GATE_KINDS),
+  subject_digest: sha256Digest,
+  decision_digest: sha256Digest,
+  resolved_at_revision: positiveSafeInteger,
+}).strict();
+
+const waiverRefV1Schema = z.object({
+  gate_id: pathSafeIdV1Schema,
+  rule_id: safeIdV1Schema,
+  rule_version: positiveSafeInteger,
+  subject_digest: sha256Digest,
+  scope: z.object({
+    operation: z.enum(["review-trigger", "adjudication-failure"]),
+    boundary: z.enum(["subject", "phase", "task"]),
+  }).strict(),
+  granted: z.boolean(),
+  expires: z.literal("task-complete"),
+  granted_at_revision: positiveSafeInteger,
+}).strict();
+
+const openGateRefV1Schema = z.object({
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: z.enum(GATE_KINDS),
+  subject_digest: sha256Digest,
+  context_digest: sha256Digest,
+  frozen_state_digest: sha256Digest,
+  waiver_origin_gate_id: pathSafeIdV1Schema.optional(),
+  opened_at_revision: positiveSafeInteger,
+}).strict();
+
+const committedIntentRefV1Schema = z.object({
+  intent_id: pathSafeIdV1Schema,
+  request_digest: sha256Digest,
+  receipt_digest: sha256Digest,
+  outcome_digest: sha256Digest,
+  prior_revision: safeIntegerV1Schema,
+  resulting_revision: positiveSafeInteger,
+  result_id: safeIdV1Schema,
+}).strict();
+
+const adoptedCheckpointRefV1Schema = z.object({
+  revision: positiveSafeInteger,
+  checkpoint_digest: sha256Digest,
+}).strict();
+
+/**
+ * The mirror. Each of the three set fields calls `isSortedUniqueBy` with `tupleKey` over the same
+ * property list its `x-archflow-sorted-unique-by` keyword names — the same two exported functions
+ * the Ajv keyword registration calls — so each ordering rule is literally one predicate across both
+ * authorities and cannot drift. `.strict()` matches `additionalProperties: false`; absence is
+ * `.optional()` plus omission from `required`, never `null`.
+ */
+export const taskStateV1Schema = z.object({
+  schema_version: z.literal("1"),
+  task_id: taskSlugV1Schema,
+  repository_identity_digest: sha256Digest,
+  revision: positiveSafeInteger,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: z.enum(PIPELINE_STEPS),
+  status: z.enum(STEP_STATUSES),
+  attempt: positiveSafeInteger,
+  input_fingerprint: sha256Digest,
+  initialization_digest: sha256Digest,
+  config_digest: sha256Digest,
+  workflow_digest: sha256Digest,
+  constitution_digest: sha256Digest,
+  policy_base_commit: gitOidV1Schema,
+  authoritative_results: z.array(authoritativeResultRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "authoritative_results must be sorted by (phase_instance, step) with no duplicates"),
+  approvals: z.array(approvalRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "approvals must be sorted by gate_id with no duplicates"),
+  waivers: z.array(waiverRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "waivers must be sorted by gate_id with no duplicates"),
+  planned_final_phase: positiveSafeInteger.optional(),
+  open_gate: openGateRefV1Schema.optional(),
+  committed_intent: committedIntentRefV1Schema.optional(),
+  adopted_checkpoint: adoptedCheckpointRefV1Schema.optional(),
+  terminal: z.enum(TERMINAL_STATES).optional(),
+}).strict() as unknown as z.ZodType<TaskStateV1>;

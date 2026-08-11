@@ -207,47 +207,6 @@ describe("D2 — the Zod-mirror half agrees with its JSON Schema authority", () 
 });
 
 /**
- * The other half of D2, asserted negatively. `task-state`, `intent-receipt`, and `maintenance-record` are
- * only purely server-internal shapes and have exactly one shape model each — Phase 5's precedent,
- * where `release-manifest.schema.json` has JSON Schema authority and no TypeScript module at all.
- * A missing mirror and a forgotten mirror are indistinguishable without this.
- */
-describe("D2 — the no-mirror half has exactly one shape model", () => {
-  it("neither server-internal module declares a Zod schema", () => {
-    for (const name of ["durable-state.ts", "durable-intent.ts", "durable-maintenance.ts"]) {
-      const text = source(name);
-      expect(text, `${name} imports zod`).not.toMatch(/from\s+"zod"/u);
-      expect(text, `${name} declares a Zod schema`).not.toMatch(/\bz\s*\./u);
-      expect(text, `${name} declares a mirror const`).not.toMatch(/V1Schema\s*=/u);
-    }
-  });
-
-  it("no Zod schema anywhere names a field of task-state, receipt, maintenance-record, or CommittedIntentRef", () => {
-    // One distinctive, uniquely-owned field per unmirrored shape. A Zod mirror for any of them would
-    // have to name at least one of these, so a module that both imports zod and mentions one is the
-    // exact drift this asserts against.
-    const unmirroredFields = [
-      "committed_intent", // TaskStateV1
-      "reachability_proof_digest", // MaintenanceRecordV1
-      "prepared_state_digest", // IntentReceiptV1
-    ] as const;
-
-    // D21 makes the other task-state reference shapes mirrored Phase 8 authorities.
-
-    const modules = readdirSync(SRC).filter((name) => name.endsWith(".ts"));
-    expect(modules.length).toBeGreaterThan(NEW_MODULES.length);
-
-    for (const name of modules) {
-      const text = source(name);
-      if (!/from\s+"zod"/u.test(text)) continue;
-      for (const field of unmirroredFields) {
-        expect(text, `${name} is a zod-bearing module naming ${field}`).not.toContain(field);
-      }
-    }
-  });
-});
-
-/**
  * The claimable / server-owned partition. This is the assertion that stops a future class added to
  * `path-claims.ts` from landing in neither set — a class in neither is silently unclaimable *and*
  * unprotected, and no leaf chunk's test can see it.

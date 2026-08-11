@@ -46,13 +46,13 @@ export function decodePhaseInstance(value: unknown): PhaseInstance {
 }
 
 /**
- * The shared authority for the phase-instance *string*. It delegates to `decodePhaseInstance`
- * rather than copying `ITERATED_PHASE`, exactly as `errors.ts:26` and `gates.ts:121` already do, so
- * no further literal copy of the pattern exists. It is therefore strictly stronger than
- * `primitives.schema.json#/$defs/phaseInstanceId`, which can only be a `pattern` and so admits phase
- * numbers above `Number.MAX_SAFE_INTEGER` that this schema rejects.
+ * The shared authority for the phase-instance *string*. The `.regex()` carries
+ * `primitives.schema.json#/$defs/phaseInstanceId` verbatim, so a generated schema emits the same
+ * `pattern`. The refine delegates to `decodePhaseInstance` rather than copying `ITERATED_PHASE`
+ * and stays strictly stronger than the pattern, which alone admits phase numbers above
+ * `Number.MAX_SAFE_INTEGER` that this schema rejects.
  */
-export const phaseInstanceIdV1Schema = z.string().refine((value) => {
+export const phaseInstanceIdV1Schema = z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((value) => {
   try {
     decodePhaseInstance(value);
     return true;

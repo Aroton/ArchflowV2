@@ -1,8 +1,9 @@
 import { z } from "zod";
 
 import type { CanonicalDocument } from "./canonical.js";
-import type { PathSafeId, SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
+import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type SafeInteger, type Sha256Digest, type TaskSlug } from "./evidence.js";
 import {
+  GATE_CONTRACTS,
   GATE_KINDS,
   gateDecisionEnvelopeV1Schema,
   humanDecisionProvenanceV1Schema,
@@ -15,7 +16,7 @@ import {
   type WaiverOriginRef,
   type WaiverScope,
 } from "./gates.js";
-import type { CurrentEvidenceSetRef } from "./trust.js";
+import { currentEvidenceSetRefSchema, type CurrentEvidenceSetRef } from "./trust.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson } from "./plain-json.js";
 import {
@@ -97,8 +98,8 @@ export type ActiveGateV1 = GateRequestV1 & {
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const safeId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
-const pathSafeId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u);
-const taskSlug = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u);
+const pathSafeId = pathSafeIdV1Schema;
+const taskSlug = taskSlugV1Schema;
 const phase = z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
 const text = z.string().min(1).max(4096).regex(/\S/u);
 const rule = z.object({ rule_id: safeId, rule_version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict();
@@ -116,6 +117,84 @@ export const gateDecisionRecordV1Schema = z.discriminatedUnion("outcome", [
   z.object({ ...base, outcome: z.literal("cancelled"), reason: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
   z.object({ ...base, outcome: z.literal("superseded"), supersession }).strict(),
 ]) as unknown as z.ZodType<GateDecisionRecordV1>;
+
+/**
+ * The per-kind decision vocabularies pinned as `const` arrays by `gate-request.schema.json`; order
+ * is part of the contract, so the mirror models each as a tuple of literals.
+ */
+const GATE_REQUEST_DECISIONS = {
+  "artifact-approval": ["approve", "revise", "reject", "cancel"],
+  "review-trigger": ["approve", "revise", "reject", "waiver-requested", "cancel"],
+  "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
+  "adjudication-failure": ["approve", "revise", "reject", "waiver-requested", "cancel"],
+  "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
+  "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
+  "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
+  "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
+  "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"],
+} as const satisfies Readonly<Record<GateKind, readonly [string, ...string[]]>>;
+
+const WAIVER_DECISIONS = ["grant", "deny", "cancel"] as const;
+
+const literalTuple = (values: readonly [string, ...string[]]) =>
+  z.tuple(values.map((value) => z.literal(value)) as [z.ZodLiteral<string>, ...z.ZodLiteral<string>[]]);
+
+const waiverGateContextSchema = z.object({ origin, rationale: text }).strict();
+
+const gateRequestCommon = {
+  schema_version: z.literal("1"),
+  gate_id: pathSafeId,
+  intent_id: pathSafeId,
+  request_digest: digest,
+  task_id: taskSlug,
+  phase_instance: phase,
+  summary: text,
+  subject_digest: digest,
+  context_digest: digest,
+  current_evidence: currentEvidenceSetRefSchema,
+  supersedes: supersession.optional(),
+  opened_at_revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+} as const;
+
+const gateArm = (kind: GateKind, context: z.ZodType, decisions: readonly [string, ...string[]], extra: Record<string, z.ZodType>) =>
+  z.object({ ...gateRequestCommon, ...extra, kind: z.literal(kind), context, allowed_decisions: literalTuple(decisions) }).strict();
+
+/**
+ * One arm per `gate-request.schema.json` `oneOf` branch: the nine gate kinds plus the two waiver
+ * arms. Non-waiver arms embed `GATE_CONTRACTS[kind].context` — the same Zod context schemas
+ * `parseGateContext` runs — so the `x-archflow-gate-semantics` checks (sorted-unique rule sets,
+ * eligible-waiver subset, waiver-scope operation match, attempts >= maximum) ride along instead of
+ * being restated. The arms are disjoint: the pinned `allowed_decisions` tuples separate a waiver
+ * arm from its same-kind review arm.
+ */
+const gateArms = (extra: Record<string, z.ZodType>) => [
+  ...GATE_KINDS.map((kind) => gateArm(kind, GATE_CONTRACTS[kind].context, GATE_REQUEST_DECISIONS[kind], extra)),
+  gateArm("review-trigger", waiverGateContextSchema, WAIVER_DECISIONS, extra),
+  gateArm("adjudication-failure", waiverGateContextSchema, WAIVER_DECISIONS, extra),
+] as unknown as [z.ZodType, z.ZodType, ...z.ZodType[]];
+
+export const gateRequestV1Schema = z.union(gateArms({})) as unknown as z.ZodType<GateRequestV1>;
+
+const gateDecisionTemplateV1Schema = z.object({
+  schema_version: z.literal("1"),
+  gate_id: pathSafeId,
+  task_id: taskSlug,
+  phase_instance: phase,
+  kind: z.enum(GATE_KINDS),
+  subject_digest: digest,
+  context_digest: digest,
+  required_fields: z.union([
+    literalTuple(["payload", "human_provenance"]),
+    literalTuple(["granted", "scope", "origin", "notes", "human_provenance"]),
+  ]),
+  cancellation_fields: literalTuple(["cancelled", "reason", "human_provenance"]),
+}).strict();
+
+export const activeGateV1Schema = z.union(gateArms({
+  status: z.literal("awaiting-human"),
+  decision_template: gateDecisionTemplateV1Schema,
+  supplemental,
+})) as unknown as z.ZodType<ActiveGateV1>;
 
 export function parseGateRequest(value: unknown): GateRequestV1 {
   assertPlainJson(value, "gate request");

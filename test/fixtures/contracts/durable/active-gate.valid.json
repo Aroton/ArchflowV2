@@ -1,0 +1,75 @@
+{
+  "schema_version": "1",
+  "gate_id": "gate-review-1",
+  "intent_id": "intent-1",
+  "request_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "task_id": "task-1",
+  "phase_instance": "phase-impl-2",
+  "summary": "Run the triggered constitution review before the phase may advance",
+  "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "context_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "current_evidence": {
+    "set_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+    "slots": [
+      {
+        "role": "counter-review",
+        "evidence_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+        "assurance": "server-attested",
+        "producer_family": "claude",
+        "reviewer_family": "codex",
+        "independence": "opposite-family"
+      }
+    ]
+  },
+  "supersedes": {
+    "superseded_gate_id": "gate-0",
+    "accepted_triage_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "old_subject_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "kind": "review-trigger",
+  "context": {
+    "matched_rules": [
+      { "rule_id": "rule-a", "rule_version": 1 },
+      { "rule_id": "rule-b", "rule_version": 2 }
+    ],
+    "uncertain_rules": [{ "rule_id": "rule-c", "rule_version": 1 }],
+    "eligible_waiver_rules": [{ "rule_id": "rule-a", "rule_version": 1 }],
+    "waiver_scope": { "operation": "review-trigger", "boundary": "subject" }
+  },
+  "allowed_decisions": ["approve", "revise", "reject", "waiver-requested", "cancel"],
+  "opened_at_revision": 4,
+  "status": "awaiting-human",
+  "decision_template": {
+    "schema_version": "1",
+    "gate_id": "gate-review-1",
+    "task_id": "task-1",
+    "phase_instance": "phase-impl-2",
+    "kind": "review-trigger",
+    "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "context_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "required_fields": ["payload", "human_provenance"],
+    "cancellation_fields": ["cancelled", "reason", "human_provenance"]
+  },
+  "supplemental": [
+    {
+      "action": "ingest",
+      "reason": "Human requested a supplemental gate counter-review",
+      "review": {
+        "prior_gate_id": "gate-0",
+        "task_id": "task-1",
+        "phase_instance": "phase-impl-2",
+        "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "input_fingerprint": "6666666666666666666666666666666666666666666666666666666666666666",
+        "evidence_slot": {
+          "role": "gate-counter-review",
+          "evidence_digest": "7777777777777777777777777777777777777777777777777777777777777777",
+          "assurance": "server-attested",
+          "producer_family": "claude",
+          "reviewer_family": "codex",
+          "independence": "opposite-family",
+          "gate_id": "gate-0"
+        }
+      }
+    }
+  ]
+}

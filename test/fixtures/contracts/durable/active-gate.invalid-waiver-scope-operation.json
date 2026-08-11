@@ -1,0 +1,47 @@
+{
+  "schema_version": "1",
+  "gate_id": "gate-adjudication-1",
+  "intent_id": "intent-1",
+  "request_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "task_id": "task-1",
+  "phase_instance": "phase-impl-2",
+  "summary": "Adjudication failure whose waiver scope names the wrong operation",
+  "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "context_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "current_evidence": {
+    "set_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+    "slots": [
+      {
+        "role": "counter-review",
+        "evidence_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+        "assurance": "server-attested",
+        "producer_family": "claude",
+        "reviewer_family": "codex",
+        "independence": "opposite-family"
+      }
+    ]
+  },
+  "kind": "adjudication-failure",
+  "context": {
+    "constitution": "fail",
+    "failed_rules": [{ "rule_id": "rule-a", "rule_version": 1 }],
+    "uncertain_rules": [],
+    "eligible_waiver_rules": [{ "rule_id": "rule-a", "rule_version": 1 }],
+    "waiver_scope": { "operation": "review-trigger", "boundary": "subject" }
+  },
+  "allowed_decisions": ["approve", "revise", "reject", "waiver-requested", "cancel"],
+  "opened_at_revision": 4,
+  "status": "awaiting-human",
+  "decision_template": {
+    "schema_version": "1",
+    "gate_id": "gate-adjudication-1",
+    "task_id": "task-1",
+    "phase_instance": "phase-impl-2",
+    "kind": "adjudication-failure",
+    "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "context_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "required_fields": ["payload", "human_provenance"],
+    "cancellation_fields": ["cancelled", "reason", "human_provenance"]
+  },
+  "supplemental": []
+}
