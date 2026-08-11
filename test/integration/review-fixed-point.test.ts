@@ -59,12 +59,11 @@ import {
 } from "../../src/repository/identity.js";
 import type { ResolvedPath, ResolvedTaskPath } from "../../src/repository/paths.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
+import { rulesForEnvelope } from "../../src/review/adjudication.js";
 import {
-  runAdjudication,
-  type RunAdjudicationDependencies,
-  type RunAdjudicationInput,
-} from "../../src/review/adjudication.js";
-import { runCounterReview } from "../../src/review/counter-review.js";
+  runCounterReview,
+  type ConstitutionReviewPlan,
+} from "../../src/review/counter-review.js";
 import {
   assessCurrentEvidence,
   type EvidenceAssessment,
@@ -101,6 +100,8 @@ afterEach(async () => {
 });
 
 const task = parseTaskSlug("fixed-point-task");
+// One active rule (no enforcement declarations) so every counter-review call carries the merged
+// constitution review, plus one retired rule proving deprecated entries never demand coverage.
 const constitution = await resolvedConstitutionFixture({
   "00-retired.md": `---
 id: retired
@@ -108,6 +109,14 @@ version: 1
 status: deprecated
 ---
 retired rule
+`,
+  "10-isolation.md": `---
+id: task-isolation
+version: 1
+status: active
+review_trigger: A task reads or mutates another task's files.
+---
+Tasks are isolated from one another.
 `,
 });
 const phase = encodePhaseInstance({
@@ -657,6 +666,83 @@ async function commitTriage(
   });
 }
 
+/**
+ * Builds the fixture stand-in for the second, adjudicating child dispatch: it answers with a
+ * clean pass over exactly the sealed envelope it received, covering every active rule.
+ */
+function constitutionPlan(
+  h: Harness,
+  dependencies: TransactionDependencies,
+  version: number,
+): ConstitutionReviewPlan {
+  const resultId = `adjudication-v${version}`;
+  return {
+    registry: constitution.rules,
+    pinned_constitution_digest: constitution.digest,
+    rules: rulesForEnvelope(constitution.rules),
+    approved_upstreams: [],
+    approved_upstream_digests: [],
+    invocation_id: parseSafeId(`adjudication-invocation-v${version}`),
+    result_id: parseSafeId(resultId),
+    dispatch: async (_route, envelope) => {
+      const parsed = JSON.parse(new TextDecoder().decode(envelope.bytes)) as {
+        subject: Record<string, unknown>;
+        rules: readonly { id: string; version: number }[];
+      };
+      return {
+        cli_version: "fixture-1",
+        extracted_output_bytes: canonicalJsonBytes({
+          schema_version: "1",
+          task_id: task,
+          phase_instance: phase,
+          step: "adjudicate",
+          subject_digest: parsed.subject.subject_digest,
+          input_fingerprint: parsed.subject.input_fingerprint,
+          pinned_constitution_digest: parsed.subject.pinned_constitution_digest,
+          approved_upstream_digests: [],
+          source_evidence_set_digest: parsed.subject.source_evidence_set_digest,
+          rule_findings: parsed.rules.map((rule) => ({
+            rule_id: rule.id,
+            rule_version: rule.version,
+            compliance: "pass",
+            rationale: "Checked the retained subject.",
+            trigger: "not-matched",
+            trigger_evidence: "No review trigger matched.",
+            enforced_by: [],
+          })),
+          drift_findings: [],
+          constitution: "pass",
+          drift: "aligned",
+          matched_rule_versions: [],
+          uncertain_rule_versions: [],
+        } as never),
+      };
+    },
+    // The third parameter (the sibling review's just-prepared bytes) is deliberately unused:
+    // this harness reads retained bytes from durable state at both preparation and install
+    // time, so creation-time accounting must be computed against the same authority the
+    // install-time check re-reads, or the two measurements could never agree.
+    prepare_evidence: async (evidence, measuredAtRevision) => {
+      const prepared = await prepareEvidenceResult({
+        authority: h.authority,
+        runner: h.runner,
+        result_id: parseSafeId(resultId),
+        retained_task_bytes: await dependencies.read_retained_task_bytes!(),
+        measured_at_revision: measuredAtRevision,
+        scanner: cleanScanner,
+        value: { kind: "adjudication", evidence },
+      });
+      if (prepared.ok) {
+        for (const payload of prepared.value.prepared.payloads) {
+          await mkdir(dirname(payload.target.absolute), { recursive: true });
+        }
+        await mkdir(dirname(prepared.value.manifest_target.absolute), { recursive: true });
+      }
+      return prepared;
+    },
+  };
+}
+
 async function commitCounter(
   h: Harness,
   dependencies: TransactionDependencies,
@@ -739,8 +825,12 @@ async function commitCounter(
       },
     },
     projection_digest: subject,
+    // The pinned constitution has an active rule, so every counter-review call carries the
+    // second, adjudicating dispatch and installs both evidence results in the one transaction.
+    constitution: constitutionPlan(h, dependencies, version),
   });
   if (!result.ok) throw new Error(result.error.code);
+  return result.value;
 }
 
 async function rewrite(
@@ -972,227 +1062,8 @@ async function assessment(
   });
 }
 
-async function commitAdjudication(
-  h: Harness,
-  dependencies: TransactionDependencies,
-  subject: Sha256Digest,
-  fingerprint: Sha256Digest,
-  current: CurrentReviewSet,
-) {
-  await enterStep(
-    h,
-    dependencies,
-    "adjudication-running-v2",
-    "adjudicate",
-    fingerprint,
-  );
-  const state = await durableState(h.authority);
-  const resultId = "adjudication-v2";
-  const call = parseToolCall("archflow_adjudicate", {
-    schema_version: "1",
-    task_id: task,
-    intent_id: "adjudication-intent-v2",
-    expected_revision: state.revision,
-    input_fingerprint: fingerprint,
-    artifact_path: parseTaskPathClaim("phases/phase-14-output.md"),
-    upstream_paths: [],
-  });
-  const output = {
-    schema_version: "1",
-    task_id: task,
-    phase_instance: phase,
-    step: "adjudicate",
-    subject_digest: subject,
-    input_fingerprint: fingerprint,
-    pinned_constitution_digest: state.constitution_digest,
-    approved_upstream_digests: [],
-    source_evidence_set_digest: current.current_evidence_set.set_digest,
-    rule_findings: [],
-    drift_findings: [],
-    constitution: "pass",
-    drift: "aligned",
-    matched_rule_versions: [],
-    uncertain_rule_versions: [],
-  } satisfies Omit<AdjudicationEvidence,
-    "assurance" | "adapter" | "cli_version" | "model_family" | "model" |
-    "effort" | "invocation_id" | "envelope_input_digest" |
-    "observed_output_digest" | "result_id">;
-  const serviceDependencies: RunAdjudicationDependencies = {
-    transaction: dependencies,
-    load_constitution: async (policyBaseCommit) => {
-      expect(policyBaseCommit).toBe(state.policy_base_commit);
-      return { schema_version: "1", ok: true, value: constitution };
-    },
-    load_current_review_set: async (authority, phaseInstance) =>
-      loadCurrentReviewSet({
-        read_state: dependencies.read_state,
-        load_retained_result: dependencies.load_retained_result!,
-      }, authority, phaseInstance),
-    dispatch: async () => ({
-      cli_version: "fixture-1",
-      extracted_output_bytes: canonicalJsonBytes(output),
-    }),
-    prepare_evidence: async (evidence, measuredAtRevision) => {
-      const prepared = await prepareEvidenceResult({
-        authority: h.authority,
-        runner: h.runner,
-        result_id: parseSafeId(resultId),
-        retained_task_bytes: await dependencies.read_retained_task_bytes!(),
-        measured_at_revision: measuredAtRevision,
-        scanner: cleanScanner,
-        value: { kind: "adjudication", evidence },
-      });
-      if (prepared.ok) {
-        for (const payload of prepared.value.prepared.payloads) {
-          await mkdir(dirname(payload.target.absolute), { recursive: true });
-        }
-        await mkdir(dirname(prepared.value.manifest_target.absolute), { recursive: true });
-      }
-      return prepared;
-    },
-    detect_constitution_edit: async () => ({
-      schema_version: "1",
-      ok: true,
-      value: undefined,
-    }),
-    derive_approved_upstreams: async () => ({
-      schema_version: "1",
-      ok: true,
-      value: [],
-    }),
-    open_gate: async () => {
-      throw new Error("clean adjudication must not open a gate");
-    },
-  };
-  const serviceInput: RunAdjudicationInput = {
-    authority: h.authority,
-    call,
-    config,
-    phase_kind: "phase-impl",
-    producer_family: "claude",
-    envelope: {
-      artifact: "artifact-v2",
-      rules: [],
-      source_evidence_set_digest: current.current_evidence_set.set_digest,
-      subject: {
-        task_id: task,
-        phase_instance: phase,
-        role: "adjudication",
-        step: "adjudicate",
-        subject_digest: subject,
-        input_fingerprint: fingerprint,
-        pinned_constitution_digest: state.constitution_digest,
-        approved_upstream_digests: [],
-        source_evidence_set_digest: current.current_evidence_set.set_digest,
-        invocation_id: "adjudication-invocation-v2",
-        result_id: resultId,
-      },
-    },
-  };
-  const forgedSetDigest = "9".repeat(64) as Sha256Digest;
-  await expect(runAdjudication({
-    ...serviceDependencies,
-    load_constitution: async () => ({
-      schema_version: "1",
-      ok: true,
-      value: { ...constitution },
-    }),
-  }, serviceInput)).rejects.toThrow(/authentic resolved constitution/u);
-  await expect(runAdjudication(serviceDependencies, {
-    ...serviceInput,
-    envelope: {
-      ...serviceInput.envelope,
-      rules: [{
-        id: "invented",
-        version: 1,
-        text: "not pinned",
-        enforced_by: [],
-      }],
-    },
-  })).rejects.toThrow(/constitution is not durably pinned/u);
-  await expect(runAdjudication(serviceDependencies, {
-    ...serviceInput,
-    envelope: {
-      ...serviceInput.envelope,
-      subject: {
-        ...serviceInput.envelope.subject,
-        pinned_constitution_digest: forgedSetDigest,
-      },
-    },
-  })).rejects.toThrow(/constitution is not durably pinned/u);
-  await expect(runAdjudication(serviceDependencies, {
-    ...serviceInput,
-    envelope: {
-      ...serviceInput.envelope,
-      source_evidence_set_digest: forgedSetDigest,
-      subject: {
-        ...serviceInput.envelope.subject,
-        source_evidence_set_digest: forgedSetDigest,
-      },
-    },
-  })).rejects.toThrow(/source review set is not durably current/u);
-
-  const malformed = await runAdjudication({
-    ...serviceDependencies,
-    dispatch: async () => ({
-      cli_version: "fixture-1",
-      extracted_output_bytes: canonicalJsonBytes({
-        schema_version: "1",
-        malformed: true,
-      }),
-    }),
-  }, serviceInput);
-  expect(malformed.ok).toBe(false);
-  if (!malformed.ok) {
-    expect(malformed.error.code).toBe("MODEL_OUTPUT_INVALID");
-    expect(malformed.error.diagnostic.parameters).toMatchObject({
-      adapter: "codex-cli",
-      attempt: 1,
-      issue_code: "adjudication-output-invalid",
-    });
-  }
-  expect((await durableState(h.authority)).revision).toBe(state.revision);
-
-  const missingApprovalDigest = "8".repeat(64) as Sha256Digest;
-  const missingApproval = await runAdjudication({
-    ...serviceDependencies,
-    derive_approved_upstreams: async () => ({
-      schema_version: "1",
-      ok: true,
-      value: [{
-        upstream_digest: missingApprovalDigest,
-        artifact: "unapproved upstream",
-      }],
-    }),
-    dispatch: async () => {
-      throw new Error("an unapproved upstream must stop before dispatch");
-    },
-  }, {
-    ...serviceInput,
-    envelope: {
-      ...serviceInput.envelope,
-      subject: {
-        ...serviceInput.envelope.subject,
-        approved_upstream_digests: [missingApprovalDigest],
-      },
-    },
-  });
-  expect(missingApproval.ok).toBe(false);
-  if (!missingApproval.ok) {
-    expect(missingApproval.error.code).toBe("STATE_INVALID");
-    expect(missingApproval.error.diagnostic.parameters).toMatchObject({
-      issue_code: "upstream-approval-missing",
-    });
-  }
-  expect((await durableState(h.authority)).revision).toBe(state.revision);
-
-  const result = await runAdjudication(serviceDependencies, serviceInput);
-  if (!result.ok) throw new Error(result.error.code);
-  expect(result.value.gate).toBeUndefined();
-}
-
 describe("durable review fixed point", () => {
-  it("restarts twice and advances only after the final clean adjudication", async () => {
+  it("restarts twice and advances only after the final clean merged review", async () => {
     const h = await fixture();
     let dependencies = h.dependencies;
     const subjects = [0, 1, 2].map((version) =>
@@ -1200,19 +1071,35 @@ describe("durable review fixed point", () => {
     const fingerprints = [0, 1, 2].map((version) =>
       computeInputFingerprint(fingerprintSubject(version)));
 
-    await commitCounter(h, dependencies, 0,
+    const merged = await commitCounter(h, dependencies, 0,
       subjects[0]!, fingerprints[0]!, "accepted");
+    // One call, one transaction, two evidence results: the merged success reports the
+    // evaluated constitution and durable state holds both references immediately.
+    expect(merged.transaction.outcome).toMatchObject({
+      verdict: "advisory",
+      constitution: {
+        status: "evaluated",
+        constitution: "pass",
+        drift: "aligned",
+        triggers: [],
+      },
+    });
+    expect(merged.constitution_evidence?.constitution).toBe("pass");
+    expect((await durableState(h.authority)).authoritative_results
+      .filter((reference) => reference.input_fingerprint === fingerprints[0])
+      .map((reference) => reference.step).sort()).toEqual([
+        "adjudicate",
+        "counter_review",
+      ]);
     await commitTriage(h, dependencies, 0, "accepted");
     expect(await assessment(h, dependencies, subjects[0]!, fingerprints[0]!))
       .toMatchObject({ reentry_required: true, next: "produce" });
-    expect((await durableState(h.authority)).authoritative_results
-      .some((reference) => reference.step === "adjudicate")).toBe(false);
 
     dependencies = await rewrite(h, dependencies, 1);
     expect(await assessment(h, dependencies, subjects[1]!, fingerprints[1]!))
       .toMatchObject({
         current: [],
-        stale: ["counter_review", "triage"],
+        stale: ["counter_review", "triage", "adjudicate"],
         next: "counter_review",
       });
 
@@ -1225,23 +1112,19 @@ describe("durable review fixed point", () => {
     await commitTriage(h, dependencies, 1, "accepted");
     expect(await assessment(h, dependencies, subjects[1]!, fingerprints[1]!))
       .toMatchObject({ reentry_required: true, next: "produce" });
+    // The retained constitution evidence is the one installed with this round's review.
     expect((await durableState(h.authority)).authoritative_results
-      .some((reference) => reference.step === "adjudicate")).toBe(false);
+      .filter((reference) => reference.step === "adjudicate")
+      .map((reference) => reference.input_fingerprint)).toEqual([fingerprints[1]]);
 
     dependencies = await rewrite(h, dependencies, 2);
     await commitCounter(h, dependencies, 2,
       subjects[2]!, fingerprints[2]!, "clean");
-    const finalReviews = await reconstruct(h, dependencies);
     await commitTriage(h, dependencies, 2, "rejected");
+    // No separate adjudication step remains: the clean constitution evidence arrived with the
+    // review, so the completed triage closes the loop at "advance".
     expect(await assessment(h, dependencies, subjects[2]!, fingerprints[2]!))
-      .toMatchObject({ blocker_remains: false, next: "adjudicate" });
-    await commitAdjudication(
-      h,
-      dependencies,
-      subjects[2]!,
-      fingerprints[2]!,
-      finalReviews,
-    );
+      .toMatchObject({ blocker_remains: false, next: "advance" });
 
     // Simulate a process restart: rebuild all dependencies and derive authority only
     // from canonical state plus retained manifests on disk.
@@ -1289,7 +1172,7 @@ describe("editorial revision fixed point", () => {
     expect((await durableState(h.authority)).attempt).toBe(1);
     expect(await assessment(h, dependencies, predecessorSubject, predecessorFingerprint))
       .toMatchObject({
-        current: ["counter_review", "triage"],
+        current: ["counter_review", "triage", "adjudicate"],
         editorial_revision_required: true,
         reentry_required: false,
         exhausted: false,
@@ -1297,16 +1180,18 @@ describe("editorial revision fixed point", () => {
       });
     expect((await durableState(h.authority)).attempt).toBe(1);
 
-    // The revised subject inherits currency only through the declared predecessor pair.
+    // The revised subject inherits currency only through the declared predecessor pair, and it
+    // inherits ALL of it — reviews, triage, and the constitution evidence dispatched with the
+    // review. Nothing is re-run after an editorial revision; the loop closes at "advance".
     expect(await assessment(h, dependencies, revisedSubject, revisedFingerprint, {
       subject_digest: predecessorSubject,
       input_fingerprint: predecessorFingerprint,
     })).toMatchObject({
-      current: ["counter_review", "triage"],
+      current: ["counter_review", "triage", "adjudicate"],
       stale: [],
       editorial_revision_required: false,
       reentry_required: false,
-      next: "adjudicate",
+      next: "advance",
     });
     // Without the declaration nothing is current.
     expect(await assessment(h, dependencies, revisedSubject, revisedFingerprint))
@@ -1320,9 +1205,10 @@ describe("editorial revision fixed point", () => {
       { subject_digest: revisedSubject, input_fingerprint: revisedFingerprint },
     )).toMatchObject({ current: [], next: "counter_review" });
 
-    // Adjudication currency deliberately stays exact: an adjudication bound to the predecessor
-    // never counts for the revised subject, while one bound to the revised bytes closes the
-    // loop at "advance" exactly as a normal clean pass would.
+    // Constitution-evidence currency follows the same one-hop rule as the reviews it was
+    // dispatched with: predecessor-bound counts, revised-bound counts, anything else is stale —
+    // and a stale constitution slot beside current reviews demands the produce re-entry
+    // recovery path rather than any direct re-adjudication (the step no longer exists).
     const state = await durableState(h.authority);
     const loaded = await loadRetainedEvidence({
       load_retained_result: dependencies.load_retained_result!,
@@ -1382,8 +1268,9 @@ describe("editorial revision fixed point", () => {
       "adjudication-predecessor-bound",
       adjudicationFor(predecessorSubject, predecessorFingerprint),
     )).toMatchObject({
-      current: ["counter_review", "triage"],
-      next: "adjudicate",
+      current: ["counter_review", "triage", "adjudicate"],
+      reentry_required: false,
+      next: "advance",
     });
     expect(await withAdjudication(
       "adjudication-revised-bound",
@@ -1394,6 +1281,18 @@ describe("editorial revision fixed point", () => {
       reentry_required: false,
       editorial_revision_required: false,
       next: "advance",
+    });
+    // Two hops back is stale. With active rules and current reviews, the stale constitution
+    // slot is reachable only through repair or upstream re-approval, and the answer is the
+    // backward-to-produce recovery door — never a bigger evidence window.
+    expect(await withAdjudication(
+      "adjudication-unrelated-bound",
+      adjudicationFor(secondRevision, computeInputFingerprint(fingerprintSubject(2))),
+    )).toMatchObject({
+      current: ["counter_review", "triage"],
+      stale: ["adjudicate"],
+      reentry_required: true,
+      next: "produce",
     });
   });
 });

@@ -45,7 +45,6 @@ function phaseInstance(call: ParsedToolCall, context: RepositoryOperationContext
     case "archflow_waiver":
       return call.input.origin.phase_instance;
     case "archflow_counter_review":
-    case "archflow_adjudicate":
       return context.phase_instance;
     default: {
       const exhaustive: never = call;

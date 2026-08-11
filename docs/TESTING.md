@@ -21,7 +21,7 @@ The unit layer is broad and normally imports production modules directly.
 - **State authority and persistence:** initialization, transition ordering, transactions, atomic replacement, locks, snapshots, repair, reconciliation, checkpoints, gate interfaces/waiting, next-action derivation, retained maintenance, result manifests, and secret rejection/scanning. Representative files include `test/unit/state-transaction.test.ts`, `test/unit/state-gates.test.ts`, `test/unit/state-snapshot-restore-seam.test.ts`, `test/unit/state-repair.test.ts`, and `test/unit/secret-rejection.test.ts`.
 - **Repository/Git safety:** discovery and identity, resolved-path containment, index/history/object behavior, constitution reads, handoffs, and linked-worktree behavior. These tests use real temporary Git repositories where behavior cannot be represented by a fake runner; examples are `test/unit/repository-paths.test.ts`, `test/unit/repository-index.test.ts`, and `test/unit/repository-identity.test.ts`.
 - **MCP runtime:** framing, session state, send queue, SDK adapter, process runner, server, tools, handler authority/error mapping, replay/supersession, and cancellation/overflow translation. Representative files include `test/unit/mcp-framing.test.ts`, `test/unit/mcp-sdk-adapter.test.ts`, `test/unit/mcp-session.test.ts`, and `test/unit/mcp-handler-authority.test.ts`.
-- **Dispatch and review:** CLI policy/projection, routing and attestation, child-process lifecycle, isolated workspaces, pinned context, review envelopes/diffs, adjudication, counter-review, and service-level fixed-point behavior. See `test/unit/dispatch-cli.test.ts`, `test/unit/dispatch-process.test.ts`, `test/unit/review-services.test.ts`, and `test/unit/adjudication.test.ts`.
+- **Dispatch and review:** CLI policy/projection, routing and attestation, child-process lifecycle, isolated workspaces, pinned context, review envelopes/diffs, the constitution review, counter-review, and service-level fixed-point behavior. See `test/unit/dispatch-cli.test.ts`, `test/unit/dispatch-process.test.ts`, `test/unit/review-services.test.ts`, and `test/unit/adjudication.test.ts`.
 - **Initialization and local/manual surfaces:** asset/config scaffolding, host registration crash safety, task initialization, legacy upgrade, local command dispatch, and manual workflow helpers. See `test/unit/init-registration-crash-safety.test.ts`, `test/unit/init-task-initialization.test.ts`, `test/unit/legacy-upgrade.test.ts`, and `test/unit/local-manual-workflow.test.ts`.
 
 Success cases are paired with representative boundary failures: malformed/non-plain inputs and split-observation getters; digest, revision, task, and phase mismatches; stale or contradictory evidence; traversal/symlink/class-confusion paths; lock and snapshot limits; secret-bearing output; process cancellation/overflow; and unsupported or unauthenticated host classifications.
@@ -44,7 +44,7 @@ Integration tests assemble production services around real temporary repositorie
 
 - Repository discovery/object proofs/configuration matrices, linked worktrees, relocation, conflicts, and file-kind restore collisions (`repository-git-matrix.test.ts`, `repository-git-object-proofs.test.ts`, `manifest-file-kind-restore-matrix.test.ts`).
 - Durable state concurrency, lifecycle, projection, replay, reconciliation, gates/waivers, supplemental review, and fixed-point review (`state-transaction.test.ts`, `state-gate-lifecycle.test.ts`, `mcp-handler-state-replay.test.ts`, `review-fixed-point-live.test.ts`).
-- Full MCP stdio/tool-handler behavior, cancellation, handler isolation, adjudication, and counter-review replay (`mcp-stdio.test.ts`, `mcp-handlers.test.ts`, `isolation-handler-entry.test.ts`, `mcp-adjudicate-constitution-gate.test.ts`).
+- Full MCP stdio/tool-handler behavior, cancellation, handler isolation, and counter-review replay including the constitution-review result (`mcp-stdio.test.ts`, `mcp-handlers.test.ts`, `isolation-handler-entry.test.ts`, `mcp-handler-counter-replay.test.ts`).
 - Dispatch plumbing/coordinator/CLI behavior through deterministic fake Claude and Codex children (`dispatch-plumbing.test.ts`, `dispatch-coordinator.test.ts`, `dispatch-cli.test.ts`).
 - Repository initialization, project registration, installer behavior, local CLI command/payload/stdin discipline, manual workflow, and legacy upgrade/fault recovery (`init-orchestration.test.ts`, `init-registration.test.ts`, `install-script.test.ts`, `local-cli-stdin-discipline.test.ts`, `manual-workflow.test.ts`, `legacy-staging-faults.test.ts`).
 - Offline release behavior (`release-offline.test.ts`).
@@ -58,7 +58,7 @@ Representative failure coverage includes exact-replay versus stale-CAS behavior,
 ### Real-host and installed-distribution: `test/real-host/` (5 files)
 
 - `preflight.test.ts` probes installed/authenticated Claude and Codex versions, identity/auth shapes, unsolicited pre-initialize recovery, managed-policy reporting, and PII omission.
-- `dispatch.test.ts` makes real opposite-family review/adjudication calls and requires schema-valid, server-attested evidence; it rejects same-family routing before dispatch.
+- `dispatch.test.ts` makes real opposite-family review and constitution-review calls and requires schema-valid, server-attested evidence; it rejects same-family routing before dispatch.
 - `failure-classes.test.ts` observes real unsupported-model and cancellation classifications.
 - `terminal-journey.test.ts` installs tracked `dist/` into a scratch home and exercises installed `archflow-local`/`archflow-mcp` slices including initialization, checkpoint/import, snapshot caps, dirty-worktree replay, maintenance, secret rejection, and legacy upgrade.
 - `review-benchmark.test.ts` pins the benchmark digest/threshold binding in ordinary runs; its actual twelve-call real-model matrix is separately gated.
@@ -72,7 +72,7 @@ Real hosts are hermetic by default. `ARCHFLOW_REAL_HOSTS=1 npm run test:real-hos
 - `test/helpers/resolved-constitution.ts` and `test/helpers/real-host.ts` supply constitution and host-specific seams.
 - `test/fixtures/dispatch/` contains deterministic fake Claude/Codex processes, protocol handshakes, plumbing children, and a grandchild-process fixture.
 - `test/fixtures/mcp/runtime/` contains initialize/call transcripts and adversarial bytes used by stdio and release smoke tests.
-- `test/fixtures/corpus/` contains seeded-defect/control artifacts plus adjudication and review scenarios; `test/integration/review-corpus.test.ts` and the real benchmark consume them.
+- `test/fixtures/corpus/` contains seeded-defect/control artifacts plus constitution-review (`adjudication-scenarios.json`) and review scenarios; `test/integration/review-corpus.test.ts` and the real benchmark consume them.
 - `test/fixtures/legacy/`, `test/fixtures/init/`, and `test/fixtures/release/` cover legacy layouts, fake host registration, and hostile runtime/canary checks.
 
 Temporary repositories and homes are removed by harness cleanup. Git-related suites use availability gates; on a machine without Git those groups skip rather than synthesize Git behavior.

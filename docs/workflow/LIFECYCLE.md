@@ -18,9 +18,9 @@ flowchart LR
     PI --> Done([task complete])
 ```
 
-One nuance the YAML alone doesn't show: `gate: on_trigger` refers only to *adjudication-triggered* gates. The phase skills impose an additional mandatory human gate on top — phase-design always opens an `artifact-approval` gate, and phase-impl always opens a `commit-authorization` gate (`src/local/build-request.ts` picks the kind from the phase). In practice **every phase ends at a human decision.**
+One nuance the YAML alone doesn't show: `gate: on_trigger` refers only to the gates the constitution verdict can demand (derived after triage). The phase skills impose an additional mandatory human gate on top — phase-design always opens an `artifact-approval` gate, and phase-impl always opens a `commit-authorization` gate (`src/local/build-request.ts` picks the kind from the phase). In practice **every phase ends at a human decision.**
 
-The workflow file's bytes are digest-pinned into each task at creation, so changing the graph mid-task is detectable, not silently applied.
+The workflow file's bytes are digest-pinned into each task at creation, so changing the graph mid-task is detectable, not silently applied. Tasks pinned to the retired four-step workflow digest (the one with a separate `adjudicate` step) are invalidated — status reports `restore-pinned-config` — and either restart or go through `archflow-upgrade`; there is no migration.
 
 ## What each stage produces
 
@@ -41,12 +41,13 @@ All task files live under `.archflow/tasks/<task>/`; the only cross-task materia
 Every gated stage runs the same evidence pipeline to a fixed point:
 
 1. **produce** — write or revise the artifact. Its SHA-256 becomes the *subject digest*. Self-review happens here, as ordinary orchestrator/sub-agent work on the draft — nothing durable records it; the first recorded review is the adversarial one.
-2. **counter_review** — the server dispatches the *opposite model family* (Claude ⇄ Codex) against a sealed envelope plus a read-only repo checkout at a pinned commit. Evidence the producer cannot author.
-3. **triage** — the producer must disposition **every** finding, one of three ways:
+2. **counter_review** — one tool call, up to two dispatches, one atomic commit. The server dispatches the *opposite model family* (Claude ⇄ Codex) against a sealed envelope plus a read-only repo checkout at a pinned commit — evidence the producer cannot author. Then, only when the pinned constitution has active rules (the server decides, never the agent), it dispatches a second opposite-family child for the constitution and drift review — sealed envelope, deliberately no checkout. Both results commit in one atomic state transaction; `constitution: {status: "not-run"}` simply means no active rules exist.
+3. **triage** — the producer must disposition **every** rubric finding, one of three ways:
    - **accepted** — the finding demands a substantive fix; the work re-enters produce and all evidence is redone against the new bytes.
    - **accepted-editorial** — the fix is purely wording or formatting and the finding is non-blocking (the server refuses this disposition for blocking findings). See the editorial path below.
    - **rejected** — with a written rationale. Findings prefixed `unverifiable-` mean "the reviewer lacked evidence," and are rejected with an `envelope-gap:` rationale, never accepted.
-4. **adjudicate** — a third dispatch judges the artifact against the pinned constitution. Failures, uncertainty, drift, or matched review triggers open human gates.
+
+   The constitution verdict is never triaged: a failing or uncertain rule, material drift, or a matched `review_trigger` opens a human gate *after* triage, through the ordinary gate flow — status derives the pending gate and `build-request` (kind `"gate"`) composes the complete request mechanically; the human decides at the gate.
 
 Editing the artifact changes the subject digest, which invalidates all downstream evidence — the pipeline re-runs until everything agrees about the same bytes. Re-entry is bounded (`max_attempts`, default 3); exhaustion opens an `attempts-exhausted` gate rather than looping forever.
 
@@ -54,18 +55,19 @@ Editing the artifact changes the subject digest, which invalidates all downstrea
 
 Because that means artifacts can reach approval with findings the producer judged immaterial, `status.evidence.findings` carries each finding's severity, summary, and recorded disposition, and every gate presents rejected blocking findings as an **Open findings** section beside the existing **Envelope gaps** section. The human sees exactly what was waved through and can disagree — silent dissent would make the materiality bar a way to hide disagreement rather than a way to converge.
 
-### The editorial shortcut
+### The editorial revision
 
-When a round's only accepted findings are `accepted-editorial`, the producer revises the artifact and re-enters **adjudicate directly** instead of restarting the whole pipeline. The revised artifact declares a server-validated, strictly one-hop `editorial_predecessor` link — `{subject_digest, input_fingerprint, triage_result_digest}` naming the exact reviewed bytes, their inputs, and the triage round that authorized the shortcut. Retained reviews stay *current for the predecessor*; adjudication re-runs on the final bytes; and the eventual human gate presents the predecessor→final diff with an explicit predecessor disclosure, so the human sees precisely what changed after review. A plain `accepted` disposition anywhere in the round still forces full re-entry — the shortcut exists only for rounds that are editorial through and through.
+When a round's only accepted findings are `accepted-editorial`, the producer applies exactly the recorded revision intents and records produce again — and **nothing re-runs**. The revised artifact declares a server-validated, strictly one-hop `editorial_predecessor` link — `{subject_digest, input_fingerprint, triage_result_digest}` naming the exact reviewed bytes, their inputs, and the triage round that authorized the hop. The retained reviews *and* the constitution verdict stay bound to the declared predecessor for that one hop, and the eventual human gate presents the predecessor→final diff with an explicit disclosure that the evidence evaluated the predecessor bytes. A plain `accepted` disposition anywhere in the round still forces full re-entry — the editorial path exists only for rounds that are editorial through and through.
 
 An editorial round consumes an attempt slot like any other re-entry. That is deliberate: if editorial rounds push a task to its attempt cap, the `attempts-exhausted` gate's retry decision is the intended recovery, keeping the human in the loop rather than letting cosmetic churn extend the loop silently.
 
 ### The transition edges, precisely
 
-Beyond the forward hand-off (each succeeded step to its successor, same attempt), the state machine (`src/state/transitions.ts`) admits exactly two other same-phase moves:
+Beyond the forward hand-off (each succeeded step to its successor, same attempt), the state machine (`src/state/transitions.ts`) admits exactly one other same-phase move:
 
-- **produce-succeeded → adjudicate-running (same attempt)** — the editorial path above. Structurally the edge admits any succeeded produce; the `archflow_state` handler refuses it *semantically* unless current review evidence covers the subject or its declared editorial predecessor, so a task can never strand in adjudicate without evidence.
-- **any-succeeded step → produce-running (attempt + 1)** — the "new information" door. From triage or adjudicate this is the accepted-finding re-entry; from a succeeded produce or counter_review it is the author withdrawing to incorporate new information. Downstream evidence simply goes stale and is redone. Because re-entry is sanctioned, the artifact drifting on disk while state sits at produce running (or failed) is an *expected re-entry edit*, not material drift.
+- **any-succeeded step → produce-running (attempt + 1)** — the "new information" door. From triage this is the accepted-finding (or editorial) re-entry; from a succeeded produce or counter_review it is the author withdrawing to incorporate new information. Downstream evidence simply goes stale and is redone — except on the one-hop editorial path, where retained evidence stays bound to the declared predecessor. Because re-entry is sanctioned, the artifact drifting on disk while state sits at produce running (or failed) is an *expected re-entry edit*, not material drift.
+
+The phase-completion signal fires from **triage-succeeded**: once triage closes the fixed point (and any post-triage gates resolve), the phase can advance — for phase-impl that is what arms the commit-authorization flow, and the legacy-import design jump fires from the same point.
 
 ## Gates: where humans decide
 
@@ -75,11 +77,11 @@ Nine gate kinds exist (`src/contracts/gates.ts`):
 |---|---|
 | `artifact-approval` | a PRD, design, or phase design reaches its fixed point |
 | `commit-authorization` | a phase implementation is ready to commit |
-| `review-trigger` | a constitution rule's `review_trigger` condition matched |
-| `adjudication-failure` | the adjudicator found a rule `fail` or `uncertain` |
-| `material-drift` | an approved upstream document drifted materially |
+| `review-trigger` | a constitution rule's `review_trigger` condition matched (derived after triage) |
+| `adjudication-failure` | the constitution review found a rule `fail` or `uncertain` (derived after triage) |
+| `material-drift` | an approved upstream document drifted materially (derived after triage) |
 | `attempts-exhausted` | the produce/review loop hit its attempt cap (status prefills its request; `build-request` composes only the approval kinds, so complete it through `archflow-local envelope`) |
-| `constitution-edit` | a task branch tried to amend its own governing constitution |
+| `constitution-edit` | a task branch tried to amend its own governing constitution (detected at counter-review time; on the first round, with no retained review set to bind, this is a plain `constitution-edited-on-task-branch` error instead) |
 | `restore-collision` | a drift repair would overwrite conflicting bytes |
 | `migration-audit` | a legacy import is ready for its guarded resume jump |
 

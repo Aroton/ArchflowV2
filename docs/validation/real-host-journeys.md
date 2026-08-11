@@ -229,7 +229,9 @@ archflow-local init | tee "$CLAUDE_JOURNEY_LOG/init-report.json"
 
 Inspect `$CLAUDE_JOURNEY_LOG/init-report.json` and the scaffolded files. The active
 `.archflow/config.yaml` document must have Claude producer/self-reviewer routes and Codex
-counter-reviewer/adjudicator routes. Verify and commit the policy base yourself:
+counter-reviewer/adjudicator routes. [Correction: the config roles are exactly
+`producer`/`counter-reviewer`/`adjudicator` — there is no `self-reviewer` role, and declaring one
+fails `CONFIG_INVALID`.] Verify and commit the policy base yourself:
 
 ```bash
 sed -n '1,120p' .archflow/config.yaml
@@ -313,8 +315,10 @@ archflow-local init | tee "$CODEX_JOURNEY_LOG/init-report.json"
 Before the policy-base commit, replace `.archflow/config.yaml` with the exact Codex-producer block
 printed in the comment at the bottom of the scaffolded template: Codex produces and self-reviews;
 Claude counter-reviews and adjudicates. Remove the old active document and all leading comment
-markers from the replacement. Inspect the complete file and commit it with the other scaffolded
-policy files only after operator review:
+markers from the replacement. [Correction: the block below includes a `self-reviewer` role that the
+config contract does not accept — the roles are exactly `producer`/`counter-reviewer`/`adjudicator`,
+and a `self-reviewer` entry fails `CONFIG_INVALID`; omit it.] Inspect the complete file and commit
+it with the other scaffolded policy files only after operator review:
 
 ```bash
 printf '%s\n' \

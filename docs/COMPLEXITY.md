@@ -36,7 +36,7 @@ Agent-facing shapes exist as JSON Schema *and* a Zod mirror, with `assertZodAgre
 
 ### 6. `fixed-point.ts` gate satisfaction — load-bearing logic in an unreadable shape
 
-`adjudicationGateSatisfied` is a ~20-clause boolean conjunction where every clause is a silent `continue` with no diagnostic — and a second, independent implementation of "is this gate satisfied" lives in the adjudicate handler's replay path. Decomposing into named predicates that report *which* binding failed would improve both auditability and debuggability. Similarly, `handleAdjudicate` (386 lines, three large inline closures, two distinct replay paths) is the densest handler.
+`adjudicationGateSatisfied` is a ~20-clause boolean conjunction where every clause is a silent `continue` with no diagnostic. Decomposing into named predicates that report *which* binding failed would improve both auditability and debuggability. Similarly, `handleCounterReview` (~387 lines, now running both the rubric dispatch and the constitution-review dispatch and committing them in one transaction) is the densest handler.
 
 ### 7. Naming collisions and small frictions
 

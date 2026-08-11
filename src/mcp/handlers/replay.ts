@@ -10,7 +10,7 @@ const NEW_INTENT = "handler-replay-probe-new-intent";
  * Uses the transaction kernel's authenticated replay/recovery path while supplying a preparation
  * callback that deliberately stops a genuinely new intent before any receipt or state write.
  */
-export async function resolvePreDispatchReplay<K extends Extract<ToolName, "archflow_counter_review" | "archflow_adjudicate">>(
+export async function resolvePreDispatchReplay<K extends Extract<ToolName, "archflow_counter_review">>(
   dependencies: TransactionDependencies,
   authority: TransactionAuthority,
   call: Extract<ParsedToolCall, { name: K }>,

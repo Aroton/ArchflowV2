@@ -71,7 +71,10 @@ async function fixture() {
   cpSync(join(process.cwd(), "assets", "constitution"), join(root, ".archflow", "constitution"), { recursive: true });
   rmSync(join(root, ".archflow", "constitution"), { recursive: true, force: true });
   mkdirSync(join(root, ".archflow", "constitution"), { recursive: true });
-  writeFileSync(join(root, ".archflow", "constitution", "00-review.md"), `---\nid: review-implementation\nversion: 1\nstatus: active\n---\nReview the retained implementation subject.\n`);
+  // Deliberately no active rules: these regressions target the state/evidence pipeline, so the
+  // merged counter-review must report the constitution review as not-run instead of launching
+  // the second, adjudicating dispatch.
+  writeFileSync(join(root, ".archflow", "constitution", "00-review.md"), `---\nid: review-implementation\nversion: 1\nstatus: deprecated\n---\nReview the retained implementation subject.\n`);
   writeFileSync(join(root, ".archflow", "tasks", task, "config.yaml"), configYaml);
   writeFileSync(join(root, "tracked.txt"), "root\n");
   execFileSync("git", ["add", ".archflow/workflow.yaml", ".archflow/constitution", "tracked.txt"], { cwd: root, env: environment });
@@ -198,7 +201,7 @@ describe("live fixed-point regressions", () => {
     if (!services.ok) throw new Error(services.error.code);
     await writeFile(services.value.authority.state.absolute, canonicalDocument({
       ...services.value.state!.value,
-      step: "adjudicate",
+      step: "triage",
       status: "succeeded",
     }).bytes);
     await invokeState({
@@ -282,7 +285,7 @@ describe("live fixed-point regressions", () => {
 
     await writeFile(final.value.authority.state.absolute, canonicalDocument({
       ...final.value.state!.value,
-      step: "adjudicate", status: "succeeded", planned_final_phase: parseSafeInteger(18),
+      step: "triage", status: "succeeded", planned_final_phase: parseSafeInteger(18),
     }).bytes);
     let completion = await createProductionServices({
       working_directory: h.root, task_id: task, operation: parseSafeCode("non-final-approval"),
@@ -344,7 +347,7 @@ describe("live fixed-point regressions", () => {
     });
     if (!completion.ok) throw new Error(completion.error.code);
     await writeFile(completion.value.authority.state.absolute, canonicalDocument({
-      ...completion.value.state!.value, step: "adjudicate", status: "succeeded",
+      ...completion.value.state!.value, step: "triage", status: "succeeded",
     }).bytes);
     completion = await createProductionServices({
       working_directory: h.root, task_id: task, operation: parseSafeCode("final-approval"),
@@ -357,10 +360,12 @@ describe("live fixed-point regressions", () => {
       working_directory: h.root, task_id: task, operation: parseSafeCode("final-completion"),
     });
     if (!completion.ok) throw new Error(completion.error.code);
+    // The completion signal fires from triage-succeeded: re-recording the same position with
+    // the commit observed and the commit-authorization approval durable marks the task complete.
     await invokeState({
       schema_version: "1", task_id: task, intent_id: "final-completion",
       expected_revision: completion.value.state!.value.revision,
-      phase_instance: finalPhase, step: "adjudicate", status: "succeeded",
+      phase_instance: finalPhase, step: "triage", status: "succeeded",
       input_fingerprint: finalFingerprint,
     }, "final-completion");
     const completed = await createProductionServices({
@@ -423,7 +428,7 @@ describe("live fixed-point regressions", () => {
       upstreamReferences.push(prepared.value.reference);
     }
     let approvalState: TaskStateV1 = {
-      ...initial, step: "adjudicate", status: "succeeded",
+      ...initial, step: "triage", status: "succeeded",
       authoritative_results: [...upstreamReferences].sort((left, right) =>
         `${left.phase_instance}\0${left.step}`.localeCompare(`${right.phase_instance}\0${right.step}`)),
     };
@@ -562,11 +567,6 @@ else {
           phase_instance: phase, step: "triage", subject_digest: produceDigest, input_fingerprint: nonProduceFingerprint,
           current_evidence_set_digest: current.set_digest, source_evidence_digests: current.slots.map((slot) => slot.evidence_digest),
           dispositions: [], accepted_count: 0, rejected_count: 0, accepted_editorial_count: 0 } } }, "triage-succeeded");
-      await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "adjudicate-running", expected_revision: 9,
-        phase_instance: phase, step: "adjudicate", status: "running", input_fingerprint: nonProduceFingerprint }, "adjudicate-running");
-      await invoke("archflow_adjudicate", { schema_version: "1", task_id: task, intent_id: "adjudicate-succeeded", expected_revision: 10,
-        input_fingerprint: nonProduceFingerprint, artifact_path: documentPath,
-        upstream_paths: upstreamSpecs.map((spec) => spec.path) }, "adjudicate-succeeded");
       const finalServices = await createProductionServices({ working_directory: h.root, task_id: task, operation: parseSafeCode("pipeline-final") });
       if (!finalServices.ok) throw new Error(finalServices.error.code);
       const retained = await loadRetainedEvidence({ load_retained_result: finalServices.value.dependencies.load_retained_result! },
@@ -581,11 +581,13 @@ else {
         approvedUpstreamDigests.push(loaded.value.prepared.manifest.value.artifact_digest);
       }
       approvedUpstreamDigests.sort();
+      // With no active rules the merged review carried no constitution evidence, and the
+      // completed triage alone closes the loop: no separate adjudication position exists.
       expect(assessCurrentEvidence(finalServices.value.state!.value, retained.value, {
         subject_digest: produceDigest, input_fingerprint: nonProduceFingerprint, constitution: constitution.value,
         approved_upstream_digests: approvedUpstreamDigests,
         authenticated_gate_approvals: [],
-      })).toMatchObject({ next: "advance", current: ["counter_review", "triage", "adjudicate"] });
+      })).toMatchObject({ next: "advance", current: ["counter_review", "triage"] });
     } finally {
       if (saved.PATH === undefined) delete process.env.PATH; else process.env.PATH = saved.PATH;
       if (saved.HOME === undefined) delete process.env.HOME; else process.env.HOME = saved.HOME;
@@ -605,7 +607,6 @@ else {
       parseToolCall("archflow_state", { ...common, intent_id: "triage", phase_instance: phase, step: "triage", status: "running" }),
       parseToolCall("archflow_counter_review", { ...common, intent_id: "counter", artifact_path: "prd.md", rubric }),
       parseToolCall("archflow_counter_review", { ...common, intent_id: "counter-two", artifact_path: "design.md", rubric: { ...rubric, criteria: [{ ...rubric.criteria[0], text: "Changed rubric." }] } }),
-      parseToolCall("archflow_adjudicate", { ...common, intent_id: "adjudicate", artifact_path: "phases/1/impl-notes.md", upstream_paths: ["prd.md", "design.md"] }),
     ];
     const fingerprints = [];
     for (const call of calls) {

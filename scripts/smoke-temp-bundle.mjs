@@ -94,7 +94,6 @@ assert.equal(
 assert.deepEqual(Object.keys(contracts.TOOL_DEFINITIONS), [
   "archflow_state",
   "archflow_counter_review",
-  "archflow_adjudicate",
   "archflow_gate",
   "archflow_waiver"
 ]);

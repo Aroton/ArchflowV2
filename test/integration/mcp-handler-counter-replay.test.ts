@@ -40,6 +40,9 @@ roles:
   counter-reviewer:
     model: gpt-fixture
     effort: high
+  adjudicator:
+    model: gpt-fixture
+    effort: high
 `;
 const scanner: SecretScanner = {
   scan: async (candidates) => ({
@@ -54,6 +57,9 @@ async function fixture() {
   const repository = createTempRepository({ label: "handler-counter-replay" });
   const workflow = readFileSync(new URL("../../assets/workflow.yaml", import.meta.url));
   repository.write(".archflow/workflow.yaml", workflow);
+  // One active rule (no enforcement declarations), so the merged call runs BOTH child
+  // dispatches — rubric review then sealed constitution review — and replay identity must hold
+  // over the full evaluated success.
   repository.write(".archflow/constitution/00-process.md", `---
 id: process
 version: 1
@@ -159,12 +165,26 @@ else {
   for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   const subject = envelope.subject;
-  const output = {
+  const output = subject.role === "counter-review" ? {
     schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
     step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
     input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
     producer_family: subject.producer_family, findings: [], matched_rule_versions: [],
     verdict: "pass", blocking_count: 0
+  } : {
+    schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    step: "adjudicate", subject_digest: subject.subject_digest,
+    input_fingerprint: subject.input_fingerprint,
+    pinned_constitution_digest: subject.pinned_constitution_digest,
+    approved_upstream_digests: subject.approved_upstream_digests,
+    source_evidence_set_digest: subject.source_evidence_set_digest,
+    rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
+      compliance: "pass", rationale: "Checked the sealed envelope.",
+      trigger: "not-matched", trigger_evidence: "No review trigger matched.",
+      enforced_by: [] })),
+    drift_findings: subject.approved_upstream_digests.map((upstream_digest) => ({
+      upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift found." })),
+    constitution: "pass", drift: "aligned", matched_rule_versions: [], uncertain_rule_versions: []
   };
   await appendFile(${JSON.stringify(countPath)}, "call\\n");
   await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
@@ -214,11 +234,34 @@ describe("counter-review handler replay integration", () => {
     try {
       const boundary = createToolBoundary(createToolHandlers());
       const first = await boundary.invoke("archflow_counter_review", h.args, h.invocation("counter-first"));
-      expect(first).toMatchObject({
+      // The one call ran both children and reports the evaluated constitution outcome inline.
+      expect(first, JSON.stringify(first)).toMatchObject({
         kind: "project-result",
-        result: { schema_version: "1", ok: true, value: { verdict: "pass", blocking_count: 0, revision: 8 } },
+        result: { schema_version: "1", ok: true, value: {
+          verdict: "pass",
+          blocking_count: 0,
+          constitution: {
+            status: "evaluated",
+            constitution: "pass",
+            drift: "aligned",
+            triggers: [],
+          },
+          revision: 8,
+        } },
       });
-      expect(callCount(h.countPath)).toBe(1);
+      expect(callCount(h.countPath)).toBe(2);
+      // Both evidence results were installed by the one transaction: durable state moved a
+      // single revision and now retains the counter_review AND adjudicate references together.
+      const committed = JSON.parse(readFileSync(h.authority.state.absolute, "utf8")) as {
+        revision: number;
+        authoritative_results: readonly { step: string; input_fingerprint: string }[];
+      };
+      expect(committed.revision).toBe(8);
+      expect(committed.authoritative_results
+        .filter((reference) => reference.input_fingerprint === h.args.input_fingerprint &&
+          reference.step !== "produce")
+        .map((reference) => reference.step)
+        .sort()).toEqual(["adjudicate", "counter_review"]);
 
       const replay = await boundary.invoke(
         "archflow_counter_review",
@@ -226,10 +269,11 @@ describe("counter-review handler replay integration", () => {
         h.invocation("counter-replay"),
       );
       expect(replay).toEqual(first);
-      expect(callCount(h.countPath)).toBe(1);
+      expect(callCount(h.countPath)).toBe(2);
 
-      // Model the receipt-created/state-not-replaced crash cut. The retained result and receipt
-      // remain authoritative; recovery must install the prepared successor without redispatching.
+      // Model the receipt-created/state-not-replaced crash cut. The retained results and receipt
+      // remain authoritative; recovery must reinstall BOTH prepared results — the review and the
+      // constitution evidence — without redispatching either child.
       writeFileSync(h.authority.state.absolute, h.initialState);
       const recovered = await boundary.invoke(
         "archflow_counter_review",
@@ -237,7 +281,14 @@ describe("counter-review handler replay integration", () => {
         h.invocation("counter-receipt-only"),
       );
       expect(recovered).toEqual(first);
-      expect(callCount(h.countPath)).toBe(1);
+      expect(callCount(h.countPath)).toBe(2);
+      const recoveredState = JSON.parse(readFileSync(h.authority.state.absolute, "utf8")) as {
+        revision: number;
+        authoritative_results: readonly { step: string }[];
+      };
+      expect(recoveredState.revision).toBe(8);
+      expect(recoveredState.authoritative_results.map((reference) => reference.step).sort())
+        .toEqual(["adjudicate", "counter_review", "produce"]);
     } finally {
       if (saved.PATH === undefined) delete process.env.PATH; else process.env.PATH = saved.PATH;
       if (saved.HOME === undefined) delete process.env.HOME; else process.env.HOME = saved.HOME;

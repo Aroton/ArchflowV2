@@ -939,7 +939,7 @@ export async function openDurableGate(
         if (
           input.phase_instance !== "design" ||
           current.value.phase_instance !== "design" ||
-          current.value.step !== "adjudicate" ||
+          current.value.step !== "triage" ||
           current.value.status !== "succeeded" ||
           reference === undefined ||
           dependencies.load_retained_result === undefined
@@ -1152,7 +1152,7 @@ async function planGateAuthorizedReentry(
   }
   if (
     current.value.status !== "succeeded" ||
-    (current.value.step !== "triage" && current.value.step !== "adjudicate")
+    current.value.step !== "triage"
   ) return issue("STATE_INVALID", current.value, "gate-reentry-predecessor-mismatch");
   if (request.kind === "attempts-exhausted") {
     if (
@@ -1160,8 +1160,6 @@ async function planGateAuthorizedReentry(
       request.context.attempts !== current.value.attempt ||
       request.context.maximum_attempts > request.context.attempts
     ) return issue("STATE_INVALID", current.value, "gate-reentry-attempt-context-mismatch");
-  } else if (current.value.step !== "adjudicate") {
-    return issue("STATE_INVALID", current.value, "gate-reentry-step-mismatch");
   }
   if (dependencies.resolve_gate_reentry_fingerprint === undefined) {
     return issue("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");

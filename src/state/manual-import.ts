@@ -422,7 +422,7 @@ function exactCommittedTransitionFacts(
   commit_observed: true;
 }> | undefined {
   const decoded = decodePhaseInstance(cursor.phase_instance);
-  if (decoded.kind !== "phase-impl" || cursor.step !== "adjudicate" || cursor.status !== "succeeded") return undefined;
+  if (decoded.kind !== "phase-impl" || cursor.step !== "triage" || cursor.status !== "succeeded") return undefined;
   const proof = evidence.committed_implementations.find((candidate) =>
     candidate.phase_instance === cursor.phase_instance &&
     cursor.authoritative_results.some((reference) =>
@@ -513,7 +513,7 @@ function isAuthenticatedRetryLanding(
     (pair.request.kind === "material-drift" && decision === "revise-current") ||
     (pair.request.kind === "attempts-exhausted" && (decision === "retry-once" || decision === "revise"));
   return reentry && cursor.status === "succeeded" &&
-    (cursor.step === "triage" || cursor.step === "adjudicate") &&
+    cursor.step === "triage" &&
     checkpoint.phase_instance === cursor.phase_instance && checkpoint.step === "produce" &&
     checkpoint.status === "running" && checkpoint.attempt === cursor.attempt + 1 &&
     checkpoint.input_fingerprint !== cursor.input_fingerprint &&

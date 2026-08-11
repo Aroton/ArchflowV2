@@ -16,7 +16,7 @@ The system is one codebase with three faces. Understanding which face does what 
 |---|---|---|
 | **Skills** (`skills/archflow-*`) | Prose playbooks the agent follows (`/archflow-prd`, `/archflow-phase-impl`, …) | Nothing. They are instructions, not enforcement. |
 | **`archflow-local` CLI** (`src/local/`) | A local helper that *composes* requests, reads status, and runs the degraded-mode fallback | Deriving mechanical fields correctly. It writes almost nothing. |
-| **`archflow-mcp` MCP server** (`src/mcp/`, `src/state/`, …) | A stdio MCP server exposing five tools | Everything. It is the sole writer of durable state and the sole judge of validity. |
+| **`archflow-mcp` MCP server** (`src/mcp/`, `src/state/`, …) | A stdio MCP server exposing four tools | Everything. It is the sole writer of durable state and the sole judge of validity. |
 
 A subtlety worth naming immediately: the `archflow-mcp` binary has **no CLI mode** — it is always a stdio MCP server. The word "CLI" appears in two other senses: `archflow-local` (the helper above), and `src/dispatch/cli.ts`, which spawns the *external* `claude` and `codex` command-line tools as child processes to run counter-reviews.
 
@@ -27,7 +27,7 @@ flowchart TB
     Human([Human])
     Agent["Agent session<br/>(Claude Code or Codex)<br/>following a skill"]
     Local["archflow-local CLI<br/>composes requests, reads status"]
-    MCP["archflow-mcp server<br/>5 MCP tools — the authority"]
+    MCP["archflow-mcp server<br/>4 MCP tools — the authority"]
     State[(".archflow/ durable state<br/>state.json, gates, results,<br/>canonical documents")]
     Child["Opposite-family reviewer<br/>claude or codex child process,<br/>sealed envelope + read-only checkout"]
 
@@ -36,7 +36,7 @@ flowchart TB
     Local -->|"reads"| State
     Agent -->|"MCP tool calls<br/>(request.input verbatim)"| MCP
     MCP -->|"writes & verifies"| State
-    MCP -->|"dispatches counter-review<br/>and adjudication"| Child
+    MCP -->|"dispatches counter-review<br/>and constitution review"| Child
     Child -->|"verdict + findings"| MCP
 ```
 
@@ -44,21 +44,19 @@ The loop the agent lives in is simple: run `archflow-local status --task <task>`
 
 ## The evidence pipeline
 
-Every gated stage runs the same four-step pipeline until it reaches a fixed point — all evidence current, all findings dispositioned, no blockers:
+Every gated stage runs the same three-step pipeline until it reaches a fixed point — all evidence current, all findings dispositioned, no blockers:
 
 ```mermaid
 flowchart LR
-    P[produce] --> CR["counter_review<br/>(opposite model family)"]
-    CR --> T["triage<br/>(disposition every finding)"]
+    P[produce] --> CR["counter_review<br/>(opposite family rubric review,<br/>+ constitution review when<br/>active rules exist)"]
+    CR --> T["triage<br/>(disposition every rubric finding)"]
     T -->|"any finding accepted"| P
-    T -->|"editorial accepts only"| A
-    T -->|"all rejected with rationale"| A["adjudicate<br/>(vs. the constitution)"]
-    A -->|"rule failure / drift / trigger"| G{{"Human gate"}}
-    A -->|clean| Adv[advance]
+    T -->|"clean"| Adv[advance]
+    T -->|"constitution rule failure /<br/>drift / trigger"| G{{"Human gate<br/>(derived after triage)"}}
     G -->|approved or waived| Adv
 ```
 
-Self-review is not a durable step: the producing agent reviews its own draft as ordinary sub-agent work inside produce, before the artifact's bytes are ever recorded. Triage has three dispositions: `accepted` sends the work back into produce; `accepted-editorial` (non-blocking wording/formatting fixes only) lets the artifact be revised under a server-validated one-hop predecessor link and jump straight to adjudication on the new bytes; `rejected` requires a written rationale.
+The counter_review step is one tool call and up to two server-run dispatches: the rubric review (read-only checkout at a pinned commit) and, only when the pinned constitution has active rules — the server decides, never the agent — the constitution review (sealed envelope, no checkout). Both results commit in one atomic transaction. Self-review is not a durable step: the producing agent reviews its own draft as ordinary sub-agent work inside produce, before the artifact's bytes are ever recorded. Triage has three dispositions: `accepted` sends the work back into produce; `accepted-editorial` (non-blocking wording/formatting fixes only) lets the artifact be revised under a server-validated one-hop predecessor link with **nothing re-run** — retained reviews and the constitution verdict stay bound to the predecessor, disclosed at the gate; `rejected` requires a written rationale. Constitution verdicts are never triaged: a rule failure, material drift, or matched trigger opens a human gate after triage.
 
 Editing the artifact changes its digest, which automatically invalidates every downstream review — you cannot sneak an edit past a stale approval. That mechanism (digests as identity) is the engine of the whole trust model; see `contracts/CONTRACTS.md`.
 
@@ -69,7 +67,7 @@ Editing the artifact changes its digest, which automatically invalidates every d
 - **MCP server** — validates every request, owns all writes, and treats even the MCP SDK as untrusted for framing and output fidelity. See `mcp/SERVER.md`.
 - **Dispatch** — runs the opposite-family reviewer as a locked-down child process so review evidence is something the producer *cannot author*. See `mcp/DISPATCH.md`.
 - **Local CLI** — exists because hand-transcribing mechanical fields was the dominant source of errors; `build-request` is "the one documented door." See `cli/COMMANDS.md`.
-- **Review & adjudication** — sealed 1 MiB envelopes, pinned context, constitution checks, waivers. See `review/COUNTER-REVIEW.md` and `review/ADJUDICATION.md`.
+- **Review & constitution checks** — sealed 1 MiB envelopes, pinned context, the constitution review, waivers. See `review/COUNTER-REVIEW.md`.
 - **Contracts** — canonical JSON, digests, plain-JSON validation, trust brands: the vocabulary everything else is written in. See `contracts/CONTRACTS.md`.
 - **Durable state** — the `.archflow/` layout, the state machine, transactions, and recovery. See `state/DURABLE-STATE.md`.
 - **Complexity audit** — where the heaviest machinery lives and what could be simplified, per subsystem. See `COMPLEXITY.md`.
@@ -82,6 +80,6 @@ Editing the artifact changes its digest, which automatically invalidates every d
 - **Digest / fingerprint** — SHA-256 identities. A *subject digest* names an artifact's exact bytes; an *input fingerprint* names everything a step depended on. Stale identity = invalid evidence.
 - **Call envelope** (`src/local/envelope.ts`) — the authentication wrapper around one outgoing MCP tool call.
 - **Dispatch envelope** (`src/review/envelopes.ts`) — the sealed, byte-capped evidence package handed to a child reviewer. *Same word, unrelated concepts* — a known naming collision.
-- **Constitution** — versioned repository policy rules (`.archflow/constitution/`) that the adjudicator judges every artifact against, pinned per task at an approved commit.
+- **Constitution** — versioned repository policy rules (`.archflow/constitution/`) that the constitution review — run inside `archflow_counter_review` when active rules exist — judges every artifact against, pinned per task at an approved commit.
 - **Waiver** — a human-granted exemption from one rule version, for one subject digest, for one task. Evaporates if the artifact or the rule changes.
 - **Degraded mode** — the manual checkpoint workflow used when the MCP server is unavailable; progress is recorded locally and folded back in later. Never a shortcut around gates.

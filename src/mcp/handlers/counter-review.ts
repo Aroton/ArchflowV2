@@ -1,23 +1,34 @@
 import { canonicalJsonDigest, sha256Bytes } from "../../contracts/canonical.js";
 import type { InvocationContext } from "../../contracts/contexts.js";
 import { createProjectError, type ProjectResult } from "../../contracts/errors.js";
-import { parseSafeId } from "../../contracts/evidence.js";
+import { parsePathSafeId, parseSafeId, parseSafeInteger } from "../../contracts/evidence.js";
 import type { ParsedToolCall, ToolSuccess } from "../../contracts/mcp-tools.js";
 import type { PlainJsonValue } from "../../contracts/plain-json.js";
 import type { GitOid } from "../../contracts/canonical.js";
+import type { TaskStateV1 } from "../../contracts/durable-state.js";
 import { createDispatchCoordinator } from "../../dispatch/coordinator.js";
 import { readHeadCommit } from "../../repository/git.js";
 import type { RootBoundGitRunner } from "../../repository/identity.js";
-import { runCounterReview } from "../../review/counter-review.js";
+import { rulesForEnvelope } from "../../review/adjudication.js";
+import { runCounterReview, type ConstitutionReviewPlan } from "../../review/counter-review.js";
 import {
   REPOSITORY_VIEW_NOTE,
   REVIEW_ENVELOPE_BYTE_CAP,
   ReviewEnvelopeError,
+  type AdjudicationUpstreamInput,
 } from "../../review/envelopes.js";
+import { requireApprovedUpstreamDigests } from "../../review/fixed-point.js";
 import { assembleReviewContext } from "../../review/pinned-context.js";
-import { prepareEvidenceResult } from "../../state/evidence-results.js";
 import {
+  detectTaskLocalConstitutionEdit,
+  resolvePinnedConstitution,
+} from "../../state/constitution.js";
+import { loadCurrentReviewSet, prepareEvidenceResult } from "../../state/evidence-results.js";
+import { loadAuthenticatedGateApproval, openDurableGate } from "../../state/gates.js";
+import {
+  expectedProduceUpstreamBindings,
   loadCurrentProduceSubject,
+  loadProduceUpstreamSubject,
   readProduceProjection,
   renderProduceReviewMaterial,
   resolveReviewExclusions,
@@ -31,9 +42,14 @@ import { openHandlerSession } from "./session.js";
 
 const fail = <T>(error: ReturnType<typeof createProjectError>): ProjectResult<T> =>
   Object.freeze({ schema_version: "1", ok: false, error });
+const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 
 function dispatchId(prefix: string, value: string): ReturnType<typeof parseSafeId> {
   return parseSafeId(`${prefix}-${sha256Bytes(new TextEncoder().encode(value)).slice(0, 32)}`);
+}
+
+function stableId(prefix: string, seed: PlainJsonValue): ReturnType<typeof parseSafeId> {
+  return parseSafeId(`${prefix}-${canonicalJsonDigest(seed).slice(0, 32)}`);
 }
 
 /**
@@ -122,6 +138,154 @@ export async function handleCounterReview(
       }));
     }
 
+    // The server, not the caller, decides whether the constitution review runs: it resolves the
+    // pinned constitution itself and dispatches the second review exactly when active rules exist.
+    const constitution = await resolvePinnedConstitution(
+      services.runner, state.value.policy_base_commit, services.authority.context,
+    );
+    if (!constitution.ok) return constitution;
+    const activeRules = [...constitution.value.rules.values()]
+      .some((rule) => rule.status === "active");
+
+    // Adjudicating against edited rules is meaningless, so a task-branch constitution edit
+    // short-circuits before any dispatch. With retained review evidence the durable
+    // constitution-edit gate opens as before; on a first round with no evidence set to bind, the
+    // same stop is a plain error — every decision the gate offers (revert, base amendment,
+    // abort) is equally available to the human either way.
+    const edited = await detectTaskLocalConstitutionEdit(
+      services.runner, state.value.policy_base_commit, state.value.constitution_digest, services.authority.context,
+    );
+    if (!edited.ok) return edited;
+    if (edited.value !== undefined) {
+      let retainedReviews;
+      try {
+        const loaded = await loadCurrentReviewSet(
+          { read_state: services.dependencies.read_state, load_retained_result: services.dependencies.load_retained_result! },
+          services.authority,
+          state.value.phase_instance,
+        );
+        retainedReviews = loaded.ok ? loaded.value : undefined;
+      } catch {
+        retainedReviews = undefined;
+      }
+      if (retainedReviews === undefined) {
+        return fail(createProjectError("STATE_INVALID", {
+          phase_instance: state.value.phase_instance,
+          issue_code: "constitution-edited-on-task-branch",
+        }));
+      }
+      const gateIntent = stableId("constitution-edit-gate", {
+        schema_version: "1", task_identity_digest: services.authority.task_identity_digest,
+        counter_review_intent: call.input.intent_id,
+        kind: "constitution-edit", subject_digest: produce.value.artifact_digest, context: edited.value,
+      });
+      const requestDigest = canonicalJsonDigest({
+        schema_version: "1", operation: "constitution-edit-gate", intent_id: gateIntent,
+        task_identity_digest: services.authority.task_identity_digest, kind: "constitution-edit",
+        subject_digest: produce.value.artifact_digest, context: edited.value,
+      });
+      const opened = await openDurableGate(services.dependencies, {
+        authority: services.authority, expected_revision: state.value.revision,
+        intent_id: parsePathSafeId(gateIntent), request_digest: requestDigest,
+        input_fingerprint: state.value.input_fingerprint,
+        phase_instance: state.value.phase_instance,
+        summary: "Resolve constitution-edit before review can run",
+        subject_digest: produce.value.artifact_digest, kind: "constitution-edit", context: edited.value,
+        current_evidence: retainedReviews.current_evidence_set,
+      });
+      if (!opened.ok) return opened;
+      return fail(createProjectError("GATE_ACTIVE", {
+        gate_id: opened.value.gate_id, gate_kind: "constitution-edit",
+      }));
+    }
+
+    const retainedBytes = services.dependencies.read_retained_task_bytes;
+    if (retainedBytes === undefined) throw new TypeError("retained byte accounting is unavailable");
+
+    // Derives the phase's exact workflow upstreams entirely from durable authority — the caller
+    // declares nothing. Each upstream must be the retained produce artifact for its canonical
+    // path and must hold a durable artifact-approval for its exact current digest.
+    const deriveApprovedUpstreams = async (
+      durable: TaskStateV1,
+    ): Promise<ProjectResult<readonly AdjudicationUpstreamInput[]>> => {
+      const derived: AdjudicationUpstreamInput[] = [];
+      for (const binding of expectedProduceUpstreamBindings(durable)) {
+        const upstream = await loadProduceUpstreamSubject(services.dependencies, durable, binding);
+        if (!upstream.ok) return upstream;
+        const upstreamProjection = await readProduceProjection(
+          services.runner, services.authority, upstream.value, binding.path,
+        );
+        if (!upstreamProjection.ok) return upstreamProjection;
+        let text: string;
+        try {
+          text = new TextDecoder("utf-8", { fatal: true }).decode(upstreamProjection.value.bytes);
+        } catch {
+          return fail(createProjectError("CONTRACT_INVALID", {
+            tool: call.name, issue_code: "adjudication-upstream-not-utf8",
+          }));
+        }
+        const upstreamDigest = upstream.value.artifact_digest;
+        let approved = false;
+        for (const approval of [...durable.approvals]
+          .filter((candidate) => candidate.gate_kind === "artifact-approval" && candidate.subject_digest === upstreamDigest)
+          .sort((left, right) => right.resolved_at_revision - left.resolved_at_revision)) {
+          const authenticated = await loadAuthenticatedGateApproval(
+            services.dependencies, services.authority, approval,
+          );
+          if (!authenticated.ok) return authenticated;
+          if (
+            authenticated.value.request.kind === "artifact-approval" &&
+            authenticated.value.request.context.artifact_kind === binding.artifact_kind
+          ) {
+            approved = true;
+            break;
+          }
+        }
+        if (!approved) {
+          return fail(createProjectError("STATE_INVALID", {
+            phase_instance: durable.phase_instance, issue_code: "upstream-approval-missing",
+          }));
+        }
+        derived.push(Object.freeze({ upstream_digest: upstreamDigest, artifact: text }));
+      }
+      derived.sort((left, right) => left.upstream_digest.localeCompare(right.upstream_digest));
+      return ok(Object.freeze(derived));
+    };
+
+    let constitutionPlan: ConstitutionReviewPlan | undefined;
+    if (activeRules) {
+      const upstreams = await deriveApprovedUpstreams(state.value);
+      if (!upstreams.ok) return upstreams;
+      const approvedUpstreamDigests = requireApprovedUpstreamDigests(
+        state.value.approvals,
+        upstreams.value.map((item) => item.upstream_digest),
+      );
+      const constitutionResultId = stableId("adjudication-result", call.input.intent_id);
+      const constitutionCoordinator = createDispatchCoordinator({
+        authority: services.authority, dependencies: services.dependencies, host: session.value.host,
+        repository_root: services.runner.location.worktreeRoot, phase_instance: state.value.phase_instance,
+        signal: context.signal, cancellation_source: "client", allow_claude_dispatch: true,
+        // Deliberately no repository_view_commit: the constitution reviewer judges exactly the
+        // sealed envelope, with nothing else to be steered by.
+      });
+      constitutionPlan = Object.freeze({
+        registry: constitution.value.rules,
+        pinned_constitution_digest: constitution.value.digest,
+        rules: rulesForEnvelope(constitution.value.rules),
+        approved_upstreams: upstreams.value,
+        approved_upstream_digests: approvedUpstreamDigests,
+        invocation_id: stableId("adjudication-invocation", context.invocation_id),
+        result_id: constitutionResultId,
+        dispatch: constitutionCoordinator,
+        prepare_evidence: async (evidence, measuredAtRevision) => prepareEvidenceResult({
+          authority: services.authority, runner: services.runner, result_id: constitutionResultId,
+          retained_task_bytes: await retainedBytes(),
+          measured_at_revision: measuredAtRevision, scanner: services.dependencies.gate_secret_scanner!,
+          value: { kind: "adjudication", evidence },
+        }),
+      });
+    }
+
     const context_entries = await assembleReviewContext({
       runner: services.runner,
       authority: services.authority,
@@ -148,8 +312,6 @@ export async function handleCounterReview(
       allow_claude_dispatch: true,
       repository_view_commit: repositoryViewCommit,
     });
-    const retainedBytes = services.dependencies.read_retained_task_bytes;
-    if (retainedBytes === undefined) throw new TypeError("retained byte accounting is unavailable");
     const result = await runCounterReview({
       transaction: services.dependencies,
       dispatch: coordinator,
@@ -209,6 +371,7 @@ export async function handleCounterReview(
         },
       },
       projection_digest: projection.value.digest,
+      ...(constitutionPlan === undefined ? {} : { constitution: constitutionPlan }),
     }).catch((error: unknown) => {
       const overflow = envelopeOverflowError(error, produce.value, exclusions);
       if (overflow !== undefined) return fail<never>(overflow);

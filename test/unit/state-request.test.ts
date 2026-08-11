@@ -63,7 +63,6 @@ const waiverOrigin = {
 const rawInputs = () => ({
   archflow_state: { ...common, phase_instance: phase, step: "produce", status: "succeeded" },
   archflow_counter_review: { ...common, artifact_path: "phases/9/result.md", rubric },
-  archflow_adjudicate: { ...common, artifact_path: "phases/9/result.md", upstream_paths: ["prd.md", "architecture.md"] },
   archflow_gate: { ...common, phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } },
   archflow_waiver: { ...common, origin: waiverOrigin, rationale: "A bounded exception is required" },
 } as const);
@@ -84,7 +83,6 @@ function selectorFixtures(): readonly SelectorFixture[] {
   return [
     { call: parseToolCall("archflow_state", raw.archflow_state), operation: "record-state-boundary", operation_fields: { phase_instance: phase, step: "produce", status: "succeeded" } },
     { call: parseToolCall("archflow_counter_review", raw.archflow_counter_review), operation: "counter-review", operation_fields: { artifact_path: "phases/9/result.md", rubric } },
-    { call: parseToolCall("archflow_adjudicate", raw.archflow_adjudicate), operation: "adjudicate", operation_fields: { artifact_path: "phases/9/result.md", upstream_paths: ["prd.md", "architecture.md"] } },
     { call: parseToolCall("archflow_gate", raw.archflow_gate), operation: "gate", operation_fields: { phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } } },
     { call: parseToolCall("archflow_gate", { ...raw.archflow_gate, supersedes: { superseded_gate_id: "gate-0", accepted_triage_digest: "9".repeat(64), old_subject_digest: "a".repeat(64) } }), operation: "gate", operation_fields: { phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, supersedes: { superseded_gate_id: "gate-0", accepted_triage_digest: "9".repeat(64), old_subject_digest: "a".repeat(64) }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } } },
     { call: parseToolCall("archflow_waiver", raw.archflow_waiver), operation: "waiver", operation_fields: { origin: waiverOrigin, rationale: "A bounded exception is required" } },

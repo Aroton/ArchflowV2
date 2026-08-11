@@ -38,23 +38,29 @@ const provenance = humanDecisionProvenanceV1Schema as z.ZodType<HumanDecisionPro
 const common = { schema_version: z.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger, input_fingerprint: digest } as const;
 
 export type CommonToolInput = { readonly schema_version: "1"; readonly task_id: TaskSlug; readonly intent_id: PathSafeId; readonly expected_revision: number; readonly input_fingerprint: Sha256Digest };
-export type StateInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "counter_review" | "triage" | "adjudicate"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact };
+export type StateInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "counter_review" | "triage"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact };
 // Every success value optionally echoes the request_digest the server recorded for the call, so
 // a client can compare one string against its envelope output to prove the arguments arrived
 // untranscribed. Optional in the contract because receipts recorded before the echo existed must
 // keep replaying byte-identically; live handlers always emit it.
 export interface StateSuccess { readonly path: TaskPathClaim; readonly revision: number; readonly status: StateInput["status"]; readonly request_digest?: Sha256Digest }
 export interface CounterReviewInput extends CommonToolInput { readonly artifact_path: TaskPathClaim; readonly rubric: RubricV1 }
-export interface CounterReviewSuccess { readonly path: TaskPathClaim; readonly verdict: "pass" | "advisory" | "fail"; readonly blocking_count: number; readonly revision: number; readonly request_digest?: Sha256Digest }
-export interface AdjudicateInput extends CommonToolInput { readonly artifact_path: TaskPathClaim; readonly upstream_paths: readonly TaskPathClaim[] }
-export interface AdjudicateSuccess { readonly path: TaskPathClaim; readonly constitution: ConstitutionResult; readonly drift: DriftResult; readonly triggers: readonly RuleVersionRef[]; readonly revision: number; readonly request_digest?: Sha256Digest }
+/**
+ * The server decides whether the constitution review runs: it is evaluated as a second
+ * opposite-family dispatch inside the same archflow_counter_review call whenever the pinned
+ * constitution has active rules, and reported "not-run" explicitly when it has none.
+ */
+export type CounterReviewConstitutionOutcome =
+  | Readonly<{ status: "evaluated"; path: TaskPathClaim; constitution: ConstitutionResult; drift: DriftResult; triggers: readonly RuleVersionRef[] }>
+  | Readonly<{ status: "not-run"; reason: "no-active-constitution-rules" }>;
+export interface CounterReviewSuccess { readonly path: TaskPathClaim; readonly verdict: "pass" | "advisory" | "fail"; readonly blocking_count: number; readonly constitution: CounterReviewConstitutionOutcome; readonly revision: number; readonly request_digest?: Sha256Digest }
 export type GateInput = { readonly [K in GateKind]: CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly summary: string; readonly subject_digest: Sha256Digest; readonly current_evidence: CurrentEvidenceSetRef; readonly supersedes?: GateSupersessionRef; readonly supplemental_outcome?: SupplementalReviewOutcome; readonly kind: K; readonly context: GateContext<K> } }[GateKind];
 export type GateSuccess = { readonly [K in GateKind]: { readonly kind: K; readonly decision: GateDecisionEnvelope<K>; readonly notes: string; readonly revision: number; readonly request_digest?: Sha256Digest } }[GateKind];
 export interface WaiverInput extends CommonToolInput { readonly origin: WaiverOriginRef; readonly rationale: string; readonly supplemental_outcome?: SupplementalReviewOutcome }
 export interface WaiverDecisionBinding { readonly origin_gate_id: PathSafeId; readonly waiver_gate_id: PathSafeId; readonly task_id: TaskSlug; readonly rule_id: string; readonly rule_version: number; readonly subject_digest: Sha256Digest; readonly current_evidence_set_digest: Sha256Digest; readonly scope: WaiverScope; readonly human_provenance: HumanDecisionProvenance }
 export type WaiverSuccess = (WaiverDecisionBinding & { readonly granted: true; readonly expires: "task-complete"; readonly notes: string; readonly revision: number; readonly request_digest?: Sha256Digest }) | (WaiverDecisionBinding & { readonly granted: false; readonly notes: string; readonly revision: number; readonly request_digest?: Sha256Digest });
 export interface ToolContract<Input, Success> { readonly input: Input; readonly success: Success }
-export interface ToolContractMap { readonly archflow_state: ToolContract<StateInput, StateSuccess>; readonly archflow_counter_review: ToolContract<CounterReviewInput, CounterReviewSuccess>; readonly archflow_adjudicate: ToolContract<AdjudicateInput, AdjudicateSuccess>; readonly archflow_gate: ToolContract<GateInput, GateSuccess>; readonly archflow_waiver: ToolContract<WaiverInput, WaiverSuccess> }
+export interface ToolContractMap { readonly archflow_state: ToolContract<StateInput, StateSuccess>; readonly archflow_counter_review: ToolContract<CounterReviewInput, CounterReviewSuccess>; readonly archflow_gate: ToolContract<GateInput, GateSuccess>; readonly archflow_waiver: ToolContract<WaiverInput, WaiverSuccess> }
 type Exact = ToolContractMap extends Record<ToolName, ToolContract<unknown, unknown>> ? Exclude<keyof ToolContractMap, ToolName> extends never ? true : never : never;
 const exact: Exact = true; void exact;
 export type ToolInput<K extends ToolName> = ToolContractMap[K]["input"];
@@ -62,7 +68,7 @@ export type ToolSuccess<K extends ToolName> = ToolContractMap[K]["success"];
 export type ResultIdentityPayload<K extends ToolName = ToolName> = { readonly [P in K]: Readonly<{ schema_version: "1"; tool: P; task_id: TaskSlug; intent_id: PathSafeId; input_fingerprint: Sha256Digest; request_digest: Sha256Digest; result_id: string; resulting_revision: number; success: ToolSuccess<P> }> }[K];
 export interface ToolDefinition<K extends ToolName> { readonly name: K; readonly input_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${K}/input`; readonly result_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${K}/result` }
 const def = <K extends ToolName>(name: K): ToolDefinition<K> => Object.freeze({ name, input_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/input`, result_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/result` });
-export const TOOL_DEFINITIONS = Object.freeze({ archflow_state: def("archflow_state"), archflow_counter_review: def("archflow_counter_review"), archflow_adjudicate: def("archflow_adjudicate"), archflow_gate: def("archflow_gate"), archflow_waiver: def("archflow_waiver") }) satisfies { readonly [K in keyof ToolContractMap]: ToolDefinition<K> };
+export const TOOL_DEFINITIONS = Object.freeze({ archflow_state: def("archflow_state"), archflow_counter_review: def("archflow_counter_review"), archflow_gate: def("archflow_gate"), archflow_waiver: def("archflow_waiver") }) satisfies { readonly [K in keyof ToolContractMap]: ToolDefinition<K> };
 
 const durableArtifact = z.union([
   taskInitializationV1Schema,
@@ -76,7 +82,7 @@ const durableArtifact = z.union([
     evidence: triageCandidateSchema,
   }).strict() as z.ZodType<TriageArtifactV1>,
 ]) as unknown as z.ZodType<DurableArtifact>;
-const stateInput = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "counter_review", "triage", "adjudicate"]), status: z.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
+const stateInput = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "counter_review", "triage"]), status: z.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
 /**
  * The staged-request reference arm shared by every tool input union. It is structurally disjoint
  * from every full-payload arm: strictness rejects any full payload (extra fields), and every full
@@ -91,14 +97,13 @@ export function parseStagedRequestReference(value: unknown): StagedRequestRefere
   return deepFreeze(stagedReferenceInput.parse(structuredClone(value))) as StagedRequestReference;
 }
 const counterInput = z.object({ ...common, artifact_path: taskPathClaimV1Schema, rubric: rubricV1Schema }).strict();
-const adjudicateInput = z.object({ ...common, artifact_path: taskPathClaimV1Schema, upstream_paths: z.array(taskPathClaimV1Schema) }).strict();
 const supersedes = z.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest, old_subject_digest: digest }).strict();
 const gateInput = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), supersedes: supersedes.optional(), supplemental_outcome: z.unknown().optional(), kind: z.enum(GATE_KINDS), context: z.unknown() }).strict();
 const waiverOrigin = z.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest, origin_context_digest: digest, task_id: taskSlugV1Schema, phase_instance: phase, subject_digest: digest, current_evidence_set_digest: digest, rule, scope }).strict();
 const waiverInput = z.object({ ...common, origin: waiverOrigin, rationale: text, supplemental_outcome: z.unknown().optional() }).strict();
 
 function inputFor<K extends ToolName>(name: K, value: unknown): ToolInput<K> {
-  const parsed = name === "archflow_state" ? stateInput.parse(value) : name === "archflow_counter_review" ? counterInput.parse(value) : name === "archflow_adjudicate" ? adjudicateInput.parse(value) : name === "archflow_waiver" ? waiverInput.parse(value) : gateInput.parse(value);
+  const parsed = name === "archflow_state" ? stateInput.parse(value) : name === "archflow_counter_review" ? counterInput.parse(value) : name === "archflow_waiver" ? waiverInput.parse(value) : gateInput.parse(value);
   if (name === "archflow_gate") { const v = parsed as z.infer<typeof gateInput>; parseGateContext(v.kind, v.context); return { ...v, current_evidence: parseCurrentEvidenceSetRef(v.current_evidence), ...(v.supplemental_outcome === undefined ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) }) } as ToolInput<K>; }
   if (name === "archflow_waiver") {
     const v = parsed as z.infer<typeof waiverInput>;
@@ -156,8 +161,17 @@ export function bindParsedToolCallRequest<K extends ToolName>(call: Extract<Pars
 
 const successSchemas = {
   archflow_state: z.object({ path: taskPathClaimV1Schema, revision: safeInteger, status: z.enum(["running", "succeeded", "failed"]), request_digest: digest.optional() }).strict(),
-  archflow_counter_review: z.object({ path: taskPathClaimV1Schema, verdict: z.enum(["pass", "advisory", "fail"]), blocking_count: safeInteger, revision: safeInteger, request_digest: digest.optional() }).strict(),
-  archflow_adjudicate: z.object({ path: taskPathClaimV1Schema, constitution: z.enum(CONSTITUTION_RESULTS), drift: z.enum(DRIFT_RESULTS), triggers: z.array(rule), revision: safeInteger, request_digest: digest.optional() }).strict(),
+  archflow_counter_review: z.object({
+    path: taskPathClaimV1Schema,
+    verdict: z.enum(["pass", "advisory", "fail"]),
+    blocking_count: safeInteger,
+    constitution: z.union([
+      z.object({ status: z.literal("evaluated"), path: taskPathClaimV1Schema, constitution: z.enum(CONSTITUTION_RESULTS), drift: z.enum(DRIFT_RESULTS), triggers: z.array(rule) }).strict(),
+      z.object({ status: z.literal("not-run"), reason: z.literal("no-active-constitution-rules") }).strict(),
+    ]),
+    revision: safeInteger,
+    request_digest: digest.optional(),
+  }).strict(),
   archflow_gate: z.object({ kind: z.enum(GATE_KINDS), decision: z.unknown(), notes: text, revision: safeInteger, request_digest: digest.optional() }).strict(),
   archflow_waiver: z.union([z.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId, rule_version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest, current_evidence_set_digest: digest, scope, human_provenance: provenance, granted: z.literal(true), expires: z.literal("task-complete"), notes: text, revision: safeInteger, request_digest: digest.optional() }).strict(), z.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId, rule_version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest, current_evidence_set_digest: digest, scope, human_provenance: provenance, granted: z.literal(false), notes: text, revision: safeInteger, request_digest: digest.optional() }).strict()])
 } as const;

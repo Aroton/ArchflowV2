@@ -113,6 +113,12 @@ export type InternalResultInstallation = Readonly<{ readonly kind: "archflow-res
 
 export type PreparedResultTransaction<K extends ToolName> = PreparedTransaction<K> & Readonly<{
   result_installation: InternalResultInstallation;
+  /**
+   * archflow_counter_review's second installation: the constitution-review evidence committed in
+   * the same transaction as the rubric review, so the two results are durable together or not at
+   * all. Absent for every other tool and when the pinned constitution has no active rules.
+   */
+  constitution_installation?: InternalResultInstallation;
 }>;
 
 type ResultInstallationFacts = Readonly<{
@@ -188,6 +194,7 @@ type PlannedCommit<K extends ToolName> = Readonly<{
   final: CanonicalDocument<TaskStateV1>;
   outcome: ToolSuccess<K>;
   result_installation?: ResultInstallationFacts;
+  constitution_installation?: ResultInstallationFacts;
 }>;
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
@@ -262,7 +269,6 @@ function operationFor(call: ParsedToolCall): IntentReceiptV1["operation"] {
       }
     }
     case "archflow_counter_review": return "counter-review" as IntentReceiptV1["operation"];
-    case "archflow_adjudicate": return "adjudicate" as IntentReceiptV1["operation"];
     case "archflow_gate": return "gate" as IntentReceiptV1["operation"];
     case "archflow_waiver": return "waiver" as IntentReceiptV1["operation"];
     default: {
@@ -541,12 +547,31 @@ function validatePreparedAndCommitted(
   return validateDurableSemantics(createCommittedIntentSubject(final, receipt));
 }
 
-function materializePlan<K extends ToolName>(value: unknown): PreparedTransaction<K> & { result_installation?: ResultInstallationFacts } {
+function consumeInstallationCapability(value: object, slot: string): ResultInstallationFacts {
+  const capability = ownDataField(value, slot, "prepared transaction");
+  if (capability === null || typeof capability !== "object") throw new TypeError(`${slot} capability is invalid`);
+  const facts = resultInstallations.get(capability);
+  if (facts === undefined || consumedResultInstallations.has(capability)) {
+    throw new TypeError(`${slot} capability is unauthenticated or already consumed`);
+  }
+  consumedResultInstallations.add(capability);
+  return facts;
+}
+
+function materializePlan<K extends ToolName>(value: unknown): PreparedTransaction<K> & {
+  result_installation?: ResultInstallationFacts;
+  constitution_installation?: ResultInstallationFacts;
+} {
   if (value === null || typeof value !== "object") throw new TypeError("prepared transaction must be an object");
   const hasInstallation = Object.hasOwn(value, "result_installation");
-  const expected = hasInstallation
-    ? ["expectation", "next_state", "result", "result_installation"]
-    : ["expectation", "next_state", "result"];
+  const hasConstitution = Object.hasOwn(value, "constitution_installation");
+  if (hasConstitution && !hasInstallation) {
+    throw new TypeError("a constitution installation requires a primary result installation");
+  }
+  const expected = ["expectation", "next_state", "result"];
+  if (hasConstitution) expected.push("constitution_installation");
+  if (hasInstallation) expected.push("result_installation");
+  expected.sort();
   const keys = Reflect.ownKeys(value);
   if (keys.some((key) => typeof key !== "string") || !isDeepStrictEqual((keys as string[]).sort(), expected)) {
     throw new TypeError("prepared transaction has unexpected or missing slots");
@@ -555,14 +580,16 @@ function materializePlan<K extends ToolName>(value: unknown): PreparedTransactio
   const result = ownDataField(value, "result", "prepared transaction") as StructurallyValidProjectResult<K>;
   const nextState = materializeDraft(ownDataField(value, "next_state", "prepared transaction"));
   if (!hasInstallation) return { expectation, result, next_state: nextState };
-  const capability = ownDataField(value, "result_installation", "prepared transaction");
-  if (capability === null || typeof capability !== "object") throw new TypeError("result installation capability is invalid");
-  const facts = resultInstallations.get(capability);
-  if (facts === undefined || consumedResultInstallations.has(capability)) {
-    throw new TypeError("result installation capability is unauthenticated or already consumed");
-  }
-  consumedResultInstallations.add(capability);
-  return { expectation, result, next_state: nextState, result_installation: facts };
+  const facts = consumeInstallationCapability(value, "result_installation");
+  if (!hasConstitution) return { expectation, result, next_state: nextState, result_installation: facts };
+  const constitutionFacts = consumeInstallationCapability(value, "constitution_installation");
+  return {
+    expectation,
+    result,
+    next_state: nextState,
+    result_installation: facts,
+    constitution_installation: constitutionFacts,
+  };
 }
 
 function expectedInstallationSource(
@@ -592,9 +619,6 @@ function expectedInstallationSource(
     source.evidence.role === "counter-review" &&
     source.evidence.step === "counter_review"
   ) return "counter_review";
-  if (call.name === "archflow_adjudicate" && source.artifact_kind === "adjudication-evidence") {
-    return "adjudicate";
-  }
   throw new TypeError("result installation tool and source kind do not match");
 }
 
@@ -616,25 +640,20 @@ export function resultProjectionTargetIsContained(
   );
 }
 
-function validateResultInstallationBinding<K extends ToolName>(
+function validateInstallationFacts<K extends ToolName>(
   request: TransactionRequest<K>,
   current: CanonicalDocument<TaskStateV1>,
   identified: Identified<K>,
-  plan: PreparedTransaction<K> & { result_installation?: ResultInstallationFacts },
+  nextState: NextStateDraft,
+  facts: ResultInstallationPlan,
+  expectedStep: PipelineStep,
   authenticatedWorktreeRoot: string,
 ): ProjectResult<void> {
-  const installation = plan.result_installation;
-  if (installation === undefined) return ok(undefined);
-  const facts = installation.plan;
   const manifest = facts.prepared.manifest.value;
-  const expectedStep = expectedInstallationSource(request.call, manifest.source_artifact);
-  if (plan.next_state.status !== "succeeded" || plan.next_state.step !== expectedStep) {
-    throw new TypeError("result installation is permitted only at its successful evidence boundary");
-  }
   const reference = facts.reference;
-  const nextReference = plan.next_state.authoritative_results.find((entry) =>
+  const nextReference = nextState.authoritative_results.find((entry) =>
     entry.phase_instance === reference.phase_instance && entry.step === reference.step);
-  if (!isDeepStrictEqual(nextReference, reference) || reference.result_id !== plan.expectation.result_id) {
+  if (!isDeepStrictEqual(nextReference, reference)) {
     throw new TypeError("result installation reference does not match the prepared transaction");
   }
   if (reference.input_fingerprint !== identified.input_fingerprint) {
@@ -649,7 +668,7 @@ function validateResultInstallationBinding<K extends ToolName>(
     manifest.repository_identity_digest !== current.value.repository_identity_digest
   ) return stateIssue(current.value, "result-installation-repository-mismatch");
   if (
-    manifest.phase_instance !== plan.next_state.phase_instance ||
+    manifest.phase_instance !== nextState.phase_instance ||
     manifest.step !== expectedStep ||
     manifest.input_fingerprint !== identified.input_fingerprint
   ) return stateIssue(current.value, "result-installation-state-mismatch");
@@ -680,6 +699,54 @@ function validateResultInstallationBinding<K extends ToolName>(
       ))
   ) return issue("CONTRACT_INVALID", "result-installation-projection-target-mismatch");
   return ok(undefined);
+}
+
+function validateResultInstallationBinding<K extends ToolName>(
+  request: TransactionRequest<K>,
+  current: CanonicalDocument<TaskStateV1>,
+  identified: Identified<K>,
+  plan: PreparedTransaction<K> & {
+    result_installation?: ResultInstallationFacts;
+    constitution_installation?: ResultInstallationFacts;
+  },
+  authenticatedWorktreeRoot: string,
+): ProjectResult<void> {
+  const installation = plan.result_installation;
+  if (installation === undefined) {
+    if (plan.constitution_installation !== undefined) {
+      throw new TypeError("a constitution installation requires a primary result installation");
+    }
+    return ok(undefined);
+  }
+  const facts = installation.plan;
+  const expectedStep = expectedInstallationSource(request.call, facts.prepared.manifest.value.source_artifact);
+  if (plan.next_state.status !== "succeeded" || plan.next_state.step !== expectedStep) {
+    throw new TypeError("result installation is permitted only at its successful evidence boundary");
+  }
+  if (facts.reference.result_id !== plan.expectation.result_id) {
+    throw new TypeError("result installation reference does not match the prepared transaction");
+  }
+  const primary = validateInstallationFacts(
+    request, current, identified, plan.next_state, facts, expectedStep, authenticatedWorktreeRoot,
+  );
+  if (!primary.ok) return primary;
+  const constitution = plan.constitution_installation;
+  if (constitution === undefined) return ok(undefined);
+  // The constitution-review evidence rides the counter-review transaction: its manifest is an
+  // adjudication-evidence source retained under the "adjudicate" slot while the transaction's
+  // state target remains counter_review-succeeded.
+  const constitutionFacts = constitution.plan;
+  if (
+    request.call.name !== "archflow_counter_review" ||
+    expectedStep !== "counter_review" ||
+    constitutionFacts.prepared.manifest.value.source_artifact.artifact_kind !== "adjudication-evidence" ||
+    constitutionFacts.reference.step !== "adjudicate"
+  ) {
+    throw new TypeError("constitution installation is permitted only inside a counter-review transaction");
+  }
+  return validateInstallationFacts(
+    request, current, identified, plan.next_state, constitutionFacts, "adjudicate", authenticatedWorktreeRoot,
+  );
 }
 
 function buildPlan<K extends ToolName>(
@@ -732,7 +799,8 @@ function buildPlan<K extends ToolName>(
   const semantics = validatePreparedAndCommitted(current, receipt, final);
   if (!semantics.ok) return semantics;
   return ok(Object.freeze({ receipt, final, outcome,
-    ...(plan.result_installation === undefined ? {} : { result_installation: plan.result_installation }) }));
+    ...(plan.result_installation === undefined ? {} : { result_installation: plan.result_installation }),
+    ...(plan.constitution_installation === undefined ? {} : { constitution_installation: plan.constitution_installation }) }));
 }
 
 async function authenticateCommitted<K extends ToolName>(
@@ -932,11 +1000,18 @@ async function installPlan<K extends ToolName>(
   const resumesResult = plan.receipt.value.operation === "record-document-artifact" ||
     plan.receipt.value.operation === "record-implementation-output" ||
     plan.receipt.value.operation === "record-triage" ||
-    plan.receipt.value.operation === "counter-review" ||
-    plan.receipt.value.operation === "adjudicate";
+    plan.receipt.value.operation === "counter-review";
   if (receiptAlreadyExists && resumesResult) {
-    const reference = plan.final.value.authoritative_results.find((entry) => entry.result_id === plan.receipt.value.result_id);
-    if (reference !== undefined) {
+    // A counter-review receipt may have installed a second, constitution-review result in the
+    // same commit; both were part of this receipt's prepared state, so both resume here. The
+    // fingerprint match selects exactly the references this request round installed.
+    const references = plan.final.value.authoritative_results.filter((entry) =>
+      entry.result_id === plan.receipt.value.result_id ||
+      (plan.receipt.value.operation === "counter-review" &&
+        entry.step === "adjudicate" &&
+        entry.phase_instance === plan.final.value.phase_instance &&
+        entry.input_fingerprint === plan.receipt.value.input_fingerprint));
+    for (const reference of references) {
       if (dependencies.load_retained_result === undefined) return stateIssue(current.value, "result-resume-unavailable");
       const loaded = await dependencies.load_retained_result(reference);
       if (!loaded.ok) return loaded;
@@ -949,9 +1024,15 @@ async function installPlan<K extends ToolName>(
       }), true);
       if (!resumed.ok) return resumed;
     }
-  } else if (plan.result_installation !== undefined) {
-    const installed = await installResultFacts(dependencies, request.authority, current, plan.result_installation, false);
-    if (!installed.ok) return installed;
+  } else {
+    if (plan.result_installation !== undefined) {
+      const installed = await installResultFacts(dependencies, request.authority, current, plan.result_installation, false);
+      if (!installed.ok) return installed;
+    }
+    if (plan.constitution_installation !== undefined) {
+      const installed = await installResultFacts(dependencies, request.authority, current, plan.constitution_installation, false);
+      if (!installed.ok) return installed;
+    }
   }
   try {
     await ensureIntentDirectory(request.authority);

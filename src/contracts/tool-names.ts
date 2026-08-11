@@ -1,7 +1,6 @@
 export const TOOL_NAMES = Object.freeze([
   "archflow_state",
   "archflow_counter_review",
-  "archflow_adjudicate",
   "archflow_gate",
   "archflow_waiver"
 ] as const);

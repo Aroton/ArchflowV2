@@ -379,12 +379,18 @@ async function currentApprovedUpstreams(
   return Object.freeze(digests.sort());
 }
 
-function pendingAdjudicationGateKind(
+/**
+ * The next unresolved constitution-review gate, derived mechanically from retained adjudication
+ * evidence: a gate the selector demands that is neither approved for the current evidence set
+ * nor fully covered by in-force waivers. Shared by status and build-request so the composed
+ * gate request and the fixed point can never disagree about which gate is pending.
+ */
+export function pendingAdjudicationGate(
   state: TaskStateV1,
   constitution: ResolvedConstitution,
   retained: RetainedEvidenceSet,
   authenticated: readonly AuthenticatedGateApproval[],
-): ActiveGateV1["kind"] | undefined {
+): ReturnType<typeof selectAdjudicationGates>[number] | undefined {
   const source = retained.get("adjudicate")?.manifest.source_artifact;
   if (source?.artifact_kind !== "adjudication-evidence") return undefined;
   let currentSet: CurrentEvidenceSetRef | undefined;
@@ -406,7 +412,7 @@ function pendingAdjudicationGateKind(
         waiverContext.eligible_waiver_rules.every((rule) =>
           waiverInForce(state, rule, gate.subject_digest, waiverContext.waiver_scope) !== undefined);
     }
-    if (!approved && !waived) return gate.kind;
+    if (!approved && !waived) return gate;
   }
   return undefined;
 }
@@ -963,10 +969,11 @@ export async function computeTaskStatus(
   }
   if (manualCheckpointHeadIsPending(state, checkpointHead)) blockers.push("checkpoint-import-available");
 
-  let adjudicationGateKind: Parameters<typeof deriveNextAction>[0]["adjudication_gate_kind"];
+  let adjudicationGate: ReturnType<typeof pendingAdjudicationGate>;
   if (assessment?.next === "adjudication-gate" && constitution !== undefined) {
-    adjudicationGateKind = pendingAdjudicationGateKind(state, constitution, retained, authenticatedApprovals);
+    adjudicationGate = pendingAdjudicationGate(state, constitution, retained, authenticatedApprovals);
   }
+  const adjudicationGateKind = adjudicationGate?.kind;
   const nextAction = deriveNextAction({
     repository_initialized: true,
     state,
@@ -1009,6 +1016,7 @@ export async function computeTaskStatus(
         }
       : {}),
     ...(gateInput === undefined ? {} : { commit_authorization: gateInput }),
+    ...(adjudicationGate === undefined ? {} : { adjudication_gate: adjudicationGate }),
     maximum_attempts: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS,
   });
 

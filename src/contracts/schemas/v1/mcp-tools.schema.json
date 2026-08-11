@@ -246,8 +246,7 @@
                     "enum": [
                       "produce",
                       "counter_review",
-                      "triage",
-                      "adjudicate"
+                      "triage"
                     ]
                   },
                   "status": {
@@ -375,6 +374,7 @@
           "path",
           "verdict",
           "blocking_count",
+          "constitution",
           "revision"
         ],
         "properties": {
@@ -390,6 +390,65 @@
           },
           "blocking_count": {
             "$ref": "#/$defs/integer"
+          },
+          "constitution": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "status",
+                  "path",
+                  "constitution",
+                  "drift",
+                  "triggers"
+                ],
+                "properties": {
+                  "status": {
+                    "const": "evaluated"
+                  },
+                  "path": {
+                    "$ref": "#/$defs/path"
+                  },
+                  "constitution": {
+                    "enum": [
+                      "pass",
+                      "fail",
+                      "uncertain"
+                    ]
+                  },
+                  "drift": {
+                    "enum": [
+                      "aligned",
+                      "incidental",
+                      "material"
+                    ]
+                  },
+                  "triggers": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/rule"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "status",
+                  "reason"
+                ],
+                "properties": {
+                  "status": {
+                    "const": "not-run"
+                  },
+                  "reason": {
+                    "const": "no-active-constitution-rules"
+                  }
+                }
+              }
+            ]
           },
           "revision": {
             "$ref": "#/$defs/integer"
@@ -421,123 +480,6 @@
               },
               "value": {
                 "$ref": "#/$defs/archflow_counter_review/success"
-              }
-            }
-          }
-        ]
-      }
-    },
-    "archflow_adjudicate": {
-      "input": {
-        "oneOf": [
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "schema_version",
-              "task_id",
-              "intent_id",
-              "expected_revision",
-              "input_fingerprint",
-              "artifact_path",
-              "upstream_paths"
-            ],
-            "properties": {
-              "schema_version": {
-                "const": "1"
-              },
-              "task_id": {
-                "$ref": "#/$defs/taskSlug"
-              },
-              "intent_id": {
-                "$ref": "#/$defs/pathSafeId"
-              },
-              "expected_revision": {
-                "$ref": "#/$defs/integer"
-              },
-              "input_fingerprint": {
-                "$ref": "#/$defs/digest"
-              },
-              "artifact_path": {
-                "$ref": "#/$defs/path"
-              },
-              "upstream_paths": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/path"
-                }
-              }
-            }
-          },
-          {
-            "$ref": "#/$defs/stagedReference"
-          }
-        ]
-      },
-      "success": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "path",
-          "constitution",
-          "drift",
-          "triggers",
-          "revision"
-        ],
-        "properties": {
-          "path": {
-            "$ref": "#/$defs/path"
-          },
-          "constitution": {
-            "enum": [
-              "pass",
-              "fail",
-              "uncertain"
-            ]
-          },
-          "drift": {
-            "enum": [
-              "aligned",
-              "incidental",
-              "material"
-            ]
-          },
-          "triggers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/$defs/rule"
-            }
-          },
-          "revision": {
-            "$ref": "#/$defs/integer"
-          },
-          "request_digest": {
-            "$ref": "#/$defs/digest"
-          }
-        }
-      },
-      "result": {
-        "oneOf": [
-          {
-            "$ref": "#/$defs/failure"
-          },
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "schema_version",
-              "ok",
-              "value"
-            ],
-            "properties": {
-              "schema_version": {
-                "const": "1"
-              },
-              "ok": {
-                "const": true
-              },
-              "value": {
-                "$ref": "#/$defs/archflow_adjudicate/success"
               }
             }
           }
@@ -1019,9 +961,6 @@
     },
     {
       "$ref": "#/$defs/archflow_counter_review/input"
-    },
-    {
-      "$ref": "#/$defs/archflow_adjudicate/input"
     },
     {
       "$ref": "#/$defs/archflow_gate/input"

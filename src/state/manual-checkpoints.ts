@@ -187,7 +187,7 @@ export function requiresManualFinalPhaseCompletion(
   targetPhase: PhaseInstanceId,
 ): boolean {
   const decoded = decodePhaseInstance(current.phase_instance);
-  return decoded.kind === "phase-impl" && current.step === "adjudicate" && current.status === "succeeded" &&
+  return decoded.kind === "phase-impl" && current.step === "triage" && current.status === "succeeded" &&
     current.planned_final_phase !== undefined && Number(decoded.phase) >= Number(current.planned_final_phase) &&
     targetPhase !== current.phase_instance;
 }
@@ -335,7 +335,7 @@ export async function buildNextManualCheckpoint(
           ? undefined
           : sourceArtifact;
       const requiresCommit = decodePhaseInstance(current.phase_instance).kind === "phase-impl" &&
-        current.step === "adjudicate" && current.status === "succeeded" &&
+        current.step === "triage" && current.status === "succeeded" &&
         phaseInstance !== current.phase_instance;
       if (requiresCommit && requiresManualFinalPhaseCompletion(current, phaseInstance)) {
         return invalidManual(authority.services.authority, "manual-final-phase-must-complete");

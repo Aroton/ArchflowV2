@@ -490,7 +490,20 @@ export function deriveCurrentEvidenceSet(
   if (counterSource.artifact_kind !== "review-evidence") {
     throw new TypeError("current review manifests have the wrong source kind");
   }
-  const counter = counterSource.evidence;
+  const derived = deriveEvidenceSetFromCounter(counterSource.evidence);
+  if (derived.reviews[0]!.evidence_digest !== counterEntry.manifest.artifact_digest) {
+    throw new TypeError("retained review evidence digest does not match its manifest");
+  }
+  return derived;
+}
+
+/**
+ * Derives the one admissible evidence set directly from counter-review evidence. This is how the
+ * merged counter-review call binds its constitution dispatch to the review it just observed —
+ * the evidence is not durably installed yet, but the set digest is a pure function of the
+ * payload, so the binding recomputes identically from the retained result afterwards.
+ */
+export function deriveEvidenceSetFromCounter(counter: ReviewEvidence): DerivedCurrentEvidenceSet {
   if (
     counter.role !== "counter-review" ||
     (counter.assurance !== "server-attested" && counter.assurance !== "degraded") ||
@@ -498,11 +511,7 @@ export function deriveCurrentEvidenceSet(
   ) {
     throw new TypeError("retained reviews do not form one current review set");
   }
-
   const verifiedCounter = createVerifiedEvidenceReference(counter);
-  if (verifiedCounter.evidence_digest !== counterEntry.manifest.artifact_digest) {
-    throw new TypeError("retained review evidence digest does not match its manifest");
-  }
   const slots = parseRequiredReviewSlots([{
     role: "counter-review",
     evidence_digest: verifiedCounter.evidence_digest,

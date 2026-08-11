@@ -25,7 +25,7 @@ The resume phase is derived from the imported mapping as one past the highest ma
 
 ## Rebuild canonical requirements and design
 
-Run the ordinary PRD pipeline first. Seed `.archflow/tasks/<task>/prd.md` from the staged draft path returned for `prd.md`, preserving those staged bytes as the initial draft, then invoke the normal `archflow-prd` work through the status-directed pipeline. Research, revise, produce, review, adjudicate, and obtain explicit artifact approval normally. The imported PRD is a starting draft, never approval evidence.
+Run the ordinary PRD pipeline first. Seed `.archflow/tasks/<task>/prd.md` from the staged draft path returned for `prd.md`, preserving those staged bytes as the initial draft, then invoke the normal `archflow-prd` work through the status-directed pipeline. Research, revise, produce, review, triage, and obtain explicit artifact approval normally. The imported PRD is a starting draft, never approval evidence.
 
 Run the ordinary design pipeline after the PRD advances. Seed `.archflow/tasks/<task>/design.md` from the staged draft path returned for `design.md`, preserving those staged bytes as the initial draft, then invoke the normal `archflow-design` work through the status-directed pipeline. Require the imported design to declare a valid phase plan that covers the derived resume phase. If it does not, revise the canonical design before asking the human to approve it. Nothing in the imported architecture, phase files, logs, reviews, or decisions substitutes for the current design's fixed point and explicit artifact approval.
 

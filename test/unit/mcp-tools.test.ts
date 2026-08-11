@@ -3,7 +3,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import * as publicContracts from "../../src/contracts/index.js";
 import { createProjectError } from "../../src/contracts/errors.js";
 import { parsePathSafeId, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
-import { bindParsedToolCallRequest, correlateProjectResult, createInternalResultExpectation, parseToolCall, TOOL_DEFINITIONS, validateProjectFailureStructure, validateProjectResultStructure, type AdjudicateInput, type CommonToolInput, type CounterReviewInput, type GateInput, type ResultIdentityPayload, type StateInput, type WaiverDecisionBinding, type WaiverInput } from "../../src/contracts/mcp-tools.js";
+import { bindParsedToolCallRequest, correlateProjectResult, createInternalResultExpectation, parseToolCall, TOOL_DEFINITIONS, validateProjectFailureStructure, validateProjectResultStructure, type CommonToolInput, type CounterReviewInput, type GateInput, type ResultIdentityPayload, type StateInput, type WaiverDecisionBinding, type WaiverInput } from "../../src/contracts/mcp-tools.js";
 import type { GateDecisionEnvelopeBase } from "../../src/contracts/gates.js";
 import type { GateSupersessionRef, SupplementalGateRef } from "../../src/contracts/supplemental.js";
 import type { PathSafeId, TaskSlug } from "../../src/contracts/evidence.js";
@@ -18,8 +18,8 @@ const taskInitialization = JSON.parse(readFileSync(
 )) as Record<string, unknown>;
 
 describe("correlated MCP tool contracts", () => {
-  it("publishes exactly five exact schema fragment pairs", () => {
-    expect(Object.keys(TOOL_DEFINITIONS)).toEqual(["archflow_state", "archflow_counter_review", "archflow_adjudicate", "archflow_gate", "archflow_waiver"]);
+  it("publishes exactly four exact schema fragment pairs", () => {
+    expect(Object.keys(TOOL_DEFINITIONS)).toEqual(["archflow_state", "archflow_counter_review", "archflow_gate", "archflow_waiver"]);
     for (const [name, definition] of Object.entries(TOOL_DEFINITIONS)) {
       expect(definition.input_schema_id).toBe(`https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/input`);
       expect(definition.result_schema_id).toBe(`https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/result`);
@@ -33,12 +33,6 @@ describe("correlated MCP tool contracts", () => {
     expect(counter.input.rubric.criteria[0]!.text).toBe("Check paths");
     expect(Object.isFrozen(counter.input.rubric.criteria)).toBe(true);
     expect(Object.isFrozen(counter.input.rubric.criteria[0])).toBe(true);
-
-    const upstreamSource = ["prd.md", "design.md"];
-    const adjudicate = parseToolCall("archflow_adjudicate", { schema_version: "1", task_id: "task-1", intent_id: "intent-2", expected_revision: 0, input_fingerprint: digest, artifact_path: "phases/2/result.md", upstream_paths: upstreamSource });
-    upstreamSource[0] = "mutated.md";
-    expect(adjudicate.input.upstream_paths).toEqual(["prd.md", "design.md"]);
-    expect(Object.isFrozen(adjudicate.input.upstream_paths)).toBe(true);
 
     const originSource = { origin_gate_id: "gate-1", origin_decision_digest: "1".repeat(64), origin_context_digest: "2".repeat(64), task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), rule: { rule_id: "Rule:1", rule_version: 1 }, scope: { operation: "review-trigger", boundary: "subject" } };
     const waiver = parseToolCall("archflow_waiver", { schema_version: "1", task_id: "task-1", intent_id: "intent-3", expected_revision: 0, input_fingerprint: digest, origin: originSource, rationale: "Needed" });
@@ -355,7 +349,6 @@ describe("retightened boundary identifiers", () => {
     expectTypeOf<CommonToolInput["intent_id"]>().toEqualTypeOf<PathSafeId>();
     expectTypeOf<StateInput["task_id"]>().toEqualTypeOf<TaskSlug>();
     expectTypeOf<CounterReviewInput["task_id"]>().toEqualTypeOf<TaskSlug>();
-    expectTypeOf<AdjudicateInput["task_id"]>().toEqualTypeOf<TaskSlug>();
     expectTypeOf<GateInput["task_id"]>().toEqualTypeOf<TaskSlug>();
     expectTypeOf<WaiverInput["task_id"]>().toEqualTypeOf<TaskSlug>();
     expectTypeOf<ResultIdentityPayload["task_id"]>().toEqualTypeOf<TaskSlug>();
@@ -369,8 +362,6 @@ describe("retightened boundary identifiers", () => {
     const stateTask: StateInput["task_id"] = "task-1";
     // @ts-expect-error a plain string is not a validated task slug
     const counterTask: CounterReviewInput["task_id"] = "task-1";
-    // @ts-expect-error a plain string is not a validated task slug
-    const adjudicateTask: AdjudicateInput["task_id"] = "task-1";
     // @ts-expect-error a plain string is not a validated task slug
     const gateTask: GateInput["task_id"] = "task-1";
     // @ts-expect-error a plain string is not a validated task slug
@@ -398,6 +389,6 @@ describe("retightened boundary identifiers", () => {
     // rule_id is deliberately unchanged: it is not a path segment and keeps the broad grammar.
     const ruleId: WaiverDecisionBinding["rule_id"] = "Rule:1";
 
-    expect([commonTask, commonIntent, stateTask, counterTask, adjudicateTask, gateTask, waiverTask, identityTask, identityIntent, bindingOrigin, bindingWaiver, bindingTask, envelopeGate, envelopeTask, supersededGate, priorGate, supplementalTask, ruleId]).toHaveLength(18);
+    expect([commonTask, commonIntent, stateTask, counterTask, gateTask, waiverTask, identityTask, identityIntent, bindingOrigin, bindingWaiver, bindingTask, envelopeGate, envelopeTask, supersededGate, priorGate, supplementalTask, ruleId]).toHaveLength(17);
   });
 });

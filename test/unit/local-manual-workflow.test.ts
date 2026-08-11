@@ -210,7 +210,7 @@ describe("manual recovery trust boundaries", () => {
     const head = parseManualCheckpoint({
       ...fixtureInitial, task_id: TASK, repository_identity_digest: services.authority.repository_identity_digest,
       initialization, initialization_digest: canonicalJsonDigest(initialization), revision: 1,
-      phase_instance: PHASE, step: "adjudicate", status: "succeeded", attempt: 1,
+      phase_instance: PHASE, step: "triage", status: "succeeded", attempt: 1,
       approvals: [{ gate_id: gateId, gate_kind: "commit-authorization", subject_digest: subject,
         decision_digest: canonicalDocument(decision).digest, resolved_at_revision: 1 }],
       authoritative_results: [], projections: [], evidence_chain: [], waivers: [],
@@ -532,7 +532,7 @@ describe("manual recovery trust boundaries", () => {
     const initializationDigest = canonicalJsonDigest(initialization);
     const initial = parseManualCheckpoint({
       ...fixtureInitial, task_id: TASK, repository_identity_digest: repositoryDigest,
-      phase_instance: PHASE, step: "adjudicate", status: "succeeded", attempt: 1,
+      phase_instance: PHASE, step: "triage", status: "succeeded", attempt: 1,
       initialization, initialization_digest: initializationDigest,
       authoritative_results: [], projections: [], evidence_chain: [], approvals: [], waivers: [],
     });
@@ -541,7 +541,7 @@ describe("manual recovery trust boundaries", () => {
     const contextDigest = computeGateContextDigest("artifact-approval", gateContext);
     const frozenState = {
       schema_version: "1" as const, task_id: TASK, repository_identity_digest: repositoryDigest,
-      revision: parseSafeInteger(2), phase_instance: PHASE, step: "adjudicate" as const, status: "succeeded" as const,
+      revision: parseSafeInteger(2), phase_instance: PHASE, step: "triage" as const, status: "succeeded" as const,
       attempt: parseSafeInteger(1), input_fingerprint: initial.input_fingerprint,
       initialization_digest: initializationDigest, config_digest: initialization.config_digest,
       workflow_digest: initialization.workflow_digest, constitution_digest: initialization.constitution_digest,
@@ -609,7 +609,7 @@ describe("manual recovery trust boundaries", () => {
     if (!evidence.ok) return;
     const reduced = reduceAuthenticatedManualChain({ artifact, evidence: evidence.value });
     expect(reduced).toMatchObject({ ok: true, value: { head: { revision: 3 }, next_state: {
-      step: variant === "retry" ? "produce" : "adjudicate",
+      step: variant === "retry" ? "produce" : "triage",
       status: variant === "retry" ? "running" : "succeeded",
     } } });
   });

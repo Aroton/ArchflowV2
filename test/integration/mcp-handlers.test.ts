@@ -15,9 +15,8 @@ afterEach(async () => {
 });
 
 describe("live MCP handlers", () => {
-  it("registers exactly the five workflow tools", () => {
+  it("registers exactly the four workflow tools", () => {
     expect(Object.keys(createToolHandlers()).sort()).toEqual([
-      "archflow_adjudicate",
       "archflow_counter_review",
       "archflow_gate",
       "archflow_state",

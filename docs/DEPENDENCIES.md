@@ -46,7 +46,7 @@ There is no ESLint, Prettier, Biome, dotenv loader, web framework, database clie
 - The server identifies itself as `archflow-mcp@0.0.0` and supports MCP protocol `2025-11-25` (`PROTOCOL_VERSION` in `src/mcp/sdk-adapter.ts`).
 - The only SDK import in production is the public root in `src/mcp/sdk-adapter.ts`. `scripts/check-mcp-sdk-boundary.mjs` enforces that boundary; `scripts/test-mcp-sdk-boundary-policy.mjs` mutation-tests the checker.
 - `scripts/probe-mcp-sdk-compatibility.mjs` verifies the exact SDK/core package identities and the public/behavioral surfaces the adapter relies on. It also runs `npm view ... dist-tags --json`, so this verification step requires registry network access.
-- `src/mcp/tools.ts` advertises exactly five tools: `archflow_state`, `archflow_counter_review`, `archflow_adjudicate`, `archflow_gate`, and `archflow_waiver`. Their schemas originate in `src/contracts/schemas/v1/` and `src/contracts/mcp-tools.ts`.
+- `src/mcp/tools.ts` advertises exactly four tools: `archflow_state`, `archflow_counter_review`, `archflow_gate`, and `archflow_waiver`. Their schemas originate in `src/contracts/schemas/v1/` and `src/contracts/mcp-tools.ts`.
 
 Host identity is derived from MCP `clientInfo.name` in `src/contracts/hosts.ts`: `claude-code` maps to Claude, `codex-mcp-client` maps to Codex, and any unrecognized name maps to `unknown`. Recorded versions are evidence fixtures, not a prefix-based identity fallback.
 
@@ -62,9 +62,9 @@ The repository itself contains current examples in `.mcp.json` and `.codex/confi
 
 ## Model dispatch integrations
 
-`src/dispatch/` launches authenticated first-party `claude` or `codex` CLIs to perform independent review/adjudication. It does not call provider HTTP APIs directly.
+`src/dispatch/` launches authenticated first-party `claude` or `codex` CLIs to perform the independent rubric and constitution reviews. It does not call provider HTTP APIs directly.
 
-`src/dispatch/routing.ts` reads the task-pinned YAML configuration and maps model prefixes to adapters (`claude-*` to `claude-cli`, `gpt-*` to `codex-cli`). Counter-review and adjudication must use the opposite family from the producer. The active template at `assets/config.template.yaml` routes the Claude-family producer role to `claude-opus-5` and the Codex-family counter-reviewer/adjudicator roles to `gpt-5.6-sol`; `.archflow/config.yaml` is the current repository copy. Optional per-workflow overrides exist for `explore`, `prd`, `design`, `phase-design`, and `phase-impl`.
+`src/dispatch/routing.ts` reads the task-pinned YAML configuration and maps model prefixes to adapters (`claude-*` to `claude-cli`, `gpt-*` to `codex-cli`). Both dispatched reviews — counter-review and the constitution review — must use the opposite family from the producer. The active template at `assets/config.template.yaml` routes the Claude-family producer role to `claude-opus-5` and the Codex-family counter-reviewer/adjudicator roles to `gpt-5.6-sol` (`adjudicator` is now simply the constitution-review route; the producer is the connected host itself and is never dispatched); `.archflow/config.yaml` is the current repository copy. Optional per-workflow overrides exist for `explore`, `prd`, `design`, `phase-design`, and `phase-impl`.
 
 `src/dispatch/cli.ts` defines the concrete adapters:
 

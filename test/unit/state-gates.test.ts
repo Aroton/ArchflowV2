@@ -218,7 +218,7 @@ describe("gate manual authority import", () => {
     ]) as RetainedEvidenceSet;
     expect(deriveCurrentEvidenceSet(retained).current_evidence_set)
       .toEqual(currentEvidence);
-    const assessmentState = { ...resolvedState.document.value, step: "adjudicate" as const, status: "succeeded" as const };
+    const assessmentState = { ...resolvedState.document.value, step: "triage" as const, status: "succeeded" as const };
     expect(assessCurrentEvidence(assessmentState, retained, {
       subject_digest: D("c"), input_fingerprint: inputFingerprint, constitution,
       authenticated_gate_approvals: [loaded.value],
@@ -317,7 +317,7 @@ describe("gate manual authority import", () => {
     let current: TaskStateV1 = {
       ...state(), repository_identity_digest: authority.repository_identity_digest,
       config_digest: sha256Bytes(configBytes), input_fingerprint: inputFingerprint,
-      phase_instance: "design" as TaskStateV1["phase_instance"], step: "adjudicate", status: "succeeded",
+      phase_instance: "design" as TaskStateV1["phase_instance"], step: "triage", status: "succeeded",
       authoritative_results: [installDesign("### Phase 1: One\n### Phase 2: Two\n", "design-1")],
     };
     writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
@@ -385,7 +385,7 @@ describe("gate manual authority import", () => {
     expect(current.planned_final_phase).toBe(2);
 
     const amended = installDesign("### Phase 1: One\n### Phase 2: Two\n### Phase 3: Three\n", "design-2");
-    current = { ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "adjudicate", status: "succeeded", authoritative_results: [amended] };
+    current = { ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "triage", status: "succeeded", authoritative_results: [amended] };
     writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
     await approve("artifact-approval", amended.result_digest, { artifact_kind: "design" });
     expect(current.planned_final_phase).toBe(3);
@@ -404,14 +404,14 @@ describe("gate manual authority import", () => {
     ] as const;
     for (const [name, markdown] of invalidPlans) {
       const invalid = installDesign(markdown, `design-invalid-${name.replaceAll(" ", "-")}`);
-      current = { ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "adjudicate", status: "succeeded", authoritative_results: [invalid] };
+      current = { ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "triage", status: "succeeded", authoritative_results: [invalid] };
       writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
       await approve("artifact-approval", invalid.result_digest, { artifact_kind: "design" }, "approved-design-phase-count-invalid");
       expect(current.planned_final_phase).toBe(3);
     }
 
     const openEnded = installDesign("# Intentionally open-ended design\n\n<!-- archflow:phase-plan:open-ended -->\n", "design-3");
-    current = { ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "adjudicate", status: "succeeded", authoritative_results: [openEnded] };
+    current = { ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "triage", status: "succeeded", authoritative_results: [openEnded] };
     writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
     await approve("artifact-approval", openEnded.result_digest, { artifact_kind: "design" });
     expect(current.planned_final_phase).toBeUndefined();
@@ -424,7 +424,7 @@ describe("gate manual authority import", () => {
     } as never), payloads: [] } };
     current = {
       ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "phase-impl-3" as TaskStateV1["phase_instance"],
-      step: "adjudicate", status: "succeeded", planned_final_phase: parseSafeInteger(3), authoritative_results: [implementationReference],
+      step: "triage", status: "succeeded", planned_final_phase: parseSafeInteger(3), authoritative_results: [implementationReference],
     };
     writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
     await approve("commit-authorization", implementationArtifactDigest, {

@@ -38,16 +38,6 @@
     "runtime": true
   },
   {
-    "label": "portable-valid-adjudicate-success",
-    "tool": "archflow_adjudicate",
-    "member": "output",
-    "classification": "portable-structure",
-    "materialization": "valid-adjudicate-success",
-    "call_fixture": "archflow_adjudicate",
-    "portable": true,
-    "runtime": true
-  },
-  {
     "label": "portable-valid-gate-success",
     "tool": "archflow_gate",
     "member": "output",

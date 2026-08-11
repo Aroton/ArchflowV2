@@ -231,7 +231,7 @@ describe("bundled legacy upgrade workflow", () => {
     }
     const { committed_intent: _initialIntent, ...initializedState } = services.value.state.value;
     writeFileSync(services.value.authority.state.absolute, canonicalDocument({
-      ...initializedState, phase_instance: "design", step: "adjudicate", status: "succeeded",
+      ...initializedState, phase_instance: "design", step: "triage", status: "succeeded",
       authoritative_results: [...references].sort((left, right) =>
         `${left.phase_instance}\0${left.step}`.localeCompare(`${right.phase_instance}\0${right.step}`)),
       planned_final_phase: 4,

@@ -4,21 +4,20 @@
 
 `archflow-mcp` is a stdio MCP server speaking newline-delimited JSON-RPC. It is the system's sole authority: the only writer of durable state and the only judge of request validity. It takes no arguments and has no other mode — `src/main.ts` is 28 lines that either print usage or start the runtime.
 
-## The five tools
+## The four tools
 
 Tool names are frozen in `src/contracts/tool-names.ts`; handlers live in `src/mcp/handlers/`.
 
 | Tool | What it does |
 |---|---|
-| `archflow_state` | The workflow's write path. Records that a pipeline step (`produce`, `counter_review`, `triage`, `adjudicate`) is running/succeeded/failed, optionally attaching a durable artifact. Runs a state transaction and returns the new revision. |
-| `archflow_counter_review` | Assembles a sealed review envelope plus a read-only repo checkout, dispatches it to the opposite-family model CLI, and returns the verdict and finding count. |
-| `archflow_adjudicate` | Dispatches an adjudication envelope (no repo view) judging the artifact against the pinned constitution; returns compliance, drift, and triggered rules. |
+| `archflow_state` | The workflow's write path. Records that a pipeline step (`produce`, `counter_review`, `triage`) is running/succeeded/failed, optionally attaching a durable artifact. Runs a state transaction and returns the new revision. |
+| `archflow_counter_review` | Assembles a sealed review envelope plus a read-only repo checkout and dispatches it to the opposite-family model CLI; when the pinned constitution has active rules (the server decides, never the agent) it then dispatches a second opposite-family child for the constitution/drift review — sealed envelope, deliberately no checkout. Both results commit in one atomic state transaction; the result reports both: `{path, verdict, blocking_count, constitution, revision, request_digest}`, where `constitution` is `{status: "evaluated", path, constitution: pass\|fail\|uncertain, drift: aligned\|incidental\|material, triggers: […]}` or `{status: "not-run", reason: "no-active-constitution-rules"}`. |
 | `archflow_gate` | Records and resolves a durable human gate decision against a subject digest; handles supersession (`GATE_SUPERSEDED`). |
 | `archflow_waiver` | Grants or denies a human waiver against a gate whose decision was `waiver-requested`, after re-verifying the archived origin gate. |
 
 The advertised catalogue carries names and JSON Schemas; each input schema also carries one description naming its two parameter groups. The skills, not the tool listing, teach agents when to call what.
 
-The *advertised* input schema is deliberately flatter than the normative contract. The normative input is a root-level `oneOf` (full payload | staged reference) built from `$ref`/`allOf` composition — and at least one MCP host flattens a root-level `oneOf` by dropping every branch it cannot resolve, which advertised all five tools as zero-field objects and left models composing calls with guessed (all-string) types. `standaloneSchema` in `src/mcp/tools.ts` therefore merges the two branches into one plain object root: the union of both groups' properties (typed by `$ref` into the pruned `$defs`, which hosts do preserve below the root), the fields common to both groups as `required`, and the group-naming description. The merge is advisory; the server's strict `oneOf` validation in `parseToolCall` is unchanged and remains the authority. A regression fence in `test/contracts/mcp-advertised-schema.test.ts` forbids root-level combinators from ever coming back.
+The *advertised* input schema is deliberately flatter than the normative contract. The normative input is a root-level `oneOf` (full payload | staged reference) built from `$ref`/`allOf` composition — and at least one MCP host flattens a root-level `oneOf` by dropping every branch it cannot resolve, which advertised every tool as a zero-field object and left models composing calls with guessed (all-string) types. `standaloneSchema` in `src/mcp/tools.ts` therefore merges the two branches into one plain object root: the union of both groups' properties (typed by `$ref` into the pruned `$defs`, which hosts do preserve below the root), the fields common to both groups as `required`, and the group-naming description. The merge is advisory; the server's strict `oneOf` validation in `parseToolCall` is unchanged and remains the authority. A regression fence in `test/contracts/mcp-advertised-schema.test.ts` forbids root-level combinators from ever coming back.
 
 When the server rejects an input, `CONTRACT_INVALID` carries a bounded `issues` list (up to five `"<field path>: <message>"` strings) alongside `issue_code: "input-invalid"`, so a caller can correct the offending field instead of retrying blind; `STAGED_REQUEST_MISMATCH` does the same for a staged file that no longer re-parses.
 

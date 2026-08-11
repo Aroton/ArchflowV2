@@ -209,7 +209,7 @@ async function committedImplementationState(root: string, plannedFinalPhase: num
   git(root, "add", "--", "README.md");
   git(root, "commit", "-q", "-m", `phase ${plannedFinalPhase} implementation`);
   writeFileSync(statePath, canonicalDocument({
-    ...state, step: "adjudicate", status: "succeeded", planned_final_phase: plannedFinalPhase,
+    ...state, step: "triage", status: "succeeded", planned_final_phase: plannedFinalPhase,
     approvals: [{ gate_id: gateId, gate_kind: "commit-authorization", subject_digest: subjectDigest,
       decision_digest: canonicalDocument(decision).digest, resolved_at_revision: state.revision }],
   }).bytes);
@@ -655,10 +655,11 @@ describe("bundled manual workflow", () => {
       status: 0, value: { ok: false, error: { code: "STATE_INVALID" } },
     });
 
+    // No archflow_adjudicate fallback exists any more: the degraded constitution review rides
+    // the counter-review fallback exactly when active constitution_rules are supplied.
     const fallbackInputs = [
       { tool: "archflow_state", proposed_call: { step: "produce" } },
-      { tool: "archflow_counter_review", proposed_call: { artifact_path: "prd.md" }, source_artifact: { path: "prd.md" }, rubric: { criteria: [] }, upstreams: [], producer_family: "claude" },
-      { tool: "archflow_adjudicate", proposed_call: { artifact_path: "prd.md" }, source_artifact: { path: "prd.md" }, evidence: [], upstreams: [] },
+      { tool: "archflow_counter_review", proposed_call: { artifact_path: "prd.md" }, source_artifact: { path: "prd.md" }, rubric: { criteria: [] }, upstreams: [], producer_family: "claude", constitution_rules: [{ id: "task-isolation", version: 1, text: "Tasks are isolated from one another." }] },
       { tool: "archflow_gate", proposed_call: { kind: "artifact-approval" }, request_material: { kind: "artifact-approval" }, decision_templates: [{ decision: "approve" }] },
       { tool: "archflow_waiver", proposed_call: { origin: "gate" }, request_material: { kind: "waiver" }, decision_templates: [{ granted: false }] },
     ] as const;
@@ -698,17 +699,14 @@ describe("bundled manual workflow", () => {
               rubric: fallbackInput.rubric,
               upstreams: fallbackInput.upstreams,
               reviewer_family: "codex",
+              constitution_rules: fallbackInput.constitution_rules,
             },
           },
         });
         expect(fallback.material.prompt).toContain("Do not change files or advance the workflow.");
-      } else if (fallbackInput.tool === "archflow_adjudicate") {
-        expect(fallback).toMatchObject({
-          kind: "prompt",
-          material: { proposed: { evidence: [], upstreams: [] } },
-        });
+        // The one merged prompt also instructs the degraded constitution review.
+        expect(fallback.material.prompt).toContain("degraded constitution review");
         expect(fallback.material.prompt).toContain("uncertain");
-        expect(fallback.material.prompt).toContain("open a human gate");
       } else {
         expect(fallback).toMatchObject({
           kind: "gate-interface",

@@ -113,7 +113,6 @@ describe("local call envelopes", () => {
     const values = [
       { tool: "archflow_state" as const, input: { ...common, intent_id: "state-envelope", phase_instance: "prd", step: "counter_review", status: "running" } },
       { tool: "archflow_counter_review" as const, input: { ...common, intent_id: "counter-envelope", artifact_path: "prd.md", rubric } },
-      { tool: "archflow_adjudicate" as const, input: { ...common, intent_id: "adjudicate-envelope", artifact_path: "prd.md", upstream_paths: [] } },
     ];
     for (const value of values) {
       const envelope = await computeCallEnvelope(production.value, value);

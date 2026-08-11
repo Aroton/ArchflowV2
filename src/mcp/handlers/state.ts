@@ -92,49 +92,6 @@ export async function handleState(
       services.dependencies,
       { authority: services.authority, call },
       async (current, identifiedCall): Promise<ProjectResult<PreparedTransaction<"archflow_state">>> => {
-        if (
-          artifact === undefined &&
-          call.input.step === "adjudicate" &&
-          call.input.status === "running" &&
-          current.value.step === "produce" &&
-          current.value.status === "succeeded"
-        ) {
-          // The produce-succeeded -> adjudicate-running edge is structural in the movement
-          // rules; its semantic guard lives here, before any transition commits: adjudication
-          // may be entered directly from a succeeded produce only when current review evidence
-          // covers the retained artifact or its declared editorial predecessor. A plain produce
-          // with stale or absent reviews is refused, so a task can never strand mid-adjudicate
-          // without the evidence adjudication needs.
-          const loadRetained = services.dependencies.load_retained_result;
-          if (loadRetained === undefined) throw new TypeError("evidence preparation dependencies are unavailable");
-          const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
-          if (!produce.ok) return produce;
-          const notCurrent = (): ProjectResult<PreparedTransaction<"archflow_state">> =>
-            fail(createProjectError("STATE_INVALID", {
-              phase_instance: current.value.phase_instance,
-              issue_code: "adjudication-subject-not-current",
-            }));
-          let reviews;
-          try {
-            reviews = await loadCurrentReviewSet(
-              { read_state: services.dependencies.read_state, load_retained_result: loadRetained },
-              services.authority,
-              current.value.phase_instance,
-            );
-          } catch {
-            return notCurrent();
-          }
-          if (!reviews.ok) return reviews;
-          const predecessor = produce.value.artifact.artifact_kind === "document"
-            ? produce.value.artifact.editorial_predecessor
-            : undefined;
-          const reviewsBindPredecessor = predecessor !== undefined &&
-            reviews.value.subject_digest === predecessor.subject_digest &&
-            reviews.value.input_fingerprint === predecessor.input_fingerprint;
-          if (produce.value.artifact_digest !== reviews.value.subject_digest && !reviewsBindPredecessor) {
-            return notCurrent();
-          }
-        }
         let preparedResult: PreparedStateResult | PreparedEvidenceResult | undefined;
         if (artifact?.artifact_kind === "document" || artifact?.artifact_kind === "implementation-output") {
           if (retainedBytes === undefined || scanner === undefined) {
@@ -238,7 +195,7 @@ export async function handleState(
         const completionSignal =
           artifact === undefined &&
           decodePhaseInstance(current.value.phase_instance).kind === "phase-impl" &&
-          current.value.step === "adjudicate" &&
+          current.value.step === "triage" &&
           current.value.status === "succeeded";
         if (completionSignal) {
           const reference = current.value.authoritative_results.find((entry) =>
@@ -276,7 +233,7 @@ export async function handleState(
         const legacyJumpSignal =
           artifact === undefined &&
           current.value.phase_instance === "design" &&
-          current.value.step === "adjudicate" &&
+          current.value.step === "triage" &&
           current.value.status === "succeeded" &&
           decodedTarget.kind === "phase-design" &&
           Number(decodedTarget.phase) > 1;

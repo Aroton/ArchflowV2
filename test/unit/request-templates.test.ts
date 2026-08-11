@@ -95,7 +95,7 @@ describe("next-action request templates", () => {
     );
     expect(editorial?.request.input).toMatchObject({ step: "produce", status: "running" });
     expect(editorial?.guidance).toMatch(/exactly the accepted editorial revision intents/u);
-    expect(editorial?.guidance).toMatch(/Reviews are not re-run; adjudication is\./u);
+    expect(editorial?.guidance).toMatch(/Nothing is re-run/u);
     const plain = buildNextActionRequest(
       action({ code: "run-step", step: "produce" }),
       { task_id: taskId, state: stateAt("prd", "triage", "succeeded") },
@@ -157,15 +157,11 @@ describe("next-action request templates", () => {
     expect(counter?.request.input).toMatchObject({ artifact_path: "phases/2/design.md" });
     expect(() => parseToolCall("archflow_counter_review", structuredClone(counter?.request.input))).toThrow();
 
-    const adjudicate = buildNextActionRequest(
+    // The adjudicate position is retired: no run-step template may target it from any state.
+    expect(buildNextActionRequest(
       action({ code: "run-step", step: "adjudicate" }),
-      { task_id: taskId, state: stateAt("phase-impl-3", "adjudicate", "running") },
-    );
-    expect(adjudicate?.request.tool).toBe("archflow_adjudicate");
-    expect(adjudicate?.request.input).toMatchObject({
-      artifact_path: "phases/3/impl-notes.md",
-      upstream_paths: ["phases/3/design.md", "design.md"],
-    });
+      { task_id: taskId, state: stateAt("phase-impl-3", "triage", "succeeded") },
+    )).toBeUndefined();
 
     const counterEntry = buildNextActionRequest(
       action({ code: "run-step", step: "counter_review" }),
@@ -227,7 +223,7 @@ describe("next-action request templates", () => {
 });
 
 describe("run-step template legality", () => {
-  const steps: readonly PipelineStep[] = ["produce", "counter_review", "triage", "adjudicate"];
+  const steps: readonly PipelineStep[] = ["produce", "counter_review", "triage"];
   const statuses: readonly TaskStateV1["status"][] = ["running", "failed", "succeeded"];
 
   // Mirrors the server's attempt derivation: the client never supplies attempt, so the template's
@@ -297,7 +293,6 @@ describe("run-step template legality", () => {
       const input = built.request.input as { step?: string; status?: string };
       switch (built.request.tool) {
         case "archflow_counter_review": return "counter-review";
-        case "archflow_adjudicate": return "adjudicate";
         case "archflow_gate": return "gate";
         case "archflow_state":
           if (input.status === "running") return "running";
@@ -348,7 +343,7 @@ describe("run-step template legality", () => {
     // The sweep must actually cover every prefill family, or the invariant proves nothing.
     expect(emitted.length).toBeGreaterThanOrEqual(10);
     const tools = new Set(emitted.map(([, built]) => built.request.tool));
-    expect([...tools].sort()).toEqual(["archflow_adjudicate", "archflow_counter_review", "archflow_gate", "archflow_state"]);
+    expect([...tools].sort()).toEqual(["archflow_counter_review", "archflow_gate", "archflow_state"]);
     for (const [code, built] of emitted) {
       expect(BUILD_REQUEST_KINDS).toContain(composerKindFor(code, built));
     }

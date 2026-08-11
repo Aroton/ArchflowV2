@@ -309,7 +309,10 @@ describe("review services", () => {
     expect(assessCurrentEvidence(state(), replaced, subject)).toMatchObject({
       current: ["counter_review"],
       stale: ["triage", "adjudicate"],
-      next: "triage",
+      // Stale constitution evidence beside a current review set is reachable only through
+      // repair; the backward-to-produce door is the recovery path.
+      next: "produce",
+      reentry_required: true,
     });
 
     const wrongTriage = new Map(retained());
@@ -352,8 +355,10 @@ describe("review services", () => {
         },
       },
     });
-    expect(assessCurrentEvidence(state(), wrongAdjudication, subject).next)
-      .toBe("adjudicate");
+    expect(assessCurrentEvidence(state(), wrongAdjudication, subject)).toMatchObject({
+      next: "produce",
+      reentry_required: true,
+    });
   });
 
   it("makes retained adjudication stale when the currently approved upstream digests change", () => {
@@ -363,7 +368,7 @@ describe("review services", () => {
       subject_digest: D("8"), input_fingerprint: D("2"), constitution,
       approved_upstream_digests: [approved],
     }).next).toBe("advance");
-    expect(assessCurrentEvidence(state({ step: "adjudicate", status: "succeeded" }), evidence, {
+    expect(assessCurrentEvidence(state({ step: "triage", status: "succeeded" }), evidence, {
       subject_digest: D("8"), input_fingerprint: D("2"), constitution,
       approved_upstream_digests: [D("7")],
     })).toMatchObject({
@@ -544,7 +549,7 @@ describe("review services", () => {
     } as const;
     const afterFailureWaiver = assessCurrentEvidence(
       state({
-        step: "adjudicate",
+        step: "triage",
         status: "succeeded",
         waivers: [liveFailureWaiver],
       }),
@@ -556,7 +561,7 @@ describe("review services", () => {
 
     const withMaterialOpen = assessCurrentEvidence(
       state({
-        step: "adjudicate",
+        step: "triage",
         status: "succeeded",
         waivers: [liveFailureWaiver],
         open_gate: {
@@ -579,14 +584,15 @@ describe("review services", () => {
     )).not.toBe(computeGateContextDigest(materialDrift.kind, materialDrift.context));
   });
 
-  it("requires adjudication re-entry when retained evidence is stale", () => {
+  it("routes a fully stale evidence set back to counter-review", () => {
     const assessment = assessCurrentEvidence(
-      state({ step: "adjudicate", attempt: 2 }),
+      state({ step: "counter_review", status: "running", attempt: 2 }),
       retained(D("8"), D("9"), 0, D("9")),
       { subject_digest: D("8"), input_fingerprint: D("2"), constitution },
     );
     expect(assessment.stale).toContain("adjudicate");
-    expect(assessment.next).toBe("produce");
+    expect(assessment.next).toBe("counter_review");
+    expect(assessment.reentry_required).toBe(false);
   });
 
   it("keeps a selected adjudication gate durable across publication crashes and non-advancing closure", () => {
@@ -633,7 +639,7 @@ describe("review services", () => {
     };
 
     const afterCommitCrash = assessCurrentEvidence(
-      state({ step: "adjudicate", status: "succeeded" }),
+      state({ step: "triage", status: "succeeded" }),
       gated,
       subject,
     );
@@ -649,7 +655,7 @@ describe("review services", () => {
       opened_at_revision: 8,
     };
     const resumed = assessCurrentEvidence(
-      state({ step: "adjudicate", status: "succeeded", open_gate: openGate }),
+      state({ step: "triage", status: "succeeded", open_gate: openGate }),
       gated,
       subject,
     );
@@ -658,14 +664,14 @@ describe("review services", () => {
 
     // A rejected/cancelled/non-advancing closure leaves no ApprovalRef and remains gated.
     expect(assessCurrentEvidence(
-      state({ step: "adjudicate", status: "succeeded" }),
+      state({ step: "triage", status: "succeeded" }),
       gated,
       subject,
     ).next).toBe("adjudication-gate");
 
     const unauthenticated = assessCurrentEvidence(
       state({
-        step: "adjudicate",
+        step: "triage",
         status: "succeeded",
         approvals: [{
           gate_id: "selected-gate",

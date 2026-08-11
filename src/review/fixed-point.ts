@@ -48,11 +48,11 @@ export type EvidenceSubject = Readonly<{
   input_fingerprint: Sha256Digest;
   constitution: ResolvedConstitution;
   /**
-   * Present only when the current produce artifact declares an editorial predecessor. Review and
-   * triage evidence bound to this pair counts as current for the subject — exactly one hop, no
-   * chaining: the pair always comes from the current artifact's own declaration, so evidence two
-   * revisions back never matches. Adjudication currency deliberately stays exact on the new
-   * subject; only its triage binding relaxes.
+   * Present only when the current produce artifact declares an editorial predecessor. Review,
+   * triage, and constitution evidence bound to this pair counts as current for the subject —
+   * exactly one hop, no chaining: the pair always comes from the current artifact's own
+   * declaration, so evidence two revisions back never matches. An editorial revision therefore
+   * re-runs nothing; the gate summary discloses that the evidence evaluated the predecessor bytes.
    */
   editorial_predecessor?: EditorialPredecessorPair;
   approved_upstream_digests?: readonly Sha256Digest[];
@@ -77,7 +77,6 @@ export type EvidenceAssessment = Readonly<{
   next:
     | "counter_review"
     | "triage"
-    | "adjudicate"
     | "produce"
     | "attempts-exhausted"
     | "adjudication-gate"
@@ -146,14 +145,14 @@ function currentFor(
   step: PipelineStep,
   subject: EvidenceSubject,
   reviews: DerivedCurrentEvidenceSet | undefined,
-  currentTriage: TriageCandidate | undefined,
 ): boolean {
   if (step === "counter_review") return reviews !== undefined;
   const entry = retained.get(step);
   const evidence = entry === undefined ? undefined : evidencePayload(entry.manifest);
-  // Triage may be bound to the declared editorial predecessor (one hop); adjudication currency
-  // deliberately stays exact against the new subject, so it is re-run after an editorial revision.
-  if (!subjectCurrent(evidence, subject, step === "triage") || reviews === undefined) return false;
+  // Triage and constitution evidence may be bound to the declared editorial predecessor (one
+  // hop): the constitution review is dispatched with the counter-review, so both stay bound to
+  // the same bytes and an editorial revision re-runs neither.
+  if (!subjectCurrent(evidence, subject, true) || reviews === undefined) return false;
   if (step === "triage") {
     const triage = evidence as TriageCandidate;
     return triage.current_evidence_set_digest === reviews.current_evidence_set.set_digest &&
@@ -163,8 +162,7 @@ function currentFor(
   }
   if (step === "adjudicate") {
     const adjudication = evidence as AdjudicationEvidence;
-    return currentTriage !== undefined &&
-      adjudication.source_evidence_set_digest === reviews.current_evidence_set.set_digest &&
+    return adjudication.source_evidence_set_digest === reviews.current_evidence_set.set_digest &&
       adjudication.approved_upstream_digests.length ===
         (subject.approved_upstream_digests ?? []).length &&
       adjudication.approved_upstream_digests.every((digest, index) =>
@@ -210,11 +208,11 @@ function adjudicationGateSatisfied(
       counterDigest === undefined ||
       triage === undefined ||
       adjudication === undefined ||
-      // The triage binding alone relaxes to the declared editorial predecessor (one hop);
-      // adjudication stays exact so the constitution verdict is honest for the final bytes.
+      // Both bindings relax to the declared editorial predecessor (one hop): the constitution
+      // review is dispatched with the counter-review, so an editorial revision re-runs neither
+      // and the gate summary discloses that the evidence evaluated the predecessor bytes.
       !(boundToSubjectExactly(triage, subject) || boundToDeclaredPredecessor(triage, subject)) ||
-      adjudication.subject_digest !== subject.subject_digest ||
-      adjudication.input_fingerprint !== subject.input_fingerprint ||
+      !(boundToSubjectExactly(adjudication, subject) || boundToDeclaredPredecessor(adjudication, subject)) ||
       adjudication.source_evidence_set_digest !== request.current_evidence.set_digest ||
       request.current_evidence.set_digest !== triage.current_evidence_set_digest ||
       request.current_evidence.slots[0].evidence_digest !== counterDigest
@@ -305,13 +303,15 @@ export function assessCurrentEvidence(
   if (!Number.isSafeInteger(maximum) || maximum < 1) {
     throw new TypeError("max_attempts must be a positive safe integer");
   }
+  const constitutionRequired = [...subject.constitution.rules.values()]
+    .some((rule) => rule.status === "active");
   const reviews = currentReviewSet(retained, subject);
   const candidateTriage = triageAt(retained);
   const triageCurrent = currentFor(
-    retained, "triage", subject, reviews, undefined,
+    retained, "triage", subject, reviews,
   ) ? candidateTriage : undefined;
   const current = EVIDENCE_STEPS.filter((step) =>
-    currentFor(retained, step, subject, reviews, triageCurrent));
+    currentFor(retained, step, subject, reviews));
   const stale = EVIDENCE_STEPS.filter((step) =>
     retained.has(step) && !current.includes(step));
   const disposition = dispositionState(retained, reviews, triageCurrent);
@@ -331,24 +331,23 @@ export function assessCurrentEvidence(
     triageCurrent.accepted_count === 0 &&
     (triageCurrent.accepted_editorial_count ?? 0) > 0 &&
     boundToSubjectExactly(triageCurrent, subject);
-  const staleAdjudicationReentry =
-    retained.has("adjudicate") &&
-    !current.includes("adjudicate") &&
-    state.step === "adjudicate" &&
-    state.status === "succeeded";
-  if (acceptedReentry || staleAdjudicationReentry) {
+  if (acceptedReentry) {
     reentry = true;
     next = "produce";
   } else if (!current.includes("counter_review")) next = "counter_review";
-  else if (!current.includes("triage") || !disposition.complete) next = "triage";
+  else if (constitutionRequired && !current.includes("adjudicate")) {
+    // The merged counter-review call installs review and constitution evidence atomically, so a
+    // current review set without current constitution evidence is reachable only through repair
+    // or an upstream re-approval. The backward-to-produce door is the recovery path.
+    reentry = true;
+    next = "produce";
+  } else if (!current.includes("triage") || !disposition.complete) next = "triage";
   else if (disposition.accepted) {
     next = "triage";
   } else if (editorialPending) {
     // Not a re-entry: the attempt budget and the retained review evidence both survive.
     editorialRevision = true;
     next = "produce";
-  } else if (!current.includes("adjudicate")) {
-    next = "adjudicate";
   } else {
     const adjudication = adjudicationAt(retained);
     const gates = adjudication === undefined

@@ -128,16 +128,15 @@ describe("MCP contract schema agreement", () => {
     const examples = [
       ["archflow_state", { ...common, phase_instance: "phase-impl-2", step: "produce", status: "running" }],
       ["archflow_counter_review", { ...common, artifact_path: "phases/2/result.md", rubric }],
-      ["archflow_adjudicate", { ...common, artifact_path: "phases/2/result.md", upstream_paths: ["prd.md", "design.md"] }],
       ["archflow_gate", gate],
       ["archflow_waiver", { ...common, origin: waiverOrigin, rationale: "Needed" }]
     ] as const;
     for (const [name, input] of examples) { expect(validator.validate(input), name).toBe(true); expect(parseToolCall(name, input).name).toBe(name); }
     const waiverSupplemental = { action: "decline", gate: { prior_gate_id: "waiver-gate", task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), input_fingerprint: "a".repeat(64) }, reason: "Declined optional review" };
-    const waiverRetry = { ...examples[4][1], supplemental_outcome: waiverSupplemental };
+    const waiverRetry = { ...examples[3][1], supplemental_outcome: waiverSupplemental };
     expect(validator.validate(waiverRetry)).toBe(true);
     expect(parseToolCall("archflow_waiver", waiverRetry).input.supplemental_outcome).toEqual(waiverSupplemental);
-    const wrongWaiver = { ...examples[4][1], task_id: "other" };
+    const wrongWaiver = { ...examples[3][1], task_id: "other" };
     expect(validator.validate(wrongWaiver)).toBe(false);
     expect(() => parseToolCall("archflow_waiver", wrongWaiver)).toThrow();
   });

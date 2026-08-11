@@ -68,11 +68,10 @@ docs/
   LIMITATIONS.md           # honest reliability/security boundaries
   workflow/LIFECYCLE.md    # phase graph, pipeline, gates, trust boundaries
   workflow/SKILLS.md       # the eight skills
-  mcp/SERVER.md            # MCP server, five tools, protocol plumbing
+  mcp/SERVER.md            # MCP server, four tools, protocol plumbing
   mcp/DISPATCH.md          # child reviewer dispatch, sandbox, repo views
   cli/COMMANDS.md          # archflow-local surface, build-request, degraded mode
-  review/COUNTER-REVIEW.md # dispatch envelopes, pinned context, review flow
-  review/ADJUDICATION.md   # constitution, waivers, durable decisions
+  review/COUNTER-REVIEW.md # dispatch envelopes, pinned context, review flow, constitution review, waivers
   contracts/CONTRACTS.md   # canonical JSON, digests, trust brands
   state/DURABLE-STATE.md   # .archflow layout, transactions, state machine, git boundary
 ```

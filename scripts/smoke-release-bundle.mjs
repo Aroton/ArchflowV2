@@ -132,7 +132,6 @@ function assertCallTranscript(bytes, initialize, calls, workingDirectory) {
   assert.deepEqual(lines[2]?.result?.tools?.map((tool) => tool.name), [
     "archflow_state",
     "archflow_counter_review",
-    "archflow_adjudicate",
     "archflow_gate",
     "archflow_waiver",
   ]);

@@ -6,7 +6,7 @@
  * outside re-entry — keeps blocking with `restore-or-record-new-transition`.
  */
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -52,12 +52,16 @@ async function repository() {
   git(root, "commit", "-q", "-m", "root");
   const scaffolded = await scaffoldRepositoryAssets({ working_directory: root });
   if (!scaffolded.ok) throw new Error(scaffolded.error.code);
-  // Same fixture constitution as the roundtrip suite: no mechanical enforcement declarations,
-  // so a model adjudication never forces a human gate that would block the driver.
+  // Same fixture constitution as the roundtrip suite — deliberately no active rules, so the
+  // merged archflow_counter_review call runs a single dispatch, reports the constitution review
+  // as not-run, and this suite stays about re-entry edit tolerance.
+  for (const name of readdirSync(join(root, ".archflow", "constitution"))) {
+    if (name.endsWith(".md") && name !== "README.md") rmSync(join(root, ".archflow", "constitution", name));
+  }
   writeFileSync(join(root, ".archflow", "constitution", "20-data.md"), `---
 id: task-and-evidence-isolation
 version: 1
-status: active
+status: deprecated
 review_trigger: A task reads or mutates another task's files.
 ---
 Tasks are isolated from one another.
@@ -164,7 +168,7 @@ else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logg
 else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8")); const subject = envelope.subject;
-  const output = subject.role === "counter-review" ? {
+  const output = {
     schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
     step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
     input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
@@ -173,22 +177,6 @@ else {
     matched_rule_versions: [],
     verdict: ${JSON.stringify(findings.some((finding) => finding.blocking === true) ? "fail" : "advisory")},
     blocking_count: ${JSON.stringify(findings.filter((finding) => finding.blocking === true).length)}
-  } : {
-    schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
-    step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
-    pinned_constitution_digest: subject.pinned_constitution_digest,
-    approved_upstream_digests: subject.approved_upstream_digests,
-    source_evidence_set_digest: subject.source_evidence_set_digest,
-    rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
-      compliance: "pass",
-      rationale: "Checked the retained subject.",
-      trigger: "not-matched", trigger_evidence: "No review trigger matched.",
-      enforced_by: rule.enforced_by.map((mechanism) => ({ mechanism, state: "current",
-        subject_digest: subject.subject_digest, evidence_digest: subject.subject_digest,
-        details: "Mechanically verified in fixture." })) })),
-    drift_findings: subject.approved_upstream_digests.map((upstream_digest) => ({ upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift found." })),
-    constitution: "pass",
-    drift: "aligned", matched_rule_versions: [], uncertain_rule_versions: []
   };
   await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
@@ -321,13 +309,17 @@ describe("post-triage re-entry edits are expected", () => {
       expect(revised.reconciliation?.expected_reentry_edits).toBeUndefined();
       expect(revised.next_action).toMatchObject({ code: "run-step", step: "counter_review" });
 
-      // Stale prior-cycle reviews never authorize the direct adjudicate entry: the revised
-      // artifact declares no editorial predecessor, so the evidence guard refuses before any
-      // transition commits and the pipeline still demands the fresh counter-review.
-      const staleEntry = await h.buildRequest({ intent_id: "adjudicate-entry-stale", kind: "running", step: "adjudicate" });
-      const staleRefused = await h.invokeRaw(staleEntry.request.tool, staleEntry.request.input);
-      expect(staleRefused.ok).toBe(false);
-      expect(staleRefused.error?.diagnostic?.parameters).toMatchObject({ issue_code: "adjudication-subject-not-current" });
+      // The adjudicate position is retired outright: no movement can target it, so stale
+      // prior-cycle reviews cannot be laundered into a direct re-adjudication — the pipeline
+      // still demands the fresh counter-review, and the state parser refuses the step name.
+      await expect(h.buildRequest({ intent_id: "adjudicate-entry-stale", kind: "running", step: "adjudicate" }))
+        .rejects.toThrow(/TRANSITION_INVALID/u);
+      const parseRefused = await h.invokeRaw("archflow_state", {
+        schema_version: "1", task_id: task, intent_id: "adjudicate-direct", expected_revision: 0,
+        input_fingerprint: "0".repeat(64), phase_instance: "prd", step: "adjudicate", status: "running",
+      });
+      expect(parseRefused.ok).toBe(false);
+      expect(parseRefused.error?.code).toBe("CONTRACT_INVALID");
       expect(await h.status()).toMatchObject({ step: "produce", status: "succeeded" });
     } finally {
       stub.restore();
@@ -359,12 +351,10 @@ describe("post-triage re-entry edits are expected", () => {
     const produceComposed = await h.buildRequest({ intent_id: "produce-1" });
     await h.invoke(produceComposed.request.tool, produceComposed.request.input);
 
-    // A plain produce with no current reviews is refused the direct adjudicate entry by the
-    // evidence guard before any transition commits: the edge is structural, the guard semantic.
-    const guardedEntry = await h.buildRequest({ intent_id: "adjudicate-entry-refused", kind: "running", step: "adjudicate" });
-    const guarded = await h.invokeRaw(guardedEntry.request.tool, guardedEntry.request.input);
-    expect(guarded.ok).toBe(false);
-    expect(guarded.error?.diagnostic?.parameters).toMatchObject({ issue_code: "adjudication-subject-not-current" });
+    // The adjudicate entry no longer exists as a composable movement from any position: the
+    // constitution review rides the counter-review call instead.
+    await expect(h.buildRequest({ intent_id: "adjudicate-entry-refused", kind: "running", step: "adjudicate" }))
+      .rejects.toThrow(/TRANSITION_INVALID/u);
     expect(await h.status()).toMatchObject({ step: "produce", status: "succeeded", attempt: 1 });
     const counterEntry = await h.buildRequest({ intent_id: "counter-entry-1", kind: "running", step: "counter_review" });
     await h.invoke(counterEntry.request.tool, counterEntry.request.input);
@@ -492,9 +482,9 @@ describe("post-triage re-entry edits are expected", () => {
       await h.invoke(revisedComposed.request.tool, revisedComposed.request.input);
 
       // After the editorial produce: the reviews and triage stay current for exactly this one
-      // hop, the next action is adjudicate — never counter_review — and status surfaces the
-      // editorial block the gate presenter needs, with the review-set subject still naming the
-      // predecessor bytes the reviews actually evaluated.
+      // hop, nothing is re-run — with no active constitution rules the loop closes at "advance"
+      // immediately — and status surfaces the editorial block the gate presenter needs, with the
+      // review-set subject still naming the predecessor bytes the reviews actually evaluated.
       const revised = await h.status();
       expect(revised.subject_digest).toBe(revisedComposed.artifact_digest);
       expect(revised.subject_digest).not.toBe(predecessorDigest);
@@ -505,9 +495,9 @@ describe("post-triage re-entry edits are expected", () => {
         stale: [],
         reentry_required: false,
         editorial_revision_required: false,
-        next: "adjudicate",
+        next: "advance",
       });
-      expect(revised.next_action).toMatchObject({ code: "run-step", step: "adjudicate" });
+      expect(revised.next_action).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval" });
       expect(revised.editorial_revision).toMatchObject({
         predecessor_subject_digest: predecessorDigest,
         dispositions: [{
@@ -516,24 +506,6 @@ describe("post-triage re-entry edits are expected", () => {
         }],
       });
       expect(revised.reconciliation?.classification).toBe("consistent");
-
-      // The movement rules admit the produce-succeeded -> adjudicate-running entry the
-      // editorial route needs, at the same attempt; the state handler's evidence guard accepts
-      // it because the retained reviews bind the declared predecessor.
-      const adjEntry = await h.buildRequest({ intent_id: "adjudicate-entry-1", kind: "running", step: "adjudicate" });
-      await h.invoke(adjEntry.request.tool, adjEntry.request.input);
-      const midAdjudicate = await h.status();
-      expect(midAdjudicate).toMatchObject({ step: "adjudicate", status: "running", attempt: 2 });
-      expect(midAdjudicate.next_action).toMatchObject({ code: "run-step", step: "adjudicate" });
-
-      // Adjudication runs against the new bytes and the loop closes at the approval gate.
-      const adjComposed = await h.buildRequest({ intent_id: "adjudicate-1", kind: "adjudicate" });
-      expect(adjComposed.request.tool).toBe("archflow_adjudicate");
-      await h.invoke(adjComposed.request.tool, adjComposed.request.input);
-      const adjudicated = await h.status();
-      expect(adjudicated).toMatchObject({ step: "adjudicate", status: "succeeded" });
-      expect(adjudicated.evidence?.assessment).toMatchObject({ next: "advance" });
-      expect(adjudicated.next_action).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval" });
     } finally {
       stub.restore();
     }
@@ -618,10 +590,7 @@ describe("post-triage re-entry edits are expected", () => {
         }],
       });
       await h.invoke(triageComposed.request.tool, triageComposed.request.input);
-      const adjEntry = await h.buildRequest({ intent_id: "adjudicate-entry-1", kind: "running", step: "adjudicate" });
-      await h.invoke(adjEntry.request.tool, adjEntry.request.input);
-      const adjComposed = await h.buildRequest({ intent_id: "adjudicate-1", kind: "adjudicate" });
-      await h.invoke(adjComposed.request.tool, adjComposed.request.input);
+      // The completed triage alone closes the loop: no adjudicate position follows it.
       const closed = await h.status();
       expect(closed.evidence?.assessment).toMatchObject({ next: "advance" });
       expect(closed.next_action).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval" });

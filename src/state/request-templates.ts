@@ -5,6 +5,7 @@ import type { PlainJsonValue } from "../contracts/plain-json.js";
 import type { ToolName } from "../contracts/tool-names.js";
 import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
+import type { AdjudicationGateRequest } from "../review/adjudication.js";
 import type { NextAction, NextActionRequest } from "./next-action.js";
 import { phaseReviewPaths, type PhaseReviewPaths } from "./phase-documents.js";
 import type { CommitAuthorizationInput } from "./status.js";
@@ -37,6 +38,11 @@ export type NextActionRequestFacts = Readonly<{
   subject_digest?: Sha256Digest;
   current_evidence?: CurrentEvidenceSetRef;
   commit_authorization?: CommitAuthorizationInput;
+  /**
+   * The pending constitution-review gate, derived mechanically from retained adjudication
+   * evidence by the same selector the fixed point uses; only the summary is authored.
+   */
+  adjudication_gate?: AdjudicationGateRequest;
   /** The resolved attempt ceiling, needed to prefill the attempts-exhausted gate context. */
   maximum_attempts?: number;
 }>;
@@ -117,8 +123,9 @@ export function buildNextActionRequest(next: NextAction, facts: NextActionReques
     const target = legalRunStepStatus(state, step);
     if (target === undefined) return undefined;
     if (target === "succeeded") {
-      // Mid-step: the remaining call records this step's terminal result. Counter-review and
-      // adjudication record their own terminal state through their dedicated tools.
+      // Mid-step: the remaining call records this step's terminal result. Counter-review records
+      // its own terminal state through its dedicated tool — and runs the constitution review
+      // itself when the pinned constitution has active rules.
       if (step === "counter_review") {
         return request("archflow_counter_review", {
           ...mechanicalPrefix(facts.task_id, state),
@@ -127,19 +134,7 @@ export function buildNextActionRequest(next: NextAction, facts: NextActionReques
         }, envelopeGuidance(
           facts.task_id,
           "archflow_counter_review",
-          "Replace the rubric placeholder with the skill's stable rubric verbatim.",
-        ));
-      }
-      if (step === "adjudicate") {
-        const paths = reviewPaths(state);
-        return request("archflow_adjudicate", {
-          ...mechanicalPrefix(facts.task_id, state),
-          artifact_path: paths.artifact_path,
-          upstream_paths: paths.upstream_paths,
-        }, envelopeGuidance(
-          facts.task_id,
-          "archflow_adjudicate",
-          "The artifact and upstream paths are the canonical review subjects for this phase.",
+          "Replace the rubric placeholder with the skill's stable rubric verbatim. The server also runs the constitution review inside this call when the pinned constitution has active rules; the result reports both verdicts.",
         ));
       }
       return request("archflow_state", {
@@ -163,7 +158,7 @@ export function buildNextActionRequest(next: NextAction, facts: NextActionReques
       facts.task_id,
       "archflow_state",
       next.editorial_revision === true && step === "produce"
-        ? "This is the running entry for the editorial produce re-entry: apply exactly the accepted editorial revision intents to the artifact — nothing else — then record the terminal produce result with archflow-local build-request (kind \"produce\"), which attaches the editorial predecessor link from durable authority. Reviews are not re-run; adjudication is."
+        ? "This is the running entry for the editorial produce re-entry: apply exactly the accepted editorial revision intents to the artifact — nothing else — then record the terminal produce result with archflow-local build-request (kind \"produce\"), which attaches the editorial predecessor link from durable authority. Nothing is re-run: the retained reviews and constitution verdict stay bound to the declared predecessor for this one hop."
         : `This is the running entry for the ${step} step; the terminal write that follows the work carries the step artifact and a succeeded or failed status.`,
     ));
   }
@@ -198,6 +193,31 @@ export function buildNextActionRequest(next: NextAction, facts: NextActionReques
         facts.task_id,
         "archflow_gate",
         "Write the summary for the human reviewer.",
+      ));
+    }
+    if (
+      (next.gate_kind === "adjudication-failure" ||
+        next.gate_kind === "material-drift" ||
+        next.gate_kind === "review-trigger") &&
+      facts.adjudication_gate !== undefined &&
+      facts.adjudication_gate.kind === next.gate_kind &&
+      facts.current_evidence !== undefined
+    ) {
+      // The constitution-review gates open at the post-triage fixed point through this ordinary
+      // gate flow. Kind, subject, and context all come from the retained adjudication evidence
+      // via the same selector the fixed point uses; only the summary is authored.
+      return request("archflow_gate", {
+        ...mechanicalPrefix(facts.task_id, state, state.input_fingerprint),
+        phase_instance: state.phase_instance,
+        summary: TEMPLATE_SUMMARY,
+        subject_digest: facts.adjudication_gate.subject_digest,
+        current_evidence: facts.current_evidence as unknown as PlainJsonValue,
+        kind: facts.adjudication_gate.kind,
+        context: facts.adjudication_gate.context as unknown as PlainJsonValue,
+      }, envelopeGuidance(
+        facts.task_id,
+        "archflow_gate",
+        "Write the summary for the human reviewer: name the constitution rules that failed, matched a review trigger, or drifted, and what the constitution review reported about each.",
       ));
     }
     // Exhaustion is a decision point, not a failure: without a template the human's entire view

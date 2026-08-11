@@ -33,12 +33,12 @@ flowchart LR
 ## The file clusters
 
 - **Foundation** — `plain-json.ts`, `canonical.ts`, `yaml.ts` (one strict YAML door), `versions.ts`.
-- **Vocabulary & primitives** — closed lists of phases/steps/gate policies; branded string types (`Sha256Digest`, `TaskSlug`, …); path-claim safety rules (no `..`, no pathspec magic); the five tool names.
+- **Vocabulary & primitives** — closed lists of phases/steps/gate policies; branded string types (`Sha256Digest`, `TaskSlug`, …); path-claim safety rules (no `..`, no pathspec magic); the four tool names.
 - **Validation machinery** — the Ajv setup with ten custom `x-archflow-*` keywords; `assertZodAgreement`, which proves the JSON Schemas and their Zod mirrors accept and reject exactly the same values.
 - **Fingerprints** — all derived identity computation in one module.
-- **Evidence & trust semantics** — review/adjudication/triage shapes in three assurance flavors (`agent-declared`, `server-attested`, `degraded`), the trust brands, secret-scan shapes, and renderers that escape control characters so rendered evidence can't spoof its own headers.
+- **Evidence & trust semantics** — review/constitution-review/triage shapes in three assurance flavors (`agent-declared`, `server-attested`, `degraded`), the trust brands, secret-scan shapes, and renderers that escape control characters so rendered evidence can't spoof its own headers.
 - **Durable document shapes** — thirteen `durable-*.ts` modules for the persisted roots, plus `durable.ts`, one large cross-document semantic validator.
-- **Tool contracts & errors** — the five tools' input/output types (each input is a union: the full payload, or the four-field staged-request reference `{schema_version, task_id, intent_id, request_digest}` the server rehydrates from disk — see `../mcp/SERVER.md`), gate kinds and decision envelopes, and the ~57-code project error taxonomy where every error carries an owner, a retryable flag, and a suggested action.
+- **Tool contracts & errors** — the four tools' input/output types (each input is a union: the full payload, or the four-field staged-request reference `{schema_version, task_id, intent_id, request_digest}` the server rehydrates from disk — see `../mcp/SERVER.md`; the former `AdjudicateInput`/`AdjudicateSuccess` are gone, and `CounterReviewSuccess` carries the merged result `{path, verdict, blocking_count, constitution, revision, request_digest}`), gate kinds and decision envelopes, and the ~57-code project error taxonomy where every error carries an owner, a retryable flag, and a suggested action.
 
 ## Design rules that follow from this layer
 

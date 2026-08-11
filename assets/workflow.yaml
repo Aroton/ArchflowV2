@@ -6,22 +6,22 @@ phases:
     optional: true
   - id: prd
     skill: archflow-prd
-    pipeline: [produce, counter_review, triage, adjudicate]
+    pipeline: [produce, counter_review, triage]
     gate: always
   - id: design
     skill: archflow-design
     requires: [prd]
-    pipeline: [produce, counter_review, triage, adjudicate]
+    pipeline: [produce, counter_review, triage]
     gate: always
   - id: phase-design
     skill: archflow-phase-design
     requires: [design]
     iterates: per_phase
-    pipeline: [produce, counter_review, triage, adjudicate]
+    pipeline: [produce, counter_review, triage]
     gate: on_trigger
   - id: phase-impl
     skill: archflow-phase-impl
     requires: [phase-design]
     iterates: per_phase
-    pipeline: [produce, counter_review, triage, adjudicate]
+    pipeline: [produce, counter_review, triage]
     gate: on_trigger

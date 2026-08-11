@@ -129,7 +129,6 @@ const MANUAL_CHECKPOINT = JSON.parse(await readFile(
 
 const stateCall = (status = "running") => ({ ...COMMON, phase_instance: "phase-impl-3", step: "produce", status });
 const counterCall = (artifactPath = "phases/phase-3.md", criteria = [{ id: "paths", text: "Check paths", blocking: true }]) => ({ ...COMMON, artifact_path: artifactPath, rubric: { schema_version: "1", kind: "implementation", mode: "adversarial", criteria } });
-const adjudicateCall = () => ({ ...COMMON, artifact_path: "phases/phase-3.md", upstream_paths: ["architecture.md"] });
 const gateCall = (kind: string, context: unknown) => ({ ...COMMON, phase_instance: "phase-impl-3", summary: "Review", subject_digest: D("b"), current_evidence: CURRENT_EVIDENCE, kind, context });
 const waiverCall = () => ({ ...COMMON, origin: { origin_gate_id: "gate-1", origin_decision_digest: D("1"), origin_context_digest: D("2"), task_id: COMMON.task_id, phase_instance: "phase-impl-3", subject_digest: D("3"), current_evidence_set_digest: D("4"), rule: RULE_A, scope: SCOPE }, rationale: "Needed" });
 const reviewContext = () => ({ matched_rules: [RULE_A], uncertain_rules: [], eligible_waiver_rules: [RULE_A], waiver_scope: SCOPE });
@@ -200,8 +199,7 @@ function materialize(entry: CorpusCase): MaterializedCase {
     case "commit-artifact-order": return { value: gateCall("commit-authorization", { target_ref: "HEAD", diff_digest: D("4"), current_artifact_digests: [D("b"), D("a")], parent_document_digests: [D("c")] }) };
     case "commit-parent-order": return { value: gateCall("commit-authorization", { target_ref: "HEAD", diff_digest: D("4"), current_artifact_digests: [D("a")], parent_document_digests: [D("c"), D("b")] }) };
     case "valid-state-success": return { call: stateCall(), value: result({ path: "phases/state.json", revision: 1, status: "running" }) };
-    case "valid-counter-success": return { call: counterCall(), value: result({ path: "reviews/counter.md", verdict: "pass", blocking_count: 0, revision: 1 }) };
-    case "valid-adjudicate-success": return { call: adjudicateCall(), value: result({ path: "reviews/adjudication.md", constitution: "pass", drift: "aligned", triggers: [], revision: 1 }) };
+    case "valid-counter-success": return { call: counterCall(), value: result({ path: "reviews/counter.md", verdict: "pass", blocking_count: 0, constitution: { status: "not-run", reason: "no-active-constitution-rules" }, revision: 1 }) };
     case "valid-gate-success": return { call: artifactGateCall, value: artifactGateResult };
     case "valid-waiver-success": return { call: waiverCall(), value: waiverResult() };
     case "valid-failure": return { value: snapshotFailure(["a/file", "z/file"]) };
@@ -245,7 +243,6 @@ function validateAuthenticSuccess(tool: ToolName, rawCall: unknown, value: unkno
   switch (tool) {
     case "archflow_state": void validateProjectResultStructure(parseToolCall(tool, rawCall), value); break;
     case "archflow_counter_review": void validateProjectResultStructure(parseToolCall(tool, rawCall), value); break;
-    case "archflow_adjudicate": void validateProjectResultStructure(parseToolCall(tool, rawCall), value); break;
     case "archflow_gate": void validateProjectResultStructure(parseToolCall(tool, rawCall), value); break;
     case "archflow_waiver": void validateProjectResultStructure(parseToolCall(tool, rawCall), value); break;
   }
@@ -259,7 +256,7 @@ describe("advertised MCP tool catalogue", () => {
     expect(validation).toHaveProperty("value");
     expect(listed).not.toHaveProperty("nextCursor");
     expect(ADVERTISED_TOOL_CATALOGUE.map(({ name }) => name)).toEqual(TOOL_NAMES);
-    expect(ADVERTISED_TOOL_CATALOGUE).toHaveLength(5);
+    expect(ADVERTISED_TOOL_CATALOGUE).toHaveLength(4);
   });
 
   it("compiles every standalone input and output with strict Ajv 2020 and standard formats only", () => {

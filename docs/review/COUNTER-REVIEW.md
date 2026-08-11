@@ -2,7 +2,7 @@
 
 **Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/review/`, `src/state/produce-subject.ts`
 
-Counter-review is the system's adversarial check: every artifact is reviewed by the *opposite model family* (Claude ⇄ Codex), dispatched by the server itself so the evidence is something the producer cannot author. This page covers the review envelope and the review flow; adjudication and waivers are in `ADJUDICATION.md`.
+Counter-review is the system's adversarial check: every artifact is reviewed by the *opposite model family* (Claude ⇄ Codex), dispatched by the server itself so the evidence is something the producer cannot author. One `archflow_counter_review` call covers up to two dispatches: the rubric counter-review, and — only when the pinned constitution has active rules, a decision the server makes alone — the constitution review (see below). This page covers the review envelope, the review flow, the constitution review, and waivers.
 
 ## The dispatch envelope
 
@@ -71,15 +71,59 @@ If the envelope still overflows after tiering and cap relief, the result is `ENV
 ## The flow, end to end
 
 1. **Produce** — the artifact is recorded durably; its digest becomes the subject digest.
-2. **Counter-review call** — `archflow_counter_review` with the artifact path, rubric, and fingerprint.
+2. **Counter-review call** — `archflow_counter_review` with the artifact path, rubric, and fingerprint. Everything through step 6 happens inside this one call.
 3. **Server assembles** the review material (document text or tiered change set), pins context (failing closed on authority violations), seals the envelope under the cap, and materializes the read-only checkout — HEAD for documents, the attested `base_commit` for implementations (the reviewer sees the pre-change tree; changes travel only in the envelope).
-4. **Dispatch** — the opposite-family CLI runs headless (see `../mcp/DISPATCH.md`); output is parsed and bound to its provenance (adapter, CLI version, route, envelope digest).
-5. **Currency re-check** — if the artifact drifted mid-dispatch, the result is discarded (`counter-review-subject-not-current`).
-6. **Commit** — the evidence lands in a state transaction. A `fail` verdict is a successful recording, never an error.
-7. **Triage** — the producer dispositions every finding; any accepted finding forces re-entry into produce with a new attempt (capped, default 3). Rejecting a finding — including a blocking one — is a sanctioned disposition that lets the loop advance, which is what makes the materiality bar below effective. The next round's reviewer then receives this triage record as pinned `prior-triage` context and the new round number in the subject's `attempt`.
-8. **Adjudicate** — see `ADJUDICATION.md`.
+4. **Rubric dispatch** — the opposite-family CLI runs headless (see `../mcp/DISPATCH.md`); output is parsed and bound to its provenance (adapter, CLI version, route, envelope digest).
+5. **Constitution dispatch** — when the pinned constitution has active rules, the server then dispatches a second opposite-family child that performs the constitution and drift review (see below). The server alone decides whether this runs; with no active rules the drift check is also skipped and the result records `constitution: {status: "not-run", reason: "no-active-constitution-rules"}`, which is normal.
+6. **Currency re-check and commit** — if the artifact drifted mid-dispatch, the result is discarded (`counter-review-subject-not-current`). Otherwise both results land in **one atomic state transaction**, and the tool result reports both: `{path, verdict, blocking_count, constitution, revision, request_digest}`, where `constitution` is either `{status: "evaluated", path, constitution: pass|fail|uncertain, drift: aligned|incidental|material, triggers: […]}` or the `not-run` shape above. A `fail` verdict is a successful recording, never an error.
+7. **Triage** — the producer dispositions every rubric finding; any accepted finding forces re-entry into produce with a new attempt (capped, default 3). Rejecting a finding — including a blocking one — is a sanctioned disposition that lets the loop advance, which is what makes the materiality bar below effective. The next round's reviewer then receives this triage record as pinned `prior-triage` context and the new round number in the subject's `attempt`. Triage covers rubric findings only — the constitution verdict is never dispositioned by the producer; a failing or triggering verdict surfaces as a human gate the server derives after triage (see below).
 
-Editing the artifact changes its digest, which invalidates all downstream evidence — that currency rule (enforced by `src/review/fixed-point.ts`) is what makes the loop converge honestly. You iterate until produce, counter-review, triage, and adjudication all agree about the same bytes with no accepted findings.
+Editing the artifact changes its digest, which invalidates all downstream evidence — that currency rule (enforced by `src/review/fixed-point.ts`) is what makes the loop converge honestly. You iterate until produce, counter-review, and triage all agree about the same bytes with no accepted findings.
+
+## Constitution review
+
+The constitution review judges the artifact against the repository's **constitution** — the versioned policy rules in `.archflow/constitution/`, pinned per task at a human-approved commit — and checks for drift against the approved upstream documents. It is *not* "reviewer A vs reviewer B" arbitration; disagreements between reviews are resolved by triage. It runs inside the same `archflow_counter_review` call as the rubric review, as a second sequential dispatch, and only when the pinned constitution has active rules — the server decides, never the agent.
+
+Each numbered Markdown file in `.archflow/constitution/` is exactly one rule: frontmatter carries a stable `id`, a `version`, a `status`, and a `review_trigger` (a condition that should open a human gate); the prose body is the normative text. Rule IDs are append-only — content changes bump the version, deprecation replaces deletion. The four shipped rules are a good summary of the product's values:
+
+- **`explicit-human-authority`** — silence, elapsed time, agent prose, or a model verdict never supplies approval.
+- **`approved-design-before-code`** — implementation starts only from an approved phase design; deviations update the governing documents and re-enter review.
+- **`task-and-evidence-isolation`** — tasks are isolated; stale, mismatched, cross-task, or partial evidence fails closed.
+- **`honest-human-centered-outcomes`** — failures and dead ends stay visible non-success states with a safe next action, never silently bypassed.
+
+A task cannot amend its own governing constitution: a task-branch edit detected at counter-review time opens a `constitution-edit` gate when a retained review set exists to bind, and on the first round — when there is nothing to bind — fails with a plain `STATE_INVALID` `constitution-edited-on-task-branch` error. Either way the review never dispatches against edited rules.
+
+The constitution-review child gets a sealed envelope — the artifact, the sorted active rules, the approved upstream documents, and fixed instructions — and deliberately **no repository checkout**: it judges exactly the sealed evidence. Before dispatching, the server is unusually strict: durable state, the pinned constitution digest, the authenticated review set, and a durable `artifact-approval` for every declared upstream must all agree, or nothing is dispatched.
+
+The output is cross-checked mechanically: one finding per active rule, in ID order, matching versions — and a rule with declared `enforced_by` mechanisms may never be reported as `pass`, because the model cannot claim mechanical evidence it does not have.
+
+### What the verdict opens
+
+A failing or uncertain rule, material upstream drift, or a matched `review_trigger` demands human authority — through the ordinary gate flow, **after triage**, never dispositioned by the producer:
+
+```mermaid
+flowchart TB
+    T[triage succeeds] -->|all rules pass, no triggers, no material drift| Adv["advance<br/>(to the phase's approval gate)"]
+    T -->|"rule fail / uncertain"| GF{{"adjudication-failure gate"}}
+    T -->|"material drift"| GD{{"material-drift gate<br/>resolving re-enters production"}}
+    T -->|"review_trigger matched"| GT{{"review-trigger gate"}}
+    GF -->|human approves fix| P[re-enter produce]
+    GF -->|"human: waiver-requested"| W["archflow_waiver"]
+    GT -->|human decision| P
+    W -->|granted| Adv
+```
+
+`archflow-local status` derives the pending gate, and `archflow-local build-request` (kind `"gate"`) composes the complete gate request mechanically from the retained adjudication evidence — kind, subject, and context are all derived; only the summary is authored.
+
+### Waivers
+
+A waiver is a durable, human-granted exemption from **one specific rule version**, for **one specific subject digest**, under one specific scope, lasting only until the task completes. The semantics are exact-match: change the artifact and the subject digest changes, so the waiver evaporates; bump the rule version and it evaporates.
+
+Waivers are requested from an existing gate, never conjured: the origin gate must be a `review-trigger` or `adjudication-failure` whose recorded decision literally says `waiver-requested`, and the server re-reads and re-authenticates the archived request and decision before binding the waiver. A `waiver-requested` decision is not approval; a denied or cancelled waiver grants nothing.
+
+### Durable decisions
+
+Both gates and waivers funnel into the same machinery (`src/state/gates.ts`): each gate writes an immutable request and decision record under `decisions/<gate-id>/`, bound to the gate ID, context digest, subject digest, phase, and the current evidence set, with human provenance on the decision. Task state holds only *references* to approvals and waivers — any later code that wants to rely on one re-reads and re-validates the underlying documents, and the resulting authenticated object can only be minted by that verification (it cannot be hand-constructed). Supersession is honest: if the subject changed under an open gate, the resolver returns `GATE_SUPERSEDED` and the work re-enters the pipeline.
 
 ## Gate counter-reviews
 

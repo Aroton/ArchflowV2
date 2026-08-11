@@ -66,10 +66,13 @@ async function fixture(options: FixtureOptions) {
   const repository = createTempRepository({ label: "pinned-context-ask" });
   const workflow = readFileSync(new URL("../../assets/workflow.yaml", import.meta.url));
   repository.write(".archflow/workflow.yaml", workflow);
+  // Deliberately no active rules: this suite proves the pinned context of the rubric review
+  // envelope, so the merged call must report the constitution review as not-run rather than
+  // launching the second, adjudicating dispatch.
   repository.write(".archflow/constitution/00-process.md", `---
 id: process
 version: 1
-status: active
+status: deprecated
 ---
 Preserve explicit human review gates.
 `);
@@ -278,7 +281,12 @@ describe("counter-review pinned context integration", () => {
     const result = await boundary.invoke("archflow_counter_review", h.args, h.invocation("ask-pinned"));
     expect(result).toMatchObject({
       kind: "project-result",
-      result: { schema_version: "1", ok: true, value: { verdict: "pass" } },
+      result: { schema_version: "1", ok: true, value: {
+        verdict: "pass",
+        // With zero active rules the server itself decides the constitution review is not run,
+        // and the merged success says so explicitly instead of omitting the field.
+        constitution: { status: "not-run", reason: "no-active-constitution-rules" },
+      } },
     });
     const envelope = capturedEnvelope(h.envelopePath);
     expect(envelope.context).toEqual([{

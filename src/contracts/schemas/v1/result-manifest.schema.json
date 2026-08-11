@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:archflow:schema:v1:result-manifest",
   "title": "ArchFlow Result Manifest v1",
-  "$comment": "The sole normative structural authority for the server-internal retained result root. The exact source artifact is embedded; review and triage are also admitted by archflow_state, while adjudication evidence arrives only through archflow_adjudicate. Cross-field digest and source-artifact correlations are enforced by validateDurableSemantics.",
+  "$comment": "The sole normative structural authority for the server-internal retained result root. The exact source artifact is embedded; review and triage are also admitted by archflow_state, while adjudication evidence arrives only through the constitution review archflow_counter_review runs. Cross-field digest and source-artifact correlations are enforced by validateDurableSemantics.",
   "type": "object",
   "additionalProperties": false,
   "required": [

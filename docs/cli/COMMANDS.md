@@ -26,7 +26,7 @@ archflow-local <command> [--task <task>] [--input <json-file>] [--brief]
 |---|---|
 | `validate` | Run an artifact through its contract parser and echo the parsed value |
 | `hash` | SHA-256 of a value's canonical encoding (mostly superseded by `build-request`) |
-| `render` | Preview the canonical Markdown projection of a review/adjudication, with digest |
+| `render` | Preview the canonical Markdown projection of a review or constitution-review result, with digest |
 | `import` | Analyze a manual-checkpoint chain; reports the greatest valid chain, writes nothing |
 | `init` | Set up the repository: `.archflow/` assets + MCP registrations for both hosts |
 
@@ -67,7 +67,7 @@ So `build-request` inverts the contract: **the caller supplies only judgment; th
 
 ```mermaid
 flowchart LR
-    J["Judgment only:<br/>findings, dispositions,<br/>rationales, summaries"] --> BR["build-request<br/>kind: initialize | produce | running |<br/>triage | counter-review |<br/>adjudicate | gate"]
+    J["Judgment only:<br/>findings, dispositions,<br/>rationales, summaries"] --> BR["build-request<br/>kind: initialize | produce | running |<br/>triage | counter-review | gate"]
     DS[("durable state,<br/>pinned config,<br/>retained evidence")] --> BR
     BR --> ENV["call envelope:<br/>fingerprint + request digest"]
     ENV --> STG["staged request on disk:<br/>intents/&lt;intent-id&gt;.request.json"]
@@ -79,8 +79,9 @@ Properties worth knowing:
 - Each kind guards the transition with the server's own rule first, so an illegal move fails at compose time with the server's own error, not on the network call.
 - Every kind except `initialize` also **stages** the resolved request at `.archflow/tasks/<task>/intents/<intent-id>.request.json` (atomically, overwrite-on-recompose) and adds `staged: {path, reference}` to the envelope. The reference — `{schema_version, task_id, intent_id, request_digest}` — is the whole MCP tool input; the server rehydrates the staged bytes and refuses on any digest disagreement, so the multi-kilobyte payload never crosses the model's context. Passing `request.input` verbatim remains the documented fallback.
 - `intent_id` is optional: when omitted, the composer generates `<kind>-<UTC stamp>-<4 hex>` and echoes it in the request and reference. An explicit id is only for replaying or resuming an interrupted call.
+- `running` enters a pipeline step; the steps are exactly `produce`, `counter_review`, and `triage`.
 - `triage` enforces exactly one disposition per current finding — unknown IDs, duplicates, and gaps are rejected before the server ever sees them.
-- `gate` picks the gate kind from the phase (`phase-impl` → `commit-authorization`, else `artifact-approval`); the author writes only the summary.
+- `gate` composes a pending constitution gate (`adjudication-failure`, `material-drift`, `review-trigger`, derived by the server after triage) mechanically from retained adjudication evidence — kind, subject, and context all derived; otherwise it picks the kind from the phase (`phase-impl` → `commit-authorization`, else `artifact-approval`). Either way the author writes only the summary.
 - `initialize` is the documented exception: the only composer that writes (it must stage the task before a fingerprint can resolve), legal only before durable state exists. Its envelope carries **no** `staged` block — there is no durable task directory yet to hold a staged file — so the create-task call is the one place `request.input` is passed verbatim by design, as typed JSON (`artifact` an object, `expected_revision` the number `0`).
 - A contract test pins that every prefill the server emits maps onto a composer kind — "the one door" is literally true, not aspirational.
 
@@ -95,7 +96,7 @@ This is **unrelated** to `src/review/envelopes.ts` (the sealed evidence package 
 When the MCP server is unavailable, progress is recorded through the local checkpoint chain instead, via `src/local/manual-workflow.ts`:
 
 1. `manual-status` classifies the situation and emits exactly one executable `next_action`.
-2. `manual-next` performs one step: it emits a derived checkpoint, a fully-pinned reviewer prompt, or a gate interface with decision templates — the exact serializable substitute for whichever MCP tool is down.
+2. `manual-next` performs one step: it emits a derived checkpoint, a fully-pinned reviewer prompt, or a gate interface with decision templates — the exact serializable substitute for whichever MCP tool is down. The counter-review fallback prompt also carries `constitution_rules` when active rules exist, instructing the opposite-family reviewer to perform the degraded constitution review in the same pass; there is no separate adjudication fallback.
 3. When the server returns, a recovery `archflow_state` call folds the checkpoint chain back into server state.
 4. `manual-handoff` blesses a writer transfer between machines only when the checkpoint is actually committed and pushed and the next writer can cleanly pull.
 

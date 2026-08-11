@@ -222,7 +222,7 @@ export function deriveNextAction(input: NextActionInput): NextAction {
     if (next === "produce" && input.assessment?.editorial_revision_required === true) {
       return action(
         "run-step",
-        "Apply exactly the accepted editorial revision intents to the artifact, then run the produce step; reviews are not re-run, adjudication is.",
+        "Apply exactly the accepted editorial revision intents to the artifact, then run the produce step; nothing is re-run — the retained reviews and constitution verdict stay bound to the declared predecessor.",
         false,
         state,
         { step: "produce", editorial_revision: true },

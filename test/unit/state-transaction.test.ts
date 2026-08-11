@@ -634,6 +634,7 @@ describe("mature state transaction kernel", () => {
           path: parseTaskPathClaim(`reviews/${PHASE}.counter.md`),
           verdict: "pass" as const,
           blocking_count: 0,
+          constitution: { status: "not-run" as const, reason: "no-active-constitution-rules" as const },
           revision,
         };
         const { revision: _revision, committed_intent: _intent, ...draft } = current.value;

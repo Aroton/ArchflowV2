@@ -97,7 +97,7 @@ describe("planStateTransition", () => {
   });
 
   it("moves only through the fixed pipeline and fixed phase sequence", () => {
-    const current = state({ status: "succeeded", step: "adjudicate", attempt: parseSafeInteger(3) });
+    const current = state({ status: "succeeded", step: "triage", attempt: parseSafeInteger(3) });
     const result = planStateTransition({
       current,
       target: { phase_instance: phase("phase-impl", 2), step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
@@ -117,7 +117,7 @@ describe("planStateTransition", () => {
     const current = state({
       phase_instance: parsePhaseInstanceId("design"),
       status: "succeeded",
-      step: "adjudicate",
+      step: "triage",
       attempt: parseSafeInteger(1),
     });
     const result = planStateTransition({
@@ -139,7 +139,7 @@ describe("planStateTransition", () => {
     const current = state({
       phase_instance: phase("phase-impl", 2),
       status: "succeeded",
-      step: "adjudicate",
+      step: "triage",
       attempt: parseSafeInteger(3),
     });
     const target = {
@@ -184,7 +184,7 @@ describe("planStateTransition", () => {
     });
     expect(retry.ok).toBe(true);
 
-    for (const step of ["triage", "adjudicate"] as const) {
+    for (const step of ["triage"] as const) {
       const current = state({ step, status: "succeeded", attempt: parseSafeInteger(4) });
       const reentry = planStateTransition({
         current,
@@ -201,22 +201,67 @@ describe("planStateTransition", () => {
     }
   });
 
-  it("admits the direct produce-to-adjudicate entry only at the same attempt", () => {
+  it("rejects any movement into the retired adjudicate position", () => {
     const current = state({ status: "succeeded", attempt: parseSafeInteger(2) });
     const entry = planStateTransition({
       current,
       target: { phase_instance: current.phase_instance, step: "adjudicate", status: "running", attempt: parseSafeInteger(2), input_fingerprint: D("8") },
       recomputed_input_fingerprint: D("8"),
     });
-    expect(entry.ok).toBe(true);
+    expect(entry.ok ? undefined : entry.error.code).toBe("TRANSITION_INVALID");
+    expect(legalRunStepStatus(current, "adjudicate")).toBeUndefined();
 
-    const bumped = planStateTransition({
-      current,
-      target: { phase_instance: current.phase_instance, step: "adjudicate", status: "running", attempt: parseSafeInteger(3), input_fingerprint: D("8") },
+    const fromTriage = state({ step: "triage", status: "succeeded", attempt: parseSafeInteger(2) });
+    const forward = planStateTransition({
+      current: fromTriage,
+      target: { phase_instance: fromTriage.phase_instance, step: "adjudicate", status: "running", attempt: parseSafeInteger(2), input_fingerprint: D("8") },
       recomputed_input_fingerprint: D("8"),
     });
-    expect(bumped.ok ? undefined : bumped.error.code).toBe("TRANSITION_INVALID");
-    expect(legalRunStepStatus(current, "adjudicate")).toBe("running");
+    expect(forward.ok ? undefined : forward.error.code).toBe("TRANSITION_INVALID");
+    expect(legalRunStepStatus(fromTriage, "adjudicate")).toBeUndefined();
+  });
+
+  it("installs the constitution reference only beside a succeeded counter-review", () => {
+    const current = state({ step: "counter_review" });
+    const reviewReference = {
+      phase_instance: current.phase_instance,
+      step: "counter_review" as const,
+      result_digest: D("9"),
+      result_id: parseSafeId("counter-review-result"),
+      input_fingerprint: D("8"),
+      manifest_path: parseRepositoryPathClaim(".archflow/tasks/task-1/results/sha256/" + "9".repeat(64) + "/manifest.json"),
+    };
+    const constitutionReference = {
+      phase_instance: current.phase_instance,
+      step: "adjudicate" as const,
+      result_digest: D("a"),
+      result_id: parseSafeId("adjudication-result"),
+      input_fingerprint: D("8"),
+      manifest_path: parseRepositoryPathClaim(".archflow/tasks/task-1/results/sha256/" + "a".repeat(64) + "/manifest.json"),
+    };
+    const both = planStateTransition({
+      current,
+      target: { phase_instance: current.phase_instance, step: "counter_review", status: "succeeded", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"),
+      result_reference: reviewReference,
+      constitution_result_reference: constitutionReference,
+    });
+    expect(both.ok).toBe(true);
+    if (both.ok) {
+      expect(both.value.authoritative_results).toEqual([constitutionReference, reviewReference]);
+    }
+
+    // The constitution reference is refused anywhere else — here, on a triage boundary.
+    const triageCurrent = state({ step: "triage" });
+    const triageReference = { ...reviewReference, step: "triage" as const, result_id: parseSafeId("triage-result") };
+    const misplaced = planStateTransition({
+      current: triageCurrent,
+      target: { phase_instance: triageCurrent.phase_instance, step: "triage", status: "succeeded", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"),
+      result_reference: triageReference,
+      constitution_result_reference: constitutionReference,
+    });
+    expect(misplaced.ok ? undefined : misplaced.error.code).toBe("TRANSITION_INVALID");
   });
 
   it("admits the author-initiated produce re-entry from any succeeded step at attempt + 1", () => {
@@ -249,15 +294,15 @@ describe("planStateTransition", () => {
     });
     expect(sideways.ok ? undefined : sideways.error.code).toBe("TRANSITION_INVALID");
 
-    // adjudicate-failed re-enters only itself, never produce.
-    const failedAdjudication = state({ step: "adjudicate", status: "failed" });
+    // triage-failed re-enters only itself, never produce.
+    const failedTriage = state({ step: "triage", status: "failed" });
     const backward = planStateTransition({
-      current: failedAdjudication,
-      target: { phase_instance: failedAdjudication.phase_instance, step: "produce", status: "running", attempt: parseSafeInteger(2), input_fingerprint: D("8") },
+      current: failedTriage,
+      target: { phase_instance: failedTriage.phase_instance, step: "produce", status: "running", attempt: parseSafeInteger(2), input_fingerprint: D("8") },
       recomputed_input_fingerprint: D("8"),
     });
     expect(backward.ok ? undefined : backward.error.code).toBe("TRANSITION_INVALID");
-    expect(legalRunStepStatus(failedAdjudication, "produce")).toBeUndefined();
+    expect(legalRunStepStatus(failedTriage, "produce")).toBeUndefined();
 
     // produce-succeeded still may not skip ahead to triage.
     const produced = state({ status: "succeeded" });

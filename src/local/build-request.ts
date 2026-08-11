@@ -23,8 +23,10 @@ import {
 } from "../state/phase-documents.js";
 import { loadCurrentProduceSubject } from "../state/produce-subject.js";
 import type { ProductionServices } from "../state/production.js";
+import { resolvePinnedConstitution } from "../state/constitution.js";
+import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "../state/gates.js";
 import { APPROVAL_ARTIFACT_KINDS } from "../state/request-templates.js";
-import { buildCommitAuthorizationInput, currentTargetRef } from "../state/status.js";
+import { buildCommitAuthorizationInput, currentTargetRef, pendingAdjudicationGate } from "../state/status.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "../state/transitions.js";
 import { writeStagedRequest } from "../state/staged-requests.js";
@@ -36,7 +38,7 @@ const fail = <T = never>(error: ProjectError): ProjectResult<T> =>
 
 export const BUILD_REQUEST_KINDS = Object.freeze([
   "initialize", "produce", "running", "triage",
-  "counter-review", "adjudicate", "gate",
+  "counter-review", "gate",
 ] as const);
 export type BuildRequestKind = typeof BUILD_REQUEST_KINDS[number];
 
@@ -359,25 +361,6 @@ function composeCounterReview(
   });
 }
 
-function composeAdjudicate(
-  services: ProductionServices,
-  state: TaskStateV1,
-  intentId: string,
-): Promise<ProjectResult<CallEnvelope>> | ProjectResult<never> {
-  if (legalRunStepStatus(state, "adjudicate") !== "succeeded") {
-    return transitionInvalid(state, "adjudicate-succeeded");
-  }
-  const paths = phaseReviewPaths(state.phase_instance);
-  return computeCallEnvelope(services, {
-    tool: "archflow_adjudicate",
-    input: {
-      ...mechanicalInput(services, state, intentId),
-      artifact_path: paths.artifact_path,
-      upstream_paths: [...paths.upstream_paths],
-    },
-  });
-}
-
 async function composeGate(
   services: ProductionServices,
   state: TaskStateV1,
@@ -405,8 +388,38 @@ async function composeGate(
   if (!loaded.ok) return loaded;
   const derived = deriveCurrentEvidenceSet(loaded.value);
 
+  // An unresolved constitution-review gate composes first: the fixed point refuses to advance
+  // while one is pending, so an approval gate composed past it could never resolve honestly.
+  // Kind, subject, and context are all derived from retained adjudication evidence; only the
+  // summary is authored.
+  const constitution = await resolvePinnedConstitution(
+    services.runner, state.policy_base_commit, services.authority.context,
+  );
+  let pendingGate: ReturnType<typeof pendingAdjudicationGate>;
+  if (constitution.ok) {
+    const authenticated: AuthenticatedGateApproval[] = [];
+    for (const approval of state.approvals) {
+      const loadedApproval = await loadAuthenticatedGateApproval(
+        services.dependencies, services.authority, approval,
+      );
+      if (!loadedApproval.ok) return loadedApproval;
+      authenticated.push(loadedApproval.value);
+    }
+    pendingGate = pendingAdjudicationGate(state, constitution.value, loaded.value, authenticated);
+  }
+
   let input: Record<string, PlainJsonValue>;
-  if (gateKind === "commit-authorization") {
+  if (pendingGate !== undefined) {
+    input = {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: pendingGate.subject_digest,
+      current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
+      kind: pendingGate.kind,
+      context: pendingGate.context as unknown as PlainJsonValue,
+    };
+  } else if (gateKind === "commit-authorization") {
     const target = await currentTargetRef(services.dependencies);
     const authorization = buildCommitAuthorizationInput(subject.value, derived.current_evidence_set, target);
     input = {
@@ -508,7 +521,6 @@ export async function runBuildRequest(
     case "running": return withStagedRequest(services, intentId, await composeRunning(services, state, intentId, snapshot));
     case "triage": return withStagedRequest(services, intentId, await composeTriage(services, state, intentId, snapshot));
     case "counter-review": return withStagedRequest(services, intentId, await composeCounterReview(services, state, intentId, snapshot));
-    case "adjudicate": return withStagedRequest(services, intentId, await composeAdjudicate(services, state, intentId));
     case "gate": return withStagedRequest(services, intentId, await composeGate(services, state, intentId, snapshot));
     default:
       throw new TypeError(`build-request kind ${JSON.stringify(kind)} is not recognized; expected ${PAYLOAD_SHAPE}`);

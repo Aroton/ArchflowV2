@@ -27,7 +27,7 @@
     "intent_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
     "task_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
     "repository_identity_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    "tool": { "enum": ["archflow_state", "archflow_counter_review", "archflow_adjudicate", "archflow_gate", "archflow_waiver"] },
+    "tool": { "enum": ["archflow_state", "archflow_counter_review", "archflow_gate", "archflow_waiver"] },
     "operation": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeCode" },
     "request_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
     "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },

@@ -4,7 +4,7 @@ import type { ProjectResult } from "./errors.js";
 import { createProjectError } from "./errors.js";
 import type { PathSafeId, SafeId, Sha256Digest } from "./evidence.js";
 import type { GateContext, GateKind, WaiverOriginRef } from "./gates.js";
-import type { AdjudicateInput, CommonToolInput, CounterReviewInput, GateInput, StateInput, ToolInput, WaiverInput } from "./mcp-tools.js";
+import type { CommonToolInput, CounterReviewInput, GateInput, StateInput, ToolInput, WaiverInput } from "./mcp-tools.js";
 import type { RepositoryPathClaim } from "./path-claims.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson, type PlainJsonObject, type PlainJsonValue } from "./plain-json.js";
@@ -74,10 +74,6 @@ export type RequestDigestSubject = RequestDigestCommon & ({
   readonly operation: "counter-review";
   readonly operation_fields: Pick<CounterReviewInput, "artifact_path" | "rubric">;
 } | {
-  readonly tool: "archflow_adjudicate";
-  readonly operation: "adjudicate";
-  readonly operation_fields: Pick<AdjudicateInput, "artifact_path" | "upstream_paths">;
-} | {
   readonly tool: "archflow_gate";
   readonly operation: "gate";
   readonly operation_fields: Pick<GateInput, "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "supersedes" | "kind" | "context">;
@@ -90,7 +86,6 @@ export type RequestDigestSubject = RequestDigestCommon & ({
 type SelectorKeys = {
   readonly archflow_state: "phase_instance" | "step" | "status" | "artifact";
   readonly archflow_counter_review: "artifact_path" | "rubric";
-  readonly archflow_adjudicate: "artifact_path" | "upstream_paths";
   readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "supersedes" | "supplemental_outcome" | "kind" | "context";
   readonly archflow_waiver: "origin" | "rationale" | "supplemental_outcome";
 };
@@ -102,7 +97,6 @@ type ExactSelectorCoverage = {
 const exactSelectorCoverage: ExactSelectorCoverage = {
   archflow_state: true,
   archflow_counter_review: true,
-  archflow_adjudicate: true,
   archflow_gate: true,
   archflow_waiver: true,
 };
@@ -244,12 +238,6 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
       if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
       exactFields(fields, ["artifact_path", "rubric"]);
       return { artifact_path: fields.artifact_path, rubric: fields.rubric as unknown as PlainJsonValue };
-    }
-    case "archflow_adjudicate": {
-      const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_adjudicate" }>).operation_fields;
-      if (subject.operation !== "adjudicate") throw new TypeError("invalid archflow_adjudicate operation");
-      exactFields(fields, ["artifact_path", "upstream_paths"]);
-      return { artifact_path: fields.artifact_path, upstream_paths: fields.upstream_paths };
     }
     case "archflow_gate": {
       const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_gate" }>).operation_fields;

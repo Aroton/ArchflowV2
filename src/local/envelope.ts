@@ -106,8 +106,8 @@ export function renderGateCounterPrompt(input: GateCounterPromptInput): string {
   const reviewerFamily: ModelFamily = producerFamily === "claude" ? "codex" : "claude";
   const retryTool = snapshot.tool;
   const acceptedChangeGuidance = retryTool === "archflow_gate"
-    ? "For accepted-change, do not decide the old gate: revise and rebuild the artifact, take the exact new subject from envelope.artifact_digest, combine it with status.open_gate.supplemental_supersession, and retry the same call with that complete supersede outcome. GATE_SUPERSEDED confirms that the old gate closed without approval; re-enter produce/review/triage/adjudicate to a fixed point and open a fresh gate over the new subject."
-    : "For accepted-change, do not decide or retry the old waiver gate. Revise the bound subject and return to the upstream produce/review/triage/adjudicate workflow; the waiver result contract has no superseded success shape.";
+    ? "For accepted-change, do not decide the old gate: revise and rebuild the artifact, take the exact new subject from envelope.artifact_digest, combine it with status.open_gate.supplemental_supersession, and retry the same call with that complete supersede outcome. GATE_SUPERSEDED confirms that the old gate closed without approval; re-enter produce/review/triage to a fixed point and open a fresh gate over the new subject."
+    : "For accepted-change, do not decide or retry the old waiver gate. Revise the bound subject and return to the upstream produce/review/triage workflow; the waiver result contract has no superseded success shape.";
   const bindings = JSON.stringify({
     gate_id: snapshot.gate_id,
     request_digest: snapshot.request_digest,

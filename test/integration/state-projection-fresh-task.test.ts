@@ -324,7 +324,7 @@ async function commitCounterReview(
   });
   return runStateTransaction(h.dependencies, { authority: h.authority, call }, async (stateDocument, identifiedCall) => {
     const revision = parseSafeInteger(stateDocument.value.revision + 1);
-    const success = { path: parseTaskPathClaim(`reviews/${phase}.counter.md`), verdict: "pass" as const, blocking_count: 0, revision };
+    const success = { path: parseTaskPathClaim(`reviews/${phase}.counter.md`), verdict: "pass" as const, blocking_count: 0, constitution: { status: "not-run" as const, reason: "no-active-constitution-rules" as const }, revision };
     const next = planStateTransition({
       current: stateDocument.value,
       target: {

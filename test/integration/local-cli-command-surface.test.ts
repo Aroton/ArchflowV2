@@ -179,7 +179,6 @@ describe("bundled local CLI", () => {
     const calls = [
       { tool: "archflow_state", input: { ...common, intent_id: "state-cli", phase_instance: "prd", step: "counter_review", status: "running" } },
       { tool: "archflow_counter_review", input: { ...common, intent_id: "counter-cli", artifact_path: "prd.md", rubric } },
-      { tool: "archflow_adjudicate", input: { ...common, intent_id: "adjudicate-cli", artifact_path: "prd.md", upstream_paths: [] } },
     ];
     for (const call of calls) {
       expect(cli(fixture.root, "envelope", call)).toMatchObject({ status: 0, value: { ok: true, value: { tool: call.tool } } });

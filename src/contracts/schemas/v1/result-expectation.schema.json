@@ -29,7 +29,6 @@
           "enum": [
             "archflow_state",
             "archflow_counter_review",
-            "archflow_adjudicate",
             "archflow_gate",
             "archflow_waiver"
           ]
@@ -71,20 +70,6 @@
         }
       ]
     },
-    "archflow_adjudicate": {
-      "allOf": [
-        { "$ref": "#/$defs/identity" },
-        {
-          "type": "object",
-          "properties": {
-            "tool": { "const": "archflow_adjudicate" },
-            "success": {
-              "$ref": "https://archflow.dev/schemas/v1/mcp-tools#/$defs/archflow_adjudicate/success"
-            }
-          }
-        }
-      ]
-    },
     "archflow_gate": {
       "allOf": [
         { "$ref": "#/$defs/identity" },
@@ -117,7 +102,6 @@
   "oneOf": [
     { "$ref": "#/$defs/archflow_state" },
     { "$ref": "#/$defs/archflow_counter_review" },
-    { "$ref": "#/$defs/archflow_adjudicate" },
     { "$ref": "#/$defs/archflow_gate" },
     { "$ref": "#/$defs/archflow_waiver" }
   ]

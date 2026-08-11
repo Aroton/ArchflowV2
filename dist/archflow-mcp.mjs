@@ -44002,7 +44002,6 @@ function gateDecisionEffect(payload) {
 var TOOL_NAMES = Object.freeze([
   "archflow_state",
   "archflow_counter_review",
-  "archflow_adjudicate",
   "archflow_gate",
   "archflow_waiver"
 ]);
@@ -44294,7 +44293,7 @@ function createJsonLineFramer() {
     retained = retained.slice(offset);
     offset = 0;
   };
-  const fail28 = () => {
+  const fail27 = () => {
     retained = new Uint8Array();
     offset = 0;
     fatalPending = true;
@@ -44303,7 +44302,7 @@ function createJsonLineFramer() {
     if (stopped || fatalPending || chunk.byteLength === 0) return;
     compact();
     if (retained.byteLength + chunk.byteLength > MAX_FRAME_BYTES + 2) {
-      fail28();
+      fail27();
       return;
     }
     const combined = new Uint8Array(retained.byteLength + chunk.byteLength);
@@ -44321,7 +44320,7 @@ function createJsonLineFramer() {
     const lineFeed = retained.indexOf(LINE_FEED, offset);
     if (lineFeed === -1) {
       if (retained.byteLength - offset > MAX_FRAME_BYTES) {
-        fail28();
+        fail27();
         return next();
       }
       return void 0;
@@ -44331,7 +44330,7 @@ function createJsonLineFramer() {
     const frameBytes = retained.subarray(offset, end);
     offset = lineFeed + 1;
     if (frameBytes.byteLength > MAX_FRAME_BYTES) {
-      fail28();
+      fail27();
       return next();
     }
     try {
@@ -44339,7 +44338,7 @@ function createJsonLineFramer() {
       return { kind: "json", value: JSON.parse(source) };
     } catch (error51) {
       if (error51 instanceof TypeError && frameBytes.byteLength !== 0) {
-        fail28();
+        fail27();
         return next();
       }
       return nonfatalParseError();
@@ -44354,7 +44353,7 @@ function createJsonLineFramer() {
       try {
         new TextDecoder("utf-8", { fatal: true }).decode(partial2);
       } catch {
-        fail28();
+        fail27();
         return next();
       }
       retained = new Uint8Array();
@@ -44407,7 +44406,7 @@ function createSendQueue(output, onBackpressureChange, onFatal) {
       onBackpressureChange(value);
       return true;
     } catch (error51) {
-      fail28(asError(error51, "Backpressure notification failed"));
+      fail27(asError(error51, "Backpressure notification failed"));
       return false;
     }
   }
@@ -44448,7 +44447,7 @@ function createSendQueue(output, onBackpressureChange, onFatal) {
       }
     }
   }
-  function fail28(error51) {
+  function fail27(error51) {
     shutDown(error51, true);
   }
   function finish(pending, error51) {
@@ -44457,7 +44456,7 @@ function createSendQueue(output, onBackpressureChange, onFatal) {
     }
     if (error51 != null) {
       pending.completed.reject(error51);
-      fail28(error51);
+      fail27(error51);
       return;
     }
     incomplete.delete(pending);
@@ -44498,7 +44497,7 @@ function createSendQueue(output, onBackpressureChange, onFatal) {
           pending.completed.reject(writeError);
           incomplete.delete(pending);
           incompleteBytes -= pending.entry.frame.byteLength;
-          fail28(writeError);
+          fail27(writeError);
           break;
         }
         if (!accepted && !closed) {
@@ -44518,7 +44517,7 @@ function createSendQueue(output, onBackpressureChange, onFatal) {
     }
   }
   function handleOutputError(error51) {
-    fail28(asError(error51, "Output stream failed"));
+    fail27(asError(error51, "Output stream failed"));
   }
   output.on("drain", handleDrain);
   output.on("error", handleOutputError);
@@ -44540,7 +44539,7 @@ function createSendQueue(output, onBackpressureChange, onFatal) {
         const overflowError = new Error("Send queue capacity exceeded");
         admitted.reject(overflowError);
         completed.reject(overflowError);
-        fail28(overflowError);
+        fail27(overflowError);
         return receipt;
       }
       const pending = {
@@ -44887,7 +44886,7 @@ var intent_receipt_schema_default = {
     intent_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
     task_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
     repository_identity_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    tool: { enum: ["archflow_state", "archflow_counter_review", "archflow_adjudicate", "archflow_gate", "archflow_waiver"] },
+    tool: { enum: ["archflow_state", "archflow_counter_review", "archflow_gate", "archflow_waiver"] },
     operation: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeCode" },
     request_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
     input_fingerprint: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
@@ -44983,7 +44982,7 @@ var result_manifest_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "urn:archflow:schema:v1:result-manifest",
   title: "ArchFlow Result Manifest v1",
-  $comment: "The sole normative structural authority for the server-internal retained result root. The exact source artifact is embedded; review and triage are also admitted by archflow_state, while adjudication evidence arrives only through archflow_adjudicate. Cross-field digest and source-artifact correlations are enforced by validateDurableSemantics.",
+  $comment: "The sole normative structural authority for the server-internal retained result root. The exact source artifact is embedded; review and triage are also admitted by archflow_state, while adjudication evidence arrives only through the constitution review archflow_counter_review runs. Cross-field digest and source-artifact correlations are enforced by validateDurableSemantics.",
   type: "object",
   additionalProperties: false,
   required: [
@@ -48620,7 +48619,7 @@ var scope = external_exports.object({ operation: external_exports.enum(["review-
 var provenance = humanDecisionProvenanceV1Schema;
 var common2 = { schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger6, input_fingerprint: digest7 };
 var def = (name) => Object.freeze({ name, input_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/input`, result_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/result` });
-var TOOL_DEFINITIONS = Object.freeze({ archflow_state: def("archflow_state"), archflow_counter_review: def("archflow_counter_review"), archflow_adjudicate: def("archflow_adjudicate"), archflow_gate: def("archflow_gate"), archflow_waiver: def("archflow_waiver") });
+var TOOL_DEFINITIONS = Object.freeze({ archflow_state: def("archflow_state"), archflow_counter_review: def("archflow_counter_review"), archflow_gate: def("archflow_gate"), archflow_waiver: def("archflow_waiver") });
 var durableArtifact = external_exports.union([
   taskInitializationV1Schema,
   legacyImportInitializationV1Schema,
@@ -48633,16 +48632,15 @@ var durableArtifact = external_exports.union([
     evidence: triageCandidateSchema
   }).strict()
 ]);
-var stateInput = external_exports.object({ ...common2, phase_instance: phase2, step: external_exports.enum(["produce", "counter_review", "triage", "adjudicate"]), status: external_exports.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
+var stateInput = external_exports.object({ ...common2, phase_instance: phase2, step: external_exports.enum(["produce", "counter_review", "triage"]), status: external_exports.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
 var stagedReferenceInput = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest7 }).strict();
 var counterInput = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema, rubric: rubricV1Schema }).strict();
-var adjudicateInput = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema, upstream_paths: external_exports.array(taskPathClaimV1Schema) }).strict();
 var supersedes = external_exports.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest7, old_subject_digest: digest7 }).strict();
 var gateInput = external_exports.object({ ...common2, phase_instance: phase2, summary: text2, subject_digest: digest7, current_evidence: external_exports.unknown(), supersedes: supersedes.optional(), supplemental_outcome: external_exports.unknown().optional(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown() }).strict();
 var waiverOrigin = external_exports.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest7, origin_context_digest: digest7, task_id: taskSlugV1Schema, phase_instance: phase2, subject_digest: digest7, current_evidence_set_digest: digest7, rule: rule2, scope }).strict();
 var waiverInput = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text2, supplemental_outcome: external_exports.unknown().optional() }).strict();
 function inputFor(name, value) {
-  const parsed = name === "archflow_state" ? stateInput.parse(value) : name === "archflow_counter_review" ? counterInput.parse(value) : name === "archflow_adjudicate" ? adjudicateInput.parse(value) : name === "archflow_waiver" ? waiverInput.parse(value) : gateInput.parse(value);
+  const parsed = name === "archflow_state" ? stateInput.parse(value) : name === "archflow_counter_review" ? counterInput.parse(value) : name === "archflow_waiver" ? waiverInput.parse(value) : gateInput.parse(value);
   if (name === "archflow_gate") {
     const v = parsed;
     parseGateContext(v.kind, v.context);
@@ -48697,8 +48695,17 @@ function bindParsedToolCallRequest(call, requestDigest) {
 }
 var successSchemas = {
   archflow_state: external_exports.object({ path: taskPathClaimV1Schema, revision: safeInteger6, status: external_exports.enum(["running", "succeeded", "failed"]), request_digest: digest7.optional() }).strict(),
-  archflow_counter_review: external_exports.object({ path: taskPathClaimV1Schema, verdict: external_exports.enum(["pass", "advisory", "fail"]), blocking_count: safeInteger6, revision: safeInteger6, request_digest: digest7.optional() }).strict(),
-  archflow_adjudicate: external_exports.object({ path: taskPathClaimV1Schema, constitution: external_exports.enum(CONSTITUTION_RESULTS), drift: external_exports.enum(DRIFT_RESULTS), triggers: external_exports.array(rule2), revision: safeInteger6, request_digest: digest7.optional() }).strict(),
+  archflow_counter_review: external_exports.object({
+    path: taskPathClaimV1Schema,
+    verdict: external_exports.enum(["pass", "advisory", "fail"]),
+    blocking_count: safeInteger6,
+    constitution: external_exports.union([
+      external_exports.object({ status: external_exports.literal("evaluated"), path: taskPathClaimV1Schema, constitution: external_exports.enum(CONSTITUTION_RESULTS), drift: external_exports.enum(DRIFT_RESULTS), triggers: external_exports.array(rule2) }).strict(),
+      external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict()
+    ]),
+    revision: safeInteger6,
+    request_digest: digest7.optional()
+  }).strict(),
   archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: external_exports.unknown(), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict(),
   archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope, human_provenance: provenance, granted: external_exports.literal(false), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict()])
 };
@@ -49924,12 +49931,6 @@ function closedOperationFields(subject) {
       exactFields(fields, ["artifact_path", "rubric"]);
       return { artifact_path: fields.artifact_path, rubric: fields.rubric };
     }
-    case "archflow_adjudicate": {
-      const fields = subject.operation_fields;
-      if (subject.operation !== "adjudicate") throw new TypeError("invalid archflow_adjudicate operation");
-      exactFields(fields, ["artifact_path", "upstream_paths"]);
-      return { artifact_path: fields.artifact_path, upstream_paths: fields.upstream_paths };
-    }
     case "archflow_gate": {
       const fields = subject.operation_fields;
       if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
@@ -50268,7 +50269,6 @@ function phaseInstance2(call, context2) {
     case "archflow_waiver":
       return call.input.origin.phase_instance;
     case "archflow_counter_review":
-    case "archflow_adjudicate":
       return context2.phase_instance;
     default: {
       const exhaustive = call;
@@ -50407,11 +50407,6 @@ var CONSTITUTION_DIRECTORY = ".archflow/constitution";
 var RULE_FILE = /^\.archflow\/constitution\/[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
 var decoder2 = new TextDecoder("utf-8", { fatal: true });
 var authenticResolvedConstitutions = /* @__PURE__ */ new WeakSet();
-function assertResolvedConstitution(value) {
-  if (value === null || typeof value !== "object" || !authenticResolvedConstitutions.has(value)) {
-    throw new TypeError("an authentic resolved constitution is required");
-  }
-}
 function immutableRegistry(rules2) {
   const entries = [...rules2].map(([id5, rule4]) => {
     const frozenRule = Object.freeze({
@@ -57250,10 +57245,10 @@ var workflowV1Schema = external_exports.object({ phases: external_exports.array(
 var WORKFLOW_V1 = {
   phases: [
     { id: "explore", skill: "archflow-explore", pipeline: ["produce"], gate: "never", optional: true },
-    { id: "prd", skill: "archflow-prd", pipeline: ["produce", "counter_review", "triage", "adjudicate"], gate: "always" },
-    { id: "design", skill: "archflow-design", requires: ["prd"], pipeline: ["produce", "counter_review", "triage", "adjudicate"], gate: "always" },
-    { id: "phase-design", skill: "archflow-phase-design", requires: ["design"], iterates: "per_phase", pipeline: ["produce", "counter_review", "triage", "adjudicate"], gate: "on_trigger" },
-    { id: "phase-impl", skill: "archflow-phase-impl", requires: ["phase-design"], iterates: "per_phase", pipeline: ["produce", "counter_review", "triage", "adjudicate"], gate: "on_trigger" }
+    { id: "prd", skill: "archflow-prd", pipeline: ["produce", "counter_review", "triage"], gate: "always" },
+    { id: "design", skill: "archflow-design", requires: ["prd"], pipeline: ["produce", "counter_review", "triage"], gate: "always" },
+    { id: "phase-design", skill: "archflow-phase-design", requires: ["design"], iterates: "per_phase", pipeline: ["produce", "counter_review", "triage"], gate: "on_trigger" },
+    { id: "phase-impl", skill: "archflow-phase-impl", requires: ["phase-design"], iterates: "per_phase", pipeline: ["produce", "counter_review", "triage"], gate: "on_trigger" }
   ]
 };
 function sameJson(left, right) {
@@ -57689,9 +57684,6 @@ function legalMovement(input) {
   if (target2.phase_instance === current.phase_instance && target2.step === "produce") {
     return target2.attempt === current.attempt + 1;
   }
-  if (target2.phase_instance === current.phase_instance && current.step === "produce" && target2.step === "adjudicate") {
-    return target2.attempt === current.attempt;
-  }
   const steps = pipeline(current.phase_instance);
   const index = steps.indexOf(current.step);
   if (index < 0) return false;
@@ -57726,11 +57718,16 @@ function artifactMatches(input) {
 function resultReferenceMatches(input) {
   const reference = input.result_reference;
   const sourceKind = input.artifact?.artifact_kind;
-  const evidenceStep = input.target.step === "counter_review" || input.target.step === "triage" || input.target.step === "adjudicate";
+  const evidenceStep = input.target.step === "counter_review" || input.target.step === "triage";
   const producing = input.target.status === "succeeded" && (input.target.step === "produce" && (sourceKind === "document" || sourceKind === "implementation-output") || evidenceStep);
   if (!producing) return reference === void 0;
   if (reference === void 0) return false;
   return reference.phase_instance === input.target.phase_instance && reference.step === input.target.step && reference.input_fingerprint === input.recomputed_input_fingerprint;
+}
+function constitutionReferenceMatches(input) {
+  const reference = input.constitution_result_reference;
+  if (reference === void 0) return true;
+  return input.target.status === "succeeded" && input.target.step === "counter_review" && reference.step === "adjudicate" && reference.phase_instance === input.target.phase_instance && reference.input_fingerprint === input.recomputed_input_fingerprint;
 }
 function withResultReference(current, reference) {
   if (reference === void 0) return current;
@@ -57745,7 +57742,7 @@ function withResultReference(current, reference) {
 }
 function hasAuthenticatedCommittedOutput(input) {
   const decoded = decodePhaseInstance(input.current.phase_instance);
-  if (decoded.kind !== "phase-impl" || input.current.step !== "adjudicate" || input.current.status !== "succeeded" || input.current.terminal !== void 0 || input.current.open_gate !== void 0 || input.completion_subject_digest === void 0 || input.commit_observed !== true || input.artifact !== void 0 || input.result_reference !== void 0) return false;
+  if (decoded.kind !== "phase-impl" || input.current.step !== "triage" || input.current.status !== "succeeded" || input.current.terminal !== void 0 || input.current.open_gate !== void 0 || input.completion_subject_digest === void 0 || input.commit_observed !== true || input.artifact !== void 0 || input.result_reference !== void 0 || input.constitution_result_reference !== void 0) return false;
   for (const authenticated of input.authenticated_gate_approvals ?? []) {
     assertAuthenticatedGateApproval(authenticated);
     if (authenticated.approval.gate_kind === "commit-authorization" && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.request.kind === "commit-authorization" && authenticated.request.phase_instance === input.current.phase_instance && authenticated.request.subject_digest === input.completion_subject_digest) return true;
@@ -57771,8 +57768,8 @@ function planStateTransition(value) {
     const { revision: _revision2, committed_intent: _intent2, ...preserved2 } = input.current;
     return ok8(Object.freeze({ ...preserved2, terminal: "complete" }));
   }
-  if (decodedCurrent.kind === "phase-impl" && input.current.step === "adjudicate" && input.current.status === "succeeded" && input.target.phase_instance !== input.current.phase_instance && !committedOutput) return invalid(input, from, to);
-  if (!legalMovement(input) || !artifactMatches(input) || !resultReferenceMatches(input)) {
+  if (decodedCurrent.kind === "phase-impl" && input.current.step === "triage" && input.current.status === "succeeded" && input.target.phase_instance !== input.current.phase_instance && !committedOutput) return invalid(input, from, to);
+  if (!legalMovement(input) || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input)) {
     return invalid(input, from, to);
   }
   const { revision: _revision, committed_intent: _intent, ...preserved } = input.current;
@@ -57783,9 +57780,12 @@ function planStateTransition(value) {
     status: input.target.status,
     attempt: input.target.attempt,
     input_fingerprint: input.target.input_fingerprint,
-    authoritative_results: withResultReference(preserved.authoritative_results, input.result_reference)
+    authoritative_results: withResultReference(
+      withResultReference(preserved.authoritative_results, input.result_reference),
+      input.constitution_result_reference
+    )
   });
-  if (input.result_reference === void 0 && !isDeepStrictEqual8(draft.authoritative_results, input.current.authoritative_results)) {
+  if (input.result_reference === void 0 && input.constitution_result_reference === void 0 && !isDeepStrictEqual8(draft.authoritative_results, input.current.authoritative_results)) {
     throw new TypeError("transition planning changed authoritative results");
   }
   return ok8(draft);
@@ -58266,7 +58266,7 @@ async function openDurableGate(dependencies, input) {
       }
       if (input.kind === "migration-audit") {
         const reference = [...current.value.authoritative_results].reverse().find((item) => item.phase_instance === "design" && item.step === "produce");
-        if (input.phase_instance !== "design" || current.value.phase_instance !== "design" || current.value.step !== "adjudicate" || current.value.status !== "succeeded" || reference === void 0 || dependencies.load_retained_result === void 0) return issue2("STATE_INVALID", current.value, "migration-audit-design-result-missing");
+        if (input.phase_instance !== "design" || current.value.phase_instance !== "design" || current.value.step !== "triage" || current.value.status !== "succeeded" || reference === void 0 || dependencies.load_retained_result === void 0) return issue2("STATE_INVALID", current.value, "migration-audit-design-result-missing");
         const retained = await dependencies.load_retained_result(reference);
         if (!retained.ok) return retained;
         const subject = retained.value.prepared.manifest.value.artifact_digest;
@@ -58413,11 +58413,9 @@ async function planGateAuthorizedReentry(dependencies, authority, current, reque
   if (!exactOpenGateMatches(current.value, request)) {
     return issue2("STATE_INVALID", current.value, "gate-reentry-predecessor-mismatch");
   }
-  if (current.value.status !== "succeeded" || current.value.step !== "triage" && current.value.step !== "adjudicate") return issue2("STATE_INVALID", current.value, "gate-reentry-predecessor-mismatch");
+  if (current.value.status !== "succeeded" || current.value.step !== "triage") return issue2("STATE_INVALID", current.value, "gate-reentry-predecessor-mismatch");
   if (request.kind === "attempts-exhausted") {
     if (request.context.step !== current.value.step || request.context.attempts !== current.value.attempt || request.context.maximum_attempts > request.context.attempts) return issue2("STATE_INVALID", current.value, "gate-reentry-attempt-context-mismatch");
-  } else if (current.value.step !== "adjudicate") {
-    return issue2("STATE_INVALID", current.value, "gate-reentry-step-mismatch");
   }
   if (dependencies.resolve_gate_reentry_fingerprint === void 0) {
     return issue2("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");
@@ -59351,8 +59349,6 @@ function subjectFor(call, authority, inputFingerprint) {
       };
     case "archflow_counter_review":
       return { ...common3, tool: call.name, operation: "counter-review", operation_fields: { artifact_path: call.input.artifact_path, rubric: call.input.rubric } };
-    case "archflow_adjudicate":
-      return { ...common3, tool: call.name, operation: "adjudicate", operation_fields: { artifact_path: call.input.artifact_path, upstream_paths: call.input.upstream_paths } };
     case "archflow_gate": {
       const operation_fields = {
         phase_instance: call.input.phase_instance,
@@ -59637,7 +59633,7 @@ async function loadManualImportEvidence(input) {
 }
 function exactCommittedTransitionFacts(cursor, checkpoint, evidence) {
   const decoded = decodePhaseInstance(cursor.phase_instance);
-  if (decoded.kind !== "phase-impl" || cursor.step !== "adjudicate" || cursor.status !== "succeeded") return void 0;
+  if (decoded.kind !== "phase-impl" || cursor.step !== "triage" || cursor.status !== "succeeded") return void 0;
   const proof = evidence.committed_implementations.find((candidate) => candidate.phase_instance === cursor.phase_instance && cursor.authoritative_results.some((reference) => reference.phase_instance === cursor.phase_instance && reference.step === "produce" && reference.result_digest === candidate.result_digest));
   if (proof === void 0) return void 0;
   const approval = checkpoint.approvals.find((candidate) => candidate.gate_id === proof.gate_id && candidate.gate_kind === "commit-authorization" && candidate.subject_digest === proof.subject_digest);
@@ -59684,7 +59680,7 @@ function isAuthenticatedRetryLanding(cursor, checkpoint, pair) {
   if (pair?.decision.outcome !== "decided" || gateDecisionEffect(pair.decision.envelope.payload) !== "retry") return false;
   const decision2 = pair.decision.envelope.payload.decision;
   const reentry = pair.request.kind === "review-trigger" && decision2 === "revise" || pair.request.kind === "adjudication-failure" && decision2 === "revise" || pair.request.kind === "material-drift" && decision2 === "revise-current" || pair.request.kind === "attempts-exhausted" && (decision2 === "retry-once" || decision2 === "revise");
-  return reentry && cursor.status === "succeeded" && (cursor.step === "triage" || cursor.step === "adjudicate") && checkpoint.phase_instance === cursor.phase_instance && checkpoint.step === "produce" && checkpoint.status === "running" && checkpoint.attempt === cursor.attempt + 1 && checkpoint.input_fingerprint !== cursor.input_fingerprint && isDeepStrictEqual10(checkpoint.authoritative_results, cursor.authoritative_results) && isDeepStrictEqual10(checkpoint.approvals, cursor.approvals) && isDeepStrictEqual10(checkpoint.waivers, cursor.waivers);
+  return reentry && cursor.status === "succeeded" && cursor.step === "triage" && checkpoint.phase_instance === cursor.phase_instance && checkpoint.step === "produce" && checkpoint.status === "running" && checkpoint.attempt === cursor.attempt + 1 && checkpoint.input_fingerprint !== cursor.input_fingerprint && isDeepStrictEqual10(checkpoint.authoritative_results, cursor.authoritative_results) && isDeepStrictEqual10(checkpoint.approvals, cursor.approvals) && isDeepStrictEqual10(checkpoint.waivers, cursor.waivers);
 }
 function initialBase(checkpoint) {
   const initialization = checkpoint.initialization;
@@ -59994,8 +59990,6 @@ function operationFor(call) {
     }
     case "archflow_counter_review":
       return "counter-review";
-    case "archflow_adjudicate":
-      return "adjudicate";
     case "archflow_gate":
       return "gate";
     case "archflow_waiver":
@@ -60202,10 +60196,27 @@ function validatePreparedAndCommitted(current, receipt, final) {
   if (!prepared.ok) return prepared;
   return validateDurableSemantics(createCommittedIntentSubject(final, receipt));
 }
+function consumeInstallationCapability(value, slot) {
+  const capability = ownDataField2(value, slot, "prepared transaction");
+  if (capability === null || typeof capability !== "object") throw new TypeError(`${slot} capability is invalid`);
+  const facts = resultInstallations.get(capability);
+  if (facts === void 0 || consumedResultInstallations.has(capability)) {
+    throw new TypeError(`${slot} capability is unauthenticated or already consumed`);
+  }
+  consumedResultInstallations.add(capability);
+  return facts;
+}
 function materializePlan(value) {
   if (value === null || typeof value !== "object") throw new TypeError("prepared transaction must be an object");
   const hasInstallation = Object.hasOwn(value, "result_installation");
-  const expected = hasInstallation ? ["expectation", "next_state", "result", "result_installation"] : ["expectation", "next_state", "result"];
+  const hasConstitution = Object.hasOwn(value, "constitution_installation");
+  if (hasConstitution && !hasInstallation) {
+    throw new TypeError("a constitution installation requires a primary result installation");
+  }
+  const expected = ["expectation", "next_state", "result"];
+  if (hasConstitution) expected.push("constitution_installation");
+  if (hasInstallation) expected.push("result_installation");
+  expected.sort();
   const keys = Reflect.ownKeys(value);
   if (keys.some((key) => typeof key !== "string") || !isDeepStrictEqual12(keys.sort(), expected)) {
     throw new TypeError("prepared transaction has unexpected or missing slots");
@@ -60214,14 +60225,16 @@ function materializePlan(value) {
   const result = ownDataField2(value, "result", "prepared transaction");
   const nextState = materializeDraft(ownDataField2(value, "next_state", "prepared transaction"));
   if (!hasInstallation) return { expectation, result, next_state: nextState };
-  const capability = ownDataField2(value, "result_installation", "prepared transaction");
-  if (capability === null || typeof capability !== "object") throw new TypeError("result installation capability is invalid");
-  const facts = resultInstallations.get(capability);
-  if (facts === void 0 || consumedResultInstallations.has(capability)) {
-    throw new TypeError("result installation capability is unauthenticated or already consumed");
-  }
-  consumedResultInstallations.add(capability);
-  return { expectation, result, next_state: nextState, result_installation: facts };
+  const facts = consumeInstallationCapability(value, "result_installation");
+  if (!hasConstitution) return { expectation, result, next_state: nextState, result_installation: facts };
+  const constitutionFacts = consumeInstallationCapability(value, "constitution_installation");
+  return {
+    expectation,
+    result,
+    next_state: nextState,
+    result_installation: facts,
+    constitution_installation: constitutionFacts
+  };
 }
 function expectedInstallationSource(call, source) {
   if (call.name === "archflow_state") {
@@ -60239,9 +60252,6 @@ function expectedInstallationSource(call, source) {
     return step;
   }
   if (call.name === "archflow_counter_review" && source.artifact_kind === "review-evidence" && source.evidence.role === "counter-review" && source.evidence.step === "counter_review") return "counter_review";
-  if (call.name === "archflow_adjudicate" && source.artifact_kind === "adjudication-evidence") {
-    return "adjudicate";
-  }
   throw new TypeError("result installation tool and source kind do not match");
 }
 function targetIsInside(root, target2) {
@@ -60254,18 +60264,11 @@ function resultProjectionTargetIsContained(artifactKind, taskRoot, worktreeRoot,
     target2
   );
 }
-function validateResultInstallationBinding(request, current, identified, plan, authenticatedWorktreeRoot) {
-  const installation = plan.result_installation;
-  if (installation === void 0) return ok14(void 0);
-  const facts = installation.plan;
+function validateInstallationFacts(request, current, identified, nextState, facts, expectedStep, authenticatedWorktreeRoot) {
   const manifest = facts.prepared.manifest.value;
-  const expectedStep = expectedInstallationSource(request.call, manifest.source_artifact);
-  if (plan.next_state.status !== "succeeded" || plan.next_state.step !== expectedStep) {
-    throw new TypeError("result installation is permitted only at its successful evidence boundary");
-  }
   const reference = facts.reference;
-  const nextReference = plan.next_state.authoritative_results.find((entry) => entry.phase_instance === reference.phase_instance && entry.step === reference.step);
-  if (!isDeepStrictEqual12(nextReference, reference) || reference.result_id !== plan.expectation.result_id) {
+  const nextReference = nextState.authoritative_results.find((entry) => entry.phase_instance === reference.phase_instance && entry.step === reference.step);
+  if (!isDeepStrictEqual12(nextReference, reference)) {
     throw new TypeError("result installation reference does not match the prepared transaction");
   }
   if (reference.input_fingerprint !== identified.input_fingerprint) {
@@ -60273,7 +60276,7 @@ function validateResultInstallationBinding(request, current, identified, plan, a
   }
   if (manifest.task_id !== request.authority.task_id || manifest.task_id !== current.value.task_id) return taskIssue(request.authority.task_id, "result-installation-task-mismatch");
   if (manifest.repository_identity_digest !== request.authority.repository_identity_digest || manifest.repository_identity_digest !== current.value.repository_identity_digest) return stateIssue2(current.value, "result-installation-repository-mismatch");
-  if (manifest.phase_instance !== plan.next_state.phase_instance || manifest.step !== expectedStep || manifest.input_fingerprint !== identified.input_fingerprint) return stateIssue2(current.value, "result-installation-state-mismatch");
+  if (manifest.phase_instance !== nextState.phase_instance || manifest.step !== expectedStep || manifest.input_fingerprint !== identified.input_fingerprint) return stateIssue2(current.value, "result-installation-state-mismatch");
   const expectedManifestPath = `.archflow/tasks/${request.authority.task_id}/results/sha256/${facts.prepared.result_digest}/manifest.json`;
   if (facts.worktree_root !== authenticatedWorktreeRoot || facts.manifest_target.repositoryRelative !== expectedManifestPath || !targetIsInside(request.authority.task_root, facts.manifest_target)) return issue3("CONTRACT_INVALID", "result-installation-target-mismatch");
   const payloadRoot = `.archflow/tasks/${request.authority.task_id}/results/sha256/${facts.prepared.result_digest}/payload/`;
@@ -60288,6 +60291,48 @@ function validateResultInstallationBinding(request, current, identified, plan, a
     entry.target
   ))) return issue3("CONTRACT_INVALID", "result-installation-projection-target-mismatch");
   return ok14(void 0);
+}
+function validateResultInstallationBinding(request, current, identified, plan, authenticatedWorktreeRoot) {
+  const installation = plan.result_installation;
+  if (installation === void 0) {
+    if (plan.constitution_installation !== void 0) {
+      throw new TypeError("a constitution installation requires a primary result installation");
+    }
+    return ok14(void 0);
+  }
+  const facts = installation.plan;
+  const expectedStep = expectedInstallationSource(request.call, facts.prepared.manifest.value.source_artifact);
+  if (plan.next_state.status !== "succeeded" || plan.next_state.step !== expectedStep) {
+    throw new TypeError("result installation is permitted only at its successful evidence boundary");
+  }
+  if (facts.reference.result_id !== plan.expectation.result_id) {
+    throw new TypeError("result installation reference does not match the prepared transaction");
+  }
+  const primary = validateInstallationFacts(
+    request,
+    current,
+    identified,
+    plan.next_state,
+    facts,
+    expectedStep,
+    authenticatedWorktreeRoot
+  );
+  if (!primary.ok) return primary;
+  const constitution = plan.constitution_installation;
+  if (constitution === void 0) return ok14(void 0);
+  const constitutionFacts = constitution.plan;
+  if (request.call.name !== "archflow_counter_review" || expectedStep !== "counter_review" || constitutionFacts.prepared.manifest.value.source_artifact.artifact_kind !== "adjudication-evidence" || constitutionFacts.reference.step !== "adjudicate") {
+    throw new TypeError("constitution installation is permitted only inside a counter-review transaction");
+  }
+  return validateInstallationFacts(
+    request,
+    current,
+    identified,
+    plan.next_state,
+    constitutionFacts,
+    "adjudicate",
+    authenticatedWorktreeRoot
+  );
 }
 function buildPlan(request, current, identified, preparedValue, authenticatedWorktreeRoot) {
   const resultingRevision = parseSafeInteger(current.value.revision + 1);
@@ -60337,7 +60382,8 @@ function buildPlan(request, current, identified, preparedValue, authenticatedWor
     receipt,
     final,
     outcome,
-    ...plan.result_installation === void 0 ? {} : { result_installation: plan.result_installation }
+    ...plan.result_installation === void 0 ? {} : { result_installation: plan.result_installation },
+    ...plan.constitution_installation === void 0 ? {} : { constitution_installation: plan.constitution_installation }
   }));
 }
 async function authenticateCommitted(request, current, receipt) {
@@ -60484,10 +60530,10 @@ async function reclaimSupersededPayloads(dependencies, authority, previous, comm
   }
 }
 async function installPlan(dependencies, request, intentPath, current, plan, receiptAlreadyExists) {
-  const resumesResult = plan.receipt.value.operation === "record-document-artifact" || plan.receipt.value.operation === "record-implementation-output" || plan.receipt.value.operation === "record-triage" || plan.receipt.value.operation === "counter-review" || plan.receipt.value.operation === "adjudicate";
+  const resumesResult = plan.receipt.value.operation === "record-document-artifact" || plan.receipt.value.operation === "record-implementation-output" || plan.receipt.value.operation === "record-triage" || plan.receipt.value.operation === "counter-review";
   if (receiptAlreadyExists && resumesResult) {
-    const reference = plan.final.value.authoritative_results.find((entry) => entry.result_id === plan.receipt.value.result_id);
-    if (reference !== void 0) {
+    const references = plan.final.value.authoritative_results.filter((entry) => entry.result_id === plan.receipt.value.result_id || plan.receipt.value.operation === "counter-review" && entry.step === "adjudicate" && entry.phase_instance === plan.final.value.phase_instance && entry.input_fingerprint === plan.receipt.value.input_fingerprint);
+    for (const reference of references) {
       if (dependencies.load_retained_result === void 0) return stateIssue2(current.value, "result-resume-unavailable");
       const loaded = await dependencies.load_retained_result(reference);
       if (!loaded.ok) return loaded;
@@ -60500,9 +60546,15 @@ async function installPlan(dependencies, request, intentPath, current, plan, rec
       }), true);
       if (!resumed.ok) return resumed;
     }
-  } else if (plan.result_installation !== void 0) {
-    const installed = await installResultFacts(dependencies, request.authority, current, plan.result_installation, false);
-    if (!installed.ok) return installed;
+  } else {
+    if (plan.result_installation !== void 0) {
+      const installed = await installResultFacts(dependencies, request.authority, current, plan.result_installation, false);
+      if (!installed.ok) return installed;
+    }
+    if (plan.constitution_installation !== void 0) {
+      const installed = await installResultFacts(dependencies, request.authority, current, plan.constitution_installation, false);
+      if (!installed.ok) return installed;
+    }
   }
   try {
     await ensureIntentDirectory(request.authority);
@@ -61056,9 +61108,6 @@ function expectedProduceUpstreamBindings(state) {
     Object.freeze({ phase_instance: encodePhaseInstance({ kind: "design" }), path: parseTaskPathClaim("design.md"), artifact_kind: "design" })
   ]);
 }
-function resolveProduceUpstreamBinding(state, path2) {
-  return expectedProduceUpstreamBindings(state).find((binding) => binding.path === path2);
-}
 async function loadProduceUpstreamSubject(dependencies, state, binding) {
   const reference = [...state.authoritative_results].reverse().find((candidate) => candidate.phase_instance === binding.phase_instance && candidate.step === "produce");
   if (reference === void 0 || dependencies.load_retained_result === void 0) {
@@ -61484,14 +61533,17 @@ function deriveCurrentEvidenceSet(retained) {
   if (counterSource.artifact_kind !== "review-evidence") {
     throw new TypeError("current review manifests have the wrong source kind");
   }
-  const counter = counterSource.evidence;
+  const derived = deriveEvidenceSetFromCounter(counterSource.evidence);
+  if (derived.reviews[0].evidence_digest !== counterEntry.manifest.artifact_digest) {
+    throw new TypeError("retained review evidence digest does not match its manifest");
+  }
+  return derived;
+}
+function deriveEvidenceSetFromCounter(counter) {
   if (counter.role !== "counter-review" || counter.assurance !== "server-attested" && counter.assurance !== "degraded" || counter.model_family === counter.producer_family) {
     throw new TypeError("retained reviews do not form one current review set");
   }
   const verifiedCounter = createVerifiedEvidenceReference(counter);
-  if (verifiedCounter.evidence_digest !== counterEntry.manifest.artifact_digest) {
-    throw new TypeError("retained review evidence digest does not match its manifest");
-  }
   const slots = parseRequiredReviewSlots([{
     role: "counter-review",
     evidence_digest: verifiedCounter.evidence_digest,
@@ -61997,1344 +62049,6 @@ async function runStateInitialization(dependencies, request, evidence) {
   }
 }
 
-// src/contracts/schemas/v1/adjudication.schema.json
-var adjudication_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:adjudication",
-  type: "object",
-  additionalProperties: false,
-  "x-archflow-adjudication-semantics": true,
-  required: ["schema_version", "task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_evidence_set_digest", "rule_findings", "drift_findings", "constitution", "drift", "matched_rule_versions", "uncertain_rule_versions"],
-  properties: {
-    schema_version: { const: "1" },
-    task_id: { $ref: "#/$defs/taskSlug" },
-    phase_instance: { type: "string", pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" },
-    step: { const: "adjudicate" },
-    subject_digest: { $ref: "#/$defs/digest" },
-    input_fingerprint: { $ref: "#/$defs/digest" },
-    pinned_constitution_digest: { $ref: "#/$defs/digest" },
-    approved_upstream_digests: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/digest" } },
-    source_evidence_set_digest: { $ref: "#/$defs/digest" },
-    rule_findings: { type: "array", items: { $ref: "#/$defs/ruleFinding" } },
-    drift_findings: { type: "array", "x-archflow-unique-by": "upstream_digest", items: { $ref: "#/$defs/driftFinding" } },
-    constitution: { $ref: "#/$defs/compliance" },
-    drift: { $ref: "#/$defs/drift" },
-    matched_rule_versions: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/ruleVersion" } },
-    uncertain_rule_versions: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/ruleVersion" } }
-  },
-  $defs: {
-    id: { type: "string", pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
-    taskSlug: { type: "string", pattern: "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$" },
-    digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
-    nonBlank: { type: "string", minLength: 1, pattern: "\\S" },
-    compliance: { enum: ["pass", "fail", "uncertain"] },
-    drift: { enum: ["aligned", "incidental", "material"] },
-    ruleVersion: { type: "object", additionalProperties: false, required: ["rule_id", "rule_version"], properties: { rule_id: { $ref: "#/$defs/id" }, rule_version: { type: "integer", minimum: 1, maximum: 9007199254740991 } } },
-    mechanical: { type: "object", additionalProperties: false, required: ["mechanism", "state", "details"], properties: { mechanism: { $ref: "#/$defs/nonBlank" }, state: { enum: ["current", "missing", "stale", "unknown", "failed", "digest-mismatch"] }, subject_digest: { $ref: "#/$defs/digest" }, evidence_digest: { $ref: "#/$defs/digest" }, details: { $ref: "#/$defs/nonBlank" } }, allOf: [{ if: { properties: { state: { enum: ["current", "stale"] } }, required: ["state"] }, then: { properties: { subject_digest: true, evidence_digest: true }, required: ["subject_digest", "evidence_digest"] } }, { if: { properties: { state: { enum: ["missing", "unknown"] } }, required: ["state"] }, then: { not: { anyOf: [{ required: ["subject_digest"] }, { required: ["evidence_digest"] }] } } }] },
-    ruleFinding: { type: "object", additionalProperties: false, required: ["rule_id", "rule_version", "compliance", "rationale", "trigger", "trigger_evidence", "enforced_by"], properties: { rule_id: { $ref: "#/$defs/id" }, rule_version: { type: "integer", minimum: 1, maximum: 9007199254740991 }, compliance: { $ref: "#/$defs/compliance" }, rationale: { $ref: "#/$defs/nonBlank" }, trigger: { enum: ["not-matched", "matched", "uncertain"] }, trigger_evidence: { $ref: "#/$defs/nonBlank" }, enforced_by: { type: "array", items: { $ref: "#/$defs/mechanical" } } }, allOf: [{ if: { properties: { compliance: { const: "pass" } }, required: ["compliance"] }, then: { properties: { enforced_by: { type: "array", items: { allOf: [{ $ref: "#/$defs/mechanical" }, { type: "object", properties: { state: { const: "current" } } }] } } } } }] },
-    driftFinding: { type: "object", additionalProperties: false, required: ["upstream_digest", "drift", "affected_claim_ids", "rationale"], properties: { upstream_digest: { $ref: "#/$defs/digest" }, drift: { $ref: "#/$defs/drift" }, affected_claim_ids: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/id" } }, rationale: { $ref: "#/$defs/nonBlank" } }, allOf: [{ if: { properties: { drift: { const: "aligned" } }, required: ["drift"] }, then: { properties: { affected_claim_ids: { type: "array", maxItems: 0 } } }, else: { properties: { affected_claim_ids: { type: "array", minItems: 1 } } } }] }
-  }
-};
-
-// src/dispatch/cli.ts
-import { stat as stat2, writeFile } from "node:fs/promises";
-import { join as join8 } from "node:path";
-
-// src/dispatch/process.ts
-import { spawn } from "node:child_process";
-import { open as open4, stat } from "node:fs/promises";
-var DISPATCH_TIMEOUT_MS = 9e5;
-var DISPATCH_OUTPUT_BYTE_CAP = 8 * 1024 * 1024;
-var TERMINATION_GRACE_MS = 250;
-var DispatchProcessError = class extends Error {
-  constructor(project_error, channels) {
-    super(project_error.code);
-    this.project_error = project_error;
-    this.channels = channels;
-    this.name = "DispatchProcessError";
-  }
-  project_error;
-  channels;
-};
-var fail17 = (error51) => {
-  throw new DispatchProcessError(error51);
-};
-function checkedPositiveInteger(value, label) {
-  if (!Number.isSafeInteger(value) || value <= 0) throw new TypeError(`${label} must be a positive safe integer`);
-  return value;
-}
-function terminateChild(child) {
-  const send = (signal) => {
-    if (child.pid === void 0 || child.exitCode !== null || child.signalCode !== null) return;
-    if (process.platform !== "win32") {
-      try {
-        process.kill(-child.pid, signal);
-        return;
-      } catch {
-      }
-    }
-    try {
-      child.kill(signal);
-    } catch {
-    }
-  };
-  send("SIGTERM");
-  const escalation = setTimeout(() => send("SIGKILL"), TERMINATION_GRACE_MS);
-  escalation.unref();
-  return escalation;
-}
-function classifySpawnError(adapter2, error51) {
-  if (error51.code === "ENOENT") return fail17(createProjectError("CLI_MISSING", { adapter: adapter2 }));
-  if (error51.code === "EACCES" || error51.code === "EPERM") {
-    return fail17(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "not-executable" }));
-  }
-  return fail17(createProjectError("IO_ERROR", { operation: "dispatch-spawn", attempt: 1 }));
-}
-async function readBoundedFinalOutput(adapter2, path2, byteCap) {
-  let metadata2;
-  try {
-    metadata2 = await stat(path2, { bigint: true });
-  } catch (error51) {
-    if (error51.code === "ENOENT") return void 0;
-    return fail17(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
-  }
-  if (!metadata2.isFile()) {
-    return fail17(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
-  }
-  if (metadata2.size > BigInt(byteCap)) {
-    const byteCount = Number(metadata2.size);
-    if (!Number.isSafeInteger(byteCount)) {
-      return fail17(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
-    }
-    return fail17(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
-  }
-  let handle;
-  try {
-    handle = await open4(path2, "r");
-    const chunks = [];
-    let byteCount = 0;
-    while (true) {
-      const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, byteCap + 1 - byteCount));
-      const { bytesRead } = await handle.read(buffer, 0, buffer.byteLength, null);
-      if (bytesRead === 0) break;
-      byteCount += bytesRead;
-      if (byteCount > byteCap) {
-        return fail17(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
-      }
-      chunks.push(buffer.subarray(0, bytesRead));
-    }
-    return Buffer.concat(chunks, byteCount);
-  } catch (error51) {
-    if (error51 instanceof DispatchProcessError) throw error51;
-    return fail17(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
-  } finally {
-    await handle?.close().catch(() => void 0);
-  }
-}
-async function runDispatchChild(spec) {
-  const timeoutMs = checkedPositiveInteger(spec.timeout_ms ?? DISPATCH_TIMEOUT_MS, "dispatch timeout");
-  const byteCap = checkedPositiveInteger(spec.byte_cap ?? DISPATCH_OUTPUT_BYTE_CAP, "dispatch byte cap");
-  const cancellationSource = spec.cancellation_source ?? "client";
-  if (spec.signal.aborted) {
-    return fail17(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
-  }
-  const spawnOptions = {
-    cwd: spec.cwd,
-    env: { ...spec.env },
-    shell: false,
-    windowsHide: true,
-    detached: process.platform !== "win32",
-    stdio: ["pipe", "pipe", "pipe"]
-  };
-  const child = spawn(spec.command, [...spec.argv], spawnOptions);
-  const stdoutChunks = [];
-  const stderrChunks = [];
-  let stdoutBytes = 0;
-  let stderrBytes = 0;
-  let termination;
-  let overflowBytes;
-  let ioOperation;
-  let spawnError;
-  let escalation;
-  const stop = (reason2) => {
-    if (termination !== void 0) return;
-    termination = reason2;
-    escalation = terminateChild(child);
-  };
-  const append = (channel, chunk) => {
-    if (termination !== void 0) return;
-    const nextCount = (channel === "stdout" ? stdoutBytes : stderrBytes) + chunk.byteLength;
-    if (nextCount > byteCap) {
-      overflowBytes = nextCount;
-      stop("overflow");
-      return;
-    }
-    if (channel === "stdout") {
-      stdoutBytes = nextCount;
-      stdoutChunks.push(chunk);
-    } else {
-      stderrBytes = nextCount;
-      stderrChunks.push(chunk);
-    }
-  };
-  child.stdout.on("data", (chunk) => append("stdout", Buffer.from(chunk)));
-  child.stderr.on("data", (chunk) => append("stderr", Buffer.from(chunk)));
-  child.stdout.on("error", () => {
-    ioOperation = "dispatch-stdout";
-    stop("io");
-  });
-  child.stderr.on("error", () => {
-    ioOperation = "dispatch-stderr";
-    stop("io");
-  });
-  child.on("error", (error51) => {
-    spawnError = error51;
-  });
-  const abort = () => stop("cancelled");
-  spec.signal.addEventListener("abort", abort, { once: true });
-  const timeout = setTimeout(() => stop("timeout"), timeoutMs);
-  timeout.unref();
-  child.stdin.on("error", (error51) => {
-    if (error51.code === "EPIPE" || error51.code === "ERR_STREAM_DESTROYED") return;
-    ioOperation = "dispatch-stdin";
-    stop("io");
-  });
-  child.stdin.end(spec.stdin === void 0 ? void 0 : Buffer.from(spec.stdin));
-  const closed = await new Promise((resolve2) => {
-    child.once("close", (code, signal) => resolve2({ code, signal }));
-  });
-  clearTimeout(timeout);
-  if (escalation !== void 0) clearTimeout(escalation);
-  spec.signal.removeEventListener("abort", abort);
-  const failWithChannels = (error51) => {
-    throw new DispatchProcessError(error51, Object.freeze({
-      stdout: Buffer.concat(stdoutChunks, stdoutBytes),
-      stderr: Buffer.concat(stderrChunks, stderrBytes)
-    }));
-  };
-  if (spawnError !== void 0) return classifySpawnError(spec.adapter, spawnError);
-  if (termination === "cancelled") {
-    return failWithChannels(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
-  }
-  if (termination === "timeout") {
-    return failWithChannels(createProjectError("TIMEOUT", { adapter: spec.adapter, attempt: 1, limit_ms: timeoutMs }));
-  }
-  if (termination === "overflow") {
-    return failWithChannels(createProjectError("OUTPUT_OVERFLOW", {
-      adapter: spec.adapter,
-      byte_count: overflowBytes,
-      byte_cap: byteCap
-    }));
-  }
-  if (termination === "io") {
-    return failWithChannels(createProjectError("IO_ERROR", { operation: ioOperation, attempt: 1 }));
-  }
-  const stdout = Buffer.concat(stdoutChunks, stdoutBytes);
-  const stderr = Buffer.concat(stderrChunks, stderrBytes);
-  const finalOutput = spec.final_output_path === void 0 ? void 0 : await readBoundedFinalOutput(spec.adapter, spec.final_output_path, byteCap);
-  return Object.freeze({
-    exit_code: closed.code,
-    signal: closed.signal,
-    stdout,
-    stderr,
-    ...finalOutput === void 0 ? {} : { final_output: finalOutput }
-  });
-}
-
-// src/dispatch/cli.ts
-var CLAUDE_MINIMUM_VERSION = "2.1.205";
-var CODEX_MINIMUM_VERSION = "0.122.0";
-var CLAUDE_MANAGED_POLICY_PATHS = Object.freeze([
-  "/etc/claude-code/managed-settings.json",
-  "/etc/claude-code/managed-settings.d",
-  "/etc/claude-code/managed-mcp.json",
-  "/Library/Application Support/ClaudeCode/managed-settings.json",
-  "/Library/Application Support/ClaudeCode/managed-settings.d",
-  "/Library/Application Support/ClaudeCode/managed-mcp.json"
-]);
-var CODEX_MANAGED_POLICY_PATHS = Object.freeze([
-  "/etc/codex/config.toml",
-  "/etc/codex/requirements.toml",
-  "/etc/codex/rules"
-]);
-var CODEX_DISABLED_FEATURES = Object.freeze([
-  "shell_tool",
-  "unified_exec",
-  "multi_agent",
-  "browser_use",
-  "browser_use_full_cdp_access",
-  "computer_use",
-  "image_generation",
-  "apps",
-  "hooks",
-  "in_app_browser",
-  "plugins",
-  "remote_plugin",
-  "plugin_sharing",
-  "skill_search"
-]);
-var HOST_SCHEMA_METADATA = /* @__PURE__ */ new Set(["$schema", "$id"]);
-var CLAUDE_UNSUPPORTED_SCHEMA_KEYWORDS = /* @__PURE__ */ new Set([
-  "minimum",
-  "maximum",
-  "exclusiveMinimum",
-  "exclusiveMaximum",
-  "multipleOf",
-  "minLength",
-  "maxLength",
-  "format",
-  "minItems",
-  "maxItems",
-  "uniqueItems",
-  "minProperties",
-  "maxProperties"
-]);
-function projectSchemaNode(value, adapter2) {
-  if (Array.isArray(value)) return value.map((item) => projectSchemaNode(item, adapter2));
-  if (value === null || typeof value !== "object") return value;
-  const projected = {};
-  for (const [key, child] of Object.entries(value)) {
-    if (HOST_SCHEMA_METADATA.has(key) || key.startsWith("x-archflow-") || key === "allOf" || adapter2 === "claude-cli" && CLAUDE_UNSUPPORTED_SCHEMA_KEYWORDS.has(key) || adapter2 === "codex-cli" && key === "uniqueItems") continue;
-    projected[key] = projectSchemaNode(child, adapter2);
-  }
-  return projected;
-}
-function scalarType(value) {
-  if (value === null) return "null";
-  if (Array.isArray(value)) return "array";
-  if (typeof value === "string") return "string";
-  if (typeof value === "number") return "number";
-  if (typeof value === "boolean") return "boolean";
-  if (typeof value === "object") return "object";
-  return void 0;
-}
-function codexStrictNode(value) {
-  if (Array.isArray(value)) return value.map(codexStrictNode);
-  if (value === null || typeof value !== "object") return value;
-  const node = Object.fromEntries(Object.entries(value).map(([key, child]) => [key, codexStrictNode(child)]));
-  if (node.type === void 0 && node.const !== void 0) node.type = scalarType(node.const) ?? "string";
-  if (node.type === void 0 && Array.isArray(node.enum) && node.enum.length > 0) {
-    const types = new Set(node.enum.map(scalarType));
-    if (types.size === 1 && !types.has(void 0)) node.type = [...types][0];
-  }
-  if (node.type === "object" && node.properties !== null && typeof node.properties === "object" && !Array.isArray(node.properties)) {
-    node.required = Object.keys(node.properties);
-  }
-  return node;
-}
-function codexMechanicalSchema(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
-  const mechanical = value;
-  const properties = mechanical.properties;
-  if (properties === null || typeof properties !== "object" || Array.isArray(properties)) return value;
-  const base2 = properties;
-  const branch = (states, digests) => {
-    const selected = {
-      mechanism: base2.mechanism,
-      state: { type: "string", enum: [...states] },
-      ...Object.fromEntries(digests.map((name) => [name, base2[name]])),
-      details: base2.details
-    };
-    return { type: "object", additionalProperties: false, properties: selected, required: Object.keys(selected) };
-  };
-  return {
-    type: "object",
-    anyOf: [
-      branch(["current", "stale"], ["subject_digest", "evidence_digest"]),
-      branch(["missing", "unknown"], []),
-      branch(["failed", "digest-mismatch"], []),
-      branch(["failed", "digest-mismatch"], ["subject_digest"]),
-      branch(["failed", "digest-mismatch"], ["evidence_digest"]),
-      branch(["failed", "digest-mismatch"], ["subject_digest", "evidence_digest"])
-    ]
-  };
-}
-function hostFindingSchema(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
-  const finding = value;
-  const properties = finding.properties;
-  if (properties === null || typeof properties !== "object" || Array.isArray(properties)) return value;
-  const base2 = properties;
-  const branch = (severities, blocking) => {
-    const selected = {
-      ...base2,
-      severity: { type: "string", enum: [...severities] },
-      blocking: { type: "boolean", const: blocking }
-    };
-    return { type: "object", additionalProperties: false, properties: selected, required: Object.keys(selected) };
-  };
-  return {
-    type: "object",
-    anyOf: [
-      branch(["blocker"], true),
-      branch(["major", "minor"], false)
-    ]
-  };
-}
-function hostTaskSlugSchema(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
-  return {
-    ...value,
-    // Both hosts accept ordinary regex patterns but not the normative reserved-name lookaheads.
-    // The exact task-slug parser still runs during local output validation and attestation.
-    pattern: "^[a-z0-9][a-z0-9._-]{0,63}$"
-  };
-}
-function projectCliOutputSchema(outputSchema, resultKind, adapter2, subject) {
-  assertPlainJson(outputSchema, "CLI output schema");
-  const snapshot = structuredClone(outputSchema);
-  const projected = projectSchemaNode(snapshot, adapter2);
-  if (projected === null || typeof projected !== "object" || Array.isArray(projected)) {
-    throw new TypeError("CLI output schema must be an object");
-  }
-  let root = projected;
-  const definitions = root.$defs;
-  if (definitions !== null && typeof definitions === "object" && !Array.isArray(definitions)) {
-    const named = definitions;
-    const common3 = { ...named, taskSlug: hostTaskSlugSchema(named.taskSlug) };
-    root = {
-      ...root,
-      $defs: resultKind === "review" ? { ...common3, finding: hostFindingSchema(common3.finding) } : common3
-    };
-  }
-  if (adapter2 === "codex-cli" && resultKind === "adjudication") {
-    const codexDefinitions = root.$defs;
-    if (codexDefinitions !== null && typeof codexDefinitions === "object" && !Array.isArray(codexDefinitions)) {
-      const common3 = codexDefinitions;
-      root = {
-        ...root,
-        $defs: { ...common3, mechanical: codexMechanicalSchema(common3.mechanical) }
-      };
-    }
-  }
-  const bindingKeys = resultKind === "review" ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family"] : ["task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_evidence_set_digest"];
-  if (subject !== void 0) {
-    const properties = root.properties;
-    if (properties === null || typeof properties !== "object" || Array.isArray(properties)) {
-      throw new TypeError("CLI output schema must declare properties");
-    }
-    const bound = { ...properties };
-    for (const key of bindingKeys) {
-      const value = subject[key];
-      if (value !== void 0) bound[key] = { const: structuredClone(value) };
-    }
-    root = { ...root, properties: bound };
-  }
-  return adapter2 === "codex-cli" ? codexStrictNode(root) : root;
-}
-function envelopeSubject(envelope) {
-  const decoded = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes));
-  assertPlainJson(decoded, "dispatch envelope");
-  if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) throw new TypeError("dispatch envelope must be an object");
-  const subject = decoded.subject;
-  if (subject === void 0) return {};
-  if (subject === null || typeof subject !== "object" || Array.isArray(subject)) throw new TypeError("dispatch envelope subject must be an object");
-  return subject;
-}
-var dispatchQueue = Promise.resolve();
-function serializeDispatch(operation) {
-  const result = dispatchQueue.then(operation);
-  dispatchQueue = result.then(
-    () => void 0,
-    () => void 0
-  );
-  return result;
-}
-var CliAdapterError = class extends Error {
-  constructor(project_error, cli_version) {
-    super(project_error.code);
-    this.project_error = project_error;
-    this.cli_version = cli_version;
-    this.name = "CliAdapterError";
-  }
-  project_error;
-  cli_version;
-};
-var fail18 = (error51, cliVersion) => {
-  throw new CliAdapterError(error51, cliVersion);
-};
-function decodeJson2(bytes, adapter2, issueCode) {
-  let text4;
-  try {
-    text4 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    const value = JSON.parse(text4);
-    assertPlainJson(value, "CLI JSON output");
-    return value;
-  } catch {
-    return fail18(createProjectError("MODEL_OUTPUT_INVALID", {
-      adapter: adapter2,
-      attempt: 1,
-      issue_code: issueCode
-    }));
-  }
-}
-function compareVersions(left, right) {
-  const a = left.split(".").map(Number);
-  const b = right.split(".").map(Number);
-  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
-    const difference = (a[index] ?? 0) - (b[index] ?? 0);
-    if (difference !== 0) return difference;
-  }
-  return 0;
-}
-function exactVersion(adapter2, output) {
-  const text4 = Buffer.from(output).toString("utf8").trim();
-  const match = adapter2 === "claude-cli" ? /^(\d+\.\d+\.\d+) \(Claude Code\)$/u.exec(text4) : /^codex-cli (\d+\.\d+\.\d+)$/u.exec(text4);
-  return match?.[1] ?? "unrecognized";
-}
-async function detectManagedPolicyPaths(paths) {
-  const observations = await Promise.all(paths.map(async (path2) => {
-    try {
-      await stat2(path2);
-      return path2;
-    } catch (error51) {
-      if (error51.code === "ENOENT") return void 0;
-      return path2;
-    }
-  }));
-  return Object.freeze(observations.filter((path2) => path2 !== void 0));
-}
-async function runPreflightCommand(adapter2, command, argv, workspace, signal, cancellationSource) {
-  return runDispatchChild({
-    adapter: adapter2,
-    command,
-    argv,
-    cwd: workspace.root,
-    env: workspace.env,
-    signal,
-    cancellation_source: cancellationSource
-  });
-}
-async function preflight(adapter2, command, versionArgv, authArgv, minimumVersion, policyPaths, workspace, signal, cancellationSource) {
-  const versionResult = await runPreflightCommand(
-    adapter2,
-    command,
-    versionArgv,
-    workspace,
-    signal,
-    cancellationSource
-  );
-  const version3 = exactVersion(adapter2, versionResult.stdout);
-  if (versionResult.exit_code !== 0 || version3 === "unrecognized" || compareVersions(version3, minimumVersion) < 0) {
-    return fail18(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version3 }));
-  }
-  const authResult = await runPreflightCommand(
-    adapter2,
-    command,
-    authArgv,
-    workspace,
-    signal,
-    cancellationSource
-  );
-  let loggedIn = false;
-  if (adapter2 === "claude-cli" && authResult.exit_code === 0) {
-    try {
-      const auth = JSON.parse(authResult.stdout.toString("utf8"));
-      loggedIn = auth !== null && typeof auth === "object" && Object.getOwnPropertyDescriptor(auth, "loggedIn")?.value === true;
-    } catch {
-      loggedIn = false;
-    }
-  } else if (adapter2 === "codex-cli" && authResult.exit_code === 0) {
-    const successLines = [authResult.stdout, authResult.stderr].flatMap((channel) => channel.toString("utf8").split(/\r?\n/u)).filter((line) => /^Logged in(?:\s|$)/u.test(line.trim()));
-    loggedIn = successLines.length >= 1;
-  }
-  if (!loggedIn) return fail18(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version3);
-  const managedPolicyPaths = await detectManagedPolicyPaths(policyPaths);
-  return Object.freeze({
-    cli_version: version3,
-    managed_policy_present: managedPolicyPaths.length > 0,
-    managed_policy_paths: managedPolicyPaths
-  });
-}
-function assertRoute(adapter2, route) {
-  const expectedFamily = adapter2 === "claude-cli" ? "claude" : "codex";
-  if (route.adapter !== adapter2 || route.family !== expectedFamily) {
-    fail18(createProjectError("FAMILY_MISMATCH", {
-      expected_family: expectedFamily,
-      observed_family: route.family
-    }));
-  }
-  if (!safeIdV1Schema.safeParse(route.model).success) {
-    fail18(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
-  }
-}
-function exitClass(result) {
-  if (result.exit_code !== null) return `exit-${String(result.exit_code)}`;
-  if (result.signal !== null) return `signal-${result.signal.toLowerCase()}`;
-  return "unknown-exit";
-}
-function modelFromMessage(message) {
-  const quoted = /(?:model|deployment)(?:\s+named)?\s+["'`](?<model>[A-Za-z0-9][A-Za-z0-9._:-]{0,127})["'`]/iu.exec(message)?.groups?.model;
-  if (quoted !== void 0 && safeIdV1Schema.safeParse(quoted).success) return quoted;
-  const slug = /(?<![A-Za-z0-9/_.:-])(?<model>(?:claude-(?:opus|sonnet|haiku)-[A-Za-z0-9.-]+|gpt-[A-Za-z0-9.-]+))(?![A-Za-z0-9/_.:-])/iu.exec(message)?.groups?.model;
-  return slug !== void 0 && safeIdV1Schema.safeParse(slug).success ? slug : void 0;
-}
-function classifyMessage(adapter2, message) {
-  if (/\b(?:rate[ -]?limit(?:ed)?|too many requests|usage limit|quota (?:exceeded|reached))\b/iu.test(message)) {
-    return createProjectError("RATE_LIMITED", { adapter: adapter2, attempt: 1 });
-  }
-  if (/\b(?:not logged in|login required|authentication (?:failed|required)|unauthorized|invalid credentials?)\b/iu.test(message)) {
-    return createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 });
-  }
-  if (/\b(?:model|deployment)\b.*\b(?:not found|not supported|unsupported|does not exist|unknown|invalid)\b/iu.test(message) || /\b(?:not found|not supported|unsupported|does not exist|unknown|invalid)\b.*\b(?:model|deployment)\b/iu.test(message)) {
-    const model = modelFromMessage(message);
-    if (model !== void 0) return createProjectError("UNSUPPORTED_MODEL", { model });
-  }
-  return void 0;
-}
-function claudeFailureMessage(result) {
-  try {
-    const value = JSON.parse(result.stdout.toString("utf8"));
-    if (value === null || typeof value !== "object") return void 0;
-    const record3 = value;
-    if (record3.is_error !== true && record3.type !== "error") return void 0;
-    return typeof record3.result === "string" ? record3.result : typeof record3.error === "string" ? record3.error : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function codexFailureMessages(stdout) {
-  const messages2 = [];
-  for (const line of Buffer.from(stdout).toString("utf8").split(/\r?\n/u)) {
-    if (line.trim() === "") continue;
-    try {
-      const value = JSON.parse(line);
-      if (value === null || typeof value !== "object" || Array.isArray(value)) continue;
-      const event = value;
-      let message;
-      if (event.type === "error") message = event.message;
-      if (event.type === "turn.failed" && event.error !== null && typeof event.error === "object") {
-        message = event.error.message;
-      }
-      if (typeof message === "string" && !messages2.includes(message)) messages2.push(message);
-    } catch {
-    }
-  }
-  return Object.freeze(messages2);
-}
-function classifyNonzero(adapter2, result, messages2) {
-  if (result.exit_code === 0 && result.signal === null) return void 0;
-  for (const message of messages2) {
-    const classified = classifyMessage(adapter2, message);
-    if (classified !== void 0) return classified;
-  }
-  return createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: exitClass(result) });
-}
-var claudeAdapter = Object.freeze({
-  id: "claude-cli",
-  family: "claude",
-  preflight: (workspace, signal = new AbortController().signal, cancellationSource = "client") => preflight(
-    "claude-cli",
-    "claude",
-    ["--version"],
-    ["auth", "status"],
-    CLAUDE_MINIMUM_VERSION,
-    CLAUDE_MANAGED_POLICY_PATHS,
-    workspace,
-    signal,
-    cancellationSource
-  ),
-  async buildInvocation(envelope, route, workspace, outputSchema) {
-    assertRoute("claude-cli", route);
-    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "claude-cli", envelopeSubject(envelope));
-    if (route.effort === "ultra") {
-      return fail18(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
-    }
-    const mcpConfigPath = join8(workspace.root, "empty-mcp.json");
-    await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
-    return Object.freeze({
-      adapter: "claude-cli",
-      command: "claude",
-      argv: Object.freeze([
-        "-p",
-        "--safe-mode",
-        "--tools",
-        workspace.repository_view_root === void 0 ? "" : "Read,Grep,Glob",
-        "--disable-slash-commands",
-        "--strict-mcp-config",
-        "--mcp-config",
-        mcpConfigPath,
-        "--no-session-persistence",
-        "--setting-sources",
-        "",
-        "--output-format",
-        "json",
-        "--json-schema",
-        JSON.stringify(schema),
-        "--model",
-        route.model,
-        "--effort",
-        route.effort
-      ]),
-      cwd: workspace.repository_view_root ?? workspace.root,
-      env: workspace.env,
-      stdin: envelope.bytes
-    });
-  },
-  parseOutput(result) {
-    const wrapper = decodeJson2(result.stdout, "claude-cli", "claude-wrapper-invalid");
-    if (wrapper === null || typeof wrapper !== "object" || Array.isArray(wrapper)) {
-      return fail18(createProjectError("MODEL_OUTPUT_INVALID", {
-        adapter: "claude-cli",
-        attempt: 1,
-        issue_code: "structured-output-missing"
-      }));
-    }
-    const descriptor = Object.getOwnPropertyDescriptor(wrapper, "structured_output");
-    if (descriptor === void 0 || descriptor.enumerable !== true || !("value" in descriptor)) {
-      return fail18(createProjectError("MODEL_OUTPUT_INVALID", {
-        adapter: "claude-cli",
-        attempt: 1,
-        issue_code: "structured-output-missing"
-      }));
-    }
-    try {
-      assertPlainJson(descriptor.value, "Claude structured output");
-      return canonicalJsonBytes(descriptor.value);
-    } catch {
-      return fail18(createProjectError("MODEL_OUTPUT_INVALID", {
-        adapter: "claude-cli",
-        attempt: 1,
-        issue_code: "structured-output-invalid"
-      }));
-    }
-  },
-  classifyFailure(result) {
-    const message = claudeFailureMessage(result);
-    return classifyNonzero("claude-cli", result, message === void 0 ? [] : [message]);
-  }
-});
-var codexAdapter = Object.freeze({
-  id: "codex-cli",
-  family: "codex",
-  preflight: (workspace, signal = new AbortController().signal, cancellationSource = "client") => preflight(
-    "codex-cli",
-    "codex",
-    ["--version"],
-    ["login", "status"],
-    CODEX_MINIMUM_VERSION,
-    CODEX_MANAGED_POLICY_PATHS,
-    workspace,
-    signal,
-    cancellationSource
-  ),
-  async buildInvocation(envelope, route, workspace, outputSchema) {
-    assertRoute("codex-cli", route);
-    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "codex-cli", envelopeSubject(envelope));
-    const schemaPath = join8(workspace.root, `${envelope.result_kind}.schema.json`);
-    const outputPath = join8(workspace.root, "final-output.json");
-    await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}
-`, { encoding: "utf8", mode: 384 });
-    const disabled = CODEX_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]);
-    return Object.freeze({
-      adapter: "codex-cli",
-      command: "codex",
-      argv: Object.freeze([
-        "exec",
-        "--ephemeral",
-        "--ignore-user-config",
-        "--ignore-rules",
-        "--skip-git-repo-check",
-        "--strict-config",
-        "-s",
-        "read-only",
-        // The already read-only sandbox targets the repository view when one is materialized;
-        // schema and output files deliberately stay in workspace.root, outside the view.
-        "-C",
-        workspace.repository_view_root ?? workspace.root,
-        "--json",
-        "--output-schema",
-        schemaPath,
-        "-o",
-        outputPath,
-        "-m",
-        route.model,
-        "-c",
-        "skills.include_instructions=false",
-        "-c",
-        "project_doc_max_bytes=0",
-        "-c",
-        `model_reasoning_effort=${JSON.stringify(route.effort)}`,
-        ...disabled
-      ]),
-      cwd: workspace.root,
-      env: workspace.env,
-      stdin: envelope.bytes,
-      final_output_path: outputPath
-    });
-  },
-  parseOutput(result) {
-    if (result.final_output === void 0) {
-      return fail18(createProjectError("MODEL_OUTPUT_INVALID", {
-        adapter: "codex-cli",
-        attempt: 1,
-        issue_code: "final-output-missing"
-      }));
-    }
-    decodeJson2(result.final_output, "codex-cli", "final-output-invalid");
-    return Uint8Array.from(result.final_output);
-  },
-  classifyFailure(result) {
-    return classifyNonzero("codex-cli", result, codexFailureMessages(result.stdout));
-  }
-});
-function selectCliAdapter(host, options = {}) {
-  if (host === "unknown") return fail18(createProjectError("UNSUPPORTED_HOST", { host: "unknown" }));
-  if (host === "claude") return codexAdapter;
-  if (options.allow_claude_dispatch !== true) {
-    return fail18(createProjectError("CONFIG_FAMILY_UNSUPPORTED", { family: "claude" }));
-  }
-  return claudeAdapter;
-}
-function mintReviewObservation(input) {
-  assertRoute(input.adapter, input.route);
-  const binding = {
-    kind: "review",
-    task_id: input.subject.task_id,
-    phase_instance: input.subject.phase_instance,
-    role: input.subject.role,
-    subject_digest: input.subject.subject_digest,
-    input_fingerprint: input.subject.input_fingerprint,
-    invocation_id: input.subject.invocation_id,
-    envelope_input_digest: input.envelope_input_digest,
-    result_id: input.subject.result_id,
-    adapter: input.adapter,
-    cli_version: input.cli_version,
-    family: input.route.family,
-    model: input.route.model,
-    effort: input.route.effort,
-    rubric_digest: input.subject.rubric_digest,
-    producer_family: input.subject.producer_family
-  };
-  const capability = createReviewObservationCapability(binding);
-  return observationSource.observeReview(capability, input.extracted_output_bytes);
-}
-function mintAdjudicationObservation(input) {
-  assertRoute(input.adapter, input.route);
-  const binding = {
-    kind: "adjudication",
-    task_id: input.subject.task_id,
-    phase_instance: input.subject.phase_instance,
-    role: input.subject.role,
-    subject_digest: input.subject.subject_digest,
-    input_fingerprint: input.subject.input_fingerprint,
-    invocation_id: input.subject.invocation_id,
-    envelope_input_digest: input.envelope_input_digest,
-    result_id: input.subject.result_id,
-    adapter: input.adapter,
-    cli_version: input.cli_version,
-    family: input.route.family,
-    model: input.route.model,
-    effort: input.route.effort,
-    pinned_constitution_digest: input.subject.pinned_constitution_digest,
-    approved_upstream_digests: input.subject.approved_upstream_digests,
-    source_evidence_set_digest: input.subject.source_evidence_set_digest
-  };
-  const capability = createAdjudicationObservationCapability(binding);
-  return observationSource.observeAdjudication(capability, input.extracted_output_bytes);
-}
-
-// src/review/envelopes.ts
-var REVIEW_ENVELOPE_BYTE_CAP = 1048576;
-var PINNED_CONTEXT_KINDS = [
-  "user-ask",
-  "approved-upstream",
-  "verification-transcript",
-  "prior-triage",
-  "interface-excerpt",
-  "conventions",
-  "repo-map"
-];
-var REPOSITORY_VIEW_NOTE = "Your working directory is a read-only checkout of the repository at this commit, excluding .archflow/tasks. Use it to verify repository claims; the artifact and pinned context remain the review subject and take precedence on conflict.";
-var PRIOR_TRIAGE_INSTRUCTION = "Findings already dispositioned in the pinned prior-triage record must not be re-raised in variant form; if a prior disposition looks wrong, challenge it by naming its finding_id instead of rediscovering the same defect class.";
-var ReviewEnvelopeError = class extends Error {
-  project_error;
-  /** The serialized size that failed the byte cap, when that is what failed. */
-  envelope_byte_count;
-  constructor(projectError, envelopeByteCount) {
-    super(`review envelope failed: ${projectError.code}`);
-    this.name = "ReviewEnvelopeError";
-    this.project_error = projectError;
-    if (envelopeByteCount !== void 0) this.envelope_byte_count = envelopeByteCount;
-  }
-};
-var EVIDENCE_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
-var utf82 = new TextEncoder();
-function parseEvidenceId(value, field) {
-  if (typeof value !== "string" || !EVIDENCE_ID.test(value)) {
-    throw new TypeError(`${field} must use the review evidence identifier vocabulary`);
-  }
-  return value;
-}
-function exactFields2(value, expected, label) {
-  const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
-  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
-    throw new TypeError(`${label} must contain exactly ${wanted.join(", ")}`);
-  }
-}
-function materialize3(value) {
-  assertPlainJson(value, "review envelope input");
-  return structuredClone(value);
-}
-function validateSubject(value) {
-  exactFields2(value, [
-    "task_id",
-    "phase_instance",
-    "role",
-    "step",
-    "attempt",
-    "subject_digest",
-    "input_fingerprint",
-    "rubric_digest",
-    "producer_family",
-    "invocation_id",
-    "result_id"
-  ], "dispatch subject");
-  if (value.role !== "counter-review" || value.step !== "counter_review") {
-    throw new TypeError("dispatch subject must be an ordinary counter-review");
-  }
-  if (value.producer_family !== "claude" && value.producer_family !== "codex") {
-    throw new TypeError("dispatch subject producer_family is invalid");
-  }
-  const attempt = parseSafeInteger(value.attempt);
-  if (attempt < 1) throw new TypeError("dispatch subject attempt must be at least 1");
-  return {
-    task_id: parseTaskSlug(value.task_id),
-    phase_instance: parsePhaseInstanceId(value.phase_instance),
-    role: value.role,
-    step: value.step,
-    attempt,
-    subject_digest: parseSha256Digest(value.subject_digest),
-    input_fingerprint: parseSha256Digest(value.input_fingerprint),
-    rubric_digest: parseSha256Digest(value.rubric_digest),
-    producer_family: value.producer_family,
-    invocation_id: parseEvidenceId(value.invocation_id, "invocation_id"),
-    result_id: parseEvidenceId(value.result_id, "result_id")
-  };
-}
-function validateAdjudicationSubject(value) {
-  exactFields2(value, [
-    "task_id",
-    "phase_instance",
-    "role",
-    "step",
-    "subject_digest",
-    "input_fingerprint",
-    "pinned_constitution_digest",
-    "approved_upstream_digests",
-    "source_evidence_set_digest",
-    "invocation_id",
-    "result_id"
-  ], "adjudication subject");
-  if (value.role !== "adjudication" || value.step !== "adjudicate") {
-    throw new TypeError("adjudication subject must bind the adjudication step");
-  }
-  const approvedUpstreamDigests = value.approved_upstream_digests.map(parseSha256Digest);
-  if (new Set(approvedUpstreamDigests).size !== approvedUpstreamDigests.length || approvedUpstreamDigests.some((digest12, index) => index > 0 && approvedUpstreamDigests[index - 1] >= digest12)) {
-    throw new TypeError("approved_upstream_digests must be sorted and unique");
-  }
-  return {
-    task_id: parseTaskSlug(value.task_id),
-    phase_instance: parsePhaseInstanceId(value.phase_instance),
-    role: value.role,
-    step: value.step,
-    subject_digest: parseSha256Digest(value.subject_digest),
-    input_fingerprint: parseSha256Digest(value.input_fingerprint),
-    pinned_constitution_digest: parseSha256Digest(value.pinned_constitution_digest),
-    approved_upstream_digests: approvedUpstreamDigests,
-    source_evidence_set_digest: parseSha256Digest(value.source_evidence_set_digest),
-    invocation_id: parseEvidenceId(value.invocation_id, "invocation_id"),
-    result_id: parseEvidenceId(value.result_id, "result_id")
-  };
-}
-function validateWorkspace(value) {
-  exactFields2(value, ["kind", "commit", "note"], "review workspace binding");
-  if (value.kind !== "read-only-repository-checkout") {
-    throw new TypeError("review workspace kind must be read-only-repository-checkout");
-  }
-  if (value.note !== REPOSITORY_VIEW_NOTE) {
-    throw new TypeError("review workspace note must be the fixed literal");
-  }
-  return {
-    kind: value.kind,
-    commit: parseGitOid(value.commit),
-    note: value.note
-  };
-}
-function parseNonBlank(value, label) {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new TypeError(`${label} must contain text`);
-  }
-  return value;
-}
-function parseEncoding(value) {
-  if (value !== "utf8" && value !== "base64") {
-    throw new TypeError("pinned context encoding must be utf8 or base64");
-  }
-  return value;
-}
-function validateContext(values) {
-  return values.map((value) => {
-    if (!PINNED_CONTEXT_KINDS.includes(value.kind)) {
-      throw new TypeError("pinned context kind is not in the closed vocabulary");
-    }
-    const kind = value.kind;
-    const label = parseNonBlank(value.label, "pinned context label");
-    switch (value.status) {
-      case "pinned":
-        exactFields2(value, ["kind", "label", "status", "content_digest", "encoding", "content"], "pinned context entry");
-        return {
-          kind,
-          label,
-          status: value.status,
-          content_digest: parseSha256Digest(value.content_digest),
-          encoding: parseEncoding(value.encoding),
-          content: typeof value.content === "string" ? value.content : (() => {
-            throw new TypeError("pinned context content must be text");
-          })()
-        };
-      case "truncated":
-        exactFields2(value, ["kind", "label", "status", "content_digest", "encoding", "content", "total_byte_count"], "truncated context entry");
-        if (!Number.isSafeInteger(value.total_byte_count) || value.total_byte_count < 1) {
-          throw new TypeError("truncated context total_byte_count must be a positive safe integer");
-        }
-        return {
-          kind,
-          label,
-          status: value.status,
-          content_digest: parseSha256Digest(value.content_digest),
-          encoding: parseEncoding(value.encoding),
-          content: typeof value.content === "string" ? value.content : (() => {
-            throw new TypeError("truncated context content must be text");
-          })(),
-          total_byte_count: value.total_byte_count
-        };
-      case "unavailable":
-        exactFields2(value, ["kind", "label", "status", "note"], "unavailable context entry");
-        return { kind, label, status: value.status, note: parseNonBlank(value.note, "unavailable context note") };
-      case "omitted-cap":
-        exactFields2(value, ["kind", "label", "status", "content_digest", "note"], "omitted context entry");
-        return {
-          kind,
-          label,
-          status: value.status,
-          content_digest: parseSha256Digest(value.content_digest),
-          note: parseNonBlank(value.note, "omitted context note")
-        };
-      default:
-        throw new TypeError("pinned context status is invalid");
-    }
-  });
-}
-function validateRules(values) {
-  const rules2 = values.map((value) => {
-    const expected = value.review_trigger === void 0 ? ["id", "version", "text", "enforced_by"] : ["id", "version", "text", "review_trigger", "enforced_by"];
-    exactFields2(value, expected, "adjudication rule");
-    if (!EVIDENCE_ID.test(value.id)) throw new TypeError("rule id must use the evidence identifier vocabulary");
-    if (!Number.isSafeInteger(value.version) || value.version < 1) {
-      throw new TypeError("rule version must be a positive safe integer");
-    }
-    const enforcedBy = value.enforced_by.map((mechanism) => parseNonBlank(mechanism, "enforced_by entry"));
-    if (new Set(enforcedBy).size !== enforcedBy.length) throw new TypeError("enforced_by entries must be unique");
-    return {
-      id: value.id,
-      version: value.version,
-      text: parseNonBlank(value.text, "rule text"),
-      ...value.review_trigger === void 0 ? {} : { review_trigger: parseNonBlank(value.review_trigger, "review_trigger") },
-      enforced_by: enforcedBy
-    };
-  });
-  const keys = rules2.map((rule4) => `${rule4.id}:${String(rule4.version)}`);
-  if (new Set(keys).size !== keys.length || keys.some((key, index) => index > 0 && keys[index - 1] >= key)) {
-    throw new TypeError("adjudication rules must be sorted and unique");
-  }
-  return rules2;
-}
-function validateUpstreams(values) {
-  const upstreams = values.map((value) => {
-    exactFields2(value, ["upstream_digest", "artifact"], "approved upstream");
-    if (typeof value.artifact !== "string") throw new TypeError("approved upstream artifact must be text");
-    return { upstream_digest: parseSha256Digest(value.upstream_digest), artifact: value.artifact };
-  });
-  const digests = upstreams.map((upstream) => upstream.upstream_digest);
-  if (new Set(digests).size !== digests.length || digests.some((digest12, index) => index > 0 && digests[index - 1] >= digest12)) {
-    throw new TypeError("approved upstreams must be sorted and unique");
-  }
-  return upstreams;
-}
-function finishEnvelope(resultKind, envelope, digestKind) {
-  const bytes = utf82.encode(`${JSON.stringify(envelope, null, 2)}
-`);
-  if (bytes.byteLength > REVIEW_ENVELOPE_BYTE_CAP) {
-    throw new ReviewEnvelopeError(
-      createProjectError("CONTRACT_INVALID", { issue_code: "envelope-byte-cap" }),
-      bytes.byteLength
-    );
-  }
-  const digest12 = canonicalJsonDigest({
-    ...envelope,
-    digest_kind: digestKind
-  });
-  return Object.freeze({ result_kind: resultKind, bytes, digest: digest12, byte_count: bytes.byteLength });
-}
-function buildReviewEnvelope(value) {
-  const snapshot = materialize3(value);
-  exactFields2(
-    snapshot,
-    snapshot.workspace === void 0 ? ["artifact", "rubric", "context", "subject"] : ["artifact", "rubric", "context", "subject", "workspace"],
-    "review envelope input"
-  );
-  if (typeof snapshot.artifact !== "string") throw new TypeError("review envelope artifact must be text");
-  const workspace = snapshot.workspace === void 0 ? void 0 : validateWorkspace(snapshot.workspace);
-  const parsedRubric = parseRubricV1(snapshot.rubric);
-  const rubric = {
-    schema_version: parsedRubric.schema_version,
-    kind: parsedRubric.kind,
-    mode: parsedRubric.mode,
-    criteria: parsedRubric.criteria.map((criterion) => ({
-      id: criterion.id,
-      text: criterion.text,
-      blocking: criterion.blocking
-    }))
-  };
-  const context2 = validateContext(snapshot.context);
-  const envelope = {
-    schema_version: "1",
-    artifact: snapshot.artifact,
-    rubric,
-    context: context2,
-    // The fixed literal appears exactly when a prior-triage record is pinned; presence is derived
-    // from validated context, never a caller switch.
-    ...context2.some((entry) => entry.kind === "prior-triage") ? { instructions: { prior_triage: PRIOR_TRIAGE_INSTRUCTION } } : {},
-    ...workspace === void 0 ? {} : { workspace },
-    subject: validateSubject(snapshot.subject)
-  };
-  return finishEnvelope("review", envelope, "dispatch-envelope");
-}
-function buildAdjudicationEnvelope(value) {
-  const snapshot = materialize3(value);
-  exactFields2(
-    snapshot,
-    ["artifact", "rules", "approved_upstreams", "source_evidence_set_digest", "subject"],
-    "adjudication envelope input"
-  );
-  if (typeof snapshot.artifact !== "string") throw new TypeError("adjudication envelope artifact must be text");
-  const rules2 = validateRules(snapshot.rules);
-  const approvedUpstreams = validateUpstreams(snapshot.approved_upstreams);
-  const subject = validateAdjudicationSubject(snapshot.subject);
-  const sourceEvidenceSetDigest = parseSha256Digest(snapshot.source_evidence_set_digest);
-  if (sourceEvidenceSetDigest !== subject.source_evidence_set_digest) {
-    throw new TypeError("source_evidence_set_digest must match the adjudication subject");
-  }
-  const upstreamDigests = approvedUpstreams.map((upstream) => upstream.upstream_digest);
-  if (upstreamDigests.length !== subject.approved_upstream_digests.length || upstreamDigests.some((digest12, index) => digest12 !== subject.approved_upstream_digests[index])) {
-    throw new TypeError("approved upstreams must match the adjudication subject");
-  }
-  const envelope = {
-    schema_version: "1",
-    artifact: snapshot.artifact,
-    rules: rules2,
-    approved_upstreams: approvedUpstreams,
-    source_evidence_set_digest: sourceEvidenceSetDigest,
-    instructions: {
-      rule_coverage: "Return exactly one rule finding for every supplied rule, using its id as rule_id and version as rule_version.",
-      mechanism_evidence: "For a rule with declared enforced_by labels, return uncertain compliance and one unknown-state entry for each declared mechanism. Do not claim current mechanical evidence.",
-      undeclared_mechanisms: "For a rule with no declared enforced_by labels, return an empty enforced_by list."
-    },
-    subject
-  };
-  return finishEnvelope("adjudication", envelope, "adjudication-envelope");
-}
-
-// src/review/fixed-point.ts
-var DEFAULT_MAX_ATTEMPTS = 3;
-var EVIDENCE_STEPS = Object.freeze([
-  "counter_review",
-  "triage",
-  "adjudicate"
-]);
-function evidencePayload(manifest) {
-  const source = manifest.source_artifact;
-  if (source.artifact_kind === "review-evidence" || source.artifact_kind === "triage" || source.artifact_kind === "adjudication-evidence") return source.evidence;
-  return void 0;
-}
-function boundToSubjectExactly(bound, subject) {
-  return bound.subject_digest === subject.subject_digest && bound.input_fingerprint === subject.input_fingerprint;
-}
-function boundToDeclaredPredecessor(bound, subject) {
-  const predecessor = subject.editorial_predecessor;
-  return predecessor !== void 0 && bound.subject_digest === predecessor.subject_digest && bound.input_fingerprint === predecessor.input_fingerprint;
-}
-function subjectCurrent(evidence, subject, allowPredecessor) {
-  if (evidence === void 0) return false;
-  return boundToSubjectExactly(evidence, subject) || allowPredecessor && boundToDeclaredPredecessor(evidence, subject);
-}
-function currentReviewSet(retained, subject) {
-  try {
-    const derived = deriveCurrentEvidenceSet(retained);
-    return boundToSubjectExactly(derived, subject) || boundToDeclaredPredecessor(derived, subject) ? derived : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function currentFor(retained, step, subject, reviews, currentTriage) {
-  if (step === "counter_review") return reviews !== void 0;
-  const entry = retained.get(step);
-  const evidence = entry === void 0 ? void 0 : evidencePayload(entry.manifest);
-  if (!subjectCurrent(evidence, subject, step === "triage") || reviews === void 0) return false;
-  if (step === "triage") {
-    const triage = evidence;
-    return triage.current_evidence_set_digest === reviews.current_evidence_set.set_digest && triage.source_evidence_digests.length === reviews.current_evidence_set.slots.length && triage.source_evidence_digests.every((digest12, index) => digest12 === reviews.current_evidence_set.slots[index].evidence_digest);
-  }
-  if (step === "adjudicate") {
-    const adjudication = evidence;
-    return currentTriage !== void 0 && adjudication.source_evidence_set_digest === reviews.current_evidence_set.set_digest && adjudication.approved_upstream_digests.length === (subject.approved_upstream_digests ?? []).length && adjudication.approved_upstream_digests.every((digest12, index) => digest12 === (subject.approved_upstream_digests ?? [])[index]);
-  }
-  return false;
-}
-function triageAt(retained) {
-  const source = retained.get("triage")?.manifest.source_artifact;
-  return source?.artifact_kind === "triage" ? source.evidence : void 0;
-}
-function adjudicationAt(retained) {
-  const source = retained.get("adjudicate")?.manifest.source_artifact;
-  return source?.artifact_kind === "adjudication-evidence" ? source.evidence : void 0;
-}
-function adjudicationGateSatisfied(state, retained, subject, gate) {
-  const contextDigest = computeGateContextDigest(gate.kind, gate.context);
-  const counterDigest = retained.get("counter_review")?.manifest.artifact_digest;
-  const triage = triageAt(retained);
-  const adjudication = adjudicationAt(retained);
-  for (const authenticated of subject.authenticated_gate_approvals ?? []) {
-    assertAuthenticatedGateApproval(authenticated);
-    const { approval, request, decision: decision2 } = authenticated;
-    if (approval.gate_kind !== gate.kind || approval.subject_digest !== gate.subject_digest || request.kind !== gate.kind || request.subject_digest !== gate.subject_digest || request.context_digest !== contextDigest || request.phase_instance !== state.phase_instance || decision2.context_digest !== contextDigest || decision2.envelope.context_digest !== contextDigest || counterDigest === void 0 || triage === void 0 || adjudication === void 0 || // The triage binding alone relaxes to the declared editorial predecessor (one hop);
-    // adjudication stays exact so the constitution verdict is honest for the final bytes.
-    !(boundToSubjectExactly(triage, subject) || boundToDeclaredPredecessor(triage, subject)) || adjudication.subject_digest !== subject.subject_digest || adjudication.input_fingerprint !== subject.input_fingerprint || adjudication.source_evidence_set_digest !== request.current_evidence.set_digest || request.current_evidence.set_digest !== triage.current_evidence_set_digest || request.current_evidence.slots[0].evidence_digest !== counterDigest) continue;
-    return true;
-  }
-  if (gate.kind !== "review-trigger" && gate.kind !== "adjudication-failure" || !("eligible_waiver_rules" in gate.context) || !("waiver_scope" in gate.context)) return false;
-  const required2 = gate.context.eligible_waiver_rules;
-  const scope3 = gate.context.waiver_scope;
-  return required2.length > 0 && required2.every((rule4) => waiverInForce(
-    state,
-    rule4,
-    gate.subject_digest,
-    scope3
-  ) !== void 0);
-}
-function adjudicationGatePending(state, gate) {
-  const open5 = state.open_gate;
-  return open5 !== void 0 && open5.gate_kind === gate.kind && open5.subject_digest === gate.subject_digest && open5.context_digest === computeGateContextDigest(gate.kind, gate.context);
-}
-function dispositionState(retained, reviews, triage) {
-  const counter = reviews?.reviews[0]?.evidence;
-  if (reviews === void 0 || counter === void 0 || triage === void 0) {
-    return Object.freeze({ complete: false, blocker: false, accepted: false });
-  }
-  const counterDigest = reviews.current_evidence_set.slots[0].evidence_digest;
-  const expected = /* @__PURE__ */ new Map();
-  for (const finding of counter.findings) {
-    expected.set(`${counterDigest}:${finding.finding_id}`, finding.blocking);
-  }
-  const actual = new Map(triage.dispositions.map((item) => [
-    `${item.review_evidence_digest}:${item.finding_id}`,
-    item.disposition
-  ]));
-  const complete = actual.size === expected.size && [...expected.keys()].every((key) => actual.has(key));
-  const blocker = [...expected].some(([key, blocking]) => blocking && actual.get(key) !== "rejected");
-  return Object.freeze({
-    complete,
-    blocker,
-    accepted: triage.accepted_count > 0
-  });
-}
-function assessCurrentEvidence(state, retained, subject) {
-  assertResolvedConstitution(subject.constitution);
-  if (subject.constitution.digest !== state.constitution_digest) {
-    throw new TypeError("fixed-point constitution does not match durable state");
-  }
-  const retainedAdjudication = adjudicationAt(retained);
-  if (retainedAdjudication !== void 0 && retainedAdjudication.pinned_constitution_digest !== subject.constitution.digest) {
-    throw new TypeError("retained adjudication does not match the pinned constitution");
-  }
-  const maximum = subject.max_attempts ?? DEFAULT_MAX_ATTEMPTS;
-  if (!Number.isSafeInteger(maximum) || maximum < 1) {
-    throw new TypeError("max_attempts must be a positive safe integer");
-  }
-  const reviews = currentReviewSet(retained, subject);
-  const candidateTriage = triageAt(retained);
-  const triageCurrent = currentFor(
-    retained,
-    "triage",
-    subject,
-    reviews,
-    void 0
-  ) ? candidateTriage : void 0;
-  const current = EVIDENCE_STEPS.filter((step) => currentFor(retained, step, subject, reviews, triageCurrent));
-  const stale = EVIDENCE_STEPS.filter((step) => retained.has(step) && !current.includes(step));
-  const disposition = dispositionState(retained, reviews, triageCurrent);
-  let next;
-  let reentry = false;
-  let editorialRevision = false;
-  let gatePending = false;
-  const acceptedReentry = disposition.accepted && state.step === "triage" && state.status === "succeeded";
-  const editorialPending = triageCurrent !== void 0 && disposition.complete && triageCurrent.accepted_count === 0 && (triageCurrent.accepted_editorial_count ?? 0) > 0 && boundToSubjectExactly(triageCurrent, subject);
-  const staleAdjudicationReentry = retained.has("adjudicate") && !current.includes("adjudicate") && state.step === "adjudicate" && state.status === "succeeded";
-  if (acceptedReentry || staleAdjudicationReentry) {
-    reentry = true;
-    next = "produce";
-  } else if (!current.includes("counter_review")) next = "counter_review";
-  else if (!current.includes("triage") || !disposition.complete) next = "triage";
-  else if (disposition.accepted) {
-    next = "triage";
-  } else if (editorialPending) {
-    editorialRevision = true;
-    next = "produce";
-  } else if (!current.includes("adjudicate")) {
-    next = "adjudicate";
-  } else {
-    const adjudication = adjudicationAt(retained);
-    const gates = adjudication === void 0 ? [] : selectAdjudicationGates(subject.constitution.rules, adjudication);
-    const gate = gates.find((candidate) => !adjudicationGateSatisfied(state, retained, subject, candidate));
-    if (gate === void 0) {
-      next = "advance";
-    } else {
-      gatePending = adjudicationGatePending(state, gate);
-      next = "adjudication-gate";
-    }
-  }
-  const exhausted = reentry && state.attempt >= maximum;
-  return Object.freeze({
-    current: Object.freeze([...current]),
-    stale: Object.freeze([...stale]),
-    every_finding_dispositioned: disposition.complete,
-    blocker_remains: disposition.blocker,
-    reentry_required: reentry,
-    editorial_revision_required: editorialRevision,
-    exhausted,
-    adjudication_gate_pending: gatePending,
-    next: exhausted ? "attempts-exhausted" : next
-  });
-}
-function requireApprovedUpstreamDigests(approvals, upstreamDigests) {
-  const sorted = [...upstreamDigests].sort();
-  if (new Set(sorted).size !== sorted.length) {
-    throw new TypeError("approved upstream digests must be unique");
-  }
-  for (const digest12 of sorted) {
-    if (!approvals.some((approval) => approval.gate_kind === "artifact-approval" && approval.subject_digest === digest12)) {
-      throw new TypeError(`upstream ${digest12} lacks current artifact approval`);
-    }
-  }
-  return Object.freeze(sorted);
-}
-function waiverInForce(state, rule4, subjectDigest, scope3) {
-  if (state.terminal !== void 0) return void 0;
-  return state.waivers.find((waiver) => waiver.granted && waiver.expires === "task-complete" && waiver.rule_id === rule4.rule_id && waiver.rule_version === rule4.rule_version && waiver.subject_digest === subjectDigest && waiver.scope.operation === scope3.operation && waiver.scope.boundary === scope3.boundary);
-}
-
 // src/review/adjudication.ts
 var AdjudicationServiceError = class extends Error {
   constructor(project_error) {
@@ -63383,261 +62097,27 @@ function rulesForEnvelope(registry2) {
     enforced_by: Object.freeze([...rule4.enforced_by ?? []])
   })));
 }
-function sameJson2(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-function refs(rules2) {
-  return canonicalRefs(rules2.map((rule4) => Object.freeze({ rule_id: rule4.id, rule_version: rule4.version })));
-}
-function canonicalRefs(rules2) {
+function canonicalRuleRefs(rules2) {
   return Object.freeze([...rules2].sort((left, right) => left.rule_id.localeCompare(right.rule_id) || left.rule_version - right.rule_version));
 }
-function selectAdjudicationGates(registry2, evidence) {
-  const gates = [];
-  if (evidence.constitution === "fail" || evidence.constitution === "uncertain") {
-    const failed = evidence.rule_findings.filter((item) => item.compliance === "fail");
-    const uncertain = evidence.rule_findings.filter((item) => item.compliance === "uncertain");
-    gates.push(Object.freeze({
-      kind: "adjudication-failure",
-      subject_digest: evidence.subject_digest,
-      context: Object.freeze({
-        constitution: evidence.constitution,
-        failed_rules: refs(failed.map((item) => registry2.get(item.rule_id))),
-        uncertain_rules: refs(uncertain.map((item) => registry2.get(item.rule_id))),
-        eligible_waiver_rules: refs([...failed, ...uncertain].map((item) => registry2.get(item.rule_id))),
-        waiver_scope: Object.freeze({
-          operation: "adjudication-failure",
-          boundary: "subject"
-        })
-      })
-    }));
+
+// src/review/fixed-point.ts
+var EVIDENCE_STEPS = Object.freeze([
+  "counter_review",
+  "triage",
+  "adjudicate"
+]);
+function requireApprovedUpstreamDigests(approvals, upstreamDigests) {
+  const sorted = [...upstreamDigests].sort();
+  if (new Set(sorted).size !== sorted.length) {
+    throw new TypeError("approved upstream digests must be unique");
   }
-  const material = evidence.drift_findings.find((item) => item.drift === "material");
-  if (material !== void 0) {
-    gates.push(Object.freeze({
-      kind: "material-drift",
-      subject_digest: evidence.subject_digest,
-      context: Object.freeze({
-        affected_upstream: Object.freeze({
-          kind: "implementation-result",
-          digest: material.upstream_digest
-        }),
-        drift: "material",
-        affected_claim_ids: Object.freeze([...material.affected_claim_ids].sort())
-      })
-    }));
-  }
-  if (evidence.matched_rule_versions.length > 0 || evidence.uncertain_rule_versions.length > 0) {
-    gates.push(Object.freeze({
-      kind: "review-trigger",
-      subject_digest: evidence.subject_digest,
-      context: Object.freeze({
-        matched_rules: evidence.matched_rule_versions,
-        uncertain_rules: evidence.uncertain_rule_versions,
-        eligible_waiver_rules: canonicalRefs([
-          ...evidence.matched_rule_versions,
-          ...evidence.uncertain_rule_versions
-        ]),
-        waiver_scope: Object.freeze({
-          operation: "review-trigger",
-          boundary: "subject"
-        })
-      })
-    }));
-  }
-  return Object.freeze(gates);
-}
-function selectAdjudicationGate2(registry2, evidence) {
-  return selectAdjudicationGates(registry2, evidence)[0];
-}
-async function runAdjudication(dependencies, input) {
-  const stateRead = await dependencies.transaction.read_state(input.authority.state);
-  if (stateRead.kind !== "canonical") {
-    throw new TypeError("adjudication requires canonical current state");
-  }
-  const durableState = stateRead.document.value;
-  if (durableState.task_id !== input.authority.task_id || durableState.phase_instance !== input.envelope.subject.phase_instance || durableState.input_fingerprint !== input.envelope.subject.input_fingerprint) {
-    throw new TypeError("adjudication subject is not durably current");
-  }
-  const loadedConstitution = await dependencies.load_constitution(
-    durableState.policy_base_commit
-  );
-  if (!loadedConstitution.ok) return loadedConstitution;
-  const constitution = loadedConstitution.value;
-  assertResolvedConstitution(constitution);
-  const envelopeRules = rulesForEnvelope(constitution.rules);
-  if (constitution.digest !== durableState.constitution_digest || constitution.digest !== input.envelope.subject.pinned_constitution_digest || !sameJson2(envelopeRules, input.envelope.rules)) {
-    throw new TypeError("adjudication constitution is not durably pinned");
-  }
-  const currentReviews = await dependencies.load_current_review_set(
-    input.authority,
-    durableState.phase_instance
-  );
-  if (!currentReviews.ok) return currentReviews;
-  const current = currentReviews.value;
-  const reviewsBindSubject = current.subject_digest === input.envelope.subject.subject_digest && current.input_fingerprint === input.envelope.subject.input_fingerprint && current.input_fingerprint === durableState.input_fingerprint;
-  const reviewsBindDeclaredPredecessor = input.editorial_predecessor !== void 0 && current.subject_digest === input.editorial_predecessor.subject_digest && current.input_fingerprint === input.editorial_predecessor.input_fingerprint;
-  if (!authenticCurrentReviewSet(current) || current.task_id !== input.authority.task_id || current.task_id !== input.envelope.subject.task_id || current.phase_instance !== durableState.phase_instance || current.phase_instance !== input.envelope.subject.phase_instance || !reviewsBindSubject && !reviewsBindDeclaredPredecessor || current.current_evidence_set.set_digest !== input.envelope.source_evidence_set_digest || current.current_evidence_set.set_digest !== input.envelope.subject.source_evidence_set_digest) {
-    throw new TypeError("adjudication source review set is not durably current");
-  }
-  const edited = await dependencies.detect_constitution_edit();
-  if (!edited.ok) return edited;
-  if (edited.value !== void 0) {
-    const gate2 = await dependencies.open_gate({
-      kind: "constitution-edit",
-      subject_digest: input.envelope.subject.subject_digest,
-      context: edited.value
-    });
-    return gate2.ok ? { schema_version: "1", ok: true, value: Object.freeze({ gate: gate2.value }) } : gate2;
-  }
-  const derivedUpstreams = await dependencies.derive_approved_upstreams(
-    durableState,
-    input.call.input.upstream_paths
-  );
-  if (!derivedUpstreams.ok) return derivedUpstreams;
-  const missingUpstreamApproval = derivedUpstreams.value.find((item) => !durableState.approvals.some((approval) => approval.gate_kind === "artifact-approval" && approval.subject_digest === item.upstream_digest));
-  if (missingUpstreamApproval !== void 0) {
-    return {
-      schema_version: "1",
-      ok: false,
-      error: createProjectError("STATE_INVALID", {
-        phase_instance: durableState.phase_instance,
-        issue_code: "upstream-approval-missing"
-      })
-    };
-  }
-  const upstreamDigests = requireApprovedUpstreamDigests(
-    durableState.approvals,
-    derivedUpstreams.value.map((item) => item.upstream_digest)
-  );
-  if (upstreamDigests.length !== input.envelope.subject.approved_upstream_digests.length || upstreamDigests.some((digest12, index) => digest12 !== input.envelope.subject.approved_upstream_digests[index])) throw new TypeError("adjudication upstream subject is not durably derived");
-  const route = resolveDispatchRoute(
-    input.config,
-    input.phase_kind,
-    "adjudicator",
-    input.producer_family
-  );
-  const envelope = buildAdjudicationEnvelope({
-    ...input.envelope,
-    approved_upstreams: derivedUpstreams.value
-  });
-  const dispatched = await serializeDispatch(() => dependencies.dispatch(route, envelope, adjudication_schema_default));
-  let evidence;
-  try {
-    const observed = mintAdjudicationObservation({
-      subject: input.envelope.subject,
-      adapter: route.adapter,
-      cli_version: dispatched.cli_version,
-      route,
-      envelope_input_digest: envelope.digest,
-      extracted_output_bytes: dispatched.extracted_output_bytes
-    });
-    evidence = crossCheckRuleFindings(
-      constitution.rules,
-      observed.evidence,
-      route.adapter
-    );
-  } catch (error51) {
-    return {
-      schema_version: "1",
-      ok: false,
-      error: error51 instanceof AdjudicationServiceError ? error51.project_error : createProjectError("MODEL_OUTPUT_INVALID", {
-        adapter: route.adapter,
-        attempt: 1,
-        issue_code: "adjudication-output-invalid"
-      })
-    };
-  }
-  const prepared = await dependencies.prepare_evidence(evidence, durableState.revision);
-  if (!prepared.ok) return prepared;
-  const identified = identifyTransactionRequest(
-    input.call,
-    input.authority,
-    prepared.value.reference.input_fingerprint
-  );
-  const installation = prepareResultInstallation({
-    reference: prepared.value.reference,
-    prepared: prepared.value.prepared,
-    manifest_target: prepared.value.manifest_target,
-    projection_plan: prepared.value.projection_plan,
-    worktree_root: dependencies.transaction.runner.location.worktreeRoot
-  });
-  const committed2 = await runStateTransaction(
-    dependencies.transaction,
-    { authority: input.authority, call: input.call },
-    async (current2, call) => {
-      if (current2.value.constitution_digest !== constitution.digest) {
-        throw new TypeError("constitution changed before adjudication installation");
-      }
-      const revision = parseSafeInteger(current2.value.revision + 1);
-      const triggers = canonicalRefs([
-        ...evidence.matched_rule_versions,
-        ...evidence.uncertain_rule_versions
-      ]);
-      const success2 = Object.freeze({
-        path: adjudicationReviewClaim(current2.value.phase_instance),
-        constitution: evidence.constitution,
-        drift: evidence.drift,
-        triggers,
-        revision,
-        request_digest: identified.request_digest
-      });
-      const expectation = createInternalResultExpectation({
-        schema_version: "1",
-        tool: "archflow_adjudicate",
-        task_id: input.authority.task_id,
-        intent_id: input.call.input.intent_id,
-        input_fingerprint: prepared.value.reference.input_fingerprint,
-        request_digest: identified.request_digest,
-        result_id: prepared.value.reference.result_id,
-        resulting_revision: revision,
-        success: success2
-      });
-      const result = validateProjectResultStructure(call, {
-        schema_version: "1",
-        ok: true,
-        value: success2
-      });
-      const next = planStateTransition({
-        current: current2.value,
-        target: {
-          phase_instance: current2.value.phase_instance,
-          step: "adjudicate",
-          status: "succeeded",
-          attempt: current2.value.attempt,
-          input_fingerprint: prepared.value.reference.input_fingerprint
-        },
-        recomputed_input_fingerprint: prepared.value.reference.input_fingerprint,
-        result_reference: prepared.value.reference
-      });
-      if (!next.ok) return next;
-      return {
-        schema_version: "1",
-        ok: true,
-        value: {
-          expectation,
-          result,
-          next_state: next.value,
-          result_installation: installation
-        }
-      };
+  for (const digest12 of sorted) {
+    if (!approvals.some((approval) => approval.gate_kind === "artifact-approval" && approval.subject_digest === digest12)) {
+      throw new TypeError(`upstream ${digest12} lacks current artifact approval`);
     }
-  );
-  if (!committed2.ok) return committed2;
-  const gateRequest = selectAdjudicationGate2(constitution.rules, evidence);
-  if (gateRequest === void 0) {
-    return { schema_version: "1", ok: true, value: Object.freeze({
-      transaction: committed2.value,
-      evidence
-    }) };
   }
-  const gate = await dependencies.open_gate(gateRequest);
-  if (!gate.ok) return gate;
-  return { schema_version: "1", ok: true, value: Object.freeze({
-    transaction: committed2.value,
-    gate: gate.value,
-    evidence
-  }) };
+  return Object.freeze(sorted);
 }
 
 // src/state/request-templates.ts
@@ -63897,12 +62377,12 @@ async function prepareImplementationResult(input) {
 
 // src/state/production.ts
 var ok19 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail19 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail17 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function context(input, phase4, attempt) {
   return Object.freeze({ task_id: input.task_id, phase_instance: phase4, operation: input.operation, attempt });
 }
 function stateFailure(phase4, issue4) {
-  return fail19(createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code: issue4 }));
+  return fail17(createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code: issue4 }));
 }
 async function resolvePath7(runner, authority, claim, expectedClass) {
   return resolveTaskPath({
@@ -64047,7 +62527,7 @@ async function createProductionServices(input) {
   if (!provisionalAuthority.ok) return provisionalAuthority;
   const observed = await readTaskState(provisionalAuthority.value.state);
   if (observed.kind === "unreadable") {
-    return fail19(createProjectError("IO_ERROR", { operation: input.operation, attempt: provisionalContext.attempt }));
+    return fail17(createProjectError("IO_ERROR", { operation: input.operation, attempt: provisionalContext.attempt }));
   }
   if (observed.kind === "noncanonical") return stateFailure(provisionalPhase, "task-state-noncanonical");
   const resolvedContext = observed.kind === "canonical" ? context(input, observed.document.value.phase_instance, observed.document.value.attempt) : provisionalContext;
@@ -64155,8 +62635,8 @@ var stagedRecordSchema = external_exports.object({
   request_digest: digest11
 }).strict();
 var ok20 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail20 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-var mismatch2 = (intentId, issue4, digests, issues) => fail20(createProjectError("STAGED_REQUEST_MISMATCH", {
+var fail18 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var mismatch2 = (intentId, issue4, digests, issues) => fail18(createProjectError("STAGED_REQUEST_MISMATCH", {
   intent_id: intentId,
   issue_code: issue4,
   ...digests === void 0 ? {} : { expected_digest: digests.expected, observed_digest: digests.observed },
@@ -64185,12 +62665,12 @@ async function rehydrateStagedToolCall(name, reference, workingDirectory) {
   } catch (error51) {
     const code = error51?.code;
     if (code === "ENOENT") {
-      return fail20(createProjectError("STAGED_REQUEST_NOT_FOUND", {
+      return fail18(createProjectError("STAGED_REQUEST_NOT_FOUND", {
         task_id: reference.task_id,
         intent_id: reference.intent_id
       }));
     }
-    return fail20(createProjectError("IO_ERROR", {
+    return fail18(createProjectError("IO_ERROR", {
       operation: services.value.authority.context.operation,
       attempt: services.value.authority.context.attempt
     }));
@@ -65043,8 +63523,7 @@ var mcp_tools_schema_default = {
                     enum: [
                       "produce",
                       "counter_review",
-                      "triage",
-                      "adjudicate"
+                      "triage"
                     ]
                   },
                   status: {
@@ -65172,6 +63651,7 @@ var mcp_tools_schema_default = {
           "path",
           "verdict",
           "blocking_count",
+          "constitution",
           "revision"
         ],
         properties: {
@@ -65187,6 +63667,65 @@ var mcp_tools_schema_default = {
           },
           blocking_count: {
             $ref: "#/$defs/integer"
+          },
+          constitution: {
+            oneOf: [
+              {
+                type: "object",
+                additionalProperties: false,
+                required: [
+                  "status",
+                  "path",
+                  "constitution",
+                  "drift",
+                  "triggers"
+                ],
+                properties: {
+                  status: {
+                    const: "evaluated"
+                  },
+                  path: {
+                    $ref: "#/$defs/path"
+                  },
+                  constitution: {
+                    enum: [
+                      "pass",
+                      "fail",
+                      "uncertain"
+                    ]
+                  },
+                  drift: {
+                    enum: [
+                      "aligned",
+                      "incidental",
+                      "material"
+                    ]
+                  },
+                  triggers: {
+                    type: "array",
+                    items: {
+                      $ref: "#/$defs/rule"
+                    }
+                  }
+                }
+              },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: [
+                  "status",
+                  "reason"
+                ],
+                properties: {
+                  status: {
+                    const: "not-run"
+                  },
+                  reason: {
+                    const: "no-active-constitution-rules"
+                  }
+                }
+              }
+            ]
           },
           revision: {
             $ref: "#/$defs/integer"
@@ -65218,123 +63757,6 @@ var mcp_tools_schema_default = {
               },
               value: {
                 $ref: "#/$defs/archflow_counter_review/success"
-              }
-            }
-          }
-        ]
-      }
-    },
-    archflow_adjudicate: {
-      input: {
-        oneOf: [
-          {
-            type: "object",
-            additionalProperties: false,
-            required: [
-              "schema_version",
-              "task_id",
-              "intent_id",
-              "expected_revision",
-              "input_fingerprint",
-              "artifact_path",
-              "upstream_paths"
-            ],
-            properties: {
-              schema_version: {
-                const: "1"
-              },
-              task_id: {
-                $ref: "#/$defs/taskSlug"
-              },
-              intent_id: {
-                $ref: "#/$defs/pathSafeId"
-              },
-              expected_revision: {
-                $ref: "#/$defs/integer"
-              },
-              input_fingerprint: {
-                $ref: "#/$defs/digest"
-              },
-              artifact_path: {
-                $ref: "#/$defs/path"
-              },
-              upstream_paths: {
-                type: "array",
-                items: {
-                  $ref: "#/$defs/path"
-                }
-              }
-            }
-          },
-          {
-            $ref: "#/$defs/stagedReference"
-          }
-        ]
-      },
-      success: {
-        type: "object",
-        additionalProperties: false,
-        required: [
-          "path",
-          "constitution",
-          "drift",
-          "triggers",
-          "revision"
-        ],
-        properties: {
-          path: {
-            $ref: "#/$defs/path"
-          },
-          constitution: {
-            enum: [
-              "pass",
-              "fail",
-              "uncertain"
-            ]
-          },
-          drift: {
-            enum: [
-              "aligned",
-              "incidental",
-              "material"
-            ]
-          },
-          triggers: {
-            type: "array",
-            items: {
-              $ref: "#/$defs/rule"
-            }
-          },
-          revision: {
-            $ref: "#/$defs/integer"
-          },
-          request_digest: {
-            $ref: "#/$defs/digest"
-          }
-        }
-      },
-      result: {
-        oneOf: [
-          {
-            $ref: "#/$defs/failure"
-          },
-          {
-            type: "object",
-            additionalProperties: false,
-            required: [
-              "schema_version",
-              "ok",
-              "value"
-            ],
-            properties: {
-              schema_version: {
-                const: "1"
-              },
-              ok: {
-                const: true
-              },
-              value: {
-                $ref: "#/$defs/archflow_adjudicate/success"
               }
             }
           }
@@ -65818,9 +64240,6 @@ var mcp_tools_schema_default = {
       $ref: "#/$defs/archflow_counter_review/input"
     },
     {
-      $ref: "#/$defs/archflow_adjudicate/input"
-    },
-    {
       $ref: "#/$defs/archflow_gate/input"
     },
     {
@@ -66226,7 +64645,6 @@ var project_error_schema_default = {
       enum: [
         "archflow_state",
         "archflow_counter_review",
-        "archflow_adjudicate",
         "archflow_gate",
         "archflow_waiver"
       ]
@@ -69797,6 +68215,804 @@ async function startMcpRuntime(options) {
 // src/dispatch/coordinator.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
 
+// src/dispatch/cli.ts
+import { stat as stat2, writeFile } from "node:fs/promises";
+import { join as join8 } from "node:path";
+
+// src/dispatch/process.ts
+import { spawn } from "node:child_process";
+import { open as open4, stat } from "node:fs/promises";
+var DISPATCH_TIMEOUT_MS = 9e5;
+var DISPATCH_OUTPUT_BYTE_CAP = 8 * 1024 * 1024;
+var TERMINATION_GRACE_MS = 250;
+var DispatchProcessError = class extends Error {
+  constructor(project_error, channels) {
+    super(project_error.code);
+    this.project_error = project_error;
+    this.channels = channels;
+    this.name = "DispatchProcessError";
+  }
+  project_error;
+  channels;
+};
+var fail19 = (error51) => {
+  throw new DispatchProcessError(error51);
+};
+function checkedPositiveInteger(value, label) {
+  if (!Number.isSafeInteger(value) || value <= 0) throw new TypeError(`${label} must be a positive safe integer`);
+  return value;
+}
+function terminateChild(child) {
+  const send = (signal) => {
+    if (child.pid === void 0 || child.exitCode !== null || child.signalCode !== null) return;
+    if (process.platform !== "win32") {
+      try {
+        process.kill(-child.pid, signal);
+        return;
+      } catch {
+      }
+    }
+    try {
+      child.kill(signal);
+    } catch {
+    }
+  };
+  send("SIGTERM");
+  const escalation = setTimeout(() => send("SIGKILL"), TERMINATION_GRACE_MS);
+  escalation.unref();
+  return escalation;
+}
+function classifySpawnError(adapter2, error51) {
+  if (error51.code === "ENOENT") return fail19(createProjectError("CLI_MISSING", { adapter: adapter2 }));
+  if (error51.code === "EACCES" || error51.code === "EPERM") {
+    return fail19(createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "not-executable" }));
+  }
+  return fail19(createProjectError("IO_ERROR", { operation: "dispatch-spawn", attempt: 1 }));
+}
+async function readBoundedFinalOutput(adapter2, path2, byteCap) {
+  let metadata2;
+  try {
+    metadata2 = await stat(path2, { bigint: true });
+  } catch (error51) {
+    if (error51.code === "ENOENT") return void 0;
+    return fail19(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
+  }
+  if (!metadata2.isFile()) {
+    return fail19(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
+  }
+  if (metadata2.size > BigInt(byteCap)) {
+    const byteCount = Number(metadata2.size);
+    if (!Number.isSafeInteger(byteCount)) {
+      return fail19(createProjectError("IO_ERROR", { operation: "dispatch-output-stat", attempt: 1 }));
+    }
+    return fail19(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
+  }
+  let handle;
+  try {
+    handle = await open4(path2, "r");
+    const chunks = [];
+    let byteCount = 0;
+    while (true) {
+      const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, byteCap + 1 - byteCount));
+      const { bytesRead } = await handle.read(buffer, 0, buffer.byteLength, null);
+      if (bytesRead === 0) break;
+      byteCount += bytesRead;
+      if (byteCount > byteCap) {
+        return fail19(createProjectError("OUTPUT_OVERFLOW", { adapter: adapter2, byte_count: byteCount, byte_cap: byteCap }));
+      }
+      chunks.push(buffer.subarray(0, bytesRead));
+    }
+    return Buffer.concat(chunks, byteCount);
+  } catch (error51) {
+    if (error51 instanceof DispatchProcessError) throw error51;
+    return fail19(createProjectError("IO_ERROR", { operation: "dispatch-output-read", attempt: 1 }));
+  } finally {
+    await handle?.close().catch(() => void 0);
+  }
+}
+async function runDispatchChild(spec) {
+  const timeoutMs = checkedPositiveInteger(spec.timeout_ms ?? DISPATCH_TIMEOUT_MS, "dispatch timeout");
+  const byteCap = checkedPositiveInteger(spec.byte_cap ?? DISPATCH_OUTPUT_BYTE_CAP, "dispatch byte cap");
+  const cancellationSource = spec.cancellation_source ?? "client";
+  if (spec.signal.aborted) {
+    return fail19(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
+  }
+  const spawnOptions = {
+    cwd: spec.cwd,
+    env: { ...spec.env },
+    shell: false,
+    windowsHide: true,
+    detached: process.platform !== "win32",
+    stdio: ["pipe", "pipe", "pipe"]
+  };
+  const child = spawn(spec.command, [...spec.argv], spawnOptions);
+  const stdoutChunks = [];
+  const stderrChunks = [];
+  let stdoutBytes = 0;
+  let stderrBytes = 0;
+  let termination;
+  let overflowBytes;
+  let ioOperation;
+  let spawnError;
+  let escalation;
+  const stop = (reason2) => {
+    if (termination !== void 0) return;
+    termination = reason2;
+    escalation = terminateChild(child);
+  };
+  const append = (channel, chunk) => {
+    if (termination !== void 0) return;
+    const nextCount = (channel === "stdout" ? stdoutBytes : stderrBytes) + chunk.byteLength;
+    if (nextCount > byteCap) {
+      overflowBytes = nextCount;
+      stop("overflow");
+      return;
+    }
+    if (channel === "stdout") {
+      stdoutBytes = nextCount;
+      stdoutChunks.push(chunk);
+    } else {
+      stderrBytes = nextCount;
+      stderrChunks.push(chunk);
+    }
+  };
+  child.stdout.on("data", (chunk) => append("stdout", Buffer.from(chunk)));
+  child.stderr.on("data", (chunk) => append("stderr", Buffer.from(chunk)));
+  child.stdout.on("error", () => {
+    ioOperation = "dispatch-stdout";
+    stop("io");
+  });
+  child.stderr.on("error", () => {
+    ioOperation = "dispatch-stderr";
+    stop("io");
+  });
+  child.on("error", (error51) => {
+    spawnError = error51;
+  });
+  const abort = () => stop("cancelled");
+  spec.signal.addEventListener("abort", abort, { once: true });
+  const timeout = setTimeout(() => stop("timeout"), timeoutMs);
+  timeout.unref();
+  child.stdin.on("error", (error51) => {
+    if (error51.code === "EPIPE" || error51.code === "ERR_STREAM_DESTROYED") return;
+    ioOperation = "dispatch-stdin";
+    stop("io");
+  });
+  child.stdin.end(spec.stdin === void 0 ? void 0 : Buffer.from(spec.stdin));
+  const closed = await new Promise((resolve2) => {
+    child.once("close", (code, signal) => resolve2({ code, signal }));
+  });
+  clearTimeout(timeout);
+  if (escalation !== void 0) clearTimeout(escalation);
+  spec.signal.removeEventListener("abort", abort);
+  const failWithChannels = (error51) => {
+    throw new DispatchProcessError(error51, Object.freeze({
+      stdout: Buffer.concat(stdoutChunks, stdoutBytes),
+      stderr: Buffer.concat(stderrChunks, stderrBytes)
+    }));
+  };
+  if (spawnError !== void 0) return classifySpawnError(spec.adapter, spawnError);
+  if (termination === "cancelled") {
+    return failWithChannels(createProjectError("CANCELLED", { source: cancellationSource, attempt: 1 }));
+  }
+  if (termination === "timeout") {
+    return failWithChannels(createProjectError("TIMEOUT", { adapter: spec.adapter, attempt: 1, limit_ms: timeoutMs }));
+  }
+  if (termination === "overflow") {
+    return failWithChannels(createProjectError("OUTPUT_OVERFLOW", {
+      adapter: spec.adapter,
+      byte_count: overflowBytes,
+      byte_cap: byteCap
+    }));
+  }
+  if (termination === "io") {
+    return failWithChannels(createProjectError("IO_ERROR", { operation: ioOperation, attempt: 1 }));
+  }
+  const stdout = Buffer.concat(stdoutChunks, stdoutBytes);
+  const stderr = Buffer.concat(stderrChunks, stderrBytes);
+  const finalOutput = spec.final_output_path === void 0 ? void 0 : await readBoundedFinalOutput(spec.adapter, spec.final_output_path, byteCap);
+  return Object.freeze({
+    exit_code: closed.code,
+    signal: closed.signal,
+    stdout,
+    stderr,
+    ...finalOutput === void 0 ? {} : { final_output: finalOutput }
+  });
+}
+
+// src/dispatch/cli.ts
+var CLAUDE_MINIMUM_VERSION = "2.1.205";
+var CODEX_MINIMUM_VERSION = "0.122.0";
+var CLAUDE_MANAGED_POLICY_PATHS = Object.freeze([
+  "/etc/claude-code/managed-settings.json",
+  "/etc/claude-code/managed-settings.d",
+  "/etc/claude-code/managed-mcp.json",
+  "/Library/Application Support/ClaudeCode/managed-settings.json",
+  "/Library/Application Support/ClaudeCode/managed-settings.d",
+  "/Library/Application Support/ClaudeCode/managed-mcp.json"
+]);
+var CODEX_MANAGED_POLICY_PATHS = Object.freeze([
+  "/etc/codex/config.toml",
+  "/etc/codex/requirements.toml",
+  "/etc/codex/rules"
+]);
+var CODEX_DISABLED_FEATURES = Object.freeze([
+  "shell_tool",
+  "unified_exec",
+  "multi_agent",
+  "browser_use",
+  "browser_use_full_cdp_access",
+  "computer_use",
+  "image_generation",
+  "apps",
+  "hooks",
+  "in_app_browser",
+  "plugins",
+  "remote_plugin",
+  "plugin_sharing",
+  "skill_search"
+]);
+var HOST_SCHEMA_METADATA = /* @__PURE__ */ new Set(["$schema", "$id"]);
+var CLAUDE_UNSUPPORTED_SCHEMA_KEYWORDS = /* @__PURE__ */ new Set([
+  "minimum",
+  "maximum",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+  "multipleOf",
+  "minLength",
+  "maxLength",
+  "format",
+  "minItems",
+  "maxItems",
+  "uniqueItems",
+  "minProperties",
+  "maxProperties"
+]);
+function projectSchemaNode(value, adapter2) {
+  if (Array.isArray(value)) return value.map((item) => projectSchemaNode(item, adapter2));
+  if (value === null || typeof value !== "object") return value;
+  const projected = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (HOST_SCHEMA_METADATA.has(key) || key.startsWith("x-archflow-") || key === "allOf" || adapter2 === "claude-cli" && CLAUDE_UNSUPPORTED_SCHEMA_KEYWORDS.has(key) || adapter2 === "codex-cli" && key === "uniqueItems") continue;
+    projected[key] = projectSchemaNode(child, adapter2);
+  }
+  return projected;
+}
+function scalarType(value) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  if (typeof value === "string") return "string";
+  if (typeof value === "number") return "number";
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "object") return "object";
+  return void 0;
+}
+function codexStrictNode(value) {
+  if (Array.isArray(value)) return value.map(codexStrictNode);
+  if (value === null || typeof value !== "object") return value;
+  const node = Object.fromEntries(Object.entries(value).map(([key, child]) => [key, codexStrictNode(child)]));
+  if (node.type === void 0 && node.const !== void 0) node.type = scalarType(node.const) ?? "string";
+  if (node.type === void 0 && Array.isArray(node.enum) && node.enum.length > 0) {
+    const types = new Set(node.enum.map(scalarType));
+    if (types.size === 1 && !types.has(void 0)) node.type = [...types][0];
+  }
+  if (node.type === "object" && node.properties !== null && typeof node.properties === "object" && !Array.isArray(node.properties)) {
+    node.required = Object.keys(node.properties);
+  }
+  return node;
+}
+function codexMechanicalSchema(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  const mechanical = value;
+  const properties = mechanical.properties;
+  if (properties === null || typeof properties !== "object" || Array.isArray(properties)) return value;
+  const base2 = properties;
+  const branch = (states, digests) => {
+    const selected = {
+      mechanism: base2.mechanism,
+      state: { type: "string", enum: [...states] },
+      ...Object.fromEntries(digests.map((name) => [name, base2[name]])),
+      details: base2.details
+    };
+    return { type: "object", additionalProperties: false, properties: selected, required: Object.keys(selected) };
+  };
+  return {
+    type: "object",
+    anyOf: [
+      branch(["current", "stale"], ["subject_digest", "evidence_digest"]),
+      branch(["missing", "unknown"], []),
+      branch(["failed", "digest-mismatch"], []),
+      branch(["failed", "digest-mismatch"], ["subject_digest"]),
+      branch(["failed", "digest-mismatch"], ["evidence_digest"]),
+      branch(["failed", "digest-mismatch"], ["subject_digest", "evidence_digest"])
+    ]
+  };
+}
+function hostFindingSchema(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  const finding = value;
+  const properties = finding.properties;
+  if (properties === null || typeof properties !== "object" || Array.isArray(properties)) return value;
+  const base2 = properties;
+  const branch = (severities, blocking) => {
+    const selected = {
+      ...base2,
+      severity: { type: "string", enum: [...severities] },
+      blocking: { type: "boolean", const: blocking }
+    };
+    return { type: "object", additionalProperties: false, properties: selected, required: Object.keys(selected) };
+  };
+  return {
+    type: "object",
+    anyOf: [
+      branch(["blocker"], true),
+      branch(["major", "minor"], false)
+    ]
+  };
+}
+function hostTaskSlugSchema(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  return {
+    ...value,
+    // Both hosts accept ordinary regex patterns but not the normative reserved-name lookaheads.
+    // The exact task-slug parser still runs during local output validation and attestation.
+    pattern: "^[a-z0-9][a-z0-9._-]{0,63}$"
+  };
+}
+function projectCliOutputSchema(outputSchema, resultKind, adapter2, subject) {
+  assertPlainJson(outputSchema, "CLI output schema");
+  const snapshot = structuredClone(outputSchema);
+  const projected = projectSchemaNode(snapshot, adapter2);
+  if (projected === null || typeof projected !== "object" || Array.isArray(projected)) {
+    throw new TypeError("CLI output schema must be an object");
+  }
+  let root = projected;
+  const definitions = root.$defs;
+  if (definitions !== null && typeof definitions === "object" && !Array.isArray(definitions)) {
+    const named = definitions;
+    const common3 = { ...named, taskSlug: hostTaskSlugSchema(named.taskSlug) };
+    root = {
+      ...root,
+      $defs: resultKind === "review" ? { ...common3, finding: hostFindingSchema(common3.finding) } : common3
+    };
+  }
+  if (adapter2 === "codex-cli" && resultKind === "adjudication") {
+    const codexDefinitions = root.$defs;
+    if (codexDefinitions !== null && typeof codexDefinitions === "object" && !Array.isArray(codexDefinitions)) {
+      const common3 = codexDefinitions;
+      root = {
+        ...root,
+        $defs: { ...common3, mechanical: codexMechanicalSchema(common3.mechanical) }
+      };
+    }
+  }
+  const bindingKeys = resultKind === "review" ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family"] : ["task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_evidence_set_digest"];
+  if (subject !== void 0) {
+    const properties = root.properties;
+    if (properties === null || typeof properties !== "object" || Array.isArray(properties)) {
+      throw new TypeError("CLI output schema must declare properties");
+    }
+    const bound = { ...properties };
+    for (const key of bindingKeys) {
+      const value = subject[key];
+      if (value !== void 0) bound[key] = { const: structuredClone(value) };
+    }
+    root = { ...root, properties: bound };
+  }
+  return adapter2 === "codex-cli" ? codexStrictNode(root) : root;
+}
+function envelopeSubject(envelope) {
+  const decoded = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes));
+  assertPlainJson(decoded, "dispatch envelope");
+  if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) throw new TypeError("dispatch envelope must be an object");
+  const subject = decoded.subject;
+  if (subject === void 0) return {};
+  if (subject === null || typeof subject !== "object" || Array.isArray(subject)) throw new TypeError("dispatch envelope subject must be an object");
+  return subject;
+}
+var dispatchQueue = Promise.resolve();
+function serializeDispatch(operation) {
+  const result = dispatchQueue.then(operation);
+  dispatchQueue = result.then(
+    () => void 0,
+    () => void 0
+  );
+  return result;
+}
+var CliAdapterError = class extends Error {
+  constructor(project_error, cli_version) {
+    super(project_error.code);
+    this.project_error = project_error;
+    this.cli_version = cli_version;
+    this.name = "CliAdapterError";
+  }
+  project_error;
+  cli_version;
+};
+var fail20 = (error51, cliVersion) => {
+  throw new CliAdapterError(error51, cliVersion);
+};
+function decodeJson2(bytes, adapter2, issueCode) {
+  let text4;
+  try {
+    text4 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    const value = JSON.parse(text4);
+    assertPlainJson(value, "CLI JSON output");
+    return value;
+  } catch {
+    return fail20(createProjectError("MODEL_OUTPUT_INVALID", {
+      adapter: adapter2,
+      attempt: 1,
+      issue_code: issueCode
+    }));
+  }
+}
+function compareVersions(left, right) {
+  const a = left.split(".").map(Number);
+  const b = right.split(".").map(Number);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const difference = (a[index] ?? 0) - (b[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
+}
+function exactVersion(adapter2, output) {
+  const text4 = Buffer.from(output).toString("utf8").trim();
+  const match = adapter2 === "claude-cli" ? /^(\d+\.\d+\.\d+) \(Claude Code\)$/u.exec(text4) : /^codex-cli (\d+\.\d+\.\d+)$/u.exec(text4);
+  return match?.[1] ?? "unrecognized";
+}
+async function detectManagedPolicyPaths(paths) {
+  const observations = await Promise.all(paths.map(async (path2) => {
+    try {
+      await stat2(path2);
+      return path2;
+    } catch (error51) {
+      if (error51.code === "ENOENT") return void 0;
+      return path2;
+    }
+  }));
+  return Object.freeze(observations.filter((path2) => path2 !== void 0));
+}
+async function runPreflightCommand(adapter2, command, argv, workspace, signal, cancellationSource) {
+  return runDispatchChild({
+    adapter: adapter2,
+    command,
+    argv,
+    cwd: workspace.root,
+    env: workspace.env,
+    signal,
+    cancellation_source: cancellationSource
+  });
+}
+async function preflight(adapter2, command, versionArgv, authArgv, minimumVersion, policyPaths, workspace, signal, cancellationSource) {
+  const versionResult = await runPreflightCommand(
+    adapter2,
+    command,
+    versionArgv,
+    workspace,
+    signal,
+    cancellationSource
+  );
+  const version3 = exactVersion(adapter2, versionResult.stdout);
+  if (versionResult.exit_code !== 0 || version3 === "unrecognized" || compareVersions(version3, minimumVersion) < 0) {
+    return fail20(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version3 }));
+  }
+  const authResult = await runPreflightCommand(
+    adapter2,
+    command,
+    authArgv,
+    workspace,
+    signal,
+    cancellationSource
+  );
+  let loggedIn = false;
+  if (adapter2 === "claude-cli" && authResult.exit_code === 0) {
+    try {
+      const auth = JSON.parse(authResult.stdout.toString("utf8"));
+      loggedIn = auth !== null && typeof auth === "object" && Object.getOwnPropertyDescriptor(auth, "loggedIn")?.value === true;
+    } catch {
+      loggedIn = false;
+    }
+  } else if (adapter2 === "codex-cli" && authResult.exit_code === 0) {
+    const successLines = [authResult.stdout, authResult.stderr].flatMap((channel) => channel.toString("utf8").split(/\r?\n/u)).filter((line) => /^Logged in(?:\s|$)/u.test(line.trim()));
+    loggedIn = successLines.length >= 1;
+  }
+  if (!loggedIn) return fail20(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version3);
+  const managedPolicyPaths = await detectManagedPolicyPaths(policyPaths);
+  return Object.freeze({
+    cli_version: version3,
+    managed_policy_present: managedPolicyPaths.length > 0,
+    managed_policy_paths: managedPolicyPaths
+  });
+}
+function assertRoute(adapter2, route) {
+  const expectedFamily = adapter2 === "claude-cli" ? "claude" : "codex";
+  if (route.adapter !== adapter2 || route.family !== expectedFamily) {
+    fail20(createProjectError("FAMILY_MISMATCH", {
+      expected_family: expectedFamily,
+      observed_family: route.family
+    }));
+  }
+  if (!safeIdV1Schema.safeParse(route.model).success) {
+    fail20(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
+  }
+}
+function exitClass(result) {
+  if (result.exit_code !== null) return `exit-${String(result.exit_code)}`;
+  if (result.signal !== null) return `signal-${result.signal.toLowerCase()}`;
+  return "unknown-exit";
+}
+function modelFromMessage(message) {
+  const quoted = /(?:model|deployment)(?:\s+named)?\s+["'`](?<model>[A-Za-z0-9][A-Za-z0-9._:-]{0,127})["'`]/iu.exec(message)?.groups?.model;
+  if (quoted !== void 0 && safeIdV1Schema.safeParse(quoted).success) return quoted;
+  const slug = /(?<![A-Za-z0-9/_.:-])(?<model>(?:claude-(?:opus|sonnet|haiku)-[A-Za-z0-9.-]+|gpt-[A-Za-z0-9.-]+))(?![A-Za-z0-9/_.:-])/iu.exec(message)?.groups?.model;
+  return slug !== void 0 && safeIdV1Schema.safeParse(slug).success ? slug : void 0;
+}
+function classifyMessage(adapter2, message) {
+  if (/\b(?:rate[ -]?limit(?:ed)?|too many requests|usage limit|quota (?:exceeded|reached))\b/iu.test(message)) {
+    return createProjectError("RATE_LIMITED", { adapter: adapter2, attempt: 1 });
+  }
+  if (/\b(?:not logged in|login required|authentication (?:failed|required)|unauthorized|invalid credentials?)\b/iu.test(message)) {
+    return createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 });
+  }
+  if (/\b(?:model|deployment)\b.*\b(?:not found|not supported|unsupported|does not exist|unknown|invalid)\b/iu.test(message) || /\b(?:not found|not supported|unsupported|does not exist|unknown|invalid)\b.*\b(?:model|deployment)\b/iu.test(message)) {
+    const model = modelFromMessage(message);
+    if (model !== void 0) return createProjectError("UNSUPPORTED_MODEL", { model });
+  }
+  return void 0;
+}
+function claudeFailureMessage(result) {
+  try {
+    const value = JSON.parse(result.stdout.toString("utf8"));
+    if (value === null || typeof value !== "object") return void 0;
+    const record3 = value;
+    if (record3.is_error !== true && record3.type !== "error") return void 0;
+    return typeof record3.result === "string" ? record3.result : typeof record3.error === "string" ? record3.error : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function codexFailureMessages(stdout) {
+  const messages2 = [];
+  for (const line of Buffer.from(stdout).toString("utf8").split(/\r?\n/u)) {
+    if (line.trim() === "") continue;
+    try {
+      const value = JSON.parse(line);
+      if (value === null || typeof value !== "object" || Array.isArray(value)) continue;
+      const event = value;
+      let message;
+      if (event.type === "error") message = event.message;
+      if (event.type === "turn.failed" && event.error !== null && typeof event.error === "object") {
+        message = event.error.message;
+      }
+      if (typeof message === "string" && !messages2.includes(message)) messages2.push(message);
+    } catch {
+    }
+  }
+  return Object.freeze(messages2);
+}
+function classifyNonzero(adapter2, result, messages2) {
+  if (result.exit_code === 0 && result.signal === null) return void 0;
+  for (const message of messages2) {
+    const classified = classifyMessage(adapter2, message);
+    if (classified !== void 0) return classified;
+  }
+  return createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: exitClass(result) });
+}
+var claudeAdapter = Object.freeze({
+  id: "claude-cli",
+  family: "claude",
+  preflight: (workspace, signal = new AbortController().signal, cancellationSource = "client") => preflight(
+    "claude-cli",
+    "claude",
+    ["--version"],
+    ["auth", "status"],
+    CLAUDE_MINIMUM_VERSION,
+    CLAUDE_MANAGED_POLICY_PATHS,
+    workspace,
+    signal,
+    cancellationSource
+  ),
+  async buildInvocation(envelope, route, workspace, outputSchema) {
+    assertRoute("claude-cli", route);
+    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "claude-cli", envelopeSubject(envelope));
+    if (route.effort === "ultra") {
+      return fail20(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
+    }
+    const mcpConfigPath = join8(workspace.root, "empty-mcp.json");
+    await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
+    return Object.freeze({
+      adapter: "claude-cli",
+      command: "claude",
+      argv: Object.freeze([
+        "-p",
+        "--safe-mode",
+        "--tools",
+        workspace.repository_view_root === void 0 ? "" : "Read,Grep,Glob",
+        "--disable-slash-commands",
+        "--strict-mcp-config",
+        "--mcp-config",
+        mcpConfigPath,
+        "--no-session-persistence",
+        "--setting-sources",
+        "",
+        "--output-format",
+        "json",
+        "--json-schema",
+        JSON.stringify(schema),
+        "--model",
+        route.model,
+        "--effort",
+        route.effort
+      ]),
+      cwd: workspace.repository_view_root ?? workspace.root,
+      env: workspace.env,
+      stdin: envelope.bytes
+    });
+  },
+  parseOutput(result) {
+    const wrapper = decodeJson2(result.stdout, "claude-cli", "claude-wrapper-invalid");
+    if (wrapper === null || typeof wrapper !== "object" || Array.isArray(wrapper)) {
+      return fail20(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "claude-cli",
+        attempt: 1,
+        issue_code: "structured-output-missing"
+      }));
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(wrapper, "structured_output");
+    if (descriptor === void 0 || descriptor.enumerable !== true || !("value" in descriptor)) {
+      return fail20(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "claude-cli",
+        attempt: 1,
+        issue_code: "structured-output-missing"
+      }));
+    }
+    try {
+      assertPlainJson(descriptor.value, "Claude structured output");
+      return canonicalJsonBytes(descriptor.value);
+    } catch {
+      return fail20(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "claude-cli",
+        attempt: 1,
+        issue_code: "structured-output-invalid"
+      }));
+    }
+  },
+  classifyFailure(result) {
+    const message = claudeFailureMessage(result);
+    return classifyNonzero("claude-cli", result, message === void 0 ? [] : [message]);
+  }
+});
+var codexAdapter = Object.freeze({
+  id: "codex-cli",
+  family: "codex",
+  preflight: (workspace, signal = new AbortController().signal, cancellationSource = "client") => preflight(
+    "codex-cli",
+    "codex",
+    ["--version"],
+    ["login", "status"],
+    CODEX_MINIMUM_VERSION,
+    CODEX_MANAGED_POLICY_PATHS,
+    workspace,
+    signal,
+    cancellationSource
+  ),
+  async buildInvocation(envelope, route, workspace, outputSchema) {
+    assertRoute("codex-cli", route);
+    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "codex-cli", envelopeSubject(envelope));
+    const schemaPath = join8(workspace.root, `${envelope.result_kind}.schema.json`);
+    const outputPath = join8(workspace.root, "final-output.json");
+    await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}
+`, { encoding: "utf8", mode: 384 });
+    const disabled = CODEX_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]);
+    return Object.freeze({
+      adapter: "codex-cli",
+      command: "codex",
+      argv: Object.freeze([
+        "exec",
+        "--ephemeral",
+        "--ignore-user-config",
+        "--ignore-rules",
+        "--skip-git-repo-check",
+        "--strict-config",
+        "-s",
+        "read-only",
+        // The already read-only sandbox targets the repository view when one is materialized;
+        // schema and output files deliberately stay in workspace.root, outside the view.
+        "-C",
+        workspace.repository_view_root ?? workspace.root,
+        "--json",
+        "--output-schema",
+        schemaPath,
+        "-o",
+        outputPath,
+        "-m",
+        route.model,
+        "-c",
+        "skills.include_instructions=false",
+        "-c",
+        "project_doc_max_bytes=0",
+        "-c",
+        `model_reasoning_effort=${JSON.stringify(route.effort)}`,
+        ...disabled
+      ]),
+      cwd: workspace.root,
+      env: workspace.env,
+      stdin: envelope.bytes,
+      final_output_path: outputPath
+    });
+  },
+  parseOutput(result) {
+    if (result.final_output === void 0) {
+      return fail20(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "codex-cli",
+        attempt: 1,
+        issue_code: "final-output-missing"
+      }));
+    }
+    decodeJson2(result.final_output, "codex-cli", "final-output-invalid");
+    return Uint8Array.from(result.final_output);
+  },
+  classifyFailure(result) {
+    return classifyNonzero("codex-cli", result, codexFailureMessages(result.stdout));
+  }
+});
+function selectCliAdapter(host, options = {}) {
+  if (host === "unknown") return fail20(createProjectError("UNSUPPORTED_HOST", { host: "unknown" }));
+  if (host === "claude") return codexAdapter;
+  if (options.allow_claude_dispatch !== true) {
+    return fail20(createProjectError("CONFIG_FAMILY_UNSUPPORTED", { family: "claude" }));
+  }
+  return claudeAdapter;
+}
+function mintReviewObservation(input) {
+  assertRoute(input.adapter, input.route);
+  const binding = {
+    kind: "review",
+    task_id: input.subject.task_id,
+    phase_instance: input.subject.phase_instance,
+    role: input.subject.role,
+    subject_digest: input.subject.subject_digest,
+    input_fingerprint: input.subject.input_fingerprint,
+    invocation_id: input.subject.invocation_id,
+    envelope_input_digest: input.envelope_input_digest,
+    result_id: input.subject.result_id,
+    adapter: input.adapter,
+    cli_version: input.cli_version,
+    family: input.route.family,
+    model: input.route.model,
+    effort: input.route.effort,
+    rubric_digest: input.subject.rubric_digest,
+    producer_family: input.subject.producer_family
+  };
+  const capability = createReviewObservationCapability(binding);
+  return observationSource.observeReview(capability, input.extracted_output_bytes);
+}
+function mintAdjudicationObservation(input) {
+  assertRoute(input.adapter, input.route);
+  const binding = {
+    kind: "adjudication",
+    task_id: input.subject.task_id,
+    phase_instance: input.subject.phase_instance,
+    role: input.subject.role,
+    subject_digest: input.subject.subject_digest,
+    input_fingerprint: input.subject.input_fingerprint,
+    invocation_id: input.subject.invocation_id,
+    envelope_input_digest: input.envelope_input_digest,
+    result_id: input.subject.result_id,
+    adapter: input.adapter,
+    cli_version: input.cli_version,
+    family: input.route.family,
+    model: input.route.model,
+    effort: input.route.effort,
+    pinned_constitution_digest: input.subject.pinned_constitution_digest,
+    approved_upstream_digests: input.subject.approved_upstream_digests,
+    source_evidence_set_digest: input.subject.source_evidence_set_digest
+  };
+  const capability = createAdjudicationObservationCapability(binding);
+  return observationSource.observeAdjudication(capability, input.extracted_output_bytes);
+}
+
 // src/dispatch/workspace.ts
 import { spawn as spawn2 } from "node:child_process";
 import { mkdir as mkdir4, mkdtemp, realpath as realpath4, rm, symlink as symlink2 } from "node:fs/promises";
@@ -70023,465 +69239,44 @@ function createDispatchCoordinator(input) {
   };
 }
 
-// src/mcp/handlers/errors.ts
-function carried(error51) {
-  if (error51 instanceof DispatchRoutingError || error51 instanceof CliAdapterError || error51 instanceof DispatchProcessError || error51 instanceof AdjudicationServiceError || error51 instanceof ReviewEnvelopeError) return error51.project_error;
-  try {
-    return parseProjectError(error51);
-  } catch {
-    return void 0;
+// src/contracts/schemas/v1/adjudication.schema.json
+var adjudication_schema_default = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "urn:archflow:schema:v1:adjudication",
+  type: "object",
+  additionalProperties: false,
+  "x-archflow-adjudication-semantics": true,
+  required: ["schema_version", "task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_evidence_set_digest", "rule_findings", "drift_findings", "constitution", "drift", "matched_rule_versions", "uncertain_rule_versions"],
+  properties: {
+    schema_version: { const: "1" },
+    task_id: { $ref: "#/$defs/taskSlug" },
+    phase_instance: { type: "string", pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" },
+    step: { const: "adjudicate" },
+    subject_digest: { $ref: "#/$defs/digest" },
+    input_fingerprint: { $ref: "#/$defs/digest" },
+    pinned_constitution_digest: { $ref: "#/$defs/digest" },
+    approved_upstream_digests: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/digest" } },
+    source_evidence_set_digest: { $ref: "#/$defs/digest" },
+    rule_findings: { type: "array", items: { $ref: "#/$defs/ruleFinding" } },
+    drift_findings: { type: "array", "x-archflow-unique-by": "upstream_digest", items: { $ref: "#/$defs/driftFinding" } },
+    constitution: { $ref: "#/$defs/compliance" },
+    drift: { $ref: "#/$defs/drift" },
+    matched_rule_versions: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/ruleVersion" } },
+    uncertain_rule_versions: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/ruleVersion" } }
+  },
+  $defs: {
+    id: { type: "string", pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
+    taskSlug: { type: "string", pattern: "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$" },
+    digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
+    nonBlank: { type: "string", minLength: 1, pattern: "\\S" },
+    compliance: { enum: ["pass", "fail", "uncertain"] },
+    drift: { enum: ["aligned", "incidental", "material"] },
+    ruleVersion: { type: "object", additionalProperties: false, required: ["rule_id", "rule_version"], properties: { rule_id: { $ref: "#/$defs/id" }, rule_version: { type: "integer", minimum: 1, maximum: 9007199254740991 } } },
+    mechanical: { type: "object", additionalProperties: false, required: ["mechanism", "state", "details"], properties: { mechanism: { $ref: "#/$defs/nonBlank" }, state: { enum: ["current", "missing", "stale", "unknown", "failed", "digest-mismatch"] }, subject_digest: { $ref: "#/$defs/digest" }, evidence_digest: { $ref: "#/$defs/digest" }, details: { $ref: "#/$defs/nonBlank" } }, allOf: [{ if: { properties: { state: { enum: ["current", "stale"] } }, required: ["state"] }, then: { properties: { subject_digest: true, evidence_digest: true }, required: ["subject_digest", "evidence_digest"] } }, { if: { properties: { state: { enum: ["missing", "unknown"] } }, required: ["state"] }, then: { not: { anyOf: [{ required: ["subject_digest"] }, { required: ["evidence_digest"] }] } } }] },
+    ruleFinding: { type: "object", additionalProperties: false, required: ["rule_id", "rule_version", "compliance", "rationale", "trigger", "trigger_evidence", "enforced_by"], properties: { rule_id: { $ref: "#/$defs/id" }, rule_version: { type: "integer", minimum: 1, maximum: 9007199254740991 }, compliance: { $ref: "#/$defs/compliance" }, rationale: { $ref: "#/$defs/nonBlank" }, trigger: { enum: ["not-matched", "matched", "uncertain"] }, trigger_evidence: { $ref: "#/$defs/nonBlank" }, enforced_by: { type: "array", items: { $ref: "#/$defs/mechanical" } } }, allOf: [{ if: { properties: { compliance: { const: "pass" } }, required: ["compliance"] }, then: { properties: { enforced_by: { type: "array", items: { allOf: [{ $ref: "#/$defs/mechanical" }, { type: "object", properties: { state: { const: "current" } } }] } } } } }] },
+    driftFinding: { type: "object", additionalProperties: false, required: ["upstream_digest", "drift", "affected_claim_ids", "rationale"], properties: { upstream_digest: { $ref: "#/$defs/digest" }, drift: { $ref: "#/$defs/drift" }, affected_claim_ids: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/id" } }, rationale: { $ref: "#/$defs/nonBlank" } }, allOf: [{ if: { properties: { drift: { const: "aligned" } }, required: ["drift"] }, then: { properties: { affected_claim_ids: { type: "array", maxItems: 0 } } }, else: { properties: { affected_claim_ids: { type: "array", minItems: 1 } } } }] }
   }
-}
-async function mapHandlerErrors(correlationId, run) {
-  try {
-    return await run();
-  } catch (error51) {
-    const projectError = carried(error51);
-    if (projectError !== void 0) {
-      return Object.freeze({ schema_version: "1", ok: false, error: projectError });
-    }
-    if (error51 instanceof TypeError) throw error51;
-    reportInternalError(correlationId, error51);
-    return Object.freeze({
-      schema_version: "1",
-      ok: false,
-      error: createProjectError("INTERNAL_ERROR", { correlation_id: correlationId })
-    });
-  }
-}
-
-// src/mcp/handlers/replay.ts
-var NEW_INTENT = "handler-replay-probe-new-intent";
-async function resolvePreDispatchReplay(dependencies, authority, call) {
-  const probed = await runStateTransaction(dependencies, { authority, call }, async (current) => ({
-    schema_version: "1",
-    ok: false,
-    error: createProjectError("STATE_INVALID", {
-      phase_instance: current.value.phase_instance,
-      issue_code: NEW_INTENT
-    })
-  }));
-  if (probed.ok) {
-    return Object.freeze({ schema_version: "1", ok: true, value: probed.value.outcome });
-  }
-  if (probed.error.code === "STATE_INVALID" && probed.error.diagnostic.parameters.issue_code === NEW_INTENT) {
-    return Object.freeze({ schema_version: "1", ok: true, value: void 0 });
-  }
-  return probed;
-}
-
-// src/mcp/handlers/session.ts
-var fail21 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-async function openHandlerSession(call, context2) {
-  const suppliedPhase = call.name === "archflow_state" || call.name === "archflow_gate" ? call.input.phase_instance : void 0;
-  const services = await createProductionServices({
-    working_directory: context2.connection.startup_repository_candidate.working_directory,
-    task_id: call.input.task_id,
-    operation: parseSafeCode(call.name),
-    ...suppliedPhase === void 0 ? {} : { phase_instance: suppliedPhase }
-  });
-  if (!services.ok) return services;
-  const state = services.value.state?.value;
-  if (state === void 0 && call.name !== "archflow_state") {
-    return fail21(createProjectError("STATE_MISSING", {
-      phase_instance: suppliedPhase ?? "prd"
-    }));
-  }
-  const configRead = await services.value.dependencies.read_config(services.value.authority.config);
-  if (configRead.kind !== "valid") {
-    return fail21(createProjectError("CONFIG_INVALID", { issue_code: `config-${configRead.kind}` }));
-  }
-  if (state !== void 0 && state.config_digest !== configRead.snapshot.digest) {
-    return fail21(createProjectError("PINNED_CONFIG_MISMATCH", {
-      expected_digest: state.config_digest,
-      observed_digest: configRead.snapshot.digest
-    }));
-  }
-  const host = context2.connection.initialization_candidates.host;
-  if (host === "unknown") return fail21(createProjectError("UNSUPPORTED_HOST", { host }));
-  const phaseInstance3 = state?.phase_instance ?? suppliedPhase;
-  if (phaseInstance3 === void 0) throw new TypeError("phase instance is unavailable");
-  const phase_kind = decodePhaseInstance(phaseInstance3).kind;
-  const config2 = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes));
-  return Object.freeze({
-    schema_version: "1",
-    ok: true,
-    value: Object.freeze({
-      services: services.value,
-      config: config2,
-      host,
-      producer_family: host,
-      phase_kind,
-      measured_at_revision: parseSafeInteger(state?.revision ?? 0)
-    })
-  });
-}
-
-// src/mcp/handlers/adjudicate.ts
-var fail22 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-var ok21 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-async function resumeAdjudicationReplay(input) {
-  for (; ; ) {
-    const frame = await input.load_frame();
-    if (!frame.ok) return frame;
-    if (frame.value.next === "complete") return ok21(input.outcome);
-    if (frame.value.gate === void 0) throw new TypeError("adjudication replay gate frame is incomplete");
-    const resolved = await input.resolve_gate(frame.value.gate);
-    if (!resolved.ok) return resolved;
-  }
-}
-function stableId(prefix, seed) {
-  return parseSafeId(`${prefix}-${canonicalJsonDigest(seed).slice(0, 32)}`);
-}
-async function handleAdjudicate(call, context2) {
-  return mapHandlerErrors(context2.invocation_id, async () => {
-    const session = await openHandlerSession(call, context2);
-    if (!session.ok) return session;
-    const { services } = session.value;
-    const state = services.state;
-    if (state === void 0) return fail22(createProjectError("STATE_MISSING", { phase_instance: "prd" }));
-    const replay2 = await resolvePreDispatchReplay(services.dependencies, services.authority, call);
-    const currentReviews = await loadCurrentReviewSet(
-      { read_state: services.dependencies.read_state, load_retained_result: services.dependencies.load_retained_result },
-      services.authority,
-      state.value.phase_instance
-    );
-    if (!currentReviews.ok) return currentReviews;
-    const constitution = await resolvePinnedConstitution(
-      services.runner,
-      state.value.policy_base_commit,
-      services.authority.context
-    );
-    if (!constitution.ok) return constitution;
-    const produce = await loadCurrentProduceSubject(services.dependencies, state.value);
-    if (!produce.ok) return produce;
-    const projection = await readProduceProjection(
-      services.runner,
-      services.authority,
-      produce.value,
-      call.input.artifact_path
-    );
-    if (!projection.ok) return projection;
-    const exclusions = await resolveReviewExclusions(
-      services.runner,
-      produce.value,
-      services.authority.context
-    );
-    let artifact;
-    try {
-      artifact = renderProduceReviewMaterial(produce.value, projection.value, exclusions);
-    } catch {
-      return fail22(createProjectError("CONTRACT_INVALID", { tool: call.name, issue_code: "artifact-not-utf8" }));
-    }
-    const subjectDigest = produce.value.artifact_digest;
-    const editorialPredecessor = produce.value.artifact.artifact_kind === "document" ? produce.value.artifact.editorial_predecessor : void 0;
-    const reviewsBindPredecessor = editorialPredecessor !== void 0 && currentReviews.value.subject_digest === editorialPredecessor.subject_digest && currentReviews.value.input_fingerprint === editorialPredecessor.input_fingerprint;
-    if (subjectDigest !== currentReviews.value.subject_digest && !reviewsBindPredecessor) {
-      return fail22(createProjectError("STATE_INVALID", {
-        phase_instance: state.value.phase_instance,
-        issue_code: "adjudication-subject-not-current"
-      }));
-    }
-    const editorialPredecessorPair = reviewsBindPredecessor && editorialPredecessor !== void 0 ? Object.freeze({
-      subject_digest: editorialPredecessor.subject_digest,
-      input_fingerprint: editorialPredecessor.input_fingerprint
-    }) : void 0;
-    const deriveUpstreams = async (durable, paths) => {
-      const derived = [];
-      for (const path2 of paths) {
-        const classified = classifyTaskPath(services.authority.task_id, path2);
-        if (!classified.ok) return classified;
-        const binding = classified.value === "document" ? resolveProduceUpstreamBinding(durable, path2) : void 0;
-        if (binding === void 0) {
-          return fail22(createProjectError("STATE_INVALID", {
-            phase_instance: durable.phase_instance,
-            issue_code: "adjudication-upstream-path-mismatch"
-          }));
-        }
-        const upstream = await loadProduceUpstreamSubject(services.dependencies, durable, binding);
-        if (!upstream.ok) return upstream;
-        const projection2 = await readProduceProjection(
-          services.runner,
-          services.authority,
-          upstream.value,
-          path2
-        );
-        if (!projection2.ok) return projection2;
-        let text4;
-        try {
-          text4 = new TextDecoder("utf-8", { fatal: true }).decode(projection2.value.bytes);
-        } catch {
-          return fail22(createProjectError("CONTRACT_INVALID", {
-            tool: call.name,
-            issue_code: "adjudication-upstream-not-utf8"
-          }));
-        }
-        const upstreamDigest = upstream.value.artifact_digest;
-        let approved = false;
-        for (const approval of [...durable.approvals].filter((candidate) => candidate.gate_kind === "artifact-approval" && candidate.subject_digest === upstreamDigest).sort((left, right) => right.resolved_at_revision - left.resolved_at_revision)) {
-          const authenticated = await loadAuthenticatedGateApproval(
-            services.dependencies,
-            services.authority,
-            approval
-          );
-          if (!authenticated.ok) return authenticated;
-          if (authenticated.value.request.kind === "artifact-approval" && authenticated.value.request.context.artifact_kind === binding.artifact_kind) {
-            approved = true;
-            break;
-          }
-        }
-        if (!approved) {
-          return fail22(createProjectError("STATE_INVALID", {
-            phase_instance: durable.phase_instance,
-            issue_code: "upstream-approval-missing"
-          }));
-        }
-        derived.push(Object.freeze({ upstream_digest: upstreamDigest, artifact: text4 }));
-      }
-      derived.sort((left, right) => left.upstream_digest.localeCompare(right.upstream_digest));
-      return ok21(Object.freeze(derived));
-    };
-    const upstreams = await deriveUpstreams(state.value, call.input.upstream_paths);
-    if (!upstreams.ok) return upstreams;
-    const approvedUpstreamDigests = requireApprovedUpstreamDigests(
-      state.value.approvals,
-      upstreams.value.map((item) => item.upstream_digest)
-    );
-    const resultId = stableId("adjudication-result", call.input.intent_id);
-    const coordinator = createDispatchCoordinator({
-      authority: services.authority,
-      dependencies: services.dependencies,
-      host: session.value.host,
-      repository_root: services.runner.location.worktreeRoot,
-      phase_instance: state.value.phase_instance,
-      signal: context2.signal,
-      cancellation_source: "client",
-      allow_claude_dispatch: true
-    });
-    let preDispatchGateId;
-    const openGate = async (request) => {
-      const current = await services.dependencies.read_state(services.authority.state);
-      if (current.kind !== "canonical") {
-        return fail22(createProjectError("STATE_INVALID", { phase_instance: state.value.phase_instance, issue_code: "adjudication-gate-state-invalid" }));
-      }
-      const gateIntent = stableId("adjudication-gate", {
-        schema_version: "1",
-        task_identity_digest: services.authority.task_identity_digest,
-        adjudication_intent: call.input.intent_id,
-        kind: request.kind,
-        subject_digest: request.subject_digest,
-        context: request.context
-      });
-      const requestDigest = canonicalJsonDigest({
-        schema_version: "1",
-        operation: "adjudication-gate",
-        intent_id: gateIntent,
-        task_identity_digest: services.authority.task_identity_digest,
-        kind: request.kind,
-        subject_digest: request.subject_digest,
-        context: request.context
-      });
-      const common3 = {
-        authority: services.authority,
-        expected_revision: current.document.value.revision,
-        intent_id: parsePathSafeId(gateIntent),
-        request_digest: requestDigest,
-        input_fingerprint: current.document.value.input_fingerprint,
-        phase_instance: current.document.value.phase_instance,
-        summary: `Resolve ${request.kind} before adjudication can advance`,
-        subject_digest: request.subject_digest,
-        kind: request.kind,
-        context: request.context
-      };
-      if (request.kind === "constitution-edit") {
-        const opened = await openDurableGate(services.dependencies, {
-          ...common3,
-          current_evidence: currentReviews.value.current_evidence_set
-        });
-        if (opened.ok) preDispatchGateId = opened.value.gate_id;
-        return opened;
-      }
-      const refreshed = await loadCurrentReviewSet(
-        { read_state: services.dependencies.read_state, load_retained_result: services.dependencies.load_retained_result },
-        services.authority,
-        current.document.value.phase_instance
-      );
-      if (!refreshed.ok) return refreshed;
-      return runDurableGate(services.dependencies, {
-        ...common3,
-        current_evidence: refreshed.value.current_evidence_set,
-        signal: context2.signal
-      });
-    };
-    const loadRetiredOutcome = async () => {
-      const current = await services.dependencies.read_state(services.authority.state);
-      if (current.kind !== "canonical") return ok21(void 0);
-      const reference = current.document.value.authoritative_results.find((item) => item.phase_instance === current.document.value.phase_instance && item.step === "adjudicate" && item.input_fingerprint === call.input.input_fingerprint);
-      if (reference === void 0) return ok21(void 0);
-      const target2 = await resolveTaskPath({
-        runner: services.runner,
-        taskId: services.authority.task_id,
-        claim: parseTaskPathClaim(`intents/${call.input.intent_id}.json`),
-        expectedClass: "intent",
-        context: services.authority.context
-      });
-      if (!target2.ok) return target2;
-      try {
-        const handle = await openResolved(target2.value.absolute, 0);
-        const receiptDocument = parseCanonicalDocument(
-          new Uint8Array(await handle.readFile().finally(() => handle.close())),
-          "retired adjudication receipt"
-        );
-        const receipt = parseIntentReceipt(receiptDocument.value);
-        const identified = identifyTransactionRequest(call, services.authority, reference.input_fingerprint);
-        const retained = await services.dependencies.load_retained_result(reference);
-        if (!retained.ok) return retained;
-        if (receipt.tool !== "archflow_adjudicate" || receipt.intent_id !== call.input.intent_id || receipt.task_id !== services.authority.task_id || receipt.repository_identity_digest !== services.authority.repository_identity_digest || receipt.input_fingerprint !== reference.input_fingerprint || receipt.request_digest !== identified.request_digest || receipt.result_id !== reference.result_id || retained.value.prepared.manifest.value.result_id !== reference.result_id || retained.value.prepared.manifest.value.source_artifact.artifact_kind !== "adjudication-evidence") return fail22(createProjectError("STATE_INVALID", {
-          phase_instance: current.document.value.phase_instance,
-          issue_code: "retired-adjudication-outcome-invalid"
-        }));
-        const structured = validateProjectResultStructure(call, {
-          schema_version: "1",
-          ok: true,
-          value: receipt.outcome
-        });
-        return structured.ok ? ok21(structured.value) : structured;
-      } catch {
-        return ok21(void 0);
-      }
-    };
-    let authenticatedOutcome;
-    if (replay2.ok) authenticatedOutcome = replay2.value;
-    else {
-      const retired = await loadRetiredOutcome();
-      if (!retired.ok) return retired;
-      if (retired.value === void 0) return replay2;
-      authenticatedOutcome = retired.value;
-    }
-    if (authenticatedOutcome !== void 0) {
-      return resumeAdjudicationReplay({
-        outcome: authenticatedOutcome,
-        load_frame: async () => {
-          const current = await services.dependencies.read_state(services.authority.state);
-          if (current.kind !== "canonical") return fail22(createProjectError("STATE_INVALID", {
-            phase_instance: state.value.phase_instance,
-            issue_code: "adjudication-replay-state-invalid"
-          }));
-          const retained = await loadRetainedEvidence(
-            { load_retained_result: services.dependencies.load_retained_result },
-            current.document.value,
-            current.document.value.phase_instance
-          );
-          if (!retained.ok) return retained;
-          const adjudicationSource = retained.value.get("adjudicate")?.manifest.source_artifact;
-          if (adjudicationSource?.artifact_kind !== "adjudication-evidence") {
-            return fail22(createProjectError("STATE_INVALID", {
-              phase_instance: current.document.value.phase_instance,
-              issue_code: "retired-adjudication-evidence-missing"
-            }));
-          }
-          const approvals = [];
-          for (const approval of current.document.value.approvals) {
-            const loaded = await loadAuthenticatedGateApproval(services.dependencies, services.authority, approval);
-            if (!loaded.ok) return loaded;
-            approvals.push(loaded.value);
-          }
-          const assessment = assessCurrentEvidence(current.document.value, retained.value, {
-            subject_digest: adjudicationSource.evidence.subject_digest,
-            input_fingerprint: adjudicationSource.evidence.input_fingerprint,
-            constitution: constitution.value,
-            ...editorialPredecessorPair === void 0 ? {} : { editorial_predecessor: editorialPredecessorPair },
-            approved_upstream_digests: approvedUpstreamDigests,
-            authenticated_gate_approvals: Object.freeze(approvals),
-            ...session.value.config.max_attempts === void 0 ? {} : { max_attempts: session.value.config.max_attempts }
-          });
-          if (assessment.next !== "adjudication-gate") return ok21(Object.freeze({ next: "complete" }));
-          const candidates = selectAdjudicationGates(constitution.value.rules, adjudicationSource.evidence);
-          const next = candidates.find((candidate) => {
-            const contextDigest = computeGateContextDigest(candidate.kind, candidate.context);
-            const approved = approvals.some((item) => item.approval.gate_kind === candidate.kind && item.approval.subject_digest === candidate.subject_digest && item.request.context_digest === contextDigest);
-            if (approved) return false;
-            const candidateContext = candidate.context;
-            if ((candidate.kind === "review-trigger" || candidate.kind === "adjudication-failure") && "eligible_waiver_rules" in candidateContext && "waiver_scope" in candidateContext && candidateContext.eligible_waiver_rules.length > 0 && candidateContext.eligible_waiver_rules.every((rule4) => waiverInForce(current.document.value, rule4, candidate.subject_digest, candidateContext.waiver_scope) !== void 0)) return false;
-            return true;
-          });
-          if (next === void 0) return fail22(createProjectError("STATE_INVALID", {
-            phase_instance: current.document.value.phase_instance,
-            issue_code: "adjudication-gate-derivation-invalid"
-          }));
-          return ok21(Object.freeze({ next: "adjudication-gate", gate: next }));
-        },
-        resolve_gate: openGate
-      });
-    }
-    const result = await runAdjudication({
-      transaction: services.dependencies,
-      dispatch: coordinator,
-      prepare_evidence: async (evidence, measuredAtRevision) => prepareEvidenceResult({
-        authority: services.authority,
-        runner: services.runner,
-        result_id: resultId,
-        retained_task_bytes: await services.dependencies.read_retained_task_bytes(),
-        measured_at_revision: measuredAtRevision,
-        scanner: services.dependencies.gate_secret_scanner,
-        value: { kind: "adjudication", evidence }
-      }),
-      detect_constitution_edit: () => detectTaskLocalConstitutionEdit(
-        services.runner,
-        state.value.policy_base_commit,
-        state.value.constitution_digest,
-        services.authority.context
-      ),
-      derive_approved_upstreams: deriveUpstreams,
-      load_current_review_set: (authority, phase4) => loadCurrentReviewSet(
-        { read_state: services.dependencies.read_state, load_retained_result: services.dependencies.load_retained_result },
-        authority,
-        phase4
-      ),
-      load_constitution: (commit) => resolvePinnedConstitution(services.runner, commit, services.authority.context),
-      open_gate: openGate
-    }, {
-      authority: services.authority,
-      call,
-      config: session.value.config,
-      phase_kind: session.value.phase_kind,
-      producer_family: session.value.producer_family,
-      ...editorialPredecessorPair === void 0 ? {} : { editorial_predecessor: editorialPredecessorPair },
-      envelope: {
-        artifact,
-        rules: Object.freeze([...constitution.value.rules.values()].filter((rule4) => rule4.status === "active").sort((left, right) => left.id.localeCompare(right.id) || left.version - right.version).map((rule4) => Object.freeze({
-          id: rule4.id,
-          version: rule4.version,
-          text: rule4.text,
-          ...rule4.review_trigger === void 0 ? {} : { review_trigger: rule4.review_trigger },
-          enforced_by: Object.freeze([...rule4.enforced_by ?? []])
-        }))),
-        source_evidence_set_digest: currentReviews.value.current_evidence_set.set_digest,
-        subject: {
-          task_id: services.authority.task_id,
-          phase_instance: state.value.phase_instance,
-          role: "adjudication",
-          step: "adjudicate",
-          subject_digest: subjectDigest,
-          input_fingerprint: call.input.input_fingerprint,
-          pinned_constitution_digest: constitution.value.digest,
-          approved_upstream_digests: approvedUpstreamDigests,
-          source_evidence_set_digest: currentReviews.value.current_evidence_set.set_digest,
-          invocation_id: stableId("adjudication-invocation", context2.invocation_id),
-          result_id: resultId
-        }
-      }
-    });
-    if (!result.ok) return result;
-    if (result.value.transaction === void 0) {
-      return fail22(createProjectError("GATE_ACTIVE", {
-        gate_id: preDispatchGateId ?? parsePathSafeId(call.input.intent_id),
-        gate_kind: "constitution-edit"
-      }));
-    }
-    return ok21(result.value.transaction.outcome);
-  });
-}
+};
 
 // src/contracts/schemas/v1/review.schema.json
 var review_schema_default = {
@@ -70530,6 +69325,319 @@ var review_schema_default = {
     }
   }
 };
+
+// src/review/envelopes.ts
+var REVIEW_ENVELOPE_BYTE_CAP = 1048576;
+var PINNED_CONTEXT_KINDS = [
+  "user-ask",
+  "approved-upstream",
+  "verification-transcript",
+  "prior-triage",
+  "interface-excerpt",
+  "conventions",
+  "repo-map"
+];
+var REPOSITORY_VIEW_NOTE = "Your working directory is a read-only checkout of the repository at this commit, excluding .archflow/tasks. Use it to verify repository claims; the artifact and pinned context remain the review subject and take precedence on conflict.";
+var PRIOR_TRIAGE_INSTRUCTION = "Findings already dispositioned in the pinned prior-triage record must not be re-raised in variant form; if a prior disposition looks wrong, challenge it by naming its finding_id instead of rediscovering the same defect class.";
+var ReviewEnvelopeError = class extends Error {
+  project_error;
+  /** The serialized size that failed the byte cap, when that is what failed. */
+  envelope_byte_count;
+  constructor(projectError, envelopeByteCount) {
+    super(`review envelope failed: ${projectError.code}`);
+    this.name = "ReviewEnvelopeError";
+    this.project_error = projectError;
+    if (envelopeByteCount !== void 0) this.envelope_byte_count = envelopeByteCount;
+  }
+};
+var EVIDENCE_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
+var utf82 = new TextEncoder();
+function parseEvidenceId(value, field) {
+  if (typeof value !== "string" || !EVIDENCE_ID.test(value)) {
+    throw new TypeError(`${field} must use the review evidence identifier vocabulary`);
+  }
+  return value;
+}
+function exactFields2(value, expected, label) {
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
+    throw new TypeError(`${label} must contain exactly ${wanted.join(", ")}`);
+  }
+}
+function materialize3(value) {
+  assertPlainJson(value, "review envelope input");
+  return structuredClone(value);
+}
+function validateSubject(value) {
+  exactFields2(value, [
+    "task_id",
+    "phase_instance",
+    "role",
+    "step",
+    "attempt",
+    "subject_digest",
+    "input_fingerprint",
+    "rubric_digest",
+    "producer_family",
+    "invocation_id",
+    "result_id"
+  ], "dispatch subject");
+  if (value.role !== "counter-review" || value.step !== "counter_review") {
+    throw new TypeError("dispatch subject must be an ordinary counter-review");
+  }
+  if (value.producer_family !== "claude" && value.producer_family !== "codex") {
+    throw new TypeError("dispatch subject producer_family is invalid");
+  }
+  const attempt = parseSafeInteger(value.attempt);
+  if (attempt < 1) throw new TypeError("dispatch subject attempt must be at least 1");
+  return {
+    task_id: parseTaskSlug(value.task_id),
+    phase_instance: parsePhaseInstanceId(value.phase_instance),
+    role: value.role,
+    step: value.step,
+    attempt,
+    subject_digest: parseSha256Digest(value.subject_digest),
+    input_fingerprint: parseSha256Digest(value.input_fingerprint),
+    rubric_digest: parseSha256Digest(value.rubric_digest),
+    producer_family: value.producer_family,
+    invocation_id: parseEvidenceId(value.invocation_id, "invocation_id"),
+    result_id: parseEvidenceId(value.result_id, "result_id")
+  };
+}
+function validateAdjudicationSubject(value) {
+  exactFields2(value, [
+    "task_id",
+    "phase_instance",
+    "role",
+    "step",
+    "subject_digest",
+    "input_fingerprint",
+    "pinned_constitution_digest",
+    "approved_upstream_digests",
+    "source_evidence_set_digest",
+    "invocation_id",
+    "result_id"
+  ], "adjudication subject");
+  if (value.role !== "adjudication" || value.step !== "adjudicate") {
+    throw new TypeError("adjudication subject must bind the adjudication step");
+  }
+  const approvedUpstreamDigests = value.approved_upstream_digests.map(parseSha256Digest);
+  if (new Set(approvedUpstreamDigests).size !== approvedUpstreamDigests.length || approvedUpstreamDigests.some((digest12, index) => index > 0 && approvedUpstreamDigests[index - 1] >= digest12)) {
+    throw new TypeError("approved_upstream_digests must be sorted and unique");
+  }
+  return {
+    task_id: parseTaskSlug(value.task_id),
+    phase_instance: parsePhaseInstanceId(value.phase_instance),
+    role: value.role,
+    step: value.step,
+    subject_digest: parseSha256Digest(value.subject_digest),
+    input_fingerprint: parseSha256Digest(value.input_fingerprint),
+    pinned_constitution_digest: parseSha256Digest(value.pinned_constitution_digest),
+    approved_upstream_digests: approvedUpstreamDigests,
+    source_evidence_set_digest: parseSha256Digest(value.source_evidence_set_digest),
+    invocation_id: parseEvidenceId(value.invocation_id, "invocation_id"),
+    result_id: parseEvidenceId(value.result_id, "result_id")
+  };
+}
+function validateWorkspace(value) {
+  exactFields2(value, ["kind", "commit", "note"], "review workspace binding");
+  if (value.kind !== "read-only-repository-checkout") {
+    throw new TypeError("review workspace kind must be read-only-repository-checkout");
+  }
+  if (value.note !== REPOSITORY_VIEW_NOTE) {
+    throw new TypeError("review workspace note must be the fixed literal");
+  }
+  return {
+    kind: value.kind,
+    commit: parseGitOid(value.commit),
+    note: value.note
+  };
+}
+function parseNonBlank(value, label) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new TypeError(`${label} must contain text`);
+  }
+  return value;
+}
+function parseEncoding(value) {
+  if (value !== "utf8" && value !== "base64") {
+    throw new TypeError("pinned context encoding must be utf8 or base64");
+  }
+  return value;
+}
+function validateContext(values) {
+  return values.map((value) => {
+    if (!PINNED_CONTEXT_KINDS.includes(value.kind)) {
+      throw new TypeError("pinned context kind is not in the closed vocabulary");
+    }
+    const kind = value.kind;
+    const label = parseNonBlank(value.label, "pinned context label");
+    switch (value.status) {
+      case "pinned":
+        exactFields2(value, ["kind", "label", "status", "content_digest", "encoding", "content"], "pinned context entry");
+        return {
+          kind,
+          label,
+          status: value.status,
+          content_digest: parseSha256Digest(value.content_digest),
+          encoding: parseEncoding(value.encoding),
+          content: typeof value.content === "string" ? value.content : (() => {
+            throw new TypeError("pinned context content must be text");
+          })()
+        };
+      case "truncated":
+        exactFields2(value, ["kind", "label", "status", "content_digest", "encoding", "content", "total_byte_count"], "truncated context entry");
+        if (!Number.isSafeInteger(value.total_byte_count) || value.total_byte_count < 1) {
+          throw new TypeError("truncated context total_byte_count must be a positive safe integer");
+        }
+        return {
+          kind,
+          label,
+          status: value.status,
+          content_digest: parseSha256Digest(value.content_digest),
+          encoding: parseEncoding(value.encoding),
+          content: typeof value.content === "string" ? value.content : (() => {
+            throw new TypeError("truncated context content must be text");
+          })(),
+          total_byte_count: value.total_byte_count
+        };
+      case "unavailable":
+        exactFields2(value, ["kind", "label", "status", "note"], "unavailable context entry");
+        return { kind, label, status: value.status, note: parseNonBlank(value.note, "unavailable context note") };
+      case "omitted-cap":
+        exactFields2(value, ["kind", "label", "status", "content_digest", "note"], "omitted context entry");
+        return {
+          kind,
+          label,
+          status: value.status,
+          content_digest: parseSha256Digest(value.content_digest),
+          note: parseNonBlank(value.note, "omitted context note")
+        };
+      default:
+        throw new TypeError("pinned context status is invalid");
+    }
+  });
+}
+function validateRules(values) {
+  const rules2 = values.map((value) => {
+    const expected = value.review_trigger === void 0 ? ["id", "version", "text", "enforced_by"] : ["id", "version", "text", "review_trigger", "enforced_by"];
+    exactFields2(value, expected, "adjudication rule");
+    if (!EVIDENCE_ID.test(value.id)) throw new TypeError("rule id must use the evidence identifier vocabulary");
+    if (!Number.isSafeInteger(value.version) || value.version < 1) {
+      throw new TypeError("rule version must be a positive safe integer");
+    }
+    const enforcedBy = value.enforced_by.map((mechanism) => parseNonBlank(mechanism, "enforced_by entry"));
+    if (new Set(enforcedBy).size !== enforcedBy.length) throw new TypeError("enforced_by entries must be unique");
+    return {
+      id: value.id,
+      version: value.version,
+      text: parseNonBlank(value.text, "rule text"),
+      ...value.review_trigger === void 0 ? {} : { review_trigger: parseNonBlank(value.review_trigger, "review_trigger") },
+      enforced_by: enforcedBy
+    };
+  });
+  const keys = rules2.map((rule4) => `${rule4.id}:${String(rule4.version)}`);
+  if (new Set(keys).size !== keys.length || keys.some((key, index) => index > 0 && keys[index - 1] >= key)) {
+    throw new TypeError("adjudication rules must be sorted and unique");
+  }
+  return rules2;
+}
+function validateUpstreams(values) {
+  const upstreams = values.map((value) => {
+    exactFields2(value, ["upstream_digest", "artifact"], "approved upstream");
+    if (typeof value.artifact !== "string") throw new TypeError("approved upstream artifact must be text");
+    return { upstream_digest: parseSha256Digest(value.upstream_digest), artifact: value.artifact };
+  });
+  const digests = upstreams.map((upstream) => upstream.upstream_digest);
+  if (new Set(digests).size !== digests.length || digests.some((digest12, index) => index > 0 && digests[index - 1] >= digest12)) {
+    throw new TypeError("approved upstreams must be sorted and unique");
+  }
+  return upstreams;
+}
+function finishEnvelope(resultKind, envelope, digestKind) {
+  const bytes = utf82.encode(`${JSON.stringify(envelope, null, 2)}
+`);
+  if (bytes.byteLength > REVIEW_ENVELOPE_BYTE_CAP) {
+    throw new ReviewEnvelopeError(
+      createProjectError("CONTRACT_INVALID", { issue_code: "envelope-byte-cap" }),
+      bytes.byteLength
+    );
+  }
+  const digest12 = canonicalJsonDigest({
+    ...envelope,
+    digest_kind: digestKind
+  });
+  return Object.freeze({ result_kind: resultKind, bytes, digest: digest12, byte_count: bytes.byteLength });
+}
+function buildReviewEnvelope(value) {
+  const snapshot = materialize3(value);
+  exactFields2(
+    snapshot,
+    snapshot.workspace === void 0 ? ["artifact", "rubric", "context", "subject"] : ["artifact", "rubric", "context", "subject", "workspace"],
+    "review envelope input"
+  );
+  if (typeof snapshot.artifact !== "string") throw new TypeError("review envelope artifact must be text");
+  const workspace = snapshot.workspace === void 0 ? void 0 : validateWorkspace(snapshot.workspace);
+  const parsedRubric = parseRubricV1(snapshot.rubric);
+  const rubric = {
+    schema_version: parsedRubric.schema_version,
+    kind: parsedRubric.kind,
+    mode: parsedRubric.mode,
+    criteria: parsedRubric.criteria.map((criterion) => ({
+      id: criterion.id,
+      text: criterion.text,
+      blocking: criterion.blocking
+    }))
+  };
+  const context2 = validateContext(snapshot.context);
+  const envelope = {
+    schema_version: "1",
+    artifact: snapshot.artifact,
+    rubric,
+    context: context2,
+    // The fixed literal appears exactly when a prior-triage record is pinned; presence is derived
+    // from validated context, never a caller switch.
+    ...context2.some((entry) => entry.kind === "prior-triage") ? { instructions: { prior_triage: PRIOR_TRIAGE_INSTRUCTION } } : {},
+    ...workspace === void 0 ? {} : { workspace },
+    subject: validateSubject(snapshot.subject)
+  };
+  return finishEnvelope("review", envelope, "dispatch-envelope");
+}
+function buildAdjudicationEnvelope(value) {
+  const snapshot = materialize3(value);
+  exactFields2(
+    snapshot,
+    ["artifact", "rules", "approved_upstreams", "source_evidence_set_digest", "subject"],
+    "adjudication envelope input"
+  );
+  if (typeof snapshot.artifact !== "string") throw new TypeError("adjudication envelope artifact must be text");
+  const rules2 = validateRules(snapshot.rules);
+  const approvedUpstreams = validateUpstreams(snapshot.approved_upstreams);
+  const subject = validateAdjudicationSubject(snapshot.subject);
+  const sourceEvidenceSetDigest = parseSha256Digest(snapshot.source_evidence_set_digest);
+  if (sourceEvidenceSetDigest !== subject.source_evidence_set_digest) {
+    throw new TypeError("source_evidence_set_digest must match the adjudication subject");
+  }
+  const upstreamDigests = approvedUpstreams.map((upstream) => upstream.upstream_digest);
+  if (upstreamDigests.length !== subject.approved_upstream_digests.length || upstreamDigests.some((digest12, index) => digest12 !== subject.approved_upstream_digests[index])) {
+    throw new TypeError("approved upstreams must match the adjudication subject");
+  }
+  const envelope = {
+    schema_version: "1",
+    artifact: snapshot.artifact,
+    rules: rules2,
+    approved_upstreams: approvedUpstreams,
+    source_evidence_set_digest: sourceEvidenceSetDigest,
+    instructions: {
+      rule_coverage: "Return exactly one rule finding for every supplied rule, using its id as rule_id and version as rule_version.",
+      mechanism_evidence: "For a rule with declared enforced_by labels, return uncertain compliance and one unknown-state entry for each declared mechanism. Do not claim current mechanical evidence.",
+      undeclared_mechanisms: "For a rule with no declared enforced_by labels, return an empty enforced_by list."
+    },
+    subject
+  };
+  return finishEnvelope("adjudication", envelope, "adjudication-envelope");
+}
 
 // src/review/pinned-context.ts
 import { Buffer as Buffer5 } from "node:buffer";
@@ -70625,8 +69733,8 @@ function buildReviewEnvelopeWithCap(input) {
     }
   }
 }
-var ok22 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail23 = (phase4, issue_code) => Object.freeze({
+var ok21 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail21 = (phase4, issue_code) => Object.freeze({
   schema_version: "1",
   ok: false,
   error: createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code })
@@ -70654,14 +69762,14 @@ async function assembleReviewContext(input) {
       mechanical = artifactText === void 0 ? Object.freeze([]) : await documentMechanicalEvidence(input.runner, artifactText);
     }
     const conventions = await conventionsEvidence(input.runner);
-    return ok22(Object.freeze([...upstreams.value, ...priorTriage.value, ...mechanical, ...conventions]));
+    return ok21(Object.freeze([...upstreams.value, ...priorTriage.value, ...mechanical, ...conventions]));
   }
   if (input.subject.artifact.artifact_kind !== "document") {
-    return ok22(Object.freeze([...priorTriage.value]));
+    return ok21(Object.freeze([...priorTriage.value]));
   }
   const declared = input.subject.artifact.declared_inputs.find((candidate) => candidate.input_id === "user-ask");
   if (declared === void 0) {
-    return ok22(Object.freeze([unavailableContextEntry(
+    return ok21(Object.freeze([unavailableContextEntry(
       "user-ask",
       "ask.md",
       "no user-ask input was declared by this PRD; judge ask fidelity under unverifiable-claims"
@@ -70684,12 +69792,12 @@ async function assembleReviewContext(input) {
       await handle.close();
     }
   } catch {
-    return fail23(input.state.phase_instance, "user-ask-unavailable");
+    return fail21(input.state.phase_instance, "user-ask-unavailable");
   }
   if (sha256Bytes(bytes) !== declared.digest) {
-    return fail23(input.state.phase_instance, "user-ask-not-current");
+    return fail21(input.state.phase_instance, "user-ask-not-current");
   }
-  return ok22(Object.freeze([pinnedContextEntry("user-ask", "ask.md", bytes), ...priorTriage.value]));
+  return ok21(Object.freeze([pinnedContextEntry("user-ask", "ask.md", bytes), ...priorTriage.value]));
 }
 async function assembleUpstreamContext(input) {
   const entries = [];
@@ -70697,7 +69805,7 @@ async function assembleUpstreamContext(input) {
     const upstream = await loadProduceUpstreamSubject(input.dependencies, input.state, binding);
     if (!upstream.ok) return upstream;
     const approved = input.state.approvals.some((approval) => approval.gate_kind === "artifact-approval" && approval.subject_digest === upstream.value.artifact_digest);
-    if (!approved) return fail23(input.state.phase_instance, "upstream-approval-missing");
+    if (!approved) return fail21(input.state.phase_instance, "upstream-approval-missing");
     const projection = await readProduceProjection(
       input.runner,
       input.authority,
@@ -70707,7 +69815,7 @@ async function assembleUpstreamContext(input) {
     if (!projection.ok) return projection;
     entries.push(pinnedContextEntry("approved-upstream", binding.path, projection.value.bytes));
   }
-  return ok22(Object.freeze(entries));
+  return ok21(Object.freeze(entries));
 }
 var RELATIVE_IMPORT_PATTERNS = [
   /\bfrom\s+["']([^"'\n]+)["']/gu,
@@ -70872,13 +69980,13 @@ async function implementationMechanicalEvidence(runner, subject) {
 async function priorTriageEvidence(dependencies, state) {
   const triageRef = state.authoritative_results.find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "triage");
   if (triageRef === void 0 || dependencies.load_retained_result === void 0) {
-    return ok22(Object.freeze([]));
+    return ok21(Object.freeze([]));
   }
   const triage = await dependencies.load_retained_result(triageRef);
   if (!triage.ok) return triage;
   const triageSource = triage.value.prepared.manifest.value.source_artifact;
   if (triageSource.artifact_kind !== "triage") {
-    return fail23(state.phase_instance, "prior-triage-artifact-invalid");
+    return fail21(state.phase_instance, "prior-triage-artifact-invalid");
   }
   const findingsByRef = /* @__PURE__ */ new Map();
   const reviewRef = state.authoritative_results.find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "counter_review");
@@ -70916,7 +70024,7 @@ async function priorTriageEvidence(dependencies, state) {
   };
   const bytes = new TextEncoder().encode(`${JSON.stringify(record3, null, 2)}
 `);
-  return ok22(Object.freeze([excerptContextEntry("prior-triage", "prior-round-triage", bytes)]));
+  return ok21(Object.freeze([excerptContextEntry("prior-triage", "prior-round-triage", bytes)]));
 }
 async function conventionsEvidence(runner) {
   let bytes;
@@ -70986,6 +70094,72 @@ async function runCounterReview(dependencies, input) {
     input.measured_at_revision
   );
   if (!prepared.ok) return prepared;
+  let constitutionEvidence;
+  let constitutionPrepared;
+  const plan = input.constitution;
+  if (plan !== void 0) {
+    const derivedSet = deriveEvidenceSetFromCounter(observed.evidence);
+    const setDigest = derivedSet.current_evidence_set.set_digest;
+    const constitutionRoute = resolveDispatchRoute(
+      input.config,
+      input.phase_kind,
+      "adjudicator",
+      input.producer_family
+    );
+    const constitutionSubject = Object.freeze({
+      task_id: input.envelope.subject.task_id,
+      phase_instance: input.envelope.subject.phase_instance,
+      role: "adjudication",
+      step: "adjudicate",
+      subject_digest: input.envelope.subject.subject_digest,
+      input_fingerprint: input.envelope.subject.input_fingerprint,
+      pinned_constitution_digest: plan.pinned_constitution_digest,
+      approved_upstream_digests: plan.approved_upstream_digests,
+      source_evidence_set_digest: setDigest,
+      invocation_id: plan.invocation_id,
+      result_id: plan.result_id
+    });
+    const constitutionEnvelope = buildAdjudicationEnvelope({
+      artifact: input.envelope.artifact,
+      rules: plan.rules,
+      source_evidence_set_digest: setDigest,
+      approved_upstreams: plan.approved_upstreams,
+      subject: constitutionSubject
+    });
+    const constitutionDispatched = await serializeDispatch(() => plan.dispatch(constitutionRoute, constitutionEnvelope, adjudication_schema_default));
+    try {
+      const observedConstitution = mintAdjudicationObservation({
+        subject: constitutionSubject,
+        adapter: constitutionRoute.adapter,
+        cli_version: constitutionDispatched.cli_version,
+        route: constitutionRoute,
+        envelope_input_digest: constitutionEnvelope.digest,
+        extracted_output_bytes: constitutionDispatched.extracted_output_bytes
+      });
+      constitutionEvidence = crossCheckRuleFindings(
+        plan.registry,
+        observedConstitution.evidence,
+        constitutionRoute.adapter
+      );
+    } catch (error51) {
+      return {
+        schema_version: "1",
+        ok: false,
+        error: error51 instanceof AdjudicationServiceError ? error51.project_error : createProjectError("MODEL_OUTPUT_INVALID", {
+          adapter: constitutionRoute.adapter,
+          attempt: 1,
+          issue_code: "adjudication-output-invalid"
+        })
+      };
+    }
+    const preparedConstitution = await plan.prepare_evidence(
+      constitutionEvidence,
+      input.measured_at_revision
+    );
+    if (!preparedConstitution.ok) return preparedConstitution;
+    constitutionPrepared = preparedConstitution.value;
+  }
+  const summarizedConstitution = constitutionEvidence;
   const identified = identifyTransactionRequest(
     input.call,
     input.authority,
@@ -70998,15 +70172,36 @@ async function runCounterReview(dependencies, input) {
     projection_plan: prepared.value.projection_plan,
     worktree_root: dependencies.transaction.runner.location.worktreeRoot
   });
+  const constitutionInstallation = constitutionPrepared === void 0 ? void 0 : prepareResultInstallation({
+    reference: constitutionPrepared.reference,
+    prepared: constitutionPrepared.prepared,
+    manifest_target: constitutionPrepared.manifest_target,
+    projection_plan: constitutionPrepared.projection_plan,
+    worktree_root: dependencies.transaction.runner.location.worktreeRoot
+  });
   const committed2 = await runStateTransaction(
     dependencies.transaction,
     { authority: input.authority, call: input.call },
     async (current, call) => {
       const revision = parseSafeInteger(current.value.revision + 1);
+      const constitutionOutcome = summarizedConstitution === void 0 ? Object.freeze({
+        status: "not-run",
+        reason: "no-active-constitution-rules"
+      }) : Object.freeze({
+        status: "evaluated",
+        path: adjudicationReviewClaim(current.value.phase_instance),
+        constitution: summarizedConstitution.constitution,
+        drift: summarizedConstitution.drift,
+        triggers: canonicalRuleRefs([
+          ...summarizedConstitution.matched_rule_versions,
+          ...summarizedConstitution.uncertain_rule_versions
+        ])
+      });
       const success2 = Object.freeze({
         path: counterReviewClaim(current.value.phase_instance),
         verdict: observed.evidence.verdict,
         blocking_count: observed.evidence.blocking_count,
+        constitution: constitutionOutcome,
         revision,
         request_digest: identified.request_digest
       });
@@ -71036,7 +70231,8 @@ async function runCounterReview(dependencies, input) {
           input_fingerprint: prepared.value.reference.input_fingerprint
         },
         recomputed_input_fingerprint: prepared.value.reference.input_fingerprint,
-        result_reference: prepared.value.reference
+        result_reference: prepared.value.reference,
+        ...constitutionPrepared === void 0 ? {} : { constitution_result_reference: constitutionPrepared.reference }
       });
       if (!next.ok) return next;
       return {
@@ -71046,7 +70242,8 @@ async function runCounterReview(dependencies, input) {
           expectation,
           result,
           next_state: next.value,
-          result_installation: installation
+          result_installation: installation,
+          ...constitutionInstallation === void 0 ? {} : { constitution_installation: constitutionInstallation }
         }
       };
     }
@@ -71055,14 +70252,116 @@ async function runCounterReview(dependencies, input) {
   return {
     schema_version: "1",
     ok: true,
-    value: Object.freeze({ transaction: committed2.value, evidence: observed.evidence })
+    value: Object.freeze({
+      transaction: committed2.value,
+      evidence: observed.evidence,
+      ...constitutionEvidence === void 0 ? {} : { constitution_evidence: constitutionEvidence }
+    })
   };
 }
 
+// src/mcp/handlers/errors.ts
+function carried(error51) {
+  if (error51 instanceof DispatchRoutingError || error51 instanceof CliAdapterError || error51 instanceof DispatchProcessError || error51 instanceof AdjudicationServiceError || error51 instanceof ReviewEnvelopeError) return error51.project_error;
+  try {
+    return parseProjectError(error51);
+  } catch {
+    return void 0;
+  }
+}
+async function mapHandlerErrors(correlationId, run) {
+  try {
+    return await run();
+  } catch (error51) {
+    const projectError = carried(error51);
+    if (projectError !== void 0) {
+      return Object.freeze({ schema_version: "1", ok: false, error: projectError });
+    }
+    if (error51 instanceof TypeError) throw error51;
+    reportInternalError(correlationId, error51);
+    return Object.freeze({
+      schema_version: "1",
+      ok: false,
+      error: createProjectError("INTERNAL_ERROR", { correlation_id: correlationId })
+    });
+  }
+}
+
+// src/mcp/handlers/replay.ts
+var NEW_INTENT = "handler-replay-probe-new-intent";
+async function resolvePreDispatchReplay(dependencies, authority, call) {
+  const probed = await runStateTransaction(dependencies, { authority, call }, async (current) => ({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("STATE_INVALID", {
+      phase_instance: current.value.phase_instance,
+      issue_code: NEW_INTENT
+    })
+  }));
+  if (probed.ok) {
+    return Object.freeze({ schema_version: "1", ok: true, value: probed.value.outcome });
+  }
+  if (probed.error.code === "STATE_INVALID" && probed.error.diagnostic.parameters.issue_code === NEW_INTENT) {
+    return Object.freeze({ schema_version: "1", ok: true, value: void 0 });
+  }
+  return probed;
+}
+
+// src/mcp/handlers/session.ts
+var fail22 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+async function openHandlerSession(call, context2) {
+  const suppliedPhase = call.name === "archflow_state" || call.name === "archflow_gate" ? call.input.phase_instance : void 0;
+  const services = await createProductionServices({
+    working_directory: context2.connection.startup_repository_candidate.working_directory,
+    task_id: call.input.task_id,
+    operation: parseSafeCode(call.name),
+    ...suppliedPhase === void 0 ? {} : { phase_instance: suppliedPhase }
+  });
+  if (!services.ok) return services;
+  const state = services.value.state?.value;
+  if (state === void 0 && call.name !== "archflow_state") {
+    return fail22(createProjectError("STATE_MISSING", {
+      phase_instance: suppliedPhase ?? "prd"
+    }));
+  }
+  const configRead = await services.value.dependencies.read_config(services.value.authority.config);
+  if (configRead.kind !== "valid") {
+    return fail22(createProjectError("CONFIG_INVALID", { issue_code: `config-${configRead.kind}` }));
+  }
+  if (state !== void 0 && state.config_digest !== configRead.snapshot.digest) {
+    return fail22(createProjectError("PINNED_CONFIG_MISMATCH", {
+      expected_digest: state.config_digest,
+      observed_digest: configRead.snapshot.digest
+    }));
+  }
+  const host = context2.connection.initialization_candidates.host;
+  if (host === "unknown") return fail22(createProjectError("UNSUPPORTED_HOST", { host }));
+  const phaseInstance3 = state?.phase_instance ?? suppliedPhase;
+  if (phaseInstance3 === void 0) throw new TypeError("phase instance is unavailable");
+  const phase_kind = decodePhaseInstance(phaseInstance3).kind;
+  const config2 = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes));
+  return Object.freeze({
+    schema_version: "1",
+    ok: true,
+    value: Object.freeze({
+      services: services.value,
+      config: config2,
+      host,
+      producer_family: host,
+      phase_kind,
+      measured_at_revision: parseSafeInteger(state?.revision ?? 0)
+    })
+  });
+}
+
 // src/mcp/handlers/counter-review.ts
-var fail24 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail23 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok22 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function dispatchId(prefix, value) {
   return parseSafeId(`${prefix}-${sha256Bytes(new TextEncoder().encode(value)).slice(0, 32)}`);
+}
+function stableId(prefix, seed) {
+  return parseSafeId(`${prefix}-${canonicalJsonDigest(seed).slice(0, 32)}`);
 }
 function envelopeOverflowError(error51, subject, exclusions) {
   if (!(error51 instanceof ReviewEnvelopeError)) return void 0;
@@ -71087,7 +70386,7 @@ async function handleCounterReview(call, context2) {
     const { services } = session.value;
     const state = services.state;
     if (state === void 0) {
-      return fail24(createProjectError("STATE_MISSING", { phase_instance: "prd" }));
+      return fail23(createProjectError("STATE_MISSING", { phase_instance: "prd" }));
     }
     const replay2 = await resolvePreDispatchReplay(
       services.dependencies,
@@ -71116,10 +70415,167 @@ async function handleCounterReview(call, context2) {
     try {
       artifact = renderProduceReviewMaterial(produce.value, projection.value, exclusions);
     } catch {
-      return fail24(createProjectError("CONTRACT_INVALID", {
+      return fail23(createProjectError("CONTRACT_INVALID", {
         tool: call.name,
         issue_code: "artifact-not-utf8"
       }));
+    }
+    const constitution = await resolvePinnedConstitution(
+      services.runner,
+      state.value.policy_base_commit,
+      services.authority.context
+    );
+    if (!constitution.ok) return constitution;
+    const activeRules = [...constitution.value.rules.values()].some((rule4) => rule4.status === "active");
+    const edited = await detectTaskLocalConstitutionEdit(
+      services.runner,
+      state.value.policy_base_commit,
+      state.value.constitution_digest,
+      services.authority.context
+    );
+    if (!edited.ok) return edited;
+    if (edited.value !== void 0) {
+      let retainedReviews;
+      try {
+        const loaded = await loadCurrentReviewSet(
+          { read_state: services.dependencies.read_state, load_retained_result: services.dependencies.load_retained_result },
+          services.authority,
+          state.value.phase_instance
+        );
+        retainedReviews = loaded.ok ? loaded.value : void 0;
+      } catch {
+        retainedReviews = void 0;
+      }
+      if (retainedReviews === void 0) {
+        return fail23(createProjectError("STATE_INVALID", {
+          phase_instance: state.value.phase_instance,
+          issue_code: "constitution-edited-on-task-branch"
+        }));
+      }
+      const gateIntent = stableId("constitution-edit-gate", {
+        schema_version: "1",
+        task_identity_digest: services.authority.task_identity_digest,
+        counter_review_intent: call.input.intent_id,
+        kind: "constitution-edit",
+        subject_digest: produce.value.artifact_digest,
+        context: edited.value
+      });
+      const requestDigest = canonicalJsonDigest({
+        schema_version: "1",
+        operation: "constitution-edit-gate",
+        intent_id: gateIntent,
+        task_identity_digest: services.authority.task_identity_digest,
+        kind: "constitution-edit",
+        subject_digest: produce.value.artifact_digest,
+        context: edited.value
+      });
+      const opened = await openDurableGate(services.dependencies, {
+        authority: services.authority,
+        expected_revision: state.value.revision,
+        intent_id: parsePathSafeId(gateIntent),
+        request_digest: requestDigest,
+        input_fingerprint: state.value.input_fingerprint,
+        phase_instance: state.value.phase_instance,
+        summary: "Resolve constitution-edit before review can run",
+        subject_digest: produce.value.artifact_digest,
+        kind: "constitution-edit",
+        context: edited.value,
+        current_evidence: retainedReviews.current_evidence_set
+      });
+      if (!opened.ok) return opened;
+      return fail23(createProjectError("GATE_ACTIVE", {
+        gate_id: opened.value.gate_id,
+        gate_kind: "constitution-edit"
+      }));
+    }
+    const retainedBytes = services.dependencies.read_retained_task_bytes;
+    if (retainedBytes === void 0) throw new TypeError("retained byte accounting is unavailable");
+    const deriveApprovedUpstreams = async (durable) => {
+      const derived = [];
+      for (const binding of expectedProduceUpstreamBindings(durable)) {
+        const upstream = await loadProduceUpstreamSubject(services.dependencies, durable, binding);
+        if (!upstream.ok) return upstream;
+        const upstreamProjection = await readProduceProjection(
+          services.runner,
+          services.authority,
+          upstream.value,
+          binding.path
+        );
+        if (!upstreamProjection.ok) return upstreamProjection;
+        let text4;
+        try {
+          text4 = new TextDecoder("utf-8", { fatal: true }).decode(upstreamProjection.value.bytes);
+        } catch {
+          return fail23(createProjectError("CONTRACT_INVALID", {
+            tool: call.name,
+            issue_code: "adjudication-upstream-not-utf8"
+          }));
+        }
+        const upstreamDigest = upstream.value.artifact_digest;
+        let approved = false;
+        for (const approval of [...durable.approvals].filter((candidate) => candidate.gate_kind === "artifact-approval" && candidate.subject_digest === upstreamDigest).sort((left, right) => right.resolved_at_revision - left.resolved_at_revision)) {
+          const authenticated = await loadAuthenticatedGateApproval(
+            services.dependencies,
+            services.authority,
+            approval
+          );
+          if (!authenticated.ok) return authenticated;
+          if (authenticated.value.request.kind === "artifact-approval" && authenticated.value.request.context.artifact_kind === binding.artifact_kind) {
+            approved = true;
+            break;
+          }
+        }
+        if (!approved) {
+          return fail23(createProjectError("STATE_INVALID", {
+            phase_instance: durable.phase_instance,
+            issue_code: "upstream-approval-missing"
+          }));
+        }
+        derived.push(Object.freeze({ upstream_digest: upstreamDigest, artifact: text4 }));
+      }
+      derived.sort((left, right) => left.upstream_digest.localeCompare(right.upstream_digest));
+      return ok22(Object.freeze(derived));
+    };
+    let constitutionPlan;
+    if (activeRules) {
+      const upstreams = await deriveApprovedUpstreams(state.value);
+      if (!upstreams.ok) return upstreams;
+      const approvedUpstreamDigests = requireApprovedUpstreamDigests(
+        state.value.approvals,
+        upstreams.value.map((item) => item.upstream_digest)
+      );
+      const constitutionResultId = stableId("adjudication-result", call.input.intent_id);
+      const constitutionCoordinator = createDispatchCoordinator({
+        authority: services.authority,
+        dependencies: services.dependencies,
+        host: session.value.host,
+        repository_root: services.runner.location.worktreeRoot,
+        phase_instance: state.value.phase_instance,
+        signal: context2.signal,
+        cancellation_source: "client",
+        allow_claude_dispatch: true
+        // Deliberately no repository_view_commit: the constitution reviewer judges exactly the
+        // sealed envelope, with nothing else to be steered by.
+      });
+      constitutionPlan = Object.freeze({
+        registry: constitution.value.rules,
+        pinned_constitution_digest: constitution.value.digest,
+        rules: rulesForEnvelope(constitution.value.rules),
+        approved_upstreams: upstreams.value,
+        approved_upstream_digests: approvedUpstreamDigests,
+        invocation_id: stableId("adjudication-invocation", context2.invocation_id),
+        result_id: constitutionResultId,
+        dispatch: constitutionCoordinator,
+        prepare_evidence: async (evidence, measuredAtRevision) => prepareEvidenceResult({
+          authority: services.authority,
+          runner: services.runner,
+          result_id: constitutionResultId,
+          retained_task_bytes: await retainedBytes(),
+          measured_at_revision: measuredAtRevision,
+          scanner: services.dependencies.gate_secret_scanner,
+          value: { kind: "adjudication", evidence }
+        })
+      });
     }
     const context_entries = await assembleReviewContext({
       runner: services.runner,
@@ -71147,8 +70603,6 @@ async function handleCounterReview(call, context2) {
       allow_claude_dispatch: true,
       repository_view_commit: repositoryViewCommit
     });
-    const retainedBytes = services.dependencies.read_retained_task_bytes;
-    if (retainedBytes === void 0) throw new TypeError("retained byte accounting is unavailable");
     const result = await runCounterReview({
       transaction: services.dependencies,
       dispatch: coordinator,
@@ -71163,13 +70617,13 @@ async function handleCounterReview(call, context2) {
       }),
       reobserve_projection_digest: async () => {
         const current = await services.dependencies.read_state(services.authority.state);
-        if (current.kind !== "canonical") return fail24(createProjectError("STATE_INVALID", {
+        if (current.kind !== "canonical") return fail23(createProjectError("STATE_INVALID", {
           phase_instance: state.value.phase_instance,
           issue_code: "counter-review-state-not-current"
         }));
         const retained = await loadCurrentProduceSubject(services.dependencies, current.document.value);
         if (!retained.ok) return retained;
-        if (retained.value.artifact_digest !== produce.value.artifact_digest) return fail24(createProjectError("STATE_INVALID", {
+        if (retained.value.artifact_digest !== produce.value.artifact_digest) return fail23(createProjectError("STATE_INVALID", {
           phase_instance: state.value.phase_instance,
           issue_code: "counter-review-subject-not-current"
         }));
@@ -71210,10 +70664,11 @@ async function handleCounterReview(call, context2) {
           result_id: resultId
         }
       },
-      projection_digest: projection.value.digest
+      projection_digest: projection.value.digest,
+      ...constitutionPlan === void 0 ? {} : { constitution: constitutionPlan }
     }).catch((error51) => {
       const overflow = envelopeOverflowError(error51, produce.value, exclusions);
-      if (overflow !== void 0) return fail24(overflow);
+      if (overflow !== void 0) return fail23(overflow);
       throw error51;
     });
     if (!result.ok) return result;
@@ -71226,7 +70681,7 @@ async function handleCounterReview(call, context2) {
 }
 
 // src/mcp/handlers/gate.ts
-var fail25 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail24 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 async function handleGate(call, context2) {
   return mapHandlerErrors(context2.invocation_id, async () => {
     const session = await openHandlerSession(call, context2);
@@ -71258,19 +70713,19 @@ async function handleGate(call, context2) {
     if ("record" in outcome.value && outcome.value.record.value.outcome === "superseded") {
       const supplemental2 = call.input.supplemental_outcome;
       if (supplemental2?.action !== "supersede" || outcome.value.record.value.gate_id !== supplemental2.review.prior_gate_id || outcome.value.record.value.supersession.old_subject_digest !== supplemental2.old_subject_digest) {
-        return fail25(createProjectError("STATE_INVALID", {
+        return fail24(createProjectError("STATE_INVALID", {
           phase_instance: call.input.phase_instance,
           issue_code: "gate-supersession-caller-binding-invalid"
         }));
       }
-      return fail25(createProjectError("GATE_SUPERSEDED", {
+      return fail24(createProjectError("GATE_SUPERSEDED", {
         gate_id: outcome.value.record.value.gate_id,
         old_subject_digest: outcome.value.record.value.supersession.old_subject_digest,
         new_subject_digest: supplemental2.new_subject_digest
       }));
     }
     if (!("record" in outcome.value) || outcome.value.record.value.outcome !== "decided") {
-      return fail25(createProjectError("STATE_INVALID", {
+      return fail24(createProjectError("STATE_INVALID", {
         phase_instance: call.input.phase_instance,
         issue_code: "gate-resolution-missing-decision"
       }));
@@ -71291,7 +70746,7 @@ async function handleGate(call, context2) {
 }
 
 // src/mcp/handlers/state.ts
-var fail26 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail25 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function stateResultId(intentId) {
   return parseSafeId(`state-result-${sha256Bytes(new TextEncoder().encode(intentId)).slice(0, 32)}`);
 }
@@ -71329,32 +70784,6 @@ async function handleState(call, context2) {
       services.dependencies,
       { authority: services.authority, call },
       async (current, identifiedCall) => {
-        if (artifact === void 0 && call.input.step === "adjudicate" && call.input.status === "running" && current.value.step === "produce" && current.value.status === "succeeded") {
-          const loadRetained = services.dependencies.load_retained_result;
-          if (loadRetained === void 0) throw new TypeError("evidence preparation dependencies are unavailable");
-          const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
-          if (!produce.ok) return produce;
-          const notCurrent = () => fail26(createProjectError("STATE_INVALID", {
-            phase_instance: current.value.phase_instance,
-            issue_code: "adjudication-subject-not-current"
-          }));
-          let reviews;
-          try {
-            reviews = await loadCurrentReviewSet(
-              { read_state: services.dependencies.read_state, load_retained_result: loadRetained },
-              services.authority,
-              current.value.phase_instance
-            );
-          } catch {
-            return notCurrent();
-          }
-          if (!reviews.ok) return reviews;
-          const predecessor = produce.value.artifact.artifact_kind === "document" ? produce.value.artifact.editorial_predecessor : void 0;
-          const reviewsBindPredecessor = predecessor !== void 0 && reviews.value.subject_digest === predecessor.subject_digest && reviews.value.input_fingerprint === predecessor.input_fingerprint;
-          if (produce.value.artifact_digest !== reviews.value.subject_digest && !reviewsBindPredecessor) {
-            return notCurrent();
-          }
-        }
         let preparedResult;
         if (artifact?.artifact_kind === "document" || artifact?.artifact_kind === "implementation-output") {
           if (retainedBytes === void 0 || scanner === void 0) {
@@ -71387,7 +70816,7 @@ async function handleState(call, context2) {
           const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
           if (!produce.ok) return produce;
           if (artifact.evidence.subject_digest !== produce.value.artifact_digest) {
-            return fail26(createProjectError("STATE_INVALID", {
+            return fail25(createProjectError("STATE_INVALID", {
               phase_instance: current.value.phase_instance,
               issue_code: "review-subject-not-current-produce-artifact"
             }));
@@ -71449,7 +70878,7 @@ async function handleState(call, context2) {
         let commitObserved = false;
         let legacyResumePhase;
         const authenticatedGateApprovals2 = [];
-        const completionSignal = artifact === void 0 && decodePhaseInstance(current.value.phase_instance).kind === "phase-impl" && current.value.step === "adjudicate" && current.value.status === "succeeded";
+        const completionSignal = artifact === void 0 && decodePhaseInstance(current.value.phase_instance).kind === "phase-impl" && current.value.step === "triage" && current.value.status === "succeeded";
         if (completionSignal) {
           const reference = current.value.authoritative_results.find((entry) => entry.phase_instance === current.value.phase_instance && entry.step === "produce");
           const loader = services.dependencies.load_retained_result;
@@ -71484,7 +70913,7 @@ async function handleState(call, context2) {
           }
         }
         const decodedTarget = decodePhaseInstance(call.input.phase_instance);
-        const legacyJumpSignal = artifact === void 0 && current.value.phase_instance === "design" && current.value.step === "adjudicate" && current.value.status === "succeeded" && decodedTarget.kind === "phase-design" && Number(decodedTarget.phase) > 1;
+        const legacyJumpSignal = artifact === void 0 && current.value.phase_instance === "design" && current.value.step === "triage" && current.value.status === "succeeded" && decodedTarget.kind === "phase-design" && Number(decodedTarget.phase) > 1;
         if (legacyJumpSignal) {
           const resolved = await findLegacyImportResumePhase(
             services.dependencies,
@@ -71546,7 +70975,7 @@ async function handleState(call, context2) {
 
 // src/mcp/handlers/waiver.ts
 import { isDeepStrictEqual as isDeepStrictEqual14 } from "node:util";
-var fail27 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail26 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function authenticWaiverOriginArchive(request, decision2, origin2) {
   const payload = decision2.value.outcome === "decided" ? decision2.value.envelope.payload : void 0;
   return request.value.gate_id === origin2.origin_gate_id && request.value.task_id === origin2.task_id && request.value.phase_instance === origin2.phase_instance && request.value.subject_digest === origin2.subject_digest && request.value.context_digest === origin2.origin_context_digest && request.value.current_evidence.set_digest === origin2.current_evidence_set_digest && (request.value.kind === "review-trigger" || request.value.kind === "adjudication-failure") && decision2.digest === origin2.origin_decision_digest && payload?.decision === "waiver-requested" && isDeepStrictEqual14(payload.rule, origin2.rule) && "waiver_scope" in request.value.context && isDeepStrictEqual14(request.value.context.waiver_scope, origin2.scope) && validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok;
@@ -71557,7 +70986,7 @@ async function handleWaiver(call, context2) {
     if (!session.ok) return session;
     const { services } = session.value;
     const state = services.state;
-    if (state === void 0) return fail27(createProjectError("STATE_MISSING", { phase_instance: call.input.origin.phase_instance }));
+    if (state === void 0) return fail26(createProjectError("STATE_MISSING", { phase_instance: call.input.origin.phase_instance }));
     const originTarget = await resolveTaskPath({
       runner: services.runner,
       taskId: services.authority.task_id,
@@ -71590,10 +71019,10 @@ async function handleWaiver(call, context2) {
       );
       originDecision = Object.freeze({ ...originDecision, value: parseGateDecisionRecord(originDecision.value) });
     } catch {
-      return fail27(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-request-invalid" }));
+      return fail26(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-request-invalid" }));
     }
     if (!authenticWaiverOriginArchive(originRequest, originDecision, call.input.origin)) {
-      return fail27(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-decision-invalid" }));
+      return fail26(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-decision-invalid" }));
     }
     const identified = identifyTransactionRequest(call, services.authority, call.input.input_fingerprint);
     const waiverContext2 = Object.freeze({ origin: call.input.origin, rationale: call.input.rationale });
@@ -71617,7 +71046,7 @@ async function handleWaiver(call, context2) {
     });
     if (!resolved.ok) return resolved;
     if (!("record" in resolved.value) || resolved.value.record.value.outcome !== "waiver-decided") {
-      return fail27(createProjectError("STATE_INVALID", {
+      return fail26(createProjectError("STATE_INVALID", {
         phase_instance: call.input.origin.phase_instance,
         issue_code: "waiver-resolution-missing-decision"
       }));
@@ -71647,7 +71076,6 @@ function createToolHandlers() {
   return Object.freeze({
     archflow_state: handleState,
     archflow_counter_review: handleCounterReview,
-    archflow_adjudicate: handleAdjudicate,
     archflow_gate: handleGate,
     archflow_waiver: handleWaiver
   });

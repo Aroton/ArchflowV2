@@ -7,7 +7,7 @@
  * reconciliation, and pruning ignore staged bytes.
  */
 import { execFileSync } from "node:child_process";
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -56,11 +56,16 @@ async function repository(): Promise<string> {
   git(root, "commit", "-q", "-m", "root");
   const scaffolded = await scaffoldRepositoryAssets({ working_directory: root });
   if (!scaffolded.ok) throw new Error(scaffolded.error.code);
-  // No mechanical enforcement declarations, so adjudication never forces a human gate here.
+  // Deliberately no active rules anywhere: this suite is about the staged-request handoff, so
+  // the merged counter-review call runs a single dispatch and reports the constitution review as
+  // not-run. The scaffolded rule set is retired wholesale, keeping one deprecated entry.
+  for (const name of readdirSync(join(root, ".archflow", "constitution"))) {
+    if (name.endsWith(".md") && name !== "README.md") rmSync(join(root, ".archflow", "constitution", name));
+  }
   writeFileSync(join(root, ".archflow", "constitution", "20-data.md"), `---
 id: task-and-evidence-isolation
 version: 1
-status: active
+status: deprecated
 review_trigger: A task reads or mutates another task's files.
 ---
 Tasks are isolated from one another.
@@ -294,6 +299,7 @@ describe("staged-request handoff", () => {
       const reviewed = await h.invoke("archflow_counter_review", counter.staged!.reference as unknown as PlainJsonValue);
       expect(reviewed.request_digest).toBe(counter.request_digest);
       expect(reviewed.verdict).toBe("pass");
+      expect(reviewed.constitution).toEqual({ status: "not-run", reason: "no-active-constitution-rules" });
     } finally {
       stub.restore();
     }

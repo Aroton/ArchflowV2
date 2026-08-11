@@ -475,9 +475,11 @@ describe("durable gate lifecycle", () => {
 
   it("atomically enacts and exact-replays a gate-authorized re-entry", async () => {
     const h = await harness();
+    // The one sanctioned gate-authorized re-entry predecessor: triage-succeeded, where the
+    // post-triage constitution gates open.
     const predecessor = {
       ...initialState(h.authority),
-      step: "adjudicate" as const,
+      step: "triage" as const,
       status: "succeeded" as const,
       attempt: parseSafeInteger(3),
     };
@@ -487,7 +489,7 @@ describe("durable gate lifecycle", () => {
       ...h.dependencies,
       resolve_gate_reentry_fingerprint: async ({ request, current }) => {
         expect(request.phase_instance).toBe(PHASE);
-        expect(["adjudicate", "produce"]).toContain(current.value.step);
+        expect(["triage", "produce"]).toContain(current.value.step);
         return { schema_version: "1", ok: true, value: nextFingerprint };
       },
     };
@@ -616,7 +618,7 @@ describe("durable gate lifecycle", () => {
     const h = await harness();
     writeFileSync(h.authority.state.absolute, canonicalDocument({
       ...initialState(h.authority),
-      step: "adjudicate",
+      step: "triage",
       status: "succeeded",
       attempt: parseSafeInteger(2),
     }).bytes);
@@ -674,7 +676,7 @@ describe("durable gate lifecycle", () => {
       ok: true,
       value: {
         effect: "redirect-upstream",
-        state: { value: { step: "adjudicate", status: "succeeded", attempt: 2 } },
+        state: { value: { step: "triage", status: "succeeded", attempt: 2 } },
       },
     });
     if (!firstResolved.ok) return;
@@ -724,9 +726,9 @@ describe("durable gate lifecycle", () => {
 
   it("rejects gate re-entry from the wrong step, status, phase, or exhausted-attempt context", async () => {
     const cases = [
-      { label: "step", state: { step: "triage" as const, status: "succeeded" as const }, phase: PHASE },
-      { label: "status", state: { step: "adjudicate" as const, status: "running" as const }, phase: PHASE },
-      { label: "phase", state: { step: "adjudicate" as const, status: "succeeded" as const },
+      { label: "step", state: { step: "counter_review" as const, status: "succeeded" as const }, phase: PHASE },
+      { label: "status", state: { step: "triage" as const, status: "running" as const }, phase: PHASE },
+      { label: "phase", state: { step: "triage" as const, status: "succeeded" as const },
         phase: encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(13) }) },
     ] as const;
     for (const testCase of cases) {
@@ -766,7 +768,7 @@ describe("durable gate lifecycle", () => {
 
     const h = await harness();
     writeFileSync(h.authority.state.absolute, canonicalDocument({
-      ...initialState(h.authority), step: "adjudicate", status: "succeeded", attempt: parseSafeInteger(3),
+      ...initialState(h.authority), step: "triage", status: "succeeded", attempt: parseSafeInteger(3),
     }).bytes);
     const dependencies: GateLifecycleDependencies = {
       ...h.dependencies,
@@ -775,7 +777,7 @@ describe("durable gate lifecycle", () => {
     const input: GateOpenInput = {
       ...gateInput(h, "gate-wrong-attempt"),
       kind: "attempts-exhausted",
-      context: { step: "adjudicate", attempts: 2, maximum_attempts: 2 },
+      context: { step: "triage", attempts: 2, maximum_attempts: 2 },
     };
     const opened = await openDurableGate(dependencies, input);
     expect(opened.ok).toBe(true);

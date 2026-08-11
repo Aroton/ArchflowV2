@@ -378,6 +378,12 @@ export async function buildCheckpointImportStateCall(
       expected_state_digest: facts.state.digest,
     };
   }
+  if (head.step === "adjudicate") {
+    // "adjudicate" is a retired state-machine position: the constitution review now runs inside
+    // archflow_counter_review, so a checkpoint chain recorded against the old pipeline cannot be
+    // imported — the task restarts or goes through the explicit upgrade flow.
+    return invalid(facts.services, "manual-import-step-retired");
+  }
   const callInput: StateInput = {
     schema_version: "1",
     task_id: facts.services.authority.task_id,
@@ -548,7 +554,7 @@ export async function classifyManualWorkflowStatus(input: ManualWorkflowStatusIn
   }));
 }
 
-export type ManualFallbackTool = "archflow_state" | "archflow_counter_review" | "archflow_adjudicate" | "archflow_gate" | "archflow_waiver";
+export type ManualFallbackTool = "archflow_state" | "archflow_counter_review" | "archflow_gate" | "archflow_waiver";
 type ManualFallbackCommon = Readonly<{
   authority: ManualAuthority;
   unavailable_reason?: string;
@@ -562,13 +568,8 @@ export type ManualFallbackInput =
       rubric: PlainJsonValue;
       upstreams: readonly PlainJsonValue[];
       producer_family: "claude" | "codex";
-    }>)
-  | (ManualFallbackCommon & Readonly<{
-      tool: "archflow_adjudicate";
-      proposed_call: PlainJsonValue;
-      source_artifact: PlainJsonValue;
-      evidence: readonly PlainJsonValue[];
-      upstreams: readonly PlainJsonValue[];
+      /** Active constitution rules; present exactly when the degraded constitution review must also run. */
+      constitution_rules?: readonly PlainJsonValue[];
     }>)
   | (ManualFallbackCommon & Readonly<{
       tool: "archflow_gate" | "archflow_waiver";
@@ -586,7 +587,7 @@ export type ManualFallbackOutput = Readonly<{
 /** Emits the exact serializable material for one unavailable MCP capability. */
 export async function buildManualFallback(input: ManualFallbackInput): Promise<ProjectResult<ManualFallbackOutput>> {
   const facts = resolveManualAuthority(input.authority);
-  if (!( ["archflow_state", "archflow_counter_review", "archflow_adjudicate", "archflow_gate", "archflow_waiver"] as const)
+  if (!( ["archflow_state", "archflow_counter_review", "archflow_gate", "archflow_waiver"] as const)
     .includes(input.tool)) return invalid(facts.services, "manual-fallback-tool-invalid");
   const current = facts.head ?? facts.state?.value;
   const selector = Object.freeze({
@@ -615,27 +616,25 @@ export async function buildManualFallback(input: ManualFallbackInput): Promise<P
     }),
     resume_action: resume,
   }));
-  if (input.tool === "archflow_counter_review" || input.tool === "archflow_adjudicate") {
-    const role = input.tool === "archflow_counter_review" ? "counter-review" : "adjudication";
-    const proposed = input.tool === "archflow_counter_review"
-      ? Object.freeze({
-          proposed_call: input.proposed_call,
-          source_artifact: input.source_artifact,
-          rubric: input.rubric,
-          upstreams: input.upstreams,
-          reviewer_family: input.producer_family === "claude" ? "codex" : "claude",
-        })
-      : Object.freeze({
-          proposed_call: input.proposed_call,
-          source_artifact: input.source_artifact,
-          evidence: input.evidence,
-          upstreams: input.upstreams,
-        });
+  if (input.tool === "archflow_counter_review") {
+    const reviewerFamily = input.producer_family === "claude" ? "codex" : "claude";
+    const proposed = Object.freeze({
+      proposed_call: input.proposed_call,
+      source_artifact: input.source_artifact,
+      rubric: input.rubric,
+      upstreams: input.upstreams,
+      reviewer_family: reviewerFamily,
+      ...(input.constitution_rules === undefined ? {} : { constitution_rules: input.constitution_rules }),
+    });
     const prompt = [
-      `Perform the degraded ${role} for task ${facts.services.authority.task_id}.`,
+      `Perform the degraded counter-review for task ${facts.services.authority.task_id}.`,
       current === undefined ? "Use the supplied initialization and artifact." : `Pinned milestone: ${current.phase_instance}/${current.step} at revision ${current.revision}.`,
+      `The reviewer must be the ${reviewerFamily} family — never the producer's own — for every part of this review.`,
       "Return only schema-valid evidence bound to the supplied artifact and pinned inputs.",
-      input.tool === "archflow_adjudicate" ? "If the evidence is uncertain or the operation fails, open a human gate; do not infer advancement." : "Do not change files or advance the workflow.",
+      ...(input.constitution_rules === undefined ? [] : [
+        "Also perform the degraded constitution review against the supplied constitution_rules: report per-rule compliance, drift against the supplied upstreams, and any review triggers. If a verdict is uncertain, report it as uncertain; do not infer advancement.",
+      ]),
+      "Do not change files or advance the workflow.",
       `Pinned input (use exactly): ${JSON.stringify(pinned)}`,
       `Proposed input (use exactly): ${JSON.stringify(proposed)}`,
     ].join("\n");

@@ -29,6 +29,13 @@ export type TransitionPlanInput = Readonly<{
   recomputed_input_fingerprint: Sha256Digest;
   artifact?: DurableArtifact;
   result_reference?: AuthoritativeResultRef;
+  /**
+   * The constitution-review evidence reference archflow_counter_review installs alongside its
+   * review reference — one atomic transaction, so no durable state can hold the rubric review
+   * without the constitution verdict it was dispatched with. Legal only on a succeeded
+   * counter_review target; the reference itself is retained under the "adjudicate" evidence slot.
+   */
+  constitution_result_reference?: AuthoritativeResultRef;
   completion_subject_digest?: Sha256Digest;
   authenticated_gate_approvals?: readonly AuthenticatedGateApproval[];
   commit_observed?: boolean;
@@ -91,12 +98,9 @@ function sameSubject(current: TaskStateV1, target: TransitionTarget): boolean {
  * The status a same-phase run-step request may legally target for `step` from `current`, derived
  * from the same movement rules `legalMovement` enforces: mid-step work records its terminal
  * result, a failed step re-enters running, a succeeded step hands off to its pipeline successor
- * (or back to produce from any succeeded step — the author-initiated re-entry). A succeeded
- * produce may also enter adjudicate directly: the editorial-revision path re-runs adjudication
- * while retained reviews stay bound to the declared predecessor. That edge is structural here;
- * the archflow_state handler refuses it semantically when no current evidence covers the
- * subject or its declared predecessor. `undefined` means no run-step request from this state
- * can legally target `step`, so no request template may honestly be emitted for it.
+ * (or back to produce from any succeeded step — the author-initiated re-entry). `undefined`
+ * means no run-step request from this state can legally target `step`, so no request template
+ * may honestly be emitted for it.
  */
 export function legalRunStepStatus(
   current: Pick<TaskStateV1, "phase_instance" | "step" | "status" | "terminal" | "open_gate">,
@@ -111,7 +115,6 @@ export function legalRunStepStatus(
   }
   if (current.status !== "succeeded") return undefined;
   if (step === "produce") return "running";
-  if (current.step === "produce" && step === "adjudicate") return "running";
   const steps = pipeline(current.phase_instance);
   const index = steps.indexOf(current.step);
   return index >= 0 && steps[index + 1] === step ? "running" : undefined;
@@ -148,20 +151,9 @@ function legalMovement(input: TransitionPlanInput): boolean {
   if (current.status !== "succeeded" || target.status !== "running") return false;
   if (target.phase_instance === current.phase_instance && target.step === "produce") {
     // Author-initiated produce re-entry from any succeeded pipeline step (attempt + 1): the
-    // triage/adjudicate cases are the accepted-finding re-entry, the produce/counter_review
-    // cases are the sanctioned new-information door — downstream evidence simply goes stale.
+    // triage case is the accepted-finding re-entry, the produce/counter_review cases are the
+    // sanctioned new-information door — downstream evidence simply goes stale.
     return target.attempt === current.attempt + 1;
-  }
-  if (
-    target.phase_instance === current.phase_instance &&
-    current.step === "produce" &&
-    target.step === "adjudicate"
-  ) {
-    // Editorial re-entry into adjudication at the same attempt. Structurally this admits any
-    // succeeded produce; the archflow_state handler refuses the entry unless current review
-    // evidence covers the subject or its declared editorial predecessor, so a task can never
-    // strand in adjudicate without evidence.
-    return target.attempt === current.attempt;
   }
   const steps = pipeline(current.phase_instance);
   const index = steps.indexOf(current.step);
@@ -222,8 +214,7 @@ function resultReferenceMatches(input: TransitionPlanInput): boolean {
   const reference = input.result_reference;
   const sourceKind = input.artifact?.artifact_kind;
   const evidenceStep = input.target.step === "counter_review" ||
-    input.target.step === "triage" ||
-    input.target.step === "adjudicate";
+    input.target.step === "triage";
   const producing = input.target.status === "succeeded" && (
     (input.target.step === "produce" && (sourceKind === "document" || sourceKind === "implementation-output")) ||
     evidenceStep
@@ -232,6 +223,16 @@ function resultReferenceMatches(input: TransitionPlanInput): boolean {
   if (reference === undefined) return false;
   return reference.phase_instance === input.target.phase_instance &&
     reference.step === input.target.step &&
+    reference.input_fingerprint === input.recomputed_input_fingerprint;
+}
+
+function constitutionReferenceMatches(input: TransitionPlanInput): boolean {
+  const reference = input.constitution_result_reference;
+  if (reference === undefined) return true;
+  return input.target.status === "succeeded" &&
+    input.target.step === "counter_review" &&
+    reference.step === "adjudicate" &&
+    reference.phase_instance === input.target.phase_instance &&
     reference.input_fingerprint === input.recomputed_input_fingerprint;
 }
 
@@ -255,14 +256,15 @@ function hasAuthenticatedCommittedOutput(input: TransitionPlanInput): boolean {
   const decoded = decodePhaseInstance(input.current.phase_instance);
   if (
     decoded.kind !== "phase-impl" ||
-    input.current.step !== "adjudicate" ||
+    input.current.step !== "triage" ||
     input.current.status !== "succeeded" ||
     input.current.terminal !== undefined ||
     input.current.open_gate !== undefined ||
     input.completion_subject_digest === undefined ||
     input.commit_observed !== true ||
     input.artifact !== undefined ||
-    input.result_reference !== undefined
+    input.result_reference !== undefined ||
+    input.constitution_result_reference !== undefined
   ) return false;
   for (const authenticated of input.authenticated_gate_approvals ?? []) {
     assertAuthenticatedGateApproval(authenticated);
@@ -307,12 +309,17 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
   }
   if (
     decodedCurrent.kind === "phase-impl" &&
-    input.current.step === "adjudicate" &&
+    input.current.step === "triage" &&
     input.current.status === "succeeded" &&
     input.target.phase_instance !== input.current.phase_instance &&
     !committedOutput
   ) return invalid(input, from, to);
-  if (!legalMovement(input) || !artifactMatches(input) || !resultReferenceMatches(input)) {
+  if (
+    !legalMovement(input) ||
+    !artifactMatches(input) ||
+    !resultReferenceMatches(input) ||
+    !constitutionReferenceMatches(input)
+  ) {
     return invalid(input, from, to);
   }
 
@@ -324,9 +331,16 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     status: input.target.status,
     attempt: input.target.attempt,
     input_fingerprint: input.target.input_fingerprint,
-    authoritative_results: withResultReference(preserved.authoritative_results, input.result_reference),
+    authoritative_results: withResultReference(
+      withResultReference(preserved.authoritative_results, input.result_reference),
+      input.constitution_result_reference,
+    ),
   });
-  if (input.result_reference === undefined && !isDeepStrictEqual(draft.authoritative_results, input.current.authoritative_results)) {
+  if (
+    input.result_reference === undefined &&
+    input.constitution_result_reference === undefined &&
+    !isDeepStrictEqual(draft.authoritative_results, input.current.authoritative_results)
+  ) {
     throw new TypeError("transition planning changed authoritative results");
   }
   return ok(draft);
