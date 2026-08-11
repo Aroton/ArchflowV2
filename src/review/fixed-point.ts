@@ -19,7 +19,7 @@ import {
 import {
   assertAuthenticatedGateApproval,
   type AuthenticatedGateApproval,
-} from "../state/gates.js";
+} from "../state/gate-approvals.js";
 import {
   assertResolvedConstitution,
   type ResolvedConstitution,

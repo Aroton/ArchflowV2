@@ -20,7 +20,7 @@ The audit asked directly: how often is the MCP server actually down, and could d
 
 ### 2. `gates.ts` at 2,311 lines — load-bearing but overdue for a split
 
-At least five responsibilities in one file: gate lifecycle, decision templates, interface projection, approval re-authentication, and design-document phase parsing. (The sixth — an entire manual gate lifecycle, nearly a second implementation of the first — left with the degraded-mode retirement, #1.) The obvious first move is splitting along the remaining seams without changing behavior.
+**Resolved 2026-08-11.** The audit found at least five responsibilities in one file: gate lifecycle, decision templates, interface projection, approval re-authentication, and design-document phase parsing. (The sixth — an entire manual gate lifecycle, nearly a second implementation of the first — left with the degraded-mode retirement, #1.) The file is now split along those seams with no behavior change: `gate-core.ts` (shared vocabulary, dependency types, small pure helpers), `gate-approvals.ts` (the approval trust brand — WeakSet, assert, and the single mint site in `loadAuthenticatedGateApproval`, co-resident so minting stays module-private), `gate-decision-interface.ts` (decision templates and the human decision file), `legacy-import-resume.ts`, `planned-final-phase.ts`, and a ~900-line `gates.ts` that keeps the gate lifecycle itself.
 
 ### 3. Double protocol validation in `mcp/` — questionable weight
 

@@ -43510,69 +43510,9 @@ function parseSupplementalReviewRecord(value) {
   return parsed;
 }
 
-// src/state/gates.ts
+// src/state/gate-core.ts
 import { constants as fsConstants5 } from "node:fs";
-import { randomUUID as randomUUID2 } from "node:crypto";
 import { isDeepStrictEqual as isDeepStrictEqual6 } from "node:util";
-
-// src/contracts/workflow.ts
-var phaseSchema2 = external_exports.object({
-  id: external_exports.enum(PHASE_IDS),
-  skill: external_exports.string().min(1),
-  requires: external_exports.array(external_exports.enum(PHASE_IDS)).min(1).optional(),
-  iterates: external_exports.enum(ITERATION_POLICIES).optional(),
-  pipeline: external_exports.array(external_exports.enum(PIPELINE_STEPS)).min(1),
-  gate: external_exports.enum(GATE_POLICIES),
-  optional: external_exports.boolean().optional()
-}).strict();
-var workflowV1Schema = external_exports.object({ phases: external_exports.array(phaseSchema2) }).strict().superRefine((workflow, context2) => {
-  if (!sameJson(workflow, WORKFLOW_V1)) context2.addIssue({ code: "custom", message: "Workflow must match the fixed ArchFlow v1 graph exactly" });
-});
-var WORKFLOW_V1 = {
-  phases: [
-    { id: "explore", skill: "archflow-explore", pipeline: ["produce"], gate: "never", optional: true },
-    { id: "prd", skill: "archflow-prd", pipeline: ["produce", "counter_review", "triage"], gate: "always" },
-    { id: "design", skill: "archflow-design", requires: ["prd"], pipeline: ["produce", "counter_review", "triage"], gate: "always" },
-    { id: "phase-design", skill: "archflow-phase-design", requires: ["design"], iterates: "per_phase", pipeline: ["produce", "counter_review", "triage"], gate: "on_trigger" },
-    { id: "phase-impl", skill: "archflow-phase-impl", requires: ["phase-design"], iterates: "per_phase", pipeline: ["produce", "counter_review", "triage"], gate: "on_trigger" }
-  ]
-};
-function sameJson(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-function parseWorkflowV1(value) {
-  assertPlainJson(value, "workflow");
-  return workflowV1Schema.parse(value);
-}
-function parseWorkflowYaml(source, label = "workflow.yaml") {
-  return parseWorkflowV1(parseSingleYamlDocument(source, label));
-}
-
-// src/state/transitions.ts
-function phaseKind(instance) {
-  return decodePhaseInstance(instance).kind;
-}
-function pipeline(instance) {
-  const kind = phaseKind(instance);
-  const configured = WORKFLOW_V1.phases.find((phase4) => phase4.id === kind);
-  if (configured === void 0) throw new TypeError("phase instance is absent from the fixed workflow");
-  return configured.pipeline;
-}
-function legalRunStepStatus(current, step) {
-  if (current.terminal !== void 0 || current.open_gate !== void 0) return void 0;
-  if (current.step === step) {
-    if (current.status === "running") return "succeeded";
-    if (current.status === "failed") return "running";
-    return step === "produce" && current.status === "succeeded" ? "running" : void 0;
-  }
-  if (current.status !== "succeeded") return void 0;
-  if (step === "produce") return "running";
-  const steps = pipeline(current.phase_instance);
-  const index = steps.indexOf(current.step);
-  return index >= 0 && steps[index + 1] === step ? "running" : void 0;
-}
-
-// src/state/gates.ts
 var DECISIONS = Object.freeze({
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
   "review-trigger": ["approve", "revise", "reject", "waiver-requested", "cancel"],
@@ -43584,13 +43524,6 @@ var DECISIONS = Object.freeze({
   "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
   "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"]
 });
-var authenticatedGateApprovals = /* @__PURE__ */ new WeakSet();
-var authenticatedGateApprovalBrand = /* @__PURE__ */ Symbol("AuthenticatedGateApproval");
-function assertAuthenticatedGateApproval(value) {
-  if (!authenticatedGateApprovals.has(value)) {
-    throw new TypeError("an authenticated gate approval is required");
-  }
-}
 function deepFreezeGateJson(value) {
   if (value !== null && typeof value === "object") {
     for (const nested of Object.values(value)) deepFreezeGateJson(nested);
@@ -43653,6 +43586,142 @@ function parseInterface(value, request2, supplemental2 = []) {
   bindEnvelope(request2, envelope2);
   return parseGateDecisionRecord({ schema_version: "1", gate_id: request2.gate_id, task_id: request2.task_id, phase_instance: request2.phase_instance, kind: request2.kind, subject_digest: request2.subject_digest, context_digest: request2.context_digest, supplemental: supplemental2, outcome: "decided", envelope: envelope2 });
 }
+async function stateOrFailure(dependencies, authority) {
+  const read = await dependencies.read_state(authority.state);
+  return read.kind === "canonical" ? ok7(read.document) : read.kind === "unreadable" ? io(authority, "gate-state-read") : issue2("CONTRACT_INVALID", void 0, `gate-state-${read.kind}`);
+}
+
+// src/contracts/workflow.ts
+var phaseSchema2 = external_exports.object({
+  id: external_exports.enum(PHASE_IDS),
+  skill: external_exports.string().min(1),
+  requires: external_exports.array(external_exports.enum(PHASE_IDS)).min(1).optional(),
+  iterates: external_exports.enum(ITERATION_POLICIES).optional(),
+  pipeline: external_exports.array(external_exports.enum(PIPELINE_STEPS)).min(1),
+  gate: external_exports.enum(GATE_POLICIES),
+  optional: external_exports.boolean().optional()
+}).strict();
+var workflowV1Schema = external_exports.object({ phases: external_exports.array(phaseSchema2) }).strict().superRefine((workflow, context2) => {
+  if (!sameJson(workflow, WORKFLOW_V1)) context2.addIssue({ code: "custom", message: "Workflow must match the fixed ArchFlow v1 graph exactly" });
+});
+var WORKFLOW_V1 = {
+  phases: [
+    { id: "explore", skill: "archflow-explore", pipeline: ["produce"], gate: "never", optional: true },
+    { id: "prd", skill: "archflow-prd", pipeline: ["produce", "counter_review", "triage"], gate: "always" },
+    { id: "design", skill: "archflow-design", requires: ["prd"], pipeline: ["produce", "counter_review", "triage"], gate: "always" },
+    { id: "phase-design", skill: "archflow-phase-design", requires: ["design"], iterates: "per_phase", pipeline: ["produce", "counter_review", "triage"], gate: "on_trigger" },
+    { id: "phase-impl", skill: "archflow-phase-impl", requires: ["phase-design"], iterates: "per_phase", pipeline: ["produce", "counter_review", "triage"], gate: "on_trigger" }
+  ]
+};
+function sameJson(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+function parseWorkflowV1(value) {
+  assertPlainJson(value, "workflow");
+  return workflowV1Schema.parse(value);
+}
+function parseWorkflowYaml(source, label = "workflow.yaml") {
+  return parseWorkflowV1(parseSingleYamlDocument(source, label));
+}
+
+// src/state/gate-approvals.ts
+import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
+var authenticatedGateApprovals = /* @__PURE__ */ new WeakSet();
+var authenticatedGateApprovalBrand = /* @__PURE__ */ Symbol("AuthenticatedGateApproval");
+function assertAuthenticatedGateApproval(value) {
+  if (!authenticatedGateApprovals.has(value)) {
+    throw new TypeError("an authenticated gate approval is required");
+  }
+}
+async function loadAuthenticatedGateApproval(dependencies, authority, approval) {
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  assertPlainJson(approval, "approval reference");
+  const claimed = structuredClone(approval);
+  const current = await stateOrFailure(dependencies, authority);
+  if (!current.ok) return current;
+  if (current.value.value.task_id !== authority.task_id || !verifyRepositoryIdentity(
+    current.value.value.repository_identity_digest,
+    authority.repository_identity
+  ).ok) return issue2("STATE_INVALID", current.value.value, "gate-approval-state-authority-mismatch");
+  const durable = current.value.value.approvals.find((entry) => entry.gate_id === claimed.gate_id);
+  if (durable === void 0 || !isDeepStrictEqual7(durable, claimed)) {
+    return issue2("STATE_INVALID", current.value.value, "gate-approval-not-current");
+  }
+  const requestPath = await resolvePath6(
+    dependencies,
+    authority,
+    gateRequestClaim(claimed.gate_id),
+    "decision"
+  );
+  const decisionPath = await resolvePath6(
+    dependencies,
+    authority,
+    gateDecisionClaim(claimed.gate_id),
+    "decision"
+  );
+  if (!requestPath.ok) return requestPath;
+  if (!decisionPath.ok) return decisionPath;
+  const request2 = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+  const decision2 = await readCanonical(
+    decisionPath.value,
+    "gate decision record",
+    parseGateDecisionRecord
+  );
+  if (request2 === "missing" || request2 === "invalid") {
+    return issue2("STATE_INVALID", current.value.value, "gate-approval-request-invalid");
+  }
+  if (decision2 === "missing" || decision2 === "invalid") {
+    return issue2("STATE_INVALID", current.value.value, "gate-approval-decision-invalid");
+  }
+  if (decision2.digest !== claimed.decision_digest || !validateDurableSemantics({
+    gate_request: request2,
+    gate_decision: decision2
+  }).ok || decision2.value.outcome !== "decided" || gateDecisionEffect(decision2.value.envelope.payload) !== "advance" || request2.value.task_id !== authority.task_id || request2.value.gate_id !== claimed.gate_id || request2.value.kind !== claimed.gate_kind || request2.value.subject_digest !== claimed.subject_digest || decision2.value.gate_id !== claimed.gate_id || decision2.value.task_id !== authority.task_id || decision2.value.kind !== claimed.gate_kind || decision2.value.subject_digest !== claimed.subject_digest) return issue2("STATE_INVALID", current.value.value, "gate-approval-binding-invalid");
+  const authenticated = {
+    approval: deepFreezeGateJson(structuredClone(durable)),
+    request: deepFreezeGateJson(structuredClone(request2.value)),
+    decision: deepFreezeGateJson(structuredClone(decision2.value))
+  };
+  Object.defineProperty(authenticated, authenticatedGateApprovalBrand, {
+    value: true,
+    enumerable: false,
+    writable: false,
+    configurable: false
+  });
+  Object.freeze(authenticated);
+  authenticatedGateApprovals.add(authenticated);
+  return ok7(authenticated);
+}
+
+// src/state/transitions.ts
+function phaseKind(instance) {
+  return decodePhaseInstance(instance).kind;
+}
+function pipeline(instance) {
+  const kind = phaseKind(instance);
+  const configured = WORKFLOW_V1.phases.find((phase4) => phase4.id === kind);
+  if (configured === void 0) throw new TypeError("phase instance is absent from the fixed workflow");
+  return configured.pipeline;
+}
+function legalRunStepStatus(current, step) {
+  if (current.terminal !== void 0 || current.open_gate !== void 0) return void 0;
+  if (current.step === step) {
+    if (current.status === "running") return "succeeded";
+    if (current.status === "failed") return "running";
+    return step === "produce" && current.status === "succeeded" ? "running" : void 0;
+  }
+  if (current.status !== "succeeded") return void 0;
+  if (step === "produce") return "running";
+  const steps = pipeline(current.phase_instance);
+  const index = steps.indexOf(current.step);
+  return index >= 0 && steps[index + 1] === step ? "running" : void 0;
+}
+
+// src/state/gate-decision-interface.ts
+import { randomUUID as randomUUID2 } from "node:crypto";
 var TEMPLATE_REASON = "Record the human decision reason.";
 var TEMPLATE_RATIONALE = "Record the human decision rationale.";
 var TEMPLATE_RESOLUTION = "Record the human resolution for this rule.";
@@ -43802,72 +43871,6 @@ async function writeGateDecisionInterface(dependencies, authority, value) {
   } catch (error51) {
     return error51 instanceof TaskLockError ? io(authority, `gate-lock-${error51.stage}`) : io(authority, "gate-interface-write");
   }
-}
-async function stateOrFailure(dependencies, authority) {
-  const read = await dependencies.read_state(authority.state);
-  return read.kind === "canonical" ? ok7(read.document) : read.kind === "unreadable" ? io(authority, "gate-state-read") : issue2("CONTRACT_INVALID", void 0, `gate-state-${read.kind}`);
-}
-async function loadAuthenticatedGateApproval(dependencies, authority, approval) {
-  assertInternalTransactionAuthority(authority, {
-    runner: dependencies.runner,
-    environment: dependencies.environment
-  });
-  assertPlainJson(approval, "approval reference");
-  const claimed = structuredClone(approval);
-  const current = await stateOrFailure(dependencies, authority);
-  if (!current.ok) return current;
-  if (current.value.value.task_id !== authority.task_id || !verifyRepositoryIdentity(
-    current.value.value.repository_identity_digest,
-    authority.repository_identity
-  ).ok) return issue2("STATE_INVALID", current.value.value, "gate-approval-state-authority-mismatch");
-  const durable = current.value.value.approvals.find((entry) => entry.gate_id === claimed.gate_id);
-  if (durable === void 0 || !isDeepStrictEqual6(durable, claimed)) {
-    return issue2("STATE_INVALID", current.value.value, "gate-approval-not-current");
-  }
-  const requestPath = await resolvePath6(
-    dependencies,
-    authority,
-    gateRequestClaim(claimed.gate_id),
-    "decision"
-  );
-  const decisionPath = await resolvePath6(
-    dependencies,
-    authority,
-    gateDecisionClaim(claimed.gate_id),
-    "decision"
-  );
-  if (!requestPath.ok) return requestPath;
-  if (!decisionPath.ok) return decisionPath;
-  const request2 = await readCanonical(requestPath.value, "gate request", parseGateRequest);
-  const decision2 = await readCanonical(
-    decisionPath.value,
-    "gate decision record",
-    parseGateDecisionRecord
-  );
-  if (request2 === "missing" || request2 === "invalid") {
-    return issue2("STATE_INVALID", current.value.value, "gate-approval-request-invalid");
-  }
-  if (decision2 === "missing" || decision2 === "invalid") {
-    return issue2("STATE_INVALID", current.value.value, "gate-approval-decision-invalid");
-  }
-  if (decision2.digest !== claimed.decision_digest || !validateDurableSemantics({
-    gate_request: request2,
-    gate_decision: decision2
-  }).ok || decision2.value.outcome !== "decided" || gateDecisionEffect(decision2.value.envelope.payload) !== "advance" || request2.value.task_id !== authority.task_id || request2.value.gate_id !== claimed.gate_id || request2.value.kind !== claimed.gate_kind || request2.value.subject_digest !== claimed.subject_digest || decision2.value.gate_id !== claimed.gate_id || decision2.value.task_id !== authority.task_id || decision2.value.kind !== claimed.gate_kind || decision2.value.subject_digest !== claimed.subject_digest) return issue2("STATE_INVALID", current.value.value, "gate-approval-binding-invalid");
-  const authenticated = {
-    approval: deepFreezeGateJson(structuredClone(durable)),
-    request: deepFreezeGateJson(structuredClone(request2.value)),
-    decision: deepFreezeGateJson(structuredClone(decision2.value))
-  };
-  Object.defineProperty(authenticated, authenticatedGateApprovalBrand, {
-    value: true,
-    enumerable: false,
-    writable: false,
-    configurable: false
-  });
-  Object.freeze(authenticated);
-  authenticatedGateApprovals.add(authenticated);
-  return ok7(authenticated);
 }
 
 // src/state/fingerprint-readers.ts

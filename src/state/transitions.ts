@@ -12,7 +12,7 @@ import type { PipelineStep } from "../contracts/vocabulary.js";
 import {
   assertAuthenticatedGateApproval,
   type AuthenticatedGateApproval,
-} from "./gates.js";
+} from "./gate-approvals.js";
 import type { NextStateDraft } from "./transaction.js";
 
 export type TransitionTarget = Readonly<{

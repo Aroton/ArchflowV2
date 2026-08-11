@@ -24,7 +24,7 @@ import {
 import { loadCurrentProduceSubject } from "../state/produce-subject.js";
 import type { ProductionServices } from "../state/production.js";
 import { resolvePinnedConstitution } from "../state/constitution.js";
-import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "../state/gates.js";
+import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "../state/gate-approvals.js";
 import { APPROVAL_ARTIFACT_KINDS } from "../state/request-templates.js";
 import { buildCommitAuthorizationInput, currentTargetRef, pendingAdjudicationGate } from "../state/status.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";

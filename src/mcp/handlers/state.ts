@@ -9,11 +9,8 @@ import {
   type ToolSuccess,
 } from "../../contracts/mcp-tools.js";
 import { parseTaskPathClaim } from "../../contracts/path-claims.js";
-import {
-  findLegacyImportResumePhase,
-  loadAuthenticatedGateApproval,
-  type AuthenticatedGateApproval,
-} from "../../state/gates.js";
+import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "../../state/gate-approvals.js";
+import { findLegacyImportResumePhase } from "../../state/legacy-import-resume.js";
 import {
   loadCurrentReviewSet,
   prepareEvidenceResult,

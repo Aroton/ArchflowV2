@@ -7162,7 +7162,7 @@
       ]
     },
     "src/local/build-request.ts": {
-      "bytes": 23323,
+      "bytes": 23332,
       "format": "esm",
       "imports": [
         {
@@ -7247,8 +7247,8 @@
         },
         {
           "kind": "import-statement",
-          "original": "../state/gates.js",
-          "path": "src/state/gates.ts"
+          "original": "../state/gate-approvals.js",
+          "path": "src/state/gate-approvals.ts"
         },
         {
           "kind": "import-statement",
@@ -7924,7 +7924,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 13282,
+      "bytes": 13338,
       "format": "esm",
       "imports": [
         {
@@ -7954,8 +7954,13 @@
         },
         {
           "kind": "import-statement",
-          "original": "../../state/gates.js",
-          "path": "src/state/gates.ts"
+          "original": "../../state/gate-approvals.js",
+          "path": "src/state/gate-approvals.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../state/legacy-import-resume.js",
+          "path": "src/state/legacy-import-resume.ts"
         },
         {
           "kind": "import-statement",
@@ -8640,7 +8645,7 @@
       ]
     },
     "src/review/fixed-point.ts": {
-      "bytes": 16489,
+      "bytes": 16498,
       "format": "esm",
       "imports": [
         {
@@ -8655,8 +8660,8 @@
         },
         {
           "kind": "import-statement",
-          "original": "../state/gates.js",
-          "path": "src/state/gates.ts"
+          "original": "../state/gate-approvals.js",
+          "path": "src/state/gate-approvals.ts"
         },
         {
           "kind": "import-statement",
@@ -9028,6 +9033,169 @@
         }
       ]
     },
+    "src/state/gate-approvals.ts": {
+      "bytes": 5340,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable-gate.js",
+          "path": "src/contracts/durable-gate.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable.js",
+          "path": "src/contracts/durable.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/gates.js",
+          "path": "src/contracts/gates.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/plain-json.js",
+          "path": "src/contracts/plain-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../repository/paths.js",
+          "path": "src/repository/paths.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../repository/identity.js",
+          "path": "src/repository/identity.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./authority.js",
+          "path": "src/state/authority.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./gate-core.js",
+          "path": "src/state/gate-core.ts"
+        }
+      ]
+    },
+    "src/state/gate-core.ts": {
+      "bytes": 13759,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable-gate.js",
+          "path": "src/contracts/durable-gate.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable.js",
+          "path": "src/contracts/durable.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/errors.js",
+          "path": "src/contracts/errors.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/gates.js",
+          "path": "src/contracts/gates.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/plain-json.js",
+          "path": "src/contracts/plain-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../repository/paths.js",
+          "path": "src/repository/paths.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./snapshots.js",
+          "path": "src/state/snapshots.ts"
+        }
+      ]
+    },
+    "src/state/gate-decision-interface.ts": {
+      "bytes": 8692,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable-gate.js",
+          "path": "src/contracts/durable-gate.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/errors.js",
+          "path": "src/contracts/errors.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/gates.js",
+          "path": "src/contracts/gates.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/plain-json.js",
+          "path": "src/contracts/plain-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./authority.js",
+          "path": "src/state/authority.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./gate-core.js",
+          "path": "src/state/gate-core.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./lock.js",
+          "path": "src/state/lock.ts"
+        }
+      ]
+    },
     "src/state/gate-wait.ts": {
       "bytes": 2885,
       "format": "esm",
@@ -9050,29 +9218,9 @@
       ]
     },
     "src/state/gates.ts": {
-      "bytes": 92687,
+      "bytes": 62423,
       "format": "esm",
       "imports": [
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:crypto"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
-        },
         {
           "external": true,
           "kind": "import-statement",
@@ -9105,11 +9253,6 @@
         },
         {
           "kind": "import-statement",
-          "original": "../contracts/durable-legacy-import.js",
-          "path": "src/contracts/durable-legacy-import.ts"
-        },
-        {
-          "kind": "import-statement",
           "original": "../contracts/evidence.js",
           "path": "src/contracts/evidence.ts"
         },
@@ -9127,11 +9270,6 @@
           "kind": "import-statement",
           "original": "../contracts/gates.js",
           "path": "src/contracts/gates.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/plain-json.js",
-          "path": "src/contracts/plain-json.ts"
         },
         {
           "kind": "import-statement",
@@ -9165,6 +9303,11 @@
         },
         {
           "kind": "import-statement",
+          "original": "./gate-core.js",
+          "path": "src/state/gate-core.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "./gate-wait.js",
           "path": "src/state/gate-wait.ts"
         },
@@ -9175,8 +9318,18 @@
         },
         {
           "kind": "import-statement",
+          "original": "./legacy-import-resume.js",
+          "path": "src/state/legacy-import-resume.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "./lock.js",
           "path": "src/state/lock.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./planned-final-phase.js",
+          "path": "src/state/planned-final-phase.ts"
         },
         {
           "kind": "import-statement",
@@ -9187,6 +9340,21 @@
           "kind": "import-statement",
           "original": "./snapshots.js",
           "path": "src/state/snapshots.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./gate-approvals.js",
+          "path": "src/state/gate-approvals.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./gate-decision-interface.js",
+          "path": "src/state/gate-decision-interface.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./legacy-import-resume.js",
+          "path": "src/state/legacy-import-resume.ts"
         }
       ]
     },
@@ -9390,6 +9558,47 @@
           "kind": "import-statement",
           "original": "./authority.js",
           "path": "src/state/authority.ts"
+        }
+      ]
+    },
+    "src/state/legacy-import-resume.ts": {
+      "bytes": 3121,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable-legacy-import.js",
+          "path": "src/contracts/durable-legacy-import.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../repository/paths.js",
+          "path": "src/repository/paths.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/path-claims.js",
+          "path": "src/contracts/path-claims.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./gate-core.js",
+          "path": "src/state/gate-core.ts"
         }
       ]
     },
@@ -9599,6 +9808,22 @@
           "kind": "import-statement",
           "original": "../contracts/phase-instance.js",
           "path": "src/contracts/phase-instance.ts"
+        }
+      ]
+    },
+    "src/state/planned-final-phase.ts": {
+      "bytes": 3914,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./gate-core.js",
+          "path": "src/state/gate-core.ts"
         }
       ]
     },
@@ -10112,7 +10337,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 48698,
+      "bytes": 48778,
       "format": "esm",
       "imports": [
         {
@@ -10202,8 +10427,13 @@
         },
         {
           "kind": "import-statement",
-          "original": "./gates.js",
-          "path": "src/state/gates.ts"
+          "original": "./gate-approvals.js",
+          "path": "src/state/gate-approvals.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./gate-decision-interface.js",
+          "path": "src/state/gate-decision-interface.ts"
         },
         {
           "kind": "import-statement",
@@ -10354,7 +10584,7 @@
       ]
     },
     "src/state/transitions.ts": {
-      "bytes": 15585,
+      "bytes": 15594,
       "format": "esm",
       "imports": [
         {
@@ -10384,15 +10614,15 @@
         },
         {
           "kind": "import-statement",
-          "original": "./gates.js",
-          "path": "src/state/gates.ts"
+          "original": "./gate-approvals.js",
+          "path": "src/state/gate-approvals.ts"
         }
       ]
     }
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1982277,
+      "bytes": 1982400,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10664,12 +10894,17 @@
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:crypto"
+          "path": "node:util"
         },
         {
           "external": true,
           "kind": "import-statement",
           "path": "node:util"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
         },
         {
           "external": true,
@@ -11892,8 +12127,17 @@
         "src/state/fingerprint.ts": {
           "bytesInOutput": 2502
         },
+        "src/state/gate-approvals.ts": {
+          "bytesInOutput": 3472
+        },
+        "src/state/gate-core.ts": {
+          "bytesInOutput": 5935
+        },
+        "src/state/gate-decision-interface.ts": {
+          "bytesInOutput": 6617
+        },
         "src/state/gates.ts": {
-          "bytesInOutput": 15955
+          "bytesInOutput": 0
         },
         "src/state/implementation-manifest.ts": {
           "bytesInOutput": 29628
@@ -11961,7 +12205,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2762870,
+      "bytes": 2763176,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12318,7 +12562,22 @@
         {
           "external": true,
           "kind": "import-statement",
+          "path": "node:util"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
           "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:buffer"
         },
         {
           "external": true,
@@ -12344,11 +12603,6 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:buffer"
         },
         {
           "external": true,
@@ -13524,11 +13778,17 @@
         "src/state/fingerprint.ts": {
           "bytesInOutput": 2502
         },
+        "src/state/gate-approvals.ts": {
+          "bytesInOutput": 3466
+        },
+        "src/state/gate-core.ts": {
+          "bytesInOutput": 7726
+        },
         "src/state/gate-wait.ts": {
           "bytesInOutput": 2065
         },
         "src/state/gates.ts": {
-          "bytesInOutput": 70693
+          "bytesInOutput": 54729
         },
         "src/state/implementation-manifest.ts": {
           "bytesInOutput": 15693
@@ -13539,6 +13799,9 @@
         "src/state/layout.ts": {
           "bytesInOutput": 5634
         },
+        "src/state/legacy-import-resume.ts": {
+          "bytesInOutput": 1935
+        },
         "src/state/lock.ts": {
           "bytesInOutput": 2272
         },
@@ -13547,6 +13810,9 @@
         },
         "src/state/maintenance.ts": {
           "bytesInOutput": 7929
+        },
+        "src/state/planned-final-phase.ts": {
+          "bytesInOutput": 2977
         },
         "src/state/produce-subject.ts": {
           "bytesInOutput": 8390

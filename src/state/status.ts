@@ -25,12 +25,9 @@ import type { TransactionAuthority } from "./authority.js";
 import { assertInternalTransactionAuthority, createInternalTransactionAuthority } from "./authority.js";
 import { resolvePinnedConstitution, type ResolvedConstitution } from "./constitution.js";
 import { deriveCurrentEvidenceSet, loadRetainedEvidence, type RetainedEvidenceSet } from "./evidence-results.js";
-import {
-  buildGateDecisionTemplates,
-  loadAuthenticatedGateApproval,
-  type AuthenticatedGateApproval,
-  type GateLifecycleDependencies,
-} from "./gates.js";
+import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
+import { buildGateDecisionTemplates } from "./gate-decision-interface.js";
+import type { GateLifecycleDependencies } from "./gate-core.js";
 import { deriveNextAction, type NextAction } from "./next-action.js";
 import { buildNextActionRequest } from "./request-templates.js";
 import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject } from "./produce-subject.js";
