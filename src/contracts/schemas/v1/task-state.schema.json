@@ -1,10 +1,353 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:archflow:schema:v1:task-state",
-  "title": "ArchFlow Task State v1",
-  "$comment": "`state.json` — the durable state of truth for one task. This schema is the SOLE shape authority for `TaskStateV1` (D2): `src/contracts/durable-state.ts` declares the TypeScript aliases and NO Zod mirror. The complete committed intent binding authenticates one immutable receipt and outcome. Absence is omission from `required`, never `null`.",
+  "$defs": {
+    "stepStatus": {
+      "type": "string",
+      "enum": [
+        "running",
+        "succeeded",
+        "failed"
+      ]
+    },
+    "gateKind": {
+      "type": "string",
+      "enum": [
+        "artifact-approval",
+        "review-trigger",
+        "material-drift",
+        "adjudication-failure",
+        "attempts-exhausted",
+        "constitution-edit",
+        "commit-authorization",
+        "restore-collision",
+        "migration-audit"
+      ]
+    },
+    "authoritativeResultRef": {
+      "type": "object",
+      "properties": {
+        "phase_instance": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+        },
+        "step": {
+          "type": "string",
+          "enum": [
+            "produce",
+            "counter_review",
+            "triage",
+            "adjudicate"
+          ]
+        },
+        "result_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "result_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+        },
+        "input_fingerprint": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "manifest_path": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+        }
+      },
+      "required": [
+        "phase_instance",
+        "step",
+        "result_digest",
+        "result_id",
+        "input_fingerprint",
+        "manifest_path"
+      ],
+      "additionalProperties": false
+    },
+    "approvalRef": {
+      "type": "object",
+      "properties": {
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "gate_kind": {
+          "$ref": "#/$defs/gateKind"
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "decision_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "resolved_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "gate_id",
+        "gate_kind",
+        "subject_digest",
+        "decision_digest",
+        "resolved_at_revision"
+      ],
+      "additionalProperties": false
+    },
+    "waiverRef": {
+      "type": "object",
+      "properties": {
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "rule_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+        },
+        "rule_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "scope": {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "review-trigger",
+                "adjudication-failure"
+              ]
+            },
+            "boundary": {
+              "type": "string",
+              "enum": [
+                "subject",
+                "phase",
+                "task"
+              ]
+            }
+          },
+          "required": [
+            "operation",
+            "boundary"
+          ],
+          "additionalProperties": false
+        },
+        "granted": {
+          "type": "boolean"
+        },
+        "expires": {
+          "type": "string",
+          "const": "task-complete"
+        },
+        "granted_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "gate_id",
+        "rule_id",
+        "rule_version",
+        "subject_digest",
+        "scope",
+        "granted",
+        "expires",
+        "granted_at_revision"
+      ],
+      "additionalProperties": false
+    },
+    "openGateRef": {
+      "type": "object",
+      "properties": {
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "gate_kind": {
+          "$ref": "#/$defs/gateKind"
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "context_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "frozen_state_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "waiver_origin_gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "gate_id",
+        "gate_kind",
+        "subject_digest",
+        "context_digest",
+        "frozen_state_digest",
+        "opened_at_revision"
+      ],
+      "additionalProperties": false
+    },
+    "committedIntentRef": {
+      "type": "object",
+      "properties": {
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "receipt_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "outcome_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "prior_revision": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+        },
+        "resulting_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "result_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+        }
+      },
+      "required": [
+        "intent_id",
+        "request_digest",
+        "receipt_digest",
+        "outcome_digest",
+        "prior_revision",
+        "resulting_revision",
+        "result_id"
+      ],
+      "additionalProperties": false
+    },
+    "adoptedCheckpointRef": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "checkpoint_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        }
+      },
+      "required": [
+        "revision",
+        "checkpoint_digest"
+      ],
+      "additionalProperties": false
+    }
+  },
   "type": "object",
-  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "task_id": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+    },
+    "repository_identity_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "phase_instance": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+    },
+    "step": {
+      "type": "string",
+      "enum": [
+        "produce",
+        "counter_review",
+        "triage",
+        "adjudicate"
+      ]
+    },
+    "status": {
+      "$ref": "#/$defs/stepStatus"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "input_fingerprint": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "initialization_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "config_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "workflow_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "constitution_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "policy_base_commit": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+    },
+    "authoritative_results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/authoritativeResultRef"
+      }
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/approvalRef"
+      }
+    },
+    "waivers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/waiverRef"
+      }
+    },
+    "planned_final_phase": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "open_gate": {
+      "$ref": "#/$defs/openGateRef"
+    },
+    "committed_intent": {
+      "$ref": "#/$defs/committedIntentRef"
+    },
+    "adopted_checkpoint": {
+      "$ref": "#/$defs/adoptedCheckpointRef"
+    },
+    "terminal": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "abandoned"
+      ]
+    }
+  },
   "required": [
     "schema_version",
     "task_id",
@@ -24,179 +367,5 @@
     "approvals",
     "waivers"
   ],
-  "properties": {
-    "schema_version": { "const": "1" },
-    "task_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-    "repository_identity_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    "revision": {
-      "$comment": "D8 — pins its own minimum and does NOT $ref `safeInteger`, which admits 0. There is no revision 0. Strict monotonicity across writes is Phase 9's, not a shape rule.",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 9007199254740991
-    },
-    "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-    "step": {
-      "$comment": "`PIPELINE_STEPS` (`vocabulary.ts:2`), re-exported by `workflow.ts:7-8`.",
-      "enum": ["produce", "counter_review", "triage", "adjudicate"]
-    },
-    "status": { "$ref": "#/$defs/stepStatus" },
-    "attempt": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
-    "input_fingerprint": {
-      "$comment": "D13 — the IN-FLIGHT step's declared-input fingerprint, so Phase 9 can raise INPUT_FINGERPRINT_MISMATCH before a transition. Per-result fingerprints live in `authoritative_results[*].input_fingerprint`.",
-      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-    },
-    "initialization_digest": {
-      "$comment": "The adopted task-initialization or legacy-import-initialization document. A reference, not authority: this schema never resolves it.",
-      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-    },
-    "config_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    "workflow_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    "constitution_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    "policy_base_commit": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid" },
-    "authoritative_results": {
-      "$comment": "SET — sorted by the TUPLE (phase_instance, step), duplicates rejected. The keyword joins components with U+0000, which every ID primitive rejects, so the joined comparison is exactly componentwise ordinal comparison.",
-      "type": "array",
-      "items": { "$ref": "#/$defs/authoritativeResultRef" },
-      "x-archflow-sorted-unique-by": ["phase_instance", "step"]
-    },
-    "approvals": {
-      "$comment": "SET — sorted by `gate_id`, duplicates rejected.",
-      "type": "array",
-      "items": { "$ref": "#/$defs/approvalRef" },
-      "x-archflow-sorted-unique-by": "gate_id"
-    },
-    "waivers": {
-      "$comment": "SET — sorted by `gate_id`, duplicates rejected.",
-      "type": "array",
-      "items": { "$ref": "#/$defs/waiverRef" },
-      "x-archflow-sorted-unique-by": "gate_id"
-    },
-    "planned_final_phase": {
-      "$comment": "The positive final implementation phase recorded from consecutive exact `### Phase N: Name` headings in the human-approved design. Absence is valid only when that design carries the explicit `<!-- archflow:phase-plan:open-ended -->` marker.",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 9007199254740991
-    },
-    "open_gate": {
-      "$comment": "A single optional object, NEVER an array: a nested or concurrent gate is unrepresentable rather than merely rejected. Phase 12 owns the one-active-gate lifecycle — when this may be set, cleared, or superseded.",
-      "$ref": "#/$defs/openGateRef"
-    },
-    "committed_intent": { "$ref": "#/$defs/committedIntentRef" },
-    "adopted_checkpoint": { "$ref": "#/$defs/adoptedCheckpointRef" },
-    "terminal": {
-      "$comment": "`TERMINAL_STATES`. Declared inline rather than as a $def because copying its two enum members is cheaper than promoting another shared reference shape.",
-      "enum": ["complete", "abandoned"]
-    }
-  },
-  "$defs": {
-    "stepStatus": {
-      "$comment": "`STEP_STATUSES` (`durable-state.ts`).",
-      "enum": ["running", "succeeded", "failed"]
-    },
-    "gateKind": {
-      "$comment": "`GATE_KINDS` (`gates.ts:41`) — the nine kinds. No `gateKind` $def shipped anywhere in schemas/v1/ before this one; it is declared once here rather than inlined twice inside `approvalRef` and `openGateRef`.",
-      "enum": [
-        "artifact-approval",
-        "review-trigger",
-        "material-drift",
-        "adjudication-failure",
-        "attempts-exhausted",
-        "constitution-edit",
-        "commit-authorization",
-        "restore-collision",
-        "migration-audit"
-      ]
-    },
-    "authoritativeResultRef": {
-      "$comment": "D21. `result_digest` names a result manifest and `manifest_path` names where it lives; neither is resolved here or by `validateDurableSemantics`, whose subject has no slot that could carry the target. Phase 10 materializes them.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["phase_instance", "step", "result_digest", "result_id", "input_fingerprint", "manifest_path"],
-      "properties": {
-        "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-        "step": { "enum": ["produce", "counter_review", "triage", "adjudicate"] },
-        "result_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        "result_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" },
-        "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        "manifest_path": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" }
-      }
-    },
-    "approvalRef": {
-      "$comment": "D21. `resolved_at_revision` pins its own minimum (D8).",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["gate_id", "gate_kind", "subject_digest", "decision_digest", "resolved_at_revision"],
-      "properties": {
-        "gate_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        "gate_kind": { "$ref": "#/$defs/gateKind" },
-        "subject_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        "decision_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        "resolved_at_revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
-      }
-    },
-    "waiverRef": {
-      "$comment": "D21. `expires` is the const `task-complete` — the narrowest representation of the only expiry this project has. Phase 12 records waiver scope; Phase 14 owns expiry policy enforcement. `rule_version` and `granted_at_revision` pin their own minimums (D8).",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["gate_id", "rule_id", "rule_version", "subject_digest", "scope", "granted", "expires", "granted_at_revision"],
-      "properties": {
-        "gate_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        "rule_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" },
-        "rule_version": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
-        "subject_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        "scope": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["operation", "boundary"],
-          "properties": {
-            "operation": { "enum": ["review-trigger", "adjudication-failure"] },
-            "boundary": { "enum": ["subject", "phase", "task"] }
-          }
-        },
-        "granted": { "type": "boolean" },
-        "expires": { "const": "task-complete" },
-        "granted_at_revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
-      }
-    },
-    "openGateRef": {
-      "$comment": "D21. `opened_at_revision` pins its own minimum (D8).",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["gate_id", "gate_kind", "subject_digest", "context_digest", "frozen_state_digest", "opened_at_revision"],
-      "properties": {
-        "gate_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        "gate_kind": { "$ref": "#/$defs/gateKind" },
-        "subject_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        "context_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        "frozen_state_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        "waiver_origin_gate_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        "opened_at_revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
-      }
-    },
-    "committedIntentRef": {
-      "$comment": "The complete state authority for one committed immutable receipt. `prior_revision` admits 0 for initialization; `resulting_revision` is at least 1.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["intent_id", "request_digest", "receipt_digest", "outcome_digest", "prior_revision", "resulting_revision", "result_id"],
-      "properties": {
-        "intent_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        "request_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        "receipt_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        "outcome_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        "prior_revision": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger" },
-        "resulting_revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
-        "result_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" }
-      }
-    },
-    "adoptedCheckpointRef": {
-      "$comment": "Legacy: written only by the retired checkpoint import flow. Tolerated so pre-retirement task states still validate; nothing writes it anymore, and a state carrying it is preserved verbatim.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["revision", "checkpoint_digest"],
-      "properties": {
-        "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
-        "checkpoint_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" }
-      }
-    }
-  }
+  "additionalProperties": false
 }

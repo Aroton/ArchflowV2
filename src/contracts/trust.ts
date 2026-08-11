@@ -151,9 +151,12 @@ export const authorityLinkDataSchema = z.object({ schema_version: z.literal("1")
   if ((link.role === "gate-counter-review") !== (link.gate_id !== undefined)) context.addIssue({ code: "custom", path: ["gate_id"], message: "gate_id is required only for gate-counter-review authority" });
 });
 const slotBase = { evidence_digest: digestSchema, producer_family: familySchema, reviewer_family: familySchema };
-const counterSlotSchema = z.object({ ...slotBase, role: z.literal("counter-review"), assurance: z.enum(["server-attested", "degraded"]), independence: z.literal("opposite-family") }).strict().superRefine((slot, context) => { if (slot.producer_family === slot.reviewer_family) context.addIssue({ code: "custom", message: "counter-review families must differ" }); });
-const gateCounterSlotSchema = z.object({ ...slotBase, role: z.literal("gate-counter-review"), assurance: z.enum(["server-attested", "degraded"]), independence: z.literal("opposite-family"), gate_id: pathSafeIdV1Schema }).strict().superRefine((slot, context) => { if (slot.producer_family === slot.reviewer_family) context.addIssue({ code: "custom", message: "gate-counter-review families must differ" }); });
-export const requiredReviewSlotsSchema = z.union([z.tuple([counterSlotSchema]), z.tuple([counterSlotSchema, gateCounterSlotSchema])]).superRefine((slots, context) => {
+export const counterSlotSchema = z.object({ ...slotBase, role: z.literal("counter-review"), assurance: z.enum(["server-attested", "degraded"]), independence: z.literal("opposite-family") }).strict().superRefine((slot, context) => { if (slot.producer_family === slot.reviewer_family) context.addIssue({ code: "custom", message: "counter-review families must differ" }); });
+export const gateCounterSlotSchema = z.object({ ...slotBase, role: z.literal("gate-counter-review"), assurance: z.enum(["server-attested", "degraded"]), independence: z.literal("opposite-family"), gate_id: pathSafeIdV1Schema }).strict().superRefine((slot, context) => { if (slot.producer_family === slot.reviewer_family) context.addIssue({ code: "custom", message: "gate-counter-review families must differ" }); });
+/** The two slot layouts, named so `evidence-slots.schema.json` can register and emit each arm. */
+export const counterOnlySlotsSchema = z.tuple([counterSlotSchema]);
+export const counterWithGateCounterSlotsSchema = z.tuple([counterSlotSchema, gateCounterSlotSchema]);
+export const requiredReviewSlotsSchema = z.union([counterOnlySlotsSchema, counterWithGateCounterSlotsSchema]).superRefine((slots, context) => {
   try { validateSlots(slots); } catch (error) { context.addIssue({ code: "custom", message: error instanceof Error ? error.message : "invalid review slots" }); }
 });
 export const currentEvidenceSetRefSchema = z.object({ set_digest: digestSchema, slots: requiredReviewSlotsSchema }).strict();

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { ReferencedEvidence, Sha256Digest, TaskSlug } from "./evidence.js";
-import { taskSlugV1Schema } from "./evidence.js";
+import { createTaskSlugV1Schema } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
 
 export const REVIEW_VERDICTS = ["pass", "advisory", "fail"] as const;
@@ -51,9 +51,11 @@ export type RawReview = {
 /** Semantically checked review data. This type intentionally carries no authority brand. */
 export type DerivedReview = RawReview;
 
-const nonBlank = z.string().min(1).refine((value) => value.trim().length > 0, "must contain a non-whitespace character");
+const nonBlank = z.string().min(1).regex(/\S/, "must contain a non-whitespace character");
 const id = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u) as unknown as z.ZodType<Sha256Digest>;
+const taskSlug = createTaskSlugV1Schema();
+const phaseInstance = z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
 const safePositive = z.number().int().positive().safe();
 
 export const ruleVersionRefSchema = z.object({ rule_id: id, rule_version: safePositive }).strict();
@@ -72,8 +74,8 @@ export const reviewFindingSchema = z.object({
 
 export const rawReviewSchema = z.object({
   schema_version: z.literal("1"),
-  task_id: taskSlugV1Schema,
-  phase_instance: z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
+  task_id: taskSlug,
+  phase_instance: phaseInstance,
   step: z.literal("counter_review"),
   role: z.enum(REVIEW_ROLES),
   subject_digest: digest,
@@ -83,7 +85,7 @@ export const rawReviewSchema = z.object({
   findings: z.array(reviewFindingSchema),
   matched_rule_versions: z.array(ruleVersionRefSchema),
   verdict: z.enum(REVIEW_VERDICTS),
-  blocking_count: z.number().int().nonnegative().safe(),
+  blocking_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
 }).strict().superRefine((review, context) => {
   const findingIds = new Set<string>();
   review.findings.forEach((finding, index) => {
@@ -111,6 +113,21 @@ function validateReviewClaims(parsed: RawReview): void {
   if (parsed.blocking_count !== expected.blocking_count) throw new TypeError(`review blocking_count must be ${expected.blocking_count}`);
   if (parsed.verdict !== expected.verdict) throw new TypeError(`review verdict must be ${expected.verdict}`);
 }
+
+/**
+ * The generated `review.schema.json` `$defs` layout. The def names are load-bearing:
+ * `projectCliOutputSchema` rewrites `taskSlug` (lookahead simplification) and `finding`
+ * (severity/blocking branches) by name before handing the document to a child host, and the
+ * document must stay self-contained because hosts cannot resolve cross-document references.
+ */
+export const reviewDocumentDefs = {
+  id,
+  taskSlug,
+  digest,
+  phaseInstance,
+  nonBlank,
+  finding: reviewFindingSchema,
+} as const;
 
 export function parseAndDeriveReview(value: unknown): DerivedReview {
   assertPlainJson(value, "review");

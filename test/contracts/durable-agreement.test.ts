@@ -15,6 +15,7 @@ import {
 } from "../../src/contracts/durable-primitives.js";
 import { taskInitializationV1Schema } from "../../src/contracts/durable-task-initialization.js";
 import { PATH_CLASSES } from "../../src/contracts/path-claims.js";
+import { SCHEMA_GENERATION_GROUPS } from "../../src/contracts/internal/schema-generation.js";
 import {
   assertZodAgreement,
   createJsonSchemaValidator,
@@ -313,6 +314,24 @@ describe("the pinned $def inventory resolves", () => {
     }
     // The one whole-root inventory entry.
     expect((ALL_SCHEMAS.get("secret-scan-result") as JsonObject).$id).toBe(SCHEMA_IDS.secretScanResult);
+  });
+
+  /**
+   * The committed files are generated, so the generation manifest is where a ref-layout rename
+   * would originate: a def dropped or renamed there regenerates every `$ref` that reached it.
+   * Pinning the manifest keeps the failure at the source instead of at a downstream resolver.
+   */
+  it("every inventory $def is declared by the generation manifest under that exact name", () => {
+    const planned = new Map(
+      SCHEMA_GENERATION_GROUPS.flatMap((group) => group.documents).map(
+        (document) => [document.file, Object.keys(document.defs ?? {})] as const
+      )
+    );
+    for (const [owner, defs] of DEF_INVENTORY) {
+      const declared = planned.get(owner);
+      expect(declared, `${owner} is not in the generation manifest`).toBeDefined();
+      for (const def of defs) expect(declared, `${owner} manifest is missing ${def}`).toContain(def);
+    }
   });
 
   it("every $ref in the pinned durable schemas resolves — Ajv raises no unresolved reference", () => {

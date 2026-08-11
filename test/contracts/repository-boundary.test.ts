@@ -46,11 +46,13 @@ describe("the contracts / repository directional boundary", () => {
   });
 
   it("keeps gate-contract's changed_path_class a single const, not the widened enum", () => {
-    const schema = readFileSync(
+    const schema = JSON.parse(readFileSync(
       join(repositoryRoot, "src", "contracts", "schemas", "v1", "gate-contract.schema.json"),
       "utf8"
-    );
-    expect(schema).toContain('"changed_path_class": { "const": "task-branch-constitution" }');
+    )) as { $defs: Record<string, { properties: Record<string, { const?: unknown; enum?: unknown }> }> };
+    const changed = schema.$defs["constitutionEditContext"]!.properties["changed_path_class"]!;
+    expect(changed.const).toBe("task-branch-constitution");
+    expect(changed.enum).toBeUndefined();
   });
 
   it("exports the durable intent contract without exposing internal state filesystem capabilities", () => {

@@ -2,107 +2,55 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://archflow.dev/schemas/v1/result-expectation",
   "type": "object",
-  "x-archflow-result-expectation-semantics": true,
-  "$defs": {
-    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" },
-    "taskSlug": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-    "pathSafeId": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-    "integer": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-    "identity": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "schema_version",
-        "tool",
-        "task_id",
-        "intent_id",
-        "input_fingerprint",
-        "request_digest",
-        "result_id",
-        "resulting_revision",
-        "success"
-      ],
-      "properties": {
-        "schema_version": { "const": "1" },
-        "tool": {
-          "enum": [
-            "archflow_state",
-            "archflow_counter_review",
-            "archflow_gate",
-            "archflow_waiver"
-          ]
-        },
-        "task_id": { "$ref": "#/$defs/taskSlug" },
-        "intent_id": { "$ref": "#/$defs/pathSafeId" },
-        "input_fingerprint": { "$ref": "#/$defs/digest" },
-        "request_digest": { "$ref": "#/$defs/digest" },
-        "result_id": { "$ref": "#/$defs/id" },
-        "resulting_revision": { "$ref": "#/$defs/integer" },
-        "success": { "type": "object" }
-      }
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1"
     },
-    "archflow_state": {
-      "allOf": [
-        { "$ref": "#/$defs/identity" },
-        {
-          "type": "object",
-          "properties": {
-            "tool": { "const": "archflow_state" },
-            "success": {
-              "$ref": "https://archflow.dev/schemas/v1/mcp-tools#/$defs/archflow_state/success"
-            }
-          }
-        }
+    "tool": {
+      "type": "string",
+      "enum": [
+        "archflow_state",
+        "archflow_counter_review",
+        "archflow_gate",
+        "archflow_waiver"
       ]
     },
-    "archflow_counter_review": {
-      "allOf": [
-        { "$ref": "#/$defs/identity" },
-        {
-          "type": "object",
-          "properties": {
-            "tool": { "const": "archflow_counter_review" },
-            "success": {
-              "$ref": "https://archflow.dev/schemas/v1/mcp-tools#/$defs/archflow_counter_review/success"
-            }
-          }
-        }
-      ]
+    "task_id": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
     },
-    "archflow_gate": {
-      "allOf": [
-        { "$ref": "#/$defs/identity" },
-        {
-          "type": "object",
-          "properties": {
-            "tool": { "const": "archflow_gate" },
-            "success": {
-              "$ref": "https://archflow.dev/schemas/v1/mcp-tools#/$defs/archflow_gate/success"
-            }
-          }
-        }
-      ]
+    "intent_id": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
     },
-    "archflow_waiver": {
-      "allOf": [
-        { "$ref": "#/$defs/identity" },
-        {
-          "type": "object",
-          "properties": {
-            "tool": { "const": "archflow_waiver" },
-            "success": {
-              "$ref": "https://archflow.dev/schemas/v1/mcp-tools#/$defs/archflow_waiver/success"
-            }
-          }
-        }
-      ]
-    }
+    "input_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "request_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "result_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "resulting_revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "success": {}
   },
-  "oneOf": [
-    { "$ref": "#/$defs/archflow_state" },
-    { "$ref": "#/$defs/archflow_counter_review" },
-    { "$ref": "#/$defs/archflow_gate" },
-    { "$ref": "#/$defs/archflow_waiver" }
-  ]
+  "required": [
+    "schema_version",
+    "tool",
+    "task_id",
+    "intent_id",
+    "input_fingerprint",
+    "request_digest",
+    "result_id",
+    "resulting_revision",
+    "success"
+  ],
+  "additionalProperties": false
 }

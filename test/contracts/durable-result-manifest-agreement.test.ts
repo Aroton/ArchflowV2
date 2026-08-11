@@ -6,11 +6,11 @@ import { resultManifestV1Schema } from "../../src/contracts/durable-result-manif
 import { assertZodAgreement, resultManifestV1Validator } from "../../src/contracts/validators.js";
 
 /**
- * The result-manifest half of the D2 agreement suite. The compiled JSON Schema
- * (`resultManifestV1Validator`) stays the runtime authority behind `parseResultManifest`; this file
- * proves `resultManifestV1Schema` is a mirror of it and never a second model — the two accept and
- * reject exactly the same values across every `source_artifact` arm and both
- * `x-archflow-sorted-unique-by` sites the schema carries.
+ * The result-manifest half of the D2 agreement suite. `resultManifestV1Schema` is now the runtime
+ * authority behind `parseResultManifest`, and `result-manifest.schema.json` is generated from it.
+ * The compiled validator is still exercised so the generated document and its Zod source cannot
+ * drift structurally across every `source_artifact` arm; the two set-ordering rules are Zod-only
+ * since generation retired the `x-archflow-sorted-unique-by` keyword.
  *
  * Cross-field digest and source-artifact correlations are `validateDurableSemantics` territory
  * (`result-manifest.test.ts`), so the digests here only need to be structurally valid.
@@ -164,24 +164,34 @@ describe("the result-manifest Zod mirror agrees with its JSON Schema authority",
   });
 });
 
-describe("both x-archflow-sorted-unique-by sites reject in both authorities", () => {
+/**
+ * Generation retired the `x-archflow-sorted-unique-by` keyword from the committed schema, so the
+ * compiled document now accepts these; the Zod authority behind `parseResultManifest` must keep
+ * rejecting them.
+ */
+describe("both set-ordering sites reject in the Zod authority", () => {
+  const rejectedByZodAuthority = (mutated: JsonObject, label: string): void => {
+    expect(resultManifestV1Validator.validate(mutated), `${label}: generated schema kept a retired keyword`).toBe(true);
+    expect(resultManifestV1Schema.safeParse(mutated).success, `${label}: Zod accepted`).toBe(false);
+  };
+
   it("rejects outputs out of path order", () => {
     const sample = manifest();
-    rejectedByBoth({ ...sample, outputs: [...(sample.outputs as readonly JsonObject[])].reverse() }, "outputs-unsorted");
+    rejectedByZodAuthority({ ...sample, outputs: [...(sample.outputs as readonly JsonObject[])].reverse() }, "outputs-unsorted");
   });
 
   it("rejects a duplicated outputs path", () => {
     const first = (manifest().outputs as readonly JsonObject[])[0]!;
-    rejectedByBoth(manifest({ outputs: [clone(first), clone(first)] }), "outputs-duplicate");
+    rejectedByZodAuthority(manifest({ outputs: [clone(first), clone(first)] }), "outputs-duplicate");
   });
 
   it("rejects projections out of path order", () => {
     const sample = manifest();
-    rejectedByBoth({ ...sample, projections: [...(sample.projections as readonly JsonObject[])].reverse() }, "projections-unsorted");
+    rejectedByZodAuthority({ ...sample, projections: [...(sample.projections as readonly JsonObject[])].reverse() }, "projections-unsorted");
   });
 
   it("rejects a duplicated projections path", () => {
     const first = (manifest().projections as readonly JsonObject[])[0]!;
-    rejectedByBoth(manifest({ projections: [clone(first), clone(first)] }), "projections-duplicate");
+    rejectedByZodAuthority(manifest({ projections: [clone(first), clone(first)] }), "projections-duplicate");
   });
 });

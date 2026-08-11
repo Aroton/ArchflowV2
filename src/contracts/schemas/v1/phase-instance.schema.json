@@ -4,32 +4,62 @@
   "oneOf": [
     {
       "type": "object",
-      "properties": { "kind": { "const": "prd" } },
-      "required": ["kind"],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": { "kind": { "const": "design" } },
-      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "prd"
+        }
+      },
+      "required": [
+        "kind"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "kind": { "const": "phase-design" },
-        "phase": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber" }
+        "kind": {
+          "type": "string",
+          "const": "design"
+        }
       },
-      "required": ["kind", "phase"],
+      "required": [
+        "kind"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "kind": { "const": "phase-impl" },
-        "phase": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber" }
+        "kind": {
+          "type": "string",
+          "const": "phase-design"
+        },
+        "phase": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
+        }
       },
-      "required": ["kind", "phase"],
+      "required": [
+        "kind",
+        "phase"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "phase-impl"
+        },
+        "phase": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/positiveSafePhaseNumber"
+        }
+      },
+      "required": [
+        "kind",
+        "phase"
+      ],
       "additionalProperties": false
     }
   ]

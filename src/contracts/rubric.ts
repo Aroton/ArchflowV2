@@ -21,7 +21,7 @@ export const rubricV1Schema = z.object({
   mode: z.enum(["adversarial"]),
   criteria: z.array(z.object({
     id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
-    text: z.string().min(1).refine((value) => value.trim().length > 0, "criterion text must contain a non-whitespace character"),
+    text: z.string().min(1).regex(/\S/, "criterion text must contain a non-whitespace character"),
     blocking: z.boolean(),
   }).strict()).min(1),
 }).strict().superRefine((rubric, context) => {

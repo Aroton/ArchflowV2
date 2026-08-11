@@ -60,6 +60,8 @@ describe("normative foundational JSON Schemas agree with Zod mirrors", () => {
     expect(assertZodAgreement(rubric, rubricValidator, rubricV1Schema)).toEqual(rubric);
     expect(() => assertZodAgreement({ ...rubric, mode: "friendly" }, rubricValidator, rubricV1Schema)).toThrow();
     expect(() => assertZodAgreement({ ...rubric, criteria: [{ id: "correctness", text: "   ", blocking: true }] }, rubricValidator, rubricV1Schema)).toThrow();
+    // x-archflow-unique-by retired from the generated rubric document; criterion-id uniqueness
+    // now lives in the rubric schema's superRefine, so Ajv accepts what Zod still rejects.
     const duplicateIdWithDifferentBodies = {
       ...rubric,
       criteria: [
@@ -68,8 +70,8 @@ describe("normative foundational JSON Schemas agree with Zod mirrors", () => {
       ]
     };
     const duplicateBefore = structuredClone(duplicateIdWithDifferentBodies);
-    expect(() => rubricValidator.assert(duplicateIdWithDifferentBodies)).toThrow(/x-archflow-unique-by/iu);
-    expect(() => assertZodAgreement(duplicateIdWithDifferentBodies, rubricValidator, rubricV1Schema)).toThrow(/schema validation failed/iu);
+    expect(rubricValidator.validate(duplicateIdWithDifferentBodies)).toBe(true);
+    expect(rubricV1Schema.safeParse(duplicateIdWithDifferentBodies).success).toBe(false);
     expect(duplicateIdWithDifferentBodies).toEqual(duplicateBefore);
 
     const constitutionValidator = createJsonSchemaValidator(await schema("constitution-rule"));

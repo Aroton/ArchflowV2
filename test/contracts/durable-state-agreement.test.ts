@@ -9,11 +9,11 @@ import { taskStateV1Schema } from "../../src/contracts/durable-state.js";
 import { assertZodAgreement, createJsonSchemaValidator } from "../../src/contracts/validators.js";
 
 /**
- * The `task-state` mirror agreement suite. `task-state.schema.json` is still the runtime-
- * authoritative validator; `taskStateV1Schema` is its Zod mirror, and this file proves the two
- * authorities accept and reject exactly the same values — including the three
- * `x-archflow-sorted-unique-by` set rules, each proven from a committed negative fixture so the
- * rejection survives a rewrite of either authority.
+ * The `task-state` agreement suite. `taskStateV1Schema` is now the runtime authority — `readTaskState`
+ * parses through it — and `task-state.schema.json` is generated from it. The compiled schema is
+ * still exercised so the generated document and its Zod source cannot drift structurally; the three
+ * set-ordering rules are Zod-only since generation retired the `x-archflow-sorted-unique-by`
+ * keyword, and each is proven from a committed negative fixture so the rejection survives a rewrite.
  */
 
 const validator = createJsonSchemaValidator<Record<string, unknown>>(
@@ -71,13 +71,19 @@ describe("task-state mirror agreement", () => {
     );
   });
 
-  describe("x-archflow-sorted-unique-by — both authorities reject each committed violation", () => {
+  /**
+   * Generation retired the `x-archflow-sorted-unique-by` keyword, so the compiled document accepts
+   * these fixtures; the Zod authority behind `readTaskState` must keep rejecting them.
+   */
+  describe("set ordering — the Zod authority rejects each committed violation", () => {
     it.each([
       ["task-state.invalid-unsorted-authoritative-results", "authoritative_results out of (phase_instance, step) order"],
       ["task-state.invalid-duplicate-approval-gate-id", "approvals with a duplicate gate_id"],
       ["task-state.invalid-duplicate-waiver-gate-id", "waivers with a duplicate gate_id"],
     ])("%s", (name, label) => {
-      rejectedByBoth(fixture(name), label);
+      const value = fixture(name);
+      expect(validator.validate(value), `${label}: generated schema kept a retired keyword`).toBe(true);
+      expect(taskStateV1Schema.safeParse(value).success, `${label}: Zod accepted`).toBe(false);
     });
   });
 });

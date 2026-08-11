@@ -1,10 +1,73 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:archflow:schema:v1:maintenance-record",
-  "title": "ArchFlow Maintenance Record v1",
-  "$comment": "The record of one human-authorized maintenance deletion pass. This schema is the SOLE shape authority for `MaintenanceRecordV1` (D2): `src/contracts/durable-maintenance.ts` declares the TypeScript aliases and NO Zod mirror, because no agent supplies a maintenance record across the MCP tool boundary. `total_bytes_deleted === sum(deletions[*].byte_count)` is not expressible here and stays with `validateDurableSemantics`.",
+  "$defs": {
+    "maintenanceDeletion": {
+      "type": "object",
+      "properties": {
+        "digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "path": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+        },
+        "byte_count": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "unreferenced-attempt",
+            "superseded-payload",
+            "retired-intent",
+            "retired-staged-request"
+          ]
+        }
+      },
+      "required": [
+        "digest",
+        "path",
+        "byte_count",
+        "category"
+      ],
+      "additionalProperties": false
+    }
+  },
   "type": "object",
-  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "maintenance_id": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+    },
+    "task_id": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+    },
+    "performed_at_revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "human_reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reachability_proof_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "deletions": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/maintenanceDeletion"
+      }
+    },
+    "total_bytes_deleted": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+    }
+  },
   "required": [
     "schema_version",
     "maintenance_id",
@@ -15,53 +78,5 @@
     "deletions",
     "total_bytes_deleted"
   ],
-  "properties": {
-    "schema_version": { "const": "1" },
-    "maintenance_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-    "task_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-    "performed_at_revision": {
-      "$comment": "D8 — pins its own minimum and does NOT $ref `safeInteger`, which admits 0. There is no revision 0.",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 9007199254740991
-    },
-    "human_reason": {
-      "$comment": "The human's own words, so a plain bounded string rather than an ID primitive.",
-      "type": "string",
-      "minLength": 1,
-      "x-archflow-max-utf8-bytes": 4096
-    },
-    "reachability_proof_digest": {
-      "$comment": "A reference, not authority: this schema never resolves the proof it names.",
-      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-    },
-    "deletions": {
-      "$comment": "SET — sorted by `digest`, duplicates rejected, and non-empty: a maintenance record that deleted nothing is not a record worth writing.",
-      "type": "array",
-      "minItems": 1,
-      "items": { "$ref": "#/$defs/maintenanceDeletion" },
-      "x-archflow-sorted-unique-by": "digest"
-    },
-    "total_bytes_deleted": {
-      "$comment": "Genuinely admits 0 — every deletion may have been zero-byte — so it DOES $ref `safeInteger` (D8). The equality with the sum of `byte_count` is semantic.",
-      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
-    }
-  },
-  "$defs": {
-    "maintenanceDeletion": {
-      "$comment": "Root-internal; nothing outside this file $refs it. `byte_count` genuinely admits 0 — a zero-byte payload is deletable — so it DOES $ref `safeInteger` (D8).",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["digest", "path", "byte_count", "category"],
-      "properties": {
-        "digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        "path": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-        "byte_count": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger" },
-        "category": {
-          "$comment": "`MAINTENANCE_DELETION_CATEGORIES` (`durable-maintenance.ts`).",
-          "enum": ["unreferenced-attempt", "superseded-payload", "retired-intent", "retired-staged-request"]
-        }
-      }
-    }
-  }
+  "additionalProperties": false
 }

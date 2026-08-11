@@ -17,7 +17,14 @@ const phaseSchema = z.object({
   optional: z.boolean().optional(),
 }).strict();
 
-export const workflowV1Schema = z.object({ phases: z.array(phaseSchema) }).strict().superRefine((workflow, context) => {
+/**
+ * The structural phase list. The generated `workflow.schema.json` overrides this def's emission
+ * with the pinned five-phase `prefixItems` graph — Zod cannot express object consts — while the
+ * `superRefine` below keeps the Zod authority pinned to the same graph.
+ */
+export const workflowPhasesV1Schema = z.array(phaseSchema);
+
+export const workflowV1Schema = z.object({ phases: workflowPhasesV1Schema }).strict().superRefine((workflow, context) => {
   if (!sameJson(workflow, WORKFLOW_V1)) context.addIssue({ code: "custom", message: "Workflow must match the fixed ArchFlow v1 graph exactly" });
 });
 

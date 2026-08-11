@@ -9,12 +9,11 @@ import { isSortedUniqueBy, tupleKey } from "./validators.js";
 
 /**
  * The record of one human-authorized maintenance deletion pass. A maintenance record is purely
- * server-internal — no agent supplies one across the MCP tool boundary — so production validation
- * stays on the compiled `maintenance-record.schema.json` (`maintenance-roots.ts`,
- * `local/commands.ts`). The Zod mirror below is a mirror and never a second model:
- * `assertZodAgreement` proves the two authorities accept and reject exactly the same values, and
- * `total_bytes_deleted === sum(deletions[*].byte_count)` — not expressible in either — stays with
- * `validateDurableSemantics`. Every type is a `type` alias rather than an `interface` (D1).
+ * server-internal — no agent supplies one across the MCP tool boundary. `maintenanceRecordV1Schema`
+ * below is the runtime shape authority — `parseMaintenanceRecord` is what `maintenance-roots.ts`
+ * and `local/commands.ts` validate through — and `maintenance-record.schema.json` is generated from
+ * it. `total_bytes_deleted === sum(deletions[*].byte_count)` — not expressible in either — stays
+ * with `validateDurableSemantics`. Every type is a `type` alias rather than an `interface` (D1).
  */
 
 /**
@@ -68,8 +67,8 @@ const sha256Digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
 /** The `human_reason` byte cap, mirroring `x-archflow-max-utf8-bytes` in the JSON Schema. */
 const HUMAN_REASON_MAX_UTF8_BYTES = 4096;
 
-/** Module-private: the `maintenanceDeletion` `$def` is root-internal; nothing outside `$ref`s it. */
-const maintenanceDeletionV1Schema = z.object({
+/** Exported for schema generation only: the `maintenanceDeletion` `$def` is root-internal. */
+export const maintenanceDeletionV1Schema = z.object({
   digest: sha256Digest,
   path: repositoryPathClaimV1Schema,
   byte_count: safeInteger,

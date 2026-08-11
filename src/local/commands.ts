@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../contracts/canonical.js";
-import type { MaintenanceRecordV1 } from "../contracts/durable-maintenance.js";
+import { parseMaintenanceRecord, type MaintenanceRecordV1 } from "../contracts/durable-maintenance.js";
 import { parseGateDecisionRecord, parseGateRequest } from "../contracts/durable-gate.js";
 import { parseResultManifest } from "../contracts/durable-result-manifest.js";
 import { parseDocumentArtifact } from "../contracts/durable-document.js";
@@ -16,10 +16,6 @@ import { parseReviewEvidence } from "../contracts/review.js";
 import { parseAdjudicationEvidence } from "../contracts/adjudication.js";
 import { parseTriageCandidate } from "../contracts/triage.js";
 import { parseSupplementalReviewRecord } from "../contracts/supplemental-record.js";
-import { createJsonSchemaValidator } from "../contracts/validators.js";
-import maintenanceRecordSchema from "../contracts/schemas/v1/maintenance-record.schema.json" with { type: "json" };
-import primitivesSchema from "../contracts/schemas/v1/primitives.schema.json" with { type: "json" };
-import pathClaimSchema from "../contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
 import { gateCounterReviewClaim, gateRequestClaim, gateSupplementalReviewClaim, openResolved, resolveTaskPath, type ResolvedTaskPath } from "../repository/paths.js";
 import { writeGateDecisionInterface } from "../state/gates.js";
 import { ensureDecisionDirectory, ensureTaskProjectionParent } from "../state/layout.js";
@@ -72,7 +68,6 @@ export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommand
 export const INPUT_FREE_COMMANDS: ReadonlySet<LocalCommand> =
   new Set(LOCAL_COMMANDS.filter((command) => LOCAL_COMMAND_CONTRACTS[command].payload === null));
 
-const maintenanceRecordV1Validator = createJsonSchemaValidator<MaintenanceRecordV1>(maintenanceRecordSchema, [primitivesSchema, pathClaimSchema]);
 
 type CommandInput = Readonly<{
   command: LocalCommand;
@@ -234,7 +229,7 @@ async function maintain(input: CommandInput): Promise<PlainJsonValue | ProjectRe
     reachability_proof_digest: proof.digest, deletions,
     total_bytes_deleted: parseSafeInteger(deletions.reduce((total, deletion) => total + deletion.byte_count, 0)),
   };
-  return performMaintenance({ atomic: dependencies.atomic, record_target: target.value, record, proof, validate_record: (candidate) => maintenanceRecordV1Validator.assert(candidate, "maintenance record") });
+  return performMaintenance({ atomic: dependencies.atomic, record_target: target.value, record, proof, validate_record: parseMaintenanceRecord });
 }
 
 async function manualStatus(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {

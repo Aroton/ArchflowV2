@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import { canonicalDocument, parseCanonicalDocument } from "../../src/contracts/canonical.js";
-import { STEP_STATUSES, TERMINAL_STATES, type TaskStateV1 } from "../../src/contracts/durable-state.js";
+import { STEP_STATUSES, TERMINAL_STATES, taskStateV1Schema, type TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { GATE_KINDS } from "../../src/contracts/gates.js";
 import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
 import { PIPELINE_STEPS } from "../../src/contracts/vocabulary.js";
@@ -32,6 +32,18 @@ const validState = async (): Promise<Record<string, unknown>> =>
 const rejects = async (mutate: (state: Record<string, unknown>) => Record<string, unknown>): Promise<void> => {
   const validator = await taskStateValidator();
   expect(validator.validate(mutate(await validState()))).toBe(false);
+};
+
+/**
+ * Rejected by the Zod authority alone: generation retired the ordering keywords from the committed
+ * schema, so the compiled document accepts these; the Zod refinement behind `readTaskState` is the
+ * surviving authority.
+ */
+const rejectedByZodAuthority = async (mutate: (state: Record<string, unknown>) => Record<string, unknown>): Promise<void> => {
+  const validator = await taskStateValidator();
+  const mutated = mutate(await validState());
+  expect(validator.validate(mutated)).toBe(true);
+  expect(taskStateV1Schema.safeParse(mutated).success).toBe(false);
 };
 
 const enums = (value: unknown): readonly string[] | undefined => (value as { enum?: readonly string[] }).enum;
@@ -82,17 +94,19 @@ describe("task state contract", () => {
     }));
   });
 
-  it("rejects a shuffled or duplicated authoritative_results — a SET on the (phase_instance, step) tuple", async () => {
-    await rejects((state) => ({ ...state, authoritative_results: [...(state.authoritative_results as unknown[])].reverse() }));
-    await rejects((state) => {
+  // Generation retired `x-archflow-sorted-unique-by`, so the compiled document accepts these
+  // permutations; the Zod authority behind `readTaskState` is the surviving rejection.
+  it("rejects a shuffled or duplicated authoritative_results in the Zod authority — a SET on the (phase_instance, step) tuple", async () => {
+    await rejectedByZodAuthority((state) => ({ ...state, authoritative_results: [...(state.authoritative_results as unknown[])].reverse() }));
+    await rejectedByZodAuthority((state) => {
       const [first] = state.authoritative_results as unknown[];
       return { ...state, authoritative_results: [first, first] };
     });
   });
 
-  it("rejects a shuffled or duplicated approvals set", async () => {
-    await rejects((state) => ({ ...state, approvals: [...(state.approvals as unknown[])].reverse() }));
-    await rejects((state) => {
+  it("rejects a shuffled or duplicated approvals set in the Zod authority", async () => {
+    await rejectedByZodAuthority((state) => ({ ...state, approvals: [...(state.approvals as unknown[])].reverse() }));
+    await rejectedByZodAuthority((state) => {
       const [first] = state.approvals as unknown[];
       return { ...state, approvals: [first, first] };
     });

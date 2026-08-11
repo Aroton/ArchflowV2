@@ -8,7 +8,6 @@
       "maximum": 9007199254740991
     },
     "phaseInstanceId": {
-      "$comment": "Weaker than `phaseInstanceIdV1Schema`, which delegates to `decodePhaseInstance`. A `pattern` cannot bound the phase number, so this $def admits values above Number.MAX_SAFE_INTEGER (for example `phase-impl-99999999999999999999`) that the decoder rejects. Recorded here the way `src/repository/paths.ts:62-63` records that its `REVISION` fragment permits `0`.",
       "type": "string",
       "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
     },
@@ -37,8 +36,12 @@
       "type": "string",
       "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
     },
-    "repositoryPathClaim": { "$ref": "urn:archflow:schema:v1:path-claim" },
-    "taskPathClaim": { "$ref": "urn:archflow:schema:v1:path-claim" },
+    "repositoryPathClaim": {
+      "$ref": "urn:archflow:schema:v1:path-claim"
+    },
+    "taskPathClaim": {
+      "$ref": "urn:archflow:schema:v1:path-claim"
+    },
     "safeCode": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"

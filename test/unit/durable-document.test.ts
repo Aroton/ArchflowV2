@@ -33,6 +33,17 @@ const rejectedBoth = async (value: unknown): Promise<void> => {
   expect(documentArtifactV1Schema.safeParse(value).success).toBe(false);
 };
 
+/**
+ * Rejected by the Zod authority alone: generation retired the ordering keywords from the committed
+ * schema, so the compiled document accepts these; the Zod refinement behind the parse function is
+ * the surviving authority.
+ */
+const rejectedByZodAuthority = async (value: unknown): Promise<void> => {
+  const jsonValidator = await validator();
+  expect(jsonValidator.validate(value)).toBe(true);
+  expect(documentArtifactV1Schema.safeParse(value).success).toBe(false);
+};
+
 describe("document artifact contract", () => {
   it("round-trips the valid fixture through the JSON Schema", async () => {
     const jsonValidator = await validator();
@@ -67,11 +78,11 @@ describe("document artifact contract", () => {
     await rejectedBoth({ ...(await fixture()), path_class: "review" });
   });
 
-  it("rejects shuffled and duplicated declared_inputs in both authorities (D11)", async () => {
+  it("rejects shuffled and duplicated declared_inputs in the Zod authority (D11)", async () => {
     const valid = await fixture();
     const inputs = valid["declared_inputs"] as readonly unknown[];
-    await rejectedBoth({ ...valid, declared_inputs: [...inputs].reverse() });
-    await rejectedBoth({ ...valid, declared_inputs: [inputs[0], inputs[0]] });
+    await rejectedByZodAuthority({ ...valid, declared_inputs: [...inputs].reverse() });
+    await rejectedByZodAuthority({ ...valid, declared_inputs: [inputs[0], inputs[0]] });
   });
 
   it("rejects an unknown field in both authorities", async () => {

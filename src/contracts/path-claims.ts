@@ -26,11 +26,24 @@ const hasReservedComponent = (value: string): boolean => value.split("/").some(i
 const hasTrailingDotOrSpace = (value: string): boolean => value.split("/").some(endsWithDotOrSpace);
 
 /**
- * The sole lexical authority for both claim frames, mirroring
- * `src/contracts/schemas/v1/path-claim.schema.json` rule for rule.
+ * The one-pattern form of every lexical rule below except the NFC and UTF-8 byte bounds, which no
+ * `pattern` can express. `path-claim.schema.json` emits this source verbatim, so the generated
+ * schema and the named refines cannot drift apart.
  */
-const pathClaimLexicalSchema = z.string()
+const PATH_CLAIM_PATTERN = new RegExp(
+  String.raw`^(?!/)(?![A-Za-z]:)(?!//)(?!.*\\)(?!.*[\u0000-\u001F\u007F-\u009F])(?!\.\.?(?:/|$))(?!.*\/\.\.?(?:/|$))(?!.*//)(?!.*[:*?\[\]<>|])(?!.*[. ](?:/|$))(?!(?:.*/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?(?:/|$)).+$`,
+  "u"
+);
+
+/**
+ * The sole lexical authority for both claim frames, mirroring
+ * `src/contracts/schemas/v1/path-claim.schema.json` rule for rule. Built once per identity: the
+ * schema generator registers the document root and both branded `primitives` defs separately, and
+ * a registry identity can carry only one URI, so each must be its own object.
+ */
+const pathClaimLexical = () => z.string()
   .min(1)
+  .regex(PATH_CLAIM_PATTERN, "path claim violates the lexical path pattern")
   .refine((value) => utf8Length(value) <= 1024, "path claim must be at most 1024 UTF-8 bytes")
   .refine((value) => !value.startsWith("/"), "path claim must be relative")
   .refine((value) => !hasDriveOrUncPrefix(value), "path claim must not use a drive or UNC prefix")
@@ -42,8 +55,10 @@ const pathClaimLexicalSchema = z.string()
   .refine((value) => !hasTrailingDotOrSpace(value), "path claim components must not end with a dot or a space")
   .refine((value) => value.normalize("NFC") === value, "path claim components must already be NFC");
 
-export const taskPathClaimV1Schema = pathClaimLexicalSchema as unknown as z.ZodType<TaskPathClaim>;
-export const repositoryPathClaimV1Schema = pathClaimLexicalSchema as unknown as z.ZodType<RepositoryPathClaim>;
+/** The `path-claim.schema.json` document root; the branded schemas below are its two frames. */
+export const pathClaimLexicalV1Schema = pathClaimLexical();
+export const taskPathClaimV1Schema = pathClaimLexical() as unknown as z.ZodType<TaskPathClaim>;
+export const repositoryPathClaimV1Schema = pathClaimLexical() as unknown as z.ZodType<RepositoryPathClaim>;
 
 /**
  * Parses a bounded task-relative lexical claim. This does not inspect a file

@@ -19,6 +19,7 @@
       "pattern": "^[A-Za-z0-9.-]{1,64}$"
     },
     "tool": {
+      "type": "string",
       "enum": [
         "archflow_state",
         "archflow_counter_review",
@@ -26,9 +27,56 @@
         "archflow_waiver"
       ]
     },
-    "base": {
+    "notFound": {
       "type": "object",
-      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "TOOL_NOT_FOUND"
+        },
+        "owner": {
+          "type": "string",
+          "const": "protocol"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "TOOL_NOT_FOUND"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "tool_name_digest": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "tool_name_digest"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "call-advertised-tool"
+        }
+      },
       "required": [
         "schema_version",
         "code",
@@ -37,194 +85,198 @@
         "diagnostic",
         "next_action"
       ],
+      "additionalProperties": false
+    },
+    "disabled": {
+      "type": "object",
       "properties": {
         "schema_version": {
+          "type": "string",
           "const": "1"
         },
-        "code": {},
+        "code": {
+          "type": "string",
+          "const": "TOOL_DISABLED"
+        },
         "owner": {
+          "type": "string",
           "const": "protocol"
         },
         "retryable": {
+          "type": "boolean",
           "const": false
         },
         "diagnostic": {
           "type": "object",
-          "additionalProperties": false,
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "TOOL_DISABLED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "tool": {
+                  "$ref": "#/$defs/tool"
+                },
+                "lifecycle_state": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "tool",
+                "lifecycle_state"
+              ],
+              "additionalProperties": false
+            }
+          },
           "required": [
             "template_id",
             "parameters"
           ],
-          "properties": {
-            "template_id": {},
-            "parameters": {}
-          }
+          "additionalProperties": false
         },
-        "next_action": {}
-      }
-    },
-    "notFound": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/base"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "TOOL_NOT_FOUND"
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "TOOL_NOT_FOUND"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "tool_name_digest"
-                  ],
-                  "properties": {
-                    "tool_name_digest": {
-                      "$ref": "#/$defs/digest"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "call-advertised-tool"
-            }
-          },
-          "type": "object"
+        "next_action": {
+          "type": "string",
+          "const": "wait-for-tool-enable"
         }
-      ]
-    },
-    "disabled": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/base"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "TOOL_DISABLED"
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "TOOL_DISABLED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "tool",
-                    "lifecycle_state"
-                  ],
-                  "properties": {
-                    "tool": {
-                      "$ref": "#/$defs/tool"
-                    },
-                    "lifecycle_state": {
-                      "$ref": "#/$defs/code"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "wait-for-tool-enable"
-            }
-          },
-          "type": "object"
-        }
-      ]
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
     },
     "unsupported": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/base"
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
         },
-        {
+        "code": {
+          "type": "string",
+          "const": "UNSUPPORTED_PROTOCOL"
+        },
+        "owner": {
+          "type": "string",
+          "const": "protocol"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
           "properties": {
-            "code": {
+            "template_id": {
+              "type": "string",
               "const": "UNSUPPORTED_PROTOCOL"
             },
-            "diagnostic": {
+            "parameters": {
+              "type": "object",
               "properties": {
-                "template_id": {
-                  "const": "UNSUPPORTED_PROTOCOL"
+                "offered_version": {
+                  "$ref": "#/$defs/version"
                 },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "offered_version",
-                    "supported_version"
-                  ],
-                  "properties": {
-                    "offered_version": {
-                      "$ref": "#/$defs/version"
-                    },
-                    "supported_version": {
-                      "$ref": "#/$defs/version"
-                    }
-                  }
+                "supported_version": {
+                  "$ref": "#/$defs/version"
                 }
               },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "negotiate-supported-protocol"
+              "required": [
+                "offered_version",
+                "supported_version"
+              ],
+              "additionalProperties": false
             }
           },
-          "type": "object"
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "negotiate-supported-protocol"
         }
-      ]
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
     },
     "repeated": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/base"
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
         },
-        {
+        "code": {
+          "type": "string",
+          "const": "INITIALIZATION_REPEATED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "protocol"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
           "properties": {
-            "code": {
+            "template_id": {
+              "type": "string",
               "const": "INITIALIZATION_REPEATED"
             },
-            "diagnostic": {
+            "parameters": {
+              "type": "object",
               "properties": {
-                "template_id": {
-                  "const": "INITIALIZATION_REPEATED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "connection_id"
-                  ],
-                  "properties": {
-                    "connection_id": {
-                      "$ref": "#/$defs/id"
-                    }
-                  }
+                "connection_id": {
+                  "$ref": "#/$defs/id"
                 }
               },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "open-new-connection"
+              "required": [
+                "connection_id"
+              ],
+              "additionalProperties": false
             }
           },
-          "type": "object"
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "open-new-connection"
         }
-      ]
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
     }
   },
-  "oneOf": [
+  "anyOf": [
     {
       "$ref": "#/$defs/notFound"
     },

@@ -1,13 +1,135 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:archflow:schema:v1:evidence-slots",
-  "oneOf": [
-    { "type": "array", "prefixItems": [{ "$ref": "#/$defs/counter" }], "minItems": 1, "maxItems": 1 },
-    { "type": "array", "prefixItems": [{ "$ref": "#/$defs/counter" }, { "$ref": "#/$defs/gateCounter" }], "minItems": 2, "maxItems": 2 }
-  ],
   "$defs": {
-    "pathSafeId": { "type": "string", "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" }, "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "family": { "enum": ["claude", "codex"] },
-    "counter": { "type": "object", "additionalProperties": false, "required": ["role", "evidence_digest", "assurance", "producer_family", "reviewer_family", "independence"], "properties": { "role": { "const": "counter-review" }, "evidence_digest": { "$ref": "#/$defs/digest" }, "assurance": { "enum": ["server-attested", "degraded"] }, "producer_family": { "$ref": "#/$defs/family" }, "reviewer_family": { "$ref": "#/$defs/family" }, "independence": { "const": "opposite-family" } }, "oneOf": [{ "properties": { "producer_family": { "const": "claude" }, "reviewer_family": { "const": "codex" } } }, { "properties": { "producer_family": { "const": "codex" }, "reviewer_family": { "const": "claude" } } }] },
-    "gateCounter": { "type": "object", "additionalProperties": false, "required": ["role", "evidence_digest", "assurance", "producer_family", "reviewer_family", "independence", "gate_id"], "properties": { "role": { "const": "gate-counter-review" }, "evidence_digest": { "$ref": "#/$defs/digest" }, "assurance": { "enum": ["server-attested", "degraded"] }, "producer_family": { "$ref": "#/$defs/family" }, "reviewer_family": { "$ref": "#/$defs/family" }, "independence": { "const": "opposite-family" }, "gate_id": { "$ref": "#/$defs/pathSafeId" } }, "oneOf": [{ "properties": { "producer_family": { "const": "claude" }, "reviewer_family": { "const": "codex" } } }, { "properties": { "producer_family": { "const": "codex" }, "reviewer_family": { "const": "claude" } } }] }
-  }
+    "counter": {
+      "type": "object",
+      "properties": {
+        "evidence_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "producer_family": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "codex"
+          ]
+        },
+        "reviewer_family": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "codex"
+          ]
+        },
+        "role": {
+          "type": "string",
+          "const": "counter-review"
+        },
+        "assurance": {
+          "type": "string",
+          "enum": [
+            "server-attested",
+            "degraded"
+          ]
+        },
+        "independence": {
+          "type": "string",
+          "const": "opposite-family"
+        }
+      },
+      "required": [
+        "evidence_digest",
+        "producer_family",
+        "reviewer_family",
+        "role",
+        "assurance",
+        "independence"
+      ],
+      "additionalProperties": false
+    },
+    "gateCounter": {
+      "type": "object",
+      "properties": {
+        "evidence_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "producer_family": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "codex"
+          ]
+        },
+        "reviewer_family": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "codex"
+          ]
+        },
+        "role": {
+          "type": "string",
+          "const": "gate-counter-review"
+        },
+        "assurance": {
+          "type": "string",
+          "enum": [
+            "server-attested",
+            "degraded"
+          ]
+        },
+        "independence": {
+          "type": "string",
+          "const": "opposite-family"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        }
+      },
+      "required": [
+        "evidence_digest",
+        "producer_family",
+        "reviewer_family",
+        "role",
+        "assurance",
+        "independence",
+        "gate_id"
+      ],
+      "additionalProperties": false
+    },
+    "counterOnly": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/counter"
+        }
+      ],
+      "minItems": 1,
+      "maxItems": 1
+    },
+    "counterWithGateCounter": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/counter"
+        },
+        {
+          "$ref": "#/$defs/gateCounter"
+        }
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/counterOnly"
+    },
+    {
+      "$ref": "#/$defs/counterWithGateCounter"
+    }
+  ]
 }

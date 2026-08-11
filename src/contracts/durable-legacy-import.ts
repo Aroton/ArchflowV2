@@ -86,15 +86,15 @@ export type LegacyImportInitializationV1 = {
 const sha256Digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
 const safeInteger = safeIntegerV1Schema as unknown as z.ZodType<SafeInteger>;
 
-/** Module-private: nothing outside this root declares a field of either element type. */
-const legacyMappingEntryV1Schema = z.object({
+/** Exported for schema generation only: nothing outside this root declares a field of either element type. */
+export const legacyMappingEntryV1Schema = z.object({
   legacy_path: repositoryPathClaimV1Schema,
   destination_path: repositoryPathClaimV1Schema,
   phase_instance: phaseInstanceIdV1Schema,
   disposition: z.enum(["draft", "historical"]),
 }).strict();
 
-const stagedPayloadRefV1Schema = z.object({
+export const stagedPayloadRefV1Schema = z.object({
   legacy_path: repositoryPathClaimV1Schema,
   digest: sha256Digest,
   byte_count: safeInteger,

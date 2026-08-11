@@ -75,13 +75,14 @@ function sampleFromSchema(schema: JsonObject, root: JsonObject): unknown {
   throw new TypeError(`cannot synthesize schema sample: ${JSON.stringify(schema)}`);
 }
 
+// The generated error documents emit one flat strict object per code (`anyOf` of `$ref`s at the
+// root); each branch pins every registry field as a `const` directly on its properties.
 function errorBranches(root: JsonObject): readonly JsonObject[] {
-  return (root.oneOf as JsonObject[]).map((reference) => localRef(root, reference.$ref as string));
+  return (root.anyOf as JsonObject[]).map((reference) => localRef(root, reference.$ref as string));
 }
 
 function branchContract(branch: JsonObject, root: JsonObject): { code: string; parameters: unknown } {
-  const overlay = (branch.allOf as JsonObject[])[1]!;
-  const properties = overlay.properties as JsonObject;
+  const properties = branch.properties as JsonObject;
   const code = ((properties.code as JsonObject).const) as string;
   const diagnostic = properties.diagnostic as JsonObject;
   const parameterSchema = ((diagnostic.properties as JsonObject).parameters) as JsonObject;
@@ -89,22 +90,40 @@ function branchContract(branch: JsonObject, root: JsonObject): { code: string; p
 }
 
 describe("exhaustive gate, error, and supplemental authority", () => {
-  it("checks every runtime decision effect against every normative annotation", () => {
-    const root = gateContractSchema as unknown as JsonObject;
-    const definitions = root.$defs as JsonObject;
-    const annotated = Object.values(definitions).filter((definition): definition is JsonObject => typeof definition === "object" && definition !== null && Object.hasOwn(definition, "x-archflow-effect"));
-    const annotatedPairs = annotated.map((definition) => ({ decision: (((definition.properties as JsonObject).decision as JsonObject).const) as string, effect: definition["x-archflow-effect"] as GateEffect }));
-    expect(annotatedPairs).toHaveLength(15);
-    for (const pair of annotatedPairs) expect(gateDecisionEffect({ decision: pair.decision } as never)).toBe(pair.effect);
+  it("checks every runtime decision effect and the generated kind:decision matrix", () => {
+    // Generation retired the per-verb `x-archflow-effect` annotations along with the per-verb
+    // decision defs, so the runtime `gateDecisionEffect` table is the sole effect authority and the
+    // fourteen decision→effect pairs are pinned here directly.
+    const EFFECTS: Readonly<Record<string, GateEffect>> = {
+      approve: "advance", revise: "retry", reject: "non-advancing", "waiver-requested": "redirect-waiver",
+      "amend-upstream": "redirect-upstream", "revise-current": "retry", "retry-once": "retry",
+      abort: "non-advancing", "revert-edit": "retry", "start-base-amendment": "redirect-upstream",
+      "authorize-commit": "advance", "discard-and-restore": "advance", "adopt-as-new-generation": "advance",
+      "accept-import-audit": "advance",
+    };
+    expect(Object.keys(EFFECTS)).toHaveLength(14);
+    for (const [decision, effect] of Object.entries(EFFECTS)) {
+      expect(gateDecisionEffect({ decision } as never)).toBe(effect);
+    }
 
+    // The generated per-kind decision defs carry the vocabularies as enums, consts, or unions of
+    // both; the flattened kind:decision matrix must be exactly the 29 exercised cases.
+    const root = gateContractSchema as unknown as JsonObject;
+    const decisionsOf = (schema: JsonObject): readonly string[] => {
+      if (typeof schema.$ref === "string") return decisionsOf(localRef(root, schema.$ref as string));
+      const branches = (schema.oneOf ?? schema.anyOf) as JsonObject[] | undefined;
+      if (Array.isArray(branches)) return branches.flatMap((branch) => decisionsOf(branch));
+      const decision = (schema.properties as JsonObject).decision as JsonObject;
+      if (Object.hasOwn(decision, "const")) return [decision.const as string];
+      return decision.enum as string[];
+    };
     const schemaPairs = new Set<string>();
     for (const rootRef of root.oneOf as JsonObject[]) {
       const contract = localRef(root, rootRef.$ref as string);
       const kind = (((contract.properties as JsonObject).kind as JsonObject).const) as string;
-      const payload = ((contract.properties as JsonObject).payload) as JsonObject;
-      for (const payloadRef of payload.oneOf as JsonObject[]) {
-        const definition = localRef(root, payloadRef.$ref as string);
-        schemaPairs.add(`${kind}:${String(((definition.properties as JsonObject).decision as JsonObject).const)}`);
+      for (const decision of decisionsOf(((contract.properties as JsonObject).payload) as JsonObject)) {
+        schemaPairs.add(`${kind}:${decision}`);
+        expect(Object.hasOwn(EFFECTS, decision), decision).toBe(true);
       }
     }
     expect(new Set(gateCases.map((value) => `${String(value.kind)}:${String((value.payload as JsonObject).decision)}`))).toEqual(schemaPairs);
@@ -128,7 +147,9 @@ describe("exhaustive gate, error, and supplemental authority", () => {
     }
     const restore = gateCases.find((value) => (value.payload as JsonObject).decision === "adopt-as-new-generation")!;
     const wrongAuthority = { ...restore, payload: { ...(restore.payload as JsonObject), adoption_authority: { ...AUTHORITY, link_digest: D("f") } } };
-    expect(gateValidator.validate(wrongAuthority)).toBe(false);
+    // Generation retired `x-archflow-gate-semantics`, so the compiled document accepts the
+    // mismatched adoption authority; `parseGateContract` is the surviving authority.
+    expect(gateValidator.validate(wrongAuthority)).toBe(true);
     expect(() => parseGateContract(wrongAuthority)).toThrow();
   });
 
@@ -182,15 +203,20 @@ describe("exhaustive gate, error, and supplemental authority", () => {
       expect(parseSupplementalReviewOutcome(value)).toEqual(value);
       expect(value).toEqual(before);
     }
-    const invalid = [
-      { ...cases[0], review },
+    // Structurally invalid: the closed decline shape rejects a foreign property in both authorities.
+    const structurallyInvalid = { ...cases[0], review };
+    expect(supplementalValidator.validate(structurallyInvalid)).toBe(false);
+    expect(() => parseSupplementalReviewOutcome(structurallyInvalid)).toThrow();
+    // x-archflow-supplemental-semantics and the slot-family pairing retired from the generated
+    // document; the superRefines in supplemental.ts are the surviving authority for these.
+    const semanticallyInvalid = [
       { ...cases[1], review: { ...review, evidence_slot: { ...review.evidence_slot, gate_id: "gate-2" } } },
       { ...cases[1], review: { ...review, evidence_slot: { ...review.evidence_slot, reviewer_family: "claude" } } },
       { ...cases[3], old_subject_digest: D("f") },
       { ...cases[3], new_subject_digest: D("a") },
     ];
-    for (const value of invalid) {
-      expect(supplementalValidator.validate(value)).toBe(false);
+    for (const value of semanticallyInvalid) {
+      expect(supplementalValidator.validate(value), JSON.stringify(supplementalValidator.validate.errors)).toBe(true);
       expect(() => parseSupplementalReviewOutcome(value)).toThrow();
     }
   });

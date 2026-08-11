@@ -19,18 +19,47 @@ export type CompleteErrorRegistry<C extends string, O extends ErrorOwner, X exte
 export type ProjectErrorCode = "CONTRACT_INVALID" | "RESULT_INVALID" | "CONTRACT_VERSION_UNSUPPORTED" | "ENVELOPE_OVERFLOW" | "WORKFLOW_INVALID" | "CONFIG_INVALID" | "CONFIG_MODEL_UNSUPPORTED" | "CONFIG_FAMILY_UNSUPPORTED" | "RUNTIME_VERSION_UNSUPPORTED" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_MISMATCH" | "TASK_INVALID" | "PATH_INVALID" | "PATH_ESCAPE" | "TASK_SCOPE_VIOLATION" | "GIT_CONFLICT" | "GIT_DIVERGED" | "HANDOFF_REQUIRED" | "POLICY_BASE_INVALID" | "WORKFLOW_MISMATCH" | "PINNED_CONFIG_MISMATCH" | "STALE_SKILLS" | "STATE_MISSING" | "STATE_INVALID" | "TRANSITION_INVALID" | "INPUT_FINGERPRINT_MISMATCH" | "STATE_CONFLICT" | "SUPPLEMENTAL_REVIEW_REQUIRED" | "INTENT_MISMATCH" | "INTENT_NOT_CURRENT" | "STAGED_REQUEST_NOT_FOUND" | "STAGED_REQUEST_MISMATCH" | "SNAPSHOT_LIMIT" | "SNAPSHOT_INVALID" | "RESTORE_COLLISION" | "RECONCILIATION_REQUIRED" | "SECRET_DETECTED" | "GATE_ACTIVE" | "GATE_DECISION_INVALID" | "GATE_CANCELLED" | "GATE_SUPERSEDED" | "UNSUPPORTED_HOST" | "UNSUPPORTED_MODEL" | "FAMILY_MISMATCH" | "CLI_VERSION_UNSUPPORTED" | "AUTH_UNAVAILABLE" | "CLI_MISSING" | "SANDBOX_UNAVAILABLE" | "SANDBOX_PROBE_FAILED" | "RATE_LIMITED" | "TIMEOUT" | "CANCELLED" | "MODEL_OUTPUT_INVALID" | "IO_ERROR" | "OUTPUT_OVERFLOW" | "PROCESS_FAILED" | "INTERNAL_ERROR";
 export type ProtocolErrorCode = "TOOL_NOT_FOUND" | "TOOL_DISABLED" | "UNSUPPORTED_PROTOCOL" | "INITIALIZATION_REPEATED";
 
+/**
+ * Every schema instance a generated document registers under `$defs` must be unique to that
+ * document: the schema generator keys `$ref` emission on object identity across all documents at
+ * once, so registering a shared instance here would collide with the document that owns it. The
+ * clone must also carry no parent link — `.meta({})`/`.describe()` clones keep one, and a
+ * parented clone emits a cross-document `$ref` to wherever its parent is registered instead of
+ * its own body, silently breaking this document's self-containment. `clone(def)` shares the
+ * checks (parse behavior is unchanged) and severs the parent.
+ */
+const documentScoped = <T extends z.ZodType>(schema: T): T => schema.clone(schema.def) as unknown as T;
+
+const digest = documentScoped(sha256DigestV1Schema);
+const id = documentScoped(safeIdV1Schema);
+const taskSlug = documentScoped(taskSlugV1Schema);
+const pathSafeId = documentScoped(pathSafeIdV1Schema);
+const code = documentScoped(safeCodeV1Schema);
+const version = documentScoped(safeVersionV1Schema);
+const integer = documentScoped(safeIntegerV1Schema);
+const repositoryPathClaim = documentScoped(repositoryPathClaimV1Schema);
 const tool = z.enum(TOOL_NAMES);
 const adapter = z.enum(["claude-cli", "codex-cli"] satisfies readonly AdapterId[]);
 const family = z.enum(["claude", "codex"] satisfies readonly ModelFamily[]);
 const gateKind = z.enum(GATE_KINDS);
 const phaseInstance = z.string().regex(/^(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)$/u).refine((value) => { try { decodePhaseInstance(value); return true; } catch { return false; } });
 const object = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
-const digestPair = { expected_digest: sha256DigestV1Schema, observed_digest: sha256DigestV1Schema } as const;
+const digestPair = { expected_digest: digest, observed_digest: digest } as const;
 const pathClass = z.enum(PATH_CLASSES);
-const taskPathClass = { task_id: taskSlugV1Schema, path_class: pathClass } as const;
-const adapterAttempt = { adapter, attempt: safeIntegerV1Schema } as const;
-const sortedPaths = z.array(repositoryPathClaimV1Schema).min(1).superRefine((items, context) => { for (let index = 1; index < items.length; index += 1) if (items[index - 1]!.localeCompare(items[index]!) >= 0) context.addIssue({ code: "custom", message: "offending_paths must be sorted and unique" }); });
+const taskPathClass = { task_id: taskSlug, path_class: pathClass } as const;
+const adapterAttempt = { adapter, attempt: integer } as const;
+const sortedPaths = z.array(repositoryPathClaim).min(1).superRefine((items, context) => { for (let index = 1; index < items.length; index += 1) if (items[index - 1]!.localeCompare(items[index]!) >= 0) context.addIssue({ code: "custom", message: "offending_paths must be sorted and unique" }); })
+  .meta({ uniqueItems: true, "x-archflow-sorted-unique": true });
 const validationIssues = z.array(z.string().min(1).max(256)).min(1).max(5);
+
+// Shared single instances so the generated schema emits one `$defs` entry with `$ref`s at each
+// use site, mirroring the def layout the hand-written document established.
+const issueParams = object({ issue_code: code });
+const digestsParams = object(digestPair);
+const taskPathParams = object(taskPathClass);
+const gateParams = object({ gate_id: pathSafeId, gate_kind: gateKind });
+const adapterOnlyParams = object({ adapter });
+const adapterAttemptParams = object(adapterAttempt);
 
 /**
  * Bounded projection of a rejected input's validation failure into diagnostic parameters. The
@@ -50,30 +79,37 @@ export function describeValidationIssues(error: unknown): string[] | undefined {
 }
 
 const PROJECT_PARAMETER_SCHEMAS = {
-  CONTRACT_INVALID: object({ tool: tool.optional(), issue_code: safeCodeV1Schema, schema_version: safeVersionV1Schema.optional(), issues: validationIssues.optional() }),
-  RESULT_INVALID: object({ tool, result_id: safeIdV1Schema, expected_digest: sha256DigestV1Schema.optional(), observed_digest: sha256DigestV1Schema.optional() }),
-  CONTRACT_VERSION_UNSUPPORTED: object({ schema_version: safeVersionV1Schema, supported_version: safeVersionV1Schema }),
-  ENVELOPE_OVERFLOW: object({ offending_paths: sortedPaths, current_bytes: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }),
-  WORKFLOW_INVALID: object({ issue_code: safeCodeV1Schema }), CONFIG_INVALID: object({ issue_code: safeCodeV1Schema }),
-  CONFIG_MODEL_UNSUPPORTED: object({ model: safeIdV1Schema }), CONFIG_FAMILY_UNSUPPORTED: object({ family: safeIdV1Schema }),
-  RUNTIME_VERSION_UNSUPPORTED: object({ component: safeIdV1Schema, version: safeVersionV1Schema }),
-  REPOSITORY_NOT_FOUND: object({ repository_candidate_digest: sha256DigestV1Schema }), REPOSITORY_MISMATCH: object(digestPair),
-  TASK_INVALID: object({ task_id: taskSlugV1Schema, issue_code: safeCodeV1Schema }), PATH_INVALID: object(taskPathClass), PATH_ESCAPE: object(taskPathClass), TASK_SCOPE_VIOLATION: object(taskPathClass),
-  GIT_CONFLICT: object({ operation: safeCodeV1Schema }), GIT_DIVERGED: object(digestPair), HANDOFF_REQUIRED: object({ phase_instance: phaseInstance }),
-  POLICY_BASE_INVALID: object({ expected_digest: sha256DigestV1Schema, observed_digest: sha256DigestV1Schema.optional() }), WORKFLOW_MISMATCH: object(digestPair), PINNED_CONFIG_MISMATCH: object(digestPair), STALE_SKILLS: object(digestPair),
-  STATE_MISSING: object({ phase_instance: phaseInstance }), STATE_INVALID: object({ phase_instance: phaseInstance, issue_code: safeCodeV1Schema }), TRANSITION_INVALID: object({ phase_instance: phaseInstance, from: safeCodeV1Schema, to: safeCodeV1Schema }),
-  INPUT_FINGERPRINT_MISMATCH: object(digestPair), STATE_CONFLICT: object({ expected_revision: safeIntegerV1Schema, observed_revision: safeIntegerV1Schema }), SUPPLEMENTAL_REVIEW_REQUIRED: object({ gate_id: pathSafeIdV1Schema, evidence_digest: sha256DigestV1Schema }), INTENT_MISMATCH: object(digestPair), INTENT_NOT_CURRENT: object({ intent_id: pathSafeIdV1Schema, receipt_revision: safeIntegerV1Schema, current_revision: safeIntegerV1Schema }),
-  STAGED_REQUEST_NOT_FOUND: object({ task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema }),
-  STAGED_REQUEST_MISMATCH: object({ intent_id: pathSafeIdV1Schema, issue_code: safeCodeV1Schema, expected_digest: sha256DigestV1Schema.optional(), observed_digest: sha256DigestV1Schema.optional(), issues: validationIssues.optional() }),
-  SNAPSHOT_LIMIT: object({ limit_scope: z.enum(["result", "task"]), offending_paths: sortedPaths, current_bytes: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }), SNAPSHOT_INVALID: object({ snapshot_digest: sha256DigestV1Schema, issue_code: safeCodeV1Schema }), RESTORE_COLLISION: object({ gate_id: pathSafeIdV1Schema, path_class: pathClass }), RECONCILIATION_REQUIRED: object({ recorded_digest: sha256DigestV1Schema, observed_digest: sha256DigestV1Schema }), SECRET_DETECTED: object({ path_class: pathClass, detector_id: safeIdV1Schema }),
-  GATE_ACTIVE: object({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind }), GATE_DECISION_INVALID: object({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind, issue_code: safeCodeV1Schema }), GATE_CANCELLED: object({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind }), GATE_SUPERSEDED: object({ gate_id: pathSafeIdV1Schema, old_subject_digest: sha256DigestV1Schema, new_subject_digest: sha256DigestV1Schema }),
-  UNSUPPORTED_HOST: object({ host: safeIdV1Schema }), UNSUPPORTED_MODEL: object({ model: safeIdV1Schema }), FAMILY_MISMATCH: object({ expected_family: family, observed_family: family }),
-  CLI_VERSION_UNSUPPORTED: object({ adapter, version: safeVersionV1Schema }), AUTH_UNAVAILABLE: object({ adapter }), CLI_MISSING: object({ adapter }), SANDBOX_UNAVAILABLE: object({ capability: safeIdV1Schema }), SANDBOX_PROBE_FAILED: object({ capability: safeIdV1Schema, failure_class: safeCodeV1Schema }),
-  RATE_LIMITED: object(adapterAttempt), TIMEOUT: object({ ...adapterAttempt, limit_ms: safeIntegerV1Schema }), CANCELLED: object({ source: z.enum(["client", "transport"]), attempt: safeIntegerV1Schema }), MODEL_OUTPUT_INVALID: object({ ...adapterAttempt, issue_code: safeCodeV1Schema }), IO_ERROR: object({ operation: safeCodeV1Schema, attempt: safeIntegerV1Schema }), OUTPUT_OVERFLOW: object({ adapter, byte_count: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }), PROCESS_FAILED: object({ adapter, exit_class: safeCodeV1Schema }), INTERNAL_ERROR: object({ correlation_id: safeIdV1Schema }),
+  CONTRACT_INVALID: object({ tool: tool.optional(), issue_code: code, schema_version: version.optional(), issues: validationIssues.optional() }),
+  RESULT_INVALID: object({ tool, result_id: id, expected_digest: digest.optional(), observed_digest: digest.optional() }),
+  CONTRACT_VERSION_UNSUPPORTED: object({ schema_version: version, supported_version: version }),
+  ENVELOPE_OVERFLOW: object({ offending_paths: sortedPaths, current_bytes: integer, byte_cap: integer }),
+  WORKFLOW_INVALID: issueParams, CONFIG_INVALID: issueParams,
+  CONFIG_MODEL_UNSUPPORTED: object({ model: id }), CONFIG_FAMILY_UNSUPPORTED: object({ family: id }),
+  RUNTIME_VERSION_UNSUPPORTED: object({ component: id, version }),
+  REPOSITORY_NOT_FOUND: object({ repository_candidate_digest: digest }), REPOSITORY_MISMATCH: digestsParams,
+  TASK_INVALID: object({ task_id: taskSlug, issue_code: code }), PATH_INVALID: taskPathParams, PATH_ESCAPE: taskPathParams, TASK_SCOPE_VIOLATION: taskPathParams,
+  GIT_CONFLICT: object({ operation: code }), GIT_DIVERGED: digestsParams, HANDOFF_REQUIRED: object({ phase_instance: phaseInstance }),
+  POLICY_BASE_INVALID: object({ expected_digest: digest, observed_digest: digest.optional() }), WORKFLOW_MISMATCH: digestsParams, PINNED_CONFIG_MISMATCH: digestsParams, STALE_SKILLS: digestsParams,
+  STATE_MISSING: object({ phase_instance: phaseInstance }), STATE_INVALID: object({ phase_instance: phaseInstance, issue_code: code }), TRANSITION_INVALID: object({ phase_instance: phaseInstance, from: code, to: code }),
+  INPUT_FINGERPRINT_MISMATCH: digestsParams, STATE_CONFLICT: object({ expected_revision: integer, observed_revision: integer }), SUPPLEMENTAL_REVIEW_REQUIRED: object({ gate_id: pathSafeId, evidence_digest: digest }), INTENT_MISMATCH: digestsParams, INTENT_NOT_CURRENT: object({ intent_id: pathSafeId, receipt_revision: integer, current_revision: integer }),
+  STAGED_REQUEST_NOT_FOUND: object({ task_id: taskSlug, intent_id: pathSafeId }),
+  STAGED_REQUEST_MISMATCH: object({ intent_id: pathSafeId, issue_code: code, expected_digest: digest.optional(), observed_digest: digest.optional(), issues: validationIssues.optional() }),
+  SNAPSHOT_LIMIT: object({ limit_scope: z.enum(["result", "task"]), offending_paths: sortedPaths, current_bytes: integer, byte_cap: integer }), SNAPSHOT_INVALID: object({ snapshot_digest: digest, issue_code: code }), RESTORE_COLLISION: object({ gate_id: pathSafeId, path_class: pathClass }), RECONCILIATION_REQUIRED: object({ recorded_digest: digest, observed_digest: digest }), SECRET_DETECTED: object({ path_class: pathClass, detector_id: id }),
+  GATE_ACTIVE: gateParams, GATE_DECISION_INVALID: object({ gate_id: pathSafeId, gate_kind: gateKind, issue_code: code }), GATE_CANCELLED: gateParams, GATE_SUPERSEDED: object({ gate_id: pathSafeId, old_subject_digest: digest, new_subject_digest: digest }),
+  UNSUPPORTED_HOST: object({ host: id }), UNSUPPORTED_MODEL: object({ model: id }), FAMILY_MISMATCH: object({ expected_family: family, observed_family: family }),
+  CLI_VERSION_UNSUPPORTED: object({ adapter, version }), AUTH_UNAVAILABLE: adapterOnlyParams, CLI_MISSING: adapterOnlyParams, SANDBOX_UNAVAILABLE: object({ capability: id }), SANDBOX_PROBE_FAILED: object({ capability: id, failure_class: code }),
+  RATE_LIMITED: adapterAttemptParams, TIMEOUT: object({ ...adapterAttempt, limit_ms: integer }), CANCELLED: object({ source: z.enum(["client", "transport"]), attempt: integer }), MODEL_OUTPUT_INVALID: object({ ...adapterAttempt, issue_code: code }), IO_ERROR: object({ operation: code, attempt: integer }), OUTPUT_OVERFLOW: object({ adapter, byte_count: integer, byte_cap: integer }), PROCESS_FAILED: object({ adapter, exit_class: code }), INTERNAL_ERROR: object({ correlation_id: id }),
 } as const satisfies Record<ProjectErrorCode, z.ZodType<Readonly<Record<string, unknown>>>>;
 
+// The protocol document registers its own `$defs`, so its primitives are separate clones.
+const protocolDigest = documentScoped(sha256DigestV1Schema);
+const protocolId = documentScoped(safeIdV1Schema);
+const protocolCode = documentScoped(safeCodeV1Schema);
+const protocolVersion = documentScoped(safeVersionV1Schema);
+const protocolTool = documentScoped(tool);
+
 const PROTOCOL_PARAMETER_SCHEMAS = {
-  TOOL_NOT_FOUND: object({ tool_name_digest: sha256DigestV1Schema }), TOOL_DISABLED: object({ tool, lifecycle_state: safeCodeV1Schema }), UNSUPPORTED_PROTOCOL: object({ offered_version: safeVersionV1Schema, supported_version: safeVersionV1Schema }), INITIALIZATION_REPEATED: object({ connection_id: safeIdV1Schema }),
+  TOOL_NOT_FOUND: object({ tool_name_digest: protocolDigest }), TOOL_DISABLED: object({ tool: protocolTool, lifecycle_state: protocolCode }), UNSUPPORTED_PROTOCOL: object({ offered_version: protocolVersion, supported_version: protocolVersion }), INITIALIZATION_REPEATED: object({ connection_id: protocolId }),
 } as const satisfies Record<ProtocolErrorCode, z.ZodType<Readonly<Record<string, unknown>>>>;
 
 function parser<P extends Readonly<Record<string, unknown>>>(schema: z.ZodType<P>): StrictParameterParser<P> { return Object.freeze({ parse(value: unknown): P { assertPlainJson(value, "error parameters"); return schema.parse(value); } }); }
@@ -124,3 +160,21 @@ export function parseProtocolError(value: unknown): ProtocolError { return parse
 
 // Type-only exports make the exact table primitives discoverable without granting authority.
 export type ErrorParameterPrimitives = { readonly digest: Sha256Digest; readonly tool: ToolName; readonly phase: PhaseInstanceId; readonly path: RepositoryPathClaim; readonly gate: GateKind; readonly adapter: AdapterId; readonly family: ModelFamily };
+
+/**
+ * Generation-only view of the exact Zod tables behind the registry, keyed the way the generated
+ * documents name their `$defs`. This grants no new authority — the same schemas already decide
+ * every parse above — and the registry stays compile-time-closed: these are the `as const`
+ * tables themselves, not widened copies, so a code or shape can still only be added here.
+ */
+export const internalErrorSchemaTables = Object.freeze({
+  project: Object.freeze({
+    parameters: PROJECT_PARAMETER_SCHEMAS,
+    primitives: Object.freeze({ digest, id, taskSlug, pathSafeId, pathClass, code, version, integer, tool, adapter, family, gate: gateKind, phase: phaseInstance, repositoryPathClaim }),
+    shared: Object.freeze({ issue: issueParams, validationIssues, digests: digestsParams, taskPath: taskPathParams, gateParams, adapterOnly: adapterOnlyParams, adapterAttempt: adapterAttemptParams }),
+  }),
+  protocol: Object.freeze({
+    parameters: PROTOCOL_PARAMETER_SCHEMAS,
+    primitives: Object.freeze({ digest: protocolDigest, id: protocolId, code: protocolCode, version: protocolVersion, tool: protocolTool }),
+  }),
+});

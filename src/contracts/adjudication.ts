@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 import type { ReferencedEvidence, Sha256Digest, TaskSlug } from "./evidence.js";
-import { taskSlugV1Schema } from "./evidence.js";
+import { createTaskSlugV1Schema } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
-import { ADAPTER_IDS, EFFORT_VALUES, MODEL_FAMILIES, ruleVersionRefSchema, type AdapterId, type ModelFamily, type RuleVersionRef } from "./review.js";
+import { ADAPTER_IDS, EFFORT_VALUES, MODEL_FAMILIES, type AdapterId, type ModelFamily, type RuleVersionRef } from "./review.js";
 
 export const CONSTITUTION_RESULTS = ["pass", "fail", "uncertain"] as const;
 export const DRIFT_RESULTS = ["aligned", "incidental", "material"] as const;
@@ -57,9 +57,12 @@ export type RawAdjudication = {
 /** Semantically checked adjudication data. This type intentionally carries no authority brand. */
 export type DerivedAdjudication = RawAdjudication;
 
-const nonBlank = z.string().min(1).refine((value) => value.trim().length > 0, "must contain a non-whitespace character");
+const nonBlank = z.string().min(1).regex(/\S/, "must contain a non-whitespace character");
 const id = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u) as unknown as z.ZodType<Sha256Digest>;
+const taskSlug = createTaskSlugV1Schema();
+/** Module-local twin of review's rule-version shape so this document emits self-contained. */
+const ruleVersionSchema = z.object({ rule_id: id, rule_version: z.number().int().positive().safe() }).strict();
 const mechanicalEvidenceSchema = z.object({
   mechanism: nonBlank,
   state: z.enum(MECHANICAL_EVIDENCE_STATES),
@@ -71,7 +74,7 @@ const mechanicalEvidenceSchema = z.object({
   if ((evidence.state === "current" || evidence.state === "stale") && !hasBindings) context.addIssue({ code: "custom", message: `${evidence.state} evidence requires subject and evidence digests` });
   if ((evidence.state === "missing" || evidence.state === "unknown") && (evidence.subject_digest !== undefined || evidence.evidence_digest !== undefined)) context.addIssue({ code: "custom", message: `${evidence.state} evidence cannot claim digests` });
 }) as unknown as z.ZodType<MechanicalEvidence>;
-const constitutionRuleFindingSchema = ruleVersionRefSchema.extend({
+const constitutionRuleFindingSchema = ruleVersionSchema.extend({
   compliance: z.enum(COMPLIANCE_RESULTS),
   rationale: nonBlank,
   trigger: z.enum(TRIGGER_RESULTS),
@@ -89,13 +92,13 @@ const driftFindingSchema = z.object({
 });
 
 export const rawAdjudicationSchema = z.object({
-  schema_version: z.literal("1"), task_id: taskSlugV1Schema,
+  schema_version: z.literal("1"), task_id: taskSlug,
   phase_instance: z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
   step: z.literal("adjudicate"), subject_digest: digest, input_fingerprint: digest,
   pinned_constitution_digest: digest, approved_upstream_digests: z.array(digest), source_evidence_set_digest: digest,
   rule_findings: z.array(constitutionRuleFindingSchema), drift_findings: z.array(driftFindingSchema),
   constitution: z.enum(CONSTITUTION_RESULTS), drift: z.enum(DRIFT_RESULTS),
-  matched_rule_versions: z.array(ruleVersionRefSchema), uncertain_rule_versions: z.array(ruleVersionRefSchema),
+  matched_rule_versions: z.array(ruleVersionSchema), uncertain_rule_versions: z.array(ruleVersionSchema),
 }).strict().superRefine((adjudication, context) => {
   try { validateAdjudicationClaims(adjudication); }
   catch (error) { context.addIssue({ code: "custom", message: error instanceof Error ? error.message : "invalid adjudication semantics" }); }
@@ -129,6 +132,17 @@ function validateAdjudicationClaims(parsed: RawAdjudication): void {
   if (!sameRuleSet(parsed.matched_rule_versions, matched)) throw new TypeError("matched_rule_versions contradict rule findings");
   if (!sameRuleSet(parsed.uncertain_rule_versions, uncertain)) throw new TypeError("uncertain_rule_versions contradict rule findings");
 }
+
+/**
+ * The generated `adjudication.schema.json` `$defs` layout. The def names are load-bearing:
+ * `projectCliOutputSchema` rewrites `taskSlug` (lookahead simplification) and `mechanical`
+ * (codex state-branch expansion) by name before handing the document to a child host, and the
+ * document must stay self-contained because hosts cannot resolve cross-document references.
+ */
+export const adjudicationDocumentDefs = {
+  taskSlug,
+  mechanical: mechanicalEvidenceSchema,
+} as const;
 
 export function parseAndDeriveAdjudication(value: unknown): DerivedAdjudication {
   assertPlainJson(value, "adjudication");

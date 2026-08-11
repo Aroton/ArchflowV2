@@ -14,6 +14,21 @@ export type PhaseInstance =
   | { readonly kind: "phase-design"; readonly phase: PositiveSafePhaseNumber }
   | { readonly kind: "phase-impl"; readonly phase: PositiveSafePhaseNumber };
 
+/** The `primitives.schema.json#/$defs/positiveSafePhaseNumber` authority. */
+export const positiveSafePhaseNumberV1Schema = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER) as unknown as z.ZodType<PositiveSafePhaseNumber>;
+
+/**
+ * The `phase-instance.schema.json` document root: the decoded object form of a phase instance.
+ * Runtime code constructs and decodes these through the functions below; the schema exists so the
+ * published document is generated from the same vocabulary.
+ */
+export const phaseInstanceV1Schema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("prd") }).strict(),
+  z.object({ kind: z.literal("design") }).strict(),
+  z.object({ kind: z.literal("phase-design"), phase: positiveSafePhaseNumberV1Schema }).strict(),
+  z.object({ kind: z.literal("phase-impl"), phase: positiveSafePhaseNumberV1Schema }).strict(),
+]) as unknown as z.ZodType<PhaseInstance>;
+
 export function parsePositiveSafePhaseNumber(value: unknown): PositiveSafePhaseNumber {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
     throw new TypeError("phase number must be a positive safe integer");

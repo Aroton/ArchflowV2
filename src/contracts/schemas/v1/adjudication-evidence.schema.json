@@ -2,20 +2,827 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:archflow:schema:v1:adjudication-evidence",
   "oneOf": [
-    { "$ref": "#/$defs/agentDeclared" }, { "$ref": "#/$defs/serverAttested" }, { "$ref": "#/$defs/degraded" }
-  ],
-  "$defs": {
-    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }, "taskSlug": { "type": "string", "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$" }, "nonBlank": { "type": "string", "minLength": 1, "pattern": "\\S" },
-    "ruleVersion": { "type": "object", "additionalProperties": false, "required": ["rule_id", "rule_version"], "properties": { "rule_id": { "$ref": "#/$defs/id" }, "rule_version": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 } } },
-    "mechanical": { "type": "object", "additionalProperties": false, "required": ["mechanism", "state", "details"], "properties": { "mechanism": { "$ref": "#/$defs/nonBlank" }, "state": { "enum": ["current", "missing", "stale", "unknown", "failed", "digest-mismatch"] }, "subject_digest": { "$ref": "#/$defs/digest" }, "evidence_digest": { "$ref": "#/$defs/digest" }, "details": { "$ref": "#/$defs/nonBlank" } }, "allOf": [{ "if": { "properties": { "state": { "enum": ["current", "stale"] } }, "required": ["state"] }, "then": { "properties": { "subject_digest": true, "evidence_digest": true }, "required": ["subject_digest", "evidence_digest"] } }, { "if": { "properties": { "state": { "enum": ["missing", "unknown"] } }, "required": ["state"] }, "then": { "not": { "anyOf": [{ "required": ["subject_digest"] }, { "required": ["evidence_digest"] }] } } }] },
-    "ruleFinding": { "type": "object", "additionalProperties": false, "required": ["rule_id", "rule_version", "compliance", "rationale", "trigger", "trigger_evidence", "enforced_by"], "properties": { "rule_id": { "$ref": "#/$defs/id" }, "rule_version": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }, "compliance": { "enum": ["pass", "fail", "uncertain"] }, "rationale": { "$ref": "#/$defs/nonBlank" }, "trigger": { "enum": ["not-matched", "matched", "uncertain"] }, "trigger_evidence": { "$ref": "#/$defs/nonBlank" }, "enforced_by": { "type": "array", "items": { "$ref": "#/$defs/mechanical" } } }, "allOf": [{ "if": { "properties": { "compliance": { "const": "pass" } }, "required": ["compliance"] }, "then": { "properties": { "enforced_by": { "type": "array", "items": { "allOf": [{ "$ref": "#/$defs/mechanical" }, { "type": "object", "properties": { "state": { "const": "current" } } }] } } } } }] },
-    "driftFinding": { "type": "object", "additionalProperties": false, "required": ["upstream_digest", "drift", "affected_claim_ids", "rationale"], "properties": { "upstream_digest": { "$ref": "#/$defs/digest" }, "drift": { "enum": ["aligned", "incidental", "material"] }, "affected_claim_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }, "rationale": { "$ref": "#/$defs/nonBlank" } }, "allOf": [{ "if": { "properties": { "drift": { "const": "aligned" } }, "required": ["drift"] }, "then": { "properties": { "affected_claim_ids": { "type": "array", "maxItems": 0 } } }, "else": { "properties": { "affected_claim_ids": { "type": "array", "minItems": 1 } } } }] },
-    "base": { "type": "object", "x-archflow-adjudication-semantics": true, "required": ["schema_version", "task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_evidence_set_digest", "rule_findings", "drift_findings", "constitution", "drift", "matched_rule_versions", "uncertain_rule_versions", "model_family", "model", "effort"], "properties": { "schema_version": { "const": "1" }, "task_id": { "$ref": "#/$defs/taskSlug" }, "phase_instance": { "type": "string", "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" }, "step": { "const": "adjudicate" }, "subject_digest": { "$ref": "#/$defs/digest" }, "input_fingerprint": { "$ref": "#/$defs/digest" }, "pinned_constitution_digest": { "$ref": "#/$defs/digest" }, "approved_upstream_digests": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/digest" } }, "source_evidence_set_digest": { "$ref": "#/$defs/digest" }, "rule_findings": { "type": "array", "items": { "$ref": "#/$defs/ruleFinding" } }, "drift_findings": { "type": "array", "x-archflow-unique-by": "upstream_digest", "items": { "$ref": "#/$defs/driftFinding" } }, "constitution": { "enum": ["pass", "fail", "uncertain"] }, "drift": { "enum": ["aligned", "incidental", "material"] }, "matched_rule_versions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/ruleVersion" } }, "uncertain_rule_versions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/ruleVersion" } }, "model_family": { "enum": ["claude", "codex", "unknown"] }, "model": { "$ref": "#/$defs/nonBlank" }, "effort": { "enum": ["low", "medium", "high", "xhigh", "max", "ultra", "unknown"] } } },
-    "agentDeclared": { "type": "object", "unevaluatedProperties": false, "allOf": [{ "$ref": "#/$defs/base" }, { "$ref": "#/$defs/closedCommon" }, { "type": "object", "properties": { "assurance": { "const": "agent-declared" } } }] },
-    "degraded": { "type": "object", "unevaluatedProperties": false, "allOf": [{ "$ref": "#/$defs/base" }, { "$ref": "#/$defs/closedDegraded" }, { "type": "object", "properties": { "assurance": { "const": "degraded" } } }] },
-    "serverAttested": { "type": "object", "unevaluatedProperties": false, "allOf": [{ "$ref": "#/$defs/base" }, { "$ref": "#/$defs/closedServer" }, { "type": "object", "properties": { "assurance": { "const": "server-attested" } } }] },
-    "closedCommon": { "type": "object", "required": ["assurance"], "properties": { "assurance": true } },
-    "closedDegraded": { "type": "object", "required": ["assurance", "reason"], "properties": { "assurance": true, "reason": { "$ref": "#/$defs/nonBlank" } } },
-    "closedServer": { "type": "object", "required": ["assurance", "adapter", "cli_version", "invocation_id", "envelope_input_digest", "observed_output_digest", "result_id"], "properties": { "assurance": true, "adapter": { "enum": ["claude-cli", "codex-cli"] }, "cli_version": { "$ref": "#/$defs/nonBlank" }, "model_family": { "enum": ["claude", "codex"] }, "effort": { "enum": ["low", "medium", "high", "xhigh", "max", "ultra"] }, "invocation_id": { "$ref": "#/$defs/id" }, "envelope_input_digest": { "$ref": "#/$defs/digest" }, "observed_output_digest": { "$ref": "#/$defs/digest" }, "result_id": { "$ref": "#/$defs/id" } } }
-  }
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:adjudication#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "step": {
+          "type": "string",
+          "const": "adjudicate"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "input_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "pinned_constitution_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "approved_upstream_digests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "source_evidence_set_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "rule_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "compliance": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail",
+                  "uncertain"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "not-matched",
+                  "matched",
+                  "uncertain"
+                ]
+              },
+              "trigger_evidence": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "enforced_by": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:archflow:schema:v1:adjudication#/$defs/mechanical"
+                }
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version",
+              "compliance",
+              "rationale",
+              "trigger",
+              "trigger_evidence",
+              "enforced_by"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "drift_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "upstream_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "drift": {
+                "type": "string",
+                "enum": [
+                  "aligned",
+                  "incidental",
+                  "material"
+                ]
+              },
+              "affected_claim_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                }
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "upstream_digest",
+              "drift",
+              "affected_claim_ids",
+              "rationale"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "constitution": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        "drift": {
+          "type": "string",
+          "enum": [
+            "aligned",
+            "incidental",
+            "material"
+          ]
+        },
+        "matched_rule_versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "uncertain_rule_versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "model_family": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "claude",
+                "codex"
+              ]
+            },
+            {
+              "type": "string",
+              "const": "unknown"
+            }
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "effort": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                "ultra"
+              ]
+            },
+            {
+              "type": "string",
+              "const": "unknown"
+            }
+          ]
+        },
+        "assurance": {
+          "type": "string",
+          "const": "agent-declared"
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "phase_instance",
+        "step",
+        "subject_digest",
+        "input_fingerprint",
+        "pinned_constitution_digest",
+        "approved_upstream_digests",
+        "source_evidence_set_digest",
+        "rule_findings",
+        "drift_findings",
+        "constitution",
+        "drift",
+        "matched_rule_versions",
+        "uncertain_rule_versions",
+        "model_family",
+        "model",
+        "effort",
+        "assurance"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:adjudication#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "step": {
+          "type": "string",
+          "const": "adjudicate"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "input_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "pinned_constitution_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "approved_upstream_digests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "source_evidence_set_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "rule_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "compliance": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail",
+                  "uncertain"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "not-matched",
+                  "matched",
+                  "uncertain"
+                ]
+              },
+              "trigger_evidence": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "enforced_by": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:archflow:schema:v1:adjudication#/$defs/mechanical"
+                }
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version",
+              "compliance",
+              "rationale",
+              "trigger",
+              "trigger_evidence",
+              "enforced_by"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "drift_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "upstream_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "drift": {
+                "type": "string",
+                "enum": [
+                  "aligned",
+                  "incidental",
+                  "material"
+                ]
+              },
+              "affected_claim_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                }
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "upstream_digest",
+              "drift",
+              "affected_claim_ids",
+              "rationale"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "constitution": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        "drift": {
+          "type": "string",
+          "enum": [
+            "aligned",
+            "incidental",
+            "material"
+          ]
+        },
+        "matched_rule_versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "uncertain_rule_versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "model_family": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "codex"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ]
+        },
+        "assurance": {
+          "type": "string",
+          "const": "server-attested"
+        },
+        "adapter": {
+          "type": "string",
+          "enum": [
+            "claude-cli",
+            "codex-cli"
+          ]
+        },
+        "cli_version": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "invocation_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        },
+        "envelope_input_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "observed_output_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "result_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "phase_instance",
+        "step",
+        "subject_digest",
+        "input_fingerprint",
+        "pinned_constitution_digest",
+        "approved_upstream_digests",
+        "source_evidence_set_digest",
+        "rule_findings",
+        "drift_findings",
+        "constitution",
+        "drift",
+        "matched_rule_versions",
+        "uncertain_rule_versions",
+        "model_family",
+        "model",
+        "effort",
+        "assurance",
+        "adapter",
+        "cli_version",
+        "invocation_id",
+        "envelope_input_digest",
+        "observed_output_digest",
+        "result_id"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:adjudication#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "step": {
+          "type": "string",
+          "const": "adjudicate"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "input_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "pinned_constitution_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "approved_upstream_digests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "source_evidence_set_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "rule_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "compliance": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail",
+                  "uncertain"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "not-matched",
+                  "matched",
+                  "uncertain"
+                ]
+              },
+              "trigger_evidence": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "enforced_by": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:archflow:schema:v1:adjudication#/$defs/mechanical"
+                }
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version",
+              "compliance",
+              "rationale",
+              "trigger",
+              "trigger_evidence",
+              "enforced_by"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "drift_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "upstream_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "drift": {
+                "type": "string",
+                "enum": [
+                  "aligned",
+                  "incidental",
+                  "material"
+                ]
+              },
+              "affected_claim_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                }
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "upstream_digest",
+              "drift",
+              "affected_claim_ids",
+              "rationale"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "constitution": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        "drift": {
+          "type": "string",
+          "enum": [
+            "aligned",
+            "incidental",
+            "material"
+          ]
+        },
+        "matched_rule_versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "uncertain_rule_versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "model_family": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "claude",
+                "codex"
+              ]
+            },
+            {
+              "type": "string",
+              "const": "unknown"
+            }
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "effort": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                "ultra"
+              ]
+            },
+            {
+              "type": "string",
+              "const": "unknown"
+            }
+          ]
+        },
+        "assurance": {
+          "type": "string",
+          "const": "degraded"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "phase_instance",
+        "step",
+        "subject_digest",
+        "input_fingerprint",
+        "pinned_constitution_digest",
+        "approved_upstream_digests",
+        "source_evidence_set_digest",
+        "rule_findings",
+        "drift_findings",
+        "constitution",
+        "drift",
+        "matched_rule_versions",
+        "uncertain_rule_versions",
+        "model_family",
+        "model",
+        "effort",
+        "assurance",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  ]
 }

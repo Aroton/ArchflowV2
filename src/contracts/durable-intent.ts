@@ -15,13 +15,11 @@ import {
 import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
 import type { ToolName } from "./tool-names.js";
 import { TOOL_NAMES } from "./tool-names.js";
-import { intentReceiptV1Validator } from "./validators.js";
 
 /**
  * The immutable successful preparation stored at `intents/<intent-id>.json`.
- * `intent-receipt.schema.json` is the runtime shape authority — `parseIntentReceipt` validates
- * through the compiled JSON Schema — and `intentReceiptV1Schema` below is its Zod mirror,
- * proven equivalent by `test/contracts/durable-intent-agreement.test.ts`.
+ * `intentReceiptV1Schema` below is the runtime shape authority — `parseIntentReceipt` validates
+ * through it — and `intent-receipt.schema.json` is generated from it.
  * Every reachable persisted shape is a type alias so it remains PlainJsonValue-compatible.
  */
 export type IntentReceiptV1 = {
@@ -43,6 +41,15 @@ export type IntentReceiptV1 = {
 };
 
 const sha256Digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
+
+/**
+ * The recursive `outcome` value schema, emitted as the `plainJson` `$def`. The generator replaces
+ * its emission with the hand-authored recursive fragment verbatim — `z.json()`'s own emission
+ * self-references the document root rather than the `$def` — so the committed fragment keeps the
+ * `null`-first `anyOf` order the exclusion sweep pins. Both sides sit behind `assertPlainJson`,
+ * which rejects the non-finite numbers a bare `type: "number"` would otherwise admit.
+ */
+export const plainJsonV1Schema = z.json();
 
 /**
  * The mirror. `.strict()` matches `additionalProperties: false`; `tool` reuses `TOOL_NAMES`, the
@@ -68,14 +75,14 @@ export const intentReceiptV1Schema = z.object({
   resulting_revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
   result_id: safeIdV1Schema,
   outcome_digest: sha256Digest,
-  outcome: z.json(),
+  outcome: plainJsonV1Schema,
   prepared_state_digest: sha256Digest,
   prepared_state: taskStateV1Schema,
 }).strict() as unknown as z.ZodType<IntentReceiptV1>;
 
 export function parseIntentReceipt(value: unknown): IntentReceiptV1 {
   assertPlainJson(value, "intent receipt");
-  return intentReceiptV1Validator.assert(value, "intent receipt");
+  return intentReceiptV1Schema.parse(value);
 }
 
 /** Exact whole-receipt canonical digest; no domain tag and no field subset. */

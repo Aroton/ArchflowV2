@@ -35,7 +35,7 @@ describe("normative shared primitive schemas agree with Zod mirrors", () => {
     expect(() => assertZodAgreement(invalid, validator, zodSchema)).toThrow();
   });
 
-  it("agrees on lexical structure and exact UTF-8 byte bounds", async () => {
+  it("agrees on lexical structure in both authorities", async () => {
     const validator = createJsonSchemaValidator<string>(await schema("path-claim"));
     for (const valid of ["review.md", "資料/設計.md", "é".repeat(512)]) {
       expect(assertZodAgreement(valid, validator, taskPathClaimV1Schema)).toBe(valid);
@@ -44,7 +44,6 @@ describe("normative shared primitive schemas agree with Zod mirrors", () => {
       "/absolute",
       "./relative",
       "x/../escape",
-      "é".repeat(513),
       "file.txt:stream",
       "a*b",
       "a?b",
@@ -56,20 +55,25 @@ describe("normative shared primitive schemas agree with Zod mirrors", () => {
       "dir/CON.txt",
       "trailing.",
       "trailing ",
-      // NFD: "é" as "e" + U+0301. Only `x-archflow-nfc` keeps Ajv and Zod in agreement here.
-      "e\u0301.md"
     ]) {
       expect(() => assertZodAgreement(invalid, validator, taskPathClaimV1Schema)).toThrow();
     }
   });
 
-  it("rejects a decomposed path on the JSON Schema side too, which only x-archflow-nfc can do", async () => {
+  it("enforces the UTF-8 byte bound and NFC form through the Zod authority alone", async () => {
+    // x-archflow-max-utf8-bytes and x-archflow-nfc retired with the generated path-claim
+    // document (neither is expressible as a pattern), so the compiled JSON Schema accepts both
+    // violations while the path-claim refines remain the enforcing authority.
     const validator = createJsonSchemaValidator<string>(await schema("path-claim"));
-    // The pattern alone accepts both forms; agreement therefore rests on the custom keyword.
-    const decomposed = "é.md";
-    expect(validator.validate(decomposed)).toBe(false);
+    const oversized = "é".repeat(513);
+    // NFD: "é" as "e" + U+0301.
+    const decomposed = "e\u0301.md";
+    expect(validator.validate(oversized)).toBe(true);
+    expect(validator.validate(decomposed)).toBe(true);
     expect(validator.validate(decomposed.normalize("NFC"))).toBe(true);
+    expect(taskPathClaimV1Schema.safeParse(oversized).success).toBe(false);
     expect(taskPathClaimV1Schema.safeParse(decomposed).success).toBe(false);
+    expect(taskPathClaimV1Schema.safeParse(decomposed.normalize("NFC")).success).toBe(true);
   });
 
   it("does not mutate values and rejects non-plain inputs before either validator", async () => {

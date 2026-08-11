@@ -10,11 +10,12 @@ import {
 } from "../../src/contracts/validators.js";
 
 /**
- * `maintenance-record` agreement: the Zod mirror in `durable-maintenance.ts` against the compiled
- * `maintenance-record.schema.json`, which production validation stays on (`maintenance-roots.ts`,
- * `local/commands.ts`). Each `x-archflow-*` semantic keyword the schema carries has one negative
- * fixture here, rejected by *both* authorities — a sample only one side rejects is exactly the
- * drift `assertZodAgreement` exists to catch.
+ * `maintenance-record` agreement: `maintenanceRecordV1Schema` is now the runtime authority —
+ * `maintenance-roots.ts` and `local/commands.ts` validate through `parseMaintenanceRecord` — and
+ * `maintenance-record.schema.json` is generated from it. The compiled schema is still exercised so
+ * the generated document and its Zod source cannot drift structurally; the byte-cap and ordering
+ * rules are Zod-only since generation retired the `x-archflow-max-utf8-bytes` and
+ * `x-archflow-sorted-unique-by` keywords.
  */
 
 const SCHEMA_DIR = new URL("../../src/contracts/schemas/v1/", import.meta.url);
@@ -56,26 +57,27 @@ describe("maintenance-record agreement between JSON Schema and the Zod mirror", 
   });
 
   /**
-   * `x-archflow-max-utf8-bytes` — 2049 two-byte characters: 4098 UTF-8 bytes but only 2049 code
-   * units, so a mirror counting characters instead of bytes would accept what Ajv rejects.
+   * Generation retired `x-archflow-max-utf8-bytes`, so the compiled document accepts this fixture —
+   * 2049 two-byte characters: 4098 UTF-8 bytes in 2049 code units. The Zod `.refine()` behind
+   * `parseMaintenanceRecord` counts bytes and is the surviving authority.
    */
-  it("both reject a human_reason above 4096 UTF-8 bytes", () => {
+  it("the Zod authority rejects a human_reason above 4096 UTF-8 bytes", () => {
     const mutated = fixture("maintenance-record.invalid.human-reason-bytes");
-    expect(json.validate(mutated)).toBe(false);
+    expect(json.validate(mutated)).toBe(true);
     expect(maintenanceRecordV1Schema.safeParse(mutated).success).toBe(false);
   });
 
-  /** `x-archflow-sorted-unique-by: "digest"` — the valid fixture's two deletions, order reversed. */
-  it("both reject deletions out of digest order", () => {
+  /** Generation retired `x-archflow-sorted-unique-by: "digest"`; the Zod `.refine()` survives. */
+  it("the Zod authority rejects deletions out of digest order", () => {
     const mutated = fixture("maintenance-record.invalid.deletions-unsorted");
-    expect(json.validate(mutated)).toBe(false);
+    expect(json.validate(mutated)).toBe(true);
     expect(maintenanceRecordV1Schema.safeParse(mutated).success).toBe(false);
   });
 
-  it("both reject a duplicated deletion — strict digest increase subsumes uniqueness", () => {
+  it("the Zod authority rejects a duplicated deletion — strict digest increase subsumes uniqueness", () => {
     const [first] = sample.deletions as readonly unknown[];
     const mutated = { ...sample, deletions: [first, first] };
-    expect(json.validate(mutated)).toBe(false);
+    expect(json.validate(mutated)).toBe(true);
     expect(maintenanceRecordV1Schema.safeParse(mutated).success).toBe(false);
   });
 

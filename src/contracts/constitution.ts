@@ -18,11 +18,11 @@ const frontmatterSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
   version: z.number().int().positive().safe(),
   status: z.enum(["active", "deprecated"]),
-  review_trigger: z.string().min(1).refine((value) => value.trim().length > 0, "review_trigger must contain a non-whitespace character").optional(),
-  enforced_by: z.array(z.string().min(1).refine((value) => value.trim().length > 0, "enforced_by entries must contain a non-whitespace character")).min(1).optional(),
+  review_trigger: z.string().min(1).regex(/\S/, "review_trigger must contain a non-whitespace character").optional(),
+  enforced_by: z.array(z.string().min(1).regex(/\S/, "enforced_by entries must contain a non-whitespace character")).min(1).optional(),
 }).strict();
 
-export const constitutionRuleV1Schema = frontmatterSchema.extend({ text: z.string().min(1).refine((value) => value.trim().length > 0, "text must contain a non-whitespace character") }).strict();
+export const constitutionRuleV1Schema = frontmatterSchema.extend({ text: z.string().min(1).regex(/\S/, "text must contain a non-whitespace character") }).strict();
 
 export function parseConstitutionRuleV1(value: unknown): ConstitutionRuleV1 {
   assertPlainJson(value, "constitution rule");

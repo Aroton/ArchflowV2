@@ -14,7 +14,7 @@ export type SupplementalReviewOutcome =
   | { readonly action: "supersede"; readonly review: SupplementalReviewRef; readonly accepted_triage_digest: Sha256Digest; readonly old_subject_digest: Sha256Digest; readonly new_subject_digest: Sha256Digest; readonly reason: string };
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u) as unknown as z.ZodType<Sha256Digest>;
-const nonBlank = z.string().min(1).refine((value) => value.trim().length > 0, "must contain a non-whitespace character");
+const nonBlank = z.string().min(1).regex(/\S/, "must contain a non-whitespace character");
 const family = z.enum(["claude", "codex"]);
 const phase = z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
 const gateShape = { prior_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, phase_instance: phase, subject_digest: digest, input_fingerprint: digest };

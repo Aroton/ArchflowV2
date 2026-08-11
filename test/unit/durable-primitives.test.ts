@@ -151,6 +151,21 @@ const rejectedBoth = async <T>(
   expect(zodSchema.safeParse(value).success).toBe(false);
 };
 
+/**
+ * Rejected by the Zod authority alone: generation retired the ordering keywords from the committed
+ * schema, so the compiled document accepts these; the Zod refinement behind the parse function is
+ * the surviving authority.
+ */
+const rejectedByZodAuthority = async <T>(
+  defName: string,
+  zodSchema: { safeParse(value: unknown): { success: boolean } },
+  value: unknown
+): Promise<void> => {
+  const jsonValidator = await defValidator<T>(defName);
+  expect(jsonValidator.validate(value)).toBe(true);
+  expect(zodSchema.safeParse(value).success).toBe(false);
+};
+
 describe("durable shared primitives contract", () => {
   it("agrees on a valid canonicalTaskPaths sample", async () => {
     const jsonValidator = await defValidator<CanonicalTaskPaths>("canonicalTaskPaths");
@@ -178,12 +193,12 @@ describe("durable shared primitives contract", () => {
     });
   });
 
-  it("rejects shuffled and duplicated counted_entries in both authorities", async () => {
-    await rejectedBoth("snapshotAccounting", snapshotAccountingV1Schema, {
+  it("rejects shuffled and duplicated counted_entries in the Zod authority", async () => {
+    await rejectedByZodAuthority("snapshotAccounting", snapshotAccountingV1Schema, {
       ...accounting,
       counted_entries: [...accounting.counted_entries].reverse(),
     });
-    await rejectedBoth("snapshotAccounting", snapshotAccountingV1Schema, {
+    await rejectedByZodAuthority("snapshotAccounting", snapshotAccountingV1Schema, {
       ...accounting,
       counted_entries: [accounting.counted_entries[0], accounting.counted_entries[0]],
     });

@@ -7,14 +7,10 @@ import {
 } from "../contracts/canonical.js";
 import { parseConfigYaml } from "../contracts/config.js";
 import { parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
-import type { TaskStateV1 } from "../contracts/durable-state.js";
+import { taskStateV1Schema, type TaskStateV1 } from "../contracts/durable-state.js";
 import type { Sha256Digest } from "../contracts/evidence.js";
 import type { ParsedToolCall } from "../contracts/mcp-tools.js";
 import type { ToolName } from "../contracts/tool-names.js";
-import taskStateSchema from "../contracts/schemas/v1/task-state.schema.json" with { type: "json" };
-import pathClaimSchema from "../contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
-import primitivesSchema from "../contracts/schemas/v1/primitives.schema.json" with { type: "json" };
-import { createJsonSchemaValidator } from "../contracts/validators.js";
 import { openResolved, type ResolvedPath } from "../repository/paths.js";
 import type { RepositoryOperationContext } from "../repository/git.js";
 import type { RootBoundGitRunner } from "../repository/identity.js";
@@ -46,11 +42,20 @@ export type ConfigReadResult =
   | Readonly<{ kind: "valid"; snapshot: LiveConfigSnapshot }>
   | Readonly<{ kind: "missing" | "unreadable" | "invalid" }>;
 
-const stateValidator = createJsonSchemaValidator<TaskStateV1>(taskStateSchema, [
-  primitivesSchema,
-  pathClaimSchema,
-]);
 const decoder = new TextDecoder("utf-8", { fatal: true });
+
+/**
+ * The canonical bytes are the authority, so the Zod validation clone is discarded and the parsed
+ * document's own value graph is frozen and returned — validation must never transform what a later
+ * digest or comparison reads.
+ */
+function deepFreeze<T>(value: T): T {
+  if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}
 
 function errnoOf(error: unknown): string | undefined {
   return error !== null && typeof error === "object" && "code" in error
@@ -76,7 +81,8 @@ export async function readTaskState(path: ResolvedPath): Promise<StateReadResult
   if (read.kind !== "bytes") return read;
   try {
     const document = parseCanonicalDocument<TaskStateV1>(read.bytes, "task state");
-    stateValidator.assert(document.value, "task state");
+    taskStateV1Schema.parse(document.value);
+    deepFreeze(document.value);
     return Object.freeze({ kind: "canonical", document });
   } catch {
     return Object.freeze({ kind: "noncanonical" });

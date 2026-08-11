@@ -20,16 +20,16 @@ import type { SecretScanResult } from "./secret-scan.js";
 import { secretScanResultV1Schema } from "./secret-scan.js";
 import type { TriageCandidate } from "./triage.js";
 import { triageCandidateSchema } from "./triage.js";
-import { isSortedUniqueBy, resultManifestV1Validator, tupleKey } from "./validators.js";
+import { isSortedUniqueBy, tupleKey } from "./validators.js";
 import type { PipelineStep } from "./vocabulary.js";
 import { PIPELINE_STEPS } from "./vocabulary.js";
 
 /**
  * Immutable authority stored at `results/sha256/<result-digest>/manifest.json`.
  *
- * This is a server-internal persisted root whose normative JSON Schema stays the runtime authority;
- * `parseResultManifest` validates through the compiled schema, and the Zod mirror below is a mirror
- * and never a second model. The exact validated source artifact is embedded so every later read can
+ * This is a server-internal persisted root. `resultManifestV1Schema` below is the runtime shape
+ * authority — `parseResultManifest` validates through it — and `result-manifest.schema.json` is
+ * generated from it. The exact validated source artifact is embedded so every later read can
  * re-establish the artifact digest and all duplicated wrapper facts without request-lifetime memory.
  */
 export type ResultManifestV1 = {
@@ -135,7 +135,7 @@ export const resultManifestV1Schema = z.object({
 
 export function parseResultManifest(value: unknown): ResultManifestV1 {
   assertPlainJson(value, "result manifest");
-  return resultManifestV1Validator.assert(value, "result manifest");
+  return resultManifestV1Schema.parse(value);
 }
 
 /** Compile-time assertion that the whole persisted graph remains canonical-JSON-compatible. */

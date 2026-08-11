@@ -39,6 +39,17 @@ const rejectedBoth = async (value: unknown): Promise<void> => {
   expect(implementationOutputV1Schema.safeParse(value).success).toBe(false);
 };
 
+/**
+ * Rejected by the Zod authority alone: generation retired the ordering keywords from the committed
+ * schema, so the compiled document accepts these; the Zod refinement behind the parse function is
+ * the surviving authority.
+ */
+const rejectedByZodAuthority = async (value: unknown): Promise<void> => {
+  const jsonValidator = await validator();
+  expect(jsonValidator.validate(value)).toBe(true);
+  expect(implementationOutputV1Schema.safeParse(value).success).toBe(false);
+};
+
 const without = (value: Record<string, unknown>, key: string): Record<string, unknown> => {
   const { [key]: _removed, ...rest } = value;
   return rest;
@@ -73,17 +84,17 @@ describe("implementation output contract", () => {
     await rejectedBoth({ ...(await fixture()), outputs: [] });
   });
 
-  it("rejects a shuffled or duplicated member of every declared set", async () => {
+  it("rejects a shuffled or duplicated member of every declared set in the Zod authority", async () => {
     const sample = await fixture();
     for (const key of ["outputs", "parent_documents", "declared_inputs", "restore_targets"]) {
       const items = sample[key] as unknown[];
-      await rejectedBoth({ ...sample, [key]: [...items].reverse() });
-      await rejectedBoth({ ...sample, [key]: [items[0], items[0]] });
+      await rejectedByZodAuthority({ ...sample, [key]: [...items].reverse() });
+      await rejectedByZodAuthority({ ...sample, [key]: [items[0], items[0]] });
     }
     const changes = sample.undeclared_changes as Record<string, unknown>;
     const paths = changes.undeclared_paths as unknown[];
-    await rejectedBoth({ ...sample, undeclared_changes: { ...changes, undeclared_paths: [...paths].reverse() } });
-    await rejectedBoth({ ...sample, undeclared_changes: { ...changes, undeclared_paths: [paths[0], paths[0]] } });
+    await rejectedByZodAuthority({ ...sample, undeclared_changes: { ...changes, undeclared_paths: [...paths].reverse() } });
+    await rejectedByZodAuthority({ ...sample, undeclared_changes: { ...changes, undeclared_paths: [paths[0], paths[0]] } });
   });
 
   it("accepts a raw, unrepresentable undeclared path that no claim schema would admit", async () => {

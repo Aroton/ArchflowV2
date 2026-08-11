@@ -10,13 +10,11 @@ import {
 } from "../../src/contracts/validators.js";
 
 /**
- * `intent-receipt` agreement: the Zod mirror in `durable-intent.ts` against the compiled
- * `intent-receipt.schema.json`, which production validation stays on (`parseIntentReceipt`).
- * The receipt schema carries no `x-archflow-*` keyword of its own; the three
- * `x-archflow-sorted-unique-by` rules it inherits arrive through the `prepared_state` `$ref` to
- * `task-state`, so each is exercised here through a whole receipt — a sample only one side
- * rejects is exactly the drift `assertZodAgreement` exists to catch, and the `$ref` seam is where
- * a composed mirror could drift while both leaf mirrors stay correct.
+ * `intent-receipt` agreement: `intentReceiptV1Schema` is now the runtime authority behind
+ * `parseIntentReceipt`, and `intent-receipt.schema.json` is generated from it. The compiled schema
+ * is still exercised here so the generated document and its Zod source cannot drift structurally;
+ * the task-state ordering rules the receipt inherits through the `prepared_state` `$ref` are
+ * Zod-only since generation retired the `x-archflow-sorted-unique-by` keyword.
  */
 
 const SCHEMA_DIR = new URL("../../src/contracts/schemas/v1/", import.meta.url);
@@ -92,17 +90,20 @@ describe("intent-receipt agreement between JSON Schema and the Zod mirror", () =
   });
 
   /**
-   * The three `x-archflow-sorted-unique-by` keywords the receipt inherits through the
-   * `prepared_state` `$ref`, each exercised by splicing task-state's own negative fixture for that
-   * keyword into an otherwise-valid receipt.
+   * The three task-state ordering rules the receipt inherits through the `prepared_state` `$ref`.
+   * Generation retired the `x-archflow-sorted-unique-by` keyword from the committed schema, so the
+   * compiled document now accepts these fixtures; the Zod authority behind `parseIntentReceipt`
+   * must keep rejecting them.
    */
   for (const [keyword, stateFixture] of [
     ["authoritative_results sorted by (phase_instance, step)", "task-state.invalid-unsorted-authoritative-results"],
     ["approvals unique by gate_id", "task-state.invalid-duplicate-approval-gate-id"],
     ["waivers unique by gate_id", "task-state.invalid-duplicate-waiver-gate-id"],
   ] as const) {
-    it(`both reject a prepared_state violating ${keyword}`, () => {
-      expectBothReject({ ...sample, prepared_state: fixture(stateFixture) });
+    it(`the Zod authority rejects a prepared_state violating ${keyword}`, () => {
+      const mutated = { ...sample, prepared_state: fixture(stateFixture) };
+      expect(json.validate(mutated)).toBe(true);
+      expect(intentReceiptV1Schema.safeParse(mutated).success).toBe(false);
     });
   }
 });

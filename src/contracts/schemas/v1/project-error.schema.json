@@ -19,6 +19,7 @@
       "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
     },
     "pathClass": {
+      "type": "string",
       "enum": [
         "task-config",
         "task-state",
@@ -55,6 +56,7 @@
       "maximum": 9007199254740991
     },
     "tool": {
+      "type": "string",
       "enum": [
         "archflow_state",
         "archflow_counter_review",
@@ -63,18 +65,21 @@
       ]
     },
     "adapter": {
+      "type": "string",
       "enum": [
         "claude-cli",
         "codex-cli"
       ]
     },
     "family": {
+      "type": "string",
       "enum": [
         "claude",
         "codex"
       ]
     },
     "gate": {
+      "type": "string",
       "enum": [
         "artifact-approval",
         "review-trigger",
@@ -100,20 +105,20 @@
     },
     "issue": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "issue_code"
-      ],
       "properties": {
         "issue_code": {
           "$ref": "#/$defs/code"
         }
-      }
+      },
+      "required": [
+        "issue_code"
+      ],
+      "additionalProperties": false
     },
     "validationIssues": {
-      "type": "array",
       "minItems": 1,
       "maxItems": 5,
+      "type": "array",
       "items": {
         "type": "string",
         "minLength": 1,
@@ -122,11 +127,6 @@
     },
     "digests": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "expected_digest",
-        "observed_digest"
-      ],
       "properties": {
         "expected_digest": {
           "$ref": "#/$defs/digest"
@@ -134,15 +134,15 @@
         "observed_digest": {
           "$ref": "#/$defs/digest"
         }
-      }
+      },
+      "required": [
+        "expected_digest",
+        "observed_digest"
+      ],
+      "additionalProperties": false
     },
     "taskPath": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "task_id",
-        "path_class"
-      ],
       "properties": {
         "task_id": {
           "$ref": "#/$defs/taskSlug"
@@ -150,1839 +150,15 @@
         "path_class": {
           "$ref": "#/$defs/pathClass"
         }
-      }
-    },
-    "E_CONTRACT_INVALID": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "CONTRACT_INVALID"
-            },
-            "owner": {
-              "const": "contracts"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "CONTRACT_INVALID"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "issue_code"
-                  ],
-                  "properties": {
-                    "tool": {
-                      "$ref": "#/$defs/tool"
-                    },
-                    "issue_code": {
-                      "$ref": "#/$defs/code"
-                    },
-                    "schema_version": {
-                      "$ref": "#/$defs/version"
-                    },
-                    "issues": {
-                      "$ref": "#/$defs/validationIssues"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "correct-contract"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_RESULT_INVALID": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "RESULT_INVALID"
-            },
-            "owner": {
-              "const": "integrity"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "RESULT_INVALID"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "tool",
-                    "result_id"
-                  ],
-                  "properties": {
-                    "tool": {
-                      "$ref": "#/$defs/tool"
-                    },
-                    "result_id": {
-                      "$ref": "#/$defs/id"
-                    },
-                    "expected_digest": {
-                      "$ref": "#/$defs/digest"
-                    },
-                    "observed_digest": {
-                      "$ref": "#/$defs/digest"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "repair-retained-result"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_CONTRACT_VERSION_UNSUPPORTED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "CONTRACT_VERSION_UNSUPPORTED"
-            },
-            "owner": {
-              "const": "contracts"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "CONTRACT_VERSION_UNSUPPORTED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "schema_version",
-                    "supported_version"
-                  ],
-                  "properties": {
-                    "schema_version": {
-                      "$ref": "#/$defs/version"
-                    },
-                    "supported_version": {
-                      "$ref": "#/$defs/version"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "upgrade-caller"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_ENVELOPE_OVERFLOW": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "ENVELOPE_OVERFLOW"
-            },
-            "owner": {
-              "const": "contracts"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "ENVELOPE_OVERFLOW"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "offending_paths",
-                    "current_bytes",
-                    "byte_cap"
-                  ],
-                  "properties": {
-                    "offending_paths": {
-                      "type": "array",
-                      "minItems": 1,
-                      "uniqueItems": true,
-                      "x-archflow-sorted-unique": true,
-                      "items": {
-                        "$ref": "#/$defs/repositoryPathClaim"
-                      }
-                    },
-                    "current_bytes": {
-                      "$ref": "#/$defs/integer"
-                    },
-                    "byte_cap": {
-                      "$ref": "#/$defs/integer"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "reduce-review-subject"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_WORKFLOW_INVALID": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "WORKFLOW_INVALID"
-            },
-            "owner": {
-              "const": "config"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "WORKFLOW_INVALID"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/issue"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "repair-workflow"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_CONFIG_INVALID": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "CONFIG_INVALID"
-            },
-            "owner": {
-              "const": "config"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "CONFIG_INVALID"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/issue"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "repair-config"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_CONFIG_MODEL_UNSUPPORTED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "CONFIG_MODEL_UNSUPPORTED"
-            },
-            "owner": {
-              "const": "config"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "CONFIG_MODEL_UNSUPPORTED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "model"
-                  ],
-                  "properties": {
-                    "model": {
-                      "$ref": "#/$defs/id"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "select-supported-model"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_CONFIG_FAMILY_UNSUPPORTED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "CONFIG_FAMILY_UNSUPPORTED"
-            },
-            "owner": {
-              "const": "config"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "CONFIG_FAMILY_UNSUPPORTED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "family"
-                  ],
-                  "properties": {
-                    "family": {
-                      "$ref": "#/$defs/id"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "select-supported-family"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_RUNTIME_VERSION_UNSUPPORTED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "RUNTIME_VERSION_UNSUPPORTED"
-            },
-            "owner": {
-              "const": "config"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "RUNTIME_VERSION_UNSUPPORTED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "component",
-                    "version"
-                  ],
-                  "properties": {
-                    "component": {
-                      "$ref": "#/$defs/id"
-                    },
-                    "version": {
-                      "$ref": "#/$defs/version"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "upgrade-runtime"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_REPOSITORY_NOT_FOUND": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "REPOSITORY_NOT_FOUND"
-            },
-            "owner": {
-              "const": "repository"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "REPOSITORY_NOT_FOUND"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "repository_candidate_digest"
-                  ],
-                  "properties": {
-                    "repository_candidate_digest": {
-                      "$ref": "#/$defs/digest"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "open-repository"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_REPOSITORY_MISMATCH": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "REPOSITORY_MISMATCH"
-            },
-            "owner": {
-              "const": "repository"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "REPOSITORY_MISMATCH"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/digests"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "reopen-task-worktree"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_TASK_INVALID": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "TASK_INVALID"
-            },
-            "owner": {
-              "const": "repository"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "TASK_INVALID"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "task_id",
-                    "issue_code"
-                  ],
-                  "properties": {
-                    "task_id": {
-                      "$ref": "#/$defs/taskSlug"
-                    },
-                    "issue_code": {
-                      "$ref": "#/$defs/code"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "repair-task"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_PATH_INVALID": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "PATH_INVALID"
-            },
-            "owner": {
-              "const": "paths"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "PATH_INVALID"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/taskPath"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "use-valid-path-claim"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_PATH_ESCAPE": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "PATH_ESCAPE"
-            },
-            "owner": {
-              "const": "paths"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "PATH_ESCAPE"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/taskPath"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "use-task-relative-path"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_TASK_SCOPE_VIOLATION": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "TASK_SCOPE_VIOLATION"
-            },
-            "owner": {
-              "const": "paths"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "TASK_SCOPE_VIOLATION"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/taskPath"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "use-task-scoped-path"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_GIT_CONFLICT": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "GIT_CONFLICT"
-            },
-            "owner": {
-              "const": "repository"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "GIT_CONFLICT"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "operation"
-                  ],
-                  "properties": {
-                    "operation": {
-                      "$ref": "#/$defs/code"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "resolve-git-conflict"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_GIT_DIVERGED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "GIT_DIVERGED"
-            },
-            "owner": {
-              "const": "repository"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "GIT_DIVERGED"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/digests"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "reconcile-git-history"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_HANDOFF_REQUIRED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "HANDOFF_REQUIRED"
-            },
-            "owner": {
-              "const": "repository"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "HANDOFF_REQUIRED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "phase_instance"
-                  ],
-                  "properties": {
-                    "phase_instance": {
-                      "$ref": "#/$defs/phase"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "complete-clean-handoff"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_POLICY_BASE_INVALID": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "POLICY_BASE_INVALID"
-            },
-            "owner": {
-              "const": "policy"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "POLICY_BASE_INVALID"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "expected_digest"
-                  ],
-                  "properties": {
-                    "expected_digest": {
-                      "$ref": "#/$defs/digest"
-                    },
-                    "observed_digest": {
-                      "$ref": "#/$defs/digest"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "restore-policy-base"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_WORKFLOW_MISMATCH": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "WORKFLOW_MISMATCH"
-            },
-            "owner": {
-              "const": "policy"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "WORKFLOW_MISMATCH"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/digests"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "restore-pinned-workflow"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_PINNED_CONFIG_MISMATCH": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "PINNED_CONFIG_MISMATCH"
-            },
-            "owner": {
-              "const": "policy"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "PINNED_CONFIG_MISMATCH"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/digests"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "restore-pinned-config"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_STALE_SKILLS": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "STALE_SKILLS"
-            },
-            "owner": {
-              "const": "policy"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "STALE_SKILLS"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/digests"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "refresh-skills"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_STATE_MISSING": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "STATE_MISSING"
-            },
-            "owner": {
-              "const": "state"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "STATE_MISSING"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "phase_instance"
-                  ],
-                  "properties": {
-                    "phase_instance": {
-                      "$ref": "#/$defs/phase"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "initialize-state"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_STATE_INVALID": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "STATE_INVALID"
-            },
-            "owner": {
-              "const": "state"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "STATE_INVALID"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "phase_instance",
-                    "issue_code"
-                  ],
-                  "properties": {
-                    "phase_instance": {
-                      "$ref": "#/$defs/phase"
-                    },
-                    "issue_code": {
-                      "$ref": "#/$defs/code"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "repair-state"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_TRANSITION_INVALID": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "TRANSITION_INVALID"
-            },
-            "owner": {
-              "const": "state"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "TRANSITION_INVALID"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "phase_instance",
-                    "from",
-                    "to"
-                  ],
-                  "properties": {
-                    "phase_instance": {
-                      "$ref": "#/$defs/phase"
-                    },
-                    "from": {
-                      "$ref": "#/$defs/code"
-                    },
-                    "to": {
-                      "$ref": "#/$defs/code"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "select-valid-transition"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_INPUT_FINGERPRINT_MISMATCH": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "INPUT_FINGERPRINT_MISMATCH"
-            },
-            "owner": {
-              "const": "state"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "INPUT_FINGERPRINT_MISMATCH"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/digests"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "create-fresh-intent"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_STATE_CONFLICT": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "STATE_CONFLICT"
-            },
-            "owner": {
-              "const": "state"
-            },
-            "retryable": {
-              "const": true
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "STATE_CONFLICT"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "expected_revision",
-                    "observed_revision"
-                  ],
-                  "properties": {
-                    "expected_revision": {
-                      "$ref": "#/$defs/integer"
-                    },
-                    "observed_revision": {
-                      "$ref": "#/$defs/integer"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "reread-and-retry-intent"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_SUPPLEMENTAL_REVIEW_REQUIRED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "SUPPLEMENTAL_REVIEW_REQUIRED"
-            },
-            "owner": {
-              "const": "state"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "SUPPLEMENTAL_REVIEW_REQUIRED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "gate_id",
-                    "evidence_digest"
-                  ],
-                  "properties": {
-                    "gate_id": {
-                      "$ref": "#/$defs/pathSafeId"
-                    },
-                    "evidence_digest": {
-                      "$ref": "#/$defs/digest"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "triage-supplemental-review"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_INTENT_MISMATCH": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "INTENT_MISMATCH"
-            },
-            "owner": {
-              "const": "intent"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "INTENT_MISMATCH"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/digests"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "create-fresh-intent"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_INTENT_NOT_CURRENT": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "INTENT_NOT_CURRENT"
-            },
-            "owner": {
-              "const": "intent"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "INTENT_NOT_CURRENT"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "intent_id",
-                    "receipt_revision",
-                    "current_revision"
-                  ],
-                  "properties": {
-                    "intent_id": {
-                      "$ref": "#/$defs/pathSafeId"
-                    },
-                    "receipt_revision": {
-                      "$ref": "#/$defs/integer"
-                    },
-                    "current_revision": {
-                      "$ref": "#/$defs/integer"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "inspect-current-state"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_STAGED_REQUEST_NOT_FOUND": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "STAGED_REQUEST_NOT_FOUND"
-            },
-            "owner": {
-              "const": "intent"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "STAGED_REQUEST_NOT_FOUND"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "task_id",
-                    "intent_id"
-                  ],
-                  "properties": {
-                    "task_id": {
-                      "$ref": "#/$defs/taskSlug"
-                    },
-                    "intent_id": {
-                      "$ref": "#/$defs/pathSafeId"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "stage-request-with-build-request"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_STAGED_REQUEST_MISMATCH": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "STAGED_REQUEST_MISMATCH"
-            },
-            "owner": {
-              "const": "intent"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "STAGED_REQUEST_MISMATCH"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "intent_id",
-                    "issue_code"
-                  ],
-                  "properties": {
-                    "intent_id": {
-                      "$ref": "#/$defs/pathSafeId"
-                    },
-                    "issue_code": {
-                      "$ref": "#/$defs/code"
-                    },
-                    "expected_digest": {
-                      "$ref": "#/$defs/digest"
-                    },
-                    "observed_digest": {
-                      "$ref": "#/$defs/digest"
-                    },
-                    "issues": {
-                      "$ref": "#/$defs/validationIssues"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "rebuild-staged-request"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_SNAPSHOT_LIMIT": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "SNAPSHOT_LIMIT"
-            },
-            "owner": {
-              "const": "snapshot"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "SNAPSHOT_LIMIT"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "limit_scope",
-                    "offending_paths",
-                    "current_bytes",
-                    "byte_cap"
-                  ],
-                  "properties": {
-                    "limit_scope": {
-                      "enum": [
-                        "result",
-                        "task"
-                      ]
-                    },
-                    "offending_paths": {
-                      "type": "array",
-                      "minItems": 1,
-                      "uniqueItems": true,
-                      "x-archflow-sorted-unique": true,
-                      "items": {
-                        "$ref": "#/$defs/repositoryPathClaim"
-                      }
-                    },
-                    "current_bytes": {
-                      "$ref": "#/$defs/integer"
-                    },
-                    "byte_cap": {
-                      "$ref": "#/$defs/integer"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "reduce-snapshot"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_SNAPSHOT_INVALID": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "SNAPSHOT_INVALID"
-            },
-            "owner": {
-              "const": "snapshot"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "SNAPSHOT_INVALID"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "snapshot_digest",
-                    "issue_code"
-                  ],
-                  "properties": {
-                    "snapshot_digest": {
-                      "$ref": "#/$defs/digest"
-                    },
-                    "issue_code": {
-                      "$ref": "#/$defs/code"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "repair-snapshot"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_RESTORE_COLLISION": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "RESTORE_COLLISION"
-            },
-            "owner": {
-              "const": "snapshot"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "RESTORE_COLLISION"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "gate_id",
-                    "path_class"
-                  ],
-                  "properties": {
-                    "gate_id": {
-                      "$ref": "#/$defs/pathSafeId"
-                    },
-                    "path_class": {
-                      "$ref": "#/$defs/pathClass"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "resolve-restore-gate"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_RECONCILIATION_REQUIRED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "RECONCILIATION_REQUIRED"
-            },
-            "owner": {
-              "const": "snapshot"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "RECONCILIATION_REQUIRED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "recorded_digest",
-                    "observed_digest"
-                  ],
-                  "properties": {
-                    "recorded_digest": {
-                      "$ref": "#/$defs/digest"
-                    },
-                    "observed_digest": {
-                      "$ref": "#/$defs/digest"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "run-reconciliation"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_SECRET_DETECTED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "SECRET_DETECTED"
-            },
-            "owner": {
-              "const": "snapshot"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "SECRET_DETECTED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "path_class",
-                    "detector_id"
-                  ],
-                  "properties": {
-                    "path_class": {
-                      "$ref": "#/$defs/pathClass"
-                    },
-                    "detector_id": {
-                      "$ref": "#/$defs/id"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "remove-secret"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_GATE_ACTIVE": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "GATE_ACTIVE"
-            },
-            "owner": {
-              "const": "gate"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "GATE_ACTIVE"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/gateParams"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "resolve-recorded-gate"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_GATE_DECISION_INVALID": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "GATE_DECISION_INVALID"
-            },
-            "owner": {
-              "const": "gate"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "GATE_DECISION_INVALID"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "gate_id",
-                    "gate_kind",
-                    "issue_code"
-                  ],
-                  "properties": {
-                    "gate_id": {
-                      "$ref": "#/$defs/pathSafeId"
-                    },
-                    "gate_kind": {
-                      "$ref": "#/$defs/gate"
-                    },
-                    "issue_code": {
-                      "$ref": "#/$defs/code"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "record-valid-gate-decision"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_GATE_CANCELLED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "GATE_CANCELLED"
-            },
-            "owner": {
-              "const": "gate"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "GATE_CANCELLED"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/gateParams"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "restart-gate-flow"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_GATE_SUPERSEDED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "GATE_SUPERSEDED"
-            },
-            "owner": {
-              "const": "gate"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "GATE_SUPERSEDED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "gate_id",
-                    "old_subject_digest",
-                    "new_subject_digest"
-                  ],
-                  "properties": {
-                    "gate_id": {
-                      "$ref": "#/$defs/pathSafeId"
-                    },
-                    "old_subject_digest": {
-                      "$ref": "#/$defs/digest"
-                    },
-                    "new_subject_digest": {
-                      "$ref": "#/$defs/digest"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "retry-with-superseding-subject"
-            }
-          },
-          "type": "object"
-        }
-      ]
+      },
+      "required": [
+        "task_id",
+        "path_class"
+      ],
+      "additionalProperties": false
     },
     "gateParams": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "gate_id",
-        "gate_kind"
-      ],
       "properties": {
         "gate_id": {
           "$ref": "#/$defs/pathSafeId"
@@ -1990,281 +166,27 @@
         "gate_kind": {
           "$ref": "#/$defs/gate"
         }
-      }
-    },
-    "E_UNSUPPORTED_HOST": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "UNSUPPORTED_HOST"
-            },
-            "owner": {
-              "const": "routing"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "UNSUPPORTED_HOST"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "host"
-                  ],
-                  "properties": {
-                    "host": {
-                      "$ref": "#/$defs/id"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "select-supported-host"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_UNSUPPORTED_MODEL": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "UNSUPPORTED_MODEL"
-            },
-            "owner": {
-              "const": "routing"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "UNSUPPORTED_MODEL"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "model"
-                  ],
-                  "properties": {
-                    "model": {
-                      "$ref": "#/$defs/id"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "select-supported-model"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_FAMILY_MISMATCH": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "FAMILY_MISMATCH"
-            },
-            "owner": {
-              "const": "routing"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "FAMILY_MISMATCH"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "expected_family",
-                    "observed_family"
-                  ],
-                  "properties": {
-                    "expected_family": {
-                      "$ref": "#/$defs/family"
-                    },
-                    "observed_family": {
-                      "$ref": "#/$defs/family"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "select-correct-family"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_CLI_VERSION_UNSUPPORTED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "CLI_VERSION_UNSUPPORTED"
-            },
-            "owner": {
-              "const": "dispatch"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "CLI_VERSION_UNSUPPORTED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "adapter",
-                    "version"
-                  ],
-                  "properties": {
-                    "adapter": {
-                      "$ref": "#/$defs/adapter"
-                    },
-                    "version": {
-                      "$ref": "#/$defs/version"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "upgrade-cli"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_AUTH_UNAVAILABLE": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "AUTH_UNAVAILABLE"
-            },
-            "owner": {
-              "const": "dispatch"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "AUTH_UNAVAILABLE"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/adapterOnly"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "repair-authentication"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_CLI_MISSING": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "CLI_MISSING"
-            },
-            "owner": {
-              "const": "dispatch"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "CLI_MISSING"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/adapterOnly"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "install-cli"
-            }
-          },
-          "type": "object"
-        }
-      ]
+      },
+      "required": [
+        "gate_id",
+        "gate_kind"
+      ],
+      "additionalProperties": false
     },
     "adapterOnly": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "adapter"
-      ],
       "properties": {
         "adapter": {
           "$ref": "#/$defs/adapter"
         }
-      }
+      },
+      "required": [
+        "adapter"
+      ],
+      "additionalProperties": false
     },
     "adapterAttempt": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "adapter",
-        "attempt"
-      ],
       "properties": {
         "adapter": {
           "$ref": "#/$defs/adapter"
@@ -2272,485 +194,72 @@
         "attempt": {
           "$ref": "#/$defs/integer"
         }
-      }
+      },
+      "required": [
+        "adapter",
+        "attempt"
+      ],
+      "additionalProperties": false
     },
-    "E_SANDBOX_UNAVAILABLE": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "SANDBOX_UNAVAILABLE"
-            },
-            "owner": {
-              "const": "sandbox"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "SANDBOX_UNAVAILABLE"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "capability"
-                  ],
-                  "properties": {
-                    "capability": {
-                      "$ref": "#/$defs/id"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "repair-sandbox"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_SANDBOX_PROBE_FAILED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "SANDBOX_PROBE_FAILED"
-            },
-            "owner": {
-              "const": "sandbox"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "SANDBOX_PROBE_FAILED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "capability",
-                    "failure_class"
-                  ],
-                  "properties": {
-                    "capability": {
-                      "$ref": "#/$defs/id"
-                    },
-                    "failure_class": {
-                      "$ref": "#/$defs/code"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "repair-sandbox"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_RATE_LIMITED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "RATE_LIMITED"
-            },
-            "owner": {
-              "const": "dispatch"
-            },
-            "retryable": {
-              "const": true
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "RATE_LIMITED"
-                },
-                "parameters": {
-                  "$ref": "#/$defs/adapterAttempt"
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "retry-after-backoff"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_TIMEOUT": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "TIMEOUT"
-            },
-            "owner": {
-              "const": "dispatch"
-            },
-            "retryable": {
-              "const": true
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "TIMEOUT"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "adapter",
-                    "attempt",
-                    "limit_ms"
-                  ],
-                  "properties": {
-                    "adapter": {
-                      "$ref": "#/$defs/adapter"
-                    },
-                    "attempt": {
-                      "$ref": "#/$defs/integer"
-                    },
-                    "limit_ms": {
-                      "$ref": "#/$defs/integer"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "retry-unchanged-attempt"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_CANCELLED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "CANCELLED"
-            },
-            "owner": {
-              "const": "dispatch"
-            },
-            "retryable": {
-              "const": true
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "CANCELLED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "source",
-                    "attempt"
-                  ],
-                  "properties": {
-                    "source": {
-                      "enum": [
-                        "client",
-                        "transport"
-                      ]
-                    },
-                    "attempt": {
-                      "$ref": "#/$defs/integer"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "restart-child-attempt"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_MODEL_OUTPUT_INVALID": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "MODEL_OUTPUT_INVALID"
-            },
-            "owner": {
-              "const": "dispatch"
-            },
-            "retryable": {
-              "const": true
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "MODEL_OUTPUT_INVALID"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "adapter",
-                    "attempt",
-                    "issue_code"
-                  ],
-                  "properties": {
-                    "adapter": {
-                      "$ref": "#/$defs/adapter"
-                    },
-                    "attempt": {
-                      "$ref": "#/$defs/integer"
-                    },
-                    "issue_code": {
-                      "$ref": "#/$defs/code"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "retry-unchanged-attempt"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_IO_ERROR": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "IO_ERROR"
-            },
-            "owner": {
-              "const": "dispatch"
-            },
-            "retryable": {
-              "const": true
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "IO_ERROR"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "operation",
-                    "attempt"
-                  ],
-                  "properties": {
-                    "operation": {
-                      "$ref": "#/$defs/code"
-                    },
-                    "attempt": {
-                      "$ref": "#/$defs/integer"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "retry-unchanged-attempt"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_OUTPUT_OVERFLOW": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "OUTPUT_OVERFLOW"
-            },
-            "owner": {
-              "const": "dispatch"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "OUTPUT_OVERFLOW"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "adapter",
-                    "byte_count",
-                    "byte_cap"
-                  ],
-                  "properties": {
-                    "adapter": {
-                      "$ref": "#/$defs/adapter"
-                    },
-                    "byte_count": {
-                      "$ref": "#/$defs/integer"
-                    },
-                    "byte_cap": {
-                      "$ref": "#/$defs/integer"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "reduce-output"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_PROCESS_FAILED": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "PROCESS_FAILED"
-            },
-            "owner": {
-              "const": "dispatch"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "PROCESS_FAILED"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "adapter",
-                    "exit_class"
-                  ],
-                  "properties": {
-                    "adapter": {
-                      "$ref": "#/$defs/adapter"
-                    },
-                    "exit_class": {
-                      "$ref": "#/$defs/code"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "repair-before-fresh-attempt"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "E_INTERNAL_ERROR": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/errorBase"
-        },
-        {
-          "properties": {
-            "code": {
-              "const": "INTERNAL_ERROR"
-            },
-            "owner": {
-              "const": "integrity"
-            },
-            "retryable": {
-              "const": false
-            },
-            "diagnostic": {
-              "properties": {
-                "template_id": {
-                  "const": "INTERNAL_ERROR"
-                },
-                "parameters": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "correlation_id"
-                  ],
-                  "properties": {
-                    "correlation_id": {
-                      "$ref": "#/$defs/id"
-                    }
-                  }
-                }
-              },
-              "type": "object"
-            },
-            "next_action": {
-              "const": "stop-and-inspect"
-            }
-          },
-          "type": "object"
-        }
-      ]
-    },
-    "errorBase": {
+    "E_CONTRACT_INVALID": {
       "type": "object",
-      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CONTRACT_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "contracts"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CONTRACT_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "tool": {
+                  "$ref": "#/$defs/tool"
+                },
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                },
+                "schema_version": {
+                  "$ref": "#/$defs/version"
+                },
+                "issues": {
+                  "$ref": "#/$defs/validationIssues"
+                }
+              },
+              "required": [
+                "issue_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "correct-contract"
+        }
+      },
       "required": [
         "schema_version",
         "code",
@@ -2759,30 +268,3407 @@
         "diagnostic",
         "next_action"
       ],
+      "additionalProperties": false
+    },
+    "E_RESULT_INVALID": {
+      "type": "object",
       "properties": {
         "schema_version": {
+          "type": "string",
           "const": "1"
         },
-        "code": {},
-        "owner": {},
-        "retryable": {},
+        "code": {
+          "type": "string",
+          "const": "RESULT_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "integrity"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
         "diagnostic": {
           "type": "object",
-          "additionalProperties": false,
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "RESULT_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "tool": {
+                  "$ref": "#/$defs/tool"
+                },
+                "result_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "expected_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "observed_digest": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "tool",
+                "result_id"
+              ],
+              "additionalProperties": false
+            }
+          },
           "required": [
             "template_id",
             "parameters"
           ],
-          "properties": {
-            "template_id": {},
-            "parameters": {}
-          }
+          "additionalProperties": false
         },
-        "next_action": {}
-      }
+        "next_action": {
+          "type": "string",
+          "const": "repair-retained-result"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_CONTRACT_VERSION_UNSUPPORTED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CONTRACT_VERSION_UNSUPPORTED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "contracts"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CONTRACT_VERSION_UNSUPPORTED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "schema_version": {
+                  "$ref": "#/$defs/version"
+                },
+                "supported_version": {
+                  "$ref": "#/$defs/version"
+                }
+              },
+              "required": [
+                "schema_version",
+                "supported_version"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "upgrade-caller"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_ENVELOPE_OVERFLOW": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "ENVELOPE_OVERFLOW"
+        },
+        "owner": {
+          "type": "string",
+          "const": "contracts"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "ENVELOPE_OVERFLOW"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "offending_paths": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/repositoryPathClaim"
+                  },
+                  "uniqueItems": true,
+                  "x-archflow-sorted-unique": true
+                },
+                "current_bytes": {
+                  "$ref": "#/$defs/integer"
+                },
+                "byte_cap": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "offending_paths",
+                "current_bytes",
+                "byte_cap"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "reduce-review-subject"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_WORKFLOW_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "WORKFLOW_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "config"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "WORKFLOW_INVALID"
+            },
+            "parameters": {
+              "$ref": "#/$defs/issue"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-workflow"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_CONFIG_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CONFIG_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "config"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CONFIG_INVALID"
+            },
+            "parameters": {
+              "$ref": "#/$defs/issue"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-config"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_CONFIG_MODEL_UNSUPPORTED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CONFIG_MODEL_UNSUPPORTED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "config"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CONFIG_MODEL_UNSUPPORTED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "model"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "select-supported-model"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_CONFIG_FAMILY_UNSUPPORTED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CONFIG_FAMILY_UNSUPPORTED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "config"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CONFIG_FAMILY_UNSUPPORTED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "family": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "family"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "select-supported-family"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_RUNTIME_VERSION_UNSUPPORTED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "RUNTIME_VERSION_UNSUPPORTED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "config"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "RUNTIME_VERSION_UNSUPPORTED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "component": {
+                  "$ref": "#/$defs/id"
+                },
+                "version": {
+                  "$ref": "#/$defs/version"
+                }
+              },
+              "required": [
+                "component",
+                "version"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "upgrade-runtime"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_REPOSITORY_NOT_FOUND": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "REPOSITORY_NOT_FOUND"
+        },
+        "owner": {
+          "type": "string",
+          "const": "repository"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "REPOSITORY_NOT_FOUND"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "repository_candidate_digest": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "repository_candidate_digest"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "open-repository"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_REPOSITORY_MISMATCH": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "REPOSITORY_MISMATCH"
+        },
+        "owner": {
+          "type": "string",
+          "const": "repository"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "REPOSITORY_MISMATCH"
+            },
+            "parameters": {
+              "$ref": "#/$defs/digests"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "reopen-task-worktree"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_TASK_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "TASK_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "repository"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "TASK_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "task_id": {
+                  "$ref": "#/$defs/taskSlug"
+                },
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "task_id",
+                "issue_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-task"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_PATH_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "PATH_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "paths"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "PATH_INVALID"
+            },
+            "parameters": {
+              "$ref": "#/$defs/taskPath"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "use-valid-path-claim"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_PATH_ESCAPE": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "PATH_ESCAPE"
+        },
+        "owner": {
+          "type": "string",
+          "const": "paths"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "PATH_ESCAPE"
+            },
+            "parameters": {
+              "$ref": "#/$defs/taskPath"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "use-task-relative-path"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_TASK_SCOPE_VIOLATION": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "TASK_SCOPE_VIOLATION"
+        },
+        "owner": {
+          "type": "string",
+          "const": "paths"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "TASK_SCOPE_VIOLATION"
+            },
+            "parameters": {
+              "$ref": "#/$defs/taskPath"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "use-task-scoped-path"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_GIT_CONFLICT": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "GIT_CONFLICT"
+        },
+        "owner": {
+          "type": "string",
+          "const": "repository"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "GIT_CONFLICT"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "operation": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "operation"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "resolve-git-conflict"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_GIT_DIVERGED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "GIT_DIVERGED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "repository"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "GIT_DIVERGED"
+            },
+            "parameters": {
+              "$ref": "#/$defs/digests"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "reconcile-git-history"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_HANDOFF_REQUIRED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "HANDOFF_REQUIRED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "repository"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "HANDOFF_REQUIRED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "phase_instance": {
+                  "$ref": "#/$defs/phase"
+                }
+              },
+              "required": [
+                "phase_instance"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "complete-clean-handoff"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_POLICY_BASE_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "POLICY_BASE_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "policy"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "POLICY_BASE_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "expected_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "observed_digest": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "expected_digest"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "restore-policy-base"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_WORKFLOW_MISMATCH": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "WORKFLOW_MISMATCH"
+        },
+        "owner": {
+          "type": "string",
+          "const": "policy"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "WORKFLOW_MISMATCH"
+            },
+            "parameters": {
+              "$ref": "#/$defs/digests"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "restore-pinned-workflow"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_PINNED_CONFIG_MISMATCH": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "PINNED_CONFIG_MISMATCH"
+        },
+        "owner": {
+          "type": "string",
+          "const": "policy"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "PINNED_CONFIG_MISMATCH"
+            },
+            "parameters": {
+              "$ref": "#/$defs/digests"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "restore-pinned-config"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_STALE_SKILLS": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "STALE_SKILLS"
+        },
+        "owner": {
+          "type": "string",
+          "const": "policy"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "STALE_SKILLS"
+            },
+            "parameters": {
+              "$ref": "#/$defs/digests"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "refresh-skills"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_STATE_MISSING": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "STATE_MISSING"
+        },
+        "owner": {
+          "type": "string",
+          "const": "state"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "STATE_MISSING"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "phase_instance": {
+                  "$ref": "#/$defs/phase"
+                }
+              },
+              "required": [
+                "phase_instance"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "initialize-state"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_STATE_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "STATE_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "state"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "STATE_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "phase_instance": {
+                  "$ref": "#/$defs/phase"
+                },
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "phase_instance",
+                "issue_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-state"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_TRANSITION_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "TRANSITION_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "state"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "TRANSITION_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "phase_instance": {
+                  "$ref": "#/$defs/phase"
+                },
+                "from": {
+                  "$ref": "#/$defs/code"
+                },
+                "to": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "phase_instance",
+                "from",
+                "to"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "select-valid-transition"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_INPUT_FINGERPRINT_MISMATCH": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "INPUT_FINGERPRINT_MISMATCH"
+        },
+        "owner": {
+          "type": "string",
+          "const": "state"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "INPUT_FINGERPRINT_MISMATCH"
+            },
+            "parameters": {
+              "$ref": "#/$defs/digests"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "create-fresh-intent"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_STATE_CONFLICT": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "STATE_CONFLICT"
+        },
+        "owner": {
+          "type": "string",
+          "const": "state"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": true
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "STATE_CONFLICT"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "expected_revision": {
+                  "$ref": "#/$defs/integer"
+                },
+                "observed_revision": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "expected_revision",
+                "observed_revision"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "reread-and-retry-intent"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_SUPPLEMENTAL_REVIEW_REQUIRED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "SUPPLEMENTAL_REVIEW_REQUIRED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "state"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "SUPPLEMENTAL_REVIEW_REQUIRED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "gate_id": {
+                  "$ref": "#/$defs/pathSafeId"
+                },
+                "evidence_digest": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "gate_id",
+                "evidence_digest"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "triage-supplemental-review"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_INTENT_MISMATCH": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "INTENT_MISMATCH"
+        },
+        "owner": {
+          "type": "string",
+          "const": "intent"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "INTENT_MISMATCH"
+            },
+            "parameters": {
+              "$ref": "#/$defs/digests"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "create-fresh-intent"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_INTENT_NOT_CURRENT": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "INTENT_NOT_CURRENT"
+        },
+        "owner": {
+          "type": "string",
+          "const": "intent"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "INTENT_NOT_CURRENT"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "intent_id": {
+                  "$ref": "#/$defs/pathSafeId"
+                },
+                "receipt_revision": {
+                  "$ref": "#/$defs/integer"
+                },
+                "current_revision": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "intent_id",
+                "receipt_revision",
+                "current_revision"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "inspect-current-state"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_STAGED_REQUEST_NOT_FOUND": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "STAGED_REQUEST_NOT_FOUND"
+        },
+        "owner": {
+          "type": "string",
+          "const": "intent"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "STAGED_REQUEST_NOT_FOUND"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "task_id": {
+                  "$ref": "#/$defs/taskSlug"
+                },
+                "intent_id": {
+                  "$ref": "#/$defs/pathSafeId"
+                }
+              },
+              "required": [
+                "task_id",
+                "intent_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "stage-request-with-build-request"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_STAGED_REQUEST_MISMATCH": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "STAGED_REQUEST_MISMATCH"
+        },
+        "owner": {
+          "type": "string",
+          "const": "intent"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "STAGED_REQUEST_MISMATCH"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "intent_id": {
+                  "$ref": "#/$defs/pathSafeId"
+                },
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                },
+                "expected_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "observed_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "issues": {
+                  "$ref": "#/$defs/validationIssues"
+                }
+              },
+              "required": [
+                "intent_id",
+                "issue_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "rebuild-staged-request"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_SNAPSHOT_LIMIT": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "SNAPSHOT_LIMIT"
+        },
+        "owner": {
+          "type": "string",
+          "const": "snapshot"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "SNAPSHOT_LIMIT"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "limit_scope": {
+                  "type": "string",
+                  "enum": [
+                    "result",
+                    "task"
+                  ]
+                },
+                "offending_paths": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/repositoryPathClaim"
+                  },
+                  "uniqueItems": true,
+                  "x-archflow-sorted-unique": true
+                },
+                "current_bytes": {
+                  "$ref": "#/$defs/integer"
+                },
+                "byte_cap": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "limit_scope",
+                "offending_paths",
+                "current_bytes",
+                "byte_cap"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "reduce-snapshot"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_SNAPSHOT_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "SNAPSHOT_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "snapshot"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "SNAPSHOT_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "snapshot_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "snapshot_digest",
+                "issue_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-snapshot"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_RESTORE_COLLISION": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "RESTORE_COLLISION"
+        },
+        "owner": {
+          "type": "string",
+          "const": "snapshot"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "RESTORE_COLLISION"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "gate_id": {
+                  "$ref": "#/$defs/pathSafeId"
+                },
+                "path_class": {
+                  "$ref": "#/$defs/pathClass"
+                }
+              },
+              "required": [
+                "gate_id",
+                "path_class"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "resolve-restore-gate"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_RECONCILIATION_REQUIRED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "RECONCILIATION_REQUIRED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "snapshot"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "RECONCILIATION_REQUIRED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "recorded_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "observed_digest": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "recorded_digest",
+                "observed_digest"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "run-reconciliation"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_SECRET_DETECTED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "SECRET_DETECTED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "snapshot"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "SECRET_DETECTED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path_class": {
+                  "$ref": "#/$defs/pathClass"
+                },
+                "detector_id": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "path_class",
+                "detector_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "remove-secret"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_GATE_ACTIVE": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "GATE_ACTIVE"
+        },
+        "owner": {
+          "type": "string",
+          "const": "gate"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "GATE_ACTIVE"
+            },
+            "parameters": {
+              "$ref": "#/$defs/gateParams"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "resolve-recorded-gate"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_GATE_DECISION_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "GATE_DECISION_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "gate"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "GATE_DECISION_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "gate_id": {
+                  "$ref": "#/$defs/pathSafeId"
+                },
+                "gate_kind": {
+                  "$ref": "#/$defs/gate"
+                },
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "gate_id",
+                "gate_kind",
+                "issue_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "record-valid-gate-decision"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_GATE_CANCELLED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "GATE_CANCELLED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "gate"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "GATE_CANCELLED"
+            },
+            "parameters": {
+              "$ref": "#/$defs/gateParams"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "restart-gate-flow"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_GATE_SUPERSEDED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "GATE_SUPERSEDED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "gate"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "GATE_SUPERSEDED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "gate_id": {
+                  "$ref": "#/$defs/pathSafeId"
+                },
+                "old_subject_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "new_subject_digest": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "gate_id",
+                "old_subject_digest",
+                "new_subject_digest"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "retry-with-superseding-subject"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_UNSUPPORTED_HOST": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "UNSUPPORTED_HOST"
+        },
+        "owner": {
+          "type": "string",
+          "const": "routing"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "UNSUPPORTED_HOST"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "host"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "select-supported-host"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_UNSUPPORTED_MODEL": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "UNSUPPORTED_MODEL"
+        },
+        "owner": {
+          "type": "string",
+          "const": "routing"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "UNSUPPORTED_MODEL"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "model"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "select-supported-model"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_FAMILY_MISMATCH": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "FAMILY_MISMATCH"
+        },
+        "owner": {
+          "type": "string",
+          "const": "routing"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "FAMILY_MISMATCH"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "expected_family": {
+                  "$ref": "#/$defs/family"
+                },
+                "observed_family": {
+                  "$ref": "#/$defs/family"
+                }
+              },
+              "required": [
+                "expected_family",
+                "observed_family"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "select-correct-family"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_CLI_VERSION_UNSUPPORTED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CLI_VERSION_UNSUPPORTED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CLI_VERSION_UNSUPPORTED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "adapter": {
+                  "$ref": "#/$defs/adapter"
+                },
+                "version": {
+                  "$ref": "#/$defs/version"
+                }
+              },
+              "required": [
+                "adapter",
+                "version"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "upgrade-cli"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_AUTH_UNAVAILABLE": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "AUTH_UNAVAILABLE"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "AUTH_UNAVAILABLE"
+            },
+            "parameters": {
+              "$ref": "#/$defs/adapterOnly"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-authentication"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_CLI_MISSING": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CLI_MISSING"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CLI_MISSING"
+            },
+            "parameters": {
+              "$ref": "#/$defs/adapterOnly"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "install-cli"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_SANDBOX_UNAVAILABLE": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "SANDBOX_UNAVAILABLE"
+        },
+        "owner": {
+          "type": "string",
+          "const": "sandbox"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "SANDBOX_UNAVAILABLE"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "capability": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "capability"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-sandbox"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_SANDBOX_PROBE_FAILED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "SANDBOX_PROBE_FAILED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "sandbox"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "SANDBOX_PROBE_FAILED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "capability": {
+                  "$ref": "#/$defs/id"
+                },
+                "failure_class": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "capability",
+                "failure_class"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-sandbox"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_RATE_LIMITED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "RATE_LIMITED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": true
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "RATE_LIMITED"
+            },
+            "parameters": {
+              "$ref": "#/$defs/adapterAttempt"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "retry-after-backoff"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_TIMEOUT": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "TIMEOUT"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": true
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "TIMEOUT"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "adapter": {
+                  "$ref": "#/$defs/adapter"
+                },
+                "attempt": {
+                  "$ref": "#/$defs/integer"
+                },
+                "limit_ms": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "adapter",
+                "attempt",
+                "limit_ms"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "retry-unchanged-attempt"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_CANCELLED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CANCELLED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": true
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CANCELLED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "client",
+                    "transport"
+                  ]
+                },
+                "attempt": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "source",
+                "attempt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "restart-child-attempt"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_MODEL_OUTPUT_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "MODEL_OUTPUT_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": true
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "MODEL_OUTPUT_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "adapter": {
+                  "$ref": "#/$defs/adapter"
+                },
+                "attempt": {
+                  "$ref": "#/$defs/integer"
+                },
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "adapter",
+                "attempt",
+                "issue_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "retry-unchanged-attempt"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_IO_ERROR": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "IO_ERROR"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": true
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "IO_ERROR"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "operation": {
+                  "$ref": "#/$defs/code"
+                },
+                "attempt": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "operation",
+                "attempt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "retry-unchanged-attempt"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_OUTPUT_OVERFLOW": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "OUTPUT_OVERFLOW"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "OUTPUT_OVERFLOW"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "adapter": {
+                  "$ref": "#/$defs/adapter"
+                },
+                "byte_count": {
+                  "$ref": "#/$defs/integer"
+                },
+                "byte_cap": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "adapter",
+                "byte_count",
+                "byte_cap"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "reduce-output"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_PROCESS_FAILED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "PROCESS_FAILED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "PROCESS_FAILED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "adapter": {
+                  "$ref": "#/$defs/adapter"
+                },
+                "exit_class": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "adapter",
+                "exit_class"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-before-fresh-attempt"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_INTERNAL_ERROR": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "INTERNAL_ERROR"
+        },
+        "owner": {
+          "type": "string",
+          "const": "integrity"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "INTERNAL_ERROR"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "correlation_id": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "correlation_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "stop-and-inspect"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
     }
   },
-  "oneOf": [
+  "anyOf": [
     {
       "$ref": "#/$defs/E_CONTRACT_INVALID"
     },

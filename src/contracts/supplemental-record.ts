@@ -7,10 +7,6 @@ import { phaseInstanceIdV1Schema, type PhaseInstanceId } from "./phase-instance.
 import { assertPlainJson } from "./plain-json.js";
 import { reviewEvidenceSchema, type ReviewEvidence } from "./review.js";
 import { triageCandidateSchema, type TriageCandidate } from "./triage.js";
-import { assertZodAgreement, createJsonSchemaValidator } from "./validators.js";
-import supplementalRecordSchema from "./schemas/v1/supplemental-review-record.schema.json" with { type: "json" };
-import reviewEvidenceJsonSchema from "./schemas/v1/review-evidence.schema.json" with { type: "json" };
-import triageJsonSchema from "./schemas/v1/triage.schema.json" with { type: "json" };
 
 export type SupplementalReviewRecordV1 = {
   readonly schema_version: "1";
@@ -51,20 +47,18 @@ export const supplementalReviewRecordV1Schema = z.object({
   outcome: z.enum(["no-change", "accepted-change"]),
 }).strict() as z.ZodType<SupplementalReviewRecordV1>;
 
-const validator = createJsonSchemaValidator<SupplementalReviewRecordV1>(supplementalRecordSchema, [
-  reviewEvidenceJsonSchema,
-  triageJsonSchema,
-]);
+function deepFreezeJson<T>(value: T): T {
+  if (value !== null && typeof value === "object") {
+    for (const nested of Object.values(value)) deepFreezeJson(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
 
 /** Parses the compound record and enforces its self-digests and exact-cover triage semantics. */
 export function parseSupplementalReviewRecord(value: unknown): SupplementalReviewRecordV1 {
   assertPlainJson(value, "supplemental review record");
-  const parsed = assertZodAgreement(
-    value,
-    validator,
-    supplementalReviewRecordV1Schema,
-    "supplemental review record",
-  );
+  const parsed = deepFreezeJson(supplementalReviewRecordV1Schema.parse(value));
   if (
     parsed.review.assurance !== "degraded" ||
     parsed.review.role !== "gate-counter-review" ||

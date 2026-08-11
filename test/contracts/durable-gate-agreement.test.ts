@@ -13,17 +13,16 @@ import {
 } from "../../src/contracts/validators.js";
 
 /**
- * Agreement suite for the two gate mirrors in `durable-gate.ts`. The hand-written JSON Schemas
- * remain the runtime authority; this file proves `gateRequestV1Schema` and `activeGateV1Schema`
- * accept and reject the same values across every `oneOf` arm, and that the gate-semantics logic
- * from `gates.ts` is wired into the mirrors.
+ * Agreement suite for the two gate mirrors in `durable-gate.ts`. The mirrors are now the runtime
+ * authority — `parseGateRequest` and `parseActiveGate` parse through them — and the committed
+ * schemas are generated from them; this file proves the generated documents and their Zod sources
+ * accept and reject the same values across every arm, and that the gate-semantics logic from
+ * `gates.ts` is wired into the mirrors.
  *
- * One asymmetry is pinned deliberately: `gate-request.schema.json` and `active-gate.schema.json`
- * do not carry `x-archflow-gate-semantics` (the keyword sits on the gate-contract root, and `$defs`
- * pointers do not apply a referenced document's root keywords), so the compiled Ajv validators are
- * purely structural. The semantic authority for requests is the extra `parseGateContext` call
- * inside `parseGateRequest`; the mirrors embed those same context schemas, which the gate-semantics
- * tests below assert in both directions.
+ * One asymmetry is pinned deliberately: the compiled Ajv validators are purely structural — the
+ * generated documents carry neither `x-archflow-gate-semantics` nor the retired byte/NFC/ledger
+ * keywords — so every semantic rejection below belongs to the mirrors alone, and the
+ * `validate(...)).toBe(true)` assertions pin that gap.
  */
 
 const FIXTURE_DIR = new URL("../fixtures/contracts/durable/", import.meta.url);
@@ -136,30 +135,30 @@ describe("the gate mirrors agree with their JSON Schema authorities", () => {
   });
 });
 
-describe("negatives under keyword-backed rules are rejected by both authorities", () => {
-  it("rejects a restore-collision path that is not NFC (x-archflow-nfc)", () => {
+/**
+ * Generation retired `x-archflow-nfc` and `x-archflow-max-utf8-bytes` from `path-claim`, the
+ * supplemental-semantics keyword from `supplemental-review`, and the ledger's structural
+ * supersession exclusion, so the compiled validators now accept all four; the mirrors behind
+ * `parseGateRequest` and `parseActiveGate` are the surviving authority.
+ */
+describe("negatives under retired keyword-backed rules are rejected by the Zod authority", () => {
+  it("rejects a restore-collision path that is not NFC", () => {
     const sample = fixture("gate-request.invalid-nfd-path");
-    expect(gateRequestV1Validator.validate(sample)).toBe(false);
+    expect(gateRequestV1Validator.validate(sample)).toBe(true);
     expect(gateRequestV1Schema.safeParse(sample).success).toBe(false);
-    expect(() => assertZodAgreement(sample, gateRequestV1Validator, gateRequestV1Schema, "nfd path")).toThrowError(
-      /schema validation failed/
-    );
   });
 
-  it("rejects a restore-collision path above 1024 UTF-8 bytes (x-archflow-max-utf8-bytes)", () => {
+  it("rejects a restore-collision path above 1024 UTF-8 bytes", () => {
     const sample = fixture("gate-request.invalid-nfd-path");
     (sample.context as JsonObject).path = `docs/${"a".repeat(1100)}.md`;
-    expect(gateRequestV1Validator.validate(sample)).toBe(false);
+    expect(gateRequestV1Validator.validate(sample)).toBe(true);
     expect(gateRequestV1Schema.safeParse(sample).success).toBe(false);
   });
 
-  it("rejects a supplemental slot bound to a different gate (x-archflow-supplemental-semantics)", () => {
+  it("rejects a supplemental slot bound to a different gate", () => {
     const sample = fixture("active-gate.invalid-supplemental-slot-binding");
-    expect(activeGateV1Validator.validate(sample)).toBe(false);
+    expect(activeGateV1Validator.validate(sample)).toBe(true);
     expect(activeGateV1Schema.safeParse(sample).success).toBe(false);
-    expect(() => assertZodAgreement(sample, activeGateV1Validator, activeGateV1Schema, "slot binding")).toThrowError(
-      /schema validation failed/
-    );
   });
 
   it("rejects a supersession entry in the supplemental ledger", () => {
@@ -173,7 +172,7 @@ describe("negatives under keyword-backed rules are rejected by both authorities"
       new_subject_digest: d("9"),
       reason: "Triage accepted a superseding subject",
     }];
-    expect(activeGateV1Validator.validate(sample)).toBe(false);
+    expect(activeGateV1Validator.validate(sample)).toBe(true);
     expect(activeGateV1Schema.safeParse(sample).success).toBe(false);
   });
 });

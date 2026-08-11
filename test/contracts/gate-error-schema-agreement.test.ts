@@ -27,22 +27,26 @@ describe("gate and error JSON Schema authority", () => {
     expect(gateValidator.validate({ ...value, context: { ...value.context, gate_id: "forged" } })).toBe(false);
   });
 
-  it("enforces semantic gate correlations in both authorities", () => {
+  it("enforces semantic gate correlations in the Zod authority", () => {
+    // Generation retired `x-archflow-gate-semantics`, so the compiled document accepts these;
+    // `parseGateContract` — running the same context schemas — is the surviving authority.
     const invalid = [
       { kind: "attempts-exhausted", context: { step: "produce", attempts: 1, maximum_attempts: 2 }, payload: { decision: "abort", reason: "Stop" } },
       { kind: "review-trigger", context: { matched_rules: [{ rule_id: "z", rule_version: 1 }, { rule_id: "a", rule_version: 1 }], uncertain_rules: [], eligible_waiver_rules: [], waiver_scope: { operation: "review-trigger", boundary: "subject" } }, payload: { decision: "approve", reason: "No" } },
       { kind: "adjudication-failure", context: { constitution: "fail", failed_rules: [{ rule_id: "rule", rule_version: 1 }], uncertain_rules: [], eligible_waiver_rules: [], waiver_scope: { operation: "adjudication-failure", boundary: "phase" } }, payload: { decision: "approve", reason: "Handled", resolutions: [] } }
     ];
-    for (const value of invalid) { expect(gateValidator.validate(value)).toBe(false); expect(() => parseGateContract(value)).toThrow(); }
+    for (const value of invalid) { expect(gateValidator.validate(value)).toBe(true); expect(() => parseGateContract(value)).toThrow(); }
   });
 
-  it("enforces supplemental gate and subject correlations in both authorities", () => {
+  it("enforces supplemental gate and subject correlations in the Zod authority", () => {
     const review = { prior_gate_id: "gate-1", task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: D, input_fingerprint: D, evidence_slot: { role: "gate-counter-review", evidence_digest: "b".repeat(64), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-1" } };
     const valid = { action: "supersede", review, accepted_triage_digest: D, old_subject_digest: D, new_subject_digest: "c".repeat(64), reason: "Revise" };
     expect(supplementalValidator.validate(valid)).toBe(true);
     expect(parseSupplementalReviewOutcome(valid).action).toBe("supersede");
+    // Generation retired `x-archflow-supplemental-semantics`, so the compiled document accepts
+    // these correlation violations; `parseSupplementalReviewOutcome` is the surviving authority.
     for (const value of [{ ...valid, review: { ...review, evidence_slot: { ...review.evidence_slot, gate_id: "gate-2" } } }, { ...valid, new_subject_digest: D }, { ...valid, old_subject_digest: "d".repeat(64) }]) {
-      expect(supplementalValidator.validate(value)).toBe(false);
+      expect(supplementalValidator.validate(value)).toBe(true);
       expect(() => parseSupplementalReviewOutcome(value)).toThrow();
     }
   });

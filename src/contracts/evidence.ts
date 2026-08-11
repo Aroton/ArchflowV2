@@ -57,7 +57,16 @@ const pathSegmentSafe = <T extends z.ZodType<string>>(schema: T): T =>
 export const sha256DigestV1Schema = z.string().regex(/^[0-9a-f]{64}$/u);
 export const safeIdV1Schema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
 export const pathSafeIdV1Schema = pathSegmentSafe(z.string().regex(/^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?$)(?!.*[. ]$)[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u)) as unknown as z.ZodType<PathSafeId>;
-export const taskSlugV1Schema = pathSegmentSafe(z.string().regex(/^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$/u)) as unknown as z.ZodType<TaskSlug>;
+/**
+ * Fresh task-slug instances exist because the schema generator keys emitted `$defs` on object
+ * identity: the shared `taskSlugV1Schema` emits as the `primitives` def, while the review and
+ * adjudication documents need a module-local instance so their emissions stay self-contained —
+ * they are projected verbatim into child-host structured-output schemas that cannot resolve
+ * cross-document references.
+ */
+export const createTaskSlugV1Schema = (): z.ZodType<TaskSlug> =>
+  pathSegmentSafe(z.string().regex(/^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$/u)) as unknown as z.ZodType<TaskSlug>;
+export const taskSlugV1Schema = createTaskSlugV1Schema();
 export const safeCodeV1Schema = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/u);
 export const safeVersionV1Schema = z.string().regex(/^[A-Za-z0-9.-]{1,64}$/u);
 export const safeIntegerV1Schema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);

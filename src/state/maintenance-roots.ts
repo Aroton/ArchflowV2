@@ -6,6 +6,7 @@ import { parseCanonicalDocument, sha256Bytes } from "../contracts/canonical.js";
 import { parseIntentReceipt } from "../contracts/durable-intent.js";
 import {
   MAINTENANCE_DELETION_CATEGORIES,
+  parseMaintenanceRecord,
   type MaintenanceDeletionCategory,
   type MaintenanceRecordV1,
 } from "../contracts/durable-maintenance.js";
@@ -14,10 +15,6 @@ import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parsePathSafeId, parseSafeInteger } from "../contracts/evidence.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
-import maintenanceRecordSchema from "../contracts/schemas/v1/maintenance-record.schema.json" with { type: "json" };
-import pathClaimSchema from "../contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
-import primitivesSchema from "../contracts/schemas/v1/primitives.schema.json" with { type: "json" };
-import { createJsonSchemaValidator } from "../contracts/validators.js";
 import { openResolved, resolveTaskPath, type ResolvedTaskPath } from "../repository/paths.js";
 import type { TransactionAuthority } from "./authority.js";
 import { assertInternalTransactionAuthority } from "./authority.js";
@@ -247,11 +244,6 @@ export async function enumerateMaintenanceCandidates(
   } catch { return fail(authority, "enumerate-maintenance-candidates"); }
 }
 
-const maintenanceRecordValidator = createJsonSchemaValidator<MaintenanceRecordV1>(
-  maintenanceRecordSchema,
-  [primitivesSchema, pathClaimSchema],
-);
-
 /**
  * Reclaims result payload bytes and intent records no reader can reach any more. Manifests are
  * never candidates — `results/sha256/<digest>/manifest.json` remains the permanent digest-bound
@@ -312,7 +304,7 @@ export async function pruneSupersededResultPayloads(
       record_target: target.value,
       record,
       proof,
-      validate_record: (candidate) => maintenanceRecordValidator.assert(candidate, "maintenance record"),
+      validate_record: parseMaintenanceRecord,
     });
     return ok(Object.freeze({ deleted: performed.deleted }));
   } catch { return fail(authority, "prune-superseded-payloads"); }

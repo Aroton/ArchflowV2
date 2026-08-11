@@ -1,19 +1,93 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:archflow:schema:v1:workflow",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["phases"],
-  "properties": {
+  "$defs": {
     "phases": {
-      "type": "array", "minItems": 5, "maxItems": 5,
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
       "prefixItems": [
-        { "const": { "id": "explore", "skill": "archflow-explore", "pipeline": ["produce"], "gate": "never", "optional": true } },
-        { "const": { "id": "prd", "skill": "archflow-prd", "pipeline": ["produce", "counter_review", "triage"], "gate": "always" } },
-        { "const": { "id": "design", "skill": "archflow-design", "requires": ["prd"], "pipeline": ["produce", "counter_review", "triage"], "gate": "always" } },
-        { "const": { "id": "phase-design", "skill": "archflow-phase-design", "requires": ["design"], "iterates": "per_phase", "pipeline": ["produce", "counter_review", "triage"], "gate": "on_trigger" } },
-        { "const": { "id": "phase-impl", "skill": "archflow-phase-impl", "requires": ["phase-design"], "iterates": "per_phase", "pipeline": ["produce", "counter_review", "triage"], "gate": "on_trigger" } }
+        {
+          "const": {
+            "id": "explore",
+            "skill": "archflow-explore",
+            "pipeline": [
+              "produce"
+            ],
+            "gate": "never",
+            "optional": true
+          }
+        },
+        {
+          "const": {
+            "id": "prd",
+            "skill": "archflow-prd",
+            "pipeline": [
+              "produce",
+              "counter_review",
+              "triage"
+            ],
+            "gate": "always"
+          }
+        },
+        {
+          "const": {
+            "id": "design",
+            "skill": "archflow-design",
+            "requires": [
+              "prd"
+            ],
+            "pipeline": [
+              "produce",
+              "counter_review",
+              "triage"
+            ],
+            "gate": "always"
+          }
+        },
+        {
+          "const": {
+            "id": "phase-design",
+            "skill": "archflow-phase-design",
+            "requires": [
+              "design"
+            ],
+            "iterates": "per_phase",
+            "pipeline": [
+              "produce",
+              "counter_review",
+              "triage"
+            ],
+            "gate": "on_trigger"
+          }
+        },
+        {
+          "const": {
+            "id": "phase-impl",
+            "skill": "archflow-phase-impl",
+            "requires": [
+              "phase-design"
+            ],
+            "iterates": "per_phase",
+            "pipeline": [
+              "produce",
+              "counter_review",
+              "triage"
+            ],
+            "gate": "on_trigger"
+          }
+        }
       ]
     }
-  }
+  },
+  "type": "object",
+  "properties": {
+    "phases": {
+      "$ref": "#/$defs/phases"
+    }
+  },
+  "required": [
+    "phases"
+  ],
+  "additionalProperties": false
 }

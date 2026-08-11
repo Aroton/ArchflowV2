@@ -183,6 +183,15 @@ export type TaskStateV1 = {
 
 const sha256Digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
 
+/** Emitted as the `stepStatus` `$def`; the root reaches it by `$ref`. */
+export const stepStatusV1Schema = z.enum(STEP_STATUSES);
+
+/**
+ * Emitted as the `gateKind` `$def` — declared once and shared by `approvalRef` and `openGateRef`,
+ * exactly as the schema `$ref`s it from both, rather than two structurally equal enums.
+ */
+export const gateKindV1Schema = z.enum(GATE_KINDS);
+
 /**
  * `>= 1` (D8) — mirrors every inline `{ "type": "integer", "minimum": 1, "maximum": 9007199254740991 }`
  * in `task-state.schema.json`, which pins its own minimum rather than `$ref`ing `safeInteger`
@@ -191,10 +200,11 @@ const sha256Digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
 const positiveSafeInteger = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
 
 /**
- * Module-private mirrors of the `$defs` this schema owns (D21). Nothing outside this module
- * composes them: every other root reaches the shapes by `$ref` and authors its own mirror.
+ * Mirrors of the `$defs` this schema owns (D21), exported for schema generation only. Nothing else
+ * outside this module composes them: every other root reaches the shapes by `$ref` and authors its
+ * own mirror.
  */
-const authoritativeResultRefV1Schema = z.object({
+export const authoritativeResultRefV1Schema = z.object({
   phase_instance: phaseInstanceIdV1Schema,
   step: z.enum(PIPELINE_STEPS),
   result_digest: sha256Digest,
@@ -203,15 +213,15 @@ const authoritativeResultRefV1Schema = z.object({
   manifest_path: repositoryPathClaimV1Schema,
 }).strict();
 
-const approvalRefV1Schema = z.object({
+export const approvalRefV1Schema = z.object({
   gate_id: pathSafeIdV1Schema,
-  gate_kind: z.enum(GATE_KINDS),
+  gate_kind: gateKindV1Schema,
   subject_digest: sha256Digest,
   decision_digest: sha256Digest,
   resolved_at_revision: positiveSafeInteger,
 }).strict();
 
-const waiverRefV1Schema = z.object({
+export const waiverRefV1Schema = z.object({
   gate_id: pathSafeIdV1Schema,
   rule_id: safeIdV1Schema,
   rule_version: positiveSafeInteger,
@@ -225,9 +235,9 @@ const waiverRefV1Schema = z.object({
   granted_at_revision: positiveSafeInteger,
 }).strict();
 
-const openGateRefV1Schema = z.object({
+export const openGateRefV1Schema = z.object({
   gate_id: pathSafeIdV1Schema,
-  gate_kind: z.enum(GATE_KINDS),
+  gate_kind: gateKindV1Schema,
   subject_digest: sha256Digest,
   context_digest: sha256Digest,
   frozen_state_digest: sha256Digest,
@@ -235,7 +245,7 @@ const openGateRefV1Schema = z.object({
   opened_at_revision: positiveSafeInteger,
 }).strict();
 
-const committedIntentRefV1Schema = z.object({
+export const committedIntentRefV1Schema = z.object({
   intent_id: pathSafeIdV1Schema,
   request_digest: sha256Digest,
   receipt_digest: sha256Digest,
@@ -245,7 +255,7 @@ const committedIntentRefV1Schema = z.object({
   result_id: safeIdV1Schema,
 }).strict();
 
-const adoptedCheckpointRefV1Schema = z.object({
+export const adoptedCheckpointRefV1Schema = z.object({
   revision: positiveSafeInteger,
   checkpoint_digest: sha256Digest,
 }).strict();
@@ -264,7 +274,7 @@ export const taskStateV1Schema = z.object({
   revision: positiveSafeInteger,
   phase_instance: phaseInstanceIdV1Schema,
   step: z.enum(PIPELINE_STEPS),
-  status: z.enum(STEP_STATUSES),
+  status: stepStatusV1Schema,
   attempt: positiveSafeInteger,
   input_fingerprint: sha256Digest,
   initialization_digest: sha256Digest,

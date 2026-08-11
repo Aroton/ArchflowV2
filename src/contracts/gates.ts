@@ -120,19 +120,67 @@ export const GATE_CONTRACTS = Object.freeze(Object.fromEntries(GATE_KINDS.map((k
 const connectedProvenance = z.object({ schema_version: z.literal("1"), actor_class: z.enum(["human", "archforge"]), assurance: z.literal("declared-local-trace"), channel: z.literal("connected-host"), decision_event_id: safeId, connection_id: safeId, request_id_digest: digest, recorded_at: z.string().datetime({ offset: false, local: false, precision: 3 }) }).strict();
 const localProvenance = z.object({ schema_version: z.literal("1"), actor_class: z.enum(["human", "archforge"]), assurance: z.literal("declared-local-trace"), channel: z.literal("archflow-local"), decision_event_id: safeId, helper_invocation_id: safeId, recorded_at: z.string().datetime({ offset: false, local: false, precision: 3 }) }).strict();
 export const humanDecisionProvenanceV1Schema = z.union([connectedProvenance, localProvenance]);
-const envelopeBase = { schema_version: z.literal("1"), gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, phase_instance: z.string().refine((value) => { try { decodePhaseInstance(value); return true; } catch { return false; } }), subject_digest: digest, context_digest: digest, human_provenance: z.union([connectedProvenance, localProvenance]) } as const;
 
-export const gateContractV1Schema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("artifact-approval"), context: contexts["artifact-approval"], payload: decisions["artifact-approval"] }).strict(),
-  z.object({ kind: z.literal("review-trigger"), context: contexts["review-trigger"], payload: decisions["review-trigger"] }).strict(),
-  z.object({ kind: z.literal("material-drift"), context: contexts["material-drift"], payload: decisions["material-drift"] }).strict(),
-  z.object({ kind: z.literal("adjudication-failure"), context: contexts["adjudication-failure"], payload: decisions["adjudication-failure"] }).strict(),
-  z.object({ kind: z.literal("attempts-exhausted"), context: contexts["attempts-exhausted"], payload: decisions["attempts-exhausted"] }).strict(),
-  z.object({ kind: z.literal("constitution-edit"), context: contexts["constitution-edit"], payload: decisions["constitution-edit"] }).strict(),
-  z.object({ kind: z.literal("commit-authorization"), context: contexts["commit-authorization"], payload: decisions["commit-authorization"] }).strict(),
-  z.object({ kind: z.literal("restore-collision"), context: contexts["restore-collision"], payload: decisions["restore-collision"] }).strict(),
-  z.object({ kind: z.literal("migration-audit"), context: contexts["migration-audit"], payload: decisions["migration-audit"] }).strict(),
-]);
+/**
+ * The `gate-decision.schema.json` `$defs` the generator emits, keyed by committed def name.
+ * `mcp-tools.schema.json` reaches `connected` and `local` by `$ref`, so both names are pinned.
+ */
+export const gateDecisionSchemaDefs: Readonly<Record<string, z.ZodType>> = Object.freeze({
+  connected: connectedProvenance,
+  local: localProvenance,
+});
+const envelopeBase = { schema_version: z.literal("1"), gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, phase_instance: z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((value) => { try { decodePhaseInstance(value); return true; } catch { return false; } }), subject_digest: digest, context_digest: digest, human_provenance: z.union([connectedProvenance, localProvenance]) } as const;
+
+const contractArms = Object.fromEntries(GATE_KINDS.map((kind) => [
+  kind,
+  z.object({ kind: z.literal(kind), context: contexts[kind], payload: decisions[kind] }).strict(),
+])) as unknown as Readonly<Record<GateKind, z.ZodType>>;
+
+export const gateContractV1Schema = z.discriminatedUnion("kind", GATE_KINDS.map((kind) => contractArms[kind]) as unknown as [z.ZodObject, ...z.ZodObject[]]);
+
+/**
+ * The `gate-contract.schema.json` `$defs` the generator emits, keyed by committed def name. The
+ * per-kind arms keep the pinned `<arm>/properties/context` pointer paths `mcp-tools.schema.json`
+ * reaches into; the context and decision entries name the shared objects other gate documents
+ * embed, so their emissions become `$ref`s instead of inline copies.
+ */
+export const gateContractSchemaDefs: Readonly<Record<string, z.ZodType>> = Object.freeze({
+  // `canonicalDigests` stays unregistered: both uses derive `.min(1)` from it, and a derivation of
+  // a registered def emits as a bare `$ref` plus `minItems`, which Ajv strict mode rejects.
+  digest, text: boundedText, safeInteger, rule, rules: canonicalRules,
+  waiverScope, authorityLink,
+  artifactApprovalContext: contexts["artifact-approval"],
+  reviewTriggerContext: contexts["review-trigger"],
+  materialDriftContext: contexts["material-drift"],
+  adjudicationFailureContext: contexts["adjudication-failure"],
+  attemptsExhaustedContext: contexts["attempts-exhausted"],
+  constitutionEditContext: contexts["constitution-edit"],
+  commitAuthorizationContext: contexts["commit-authorization"],
+  restoreCollisionContext: contexts["restore-collision"],
+  migrationAuditContext: contexts["migration-audit"],
+  artifactApprovalDecision: decisions["artifact-approval"],
+  reviewTriggerDecision: decisions["review-trigger"],
+  materialDriftDecision: decisions["material-drift"],
+  adjudicationFailureDecision: decisions["adjudication-failure"],
+  attemptsExhaustedDecision: decisions["attempts-exhausted"],
+  constitutionEditDecision: decisions["constitution-edit"],
+  commitAuthorizationDecision: decisions["commit-authorization"],
+  restoreCollisionDecision: decisions["restore-collision"],
+  migrationAuditDecision: decisions["migration-audit"],
+  artifactApproval: contractArms["artifact-approval"],
+  reviewTrigger: contractArms["review-trigger"],
+  materialDrift: contractArms["material-drift"],
+  adjudicationFailure: contractArms["adjudication-failure"],
+  attemptsExhausted: contractArms["attempts-exhausted"],
+  constitutionEdit: contractArms["constitution-edit"],
+  commitAuthorization: contractArms["commit-authorization"],
+  restoreCollision: contractArms["restore-collision"],
+  migrationAudit: contractArms["migration-audit"],
+});
+
+/** The shared rule and waiver-scope objects the archived gate documents embed by reference. */
+export const gateRuleVersionRefSchema = rule;
+export const gateWaiverScopeSchema = waiverScope;
 
 export const gateDecisionEnvelopeV1Schema = z.discriminatedUnion("kind", [
   z.object({ ...envelopeBase, kind: z.literal("artifact-approval"), payload: decisions["artifact-approval"] }).strict(),

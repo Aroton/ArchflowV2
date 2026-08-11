@@ -38,6 +38,17 @@ const rejectedBoth = async (value: unknown): Promise<void> => {
   expect(legacyImportInitializationV1Schema.safeParse(value).success).toBe(false);
 };
 
+/**
+ * Rejected by the Zod authority alone: generation retired the ordering keywords from the committed
+ * schema, so the compiled document accepts these; the Zod refinement behind the parse function is
+ * the surviving authority.
+ */
+const rejectedByZodAuthority = async (value: unknown): Promise<void> => {
+  const jsonValidator = await validator();
+  expect(jsonValidator.validate(value)).toBe(true);
+  expect(legacyImportInitializationV1Schema.safeParse(value).success).toBe(false);
+};
+
 describe("legacy import initialization contract", () => {
   it("round-trips the canonical valid fixture through the JSON Schema", async () => {
     const jsonValidator = await validator();
@@ -60,14 +71,14 @@ describe("legacy import initialization contract", () => {
     });
   });
 
-  it("rejects shuffled and duplicated mapping in both authorities", async () => {
-    await rejectedBoth({ ...fixture, mapping: [...mapping].reverse() });
-    await rejectedBoth({ ...fixture, mapping: [mapping[0], mapping[0]] });
+  it("rejects shuffled and duplicated mapping in the Zod authority", async () => {
+    await rejectedByZodAuthority({ ...fixture, mapping: [...mapping].reverse() });
+    await rejectedByZodAuthority({ ...fixture, mapping: [mapping[0], mapping[0]] });
   });
 
-  it("rejects shuffled and duplicated staged_payload_refs in both authorities", async () => {
-    await rejectedBoth({ ...fixture, staged_payload_refs: [...stagedPayloadRefs].reverse() });
-    await rejectedBoth({ ...fixture, staged_payload_refs: [stagedPayloadRefs[0], stagedPayloadRefs[0]] });
+  it("rejects shuffled and duplicated staged_payload_refs in the Zod authority", async () => {
+    await rejectedByZodAuthority({ ...fixture, staged_payload_refs: [...stagedPayloadRefs].reverse() });
+    await rejectedByZodAuthority({ ...fixture, staged_payload_refs: [stagedPayloadRefs[0], stagedPayloadRefs[0]] });
   });
 
   it("rejects an unknown field in both authorities", async () => {

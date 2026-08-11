@@ -187,27 +187,37 @@ const safeInteger = safeIntegerV1Schema as unknown as z.ZodType<SafeInteger>;
 const sha256Digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
 
 /**
- * Module-private: nothing outside this module declares a field of either blob-identity type, and
- * the matrix exercises both through `outputEntryV1Schema`.
+ * D9's vocabulary declaration as a Zod value: nothing composes it — both blob-identity variants pin
+ * their own mode subset — but `durable-primitives.schema.json` publishes it as the `blobTreeMode`
+ * `$def`, so the generator needs the schema object to emit.
  */
-const regularBlobIdentityV1Schema = z.object({
+export const blobTreeModeV1Schema = z.enum(BLOB_TREE_MODES);
+
+/** Emitted as the `claimableOutputPathClass` `$def`; every output leaf reaches it by `$ref`. */
+export const claimableOutputPathClassV1Schema = z.enum(CLAIMABLE_OUTPUT_PATH_CLASSES);
+
+/**
+ * Exported for schema generation only: nothing outside this module declares a field of either
+ * blob-identity type, and the matrix exercises both through `outputEntryV1Schema`.
+ */
+export const regularBlobIdentityV1Schema = z.object({
   oid: gitOid,
   mode: z.enum(["100644", "100755"]),
   size_bytes: safeInteger,
 }).strict();
 
-const symlinkBlobIdentityV1Schema = z.object({
+export const symlinkBlobIdentityV1Schema = z.object({
   oid: gitOid,
   mode: z.literal("120000"),
   size_bytes: safeInteger,
 }).strict();
 
-const blobIdentityV1Schema = z.union([regularBlobIdentityV1Schema, symlinkBlobIdentityV1Schema]);
+export const blobIdentityV1Schema = z.union([regularBlobIdentityV1Schema, symlinkBlobIdentityV1Schema]);
 
 /** The three recurring property groups, as Zod values rather than TypeScript types (see D1). */
 const common = {
   path: repositoryPathClaimV1Schema,
-  path_class: z.enum(CLAIMABLE_OUTPUT_PATH_CLASSES),
+  path_class: claimableOutputPathClassV1Schema,
 } as const;
 const gitStorage = { storage: z.literal("git-object") } as const;
 const rawStorage = {
@@ -338,8 +348,8 @@ export type SnapshotAccountingV1 = {
   readonly measured_at_revision: SafeInteger;
 };
 
-/** Module-private: nothing outside this module declares a field of the entry type. */
-const snapshotAccountingEntryV1Schema = z.discriminatedUnion("storage", [
+/** Exported for schema generation only: nothing outside this module declares a field of the entry type. */
+export const snapshotAccountingEntryV1Schema = z.discriminatedUnion("storage", [
   z.object({ path: repositoryPathClaimV1Schema, storage: z.literal("git-object"), stored_bytes: z.literal(0) }).strict(),
   z.object({ path: repositoryPathClaimV1Schema, storage: z.literal("raw-payload"), stored_bytes: safeInteger }).strict(),
 ]);
@@ -347,7 +357,9 @@ const snapshotAccountingEntryV1Schema = z.discriminatedUnion("storage", [
 /**
  * The caps are structural `maximum`s, not validator rules. `measured_at_revision` pins its own
  * `.min(1)` rather than reusing `safeIntegerV1Schema` (D8): `SafeInteger` admits `0`, and there is
- * no revision `0`. `result_bytes` and `task_bytes` genuinely admit `0`, so they do reuse it.
+ * no revision `0`. `result_bytes` and `task_bytes` admit `0` and pin the full integer range
+ * themselves — a capped derivation of the registered `safeInteger` would emit as a bare `$ref`
+ * plus `maximum`, which Ajv strict mode rejects when it compiles the generated document.
  *
  * The `counted_entries` ordering rule calls `isSortedUniqueBy` with `tupleKey("path")` — the same
  * two exported functions the `x-archflow-sorted-unique-by` Ajv keyword calls — so the two
@@ -355,8 +367,8 @@ const snapshotAccountingEntryV1Schema = z.discriminatedUnion("storage", [
  */
 export const snapshotAccountingV1Schema = z.object({
   schema_version: z.literal("1"),
-  result_bytes: safeIntegerV1Schema.max(RESULT_BYTE_CAP),
-  task_bytes: safeIntegerV1Schema.max(TASK_BYTE_CAP),
+  result_bytes: z.number().int().min(0).max(RESULT_BYTE_CAP),
+  task_bytes: z.number().int().min(0).max(TASK_BYTE_CAP),
   result_byte_cap: z.literal(RESULT_BYTE_CAP),
   task_byte_cap: z.literal(TASK_BYTE_CAP),
   counted_entries: z.array(snapshotAccountingEntryV1Schema)

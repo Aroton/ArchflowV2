@@ -1,10 +1,80 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:archflow:schema:v1:document-artifact",
-  "title": "ArchFlow Document Artifact v1",
-  "$comment": "The normative structural authority for a projected agent document. D3 — `document_path` is the TASK-relative frame and `projection_target` is the REPOSITORY frame; the two $defs are the same underlying claim validator, so the frame is named at the reference site and is not runtime-checkable. D19 — `step` is required here as well as in the type alias and the Zod mirror; the fingerprint correlation keys on (phase_instance, step).",
   "type": "object",
-  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "artifact_kind": {
+      "type": "string",
+      "const": "document"
+    },
+    "task_id": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+    },
+    "phase_instance": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+    },
+    "step": {
+      "type": "string",
+      "enum": [
+        "produce",
+        "counter_review",
+        "triage",
+        "adjudicate"
+      ]
+    },
+    "document_path": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
+    },
+    "path_class": {
+      "type": "string",
+      "const": "document"
+    },
+    "byte_count": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+    },
+    "content_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "declared_inputs": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/declaredInputRef"
+      }
+    },
+    "input_fingerprint": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "snapshot_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "projection_target": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+    },
+    "editorial_predecessor": {
+      "type": "object",
+      "properties": {
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "input_fingerprint": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "triage_result_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        }
+      },
+      "required": [
+        "subject_digest",
+        "input_fingerprint",
+        "triage_result_digest"
+      ],
+      "additionalProperties": false
+    }
+  },
   "required": [
     "schema_version",
     "artifact_kind",
@@ -20,53 +90,5 @@
     "snapshot_digest",
     "projection_target"
   ],
-  "properties": {
-    "schema_version": { "const": "1" },
-    "artifact_kind": { "const": "document" },
-    "task_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-    "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-    "step": {
-      "$comment": "D19 — exactly PIPELINE_STEPS (`vocabulary.ts:2`).",
-      "enum": ["produce", "counter_review", "triage", "adjudicate"]
-    },
-    "document_path": {
-      "$comment": "TASK-relative frame (D3).",
-      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
-    },
-    "path_class": {
-      "$comment": "A const, not the 17-member path class vocabulary.",
-      "const": "document"
-    },
-    "byte_count": {
-      "$comment": "D8 declares no own minimum: a zero-byte document is legal, so `safeInteger` is the right $ref.",
-      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
-    },
-    "content_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    "declared_inputs": {
-      "$comment": "SET — sorted by `input_id`, duplicates rejected. The keyword and the Zod mirror both call `isSortedUniqueBy` with `tupleKey(\"input_id\")`, so the two authorities are one predicate.",
-      "type": "array",
-      "items": { "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/declaredInputRef" },
-      "x-archflow-sorted-unique-by": "input_id"
-    },
-    "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    "snapshot_digest": {
-      "$comment": "Domain-separated canonical declared-output snapshot; never the retained result address.",
-      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-    },
-    "projection_target": {
-      "$comment": "REPOSITORY frame (D3).",
-      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
-    },
-    "editorial_predecessor": {
-      "$comment": "Optional editorial-revision link: the predecessor produce artifact digest, its input fingerprint, and the retained result digest of the authorizing accepted-editorial triage. Record-time semantics are enforced by the state handler, not here.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["subject_digest", "input_fingerprint", "triage_result_digest"],
-      "properties": {
-        "subject_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        "triage_result_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" }
-      }
-    }
-  }
+  "additionalProperties": false
 }

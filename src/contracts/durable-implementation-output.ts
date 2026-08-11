@@ -118,7 +118,8 @@ export type ImplementationOutputV1 = {
 const sha256Digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
 const safeInteger = safeIntegerV1Schema as unknown as z.ZodType<SafeInteger>;
 
-const parentDocumentRefV1Schema = z.object({
+/** Exported for schema generation only: the `parentDocumentRef` `$def` is root-internal. */
+export const parentDocumentRefV1Schema = z.object({
   document_path: taskPathClaimV1Schema,
   content_digest: sha256Digest,
   role: z.enum(["prd", "design", "phase-design", "impl-notes"]),
@@ -130,7 +131,8 @@ const parentDocumentRefV1Schema = z.object({
  */
 const rawGitPathMirror = z.string() as unknown as z.ZodType<RawGitPath>;
 
-const undeclaredChangeReportV1Schema = z.object({
+/** Exported for schema generation only: the `undeclaredChangeReport` `$def` is root-internal. */
+export const undeclaredChangeReportV1Schema = z.object({
   scanned: z.boolean(),
   undeclared_paths: z.array(rawGitPathMirror)
     .refine((items) => isSortedUniqueBy(items), "undeclared_paths must be sorted with no duplicates"),

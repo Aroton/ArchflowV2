@@ -33,7 +33,7 @@ export type ValidatedTriage = TriageCandidate & { readonly accepted_editorial_co
 
 const id = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u) as unknown as z.ZodType<Sha256Digest>;
-const nonBlank = z.string().min(1).refine((value) => value.trim().length > 0, "must contain a non-whitespace character");
+const nonBlank = z.string().min(1).regex(/\S/, "must contain a non-whitespace character");
 const findingRefShape = { review_evidence_digest: digest, finding_id: id };
 const acceptedDispositionSchema = z.object({ ...findingRefShape, disposition: z.literal("accepted"), rationale: nonBlank, revision_intent: nonBlank }).strict();
 const acceptedEditorialDispositionSchema = z.object({ ...findingRefShape, disposition: z.literal("accepted-editorial"), rationale: nonBlank, revision_intent: nonBlank }).strict();
@@ -45,9 +45,19 @@ export const triageCandidateSchema = z.object({
   step: z.literal("triage"), subject_digest: digest, input_fingerprint: digest,
   current_evidence_set_digest: digest, source_evidence_digests: z.array(digest),
   dispositions: z.array(triageDispositionSchema),
-  accepted_count: z.number().int().nonnegative().safe(), rejected_count: z.number().int().nonnegative().safe(),
-  accepted_editorial_count: z.number().int().nonnegative().safe().optional(),
-}).strict();
+  accepted_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), rejected_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  accepted_editorial_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+}).strict().superRefine((triage, context) => {
+  if (new Set(triage.source_evidence_digests).size !== triage.source_evidence_digests.length) {
+    context.addIssue({ code: "custom", path: ["source_evidence_digests"], message: "source evidence digests must be unique" });
+  }
+  const seen = new Set<string>();
+  triage.dispositions.forEach((disposition, index) => {
+    const key = `${disposition.review_evidence_digest}:${disposition.finding_id}`;
+    if (seen.has(key)) context.addIssue({ code: "custom", path: ["dispositions", index], message: "duplicate disposition for a finding" });
+    seen.add(key);
+  });
+});
 
 /** Structural parse only; exact current-review coverage is established by {@link validateTriage}. */
 export function parseTriageCandidate(value: unknown): TriageCandidate {

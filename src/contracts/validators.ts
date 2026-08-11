@@ -22,8 +22,10 @@ import gateRequestSchema from "./schemas/v1/gate-request.schema.json" with { typ
 import supplementalReviewSchema from "./schemas/v1/supplemental-review.schema.json" with { type: "json" };
 import evidenceSlotsSchema from "./schemas/v1/evidence-slots.schema.json" with { type: "json" };
 import secretScanResultSchema from "./schemas/v1/secret-scan-result.schema.json" with { type: "json" };
+import reviewSchemaDocument from "./schemas/v1/review.schema.json" with { type: "json" };
 import reviewEvidenceSchemaDocument from "./schemas/v1/review-evidence.schema.json" with { type: "json" };
 import triageSchemaDocument from "./schemas/v1/triage.schema.json" with { type: "json" };
+import adjudicationSchemaDocument from "./schemas/v1/adjudication.schema.json" with { type: "json" };
 import adjudicationEvidenceSchemaDocument from "./schemas/v1/adjudication-evidence.schema.json" with { type: "json" };
 
 export interface JsonSchemaValidator<T> {
@@ -332,8 +334,10 @@ export const resultManifestV1Validator = createJsonSchemaValidator<ResultManifes
   secretScanResultSchema,
   documentArtifactSchema,
   implementationOutputSchema,
+  reviewSchemaDocument,
   reviewEvidenceSchemaDocument,
   triageSchemaDocument,
+  adjudicationSchemaDocument,
   adjudicationEvidenceSchemaDocument,
 ]);
 

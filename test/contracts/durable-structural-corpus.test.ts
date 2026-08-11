@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 import { documentArtifactV1Schema } from "../../src/contracts/durable-document.js";
 import { implementationOutputV1Schema } from "../../src/contracts/durable-implementation-output.js";
 import { legacyImportInitializationV1Schema } from "../../src/contracts/durable-legacy-import.js";
+import { maintenanceRecordV1Schema } from "../../src/contracts/durable-maintenance.js";
 import { snapshotAccountingV1Schema } from "../../src/contracts/durable-primitives.js";
+import { taskStateV1Schema } from "../../src/contracts/durable-state.js";
 import { taskInitializationV1Schema } from "../../src/contracts/durable-task-initialization.js";
 import documentArtifactSchema from "../../src/contracts/schemas/v1/document-artifact.schema.json" with { type: "json" };
 import durablePrimitivesSchema from "../../src/contracts/schemas/v1/durable-primitives.schema.json" with { type: "json" };
@@ -40,9 +42,11 @@ import { PIPELINE_STEPS } from "../../src/contracts/workflow.js";
  * That split is load-bearing for three rules the design deliberately made structural rather than
  * semantic, and this file is where the claim is proved: the byte caps as `maximum` (D16 preamble),
  * `stored_bytes === 0` for a `git-object` accounting entry as a discriminated union on `storage`
- * (D16), and intra-document set ordering and uniqueness via `x-archflow-sorted-unique` and
- * `x-archflow-sorted-unique-by` (D11). If any of these ever regressed into `validateDurableSemantics`
- * the cases below would fail here, because no validator runs in this file.
+ * (D16), and intra-document set ordering and uniqueness via the shared `isSortedUniqueBy` /
+ * `tupleKey` refinements in the Zod authority (D11). Generation retired the `x-archflow-sorted-*`
+ * keywords from the committed schemas, so the ordering half is proven against the Zod parse
+ * boundary alone; if any of these ever regressed into `validateDurableSemantics` the cases below
+ * would fail here, because no semantic validator runs in this file.
  *
  * Schemas are compiled directly from their JSON rather than through the registry: chunk 13 is the
  * sole writer of `versions.ts` and `schema-registry.test.ts`, and had not registered these seven
@@ -58,15 +62,11 @@ const fixture = (name: string): JsonObject =>
     readFileSync(new URL(`../fixtures/contracts/durable/${name}.valid.json`, import.meta.url), "utf8")
   ) as JsonObject;
 
-/**
- * A shape's two authorities plus its canonical sample. `zod` is absent for exactly the two purely
- * server-internal roots — `task-state` and `maintenance-record` — which have JSON Schema authority
- * and no mirror by design (D2). Nothing below invents one for them.
- */
+/** A shape's two authorities plus its canonical sample. The Zod side is the runtime authority. */
 type Shape = {
   readonly name: string;
   readonly json: JsonSchemaValidator<unknown>;
-  readonly zod?: ZodLikeSchema<unknown>;
+  readonly zod: ZodLikeSchema<unknown>;
   readonly sample: JsonObject;
 };
 
@@ -76,12 +76,14 @@ const validator = (schema: object, references: readonly object[]): JsonSchemaVal
 const taskState: Shape = {
   name: "task-state",
   json: validator(taskStateSchema, [primitivesSchema, pathClaimSchema]),
+  zod: taskStateV1Schema,
   sample: fixture("task-state"),
 };
 
 const maintenanceRecord: Shape = {
   name: "maintenance-record",
   json: validator(maintenanceRecordSchema, [primitivesSchema, pathClaimSchema]),
+  zod: maintenanceRecordV1Schema,
   sample: fixture("maintenance-record"),
 };
 
@@ -155,24 +157,33 @@ const shape = (name: string): Shape => {
 };
 
 /**
- * Rejection means *both* authorities reject. Where a mirror exists the check runs through
- * `assertZodAgreement`, which is what proves the Ajv keyword and the Zod `.refine()` really call the
- * same `isSortedUniqueBy` / `tupleKey`: a one-sided rejection throws "…validators disagree" instead
- * of "…schema validation failed", and the regex below distinguishes the two.
+ * Rejection means *both* authorities reject. The check runs through `assertZodAgreement`: a
+ * one-sided rejection throws "…validators disagree" instead of "…schema validation failed", and
+ * the regex below distinguishes the two.
  */
 const rejects = (target: Shape, value: unknown, label = "value"): void => {
   expect(target.json.validate(value), `${target.name}/${label}: JSON Schema accepted`).toBe(false);
-  const mirror = target.zod;
-  if (mirror === undefined) return;
-  expect(mirror.safeParse(value).success, `${target.name}/${label}: Zod accepted`).toBe(false);
-  expect(() => assertZodAgreement(value, target.json, mirror, `${target.name}/${label}`)).toThrowError(
+  expect(target.zod.safeParse(value).success, `${target.name}/${label}: Zod accepted`).toBe(false);
+  expect(() => assertZodAgreement(value, target.json, target.zod, `${target.name}/${label}`)).toThrowError(
     /schema validation failed/
   );
 };
 
+/**
+ * Rejection by the Zod authority alone. Generation retired the `x-archflow-sorted-unique`,
+ * `x-archflow-sorted-unique-by`, and `x-archflow-max-utf8-bytes` keywords from the committed
+ * schemas, so the compiled document deliberately accepts these values; the Zod refinements — the
+ * same `isSortedUniqueBy` / `tupleKey` predicates the keywords used to call — are the surviving
+ * runtime authority and must keep rejecting them.
+ */
+const rejectsInZodAuthority = (target: Shape, value: unknown, label = "value"): void => {
+  expect(target.json.validate(value), `${target.name}/${label}: generated schema kept a retired keyword`).toBe(true);
+  expect(target.zod.safeParse(value).success, `${target.name}/${label}: Zod accepted`).toBe(false);
+};
+
 const accepts = (target: Shape, value: unknown, label = "value"): void => {
   expect(target.json.validate(value), `${target.name}/${label}: JSON Schema rejected`).toBe(true);
-  if (target.zod !== undefined) assertZodAgreement(value, target.json, target.zod, `${target.name}/${label}`);
+  assertZodAgreement(value, target.json, target.zod, `${target.name}/${label}`);
 };
 
 /** Replace the value at a dotted path (array indices are numeric segments) on a deep clone. */
@@ -258,18 +269,19 @@ describe("durable set ordering and uniqueness are structural", () => {
       const permuted = at(base, declared.path, shuffled);
       // A one-element set cannot be permuted; every set below is seeded with at least two members.
       expect(permuted).not.toStrictEqual(base);
-      rejects(target, permuted, `${declared.path} shuffled`);
+      rejectsInZodAuthority(target, permuted, `${declared.path} shuffled`);
     });
 
     it(`${declared.shape}.${declared.path} rejects a duplicated key`, () => {
-      rejects(target, at(base, declared.path, withDuplicate), `${declared.path} duplicated`);
+      rejectsInZodAuthority(target, at(base, declared.path, withDuplicate), `${declared.path} duplicated`);
     });
   }
 });
 
 /**
- * The sweep. Every array-shaped subschema in the durable schemas must carry an ordering keyword, and
- * the set of them must be exactly the thirteen collections above — nothing exempt, nothing untested.
+ * The sweep. Generation retired the ordering keywords, so no array-shaped subschema may carry one
+ * any more — the ordering authority is the Zod refinement exercised above — and the set of arrays
+ * must still be exactly the thirteen collections above: nothing new, nothing untested.
  */
 const SCHEMA_FILES: readonly { readonly name: string; readonly schema: object }[] = [
   { name: "durable-primitives", schema: durablePrimitivesSchema },
@@ -307,9 +319,9 @@ const collectArraySubschemas = (): readonly { readonly location: string; readonl
 };
 
 describe("no array in this phase is exempt from set ordering", () => {
-  it("every array-shaped subschema carries an ordering keyword", () => {
-    const exempt = collectArraySubschemas().filter((entry) => entry.keywords.length === 0);
-    expect(exempt.map((entry) => entry.location)).toStrictEqual([]);
+  it("no array-shaped subschema carries a retired ordering keyword", () => {
+    const carrying = collectArraySubschemas().filter((entry) => entry.keywords.length > 0);
+    expect(carrying.map((entry) => entry.location)).toStrictEqual([]);
   });
 
   it("the arrays the schemas declare are exactly the thirteen collections under test", () => {
@@ -387,7 +399,7 @@ describe("the authoritative_results tuple key is the pinned U+0000 join", () => 
   it("rejects the pair in the order a ':' join would call sorted", () => {
     const inverted = [...tupleOrderedPair].reverse();
     expect(isSortedUniqueBy(inverted, tupleKey(["phase_instance", "step"]))).toBe(false);
-    rejects(taskState, at(taskState.sample, "authoritative_results", () => inverted), "':' order");
+    rejectsInZodAuthority(taskState, at(taskState.sample, "authoritative_results", () => inverted), "':' order");
   });
 
   it("orders on the full tuple, not on phase_instance alone", () => {
@@ -396,7 +408,7 @@ describe("the authoritative_results tuple key is the pinned U+0000 join", () => 
       resultRef("phase-impl-1", "produce", "4"),
     ];
     accepts(taskState, at(taskState.sample, "authoritative_results", () => sameInstance), "second component");
-    rejects(
+    rejectsInZodAuthority(
       taskState,
       at(taskState.sample, "authoritative_results", () => [...sameInstance].reverse()),
       "second component reversed"
@@ -682,12 +694,14 @@ describe("shape-specific structural pins", () => {
     rejects(maintenanceRecord, bounded(""), "empty human_reason");
     accepts(maintenanceRecord, bounded("a"), "one-byte human_reason");
     accepts(maintenanceRecord, bounded("a".repeat(4096)), "human_reason at 4096 bytes");
-    rejects(maintenanceRecord, bounded("a".repeat(4097)), "human_reason at 4097 bytes");
+    // The upper bound was `x-archflow-max-utf8-bytes`, retired by generation; the Zod `.refine()`
+    // behind `parseMaintenanceRecord` counts UTF-8 bytes and is the surviving authority.
+    rejectsInZodAuthority(maintenanceRecord, bounded("a".repeat(4097)), "human_reason at 4097 bytes");
     // The cap is UTF-8 *bytes*, not code units: 2049 two-byte characters is 4098 bytes in 2049 chars.
     const multiByte = "é".repeat(2049);
     expect(Buffer.byteLength(multiByte, "utf8")).toBe(4098);
     expect(multiByte.length).toBe(2049);
-    rejects(maintenanceRecord, bounded(multiByte), "human_reason above 4096 UTF-8 bytes");
+    rejectsInZodAuthority(maintenanceRecord, bounded(multiByte), "human_reason above 4096 UTF-8 bytes");
   });
 
   it("an implementation output cannot claim a server-owned path class", () => {
@@ -717,7 +731,7 @@ describe("every canonical fixture is accepted and every shuffled-set variant is 
       const sets = DECLARED_SETS.filter((declared) => declared.shape === target.name);
       for (const declared of sets) {
         const base = declared.base ?? target.sample;
-        rejects(target, at(base, declared.path, shuffled), `${declared.path} shuffled`);
+        rejectsInZodAuthority(target, at(base, declared.path, shuffled), `${declared.path} shuffled`);
       }
     });
   }

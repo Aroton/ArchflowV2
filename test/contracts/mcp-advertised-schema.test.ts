@@ -105,6 +105,19 @@ const resultCorrelationCoverage = [
 ] as const;
 
 const annotationKeywords = ["x-archflow-effect"] as const;
+/**
+ * The `x-archflow-*` keywords still carried by the source documents: `mcp-tools` stays
+ * hand-written, and the generated `project-error` document preserves its path and ordering
+ * keywords by emission override. Every other keyword in `validatingKeywordCoverage` (and the
+ * `x-archflow-effect` annotation) retired to its shape's Zod authority when the documents became
+ * generated; the semantic categories those keywords named remain runtime-enforced.
+ */
+const survivingSourceKeywords = [
+  "x-archflow-max-utf8-bytes",
+  "x-archflow-mcp-semantics",
+  "x-archflow-nfc",
+  "x-archflow-sorted-unique",
+] as const;
 const expectedRuntimeSemanticCategories = [...new Set([
   ...Object.values(validatingKeywordCoverage).flat(),
   ...resultCorrelationCoverage
@@ -259,7 +272,7 @@ describe("advertised MCP tool catalogue", () => {
       if (typeof value !== "object" || value === null || Array.isArray(value)) return;
       for (const key of Object.keys(value)) if (key.startsWith("x-archflow-")) sourceKeywords.add(key);
     });
-    expect([...sourceKeywords].sort()).toEqual([...Object.keys(validatingKeywordCoverage), ...annotationKeywords].sort());
+    expect([...sourceKeywords].sort()).toEqual([...survivingSourceKeywords].sort());
 
     for (const descriptor of ADVERTISED_TOOL_CATALOGUE) {
       for (const [member, schema] of [["input", descriptor.inputSchema], ["output", descriptor.outputSchema]] as const) {
