@@ -3,7 +3,7 @@ import { constants as fsConstants } from "node:fs";
 import { z } from "zod";
 
 import { canonicalJsonBytes } from "../contracts/canonical.js";
-import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
+import { createProjectError, describeValidationIssues, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeCode, parseTaskSlug, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
 import {
   parseToolCall,
@@ -44,10 +44,12 @@ const mismatch = (
   intentId: PathSafeId,
   issue: string,
   digests?: Readonly<{ expected: Sha256Digest; observed: Sha256Digest }>,
+  issues?: string[],
 ): ProjectResult<never> => fail(createProjectError("STAGED_REQUEST_MISMATCH", {
   intent_id: intentId,
   issue_code: issue,
   ...(digests === undefined ? {} : { expected_digest: digests.expected, observed_digest: digests.observed }),
+  ...(issues === undefined ? {} : { issues }),
 }));
 
 /**
@@ -158,8 +160,8 @@ export async function rehydrateStagedToolCall<K extends ToolName>(
   let call: Extract<ParsedToolCall, { name: K }>;
   try {
     call = parseToolCall(name, record.request.input as PlainJsonValue);
-  } catch {
-    return mismatch(reference.intent_id, "staged-input-invalid");
+  } catch (error) {
+    return mismatch(reference.intent_id, "staged-input-invalid", undefined, describeValidationIssues(error));
   }
   if (call.input.intent_id !== reference.intent_id) {
     return mismatch(reference.intent_id, "staged-intent-mismatch");

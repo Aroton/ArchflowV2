@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { assertAuthenticInvocationContext, type InvocationContext } from "../contracts/contexts.js";
-import { createProjectError, createProtocolError, parseProtocolError, type ProtocolError } from "../contracts/errors.js";
+import { createProjectError, createProtocolError, describeValidationIssues, parseProtocolError, type ProtocolError } from "../contracts/errors.js";
 import { safeVersionV1Schema } from "../contracts/evidence.js";
 import {
   classifyToolCallInput,
@@ -116,8 +116,8 @@ function projectFailure<K extends ToolName>(
   return projectOutcome(tool, result);
 }
 
-function invalidInput<K extends ToolName>(tool: K, issueCode: string): ToolBoundaryOutcome {
-  return projectFailure(tool, "CONTRACT_INVALID", { tool, issue_code: issueCode });
+function invalidInput<K extends ToolName>(tool: K, issueCode: string, issues?: string[]): ToolBoundaryOutcome {
+  return projectFailure(tool, "CONTRACT_INVALID", { tool, issue_code: issueCode, ...(issues === undefined ? {} : { issues }) });
 }
 
 function internalFailure<K extends ToolName>(tool: K, context: InvocationContext, error: unknown): ToolBoundaryOutcome {
@@ -189,8 +189,8 @@ function classifyVersionedArgs<K extends ToolName>(
     return classified.kind === "staged-reference"
       ? { reference: classified.reference }
       : { call: classified.call };
-  } catch {
-    return { outcome: invalidInput(tool, "input-invalid") };
+  } catch (error) {
+    return { outcome: invalidInput(tool, "input-invalid", describeValidationIssues(error)) };
   }
 }
 

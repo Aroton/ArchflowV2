@@ -295,6 +295,36 @@ describe("advertised MCP tool catalogue", () => {
     }
   });
 
+  it("advertises every input as a flat object root that survives host oneOf-flattening", () => {
+    // Regression fence: the normative input contract is a oneOf, and at least one MCP host
+    // flattens a root-level oneOf by dropping branches it cannot resolve through $ref/allOf —
+    // observed advertising all five tools as zero-field objects. The advertised root must carry
+    // the merged field surface directly and leave combinators below the root.
+    const stagedReference = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", request_digest: D("c") };
+    for (const descriptor of ADVERTISED_TOOL_CATALOGUE) {
+      const schema = descriptor.inputSchema;
+      for (const combinator of ["oneOf", "allOf", "anyOf", "$ref", "if"]) {
+        expect(schema, `${descriptor.name} input root ${combinator}`).not.toHaveProperty(combinator);
+      }
+      const properties = schema.properties as Record<string, unknown>;
+      expect(Object.keys(properties).length, `${descriptor.name} input properties`).toBeGreaterThan(3);
+      for (const field of schema.required as string[]) {
+        expect(properties, `${descriptor.name} requires undeclared ${field}`).toHaveProperty(field);
+      }
+      expect(schema.additionalProperties, `${descriptor.name} input strictness`).toBe(false);
+      expect(schema.description, `${descriptor.name} input description`).toMatch(/Staged reference/u);
+      expect(freshAjv().compile(schema)(stagedReference), `${descriptor.name} staged reference portable`).toBe(true);
+    }
+
+    // The merge must carry the branch field types through, not collapse them: these are the
+    // exact fields the zero-field regression left the model to guess as strings.
+    const stateProperties = (ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === "archflow_state")!.inputSchema as { properties: Record<string, unknown> }).properties;
+    expect(stateProperties.expected_revision).toEqual({ $ref: "#/$defs/mcp-tools/$defs/integer" });
+    expect(stateProperties.artifact).toEqual({ $ref: "#/$defs/mcp-tools/$defs/durableArtifact" });
+    const gateProperties = (ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === "archflow_gate")!.inputSchema as { properties: Record<string, unknown> }).properties;
+    expect((gateProperties.context as { oneOf: unknown[] }).oneOf).toHaveLength(9);
+  });
+
   it("advertises exactly the reference-reachable definitions within the context-budget fence", () => {
     const unescape = (token: string): string => token.replaceAll("~1", "/").replaceAll("~0", "~");
     const assertExactReachableClosure = (schema: Readonly<Record<string, unknown>>, label: string): void => {

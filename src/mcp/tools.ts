@@ -192,6 +192,95 @@ const ADVERTISED_ERROR_SUMMARY: JsonObject = {
   additionalProperties: true
 };
 
+function resolveFragmentReference(reference: string, projected: ReadonlyMap<string, unknown>): unknown {
+  const { key, tokens } = parseLocalReference(reference);
+  const document = projected.get(key);
+  if (document === undefined) throw new TypeError(`unknown advertised schema document: ${reference}`);
+  return resolvePointer(document, tokens, reference);
+}
+
+interface BranchShape {
+  readonly properties: JsonObject;
+  readonly required: ReadonlySet<string>;
+}
+
+const CONTEXT_PLACEHOLDER = JSON.stringify({ type: "object" });
+
+/**
+ * Resolves one oneOf branch of a tool input fragment to its flat property surface. A branch is
+ * an object schema, a $ref to one, or an allOf composition of both; an allOf entry that is
+ * itself a bare oneOf (the gate kind/context pairing) contributes each variant field as a
+ * per-field union, replacing a bare `{type: "object"}` placeholder where one exists, so the
+ * per-kind context shapes survive the merge instead of collapsing to an untyped object.
+ */
+function branchShape(branch: unknown, projected: ReadonlyMap<string, unknown>): BranchShape {
+  const properties: JsonObject = {};
+  const required = new Set<string>();
+  const addProperty = (field: string, schema: unknown): void => {
+    const existing = properties[field];
+    if (existing === undefined || JSON.stringify(existing) === CONTEXT_PLACEHOLDER) properties[field] = schema;
+  };
+  const absorbVariants = (variants: readonly unknown[]): void => {
+    const schemasByField = new Map<string, unknown[]>();
+    for (const variant of variants) {
+      if (!isObject(variant) || !isObject(variant.properties)) continue;
+      for (const [field, schema] of Object.entries(variant.properties)) {
+        const collected = schemasByField.get(field) ?? [];
+        if (!collected.some((entry) => JSON.stringify(entry) === JSON.stringify(schema))) collected.push(schema);
+        schemasByField.set(field, collected);
+      }
+    }
+    for (const [field, schemas] of schemasByField) addProperty(field, schemas.length === 1 ? schemas[0] : { oneOf: schemas });
+  };
+  const absorb = (part: unknown): void => {
+    if (!isObject(part)) return;
+    if (typeof part.$ref === "string") {
+      absorb(resolveFragmentReference(part.$ref, projected));
+      return;
+    }
+    if (isObject(part.properties)) for (const [field, schema] of Object.entries(part.properties)) addProperty(field, schema);
+    if (Array.isArray(part.required)) for (const field of part.required) if (typeof field === "string") required.add(field);
+    if (Array.isArray(part.allOf)) {
+      for (const entry of part.allOf) {
+        if (isObject(entry) && Array.isArray(entry.oneOf)) absorbVariants(entry.oneOf);
+        else absorb(entry);
+      }
+    }
+  };
+  absorb(branch);
+  return { properties, required };
+}
+
+/**
+ * MCP hosts expect an advertised inputSchema whose root is a plain object schema. The normative
+ * input contract is a oneOf (full payload | staged reference) built from $ref/allOf composition,
+ * and at least one host flattens a root-level oneOf by dropping every branch it cannot resolve —
+ * observed advertising all five tools as zero-field objects, which left models composing calls
+ * from guessed (all-string) types. The advertised projection therefore merges the branches into
+ * one object schema: the union of both groups' properties, the fields common to both groups as
+ * required, and a description naming the groups. Root-level combinators are deliberately absent;
+ * the server's strict oneOf validation in parseToolCall is unchanged and remains the authority.
+ */
+function mergedInputFragment(name: ToolName, fragment: JsonObject, projected: ReadonlyMap<string, unknown>): JsonObject {
+  const branches = fragment.oneOf;
+  if (!Array.isArray(branches) || branches.length !== 2) throw new TypeError(`expected a two-branch oneOf input fragment for ${name}`);
+  const [full, staged] = branches.map((branch) => branchShape(branch, projected)) as [BranchShape, BranchShape];
+  if (!staged.required.has("request_digest")) throw new TypeError(`expected the staged-reference branch second in the ${name} input fragment`);
+
+  const properties: JsonObject = {};
+  for (const shape of [full, staged]) {
+    for (const [field, schema] of Object.entries(shape.properties)) if (!(field in properties)) properties[field] = schema;
+  }
+  const required = [...full.required].filter((field) => staged.required.has(field));
+  const fullOptional = Object.keys(full.properties).filter((field) => !full.required.has(field));
+  const description = "Exactly one parameter group is accepted (enforced server-side, not by this schema). " +
+    `Full payload — required: ${[...full.required].join(", ")}` +
+    (fullOptional.length > 0 ? `; optional: ${fullOptional.join(", ")}. ` : ". ") +
+    `Staged reference — required: ${[...staged.required].join(", ")}; pass the staged.reference object returned by archflow-local build-request verbatim. ` +
+    "Values must match the property schemas exactly: JSON numbers and objects are passed as numbers and objects, never stringified.";
+  return { description, additionalProperties: false, required, properties };
+}
+
 function standaloneSchema(name: ToolName, member: "input" | "result"): Readonly<JsonObject> {
   const projected = new Map<string, unknown>(
     schemaDocuments.map(({ key, schema }) => [
@@ -202,11 +291,12 @@ function standaloneSchema(name: ToolName, member: "input" | "result"): Readonly<
     ])
   );
   const fragment = project(schemaFragment(name, member), "mcp-tools") as JsonObject;
+  const advertised = member === "input" ? mergedInputFragment(name, fragment, projected) : fragment;
   return deepFreeze({
     $schema: JSON_SCHEMA_2020_12,
-    ...fragment,
+    ...advertised,
     type: "object",
-    $defs: reachableDefinitions(fragment, projected)
+    $defs: reachableDefinitions(advertised, projected)
   });
 }
 

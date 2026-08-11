@@ -203,7 +203,7 @@ describe("SDK-free MCP tool boundary", () => {
     expect(semantic.kind).toBe("project-result");
     if (semantic.kind !== "project-result" || semantic.result.ok) throw new Error("expected project failure");
     expect(semantic.result.error.code).toBe("CONTRACT_INVALID");
-    expect(semantic.result.error.diagnostic.parameters).toEqual({
+    expect(semantic.result.error.diagnostic.parameters).toMatchObject({
       tool: "archflow_counter_review", issue_code: "input-invalid"
     });
 
@@ -252,9 +252,26 @@ describe("SDK-free MCP tool boundary", () => {
     expectProjectFailure(await boundary.invoke("archflow_state", { schema_version: fixtures.unsupported_schema_version }, invocation), "archflow_state", "CONTRACT_VERSION_UNSUPPORTED", {
       schema_version: fixtures.unsupported_schema_version, supported_version: "1"
     });
-    expectProjectFailure(await boundary.invoke("archflow_state", fixtures.version_one_but_invalid, invocation), "archflow_state", "CONTRACT_INVALID", {
-      tool: "archflow_state", issue_code: "input-invalid"
-    });
+    const invalid = await boundary.invoke("archflow_state", fixtures.version_one_but_invalid, invocation);
+    if (invalid.kind !== "project-result" || invalid.result.ok) throw new Error("expected project failure");
+    expect(invalid.result.error.code).toBe("CONTRACT_INVALID");
+    expect(invalid.result.error.diagnostic.parameters).toMatchObject({ tool: "archflow_state", issue_code: "input-invalid" });
+
+    // A rejected input names its offending fields: the diagnostic that only said "input-invalid"
+    // was observed leaving a caller retrying byte-cosmetic variants of the same wrong shape.
+    const stringTyped = await boundary.invoke(
+      "archflow_state",
+      { ...stateInput, expected_revision: "0", artifact: "{\"artifact_kind\":\"task-initialization\"}" },
+      invocation
+    );
+    if (stringTyped.kind !== "project-result" || stringTyped.result.ok) throw new Error("expected project failure");
+    expect(stringTyped.result.error.code).toBe("CONTRACT_INVALID");
+    const issues = (stringTyped.result.error.diagnostic.parameters as { issues?: readonly string[] }).issues;
+    expect(issues).toBeDefined();
+    expect(issues!.length).toBeGreaterThan(0);
+    expect(issues!.length).toBeLessThanOrEqual(5);
+    expect(issues!.join("; ")).toMatch(/expected_revision/u);
+
     expect(calls).toBe(0);
   });
 

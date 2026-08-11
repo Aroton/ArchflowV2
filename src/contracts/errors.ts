@@ -30,9 +30,27 @@ const pathClass = z.enum(PATH_CLASSES);
 const taskPathClass = { task_id: taskSlugV1Schema, path_class: pathClass } as const;
 const adapterAttempt = { adapter, attempt: safeIntegerV1Schema } as const;
 const sortedPaths = z.array(repositoryPathClaimV1Schema).min(1).superRefine((items, context) => { for (let index = 1; index < items.length; index += 1) if (items[index - 1]!.localeCompare(items[index]!) >= 0) context.addIssue({ code: "custom", message: "offending_paths must be sorted and unique" }); });
+const validationIssues = z.array(z.string().min(1).max(256)).min(1).max(5);
+
+/**
+ * Bounded projection of a rejected input's validation failure into diagnostic parameters. The
+ * `next_action` after CONTRACT_INVALID is to correct the input, which cannot be done blind: an
+ * issue_code alone was observed leaving a caller retrying byte-cosmetic variants of the same
+ * wrong shape. Free text stays out of `issue_code` (a safe-code) and lives in this capped list.
+ */
+export function describeValidationIssues(error: unknown): string[] | undefined {
+  if (error instanceof z.ZodError) {
+    const issues = error.issues.slice(0, 5).map((issue) => {
+      const path = issue.path.length === 0 ? "input" : issue.path.map(String).join(".");
+      return `${path}: ${issue.message}`.slice(0, 256);
+    });
+    if (issues.length > 0) return issues;
+  }
+  return error instanceof Error && error.message !== "" ? [error.message.slice(0, 256)] : undefined;
+}
 
 const PROJECT_PARAMETER_SCHEMAS = {
-  CONTRACT_INVALID: object({ tool: tool.optional(), issue_code: safeCodeV1Schema, schema_version: safeVersionV1Schema.optional() }),
+  CONTRACT_INVALID: object({ tool: tool.optional(), issue_code: safeCodeV1Schema, schema_version: safeVersionV1Schema.optional(), issues: validationIssues.optional() }),
   RESULT_INVALID: object({ tool, result_id: safeIdV1Schema, expected_digest: sha256DigestV1Schema.optional(), observed_digest: sha256DigestV1Schema.optional() }),
   CONTRACT_VERSION_UNSUPPORTED: object({ schema_version: safeVersionV1Schema, supported_version: safeVersionV1Schema }),
   ENVELOPE_OVERFLOW: object({ offending_paths: sortedPaths, current_bytes: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }),
@@ -46,7 +64,7 @@ const PROJECT_PARAMETER_SCHEMAS = {
   STATE_MISSING: object({ phase_instance: phaseInstance }), STATE_INVALID: object({ phase_instance: phaseInstance, issue_code: safeCodeV1Schema }), TRANSITION_INVALID: object({ phase_instance: phaseInstance, from: safeCodeV1Schema, to: safeCodeV1Schema }),
   INPUT_FINGERPRINT_MISMATCH: object(digestPair), STATE_CONFLICT: object({ expected_revision: safeIntegerV1Schema, observed_revision: safeIntegerV1Schema }), SUPPLEMENTAL_REVIEW_REQUIRED: object({ gate_id: pathSafeIdV1Schema, evidence_digest: sha256DigestV1Schema }), INTENT_MISMATCH: object(digestPair), INTENT_NOT_CURRENT: object({ intent_id: pathSafeIdV1Schema, receipt_revision: safeIntegerV1Schema, current_revision: safeIntegerV1Schema }),
   STAGED_REQUEST_NOT_FOUND: object({ task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema }),
-  STAGED_REQUEST_MISMATCH: object({ intent_id: pathSafeIdV1Schema, issue_code: safeCodeV1Schema, expected_digest: sha256DigestV1Schema.optional(), observed_digest: sha256DigestV1Schema.optional() }),
+  STAGED_REQUEST_MISMATCH: object({ intent_id: pathSafeIdV1Schema, issue_code: safeCodeV1Schema, expected_digest: sha256DigestV1Schema.optional(), observed_digest: sha256DigestV1Schema.optional(), issues: validationIssues.optional() }),
   SNAPSHOT_LIMIT: object({ limit_scope: z.enum(["result", "task"]), offending_paths: sortedPaths, current_bytes: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }), SNAPSHOT_INVALID: object({ snapshot_digest: sha256DigestV1Schema, issue_code: safeCodeV1Schema }), RESTORE_COLLISION: object({ gate_id: pathSafeIdV1Schema, path_class: pathClass }), RECONCILIATION_REQUIRED: object({ recorded_digest: sha256DigestV1Schema, observed_digest: sha256DigestV1Schema }), SECRET_DETECTED: object({ path_class: pathClass, detector_id: safeIdV1Schema }),
   GATE_ACTIVE: object({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind }), GATE_DECISION_INVALID: object({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind, issue_code: safeCodeV1Schema }), GATE_CANCELLED: object({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind }), GATE_SUPERSEDED: object({ gate_id: pathSafeIdV1Schema, old_subject_digest: sha256DigestV1Schema, new_subject_digest: sha256DigestV1Schema }),
   UNSUPPORTED_HOST: object({ host: safeIdV1Schema }), UNSUPPORTED_MODEL: object({ model: safeIdV1Schema }), FAMILY_MISMATCH: object({ expected_family: family, observed_family: family }),

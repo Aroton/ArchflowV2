@@ -112,6 +112,16 @@
         }
       }
     },
+    "validationIssues": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
     "digests": {
       "type": "object",
       "additionalProperties": false,
@@ -180,6 +190,9 @@
                     },
                     "schema_version": {
                       "$ref": "#/$defs/version"
+                    },
+                    "issues": {
+                      "$ref": "#/$defs/validationIssues"
                     }
                   }
                 }
@@ -1517,6 +1530,9 @@
                     },
                     "observed_digest": {
                       "$ref": "#/$defs/digest"
+                    },
+                    "issues": {
+                      "$ref": "#/$defs/validationIssues"
                     }
                   }
                 }
