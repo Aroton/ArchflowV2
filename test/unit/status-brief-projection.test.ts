@@ -1,0 +1,107 @@
+import { describe, expect, it } from "vitest";
+
+import { projectBriefStatus, type TaskStatusV1 } from "../../src/state/status.js";
+
+const D = "a".repeat(64);
+
+/** A synthetic but shape-faithful full status; the projection is purely structural. */
+function fullStatus(overrides: Record<string, unknown> = {}): TaskStatusV1 {
+  return {
+    task_id: "brief-task",
+    state: "active",
+    revision: 4,
+    phase_instance: "prd",
+    step: "counter_review",
+    status: "succeeded",
+    attempt: 2,
+    input_fingerprint: D,
+    subject_digest: D,
+    config: { verified: true, expected_digest: D, observed_digest: D },
+    constitution: {
+      digest: D,
+      active_rules: [
+        { id: "task-and-evidence-isolation", version: 1, text: "Tasks are isolated from one another." },
+        { id: "secret-hygiene", version: 2, text: "Secrets never enter durable artifacts.", review_trigger: "A secret appears." },
+      ],
+    },
+    evidence: { available: false, reason: "review-set-incomplete" },
+    blocking_reasons: ["gate-decision-required"],
+    next_action: { code: "resolve-open-gate", detail: "Resolve the open gate.", human_required: true },
+    ...overrides,
+  } as unknown as TaskStatusV1;
+}
+
+describe("projectBriefStatus", () => {
+  it("projects exactly the brief field set with rule ids instead of rule text", () => {
+    const brief = projectBriefStatus(fullStatus());
+    expect(Object.keys(brief).sort()).toEqual([
+      "attempt", "blocking_reasons", "constitution", "next_action",
+      "phase_instance", "revision", "state", "status", "step", "task_id",
+    ]);
+    expect(brief.constitution).toEqual({
+      digest: D,
+      active_rule_ids: ["task-and-evidence-isolation", "secret-hygiene"],
+    });
+    expect(JSON.stringify(brief)).not.toContain("Tasks are isolated");
+    expect(JSON.stringify(brief)).not.toContain("input_fingerprint");
+    expect(brief.next_action.code).toBe("resolve-open-gate");
+  });
+
+  it("names an open gate's kind and decision templates without their bodies", () => {
+    const brief = projectBriefStatus(fullStatus({
+      open_gate_id: "gate-1",
+      open_gate: {
+        gate_id: "gate-1",
+        kind: "artifact-approval",
+        decision_path: "gate.decision",
+        archive_decision_path: "decisions/gate-1/decision.json",
+        request_path: "decisions/gate-1/request.json",
+        gate_counter_review_path: "reviews/prd.gate-counter.gate-1.md",
+        decision_templates: [
+          { decision: "approve", reason: "placeholder body" },
+          { decision: "revise", reason: "placeholder body" },
+          { decision: "waiver-requested", reason: "placeholder body", rule: { rule_id: "r", rule_version: 1 } },
+          { cancelled: true, reason: "placeholder body" },
+          { granted: true, notes: "placeholder body" },
+          { granted: false, notes: "placeholder body" },
+        ],
+        counter_review_prompt: "A three-kilobyte rendered prompt that must never appear in brief output.",
+        supplemental_outcomes: [],
+      },
+    }));
+    expect(brief.open_gate).toEqual({
+      gate_id: "gate-1",
+      kind: "artifact-approval",
+      decision_template_names: ["approve", "revise", "waiver-requested", "cancel", "waiver-grant", "waiver-deny"],
+    });
+    expect(brief.open_gate_id).toBe("gate-1");
+    const serialized = JSON.stringify(brief);
+    expect(serialized).not.toContain("counter_review_prompt");
+    expect(serialized).not.toContain("rendered prompt");
+    expect(serialized).not.toContain("placeholder body");
+  });
+
+  it("keeps reconciliation findings as kinds and paths only, and drops the empty case", () => {
+    const withFindings = projectBriefStatus(fullStatus({
+      reconciliation: {
+        classification: "reconciliation-required",
+        findings: [
+          { kind: "projection-mismatch", path: ".archflow/tasks/brief-task/prd.md", recorded_digest: D, observed_digest: D },
+          { kind: "active-gate-orphan" },
+        ],
+      },
+    }));
+    expect(withFindings.reconciliation).toEqual({
+      classification: "reconciliation-required",
+      findings: [
+        { kind: "projection-mismatch", path: ".archflow/tasks/brief-task/prd.md" },
+        { kind: "active-gate-orphan" },
+      ],
+    });
+
+    const empty = projectBriefStatus(fullStatus({
+      reconciliation: { classification: "consistent", findings: [] },
+    }));
+    expect(empty.reconciliation).toBeUndefined();
+  });
+});

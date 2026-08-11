@@ -12,7 +12,6 @@ import type { ImplementationOutputV1 } from "./durable-implementation-output.js"
 import type {
   EvidenceArtifactV1,
   ResultManifestV1,
-  ReviewEvidenceArtifactV1,
   TriageArtifactV1,
 } from "./durable-result-manifest.js";
 import type { LegacyImportInitializationV1 } from "./durable-legacy-import.js";
@@ -50,7 +49,6 @@ export type DurableArtifact =
   | DocumentArtifactV1
   | ImplementationOutputV1
   | ManualCheckpointImportV1
-  | ReviewEvidenceArtifactV1
   | TriageArtifactV1;
 
 export type DurableSemanticSubject = {
@@ -277,9 +275,7 @@ function artifactInvalid(artifact: DurableArtifact, issue_code: IssueCode): Proj
   return artifact.artifact_kind === "implementation-output"
     ? createProjectError("SNAPSHOT_INVALID", { snapshot_digest: artifact.snapshot_digest, issue_code })
     : createProjectError("TASK_INVALID", {
-        task_id: artifact.artifact_kind === "review-evidence" || artifact.artifact_kind === "triage"
-          ? artifact.evidence.task_id
-          : artifact.task_id,
+        task_id: artifact.artifact_kind === "triage" ? artifact.evidence.task_id : artifact.task_id,
         issue_code,
       });
 }
@@ -329,15 +325,13 @@ function isStepped(artifact: DurableArtifact): artifact is SteppedArtifact {
 }
 
 function durableArtifactTaskId(artifact: DurableArtifact): TaskInitializationV1["task_id"] {
-  return artifact.artifact_kind === "review-evidence" || artifact.artifact_kind === "triage"
-    ? artifact.evidence.task_id
-    : artifact.task_id;
+  return artifact.artifact_kind === "triage" ? artifact.evidence.task_id : artifact.task_id;
 }
 
 function durableSteppedPayload(
   artifact: DurableArtifact,
-): DocumentArtifactV1 | ImplementationOutputV1 | ReviewEvidenceArtifactV1["evidence"] | TriageArtifactV1["evidence"] | undefined {
-  return artifact.artifact_kind === "review-evidence" || artifact.artifact_kind === "triage"
+): DocumentArtifactV1 | ImplementationOutputV1 | TriageArtifactV1["evidence"] | undefined {
+  return artifact.artifact_kind === "triage"
     ? artifact.evidence
     : isStepped(artifact)
       ? artifact
@@ -642,11 +636,9 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     } else {
       const output = resultManifest.outputs[0];
       const roleSuffix = source.artifact_kind === "review-evidence"
-        ? source.evidence.role === "self-review"
-          ? "self"
-          : source.evidence.role === "counter-review"
-            ? "counter"
-            : undefined
+        ? source.evidence.role === "counter-review"
+          ? "counter"
+          : undefined
         : source.artifact_kind === "triage"
           ? "triage"
           : "adjudication";

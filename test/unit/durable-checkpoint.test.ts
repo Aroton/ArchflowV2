@@ -208,7 +208,7 @@ describe("manual checkpoint contract", () => {
     const evidence = clone(fixture.evidence_chain as Record<string, unknown>[]);
     const current = evidence[0]!.current_evidence as Record<string, unknown>;
     const slots = clone(current.slots as Record<string, unknown>[]);
-    slots[1] = { ...slots[1], reviewer_family: slots[1]!.producer_family };
+    slots[0] = { ...slots[0], reviewer_family: slots[0]!.producer_family };
     current.slots = slots;
     await rejectedBoth({ ...fixture, evidence_chain: evidence });
   });

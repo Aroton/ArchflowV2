@@ -35,7 +35,7 @@
     },
     "step": {
       "$comment": "D19 — required in all three authorities, with members exactly `PIPELINE_STEPS` (`vocabulary.ts:2`). Chunk 10's rank-8 fingerprint correlation keys on (phase_instance, step) and had nothing to compare against before this field existed.",
-      "enum": ["produce", "self_review", "counter_review", "triage", "adjudicate"]
+      "enum": ["produce", "counter_review", "triage", "adjudicate"]
     },
     "base_commit": {
       "$comment": "Immutable: the tree the diff is taken against.",

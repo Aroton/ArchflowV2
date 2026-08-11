@@ -154,7 +154,6 @@ describe("the ID vocabularies are usable as single path components", () => {
             ["document", `phases/${String(phase)}/impl-notes.md`] as const
           ]),
           ...phaseInstances.flatMap((instance) => [
-            ["review", `reviews/${instance}.self.md`] as const,
             ["review", `reviews/${instance}.counter.md`] as const,
             ["review", `reviews/${instance}.triage.md`] as const,
             ["review", `reviews/${instance}.adjudication.md`] as const,

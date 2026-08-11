@@ -45,9 +45,8 @@ const common = {
   expected_revision: 4,
   input_fingerprint: "a".repeat(64),
 } as const;
-const selfEvidence = { role: "self-review", evidence_digest: "5".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" } as const;
 const counterEvidence = { role: "counter-review", evidence_digest: "6".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
-const currentEvidence = { set_digest: "8".repeat(64), slots: [selfEvidence, counterEvidence] } as const;
+const currentEvidence = { set_digest: "8".repeat(64), slots: [counterEvidence] } as const;
 const rubric = { schema_version: "1", kind: "implementation", mode: "adversarial", criteria: [{ id: "paths", text: "Check paths", blocking: true }] } as const;
 const waiverOrigin = {
   origin_gate_id: "gate-1",
@@ -149,29 +148,6 @@ describe("internal transaction request identity", () => {
   });
 
   it("selects every artifact operation and binds the exact canonical artifact digest", () => {
-    const reviewArtifact = {
-      schema_version: "1",
-      artifact_kind: "review-evidence",
-      evidence: {
-        schema_version: "1",
-        task_id: taskId,
-        phase_instance: phase,
-        step: "self_review",
-        role: "self-review",
-        subject_digest: "1".repeat(64),
-        input_fingerprint: "2".repeat(64),
-        rubric_digest: "3".repeat(64),
-        producer_family: "claude",
-        findings: [],
-        matched_rule_versions: [],
-        verdict: "pass",
-        blocking_count: 0,
-        assurance: "agent-declared",
-        model_family: "claude",
-        model: "claude-test",
-        effort: "high",
-      },
-    } as const;
     const triageArtifact = {
       schema_version: "1",
       artifact_kind: "triage",
@@ -195,15 +171,12 @@ describe("internal transaction request identity", () => {
       ["document-artifact", durableFixture("document-artifact"), "record-document-artifact"],
       ["implementation-output", durableFixture("implementation-output"), "record-implementation-output"],
       ["manual-checkpoint-import", durableFixture("manual-checkpoint-import"), "adopt-manual-checkpoint-import"],
-      ["review-evidence", reviewArtifact, "record-self-review"],
       ["triage", triageArtifact, "record-triage"],
     ] as const;
     for (const [label, artifact, operation] of cases) {
       const call = parseToolCall("archflow_state", {
         ...rawInputs().archflow_state,
-        step: label === "review-evidence"
-          ? "self_review"
-          : label === "triage" ? "triage" : "produce",
+        step: label === "triage" ? "triage" : "produce",
         artifact,
       });
       const identified = identifyTransactionRequest(call, authority, fingerprint);

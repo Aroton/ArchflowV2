@@ -12,7 +12,7 @@ import {
   type ConstitutionRegistry,
   type ConstitutionRuleV1,
 } from "../../src/contracts/constitution.js";
-import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { mintAdjudicationObservation, mintReviewObservation, selectCliAdapter } from "../../src/dispatch/cli.js";
 import { runDispatchChild } from "../../src/dispatch/process.js";
@@ -131,6 +131,7 @@ function reviewSubject(output: Record<string, unknown>): DispatchSubject {
     phase_instance: parsePhaseInstanceId(output.phase_instance),
     role: "counter-review",
     step: "counter_review",
+    attempt: parseSafeInteger(1),
     subject_digest: parseSha256Digest(output.subject_digest),
     input_fingerprint: parseSha256Digest(output.input_fingerprint),
     rubric_digest: parseSha256Digest(output.rubric_digest),

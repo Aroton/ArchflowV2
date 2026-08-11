@@ -123,17 +123,17 @@ describe("discoverReconciliationInput", () => {
     const gateId = parsePathSafeId("gate-1");
     const gateContext = { artifact_kind: "phase-implementation" } as const;
     const contextDigest = computeGateContextDigest("artifact-approval", gateContext);
-    const slot = (role: "self-review" | "counter-review") => ({
-      role, evidence_digest: role === "self-review" ? D("8") : D("9"),
-      assurance: role === "self-review" ? "agent-declared" as const : "server-attested" as const,
+    const slot = () => ({
+      role: "counter-review" as const, evidence_digest: D("9"),
+      assurance: "server-attested" as const,
       producer_family: "claude" as const,
-      reviewer_family: role === "self-review" ? "claude" as const : "codex" as const,
-      independence: role === "self-review" ? "same-family-self" as const : "opposite-family" as const,
+      reviewer_family: "codex" as const,
+      independence: "opposite-family" as const,
     });
     const request = parseGateRequest({
       schema_version: "1", gate_id: gateId, intent_id: "gate-intent", request_digest: D("a"),
       task_id: TASK, phase_instance: PHASE, summary: "Approve", subject_digest: D("b"),
-      context_digest: contextDigest, current_evidence: { set_digest: D("c"), slots: [slot("self-review"), slot("counter-review")] },
+      context_digest: contextDigest, current_evidence: { set_digest: D("c"), slots: [slot()] },
       kind: "artifact-approval", context: gateContext,
       allowed_decisions: ["approve", "revise", "reject", "cancel"], opened_at_revision: 4,
     });

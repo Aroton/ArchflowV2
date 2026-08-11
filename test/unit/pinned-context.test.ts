@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { sha256Bytes } from "../../src/contracts/canonical.js";
-import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import {
   REVIEW_ENVELOPE_BYTE_CAP,
@@ -15,6 +15,7 @@ import {
   importTargetCandidates,
   mentionedRepositoryPaths,
   pinnedContextEntry,
+  priorTriageEvidence,
   relativeImportSpecifiers,
   unavailableContextEntry,
   verificationTranscriptEvidence,
@@ -29,6 +30,7 @@ const subject = (): DispatchSubject => ({
   phase_instance: parsePhaseInstanceId("prd"),
   role: "counter-review",
   step: "counter_review",
+  attempt: parseSafeInteger(1),
   subject_digest: digest("a"),
   input_fingerprint: digest("b"),
   rubric_digest: digest("c"),
@@ -189,6 +191,122 @@ describe("verificationTranscriptEvidence", () => {
   });
 });
 
+describe("priorTriageEvidence", () => {
+  const PHASE = parsePhaseInstanceId("design");
+  const REVIEW_DIGEST = digest("e");
+  const reference = (step: string, resultDigest: string) => ({
+    phase_instance: PHASE, step, result_digest: resultDigest,
+    result_id: `result-${step.replace("_", "-")}`, input_fingerprint: digest("b"),
+    manifest_path: `x/${step}`,
+  });
+  const installation = (manifest: Record<string, unknown>) =>
+    ({ prepared: { manifest: { value: manifest } } }) as never;
+  const reviewManifest = {
+    artifact_digest: REVIEW_DIGEST,
+    source_artifact: {
+      artifact_kind: "review-evidence",
+      evidence: {
+        findings: [
+          { finding_id: "digest-drift", severity: "blocker", blocking: true, summary: "Digest recomputation skips the slot check." },
+          { finding_id: "naming-nit", severity: "minor", blocking: false, summary: "Rename the helper." },
+          { finding_id: "style-note", severity: "minor", blocking: false, summary: "Editorial wording." },
+        ],
+      },
+    },
+  };
+  const triageManifest = (dispositions: readonly Record<string, unknown>[]) => ({
+    artifact_digest: digest("f"),
+    source_artifact: { artifact_kind: "triage", evidence: { dispositions } },
+  });
+  const state = (results: readonly unknown[]) => ({
+    task_id: parseTaskSlug("pinned-context"),
+    phase_instance: PHASE,
+    attempt: parseSafeInteger(2),
+    authoritative_results: results,
+  }) as unknown as TaskStateV1;
+  const loader = (byStep: Record<string, unknown>) => ({
+    load_retained_result: (candidate: { step: string }) => Promise.resolve(
+      byStep[candidate.step] === undefined
+        ? { schema_version: "1", ok: false, error: { code: "IO_ERROR" } }
+        : { schema_version: "1", ok: true, value: byStep[candidate.step] },
+    ),
+  }) as never;
+
+  it("pins nothing when no triage result is retained for this phase instance", async () => {
+    const first = await priorTriageEvidence(loader({}), state([reference("produce", "1".repeat(64))]));
+    expect(first).toMatchObject({ ok: true, value: [] });
+    const noLoader = await priorTriageEvidence(
+      { load_retained_result: undefined } as never,
+      state([reference("triage", "2".repeat(64))]),
+    );
+    expect(noLoader).toMatchObject({ ok: true, value: [] });
+  });
+
+  it("assembles the prior round's dispositions joined to their reviewer-authored findings", async () => {
+    const result = await priorTriageEvidence(
+      loader({
+        triage: installation(triageManifest([
+          { review_evidence_digest: REVIEW_DIGEST, finding_id: "digest-drift", disposition: "accepted", rationale: "Real defect.", revision_intent: "Recompute after the slot check." },
+          { review_evidence_digest: REVIEW_DIGEST, finding_id: "naming-nit", disposition: "rejected", rationale: "envelope-gap: name matches the convention.", evidence: "See CLAUDE.md." },
+          { review_evidence_digest: REVIEW_DIGEST, finding_id: "style-note", disposition: "accepted-editorial", rationale: "Wording only." },
+          { review_evidence_digest: digest("9"), finding_id: "gate-extra", disposition: "rejected", rationale: "From a supplemental review." },
+        ])),
+        counter_review: installation(reviewManifest),
+      }),
+      state([reference("counter_review", "3".repeat(64)), reference("triage", "2".repeat(64))]),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(1);
+    const entry = result.value[0]!;
+    expect(entry).toMatchObject({ kind: "prior-triage", label: "prior-round-triage", status: "pinned" });
+    if (entry.status !== "pinned") return;
+    expect(entry.content_digest).toBe(sha256Bytes(new TextEncoder().encode(entry.content)));
+    const record = JSON.parse(entry.content) as {
+      record_kind: string; current_attempt: number; dispositions: readonly Record<string, unknown>[];
+    };
+    expect(record.record_kind).toBe("prior-triage");
+    expect(record.current_attempt).toBe(2);
+    expect(record.dispositions).toEqual([
+      {
+        finding_id: "digest-drift", severity: "blocker", blocking: true,
+        summary: "Digest recomputation skips the slot check.",
+        disposition: "accepted", revision_intent: "Recompute after the slot check.",
+      },
+      {
+        finding_id: "naming-nit", severity: "minor", blocking: false,
+        summary: "Rename the helper.",
+        disposition: "rejected", rationale: "envelope-gap: name matches the convention.",
+      },
+      // An unknown disposition string renders as-is; the vocabulary can grow without breaking assembly.
+      {
+        finding_id: "style-note", severity: "minor", blocking: false,
+        summary: "Editorial wording.",
+        disposition: "accepted-editorial", rationale: "Wording only.",
+      },
+      // A finding outside the retained counter-review evidence renders without invented fields.
+      { finding_id: "gate-extra", disposition: "rejected", rationale: "From a supplemental review." },
+    ]);
+  });
+
+  it("fails closed when a referenced manifest cannot be loaded or has the wrong kind", async () => {
+    const unloadable = await priorTriageEvidence(
+      loader({}),
+      state([reference("triage", "2".repeat(64))]),
+    );
+    expect(unloadable).toMatchObject({ ok: false, error: { code: "IO_ERROR" } });
+
+    const wrongKind = await priorTriageEvidence(
+      loader({ triage: installation(reviewManifest) }),
+      state([reference("triage", "2".repeat(64))]),
+    );
+    expect(wrongKind).toMatchObject({
+      ok: false,
+      error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: "prior-triage-artifact-invalid" } } },
+    });
+  });
+});
+
 describe("buildReviewEnvelopeWithCap", () => {
   it("drops the lowest-priority droppable entry first and marks it omitted-cap", () => {
     const upstream = pinnedContextEntry("approved-upstream", "prd.md", new TextEncoder().encode("# PRD\n"));
@@ -205,6 +323,38 @@ describe("buildReviewEnvelopeWithCap", () => {
     ]);
     expect(visible.context[2]!.content_digest).toBe(repoMap.status === "pinned" ? repoMap.content_digest : undefined);
   });
+  it("drops an oversized prior-triage entry to omitted-cap like other droppable kinds", () => {
+    const upstream = pinnedContextEntry("approved-upstream", "prd.md", new TextEncoder().encode("# PRD\n"));
+    const priorTriage = pinnedContextEntry(
+      "prior-triage", "prior-round-triage", new TextEncoder().encode("t".repeat(1_100_000)),
+    );
+    const envelope = buildReviewEnvelopeWithCap(input([upstream, priorTriage]));
+    const visible = JSON.parse(new TextDecoder().decode(envelope.bytes)) as {
+      context: readonly { kind: string; status: string; content_digest?: string }[];
+    };
+    expect(visible.context.map((entry) => [entry.kind, entry.status])).toEqual([
+      ["approved-upstream", "pinned"],
+      ["prior-triage", "omitted-cap"],
+    ]);
+    expect(visible.context[1]!.content_digest)
+      .toBe(priorTriage.status === "pinned" ? priorTriage.content_digest : undefined);
+  });
+
+  it("sacrifices mechanical evidence to the cap before the prior-triage record", () => {
+    const priorTriage = pinnedContextEntry(
+      "prior-triage", "prior-round-triage", new TextEncoder().encode("t".repeat(400_000)),
+    );
+    const repoMap = pinnedContextEntry("repo-map", "tree abc", new TextEncoder().encode("m".repeat(800_000)));
+    const envelope = buildReviewEnvelopeWithCap(input([priorTriage, repoMap]));
+    const visible = JSON.parse(new TextDecoder().decode(envelope.bytes)) as {
+      context: readonly { kind: string; status: string }[];
+    };
+    expect(visible.context.map((entry) => [entry.kind, entry.status])).toEqual([
+      ["prior-triage", "pinned"],
+      ["repo-map", "omitted-cap"],
+    ]);
+  });
+
   it("passes a fitting envelope through unchanged", () => {
     const entry = pinnedContextEntry("user-ask", "ask.md", new TextEncoder().encode("Ask.\n"));
     const envelope = buildReviewEnvelopeWithCap(input([entry]));

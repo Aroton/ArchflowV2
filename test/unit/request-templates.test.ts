@@ -74,18 +74,33 @@ describe("next-action request templates", () => {
 
   it("prefills the running step entry from durable state with the sentinel fingerprint", () => {
     const request = buildNextActionRequest(
-      action({ code: "run-step", step: "self_review" }),
-      { task_id: taskId, state: stateAt("prd") },
+      action({ code: "run-step", step: "triage" }),
+      { task_id: taskId, state: stateAt("prd", "counter_review", "succeeded") },
     );
     expect(request?.request.tool).toBe("archflow_state");
     expect(request?.request.input).toMatchObject({
       expected_revision: 7,
       input_fingerprint: fingerprintSentinel,
       phase_instance: "prd",
-      step: "self_review",
+      step: "triage",
       status: "running",
     });
     expect(request?.guidance).toContain("archflow-local envelope");
+  });
+
+  it("swaps in the editorial wording on the editorial produce re-entry template", () => {
+    const editorial = buildNextActionRequest(
+      action({ code: "run-step", step: "produce", editorial_revision: true }),
+      { task_id: taskId, state: stateAt("prd", "triage", "succeeded") },
+    );
+    expect(editorial?.request.input).toMatchObject({ step: "produce", status: "running" });
+    expect(editorial?.guidance).toMatch(/exactly the accepted editorial revision intents/u);
+    expect(editorial?.guidance).toMatch(/Reviews are not re-run; adjudication is\./u);
+    const plain = buildNextActionRequest(
+      action({ code: "run-step", step: "produce" }),
+      { task_id: taskId, state: stateAt("prd", "triage", "succeeded") },
+    );
+    expect(plain?.guidance).not.toMatch(/editorial/u);
   });
 
   it("emits the terminal record, not a repeat entry, for a step already running", () => {
@@ -104,10 +119,10 @@ describe("next-action request templates", () => {
     expect(() => parseToolCall("archflow_state", structuredClone(request?.request.input))).toThrow();
 
     const review = buildNextActionRequest(
-      action({ code: "run-step", step: "self_review" }),
-      { task_id: taskId, state: stateAt("prd", "self_review", "running") },
+      action({ code: "run-step", step: "triage" }),
+      { task_id: taskId, state: stateAt("prd", "triage", "running") },
     );
-    expect(review?.request.input).toMatchObject({ step: "self_review", status: "succeeded" });
+    expect(review?.request.input).toMatchObject({ step: "triage", status: "succeeded" });
   });
 
   it("emits the retry entry for a failed step", () => {
@@ -120,14 +135,15 @@ describe("next-action request templates", () => {
   });
 
   it("emits nothing when no legal run-step transition exists from the derived state", () => {
-    // A succeeded step has no same-subject move left; only its successor is legal.
+    // A succeeded produce still has one same-subject move: the author-initiated
+    // withdraw-and-redo re-entry, so its produce template is the running entry.
     expect(buildNextActionRequest(
       action({ code: "run-step", step: "produce" }),
       { task_id: taskId, state: stateAt("prd", "produce", "succeeded") },
-    )).toBeUndefined();
-    // counter_review is not the pipeline successor of produce.
+    )?.request.input).toMatchObject({ step: "produce", status: "running" });
+    // triage is not the pipeline successor of produce.
     expect(buildNextActionRequest(
-      action({ code: "run-step", step: "counter_review" }),
+      action({ code: "run-step", step: "triage" }),
       { task_id: taskId, state: stateAt("prd", "produce", "succeeded") },
     )).toBeUndefined();
   });
@@ -153,7 +169,7 @@ describe("next-action request templates", () => {
 
     const counterEntry = buildNextActionRequest(
       action({ code: "run-step", step: "counter_review" }),
-      { task_id: taskId, state: stateAt("phase-design-2", "self_review", "succeeded") },
+      { task_id: taskId, state: stateAt("phase-design-2", "produce", "succeeded") },
     );
     expect(counterEntry?.request.tool).toBe("archflow_state");
     expect(counterEntry?.request.input).toMatchObject({ step: "counter_review", status: "running" });
@@ -211,15 +227,14 @@ describe("next-action request templates", () => {
 });
 
 describe("run-step template legality", () => {
-  const steps: readonly PipelineStep[] = ["produce", "self_review", "counter_review", "triage", "adjudicate"];
+  const steps: readonly PipelineStep[] = ["produce", "counter_review", "triage", "adjudicate"];
   const statuses: readonly TaskStateV1["status"][] = ["running", "failed", "succeeded"];
 
   // Mirrors the server's attempt derivation: the client never supplies attempt, so the template's
   // target must be legal at exactly the attempt the handler will derive for it.
   function derivedAttempt(current: TaskStateV1, targetStep: PipelineStep): SafeInteger {
     const retry = current.status === "failed" && current.step === targetStep;
-    const reentry = current.step !== targetStep &&
-      (current.step === "triage" || current.step === "adjudicate") && targetStep === "produce";
+    const reentry = current.status === "succeeded" && targetStep === "produce";
     return (retry || reentry ? current.attempt + 1 : current.attempt) as SafeInteger;
   }
 
@@ -287,7 +302,6 @@ describe("run-step template legality", () => {
         case "archflow_state":
           if (input.status === "running") return "running";
           if (input.status === "succeeded" && input.step === "produce") return "produce";
-          if (input.status === "succeeded" && input.step === "self_review") return "self-review";
           if (input.status === "succeeded" && input.step === "triage") return "triage";
           break;
       }

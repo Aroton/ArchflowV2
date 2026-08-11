@@ -220,7 +220,6 @@
             "step": {
               "enum": [
                 "produce",
-                "self_review",
                 "counter_review",
                 "triage",
                 "adjudicate"

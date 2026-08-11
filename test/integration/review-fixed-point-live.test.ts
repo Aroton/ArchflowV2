@@ -49,12 +49,11 @@ const config: ConfigV1 = {
   schema_version: "1",
   roles: {
     producer: { model: "claude-fixture", effort: "high" },
-    "self-reviewer": { model: "claude-fixture", effort: "high" },
     "counter-reviewer": { model: "gpt-fixture", effort: "high" },
     adjudicator: { model: "gpt-fixture", effort: "high" },
   },
 };
-const configYaml = `schema_version: "1"\nroles:\n  producer:\n    model: claude-fixture\n    effort: high\n  self-reviewer:\n    model: claude-fixture\n    effort: high\n  counter-reviewer:\n    model: gpt-fixture\n    effort: high\n  adjudicator:\n    model: gpt-fixture\n    effort: high\n`;
+const configYaml = `schema_version: "1"\nroles:\n  producer:\n    model: claude-fixture\n    effort: high\n  counter-reviewer:\n    model: gpt-fixture\n    effort: high\n  adjudicator:\n    model: gpt-fixture\n    effort: high\n`;
 const rubric = {
   schema_version: "1",
   kind: "implementation",
@@ -96,7 +95,7 @@ async function fixture() {
     repository_identity_digest: bootstrap.value.authority.repository_identity_digest,
     revision: parseSafeInteger(4),
     phase_instance: phase,
-    step: "self_review",
+    step: "counter_review",
     status: "running",
     attempt: parseSafeInteger(1),
     input_fingerprint: "0".repeat(64) as TaskStateV1["input_fingerprint"],
@@ -236,7 +235,6 @@ describe("live fixed-point regressions", () => {
     const approveCommit = async (currentServices: ProductionServices, subject: typeof second) => {
       const subjectDigest = canonicalJsonDigest(subject);
       const evidence = currentEvidenceSetRef([
-          { role: "self-review" as const, evidence_digest: sha256Bytes(new TextEncoder().encode(`self-${subjectDigest}`)), assurance: "agent-declared" as const, producer_family: "claude" as const, reviewer_family: "claude" as const, independence: "same-family-self" as const },
           { role: "counter-review" as const, evidence_digest: sha256Bytes(new TextEncoder().encode(`counter-${subjectDigest}`)), assurance: "server-attested" as const, producer_family: "claude" as const, reviewer_family: "codex" as const, independence: "opposite-family" as const },
       ]);
       const context = {
@@ -431,7 +429,6 @@ describe("live fixed-point regressions", () => {
     };
     await writeFile(h.services.authority.state.absolute, canonicalDocument(approvalState).bytes);
     const approvalEvidence = currentEvidenceSetRef([
-      { role: "self-review", evidence_digest: sha256Bytes(new TextEncoder().encode("upstream-self")), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
       { role: "counter-review", evidence_digest: sha256Bytes(new TextEncoder().encode("upstream-counter")), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
     ]);
     for (const [index, spec] of upstreamSpecs.entries()) {
@@ -546,21 +543,10 @@ else {
     };
     try {
       await invoke("archflow_state", { ...produceTemplate.input, input_fingerprint: produceFingerprint, artifact: produceArtifact }, "produce");
-      await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "self-running", expected_revision: 5,
-        phase_instance: phase, step: "self_review", status: "running", input_fingerprint: nonProduceFingerprint }, "self-running");
       const produceDigest = canonicalJsonDigest(produceArtifact);
-      const selfEvidence = {
-        schema_version: "1", task_id: task, phase_instance: phase, step: "self_review", role: "self-review",
-        subject_digest: produceDigest, input_fingerprint: nonProduceFingerprint, rubric_digest: canonicalJsonDigest(rubric),
-        producer_family: "claude", findings: [], matched_rule_versions: [], verdict: "pass", blocking_count: 0,
-        assurance: "agent-declared", model_family: "claude", model: "claude-fixture", effort: "high",
-      } as const;
-      await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "self-succeeded", expected_revision: 6,
-        phase_instance: phase, step: "self_review", status: "succeeded", input_fingerprint: nonProduceFingerprint,
-        artifact: { schema_version: "1", artifact_kind: "review-evidence", evidence: selfEvidence } }, "self-succeeded");
-      await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "counter-running", expected_revision: 7,
+      await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "counter-running", expected_revision: 5,
         phase_instance: phase, step: "counter_review", status: "running", input_fingerprint: nonProduceFingerprint }, "counter-running");
-      await invoke("archflow_counter_review", { schema_version: "1", task_id: task, intent_id: "counter-succeeded", expected_revision: 8,
+      await invoke("archflow_counter_review", { schema_version: "1", task_id: task, intent_id: "counter-succeeded", expected_revision: 6,
         input_fingerprint: nonProduceFingerprint, artifact_path: documentPath, rubric }, "counter-succeeded");
       const afterCounter = await createProductionServices({ working_directory: h.root, task_id: task, operation: parseSafeCode("pipeline-after-counter") });
       if (!afterCounter.ok) throw new Error(afterCounter.error.code);
@@ -568,17 +554,17 @@ else {
         load_retained_result: afterCounter.value.dependencies.load_retained_result! }, afterCounter.value.authority, phase);
       if (!directReviews.ok) throw new Error(`direct reviews: ${JSON.stringify(directReviews)}`);
       const current = directReviews.value.current_evidence_set;
-      await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "triage-running", expected_revision: 9,
+      await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "triage-running", expected_revision: 7,
         phase_instance: phase, step: "triage", status: "running", input_fingerprint: nonProduceFingerprint }, "triage-running");
-      await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "triage-succeeded", expected_revision: 10,
+      await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "triage-succeeded", expected_revision: 8,
         phase_instance: phase, step: "triage", status: "succeeded", input_fingerprint: nonProduceFingerprint,
         artifact: { schema_version: "1", artifact_kind: "triage", evidence: { schema_version: "1", task_id: task,
           phase_instance: phase, step: "triage", subject_digest: produceDigest, input_fingerprint: nonProduceFingerprint,
           current_evidence_set_digest: current.set_digest, source_evidence_digests: current.slots.map((slot) => slot.evidence_digest),
-          dispositions: [], accepted_count: 0, rejected_count: 0 } } }, "triage-succeeded");
-      await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "adjudicate-running", expected_revision: 11,
+          dispositions: [], accepted_count: 0, rejected_count: 0, accepted_editorial_count: 0 } } }, "triage-succeeded");
+      await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "adjudicate-running", expected_revision: 9,
         phase_instance: phase, step: "adjudicate", status: "running", input_fingerprint: nonProduceFingerprint }, "adjudicate-running");
-      await invoke("archflow_adjudicate", { schema_version: "1", task_id: task, intent_id: "adjudicate-succeeded", expected_revision: 12,
+      await invoke("archflow_adjudicate", { schema_version: "1", task_id: task, intent_id: "adjudicate-succeeded", expected_revision: 10,
         input_fingerprint: nonProduceFingerprint, artifact_path: documentPath,
         upstream_paths: upstreamSpecs.map((spec) => spec.path) }, "adjudicate-succeeded");
       const finalServices = await createProductionServices({ working_directory: h.root, task_id: task, operation: parseSafeCode("pipeline-final") });
@@ -599,7 +585,7 @@ else {
         subject_digest: produceDigest, input_fingerprint: nonProduceFingerprint, constitution: constitution.value,
         approved_upstream_digests: approvedUpstreamDigests,
         authenticated_gate_approvals: [],
-      })).toMatchObject({ next: "advance", current: ["self_review", "counter_review", "triage", "adjudicate"] });
+      })).toMatchObject({ next: "advance", current: ["counter_review", "triage", "adjudicate"] });
     } finally {
       if (saved.PATH === undefined) delete process.env.PATH; else process.env.PATH = saved.PATH;
       if (saved.HOME === undefined) delete process.env.HOME; else process.env.HOME = saved.HOME;
@@ -615,7 +601,7 @@ else {
       input_fingerprint: "0".repeat(64),
     };
     const calls = [
-      parseToolCall("archflow_state", { ...common, intent_id: "self", phase_instance: phase, step: "self_review", status: "running" }),
+      parseToolCall("archflow_state", { ...common, intent_id: "counter-entry", phase_instance: phase, step: "counter_review", status: "running" }),
       parseToolCall("archflow_state", { ...common, intent_id: "triage", phase_instance: phase, step: "triage", status: "running" }),
       parseToolCall("archflow_counter_review", { ...common, intent_id: "counter", artifact_path: "prd.md", rubric }),
       parseToolCall("archflow_counter_review", { ...common, intent_id: "counter-two", artifact_path: "design.md", rubric: { ...rubric, criteria: [{ ...rubric.criteria[0], text: "Changed rubric." }] } }),

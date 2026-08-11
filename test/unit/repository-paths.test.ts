@@ -25,7 +25,6 @@ import {
   counterReviewClaim,
   parseRepositoryPathClaim,
   parseTaskPathClaim,
-  selfReviewClaim,
   triageReviewClaim,
   type PathClass,
   type RepositoryPathClaim,
@@ -64,13 +63,11 @@ describe("gate path constructors", () => {
   it("constructs every fixed-point review projection and round-trips the review classifier", () => {
     const phase = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(6) });
     const claims = [
-      selfReviewClaim(phase),
       counterReviewClaim(phase),
       triageReviewClaim(phase),
       adjudicationReviewClaim(phase),
     ];
     expect(claims).toEqual([
-      "reviews/phase-impl-6.self.md",
       "reviews/phase-impl-6.counter.md",
       "reviews/phase-impl-6.triage.md",
       "reviews/phase-impl-6.adjudication.md",
@@ -185,7 +182,7 @@ const TASK_SAMPLES: readonly TaskSample[] = [
   {
     path_class: "review",
     claims: [
-      "reviews/prd.self.md",
+      "reviews/prd.counter.md",
       "reviews/design.counter.md",
       "reviews/phase-design-6.triage.md",
       "reviews/phase-impl-6.adjudication.md",
@@ -199,6 +196,7 @@ const TASK_SAMPLES: readonly TaskSample[] = [
   { path_class: "result-manifest", claims: [`results/sha256/${DIGEST_A}/manifest.json`] },
   { path_class: "result-payload", claims: [`results/sha256/${DIGEST_A}/payload/src/index.ts`] },
   { path_class: "intent", claims: ["intents/intent-1.json"] },
+  { path_class: "staged-request", claims: ["intents/intent-1.request.json"] },
   { path_class: "attempt", claims: ["attempts/phase-impl-6/attempt-1.json"] },
   { path_class: "manual-checkpoint", claims: [`manual/checkpoints/3-${DIGEST_B}.json`] },
   { path_class: "maintenance-record", claims: ["maintenance/vacuum-1.json"] },
@@ -238,13 +236,26 @@ const REPOSITORY_SAMPLES: readonly RepositorySample[] = [
   },
 ];
 
-describe.skipIf(!hasGit)("the nineteen-class table", () => {
+describe.skipIf(!hasGit)("the twenty-class table", () => {
   it("covers every class exactly once across the two frames", () => {
     expect(TASK_SAMPLES.map((sample) => sample.path_class)).toEqual([...TASK_PATH_CLASSES]);
     expect(REPOSITORY_SAMPLES.map((sample) => sample.path_class)).toEqual([
       ...REPOSITORY_PATH_CLASSES,
     ]);
-    expect(TASK_SAMPLES.length + REPOSITORY_SAMPLES.length).toBe(19);
+    expect(TASK_SAMPLES.length + REPOSITORY_SAMPLES.length).toBe(20);
+  });
+
+  it("keeps the two intent-directory suffixes disjoint: a staged request never classifies as a receipt", () => {
+    // `.request.json` is reserved for staged requests; the receipt rule's lookbehind refuses it
+    // even though a receipt id may legally contain dots.
+    expect(classifyTaskPath(TASK_ID, parseTaskPathClaim("intents/abc.request.json")))
+      .toMatchObject({ ok: true, value: "staged-request" });
+    expect(classifyTaskPath(TASK_ID, parseTaskPathClaim("intents/abc.request.request.json")))
+      .toMatchObject({ ok: true, value: "staged-request" });
+    expect(classifyTaskPath(TASK_ID, parseTaskPathClaim("intents/abc.requested.json")))
+      .toMatchObject({ ok: true, value: "intent" });
+    expect(classifyTaskPath(TASK_ID, parseTaskPathClaim("intents/with.dots.json")))
+      .toMatchObject({ ok: true, value: "intent" });
   });
 
   it("resolves every task-scoped class through the resolver that owns it", async () => {
@@ -884,6 +895,6 @@ describe("path brands", () => {
 
   it("keeps the class partition total over PathClass", () => {
     const all: readonly PathClass[] = [...TASK_PATH_CLASSES, ...REPOSITORY_PATH_CLASSES];
-    expect(all).toHaveLength(19);
+    expect(all).toHaveLength(20);
   });
 });

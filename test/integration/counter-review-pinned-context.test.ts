@@ -248,6 +248,7 @@ else {
 function capturedEnvelope(path: string): {
   context: readonly Record<string, unknown>[];
   workspace?: Record<string, unknown>;
+  subject?: Record<string, unknown>;
 } {
   return JSON.parse(readFileSync(path, "utf8")) as ReturnType<typeof capturedEnvelope>;
 }
@@ -293,6 +294,8 @@ describe("counter-review pinned context integration", () => {
       commit: h.repository.git("rev-parse", "HEAD"),
       note: REPOSITORY_VIEW_NOTE,
     });
+    // The server stamped the durable attempt counter into the child-visible subject.
+    expect(envelope.subject).toMatchObject({ attempt: 1 });
   });
 
   it("routes the reviewer checkout to the implementation base commit, not HEAD", async () => {

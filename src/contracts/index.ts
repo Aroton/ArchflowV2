@@ -40,13 +40,16 @@ export * from "./durable-handoff.js";
 export {
   TOOL_DEFINITIONS,
   bindParsedToolCallRequest,
+  classifyToolCallInput,
   correlateProjectResult,
+  parseStagedRequestReference,
   parseToolCall,
   validateProjectFailureStructure,
   validateProjectResultStructure,
 } from "./mcp-tools.js";
 export type {
   AdjudicateInput,
+  ClassifiedToolCallInput,
   AdjudicateSuccess,
   CommonToolInput,
   CounterReviewInput,
@@ -67,6 +70,7 @@ export type {
   ToolDefinition,
   ToolInput,
   ToolSuccess,
+  StagedRequestReference,
   WaiverDecisionBinding,
   WaiverInput,
   WaiverSuccess,

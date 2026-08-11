@@ -10,7 +10,7 @@ import adjudicationOutputSchema from "../../src/contracts/schemas/v1/adjudicatio
 import { parseAndDeriveAdjudication } from "../../src/contracts/adjudication.js";
 import { canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
 import { parseConfigYaml } from "../../src/contracts/config.js";
-import { parseSafeId } from "../../src/contracts/evidence.js";
+import { parseSafeId, parseSafeInteger } from "../../src/contracts/evidence.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { parseRubricV1 } from "../../src/contracts/rubric.js";
@@ -36,14 +36,12 @@ const SENTINELS = Object.freeze([
 const CLAUDE_PRODUCER_CONFIG = `schema_version: "1"
 roles:
   producer: {model: claude-opus-5, effort: high}
-  self-reviewer: {model: claude-opus-5, effort: high}
   counter-reviewer: {model: gpt-5.6-sol, effort: xhigh}
   adjudicator: {model: gpt-5.6-sol, effort: xhigh}
 `;
 const CODEX_PRODUCER_CONFIG = `schema_version: "1"
 roles:
   producer: {model: gpt-5.6-sol, effort: xhigh}
-  self-reviewer: {model: gpt-5.6-sol, effort: xhigh}
   counter-reviewer: {model: claude-opus-5, effort: high}
   adjudicator: {model: claude-opus-5, effort: high}
 `;
@@ -223,6 +221,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
           phase_instance: PHASE,
           role: "counter-review" as const,
           step: "counter_review" as const,
+          attempt: parseSafeInteger(1),
           subject_digest: sha256Bytes(encoder.encode(artifact)),
           input_fingerprint: canonicalJsonDigest({ direction: direction.name }),
           rubric_digest: rubricDigest,

@@ -12,20 +12,20 @@ flowchart LR
     W --> C["cli.ts<br/>preflight, argv lockdown,<br/>output schema"]
     C --> P["process.ts<br/>spawn, 15 min timeout,<br/>8 MiB output caps"]
     P --> O["cli.ts<br/>extract + classify output,<br/>mint observation"]
-    O --> T["coordinator.ts<br/>telemetry record under<br/>attempts/"]
+    O --> T["coordinator.ts<br/>failure record under<br/>attempts/ (failures only)"]
 ```
 
 - **`routing.ts`** — pure policy. Given the task config, phase, and role, it picks `{adapter, family, model, effort}`. Family is inferred from the model name prefix (`claude-*` / `gpt-*`), and the cross-family rule is enforced here: a counter-reviewer or adjudicator in the producer's own family fails with `FAMILY_MISMATCH`.
 - **`workspace.ts`** — builds a disposable sandbox outside the repo: a fake `HOME` containing a symlink to only the one relevant credential file, a 7-name environment allowlist, and (for counter-review) a read-only repository view.
 - **`cli.ts`** — the two adapters (`claude-cli`, `codex-cli`): version/auth preflight with minimum CLI versions, a hard-coded lockdown argv (read-only tools, no slash commands, no session persistence, no user config), output-schema projection into each host's dialect, output extraction, and failure classification.
 - **`process.ts`** — one child run: detached spawn, piped stdio, 15-minute timeout, 8 MiB per-channel cap, SIGTERM→SIGKILL escalation.
-- **`coordinator.ts`** — assembles one attempt end to end, always disposes the workspace, and always writes a JSON telemetry record under `.archflow/tasks/<task>/attempts/`, with stdout/stderr tails on failure.
+- **`coordinator.ts`** — assembles one attempt end to end and always disposes the workspace. Telemetry is **failure-only**: a failed dispatch (timeout, cancellation, nonzero exit, bad output) writes a JSON forensic record under `.archflow/tasks/<task>/attempts/` with stdout/stderr tails and the preflight's managed-policy observations; a successful dispatch writes nothing there — its evidence is the retained result itself.
 
 ## The read-only repository view
 
 The reviewer gets a checkout of the repository at one pinned commit — HEAD for document reviews, the artifact's attested `base_commit` for implementation reviews (so the reviewer sees the *pre-change* tree; the changes travel only in the envelope).
 
-The checkout is a `git archive | tar -x` extraction, deliberately **not** a worktree: the extracted tree has no `.git` link, so the reviewer cannot reach the producer's tracked self-review or triage material, and `.archflow/tasks` is deleted from the view. Reviewer independence holds structurally, not by convention.
+The checkout is a `git archive | tar -x` extraction, deliberately **not** a worktree: the extracted tree has no `.git` link, so the reviewer cannot reach the producer's tracked triage or pipeline material, and `.archflow/tasks` is deleted from the view. Reviewer independence holds structurally, not by convention.
 
 ## What is and isn't guaranteed
 

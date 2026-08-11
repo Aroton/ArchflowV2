@@ -64,7 +64,7 @@ The repository itself contains current examples in `.mcp.json` and `.codex/confi
 
 `src/dispatch/` launches authenticated first-party `claude` or `codex` CLIs to perform independent review/adjudication. It does not call provider HTTP APIs directly.
 
-`src/dispatch/routing.ts` reads the task-pinned YAML configuration and maps model prefixes to adapters (`claude-*` to `claude-cli`, `gpt-*` to `codex-cli`). Counter-review and adjudication must use the opposite family from the producer. The active template at `assets/config.template.yaml` routes Claude-family production/self-review to `claude-opus-5` and Codex-family counter-review/adjudication to `gpt-5.6-sol`; `.archflow/config.yaml` is the current repository copy. Optional per-workflow overrides exist for `explore`, `prd`, `design`, `phase-design`, and `phase-impl`.
+`src/dispatch/routing.ts` reads the task-pinned YAML configuration and maps model prefixes to adapters (`claude-*` to `claude-cli`, `gpt-*` to `codex-cli`). Counter-review and adjudication must use the opposite family from the producer. The active template at `assets/config.template.yaml` routes the Claude-family producer role to `claude-opus-5` and the Codex-family counter-reviewer/adjudicator roles to `gpt-5.6-sol`; `.archflow/config.yaml` is the current repository copy. Optional per-workflow overrides exist for `explore`, `prd`, `design`, `phase-design`, and `phase-impl`.
 
 `src/dispatch/cli.ts` defines the concrete adapters:
 
@@ -72,7 +72,7 @@ The repository itself contains current examples in `.mcp.json` and `.codex/confi
 - Authentication preflight runs `claude auth status` or `codex login status`. Authentication comes from the user's first-party CLI credential store, not API keys.
 - Claude runs in print/safe mode with tools and slash commands disabled, an empty strict MCP config, no session persistence or setting sources, and a projected JSON output schema.
 - Codex runs `exec --ephemeral` with user config/rules ignored, read-only sandboxing, strict config, a generated output schema/file, and shell, browser, computer, image, apps, plugins, hooks, skill search, and multi-agent features disabled.
-- `src/dispatch/process.ts` uses `spawn` without a shell, caps total output at 8 MiB, times out after 300 seconds by default, and terminates the process group on non-Windows.
+- `src/dispatch/process.ts` uses `spawn` without a shell, caps total output at 8 MiB, times out after 15 minutes by default (a real review of the pinned checkout is legitimately multi-minute), and terminates the process group on non-Windows.
 - A process-wide FIFO in `src/dispatch/cli.ts` serializes dispatches so concurrent calls do not race shared credential files.
 
 `src/dispatch/workspace.ts` creates a disposable home outside the repository and symlinks only the selected credential:

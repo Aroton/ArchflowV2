@@ -6,9 +6,6 @@ roles:
   producer:
     model: claude-opus-5
     effort: high
-  self-reviewer:
-    model: claude-opus-5
-    effort: high
   counter-reviewer:
     model: gpt-5.6-sol
     effort: xhigh
@@ -20,9 +17,6 @@ roles:
 # schema_version: "1"
 # roles:
 #   producer:
-#     model: gpt-5.6-sol
-#     effort: xhigh
-#   self-reviewer:
 #     model: gpt-5.6-sol
 #     effort: xhigh
 #   counter-reviewer:

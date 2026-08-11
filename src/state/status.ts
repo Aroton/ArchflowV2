@@ -79,7 +79,7 @@ type StatusEvidence = Readonly<{
     finding_id: string;
     blocking: boolean;
   }>[];
-  self_review_provenance: Readonly<{
+  counter_review_provenance: Readonly<{
     assurance: string;
     producer_family: string;
     model_family: string;
@@ -138,24 +138,12 @@ export type TaskStatusV1 = DegradedStatus & Readonly<{
   /**
    * The current review subject: the canonical digest of the whole retained produce artifact
    * (`manifest.artifact_digest`), never the document's inner `content_digest`. Present whenever
-   * the current phase has an authoritative produce result — in particular at `self_review` time,
-   * so review artifacts are never built from a hand-derived subject.
+   * the current phase has an authoritative produce result — in particular at `counter_review`
+   * time, so review artifacts are never built from a hand-derived subject.
    */
   subject_digest?: Sha256Digest;
   config: ConfigVerification;
-  routes?: Readonly<{ producer: DispatchRoute; self_review: DispatchRoute }>;
-  /**
-   * The exact provenance an agent-declared self-review artifact must carry, derived from the
-   * pinned dispatch routes. Distinct from `evidence.self_review_provenance`, which reports what
-   * a retained review actually declared and exists only once both reviews are retained.
-   */
-  expected_self_review_provenance?: Readonly<{
-    assurance: "agent-declared";
-    producer_family: DispatchRoute["family"];
-    model_family: DispatchRoute["family"];
-    model: string;
-    effort: DispatchRoute["effort"];
-  }>;
+  routes?: Readonly<{ producer: DispatchRoute }>;
   constitution?: Readonly<{
     digest: Sha256Digest;
     active_rules: readonly Readonly<{
@@ -169,16 +157,113 @@ export type TaskStatusV1 = DegradedStatus & Readonly<{
   open_gate?: OpenGateStatus;
   reconciliation?: StatusReconciliation;
   evidence?: StatusEvidence;
+  /**
+   * Present when the current produce artifact declares an editorial predecessor: the gate
+   * presenter uses it to show the editorial diff alongside the disclosure that the retained
+   * reviews evaluated the predecessor bytes.
+   */
+  editorial_revision?: Readonly<{
+    predecessor_subject_digest: Sha256Digest;
+    dispositions: readonly Readonly<{
+      finding_id: string;
+      rationale: string;
+      revision_intent: string;
+    }>[];
+  }>;
   gate_input?: CommitAuthorizationInput;
   next_action: NextAction;
 }>;
 
 /**
+ * The routine-loop projection of {@link TaskStatusV1}: position, blockers, and the one next
+ * action, with every rendered body stripped — no constitution rule text, no counter-review
+ * prompt, no decision-template bodies, no evidence detail. Everything here is derived from the
+ * full status by {@link projectBriefStatus}; the computation is never forked.
+ */
+export type BriefTaskStatusV1 = Readonly<{
+  task_id: TaskSlug;
+  state: DegradedStatus["state"];
+  revision?: number;
+  phase_instance?: PhaseInstanceId;
+  step?: TaskStateV1["step"];
+  status?: TaskStateV1["status"];
+  attempt?: number;
+  blocking_reasons: readonly string[];
+  open_gate?: Readonly<{
+    gate_id: PathSafeId;
+    kind: ActiveGateV1["kind"];
+    decision_template_names: readonly string[];
+  }>;
+  open_gate_id?: PathSafeId;
+  reconciliation?: Readonly<{
+    classification: ReconciliationResult["classification"];
+    findings: readonly Readonly<{ kind: string; path?: string }>[];
+  }>;
+  constitution?: Readonly<{
+    digest: Sha256Digest;
+    active_rule_ids: readonly string[];
+  }>;
+  next_action: NextAction;
+}>;
+
+/** Names one decision template by its selective fields without carrying its body. */
+function decisionTemplateName(template: PlainJsonValue): string {
+  if (template === null || typeof template !== "object" || Array.isArray(template)) return "unknown";
+  const value = template as Record<string, PlainJsonValue>;
+  if (value.cancelled === true) return "cancel";
+  if (typeof value.granted === "boolean") return value.granted ? "waiver-grant" : "waiver-deny";
+  if (typeof value.decision === "string") return value.decision;
+  return "unknown";
+}
+
+/** Projects the routine-loop brief view from an already-computed full status. */
+export function projectBriefStatus(full: TaskStatusV1): BriefTaskStatusV1 {
+  return Object.freeze({
+    task_id: full.task_id,
+    state: full.state,
+    ...(full.revision === undefined ? {} : { revision: full.revision }),
+    ...(full.phase_instance === undefined ? {} : { phase_instance: full.phase_instance }),
+    ...(full.step === undefined ? {} : { step: full.step }),
+    ...(full.status === undefined ? {} : { status: full.status }),
+    ...(full.attempt === undefined ? {} : { attempt: full.attempt }),
+    blocking_reasons: full.blocking_reasons,
+    ...(full.open_gate === undefined ? {} : {
+      open_gate: Object.freeze({
+        gate_id: full.open_gate.gate_id,
+        kind: full.open_gate.kind,
+        decision_template_names: Object.freeze(full.open_gate.decision_templates.map(decisionTemplateName)),
+      }),
+    }),
+    ...(full.open_gate_id === undefined ? {} : { open_gate_id: full.open_gate_id }),
+    ...(full.reconciliation === undefined || full.reconciliation.findings.length === 0 ? {} : {
+      reconciliation: Object.freeze({
+        classification: full.reconciliation.classification,
+        findings: Object.freeze(full.reconciliation.findings.map((finding) => Object.freeze({
+          kind: finding.kind,
+          ...("path" in finding && finding.path !== undefined ? { path: finding.path } : {}),
+        }))),
+      }),
+    }),
+    ...(full.constitution === undefined ? {} : {
+      constitution: Object.freeze({
+        digest: full.constitution.digest,
+        active_rule_ids: Object.freeze(full.constitution.active_rules.map((rule) => rule.id)),
+      }),
+    }),
+    next_action: full.next_action,
+  });
+}
+
+/**
  * Splits reconciliation findings into drift the current re-entry authorizes and everything else.
  *
- * A finding is an expected re-entry edit only when the fixed point requires re-entry
- * (`assessment.reentry_required` — accepted triage findings or a stale adjudication, both of
- * which authorize revising the produce artifact), the finding is a `projection-mismatch`, and
+ * A finding is an expected re-entry edit only when the fixed point authorizes revising the
+ * produce artifact (`assessment.reentry_required` — accepted triage findings or a stale
+ * adjudication — or `assessment.editorial_revision_required`, the evidence-preserving editorial
+ * re-entry), or a produce re-entry is already durably recorded (`state` sits at produce
+ * running/failed — the running entry itself is the declaration of intent, covering both the
+ * fixed-point re-entries above once entered and the author-initiated new-information door from
+ * any succeeded step), the finding is a `projection-mismatch`, and
  * the drifted path is one of the retained produce manifest's own projection paths. The last
  * test is deliberately broad: if a produce manifest ever projects more than the document
  * itself, every one of its projections becomes edit-tolerated during re-entry. Any other path
@@ -188,11 +273,15 @@ export function partitionExpectedReentryEdits(
   findings: readonly ReconciliationFinding[],
   assessment: EvidenceAssessment | undefined,
   produceSubject: CurrentProduceSubject | undefined,
+  state: Pick<TaskStateV1, "step" | "status">,
 ): Readonly<{
   remaining: readonly ReconciliationFinding[];
   expected_reentry_edits: readonly ProjectionDigestRef["path"][];
 }> {
-  if (assessment?.reentry_required !== true || produceSubject === undefined) {
+  const editAuthorized = assessment?.reentry_required === true ||
+    assessment?.editorial_revision_required === true ||
+    (state.step === "produce" && state.status !== "succeeded");
+  if (!editAuthorized || produceSubject === undefined) {
     return Object.freeze({ remaining: findings, expected_reentry_edits: Object.freeze([]) });
   }
   const producePaths = new Set<string>(
@@ -548,9 +637,7 @@ export async function computeTaskStatus(
     try {
       const phaseKind = decodePhaseInstance(state.phase_instance).kind;
       const producer = resolveDispatchRoute(parsedConfig, phaseKind, "producer", "claude");
-      const selfReview = resolveDispatchRoute(parsedConfig, phaseKind, "self-reviewer", producer.family);
-      if (producer.family !== selfReview.family) throw new TypeError("producer and self-review routes must share a family");
-      routes = Object.freeze({ producer, self_review: selfReview });
+      routes = Object.freeze({ producer });
     } catch {
       blockers.push("dispatch-routes-invalid");
     }
@@ -649,16 +736,24 @@ export async function computeTaskStatus(
 
   let subjectDigest: Sha256Digest | undefined;
   let produceSubject: CurrentProduceSubject | undefined;
-  if (state.step !== "produce" || state.status === "succeeded") {
+  // Mid-produce (running or failed) the artifact is being rewritten: the retained produce
+  // result is no longer the review subject, so `subject_digest` and the evidence assessment
+  // stay unset exactly as before, but the predecessor result is still loaded when it exists —
+  // its projection paths are what classifies the in-progress rewrite as an expected re-entry
+  // edit rather than blocking drift.
+  const midProduce = state.step === "produce" && state.status !== "succeeded";
+  const hasRetainedProduce = state.authoritative_results.some((reference) =>
+    reference.phase_instance === state.phase_instance && reference.step === "produce");
+  if (!midProduce || hasRetainedProduce) {
     try {
       const produced = await loadCurrentProduceSubject(dependencies, state);
       if (produced.ok) {
         produceSubject = produced.value;
-        subjectDigest = produced.value.artifact_digest;
+        if (!midProduce) subjectDigest = produced.value.artifact_digest;
       }
-      else blockers.push("current-subject-unavailable");
+      else if (!midProduce) blockers.push("current-subject-unavailable");
     } catch {
-      blockers.push("current-subject-unavailable");
+      if (!midProduce) blockers.push("current-subject-unavailable");
     }
   }
 
@@ -701,6 +796,9 @@ export async function computeTaskStatus(
     }
   }
 
+  const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document"
+    ? produceSubject.artifact.editorial_predecessor
+    : undefined;
   let assessment: EvidenceAssessment | undefined;
   if (constitution !== undefined && subjectDigest !== undefined) {
     try {
@@ -711,6 +809,12 @@ export async function computeTaskStatus(
         subject_digest: subjectDigest,
         input_fingerprint: state.input_fingerprint,
         constitution,
+        ...(declaredPredecessor === undefined ? {} : {
+          editorial_predecessor: Object.freeze({
+            subject_digest: declaredPredecessor.subject_digest,
+            input_fingerprint: declaredPredecessor.input_fingerprint,
+          }),
+        }),
         approved_upstream_digests: approvedUpstreamDigests,
         authenticated_gate_approvals: authenticatedApprovals,
         ...(parsedConfig?.max_attempts === undefined ? {} : { max_attempts: parsedConfig.max_attempts }),
@@ -720,10 +824,28 @@ export async function computeTaskStatus(
     }
   }
 
+  let editorialRevision: TaskStatusV1["editorial_revision"];
+  if (declaredPredecessor !== undefined) {
+    const triageSource = retained.get("triage")?.manifest.source_artifact;
+    const dispositions = triageSource?.artifact_kind === "triage"
+      ? triageSource.evidence.dispositions
+          .filter((item) => item.disposition === "accepted-editorial")
+          .map((item) => Object.freeze({
+            finding_id: item.finding_id,
+            rationale: item.rationale,
+            revision_intent: item.revision_intent,
+          }))
+      : [];
+    editorialRevision = Object.freeze({
+      predecessor_subject_digest: declaredPredecessor.subject_digest,
+      dispositions: Object.freeze(dispositions),
+    });
+  }
+
   let statusReconciliation: StatusReconciliation | undefined;
   if (reconciliation !== undefined) {
     const partitioned = partitionExpectedReentryEdits(
-      reconciliation.findings, assessment, produceSubject,
+      reconciliation.findings, assessment, produceSubject, state,
     );
     blockers.push(...partitioned.remaining.map((finding) => finding.kind));
     statusReconciliation = Object.freeze({
@@ -748,25 +870,25 @@ export async function computeTaskStatus(
       finding_id: finding.finding_id,
       blocking: finding.blocking,
     })));
-    const self = derived.reviews[0]!.evidence;
+    const counter = derived.reviews[0]!.evidence;
     evidence = Object.freeze({
       available: true,
       subject_digest: derived.subject_digest,
       current_evidence: derived.current_evidence_set,
       findings: Object.freeze(findings),
-      self_review_provenance: Object.freeze({
-        assurance: self.assurance,
-        producer_family: self.producer_family,
-        model_family: self.model_family,
-        model: self.model,
-        effort: self.effort,
+      counter_review_provenance: Object.freeze({
+        assurance: counter.assurance,
+        producer_family: counter.producer_family,
+        model_family: counter.model_family,
+        model: counter.model,
+        effort: counter.effort,
       }),
       assessment,
     });
   } catch {
     evidence = Object.freeze({
       available: false,
-      reason: retained.has("self_review") && retained.has("counter_review")
+      reason: retained.has("counter_review")
         ? "review-set-invalid"
         : "review-set-incomplete",
       ...(assessment === undefined ? {} : { assessment }),
@@ -847,8 +969,14 @@ export async function computeTaskStatus(
   const nextActionWithRequest = attachNextActionRequest(nextAction, {
     task_id: authority.task_id,
     state,
+    // Gate templates bind the retained produce artifact digest. After an editorial revision the
+    // derived review set stays bound to the predecessor bytes, so the review-set subject would
+    // name the wrong artifact.
     ...(evidence.available
-      ? { subject_digest: evidence.subject_digest, current_evidence: evidence.current_evidence }
+      ? {
+          subject_digest: subjectDigest ?? evidence.subject_digest,
+          current_evidence: evidence.current_evidence,
+        }
       : {}),
     ...(gateInput === undefined ? {} : { commit_authorization: gateInput }),
   });
@@ -865,21 +993,13 @@ export async function computeTaskStatus(
     ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),
     config,
     ...(routes === undefined ? {} : { routes }),
-    ...(routes === undefined ? {} : {
-      expected_self_review_provenance: Object.freeze({
-        assurance: "agent-declared" as const,
-        producer_family: routes.producer.family,
-        model_family: routes.self_review.family,
-        model: routes.self_review.model,
-        effort: routes.self_review.effort,
-      }),
-    }),
     ...(constitutionStatus === undefined ? {} : { constitution: constitutionStatus }),
     ...(checkpointHead === undefined ? {} : { checkpoint_head_revision: checkpointHead }),
     ...(state.open_gate === undefined ? {} : { open_gate_id: state.open_gate.gate_id }),
     ...(openGate === undefined ? {} : { open_gate: openGate }),
     ...(statusReconciliation === undefined ? {} : { reconciliation: statusReconciliation }),
     evidence,
+    ...(editorialRevision === undefined ? {} : { editorial_revision: editorialRevision }),
     ...(gateInput === undefined ? {} : { gate_input: gateInput }),
     blocking_reasons: Object.freeze([...new Set(blockers)]),
     next_action: nextActionWithRequest,

@@ -38,7 +38,7 @@ flowchart LR
 - **Fingerprints** — all derived identity computation in one module.
 - **Evidence & trust semantics** — review/adjudication/triage shapes in three assurance flavors (`agent-declared`, `server-attested`, `degraded`), the trust brands, secret-scan shapes, and renderers that escape control characters so rendered evidence can't spoof its own headers.
 - **Durable document shapes** — thirteen `durable-*.ts` modules for the persisted roots, plus `durable.ts`, one large cross-document semantic validator.
-- **Tool contracts & errors** — the five tools' input/output types, gate kinds and decision envelopes, and the ~57-code project error taxonomy where every error carries an owner, a retryable flag, and a suggested action.
+- **Tool contracts & errors** — the five tools' input/output types (each input is a union: the full payload, or the four-field staged-request reference `{schema_version, task_id, intent_id, request_digest}` the server rehydrates from disk — see `../mcp/SERVER.md`), gate kinds and decision envelopes, and the ~57-code project error taxonomy where every error carries an owner, a retryable flag, and a suggested action.
 
 ## Design rules that follow from this layer
 

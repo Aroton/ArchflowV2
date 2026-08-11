@@ -40,11 +40,11 @@ import {
  */
 const CAP_PRIORITY: readonly PinnedContextKind[] = [
   "approved-upstream", "user-ask", "verification-transcript",
-  "interface-excerpt", "conventions", "repo-map",
+  "prior-triage", "interface-excerpt", "conventions", "repo-map",
 ];
 
 const CAP_DROPPABLE_KINDS: ReadonlySet<PinnedContextKind> = new Set([
-  "interface-excerpt", "conventions", "repo-map",
+  "prior-triage", "interface-excerpt", "conventions", "repo-map",
 ]);
 
 /** Per-entry head budget for mechanical evidence; the full-file digest stays recorded. */
@@ -182,6 +182,10 @@ const fail = <T>(phase: PhaseInstanceId, issue_code: string): ProjectResult<T> =
  * durable `artifact-approval` for its exact current artifact digest and its worktree bytes
  * re-hashed against the retained projection digest. Any missing result, absent approval, or byte
  * drift fails closed: upstream pinning restates durable authority, never observes around it.
+ *
+ * Every phase kind additionally pins the previous round's triage record when one is retained
+ * (see {@link priorTriageEvidence}), so a re-entry reviewer sees which findings were already
+ * dispositioned instead of rediscovering the class.
  */
 export async function assembleReviewContext(input: {
   readonly runner: RootBoundGitRunner;
@@ -192,6 +196,8 @@ export async function assembleReviewContext(input: {
   readonly projection_bytes: Uint8Array;
 }): Promise<ProjectResult<readonly PinnedContextEntry[]>> {
   const phase = decodePhaseInstance(input.state.phase_instance);
+  const priorTriage = await priorTriageEvidence(input.dependencies, input.state);
+  if (!priorTriage.ok) return priorTriage;
   if (phase.kind !== "prd") {
     const upstreams = await assembleUpstreamContext(input);
     if (!upstreams.ok) return upstreams;
@@ -213,10 +219,10 @@ export async function assembleReviewContext(input: {
         : await documentMechanicalEvidence(input.runner, artifactText);
     }
     const conventions = await conventionsEvidence(input.runner);
-    return ok(Object.freeze([...upstreams.value, ...mechanical, ...conventions]));
+    return ok(Object.freeze([...upstreams.value, ...priorTriage.value, ...mechanical, ...conventions]));
   }
   if (input.subject.artifact.artifact_kind !== "document") {
-    return ok(Object.freeze([]));
+    return ok(Object.freeze([...priorTriage.value]));
   }
   const declared = input.subject.artifact.declared_inputs
     .find((candidate) => candidate.input_id === "user-ask");
@@ -225,7 +231,7 @@ export async function assembleReviewContext(input: {
       "user-ask",
       "ask.md",
       "no user-ask input was declared by this PRD; judge ask fidelity under unverifiable-claims",
-    )]));
+    ), ...priorTriage.value]));
   }
   const target = await resolveTaskPath({
     runner: input.runner,
@@ -249,7 +255,7 @@ export async function assembleReviewContext(input: {
   if (sha256Bytes(bytes) !== declared.digest) {
     return fail(input.state.phase_instance, "user-ask-not-current");
   }
-  return ok(Object.freeze([pinnedContextEntry("user-ask", "ask.md", bytes)]));
+  return ok(Object.freeze([pinnedContextEntry("user-ask", "ask.md", bytes), ...priorTriage.value]));
 }
 
 async function assembleUpstreamContext(input: {
@@ -477,6 +483,84 @@ async function implementationMechanicalEvidence(
   } catch {
     return [failedMechanicalEvidence("interface-excerpt", "changed-imports")];
   }
+}
+
+/**
+ * Pins the mechanical triage record of the immediately preceding review round of this same phase
+ * instance, so a fresh reviewer sees which findings were already dispositioned instead of
+ * rediscovering the defect class round after round.
+ *
+ * Durable state retains exactly one triage result per `(phase_instance, step)` — the latest —
+ * because `authoritative_results` is a replace-on-install set and superseded manifests are no
+ * longer referenced by any durable authority. The entry therefore covers only the round the
+ * current attempt re-entered from; earlier rounds are deliberately not reconstructed from
+ * unreferenced disk remnants. No retained triage (attempt 1, or a retry that never reached
+ * triage) pins nothing: absence is the accurate record, not a gap.
+ *
+ * Every rendered field restates durable authority: finding severity/summary come from the
+ * retained reviewer-authored evidence manifest, dispositions and their recorded
+ * revision-intent/rationale from the retained triage manifest. Disposition strings render as-is
+ * so a grown triage vocabulary never breaks assembly. A referenced-but-unloadable manifest fails
+ * closed like every other restatement of durable authority; a disposition whose finding is not in
+ * the retained counter-review evidence (for example a supplemental gate counter-review finding)
+ * renders without the unresolvable finding fields rather than inventing them.
+ */
+export async function priorTriageEvidence(
+  dependencies: Pick<TransactionDependencies, "load_retained_result">,
+  state: TaskStateV1,
+): Promise<ProjectResult<readonly PinnedContextEntry[]>> {
+  const triageRef = state.authoritative_results.find((candidate) =>
+    candidate.phase_instance === state.phase_instance && candidate.step === "triage");
+  if (triageRef === undefined || dependencies.load_retained_result === undefined) {
+    return ok(Object.freeze([]));
+  }
+  const triage = await dependencies.load_retained_result(triageRef);
+  if (!triage.ok) return triage;
+  const triageSource = triage.value.prepared.manifest.value.source_artifact;
+  if (triageSource.artifact_kind !== "triage") {
+    return fail(state.phase_instance, "prior-triage-artifact-invalid");
+  }
+  const findingsByRef = new Map<string, Readonly<{ severity: string; blocking: boolean; summary: string }>>();
+  const reviewRef = state.authoritative_results.find((candidate) =>
+    candidate.phase_instance === state.phase_instance && candidate.step === "counter_review");
+  if (reviewRef !== undefined) {
+    const review = await dependencies.load_retained_result(reviewRef);
+    if (!review.ok) return review;
+    const manifest = review.value.prepared.manifest.value;
+    if (manifest.source_artifact.artifact_kind === "review-evidence") {
+      for (const finding of manifest.source_artifact.evidence.findings) {
+        findingsByRef.set(`${manifest.artifact_digest}:${finding.finding_id}`, {
+          severity: finding.severity, blocking: finding.blocking, summary: finding.summary,
+        });
+      }
+    }
+  }
+  const dispositions = triageSource.evidence.dispositions.map((disposition) => {
+    const finding = findingsByRef.get(`${disposition.review_evidence_digest}:${disposition.finding_id}`);
+    // Tolerant field selection: the triage disposition vocabulary can grow (for example
+    // accepted-editorial); render whichever recorded response the shape carries.
+    const recorded = disposition as Readonly<{ revision_intent?: unknown; rationale?: unknown }>;
+    return {
+      finding_id: disposition.finding_id,
+      ...(finding ?? {}),
+      disposition: disposition.disposition as string,
+      ...(typeof recorded.revision_intent === "string"
+        ? { revision_intent: recorded.revision_intent }
+        : typeof recorded.rationale === "string"
+          ? { rationale: recorded.rationale }
+          : {}),
+    };
+  });
+  const record = {
+    schema_version: "1",
+    record_kind: "prior-triage",
+    phase_instance: state.phase_instance,
+    current_attempt: state.attempt,
+    coverage: "immediately preceding review round only; durable state retains one triage result per phase instance, so earlier rounds are superseded",
+    dispositions,
+  };
+  const bytes = new TextEncoder().encode(`${JSON.stringify(record, null, 2)}\n`);
+  return ok(Object.freeze([excerptContextEntry("prior-triage", "prior-round-triage", bytes)]));
 }
 
 /** Pins the repository's conventions document from the worktree; absent conventions pin nothing. */

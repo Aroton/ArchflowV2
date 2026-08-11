@@ -17,7 +17,6 @@ describe("review and adjudication schema agreement", () => {
     const reviewValidator = createJsonSchemaValidator(await schema("review-evidence"));
     const adjudicationValidator = createJsonSchemaValidator(await schema("adjudication-evidence"));
     const variants = [
-      [reviewValidator, reviewEvidenceSchema, { ...review, assurance: "agent-declared", model_family: "unknown", model: "unknown", effort: "unknown" }],
       [reviewValidator, reviewEvidenceSchema, { ...review, assurance: "degraded", model_family: "unknown", model: "unknown", effort: "unknown", reason: "Manual fallback." }],
       [reviewValidator, reviewEvidenceSchema, { ...review, assurance: "server-attested", adapter: "codex-cli", cli_version: "1.0.0", model_family: "codex", model: "gpt-5", effort: "high", invocation_id: "invocation-1", envelope_input_digest: "d".repeat(64), observed_output_digest: "e".repeat(64), result_id: "result-1" }],
       [adjudicationValidator, adjudicationEvidenceSchema, { ...adjudication, assurance: "agent-declared", model_family: "unknown", model: "unknown", effort: "unknown" }],
@@ -38,7 +37,7 @@ describe("review and adjudication schema agreement", () => {
     const adjudication = await json(new URL("../fixtures/contracts/adjudication/valid.json", import.meta.url)) as Record<string, unknown>;
     const reviewValidator = createJsonSchemaValidator(await schema("review-evidence"));
     const adjudicationValidator = createJsonSchemaValidator(await schema("adjudication-evidence"));
-    const declaredReview = { ...review, assurance: "agent-declared", model_family: "unknown", model: "unknown", effort: "unknown" };
+    const declaredReview = { ...review, assurance: "degraded", reason: "Manual fallback.", model_family: "unknown", model: "unknown", effort: "unknown" };
     const declaredAdjudication = { ...adjudication, assurance: "agent-declared", model_family: "unknown", model: "unknown", effort: "unknown" };
     const finding = (review.findings as Array<Record<string, unknown>>)[0]!;
 
@@ -46,17 +45,19 @@ describe("review and adjudication schema agreement", () => {
     expect(() => adjudicationValidator.assert(declaredReview)).toThrow();
     expect(() => assertZodAgreement({ ...declaredReview, adapter: "codex-cli" }, reviewValidator, reviewEvidenceSchema)).toThrow();
     expect(() => assertZodAgreement({ ...declaredAdjudication, reason: "degraded-only" }, adjudicationValidator, adjudicationEvidenceSchema)).toThrow();
+    expect(() => assertZodAgreement({ ...review, assurance: "agent-declared", model_family: "unknown", model: "unknown", effort: "unknown" }, reviewValidator, reviewEvidenceSchema)).toThrow();
     expect(() => assertZodAgreement({ ...declaredReview, findings: [{ ...finding, internal_authority: true }] }, reviewValidator, reviewEvidenceSchema)).toThrow();
   });
 
   it("agrees on duplicate IDs, role/step, opposite family, and review contradictions", async () => {
     const review = await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)) as Record<string, unknown>;
     const validator = createJsonSchemaValidator(await schema("review-evidence"));
-    const base = { ...review, assurance: "agent-declared", model_family: "unknown", model: "unknown", effort: "unknown" };
+    const base = { ...review, assurance: "degraded", reason: "Manual fallback.", model_family: "unknown", model: "unknown", effort: "unknown" };
     const server = { ...review, assurance: "server-attested", adapter: "codex-cli", cli_version: "1", model_family: "codex", model: "gpt", effort: "high", invocation_id: "invocation-1", envelope_input_digest: "d".repeat(64), observed_output_digest: "e".repeat(64), result_id: "result-1" };
     const cases = [
       { ...base, findings: [...(review.findings as unknown[]), ...(review.findings as unknown[])] },
-      { ...base, role: "self-review", step: "counter_review" },
+      { ...base, role: "self-review" },
+      { ...base, step: "self_review" },
       { ...server, model_family: "claude" },
       { ...base, verdict: "pass" },
       { ...base, blocking_count: 2 },

@@ -81,14 +81,14 @@ function retained(
     subject_digest: subject,
     input_fingerprint: fingerprint,
   } as const;
-  const self = {
+  const counter = {
     ...base,
-    step: "self_review",
-    role: "self-review",
+    step: "counter_review",
+    role: "counter-review",
     rubric_digest: D("c"),
     producer_family: "claude",
     findings: [{
-      finding_id: "self-finding",
+      finding_id: "counter-finding",
       severity: "major",
       blocking: false,
       summary: "finding",
@@ -97,21 +97,6 @@ function retained(
     }],
     matched_rule_versions: [],
     verdict: "advisory",
-    blocking_count: 0,
-    model_family: "claude",
-    model: "claude-test",
-    effort: "medium",
-    assurance: "agent-declared",
-  } as const;
-  const counter = {
-    ...base,
-    step: "counter_review",
-    role: "counter-review",
-    rubric_digest: D("c"),
-    producer_family: "claude",
-    findings: [],
-    matched_rule_versions: [],
-    verdict: "pass",
     blocking_count: 0,
     model_family: "codex",
     model: "gpt-test",
@@ -124,16 +109,8 @@ function retained(
     observed_output_digest: D("e"),
     result_id: "result",
   } as const;
-  const selfDigest = canonicalJsonDigest(self);
   const counterDigest = canonicalJsonDigest(counter);
   const evidenceSet = currentEvidenceSetRef(parseRequiredReviewSlots([{
-    role: "self-review",
-    evidence_digest: selfDigest,
-    assurance: "agent-declared",
-    producer_family: self.producer_family,
-    reviewer_family: self.model_family,
-    independence: "same-family-self",
-  }, {
     role: "counter-review",
     evidence_digest: counterDigest,
     assurance: counter.assurance,
@@ -145,10 +122,10 @@ function retained(
     ...base,
     step: "triage",
     current_evidence_set_digest: evidenceSet.set_digest,
-    source_evidence_digests: [selfDigest, counterDigest],
+    source_evidence_digests: [counterDigest],
     dispositions: [{
-      review_evidence_digest: selfDigest,
-      finding_id: "self-finding",
+      review_evidence_digest: counterDigest,
+      finding_id: "counter-finding",
       disposition: accepted > 0 ? "accepted" : "rejected",
       rationale: "because",
       ...(accepted > 0 ? { revision_intent: "rewrite" } : { evidence: "not applicable" }),
@@ -175,7 +152,7 @@ function retained(
     assurance: "agent-declared",
   } as const;
   const manifest = (
-    step: "self_review" | "counter_review" | "triage" | "adjudicate",
+    step: "counter_review" | "triage" | "adjudicate",
     digest: Sha256Digest,
     artifact: ResultManifestV1["source_artifact"],
   ) => ({
@@ -183,9 +160,6 @@ function retained(
     manifest: { artifact_digest: digest, source_artifact: artifact },
   }) as unknown as RetainedEvidenceSet extends ReadonlyMap<unknown, infer V> ? V : never;
   return new Map([
-    ["self_review", manifest("self_review", selfDigest, {
-      schema_version: "1", artifact_kind: "review-evidence", evidence: self as never,
-    })],
     ["counter_review", manifest("counter_review", counterDigest, {
       schema_version: "1", artifact_kind: "review-evidence", evidence: counter as never,
     })],
@@ -260,6 +234,48 @@ describe("review services", () => {
     expect(rewrite.reentry_required).toBe(true);
   });
 
+  it("never exhausts on an editorial revision, even at the final attempt slot", () => {
+    // The shared movement rule makes the editorial produce re-entry consume a durable attempt
+    // slot (attempt + 1); the fixed point stays honest by evaluating exhaustion only at demanded
+    // re-entries, so the editorial pass itself can never open the attempts-exhausted gate.
+    const editorial = new Map(retained());
+    const triageEntry = editorial.get("triage")!;
+    const triageSource = triageEntry.manifest.source_artifact;
+    if (triageSource.artifact_kind !== "triage") throw new Error("expected triage evidence");
+    editorial.set("triage", {
+      ...triageEntry,
+      manifest: {
+        ...triageEntry.manifest,
+        source_artifact: {
+          schema_version: "1",
+          artifact_kind: "triage",
+          evidence: {
+            ...triageSource.evidence,
+            dispositions: [{
+              review_evidence_digest: triageSource.evidence.dispositions[0]!.review_evidence_digest,
+              finding_id: "counter-finding",
+              disposition: "accepted-editorial",
+              rationale: "wording only",
+              revision_intent: "fix the typo",
+            }],
+            accepted_count: 0,
+            rejected_count: 0,
+            accepted_editorial_count: 1,
+          } as never,
+        },
+      },
+    });
+    const assessment = assessCurrentEvidence(state({ attempt: 3 }), editorial, {
+      subject_digest: D("8"), input_fingerprint: D("2"), constitution, max_attempts: 3,
+    });
+    expect(assessment).toMatchObject({
+      editorial_revision_required: true,
+      reentry_required: false,
+      exhausted: false,
+      next: "produce",
+    });
+  });
+
   it("requires triage and adjudication to bind the exact retained review set", () => {
     const subject = {
       subject_digest: D("8"),
@@ -291,7 +307,7 @@ describe("review services", () => {
       },
     });
     expect(assessCurrentEvidence(state(), replaced, subject)).toMatchObject({
-      current: ["self_review", "counter_review"],
+      current: ["counter_review"],
       stale: ["triage", "adjudicate"],
       next: "triage",
     });
@@ -351,7 +367,7 @@ describe("review services", () => {
       subject_digest: D("8"), input_fingerprint: D("2"), constitution,
       approved_upstream_digests: [D("7")],
     })).toMatchObject({
-      current: ["self_review", "counter_review", "triage"],
+      current: ["counter_review", "triage"],
       stale: ["adjudicate"],
       next: "produce",
       reentry_required: true,
@@ -359,9 +375,9 @@ describe("review services", () => {
   });
 
   it.each([
-    ["rubric", { rubric_digest: D("f") }],
-    ["producer family", { producer_family: "codex" as const, model_family: "claude" as const }],
-  ])("rejects a retained counter-review from a different %s", (_label, change) => {
+    ["same family as its producer", { model_family: "claude" as const }],
+    ["wrong role", { role: "gate-counter-review" as const }],
+  ])("rejects a retained counter-review that is %s", (_label, change) => {
     const changed = new Map(retained());
     const entry = changed.get("counter_review")!;
     const source = entry.manifest.source_artifact;

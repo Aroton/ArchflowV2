@@ -70,7 +70,27 @@ export type DocumentArtifactV1 = {
   readonly snapshot_digest: Sha256Digest;
   /** REPOSITORY frame (D3). */
   readonly projection_target: RepositoryPathClaim;
+  /**
+   * Declares this document as an editorial revision of the produce result it replaces: the
+   * predecessor's retained artifact digest and input fingerprint, plus the retained result digest
+   * of the triage whose only accepted findings were `accepted-editorial`. The link is what lets
+   * predecessor-bound review/triage evidence stay current for exactly one hop; record time
+   * refuses it unless the named triage authorizes it and the bytes actually changed.
+   */
+  readonly editorial_predecessor?: EditorialPredecessorRef;
 };
+
+export type EditorialPredecessorRef = {
+  readonly subject_digest: Sha256Digest;
+  readonly input_fingerprint: Sha256Digest;
+  readonly triage_result_digest: Sha256Digest;
+};
+
+export const editorialPredecessorRefV1Schema = z.object({
+  subject_digest: sha256DigestV1Schema,
+  input_fingerprint: sha256DigestV1Schema,
+  triage_result_digest: sha256DigestV1Schema,
+}).strict() as unknown as z.ZodType<EditorialPredecessorRef>;
 
 /**
  * The mirror. `declared_inputs` calls `isSortedUniqueBy` with `tupleKey("input_id")` — the same two
@@ -92,6 +112,7 @@ export const documentArtifactV1Schema = z.object({
   input_fingerprint: sha256DigestV1Schema,
   snapshot_digest: sha256DigestV1Schema,
   projection_target: repositoryPathClaimV1Schema,
+  editorial_predecessor: editorialPredecessorRefV1Schema.optional(),
 }).strict() as unknown as z.ZodType<DocumentArtifactV1>;
 
 /** Throws, per the contract-layer convention. */

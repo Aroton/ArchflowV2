@@ -49,7 +49,6 @@ export type StateArtifactOperation =
   | "record-document-artifact"
   | "record-implementation-output"
   | "adopt-manual-checkpoint-import"
-  | "record-self-review"
   | "record-triage";
 
 export type PinnedConstitutionFile = Readonly<{
@@ -226,7 +225,6 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
         document: "record-document-artifact",
         "implementation-output": "record-implementation-output",
         "manual-checkpoint-import": "adopt-manual-checkpoint-import",
-        "review-evidence": "record-self-review",
         triage: "record-triage",
       };
       if (operationForKind[artifactFields.artifact_kind] !== subject.operation) {

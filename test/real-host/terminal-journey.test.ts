@@ -190,11 +190,6 @@ function generationDigest(bytes: Buffer): string {
 function installedEvidence(subjectDigest: string): any {
   return currentEvidenceSetRef([
     {
-      role: "self-review", evidence_digest: sha256Bytes(Buffer.from(`self:${subjectDigest}`)),
-      assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude",
-      independence: "same-family-self",
-    },
-    {
       role: "counter-review", evidence_digest: sha256Bytes(Buffer.from(`counter:${subjectDigest}`)),
       assurance: "server-attested", producer_family: "claude", reviewer_family: "codex",
       independence: "opposite-family",

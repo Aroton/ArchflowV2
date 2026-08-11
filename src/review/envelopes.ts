@@ -1,8 +1,10 @@
 import { canonicalJsonDigest, parseGitOid, type GitOid } from "../contracts/canonical.js";
 import { createProjectError, type ProjectError } from "../contracts/errors.js";
 import {
+  parseSafeInteger,
   parseSha256Digest,
   parseTaskSlug,
+  type SafeInteger,
   type Sha256Digest,
   type TaskSlug,
 } from "../contracts/evidence.js";
@@ -22,6 +24,12 @@ export type DispatchSubject = {
   readonly phase_instance: PhaseInstanceId;
   readonly role: "counter-review";
   readonly step: "counter_review";
+  /**
+   * The durable attempt counter for this phase instance, stamped by the server from transaction
+   * authority — never caller prose. It tells the reviewer this is round N of the same subject, so
+   * the pinned `prior-triage` context (when present) reads as the record of the round before.
+   */
+  readonly attempt: SafeInteger;
   readonly subject_digest: Sha256Digest;
   readonly input_fingerprint: Sha256Digest;
   readonly rubric_digest: Sha256Digest;
@@ -33,11 +41,14 @@ export type DispatchSubject = {
 /**
  * The closed vocabulary of evidence the server can pin alongside the artifact. Entries are always
  * assembled mechanically from durable authority — never author-curated — and each phase of the
- * context contract grows this enum rather than the envelope shape.
+ * context contract grows this enum rather than the envelope shape. `prior-triage` is the
+ * mechanical triage record of the previous review round of this same phase instance, assembled by
+ * the server from retained result manifests; it is admissible where producer prose is not because
+ * every field restates durable triage/review authority.
  */
 export const PINNED_CONTEXT_KINDS = [
   "user-ask", "approved-upstream", "verification-transcript",
-  "interface-excerpt", "conventions", "repo-map",
+  "prior-triage", "interface-excerpt", "conventions", "repo-map",
 ] as const;
 export type PinnedContextKind = (typeof PINNED_CONTEXT_KINDS)[number];
 
@@ -107,6 +118,23 @@ export type ReviewEnvelopeInput = {
   readonly subject: DispatchSubject;
   readonly workspace?: ReviewWorkspaceBinding;
 };
+
+/**
+ * The caller-supplied review envelope before the server stamps the durable attempt counter into
+ * the subject. Handlers build this shape; `runCounterReview` completes it from transaction
+ * authority, so the round number in the child-visible subject is never a caller claim.
+ */
+export type ReviewEnvelopeSeed = Readonly<
+  Omit<ReviewEnvelopeInput, "subject"> & { readonly subject: Omit<DispatchSubject, "attempt"> }
+>;
+
+/**
+ * The one fixed sentence the envelope adds when a `prior-triage` context entry is pinned. A
+ * literal for the same reason as {@link REPOSITORY_VIEW_NOTE}: a variable sentence would reopen
+ * the caller-instruction channel this envelope deliberately closes.
+ */
+export const PRIOR_TRIAGE_INSTRUCTION =
+  "Findings already dispositioned in the pinned prior-triage record must not be re-raised in variant form; if a prior disposition looks wrong, challenge it by naming its finding_id instead of rediscovering the same defect class.";
 
 export type DispatchEnvelope = Readonly<{
   readonly result_kind: "review" | "adjudication";
@@ -192,6 +220,7 @@ function validateSubject(value: DispatchSubject): DispatchSubject {
     "phase_instance",
     "role",
     "step",
+    "attempt",
     "subject_digest",
     "input_fingerprint",
     "rubric_digest",
@@ -205,11 +234,14 @@ function validateSubject(value: DispatchSubject): DispatchSubject {
   if (value.producer_family !== "claude" && value.producer_family !== "codex") {
     throw new TypeError("dispatch subject producer_family is invalid");
   }
+  const attempt = parseSafeInteger(value.attempt);
+  if (attempt < 1) throw new TypeError("dispatch subject attempt must be at least 1");
   return {
     task_id: parseTaskSlug(value.task_id),
     phase_instance: parsePhaseInstanceId(value.phase_instance),
     role: value.role,
     step: value.step,
+    attempt,
     subject_digest: parseSha256Digest(value.subject_digest),
     input_fingerprint: parseSha256Digest(value.input_fingerprint),
     rubric_digest: parseSha256Digest(value.rubric_digest),
@@ -393,10 +425,15 @@ function finishEnvelope(
 
 /**
  * Builds the sole counter-review child input. The closed input and subject shells deliberately make
- * producer history, findings, triage, and agent instructions unrepresentable. `context` is the one
+ * free-form producer history and agent instructions unrepresentable. `context` is the one
  * sanctioned channel for repository-derived evidence, and it admits only mechanically assembled,
  * digest-recorded entries in the closed `PINNED_CONTEXT_KINDS` vocabulary — never free-form
- * instructions or author-curated material. The optional `workspace` binding names the read-only
+ * instructions or author-curated material. The one piece of round history that is representable is
+ * the `prior-triage` kind: the previous round's triage record for this same phase instance,
+ * assembled by the server from retained triage and review manifests — admissible because every
+ * field restates durable authority (reviewer-authored findings and their recorded dispositions),
+ * never producer-curated prose. When such an entry is pinned, the envelope adds the fixed
+ * {@link PRIOR_TRIAGE_INSTRUCTION} literal. The optional `workspace` binding names the read-only
  * repository checkout the dispatcher materializes; its note is a fixed literal so the field can
  * never smuggle caller prose.
  */
@@ -423,11 +460,17 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
     })),
   } as const;
 
+  const context = validateContext(snapshot.context);
   const envelope = {
     schema_version: "1",
     artifact: snapshot.artifact,
     rubric,
-    context: validateContext(snapshot.context),
+    context,
+    // The fixed literal appears exactly when a prior-triage record is pinned; presence is derived
+    // from validated context, never a caller switch.
+    ...(context.some((entry) => entry.kind === "prior-triage")
+      ? { instructions: { prior_triage: PRIOR_TRIAGE_INSTRUCTION } }
+      : {}),
     ...(workspace === undefined ? {} : { workspace }),
     subject: validateSubject(snapshot.subject),
   } as const satisfies PlainJsonValue;

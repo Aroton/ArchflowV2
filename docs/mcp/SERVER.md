@@ -10,13 +10,15 @@ Tool names are frozen in `src/contracts/tool-names.ts`; handlers live in `src/mc
 
 | Tool | What it does |
 |---|---|
-| `archflow_state` | The workflow's write path. Records that a pipeline step (`produce`, `self_review`, `counter_review`, `triage`, `adjudicate`) is running/succeeded/failed, optionally attaching a durable artifact. Runs a state transaction and returns the new revision. |
+| `archflow_state` | The workflow's write path. Records that a pipeline step (`produce`, `counter_review`, `triage`, `adjudicate`) is running/succeeded/failed, optionally attaching a durable artifact. Runs a state transaction and returns the new revision. |
 | `archflow_counter_review` | Assembles a sealed review envelope plus a read-only repo checkout, dispatches it to the opposite-family model CLI, and returns the verdict and finding count. |
 | `archflow_adjudicate` | Dispatches an adjudication envelope (no repo view) judging the artifact against the pinned constitution; returns compliance, drift, and triggered rules. |
 | `archflow_gate` | Records and resolves a durable human gate decision against a subject digest; handles supersession (`GATE_SUPERSEDED`). |
 | `archflow_waiver` | Grants or denies a human waiver against a gate whose decision was `waiver-requested`, after re-verifying the archived origin gate. |
 
 The advertised catalogue carries only names and JSON Schemas — no prose descriptions. The skills, not the tool listing, teach agents when to call what.
+
+Every tool input is a union of two arms. The full payload is the complete request object. The **staged reference** — `{schema_version, task_id, intent_id, request_digest}` — points at the request `archflow-local build-request` staged at `intents/<intent-id>.request.json`; the tool boundary (`server.ts` + `src/state/staged-requests.ts`) rehydrates the staged bytes into an authentic full-payload call *before any handler runs*, re-parses them through the tool's own contract, and recomputes the request digest exactly as the live path does. The recomputed digest must equal both the digest recorded in the staged file and the digest the model typed; the staged tool must equal the tool actually called; the inner `intent_id`/`task_id` must equal the reference's. Any disagreement fails closed — `STAGED_REQUEST_MISMATCH`, or `STAGED_REQUEST_NOT_FOUND` for a missing file — with no state change. This exists because hand-copying the multi-kilobyte `request.input` was the loop's largest token cost and corruption surface; the digest, not the transcription, is what binds semantics.
 
 ## How a request flows
 
@@ -35,7 +37,8 @@ sequenceDiagram
     S->>S: validate envelope,<br/>rewrite external ID → internal ID
     S->>A: forward
     A->>B: validated tools/call
-    B->>B: name lookup, schema_version gate,<br/>zod parse of input
+    B->>B: name lookup, schema_version gate,<br/>zod parse of input<br/>(full payload or staged reference)
+    B->>B: staged reference? rehydrate from<br/>intents/&lt;id&gt;.request.json, recheck digest
     B->>HD: dispatch
     HD->>HD: open session, replay probe,<br/>state transaction / dispatch
     HD-->>B: result

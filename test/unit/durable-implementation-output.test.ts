@@ -59,12 +59,12 @@ describe("implementation output contract", () => {
     expect(parseImplementationOutput(sample)).toStrictEqual(sample);
   });
 
-  it("requires `step` in both authorities and admits exactly the five pipeline steps (D19)", async () => {
+  it("requires `step` in both authorities and admits exactly the pipeline steps (D19)", async () => {
     const sample = await fixture();
     await rejectedBoth(without(sample, "step"));
     await rejectedBoth({ ...sample, step: "implement" });
     const jsonValidator = await validator();
-    for (const step of ["produce", "self_review", "counter_review", "triage", "adjudicate"]) {
+    for (const step of ["produce", "counter_review", "triage", "adjudicate"]) {
       expect(assertZodAgreement({ ...sample, step }, jsonValidator, implementationOutputV1Schema)).toBeTruthy();
     }
   });

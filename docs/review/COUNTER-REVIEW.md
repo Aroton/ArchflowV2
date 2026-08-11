@@ -13,15 +13,21 @@ flowchart TB
     subgraph ENV["Sealed envelope (≤ 1 MiB, digested)"]
         A["artifact<br/>document bytes, or a tiered<br/>implementation change-set"]
         R["rubric<br/>{id, text, blocking} triples"]
-        C["context — pinned evidence:<br/>user-ask · approved-upstream ·<br/>verification-transcript · interface-excerpt ·<br/>conventions · repo-map"]
-        S["subject — the binding:<br/>task, phase, digests, fingerprint,<br/>producer family"]
+        C["context — pinned evidence:<br/>user-ask · approved-upstream ·<br/>verification-transcript · prior-triage ·<br/>interface-excerpt · conventions · repo-map"]
+        S["subject — the binding:<br/>task, phase, attempt, digests,<br/>fingerprint, producer family"]
         W["workspace (optional)<br/>read-only checkout declaration"]
     end
     ENV -->|stdin| Child["Opposite-family CLI<br/>+ read-only checkout at pinned commit"]
     Child -->|JSON verdict + findings| Server
 ```
 
-The shape is deliberately closed: field validation rejects any key not on the expected list, so producer history, prior findings, triage notes, and free-form instructions are *structurally unrepresentable* in a review request. The envelope digest makes the review a reproducible attestation about exactly those bytes.
+The shape is deliberately closed: field validation rejects any key not on the expected list, so free-form producer history and agent instructions are *structurally unrepresentable* in a review request. One piece of round history is deliberately representable — the `prior-triage` context kind carries the previous round's triage record, but only because the server assembles it mechanically from retained triage and review manifests (reviewer-authored findings and their recorded dispositions), never from producer-curated prose. The subject also names the durable `attempt` counter, so the reviewer knows it is looking at round N of the same phase instance. The envelope digest makes the review a reproducible attestation about exactly those bytes.
+
+## Prior-triage context: stopping defect-class re-litigation
+
+Every dispatch is a fresh reviewer with no memory, so without help round N tends to rediscover the defect class round N−1 already dispositioned — the same defect was once found four times in a real run. On re-entry the server pins a `prior-triage` entry: for each prior finding, its `finding_id`, severity, blocking flag, and summary (all reviewer-authored, from the retained review evidence), plus its disposition and the recorded revision intent or rejection rationale (from the retained triage manifest). Whenever this entry is present, the envelope adds one fixed instruction literal: already-dispositioned findings must not be re-raised in variant form — a reviewer who thinks a prior disposition was wrong challenges it by naming its `finding_id`.
+
+**The retention boundary, honestly:** durable state (`authoritative_results`) keeps exactly one triage result per phase instance — installing a new one replaces the reference to the old, and unreferenced manifests are not durable authority. So the pinned record covers only the *immediately preceding* round, which is also the round whose accepted findings the current attempt is answering; earlier rounds are superseded and deliberately not reconstructed. The record does not carry the historical attempt number of that prior round either — durable state never recorded it — only the current attempt (in the subject and in the record) is authoritative. Attempt 1, or a retry that never reached triage, pins nothing: absence is the accurate record. Disposition strings render as-is, so a grown triage vocabulary (for example `accepted-editorial`) never breaks assembly.
 
 ## Pinned context: evidence, not narrative
 
@@ -34,7 +40,7 @@ The shape is deliberately closed: field validation rejects any key not on the ex
 
 The policy split is the key idea: absence that **contradicts durable authority** (the PRD's declared ask drifted; an upstream lost its approval; bytes don't match the retained projection) **fails closed** — no review happens. Every other gap becomes a named `unavailable` entry, which the rubric's non-blocking `unverifiable-claims` criterion turns into a finding. Findings prefixed `unverifiable-` mean "the reviewer lacked evidence," and triage must *reject* them with an `envelope-gap:` rationale — the fix for recurring gaps is better envelope assembly (or the reviewer's repo access), never pinning more bytes in.
 
-When the cap is hit, droppable context is replaced lowest-priority-first (`repo-map`, then `conventions`, then `interface-excerpt`). The user ask, approved upstreams, and verification transcript are never droppable — if they don't fit, the review fails closed.
+When the cap is hit, droppable context is replaced lowest-priority-first (`repo-map`, then `conventions`, then `interface-excerpt`, then `prior-triage`). The user ask, approved upstreams, and verification transcript are never droppable — if they don't fit, the review fails closed.
 
 ## The tiered change-set rendering
 
@@ -53,16 +59,15 @@ If the envelope still overflows after tiering and cap relief, the result is `ENV
 ## The flow, end to end
 
 1. **Produce** — the artifact is recorded durably; its digest becomes the subject digest.
-2. **Self-review** — the producer reviews its own work against the rubric.
-3. **Counter-review call** — `archflow_counter_review` with the artifact path, rubric, and fingerprint.
-4. **Server assembles** the review material (document text or tiered change set), pins context (failing closed on authority violations), seals the envelope under the cap, and materializes the read-only checkout — HEAD for documents, the attested `base_commit` for implementations (the reviewer sees the pre-change tree; changes travel only in the envelope).
-5. **Dispatch** — the opposite-family CLI runs headless (see `../mcp/DISPATCH.md`); output is parsed and bound to its provenance (adapter, CLI version, route, envelope digest).
-6. **Currency re-check** — if the artifact drifted mid-dispatch, the result is discarded (`counter-review-subject-not-current`).
-7. **Commit** — the evidence lands in a state transaction. A `fail` verdict is a successful recording, never an error.
-8. **Triage** — the producer dispositions every finding from both reviews; any accepted finding forces re-entry into produce with a new attempt (capped, default 3).
-9. **Adjudicate** — see `ADJUDICATION.md`.
+2. **Counter-review call** — `archflow_counter_review` with the artifact path, rubric, and fingerprint.
+3. **Server assembles** the review material (document text or tiered change set), pins context (failing closed on authority violations), seals the envelope under the cap, and materializes the read-only checkout — HEAD for documents, the attested `base_commit` for implementations (the reviewer sees the pre-change tree; changes travel only in the envelope).
+4. **Dispatch** — the opposite-family CLI runs headless (see `../mcp/DISPATCH.md`); output is parsed and bound to its provenance (adapter, CLI version, route, envelope digest).
+5. **Currency re-check** — if the artifact drifted mid-dispatch, the result is discarded (`counter-review-subject-not-current`).
+6. **Commit** — the evidence lands in a state transaction. A `fail` verdict is a successful recording, never an error.
+7. **Triage** — the producer dispositions every finding; any accepted finding forces re-entry into produce with a new attempt (capped, default 3). The next round's reviewer then receives this triage record as pinned `prior-triage` context and the new round number in the subject's `attempt`.
+8. **Adjudicate** — see `ADJUDICATION.md`.
 
-Editing the artifact changes its digest, which invalidates all downstream evidence — that currency rule (enforced by `src/review/fixed-point.ts`) is what makes the loop converge honestly. You iterate until produce, both reviews, triage, and adjudication all agree about the same bytes with no accepted findings.
+Editing the artifact changes its digest, which invalidates all downstream evidence — that currency rule (enforced by `src/review/fixed-point.ts`) is what makes the loop converge honestly. You iterate until produce, counter-review, triage, and adjudication all agree about the same bytes with no accepted findings.
 
 ## Gate counter-reviews
 

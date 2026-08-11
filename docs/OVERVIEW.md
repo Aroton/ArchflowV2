@@ -40,23 +40,25 @@ flowchart TB
     Child -->|"verdict + findings"| MCP
 ```
 
-The loop the agent lives in is simple: run `archflow-local status --task <task>`, get **exactly one** `next_action`, compose the request for it with `archflow-local build-request`, call the matching MCP tool with the returned `request.input` copied verbatim, repeat. The agent supplies judgment (findings, rationales, prose); the tooling supplies every mechanical field (digests, fingerprints, revisions, routing).
+The loop the agent lives in is simple: run `archflow-local status --task <task>`, get **exactly one** `next_action`, compose the request for it with `archflow-local build-request`, call the matching MCP tool with the returned four-field staged reference (`{schema_version, task_id, intent_id, request_digest}` — the server rehydrates the staged bytes and fails closed on any mismatch; copying `request.input` verbatim is the fallback), repeat. The agent supplies judgment (findings, rationales, prose); the tooling supplies every mechanical field (digests, fingerprints, revisions, routing).
 
 ## The evidence pipeline
 
-Every gated stage runs the same five-step pipeline until it reaches a fixed point — all evidence current, all findings dispositioned, no blockers:
+Every gated stage runs the same four-step pipeline until it reaches a fixed point — all evidence current, all findings dispositioned, no blockers:
 
 ```mermaid
 flowchart LR
-    P[produce] --> SR[self_review]
-    SR --> CR["counter_review<br/>(opposite model family)"]
+    P[produce] --> CR["counter_review<br/>(opposite model family)"]
     CR --> T["triage<br/>(disposition every finding)"]
     T -->|"any finding accepted"| P
+    T -->|"editorial accepts only"| A
     T -->|"all rejected with rationale"| A["adjudicate<br/>(vs. the constitution)"]
     A -->|"rule failure / drift / trigger"| G{{"Human gate"}}
     A -->|clean| Adv[advance]
     G -->|approved or waived| Adv
 ```
+
+Self-review is not a durable step: the producing agent reviews its own draft as ordinary sub-agent work inside produce, before the artifact's bytes are ever recorded. Triage has three dispositions: `accepted` sends the work back into produce; `accepted-editorial` (non-blocking wording/formatting fixes only) lets the artifact be revised under a server-validated one-hop predecessor link and jump straight to adjudication on the new bytes; `rejected` requires a written rationale.
 
 Editing the artifact changes its digest, which automatically invalidates every downstream review — you cannot sneak an edit past a stale approval. That mechanism (digests as identity) is the engine of the whole trust model; see `contracts/CONTRACTS.md`.
 

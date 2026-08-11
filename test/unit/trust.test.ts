@@ -115,26 +115,15 @@ describe("identity-backed authority", () => {
 
   it("requires authentic qualified reviews and exact gate identity for current sets", () => {
     const gateReview = qualifyDegraded("gate-counter-review", GATE_1, digest("3"));
-    const selfEvidence = {
-      schema_version: "1", task_id: TASK, phase_instance: phase, step: "self_review", role: "self-review",
-      subject_digest: digest("a"), input_fingerprint: digest("b"), rubric_digest: digest("c"), producer_family: "claude",
-      findings: [], matched_rule_versions: [], verdict: "pass", blocking_count: 0,
-      assurance: "agent-declared", model_family: "claude", model: "self", effort: "high",
-    } as const;
-    const selfDigest = digest("1");
-    const selfVerified = createTestVerifiedReferencedEvidence<"review", "agent-declared">("review", { evidence_digest: selfDigest, evidence: selfEvidence });
-    const selfLink = createTestAuthorityLink({ schema_version: "1", evidence_kind: "review", assurance: "agent-declared", role: "self-review", task_id: selfEvidence.task_id, phase_instance: phase, subject_digest: selfEvidence.subject_digest, input_fingerprint: selfEvidence.input_fingerprint, evidence_digest: selfDigest, authority: { kind: "agent-declared", result_id: "result-self", result_digest: digest("6"), state_revision: 1 } });
-    const self = authorityQualifier.qualifyReview(selfLink, selfVerified);
     const counter = qualifyDegraded();
     const slots = [
-      { role: "self-review", evidence_digest: selfDigest, assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
       { role: "counter-review", evidence_digest: digest("9"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       { role: "gate-counter-review", evidence_digest: digest("3"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-2" },
     ] as unknown as readonly ReviewEvidenceSlot[];
     const wrongGateAuthority = createTestCurrentReviewSetAuthority({ task_id: TASK, phase_instance: phase, subject_digest: digest("a"), input_fingerprint: digest("b"), slots: slots as never });
-    expect(() => authorityQualifier.currentReviews(wrongGateAuthority, [self, counter, gateReview])).toThrow(/slot 2|unique/);
-    expect(() => authorityQualifier.currentReviews({ ...wrongGateAuthority } as never, [self, counter, gateReview])).toThrow(/authority/);
-    expect(() => authorityQualifier.currentReviews(wrongGateAuthority, [self, { ...counter } as never, gateReview])).toThrow(/slot 1/);
+    expect(() => authorityQualifier.currentReviews(wrongGateAuthority, [counter, gateReview])).toThrow(/slot 1|unique/);
+    expect(() => authorityQualifier.currentReviews({ ...wrongGateAuthority } as never, [counter, gateReview])).toThrow(/authority/);
+    expect(() => authorityQualifier.currentReviews(wrongGateAuthority, [{ ...counter } as never, gateReview])).toThrow(/slot 0/);
   });
 
   it("requires gate identity exactly on gate-counter authority links", () => {
@@ -153,7 +142,6 @@ describe("identity-backed authority", () => {
     expect(parseAuthorityLinkData({ ...gate, authority: { kind: "degraded", checkpoint_digest: digest("8"), checkpoint_revision: 1 } }).task_id).toBe("mcp-integration");
     const slot = { role: "gate-counter-review", evidence_digest: digest("3"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "Gate:1" };
     expect(() => parseRequiredReviewSlots([
-      { role: "self-review", evidence_digest: digest("1"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
       { role: "counter-review", evidence_digest: digest("2"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       slot
     ])).toThrow();

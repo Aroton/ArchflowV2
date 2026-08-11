@@ -34,19 +34,34 @@ The workflow file's bytes are digest-pinned into each task at creation, so chang
 | phase-impl | `archflow-phase-impl` | code, `phases/<n>/verification.txt`, `phases/<n>/impl-notes.md` | `commit-authorization`, **then** a second explicit confirm-to-commit |
 | status | `archflow-status` | nothing — read-only | surfaces gates, resolves none |
 
-All task files live under `.archflow/tasks/<task>/`; the shared `.archflow/context/` is the only cross-task material. **Tasks never read each other's files** — this isolation is real and test-enforced.
+All task files live under `.archflow/tasks/<task>/`; the only cross-task material is the maintained `docs/` set, which lives in the repository proper. **Tasks never read each other's files** — this isolation is real and test-enforced.
 
 ## The pipeline inside each gated stage
 
 Every gated stage runs the same evidence pipeline to a fixed point:
 
-1. **produce** — write or revise the artifact. Its SHA-256 becomes the *subject digest*.
-2. **self_review** — the producing agent reviews its own work against the stage's rubric.
-3. **counter_review** — the server dispatches the *opposite model family* (Claude ⇄ Codex) against a sealed envelope plus a read-only repo checkout at a pinned commit. Evidence the producer cannot author.
-4. **triage** — the producer must disposition **every** finding from both reviews: accept (forces re-entry into produce) or reject with a written rationale. Findings prefixed `unverifiable-` mean "the reviewer lacked evidence," and are rejected with an `envelope-gap:` rationale, never accepted.
-5. **adjudicate** — a third dispatch judges the artifact against the pinned constitution. Failures, uncertainty, drift, or matched review triggers open human gates.
+1. **produce** — write or revise the artifact. Its SHA-256 becomes the *subject digest*. Self-review happens here, as ordinary orchestrator/sub-agent work on the draft — nothing durable records it; the first recorded review is the adversarial one.
+2. **counter_review** — the server dispatches the *opposite model family* (Claude ⇄ Codex) against a sealed envelope plus a read-only repo checkout at a pinned commit. Evidence the producer cannot author.
+3. **triage** — the producer must disposition **every** finding, one of three ways:
+   - **accepted** — the finding demands a substantive fix; the work re-enters produce and all evidence is redone against the new bytes.
+   - **accepted-editorial** — the fix is purely wording or formatting and the finding is non-blocking (the server refuses this disposition for blocking findings). See the editorial path below.
+   - **rejected** — with a written rationale. Findings prefixed `unverifiable-` mean "the reviewer lacked evidence," and are rejected with an `envelope-gap:` rationale, never accepted.
+4. **adjudicate** — a third dispatch judges the artifact against the pinned constitution. Failures, uncertainty, drift, or matched review triggers open human gates.
 
 Editing the artifact changes the subject digest, which invalidates all downstream evidence — the pipeline re-runs until everything agrees about the same bytes. Re-entry is bounded (`max_attempts`, default 3); exhaustion opens an `attempts-exhausted` gate rather than looping forever.
+
+### The editorial shortcut
+
+When a round's only accepted findings are `accepted-editorial`, the producer revises the artifact and re-enters **adjudicate directly** instead of restarting the whole pipeline. The revised artifact declares a server-validated, strictly one-hop `editorial_predecessor` link — `{subject_digest, input_fingerprint, triage_result_digest}` naming the exact reviewed bytes, their inputs, and the triage round that authorized the shortcut. Retained reviews stay *current for the predecessor*; adjudication re-runs on the final bytes; and the eventual human gate presents the predecessor→final diff with an explicit predecessor disclosure, so the human sees precisely what changed after review. A plain `accepted` disposition anywhere in the round still forces full re-entry — the shortcut exists only for rounds that are editorial through and through.
+
+An editorial round consumes an attempt slot like any other re-entry. That is deliberate: if editorial rounds push a task to its attempt cap, the `attempts-exhausted` gate's retry decision is the intended recovery, keeping the human in the loop rather than letting cosmetic churn extend the loop silently.
+
+### The transition edges, precisely
+
+Beyond the forward hand-off (each succeeded step to its successor, same attempt), the state machine (`src/state/transitions.ts`) admits exactly two other same-phase moves:
+
+- **produce-succeeded → adjudicate-running (same attempt)** — the editorial path above. Structurally the edge admits any succeeded produce; the `archflow_state` handler refuses it *semantically* unless current review evidence covers the subject or its declared editorial predecessor, so a task can never strand in adjudicate without evidence.
+- **any-succeeded step → produce-running (attempt + 1)** — the "new information" door. From triage or adjudicate this is the accepted-finding re-entry; from a succeeded produce or counter_review it is the author withdrawing to incorporate new information. Downstream evidence simply goes stale and is redone. Because re-entry is sanctioned, the artifact drifting on disk while state sits at produce running (or failed) is an *expected re-entry edit*, not material drift.
 
 ## Gates: where humans decide
 

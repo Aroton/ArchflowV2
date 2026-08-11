@@ -5,7 +5,7 @@ import { taskSlugV1Schema } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
 
 export const REVIEW_VERDICTS = ["pass", "advisory", "fail"] as const;
-export const REVIEW_ROLES = ["self-review", "counter-review", "gate-counter-review"] as const;
+export const REVIEW_ROLES = ["counter-review", "gate-counter-review"] as const;
 export const REVIEW_FINDING_SEVERITIES = ["blocker", "major", "minor"] as const;
 export const MODEL_FAMILIES = ["claude", "codex"] as const;
 export const ADAPTER_IDS = ["claude-cli", "codex-cli"] as const;
@@ -36,7 +36,7 @@ export type RawReview = {
   readonly schema_version: "1";
   readonly task_id: TaskSlug;
   readonly phase_instance: string;
-  readonly step: "self_review" | "counter_review";
+  readonly step: "counter_review";
   readonly role: ReviewRole;
   readonly subject_digest: Sha256Digest;
   readonly input_fingerprint: Sha256Digest;
@@ -74,7 +74,7 @@ export const rawReviewSchema = z.object({
   schema_version: z.literal("1"),
   task_id: taskSlugV1Schema,
   phase_instance: z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
-  step: z.enum(["self_review", "counter_review"]),
+  step: z.literal("counter_review"),
   role: z.enum(REVIEW_ROLES),
   subject_digest: digest,
   input_fingerprint: digest,
@@ -96,8 +96,6 @@ export const rawReviewSchema = z.object({
     if (rules.has(key)) context.addIssue({ code: "custom", path: ["matched_rule_versions", index], message: "duplicate rule version" });
     rules.add(key);
   });
-  if (review.role === "self-review" && review.step !== "self_review") context.addIssue({ code: "custom", path: ["step"], message: "self-review role requires self_review step" });
-  if (review.role !== "self-review" && review.step !== "counter_review") context.addIssue({ code: "custom", path: ["step"], message: "counter-review roles require counter_review step" });
   const expected = expectedReviewSummary(review.findings);
   if (review.blocking_count !== expected.blocking_count) context.addIssue({ code: "custom", path: ["blocking_count"], message: `review blocking_count must be ${expected.blocking_count}` });
   if (review.verdict !== expected.verdict) context.addIssue({ code: "custom", path: ["verdict"], message: `review verdict must be ${expected.verdict}` });
@@ -127,9 +125,6 @@ type ReviewProvenanceBase = DerivedReview & {
   readonly effort: DeclaredEffort;
 };
 
-export type AgentDeclaredReview = ReviewProvenanceBase & {
-  readonly assurance: "agent-declared";
-};
 export type ServerAttestedReview = Omit<ReviewProvenanceBase, "model_family" | "effort"> & {
   readonly assurance: "server-attested";
   readonly adapter: AdapterId;
@@ -145,14 +140,13 @@ export type DegradedReview = ReviewProvenanceBase & {
   readonly assurance: "degraded";
   readonly reason: string;
 };
-export type ReviewEvidence = AgentDeclaredReview | ServerAttestedReview | DegradedReview;
+export type ReviewEvidence = ServerAttestedReview | DegradedReview;
 
 const provenanceBase = rawReviewSchema.safeExtend({
   model_family: z.union([z.enum(MODEL_FAMILIES), z.literal("unknown")]),
   model: nonBlank,
   effort: z.union([z.enum(EFFORT_VALUES), z.literal("unknown")]),
 });
-const agentDeclaredReviewSchema = provenanceBase.safeExtend({ assurance: z.literal("agent-declared") }).strict();
 const serverAttestedReviewSchema = provenanceBase.safeExtend({
   assurance: z.literal("server-attested"),
   adapter: z.enum(ADAPTER_IDS),
@@ -164,12 +158,11 @@ const serverAttestedReviewSchema = provenanceBase.safeExtend({
   observed_output_digest: digest,
   result_id: id,
 }).strict().superRefine((review, context) => {
-  if (review.role === "self-review") context.addIssue({ code: "custom", path: ["role"], message: "self-review cannot be server-attested" });
   const expectedReviewer = review.producer_family === "claude" ? "codex" : "claude";
   if (review.model_family !== expectedReviewer) context.addIssue({ code: "custom", path: ["model_family"], message: "server-attested review must be opposite-family" });
 });
 const degradedReviewSchema = provenanceBase.safeExtend({ assurance: z.literal("degraded"), reason: nonBlank }).strict();
-export const reviewEvidenceSchema = z.discriminatedUnion("assurance", [agentDeclaredReviewSchema, serverAttestedReviewSchema, degradedReviewSchema]);
+export const reviewEvidenceSchema = z.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);
 
 export function parseReviewEvidence(value: unknown): ReviewEvidence {
   assertPlainJson(value, "review evidence");

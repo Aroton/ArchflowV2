@@ -104,8 +104,10 @@ async function createExclusive(path: ResolvedPath, bytes: Uint8Array): Promise<E
 }
 
 async function replace(path: ResolvedPath, bytes: Uint8Array): Promise<void> {
-  if (path.path_class !== "task-state" && path.path_class !== "gate-interface") {
-    throw new TypeError("replace requires a task-state or gate-interface resolved path");
+  // `staged-request` is deliberately replaceable: recomposing an intent before the call
+  // overwrites its staged file, and the request digest — not file identity — guards use.
+  if (path.path_class !== "task-state" && path.path_class !== "gate-interface" && path.path_class !== "staged-request") {
+    throw new TypeError("replace requires a task-state, gate-interface, or staged-request resolved path");
   }
 
   await replaceRegularBytes(path.absolute, bytes, 0o644);

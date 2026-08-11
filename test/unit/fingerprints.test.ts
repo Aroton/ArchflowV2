@@ -78,7 +78,6 @@ const requestRubric = { schema_version: "1", kind: "implementation", mode: "adve
 const requestEvidence = {
   set_digest: digest("8"),
   slots: [
-    { role: "self-review", evidence_digest: digest("5"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
     { role: "counter-review", evidence_digest: digest("6"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
   ],
 } as const;
@@ -163,8 +162,8 @@ describe("computeRequestDigest", () => {
       archflow_state: "9e18ce122452f01f99faa4f2b1f2c99364c580049e1cd5296bd295d37b0f7217",
       archflow_counter_review: "42b856af8a42fa8e3070048c88bab5beecfa1c0987a743328f7b180b671988b2",
       archflow_adjudicate: "f736d8b058537377d8030b67dea2fb03ea6085f7a545d4f855b351e8abb89be5",
-      archflow_gate: "4ba0f06fa0f705c3357e40ba9a7f4fbe9d034da71923d49a9b2ee3fb80d03f22",
-      archflow_gate_supersedes: "c89840cd3f406159c57181903e8e80e52a693f19f537070143346f06c4e8d1c9",
+      archflow_gate: "2ad726edb2b970f1066e49ddb7c60518fe15c41b28d254fc51df9a30ea2af399",
+      archflow_gate_supersedes: "123fe3b33c3ef1250316af54ee1085f7d55153823527607b21a90ddf2fb06255",
       archflow_waiver: "c1baf879238bc647da60c3ec7cf8655c844d986a79e25306388450a1260e3f38",
     });
   });
@@ -211,7 +210,6 @@ describe("computeRequestDigest", () => {
       ["record-document-artifact", "document"],
       ["record-implementation-output", "implementation-output"],
       ["adopt-manual-checkpoint-import", "manual-checkpoint-import"],
-      ["record-self-review", "review-evidence"],
       ["record-triage", "triage"],
     ] as const;
     for (const [operation, artifact_kind] of cases) {

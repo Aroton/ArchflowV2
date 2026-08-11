@@ -156,6 +156,16 @@ export type RunAdjudicationInput = Readonly<{
   config: ConfigV1;
   phase_kind: keyof NonNullable<ConfigV1["overrides"]>;
   producer_family: ModelFamily;
+  /**
+   * The editorial predecessor pair the current produce artifact declares, supplied by the
+   * handler only from the record-time-validated retained artifact. The current review set may
+   * be bound to this pair instead of the new subject — exactly one hop; adjudication itself
+   * still binds the new subject digest and fingerprint.
+   */
+  editorial_predecessor?: Readonly<{
+    subject_digest: Sha256Digest;
+    input_fingerprint: Sha256Digest;
+  }>;
   envelope: Omit<AdjudicationEnvelopeInput, "approved_upstreams">;
 }>;
 
@@ -314,15 +324,23 @@ export async function runAdjudication(
   );
   if (!currentReviews.ok) return currentReviews;
   const current = currentReviews.value;
+  const reviewsBindSubject =
+    current.subject_digest === input.envelope.subject.subject_digest &&
+    current.input_fingerprint === input.envelope.subject.input_fingerprint &&
+    current.input_fingerprint === durableState.input_fingerprint;
+  // One hop only: after an editorial revision the retained reviews stay bound to the
+  // predecessor bytes the produce artifact declares; adjudication still binds the new subject.
+  const reviewsBindDeclaredPredecessor =
+    input.editorial_predecessor !== undefined &&
+    current.subject_digest === input.editorial_predecessor.subject_digest &&
+    current.input_fingerprint === input.editorial_predecessor.input_fingerprint;
   if (
     !authenticCurrentReviewSet(current) ||
     current.task_id !== input.authority.task_id ||
     current.task_id !== input.envelope.subject.task_id ||
     current.phase_instance !== durableState.phase_instance ||
     current.phase_instance !== input.envelope.subject.phase_instance ||
-    current.subject_digest !== input.envelope.subject.subject_digest ||
-    current.input_fingerprint !== input.envelope.subject.input_fingerprint ||
-    current.input_fingerprint !== durableState.input_fingerprint ||
+    (!reviewsBindSubject && !reviewsBindDeclaredPredecessor) ||
     current.current_evidence_set.set_digest !== input.envelope.source_evidence_set_digest ||
     current.current_evidence_set.set_digest !==
       input.envelope.subject.source_evidence_set_digest

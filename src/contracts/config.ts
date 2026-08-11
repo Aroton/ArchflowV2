@@ -3,7 +3,7 @@ import { z } from "zod";
 import { assertPlainJson } from "./plain-json.js";
 import { parseSingleYamlDocument } from "./yaml.js";
 
-export const ROUTING_ROLES = ["producer", "self-reviewer", "counter-reviewer", "adjudicator"] as const;
+export const ROUTING_ROLES = ["producer", "counter-reviewer", "adjudicator"] as const;
 export const REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"] as const;
 export const DEFAULT_MAX_ATTEMPTS = 3;
 
@@ -14,7 +14,6 @@ const routeSchema = z.object({
 
 const rolesSchema = z.object({
   producer: routeSchema.optional(),
-  "self-reviewer": routeSchema.optional(),
   "counter-reviewer": routeSchema.optional(),
   adjudicator: routeSchema.optional(),
 }).strict();

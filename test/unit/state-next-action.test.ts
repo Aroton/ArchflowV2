@@ -55,7 +55,8 @@ function state(overrides: Partial<TaskStateV1> = {}): TaskStateV1 {
 function assessment(next: EvidenceAssessment["next"]): EvidenceAssessment {
   return {
     current: [], stale: [], every_finding_dispositioned: true, blocker_remains: false,
-    reentry_required: false, exhausted: false, adjudication_gate_pending: false, next,
+    reentry_required: false, editorial_revision_required: false, exhausted: false,
+    adjudication_gate_pending: false, next,
   };
 }
 
@@ -65,7 +66,7 @@ function input(overrides: Partial<NextActionInput> = {}): NextActionInput {
     state: state(),
     config_verified: true,
     reconciliation_findings: [],
-    assessment: assessment("self_review"),
+    assessment: assessment("counter_review"),
     evidence_available: true,
     subject_digest: D("a"),
     ...overrides,
@@ -108,6 +109,26 @@ describe("deriveNextAction", () => {
     ];
     expect(cases.map(([expected, value]) => [expected, deriveNextAction(value).code]))
       .toEqual(cases.map(([expected]) => [expected, expected]));
+  });
+
+  it("routes an editorial revision to the produce step with revision-intent wording", () => {
+    const editorial = deriveNextAction(input({
+      assessment: { ...assessment("produce"), editorial_revision_required: true },
+    }));
+    expect(editorial).toMatchObject({
+      code: "run-step",
+      step: "produce",
+      editorial_revision: true,
+      human_required: false,
+    });
+    expect(editorial.detail).toMatch(/editorial revision intents/u);
+    expect(editorial.detail).toMatch(/reviews are not re-run/u);
+    // A full re-entry keeps the ordinary produce wording and no editorial flag.
+    const reentry = deriveNextAction(input({
+      assessment: { ...assessment("produce"), reentry_required: true },
+    }));
+    expect(reentry).toMatchObject({ code: "run-step", step: "produce" });
+    expect(reentry.editorial_revision).toBeUndefined();
   });
 
   it("applies the pinned precedence ladder when conditions conflict", () => {
@@ -167,23 +188,30 @@ describe("deriveNextAction", () => {
     });
   });
 
-  it("advances a recorded self-review to the counter-review entry instead of repeating it", () => {
-    // The fixed point says next: "self_review" until both reviews retain; once the self-review
-    // is recorded, the only legal movement from self_review-succeeded is the counter_review
-    // entry, and the derived action must say so.
-    expect(deriveNextAction(input({
-      state: state({ step: "self_review", status: "succeeded" }),
-      assessment: assessment("self_review"),
-      evidence_available: false,
-    }))).toMatchObject({
-      code: "run-step", step: "counter_review",
-      detail: "Run the counter_review pipeline step.",
-    });
-    expect(deriveNextAction(input({
-      state: state({ step: "produce", status: "succeeded" }),
-      assessment: assessment("self_review"),
-      evidence_available: false,
-    }))).toMatchObject({ code: "run-step", step: "self_review" });
+  it("always prescribes finishing produce while a produce re-entry is mid-flight", () => {
+    // After a produce re-entry running entry is recorded (accepted, editorial, or the
+    // author-initiated door), the prior cycle's retained produce result and evidence still
+    // exist. Neither stale-evidence routing nor unavailable evidence may re-route the action:
+    // the only legal move is recording the terminal produce result (or retrying a failure).
+    for (const evidence of [
+      { evidence_available: false as const },
+      { assessment: assessment("triage"), evidence_available: true as const },
+    ]) {
+      expect(deriveNextAction(input({
+        state: state({ step: "produce", status: "running" }),
+        ...evidence,
+      }))).toMatchObject({
+        code: "run-step", step: "produce", human_required: false,
+        detail: "Record the terminal produce result.",
+      });
+      expect(deriveNextAction(input({
+        state: state({ step: "produce", status: "failed" }),
+        ...evidence,
+      }))).toMatchObject({
+        code: "run-step", step: "produce",
+        detail: "Retry the produce pipeline step.",
+      });
+    }
   });
 
   it("requires the phase-specific approval before advancing", () => {

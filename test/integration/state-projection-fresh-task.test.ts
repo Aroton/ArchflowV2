@@ -3,7 +3,7 @@
  * created `reviews/` (or any other projection parent) when the first
  * review-evidence result is installed, so the transaction itself must
  * materialize the projection parents. Before this coverage existed, the
- * happy-path first self-review install failed with an opaque INTERNAL_ERROR.
+ * happy-path first review install failed with an opaque INTERNAL_ERROR.
  */
 import { execFileSync } from "node:child_process";
 import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -18,6 +18,7 @@ import {
   canonicalJsonDigest,
 } from "../../src/contracts/canonical.js";
 import type { ConfigV1 } from "../../src/contracts/config.js";
+import type { ResultManifestV1 } from "../../src/contracts/durable-result-manifest.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import {
   parseSafeCode,
@@ -61,6 +62,7 @@ import {
 } from "../../src/state/evidence-results.js";
 import { createTaskLock } from "../../src/state/lock.js";
 import { readIntentReceipt, readTaskState } from "../../src/state/read.js";
+import { readSnapshot } from "../../src/state/snapshots.js";
 import { identifyTransactionRequest } from "../../src/state/request.js";
 import {
   prepareResultInstallation,
@@ -147,7 +149,10 @@ type Harness = Readonly<{
   dependencies: TransactionDependencies;
 }>;
 
-function initialState(authority: TransactionAuthority): TaskStateV1 {
+function initialState(
+  authority: TransactionAuthority,
+  authoritativeResults: TaskStateV1["authoritative_results"] = [],
+): TaskStateV1 {
   return {
     schema_version: "1",
     task_id: task,
@@ -163,7 +168,7 @@ function initialState(authority: TransactionAuthority): TaskStateV1 {
     workflow_digest: canonicalJsonDigest({ workflow: 1 }),
     constitution_digest: constitution.digest,
     policy_base_commit: "abcdef0123456789abcdef0123456789abcdef01" as TaskStateV1["policy_base_commit"],
-    authoritative_results: [],
+    authoritative_results: authoritativeResults,
     approvals: [],
     waivers: [],
   };
@@ -220,13 +225,13 @@ async function durableState(authority: TransactionAuthority): Promise<TaskStateV
   return read.document.value;
 }
 
-function selfReview(subject: Sha256Digest): ReviewEvidence {
+function counterReview(subject: Sha256Digest): ReviewEvidence {
   return {
     schema_version: "1",
     task_id: task,
     phase_instance: phase,
-    step: "self_review",
-    role: "self-review",
+    step: "counter_review",
+    role: "counter-review",
     subject_digest: subject,
     input_fingerprint: FINGERPRINT,
     rubric_digest: canonicalJsonDigest(rubric),
@@ -235,14 +240,15 @@ function selfReview(subject: Sha256Digest): ReviewEvidence {
     matched_rule_versions: [],
     verdict: "pass",
     blocking_count: 0,
-    assurance: "agent-declared",
-    model_family: "claude",
-    model: "claude-fixture",
-    effort: "high",
+    assurance: "degraded",
+    reason: "manual fallback",
+    model_family: "codex",
+    model: "manual",
+    effort: "unknown",
   };
 }
 
-async function enterSelfReview(h: Harness, intentId: string): Promise<void> {
+async function enterCounterReview(h: Harness, intentId: string): Promise<void> {
   const state = await durableState(h.authority);
   const call = parseToolCall("archflow_state", {
     schema_version: "1",
@@ -251,7 +257,7 @@ async function enterSelfReview(h: Harness, intentId: string): Promise<void> {
     expected_revision: state.revision,
     input_fingerprint: FINGERPRINT,
     phase_instance: phase,
-    step: "self_review",
+    step: "counter_review",
     status: "running",
   });
   const identified = identifyTransactionRequest(call, h.authority, FINGERPRINT);
@@ -262,7 +268,7 @@ async function enterSelfReview(h: Harness, intentId: string): Promise<void> {
       current: document.value,
       target: {
         phase_instance: phase,
-        step: "self_review",
+        step: "counter_review",
         status: "running",
         attempt: document.value.attempt,
         input_fingerprint: FINGERPRINT,
@@ -293,23 +299,20 @@ async function enterSelfReview(h: Harness, intentId: string): Promise<void> {
   if (!result.ok) throw new Error(JSON.stringify(result.error));
 }
 
-async function commitSelfReview(
+async function commitCounterReview(
   h: Harness,
   intentId: string,
   prepared: PreparedEvidenceResult,
-  evidence: ReviewEvidence,
 ) {
   const current = await durableState(h.authority);
-  const call = parseToolCall("archflow_state", {
+  const call = parseToolCall("archflow_counter_review", {
     schema_version: "1",
     task_id: task,
     intent_id: intentId,
     expected_revision: current.revision,
     input_fingerprint: prepared.reference.input_fingerprint,
-    phase_instance: phase,
-    step: prepared.reference.step,
-    status: "succeeded",
-    artifact: { schema_version: "1", artifact_kind: "review-evidence", evidence },
+    artifact_path: "phases/3/impl-notes.md",
+    rubric,
   });
   const identified = identifyTransactionRequest(call, h.authority, prepared.reference.input_fingerprint);
   const installation = prepareResultInstallation({
@@ -321,7 +324,7 @@ async function commitSelfReview(
   });
   return runStateTransaction(h.dependencies, { authority: h.authority, call }, async (stateDocument, identifiedCall) => {
     const revision = parseSafeInteger(stateDocument.value.revision + 1);
-    const success = { path: parseTaskPathClaim("state.json"), revision, status: "succeeded" as const };
+    const success = { path: parseTaskPathClaim(`reviews/${phase}.counter.md`), verdict: "pass" as const, blocking_count: 0, revision };
     const next = planStateTransition({
       current: stateDocument.value,
       target: {
@@ -332,7 +335,6 @@ async function commitSelfReview(
         input_fingerprint: prepared.reference.input_fingerprint,
       },
       recomputed_input_fingerprint: prepared.reference.input_fingerprint,
-      artifact: { schema_version: "1", artifact_kind: "review-evidence", evidence },
       result_reference: prepared.reference,
     });
     if (!next.ok) return next;
@@ -342,7 +344,7 @@ async function commitSelfReview(
       value: {
         expectation: createInternalResultExpectation({
           schema_version: "1",
-          tool: "archflow_state",
+          tool: "archflow_counter_review",
           task_id: task,
           intent_id: call.input.intent_id,
           input_fingerprint: prepared.reference.input_fingerprint,
@@ -359,19 +361,96 @@ async function commitSelfReview(
   });
 }
 
+describe("superseded result payload reclamation at commit", () => {
+  it("reclaims the replaced result's payload, keeps its manifest, and accounts for the pass", async () => {
+    const h = await fixture();
+    const oldManifest = {
+      schema_version: "1",
+      task_id: task,
+      outputs: [{ path: "evidence.json", storage: "raw-payload" }],
+    } as unknown as ResultManifestV1;
+    const oldDocument = canonicalDocument(oldManifest as never);
+    const oldDirectory = join(h.authority.task_root, "results", "sha256", oldDocument.digest);
+    await mkdir(join(oldDirectory, "payload"), { recursive: true });
+    await writeFile(join(oldDirectory, "manifest.json"), oldDocument.bytes);
+    await writeFile(join(oldDirectory, "payload", "evidence.json"), "superseded counter evidence");
+    const oldReference = {
+      phase_instance: phase,
+      step: "counter_review",
+      result_digest: oldDocument.digest,
+      result_id: parseSafeId("counter-v0"),
+      input_fingerprint: FINGERPRINT,
+      manifest_path: `.archflow/tasks/${task}/results/sha256/${oldDocument.digest}/manifest.json`,
+    } as TaskStateV1["authoritative_results"][number];
+    await writeFile(
+      h.authority.state.absolute,
+      canonicalDocument(initialState(h.authority, [oldReference])).bytes,
+    );
+
+    await enterCounterReview(h, "counter-running-2");
+    // The boundary transition replaced no reference, so nothing may be reclaimed yet.
+    await expect(readFile(join(oldDirectory, "payload", "evidence.json"), "utf8"))
+      .resolves.toBe("superseded counter evidence");
+
+    const evidence = counterReview(canonicalJsonDigest({ artifact: 1 }));
+    const running = await durableState(h.authority);
+    const prepared = await prepareEvidenceResult({
+      authority: h.authority,
+      runner: h.runner,
+      result_id: parseSafeId("counter-v1"),
+      retained_task_bytes: await h.dependencies.read_retained_task_bytes!(),
+      measured_at_revision: running.revision,
+      scanner: cleanScanner,
+      value: { kind: "review", evidence },
+    });
+    if (!prepared.ok) throw new Error(prepared.error.code);
+    const result = await commitCounterReview(h, "counter-intent-2", prepared.value);
+    expect(result).toMatchObject({ ok: true });
+
+    const committed = await durableState(h.authority);
+    expect(committed.authoritative_results.map((entry) => entry.result_digest))
+      .not.toContain(oldDocument.digest);
+
+    // The superseded payload bytes are gone; the digest-bound manifest stays forever.
+    await expect(readFile(join(oldDirectory, "payload", "evidence.json")))
+      .rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(oldDirectory, "manifest.json"))).toEqual(Buffer.from(oldDocument.bytes));
+
+    const record = JSON.parse(await readFile(
+      join(h.authority.task_root, "maintenance", `auto-prune-r${committed.revision}.json`),
+      "utf8",
+    )) as { performed_at_revision: number; deletions: readonly { path: string; category: string }[] };
+    expect(record.performed_at_revision).toBe(committed.revision);
+    expect(record.deletions).toMatchObject([{
+      category: "superseded-payload",
+      path: `.archflow/tasks/${task}/results/sha256/${oldDocument.digest}/payload/evidence.json`,
+    }]);
+
+    // The retained-result reader — what crash arbitration and resume consume — still verifies.
+    const newReference = committed.authoritative_results.find((entry) => entry.step === "counter_review")!;
+    const read = await readSnapshot({
+      target: prepared.value.manifest_target,
+      expected_result_digest: newReference.result_digest,
+      runner: h.runner,
+      worktree_root: h.root as ResolvedTaskPath,
+    });
+    expect(read).toMatchObject({ ok: true });
+  });
+});
+
 describe("first review install on a fresh task", () => {
   it("installs the first review projection without any pre-created directories", async () => {
     const h = await fixture();
     await expect(lstat(join(h.authority.task_root, "reviews"))).rejects.toMatchObject({ code: "ENOENT" });
     await expect(lstat(join(h.authority.task_root, "results"))).rejects.toMatchObject({ code: "ENOENT" });
 
-    await enterSelfReview(h, "self-running-1");
-    const evidence = selfReview(canonicalJsonDigest({ artifact: 0 }));
+    await enterCounterReview(h, "counter-running-1");
+    const evidence = counterReview(canonicalJsonDigest({ artifact: 0 }));
     const state = await durableState(h.authority);
     const prepared = await prepareEvidenceResult({
       authority: h.authority,
       runner: h.runner,
-      result_id: parseSafeId("self-v1"),
+      result_id: parseSafeId("counter-v1"),
       retained_task_bytes: await h.dependencies.read_retained_task_bytes!(),
       measured_at_revision: state.revision,
       scanner: cleanScanner,
@@ -381,7 +460,7 @@ describe("first review install on a fresh task", () => {
     const entry = prepared.value.projection_plan.entries[0]!;
     expect(entry.target.path_class).toBe("review");
 
-    const result = await commitSelfReview(h, "self-intent-1", prepared.value, evidence);
+    const result = await commitCounterReview(h, "counter-intent-1", prepared.value);
     expect(result).toMatchObject({ ok: true });
 
     expect((await lstat(join(h.authority.task_root, "reviews"))).isDirectory()).toBe(true);

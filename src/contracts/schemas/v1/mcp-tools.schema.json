@@ -65,26 +65,6 @@
               "const": "1"
             },
             "artifact_kind": {
-              "const": "review-evidence"
-            },
-            "evidence": {
-              "$ref": "urn:archflow:schema:v1:review-evidence"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "schema_version",
-            "artifact_kind",
-            "evidence"
-          ],
-          "properties": {
-            "schema_version": {
-              "const": "1"
-            },
-            "artifact_kind": {
               "const": "triage"
             },
             "evidence": {
@@ -178,6 +158,30 @@
         }
       }
     },
+    "stagedReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "task_id",
+        "intent_id",
+        "request_digest"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "task_id": {
+          "$ref": "#/$defs/taskSlug"
+        },
+        "intent_id": {
+          "$ref": "#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
     "failure": {
       "type": "object",
       "additionalProperties": false,
@@ -200,62 +204,68 @@
     },
     "archflow_state": {
       "input": {
-        "allOf": [
+        "oneOf": [
           {
-            "$ref": "#/$defs/common"
+            "allOf": [
+              {
+                "$ref": "#/$defs/common"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "schema_version",
+                  "task_id",
+                  "intent_id",
+                  "expected_revision",
+                  "input_fingerprint",
+                  "phase_instance",
+                  "step",
+                  "status"
+                ],
+                "properties": {
+                  "schema_version": {
+                    "const": "1"
+                  },
+                  "task_id": {
+                    "$ref": "#/$defs/taskSlug"
+                  },
+                  "intent_id": {
+                    "$ref": "#/$defs/pathSafeId"
+                  },
+                  "expected_revision": {
+                    "$ref": "#/$defs/integer"
+                  },
+                  "input_fingerprint": {
+                    "$ref": "#/$defs/digest"
+                  },
+                  "phase_instance": {
+                    "$ref": "#/$defs/phase"
+                  },
+                  "step": {
+                    "enum": [
+                      "produce",
+                      "counter_review",
+                      "triage",
+                      "adjudicate"
+                    ]
+                  },
+                  "status": {
+                    "enum": [
+                      "running",
+                      "succeeded",
+                      "failed"
+                    ]
+                  },
+                  "artifact": {
+                    "$ref": "#/$defs/durableArtifact"
+                  }
+                }
+              }
+            ]
           },
           {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "schema_version",
-              "task_id",
-              "intent_id",
-              "expected_revision",
-              "input_fingerprint",
-              "phase_instance",
-              "step",
-              "status"
-            ],
-            "properties": {
-              "schema_version": {
-                "const": "1"
-              },
-              "task_id": {
-                "$ref": "#/$defs/taskSlug"
-              },
-              "intent_id": {
-                "$ref": "#/$defs/pathSafeId"
-              },
-              "expected_revision": {
-                "$ref": "#/$defs/integer"
-              },
-              "input_fingerprint": {
-                "$ref": "#/$defs/digest"
-              },
-              "phase_instance": {
-                "$ref": "#/$defs/phase"
-              },
-              "step": {
-                "enum": [
-                  "produce",
-                  "self_review",
-                  "counter_review",
-                  "triage",
-                  "adjudicate"
-                ]
-              },
-              "status": {
-                "enum": [
-                  "running",
-                  "succeeded",
-                  "failed"
-                ]
-              },
-              "artifact": {
-                "$ref": "#/$defs/durableArtifact"
-              }
-            }
+            "$ref": "#/$defs/stagedReference"
           }
         ]
       },
@@ -316,40 +326,47 @@
     },
     "archflow_counter_review": {
       "input": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "schema_version",
-          "task_id",
-          "intent_id",
-          "expected_revision",
-          "input_fingerprint",
-          "artifact_path",
-          "rubric"
-        ],
-        "properties": {
-          "schema_version": {
-            "const": "1"
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schema_version",
+              "task_id",
+              "intent_id",
+              "expected_revision",
+              "input_fingerprint",
+              "artifact_path",
+              "rubric"
+            ],
+            "properties": {
+              "schema_version": {
+                "const": "1"
+              },
+              "task_id": {
+                "$ref": "#/$defs/taskSlug"
+              },
+              "intent_id": {
+                "$ref": "#/$defs/pathSafeId"
+              },
+              "expected_revision": {
+                "$ref": "#/$defs/integer"
+              },
+              "input_fingerprint": {
+                "$ref": "#/$defs/digest"
+              },
+              "artifact_path": {
+                "$ref": "#/$defs/path"
+              },
+              "rubric": {
+                "$ref": "urn:archflow:schema:v1:rubric"
+              }
+            }
           },
-          "task_id": {
-            "$ref": "#/$defs/taskSlug"
-          },
-          "intent_id": {
-            "$ref": "#/$defs/pathSafeId"
-          },
-          "expected_revision": {
-            "$ref": "#/$defs/integer"
-          },
-          "input_fingerprint": {
-            "$ref": "#/$defs/digest"
-          },
-          "artifact_path": {
-            "$ref": "#/$defs/path"
-          },
-          "rubric": {
-            "$ref": "urn:archflow:schema:v1:rubric"
+          {
+            "$ref": "#/$defs/stagedReference"
           }
-        }
+        ]
       },
       "success": {
         "type": "object",
@@ -412,43 +429,50 @@
     },
     "archflow_adjudicate": {
       "input": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "schema_version",
-          "task_id",
-          "intent_id",
-          "expected_revision",
-          "input_fingerprint",
-          "artifact_path",
-          "upstream_paths"
-        ],
-        "properties": {
-          "schema_version": {
-            "const": "1"
-          },
-          "task_id": {
-            "$ref": "#/$defs/taskSlug"
-          },
-          "intent_id": {
-            "$ref": "#/$defs/pathSafeId"
-          },
-          "expected_revision": {
-            "$ref": "#/$defs/integer"
-          },
-          "input_fingerprint": {
-            "$ref": "#/$defs/digest"
-          },
-          "artifact_path": {
-            "$ref": "#/$defs/path"
-          },
-          "upstream_paths": {
-            "type": "array",
-            "items": {
-              "$ref": "#/$defs/path"
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schema_version",
+              "task_id",
+              "intent_id",
+              "expected_revision",
+              "input_fingerprint",
+              "artifact_path",
+              "upstream_paths"
+            ],
+            "properties": {
+              "schema_version": {
+                "const": "1"
+              },
+              "task_id": {
+                "$ref": "#/$defs/taskSlug"
+              },
+              "intent_id": {
+                "$ref": "#/$defs/pathSafeId"
+              },
+              "expected_revision": {
+                "$ref": "#/$defs/integer"
+              },
+              "input_fingerprint": {
+                "$ref": "#/$defs/digest"
+              },
+              "artifact_path": {
+                "$ref": "#/$defs/path"
+              },
+              "upstream_paths": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/path"
+                }
+              }
             }
+          },
+          {
+            "$ref": "#/$defs/stagedReference"
           }
-        }
+        ]
       },
       "success": {
         "type": "object",
@@ -522,183 +546,190 @@
     },
     "archflow_gate": {
       "input": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "schema_version",
-          "task_id",
-          "intent_id",
-          "expected_revision",
-          "input_fingerprint",
-          "phase_instance",
-          "summary",
-          "subject_digest",
-          "current_evidence",
-          "kind",
-          "context"
-        ],
-        "properties": {
-          "schema_version": {
-            "const": "1"
-          },
-          "task_id": {
-            "$ref": "#/$defs/taskSlug"
-          },
-          "intent_id": {
-            "$ref": "#/$defs/pathSafeId"
-          },
-          "expected_revision": {
-            "$ref": "#/$defs/integer"
-          },
-          "input_fingerprint": {
-            "$ref": "#/$defs/digest"
-          },
-          "phase_instance": {
-            "$ref": "#/$defs/phase"
-          },
-          "summary": {
-            "$ref": "#/$defs/text"
-          },
-          "subject_digest": {
-            "$ref": "#/$defs/digest"
-          },
-          "current_evidence": {
-            "$ref": "#/$defs/currentEvidence"
-          },
-          "supersedes": {
+        "oneOf": [
+          {
             "type": "object",
             "additionalProperties": false,
             "required": [
-              "superseded_gate_id",
-              "accepted_triage_digest",
-              "old_subject_digest"
+              "schema_version",
+              "task_id",
+              "intent_id",
+              "expected_revision",
+              "input_fingerprint",
+              "phase_instance",
+              "summary",
+              "subject_digest",
+              "current_evidence",
+              "kind",
+              "context"
             ],
             "properties": {
-              "superseded_gate_id": {
+              "schema_version": {
+                "const": "1"
+              },
+              "task_id": {
+                "$ref": "#/$defs/taskSlug"
+              },
+              "intent_id": {
                 "$ref": "#/$defs/pathSafeId"
               },
-              "accepted_triage_digest": {
+              "expected_revision": {
+                "$ref": "#/$defs/integer"
+              },
+              "input_fingerprint": {
                 "$ref": "#/$defs/digest"
               },
-              "old_subject_digest": {
+              "phase_instance": {
+                "$ref": "#/$defs/phase"
+              },
+              "summary": {
+                "$ref": "#/$defs/text"
+              },
+              "subject_digest": {
                 "$ref": "#/$defs/digest"
+              },
+              "current_evidence": {
+                "$ref": "#/$defs/currentEvidence"
+              },
+              "supersedes": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "superseded_gate_id",
+                  "accepted_triage_digest",
+                  "old_subject_digest"
+                ],
+                "properties": {
+                  "superseded_gate_id": {
+                    "$ref": "#/$defs/pathSafeId"
+                  },
+                  "accepted_triage_digest": {
+                    "$ref": "#/$defs/digest"
+                  },
+                  "old_subject_digest": {
+                    "$ref": "#/$defs/digest"
+                  }
+                }
+              },
+              "supplemental_outcome": {
+                "$ref": "urn:archflow:schema:v1:supplemental-review"
+              },
+              "kind": {
+                "enum": [
+                  "artifact-approval",
+                  "review-trigger",
+                  "material-drift",
+                  "adjudication-failure",
+                  "attempts-exhausted",
+                  "constitution-edit",
+                  "commit-authorization",
+                  "restore-collision",
+                  "migration-audit"
+                ]
+              },
+              "context": {
+                "type": "object"
               }
-            }
-          },
-          "supplemental_outcome": {
-            "$ref": "urn:archflow:schema:v1:supplemental-review"
-          },
-          "kind": {
-            "enum": [
-              "artifact-approval",
-              "review-trigger",
-              "material-drift",
-              "adjudication-failure",
-              "attempts-exhausted",
-              "constitution-edit",
-              "commit-authorization",
-              "restore-collision",
-              "migration-audit"
+            },
+            "allOf": [
+              {
+                "oneOf": [
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "artifact-approval"
+                      },
+                      "context": {
+                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/artifactApproval/properties/context"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "review-trigger"
+                      },
+                      "context": {
+                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/reviewTrigger/properties/context"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "material-drift"
+                      },
+                      "context": {
+                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/materialDrift/properties/context"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "adjudication-failure"
+                      },
+                      "context": {
+                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/adjudicationFailure/properties/context"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "attempts-exhausted"
+                      },
+                      "context": {
+                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/attemptsExhausted/properties/context"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "constitution-edit"
+                      },
+                      "context": {
+                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/constitutionEdit/properties/context"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "commit-authorization"
+                      },
+                      "context": {
+                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/commitAuthorization/properties/context"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "restore-collision"
+                      },
+                      "context": {
+                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/restoreCollision/properties/context"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "migration-audit"
+                      },
+                      "context": {
+                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/migrationAudit/properties/context"
+                      }
+                    }
+                  }
+                ]
+              }
             ]
           },
-          "context": {
-            "type": "object"
-          }
-        },
-        "allOf": [
           {
-            "oneOf": [
-              {
-                "properties": {
-                  "kind": {
-                    "const": "artifact-approval"
-                  },
-                  "context": {
-                    "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/artifactApproval/properties/context"
-                  }
-                }
-              },
-              {
-                "properties": {
-                  "kind": {
-                    "const": "review-trigger"
-                  },
-                  "context": {
-                    "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/reviewTrigger/properties/context"
-                  }
-                }
-              },
-              {
-                "properties": {
-                  "kind": {
-                    "const": "material-drift"
-                  },
-                  "context": {
-                    "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/materialDrift/properties/context"
-                  }
-                }
-              },
-              {
-                "properties": {
-                  "kind": {
-                    "const": "adjudication-failure"
-                  },
-                  "context": {
-                    "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/adjudicationFailure/properties/context"
-                  }
-                }
-              },
-              {
-                "properties": {
-                  "kind": {
-                    "const": "attempts-exhausted"
-                  },
-                  "context": {
-                    "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/attemptsExhausted/properties/context"
-                  }
-                }
-              },
-              {
-                "properties": {
-                  "kind": {
-                    "const": "constitution-edit"
-                  },
-                  "context": {
-                    "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/constitutionEdit/properties/context"
-                  }
-                }
-              },
-              {
-                "properties": {
-                  "kind": {
-                    "const": "commit-authorization"
-                  },
-                  "context": {
-                    "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/commitAuthorization/properties/context"
-                  }
-                }
-              },
-              {
-                "properties": {
-                  "kind": {
-                    "const": "restore-collision"
-                  },
-                  "context": {
-                    "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/restoreCollision/properties/context"
-                  }
-                }
-              },
-              {
-                "properties": {
-                  "kind": {
-                    "const": "migration-audit"
-                  },
-                  "context": {
-                    "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/migrationAudit/properties/context"
-                  }
-                }
-              }
-            ]
+            "$ref": "#/$defs/stagedReference"
           }
         ]
       },
@@ -769,84 +800,91 @@
     },
     "archflow_waiver": {
       "input": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "schema_version",
-          "task_id",
-          "intent_id",
-          "expected_revision",
-          "input_fingerprint",
-          "origin",
-          "rationale"
-        ],
-        "properties": {
-          "schema_version": {
-            "const": "1"
-          },
-          "task_id": {
-            "$ref": "#/$defs/taskSlug"
-          },
-          "intent_id": {
-            "$ref": "#/$defs/pathSafeId"
-          },
-          "expected_revision": {
-            "$ref": "#/$defs/integer"
-          },
-          "input_fingerprint": {
-            "$ref": "#/$defs/digest"
-          },
-          "origin": {
+        "oneOf": [
+          {
             "type": "object",
             "additionalProperties": false,
             "required": [
-              "origin_gate_id",
-              "origin_decision_digest",
-              "origin_context_digest",
+              "schema_version",
               "task_id",
-              "phase_instance",
-              "subject_digest",
-              "current_evidence_set_digest",
-              "rule",
-              "scope"
+              "intent_id",
+              "expected_revision",
+              "input_fingerprint",
+              "origin",
+              "rationale"
             ],
             "properties": {
-              "origin_gate_id": {
-                "$ref": "#/$defs/pathSafeId"
-              },
-              "origin_decision_digest": {
-                "$ref": "#/$defs/digest"
-              },
-              "origin_context_digest": {
-                "$ref": "#/$defs/digest"
+              "schema_version": {
+                "const": "1"
               },
               "task_id": {
                 "$ref": "#/$defs/taskSlug"
               },
-              "phase_instance": {
-                "$ref": "#/$defs/phase"
+              "intent_id": {
+                "$ref": "#/$defs/pathSafeId"
               },
-              "subject_digest": {
+              "expected_revision": {
+                "$ref": "#/$defs/integer"
+              },
+              "input_fingerprint": {
                 "$ref": "#/$defs/digest"
               },
-              "current_evidence_set_digest": {
-                "$ref": "#/$defs/digest"
+              "origin": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "origin_gate_id",
+                  "origin_decision_digest",
+                  "origin_context_digest",
+                  "task_id",
+                  "phase_instance",
+                  "subject_digest",
+                  "current_evidence_set_digest",
+                  "rule",
+                  "scope"
+                ],
+                "properties": {
+                  "origin_gate_id": {
+                    "$ref": "#/$defs/pathSafeId"
+                  },
+                  "origin_decision_digest": {
+                    "$ref": "#/$defs/digest"
+                  },
+                  "origin_context_digest": {
+                    "$ref": "#/$defs/digest"
+                  },
+                  "task_id": {
+                    "$ref": "#/$defs/taskSlug"
+                  },
+                  "phase_instance": {
+                    "$ref": "#/$defs/phase"
+                  },
+                  "subject_digest": {
+                    "$ref": "#/$defs/digest"
+                  },
+                  "current_evidence_set_digest": {
+                    "$ref": "#/$defs/digest"
+                  },
+                  "rule": {
+                    "$ref": "#/$defs/rule"
+                  },
+                  "scope": {
+                    "$ref": "#/$defs/scope"
+                  }
+                }
               },
-              "rule": {
-                "$ref": "#/$defs/rule"
+              "rationale": {
+                "$ref": "#/$defs/text"
               },
-              "scope": {
-                "$ref": "#/$defs/scope"
+              "supplemental_outcome": {
+                "$ref": "urn:archflow:schema:v1:supplemental-review"
               }
             }
           },
-          "rationale": {
-            "$ref": "#/$defs/text"
-          },
-          "supplemental_outcome": {
-            "$ref": "urn:archflow:schema:v1:supplemental-review"
+          {
+            "$ref": "#/$defs/stagedReference"
           }
-        }
+        ]
       },
       "success": {
         "type": "object",

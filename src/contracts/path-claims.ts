@@ -74,10 +74,6 @@ export function userAskClaim(): TaskPathClaim {
   return parseTaskPathClaim("ask.md");
 }
 
-export function selfReviewClaim(phaseInstance: PhaseInstanceId): TaskPathClaim {
-  return parseTaskPathClaim(`reviews/${phaseInstance}.self.md`);
-}
-
 export function counterReviewClaim(phaseInstance: PhaseInstanceId): TaskPathClaim {
   return parseTaskPathClaim(`reviews/${phaseInstance}.counter.md`);
 }
@@ -107,7 +103,7 @@ export function tryRepositoryPathClaim(value: RawGitPath): RepositoryPathClaim |
 
 export const TASK_PATH_CLASSES = [
   "task-config", "task-state", "task-ask", "gate-interface", "document", "verification-transcript",
-  "review", "decision", "result-manifest", "result-payload", "intent", "attempt",
+  "review", "decision", "result-manifest", "result-payload", "intent", "staged-request", "attempt",
   "manual-checkpoint", "maintenance-record", "import",
 ] as const;
 export const REPOSITORY_PATH_CLASSES = [

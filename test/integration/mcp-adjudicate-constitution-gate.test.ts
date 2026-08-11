@@ -113,14 +113,10 @@ Preserve explicit human review gates.
     } as const;
     const reviews: readonly ReviewEvidence[] = [
       {
-        ...reviewBase, step: "self_review", role: "self-review", assurance: "agent-declared",
-        model_family: "claude", model: "claude-fixture", effort: "high",
-      },
-      {
         ...reviewBase, step: "counter_review", role: "counter-review", assurance: "server-attested",
         adapter: "codex-cli", cli_version: "0.146.0", model_family: "codex", model: "gpt-fixture", effort: "high",
         invocation_id: "counter-invocation", envelope_input_digest: "a".repeat(64) as never,
-        observed_output_digest: "b".repeat(64) as never, result_id: "review-result-2",
+        observed_output_digest: "b".repeat(64) as never, result_id: "review-result-1",
       },
     ];
     const references = [preparedProduce.value.reference];

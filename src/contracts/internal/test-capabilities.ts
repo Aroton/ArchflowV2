@@ -15,7 +15,6 @@ import type { AuthoritativeResultRef } from "../durable-state.js";
 import { encodePhaseInstance, decodePhaseInstance } from "../phase-instance.js";
 import {
   parseReviewEvidence,
-  type AgentDeclaredReview,
   type DegradedReview,
   type ReviewEvidence,
   type ServerAttestedReview,
@@ -75,9 +74,6 @@ export function createTestVerifiedReferencedEvidence<K extends EvidenceKind, A e
   return verified;
 }
 
-export function createVerifiedEvidenceReference(
-  evidence: AgentDeclaredReview,
-): VerifiedReferencedEvidence<"review", "agent-declared">;
 export function createVerifiedEvidenceReference(
   evidence: ServerAttestedReview,
 ): VerifiedReferencedEvidence<"review", "server-attested">;

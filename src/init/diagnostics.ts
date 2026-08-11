@@ -1,4 +1,5 @@
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
 
 import { createProjectError, type ProjectError } from "../contracts/errors.js";
 import type { AdapterId } from "../contracts/review.js";
@@ -10,7 +11,7 @@ import {
 } from "../dispatch/cli.js";
 import { DispatchProcessError } from "../dispatch/process.js";
 import { createDispatchWorkspace } from "../dispatch/workspace.js";
-import type { HostRegistrationReport } from "./registration.js";
+import { CLAUDE_MCP_TIMEOUT_MS, CODEX_TOOL_TIMEOUT_SEC, type HostRegistrationReport } from "./registration.js";
 
 export type CliInitDiagnostic = Readonly<{
   adapter: AdapterId;
@@ -30,6 +31,7 @@ export type InitDiagnostics = Readonly<{
   claude_masked_by_higher_precedence: boolean | null;
   codex_project_trusted: boolean | null;
   codex_masked_by_higher_precedence: boolean | null;
+  timeout_findings: readonly string[];
   limitations: readonly string[];
   recovery_guidance: readonly string[];
 }>;
@@ -96,10 +98,68 @@ async function diagnoseAdapter(adapter: AdapterId, repository: string): Promise<
   }
 }
 
+const TIMEOUT_FINDING_IMPACT = "Counter-review dispatches can run up to fifteen minutes, and a host default MCP timeout"
+  + " (~2 minutes in some hosts) will cut them off mid-run; re-running archflow-init repairs the entry.";
+
+/**
+ * Reports when a registered `.mcp.json` archflow entry lacks the expected `timeout`.
+ * A missing entry is a registration problem reported elsewhere, not a timeout finding.
+ */
+export function claudeTimeoutFinding(source: string | undefined): string | undefined {
+  if (source === undefined) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    return undefined;
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+  const servers = (parsed as Record<string, unknown>).mcpServers;
+  if (servers === null || typeof servers !== "object" || Array.isArray(servers)) return undefined;
+  const entry = (servers as Record<string, unknown>).archflow;
+  if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return undefined;
+  const timeout = (entry as Record<string, unknown>).timeout;
+  if (timeout === CLAUDE_MCP_TIMEOUT_MS) return undefined;
+  const detail = timeout === undefined
+    ? `is missing "timeout": ${CLAUDE_MCP_TIMEOUT_MS}`
+    : `has "timeout" ${JSON.stringify(timeout)} instead of ${CLAUDE_MCP_TIMEOUT_MS}`;
+  return `The archflow entry in .mcp.json ${detail}. ${TIMEOUT_FINDING_IMPACT}`;
+}
+
+/**
+ * Reports when a registered `.codex/config.toml` archflow block lacks the expected
+ * `tool_timeout_sec`. A missing block is a registration problem reported elsewhere.
+ */
+export function codexTimeoutFinding(source: string | undefined): string | undefined {
+  if (source === undefined) return undefined;
+  const lines = source.split(/\r?\n/u);
+  const start = lines.findIndex((line) => /^\[\s*mcp_servers\.archflow\s*\]$/u.test(line.trim()));
+  if (start === -1) return undefined;
+  for (let index = start + 1; index < lines.length && !/^\s*\[/u.test(lines[index]!); index += 1) {
+    const match = /^\s*tool_timeout_sec\s*=\s*(\S+)/u.exec(lines[index]!);
+    if (match === null) continue;
+    if (match[1] === String(CODEX_TOOL_TIMEOUT_SEC)) return undefined;
+    return `The [mcp_servers.archflow] block in .codex/config.toml has tool_timeout_sec = ${match[1]}`
+      + ` instead of ${CODEX_TOOL_TIMEOUT_SEC}. ${TIMEOUT_FINDING_IMPACT}`;
+  }
+  return `The [mcp_servers.archflow] block in .codex/config.toml is missing tool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SEC}.`
+    + ` ${TIMEOUT_FINDING_IMPACT}`;
+}
+
+async function readHostConfig(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
 export async function collectInitDiagnostics(input: InitDiagnosticsInput): Promise<InitDiagnostics> {
-  const [claude, codex] = await Promise.all([
+  const [claude, codex, claudeHostConfig, codexHostConfig] = await Promise.all([
     diagnoseAdapter("claude-cli", input.working_directory),
     diagnoseAdapter("codex-cli", input.working_directory),
+    readHostConfig(join(input.working_directory, ".mcp.json")),
+    readHostConfig(join(input.working_directory, ".codex", "config.toml")),
   ]);
   return Object.freeze({
     schema_version: "1",
@@ -110,6 +170,10 @@ export async function collectInitDiagnostics(input: InitDiagnosticsInput): Promi
     claude_masked_by_higher_precedence: input.claude_registration?.masked_by_higher_precedence ?? null,
     codex_project_trusted: input.codex_registration?.project_trusted ?? null,
     codex_masked_by_higher_precedence: input.codex_registration?.masked_by_higher_precedence ?? null,
+    timeout_findings: Object.freeze(
+      [claudeTimeoutFinding(claudeHostConfig), codexTimeoutFinding(codexHostConfig)]
+        .filter((finding): finding is string => finding !== undefined),
+    ),
     limitations: Object.freeze([
       "Dispatch context hygiene uses a generated home and scrubbed environment, but it is best-effort and is not an enforced isolation boundary.",
       "Claude project MCP registration may remain pending until a human approves it; reset choices with `claude mcp reset-project-choices` when needed.",

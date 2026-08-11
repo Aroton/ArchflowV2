@@ -181,7 +181,6 @@ async function committedImplementationState(root: string, plannedFinalPhase: num
   };
   const contextDigest = computeGateContextDigest("commit-authorization", context);
   const evidence = { set_digest: parseSha256Digest("a".repeat(64)), slots: [
-    { role: "self-review", evidence_digest: parseSha256Digest("b".repeat(64)), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
     { role: "counter-review", evidence_digest: parseSha256Digest("c".repeat(64)), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
   ] } as const;
   const request = parseGateRequest({
@@ -423,31 +422,30 @@ describe("bundled manual workflow", () => {
     const resultRoot = join(root, ".archflow", "tasks", task, "results", "sha256");
     const produceManifest = JSON.parse(readFileSync(join(resultRoot, readdirSync(resultRoot)[0]!, "manifest.json"), "utf8"));
     const subjectDigest = produceManifest.artifact_digest;
-    const review = (role: "self-review" | "counter-review") => ({
+    const review = () => ({
       schema_version: "1", task_id: task, phase_instance: "prd",
-      step: role === "self-review" ? "self_review" : "counter_review", role,
+      step: "counter_review", role: "counter-review",
       subject_digest: subjectDigest, input_fingerprint: head().input_fingerprint,
       rubric_digest: canonicalJsonDigest({ schema_version: "1", rubric: "manual" }),
       producer_family: "claude", findings: [], matched_rule_versions: [], verdict: "pass", blocking_count: 0,
-      assurance: role === "self-review" ? "agent-declared" : "degraded",
-      model_family: role === "self-review" ? "claude" : "codex", model: "fixture", effort: "unknown",
-      ...(role === "counter-review" ? { reason: "manual fallback" } : {}),
+      assurance: "degraded",
+      model_family: "codex", model: "fixture", effort: "unknown",
+      reason: "manual fallback",
     });
-    for (const role of ["self-review", "counter-review"] as const) {
-      const step = role === "self-review" ? "self_review" : "counter_review";
+    {
       expect(cli(root, "manual-next", {
-        schema_version: "1", operation: "step", phase_instance: "prd", step, status: "running",
+        schema_version: "1", operation: "step", phase_instance: "prd", step: "counter_review", status: "running",
       })).toMatchObject({ status: 0, value: { ok: true } });
       const installed = cli(root, "manual-next", {
         schema_version: "1", operation: "step", phase_instance: "prd",
-        step, status: "succeeded",
-        result: { result_id: `manual-${role}`, evidence: { kind: "review", evidence: review(role) } },
+        step: "counter_review", status: "succeeded",
+        result: { result_id: "manual-counter-review", evidence: { kind: "review", evidence: review() } },
       });
       const taskEntries = readdirSync(join(root, ".archflow", "tasks", task)).sort();
       const reviewEntries = taskEntries.includes("reviews")
         ? readdirSync(join(root, ".archflow", "tasks", task, "reviews")).sort()
         : [];
-      expect(installed, `${role}: ${installed.stderr}\n${JSON.stringify(installed.value)}\n${JSON.stringify({ taskEntries, reviewEntries })}`)
+      expect(installed, `counter-review: ${installed.stderr}\n${JSON.stringify(installed.value)}\n${JSON.stringify({ taskEntries, reviewEntries })}`)
         .toMatchObject({ status: 0, value: { ok: true } });
     }
 

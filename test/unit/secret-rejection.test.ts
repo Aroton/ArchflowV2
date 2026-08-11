@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { AgentDeclaredReview } from "../../src/contracts/review.js";
+import type { DegradedReview } from "../../src/contracts/review.js";
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
@@ -134,11 +134,11 @@ describe("secret rejection propagation", () => {
 
   it("propagates rejection through evidence-result preparation", async () => {
     const h = await workspace("evidence");
-    const review: AgentDeclaredReview = {
-      schema_version: "1", task_id: h.taskId, phase_instance: "prd", step: "self_review", role: "self-review",
+    const review: DegradedReview = {
+      schema_version: "1", task_id: h.taskId, phase_instance: "prd", step: "counter_review", role: "counter-review",
       subject_digest: D("a"), input_fingerprint: D("b"), rubric_digest: D("c"), producer_family: "claude",
       findings: [], matched_rule_versions: [], verdict: "pass", blocking_count: 0,
-      assurance: "agent-declared", model_family: "claude", model: "claude", effort: "high",
+      assurance: "degraded", reason: "manual fallback", model_family: "codex", model: "unknown", effort: "unknown",
     };
     const before = durableShape(h);
     const result = await prepareEvidenceResult({

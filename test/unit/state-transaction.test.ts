@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest, gitBlobOid, parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../../src/contracts/canonical.js";
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
-import type { ResultManifestV1, ReviewEvidenceArtifactV1 } from "../../src/contracts/durable-result-manifest.js";
+import type { ResultManifestV1, TriageArtifactV1 } from "../../src/contracts/durable-result-manifest.js";
 import type { IntentReceiptV1 } from "../../src/contracts/durable-intent.js";
 import type { AuthoritativeResultRef, TaskStateV1 } from "../../src/contracts/durable-state.js";
 import {
@@ -266,9 +266,9 @@ function documentResultFixture(h: Harness, bytes: Uint8Array): Readonly<{
 
 type ResultFixture = ReturnType<typeof documentResultFixture>;
 
-function reviewResultFixture(h: Harness, source: ReviewEvidenceArtifactV1): ResultFixture {
-  const bytes = new TextEncoder().encode("# Self review\n");
-  const outputPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/reviews/${PHASE}.self.md`);
+function triageResultFixture(h: Harness, source: TriageArtifactV1): ResultFixture {
+  const bytes = new TextEncoder().encode("# Triage\n");
+  const outputPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/reviews/${PHASE}.triage.md`);
   const renderedDigest = sha256Bytes(bytes);
   const byteCount = parseSafeInteger(bytes.byteLength);
   const output = {
@@ -280,7 +280,7 @@ function reviewResultFixture(h: Harness, source: ReviewEvidenceArtifactV1): Resu
   const snapshotDigest = deriveDeclaredSnapshotDigest([output], projections);
   const manifestValue: ResultManifestV1 = {
     schema_version: "1", task_id: TASK, repository_identity_digest: h.authority.repository_identity_digest,
-    result_id: parseSafeId("state:8"), phase_instance: PHASE, step: "self_review",
+    result_id: parseSafeId("state:8"), phase_instance: PHASE, step: "triage",
     artifact_digest: canonicalJsonDigest(source.evidence), source_artifact: source,
     input_fingerprint: FINGERPRINT, snapshot_digest: snapshotDigest, outputs: [output], projections,
     accounting: {
@@ -353,27 +353,21 @@ function remanifest(
   };
 }
 
-const selfReviewArtifact = (): ReviewEvidenceArtifactV1 => ({
+const triageArtifact = (): TriageArtifactV1 => ({
   schema_version: "1",
-  artifact_kind: "review-evidence",
+  artifact_kind: "triage",
   evidence: {
     schema_version: "1",
     task_id: TASK,
     phase_instance: PHASE,
-    step: "self_review",
-    role: "self-review",
+    step: "triage",
     subject_digest: D("1"),
     input_fingerprint: FINGERPRINT,
-    rubric_digest: D("2"),
-    producer_family: "claude",
-    findings: [],
-    matched_rule_versions: [],
-    verdict: "pass",
-    blocking_count: 0,
-    assurance: "agent-declared",
-    model_family: "claude",
-    model: "claude-test",
-    effort: "high",
+    current_evidence_set_digest: D("2"),
+    source_evidence_digests: [D("8")],
+    dispositions: [],
+    accepted_count: 0,
+    rejected_count: 0,
   },
 });
 
@@ -397,15 +391,15 @@ function call(expected_revision: number, status: "running" | "succeeded" | "fail
   });
 }
 
-function selfReviewCall(expected_revision: number, artifact?: ReviewEvidenceArtifactV1): StateCall {
+function triageCall(expected_revision: number, artifact?: TriageArtifactV1): StateCall {
   return parseToolCall("archflow_state", {
     schema_version: "1",
     task_id: TASK,
-    intent_id: "self-review-intent",
+    intent_id: "triage-intent",
     expected_revision,
     input_fingerprint: FINGERPRINT,
     phase_instance: PHASE,
-    step: "self_review",
+    step: "triage",
     status: "succeeded",
     ...(artifact === undefined ? {} : { artifact }),
   });
@@ -581,35 +575,35 @@ describe("mature state transaction kernel", () => {
 
   it("requires an evidence installation to carry the exact archflow_state artifact", async () => {
     const missing = await harness();
-    missing.state = canonicalDocument({ ...missing.state.value, step: "self_review", status: "running" });
-    const source = selfReviewArtifact();
+    missing.state = canonicalDocument({ ...missing.state.value, step: "triage", status: "running" });
+    const source = triageArtifact();
     await expect(runInstallation(
       missing,
-      selfReviewCall(7),
-      reviewResultFixture(missing, source),
+      triageCall(7),
+      triageResultFixture(missing, source),
     )).rejects.toThrow(/requires an archflow_state artifact/u);
     expect(missing.events).not.toContain("receipt-create");
 
     const changed = await harness();
-    changed.state = canonicalDocument({ ...changed.state.value, step: "self_review", status: "running" });
+    changed.state = canonicalDocument({ ...changed.state.value, step: "triage", status: "running" });
     await expect(runInstallation(
       changed,
-      selfReviewCall(7, {
+      triageCall(7, {
         ...source,
-        evidence: { ...source.evidence, model: "different-model" },
+        evidence: { ...source.evidence, current_evidence_set_digest: D("9") },
       }),
-      reviewResultFixture(changed, source),
+      triageResultFixture(changed, source),
     )).rejects.toThrow(/source does not match the archflow_state artifact/u);
     expect(changed.events).not.toContain("receipt-create");
   });
 
   it("accepts an evidence installation only when the request and retained source are identical", async () => {
     const h = await harness();
-    h.state = canonicalDocument({ ...h.state.value, step: "self_review", status: "running" });
-    const source = selfReviewArtifact();
-    const result = await runInstallation(h, selfReviewCall(7, source), reviewResultFixture(h, source));
+    h.state = canonicalDocument({ ...h.state.value, step: "triage", status: "running" });
+    const source = triageArtifact();
+    const result = await runInstallation(h, triageCall(7, source), triageResultFixture(h, source));
     expect(result.ok).toBe(true);
-    expect(h.receipt?.value.operation).toBe("record-self-review");
+    expect(h.receipt?.value.operation).toBe("record-triage");
     expect(h.state.value.authoritative_results).toHaveLength(1);
   });
 
@@ -689,26 +683,26 @@ describe("mature state transaction kernel", () => {
     )).rejects.toThrow(/tool and source kind do not match/u);
 
     const wrongSource = await harness();
-    wrongSource.state = canonicalDocument({ ...wrongSource.state.value, step: "self_review", status: "running" });
+    wrongSource.state = canonicalDocument({ ...wrongSource.state.value, step: "triage", status: "running" });
     await expect(runInstallation(
       wrongSource,
-      selfReviewCall(7, selfReviewArtifact()),
+      triageCall(7, triageArtifact()),
       documentResultFixture(wrongSource, new TextEncoder().encode("retained")),
     )).rejects.toThrow(/source kind is not legal/u);
 
     const wrongBoundary = await harness();
-    wrongBoundary.state = canonicalDocument({ ...wrongBoundary.state.value, step: "self_review", status: "running" });
-    const boundarySource = selfReviewArtifact();
-    const boundaryFixture = reviewResultFixture(wrongBoundary, boundarySource);
+    wrongBoundary.state = canonicalDocument({ ...wrongBoundary.state.value, step: "triage", status: "running" });
+    const boundarySource = triageArtifact();
+    const boundaryFixture = triageResultFixture(wrongBoundary, boundarySource);
     const { revision: _boundaryRevision, committed_intent: _boundaryIntent, ...boundaryDraft } =
       wrongBoundary.state.value;
     await expect(runInstallation(
       wrongBoundary,
-      selfReviewCall(7, boundarySource),
+      triageCall(7, boundarySource),
       boundaryFixture,
       { next_state: { ...boundaryDraft, status: "running", authoritative_results: [{
         phase_instance: PHASE,
-        step: "self_review",
+        step: "triage",
         result_digest: boundaryFixture.prepared.result_digest,
         result_id: parseSafeId("state:8"),
         input_fingerprint: FINGERPRINT,
@@ -717,13 +711,13 @@ describe("mature state transaction kernel", () => {
     )).rejects.toThrow(/only at its successful evidence boundary/u);
 
     const wrongReference = await harness();
-    wrongReference.state = canonicalDocument({ ...wrongReference.state.value, step: "self_review", status: "running" });
-    const referenceSource = selfReviewArtifact();
-    const referenceFixture = reviewResultFixture(wrongReference, referenceSource);
+    wrongReference.state = canonicalDocument({ ...wrongReference.state.value, step: "triage", status: "running" });
+    const referenceSource = triageArtifact();
+    const referenceFixture = triageResultFixture(wrongReference, referenceSource);
     const { revision: _revision, committed_intent: _intent, ...referenceDraft } = wrongReference.state.value;
     await expect(runInstallation(
       wrongReference,
-      selfReviewCall(7, referenceSource),
+      triageCall(7, referenceSource),
       referenceFixture,
       { next_state: { ...referenceDraft, status: "succeeded", authoritative_results: [] } },
     )).rejects.toThrow(/reference does not match the prepared transaction/u);

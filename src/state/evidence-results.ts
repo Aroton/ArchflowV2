@@ -14,8 +14,12 @@ import type {
   AuthoritativeResultRef,
   TaskStateV1,
 } from "../contracts/durable-state.js";
+import type {
+  DocumentArtifactV1,
+  EditorialPredecessorRef,
+} from "../contracts/durable-document.js";
 import { validateDurableSemantics } from "../contracts/durable.js";
-import type { ProjectResult } from "../contracts/errors.js";
+import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import {
   parseSafeInteger,
   type SafeId,
@@ -30,7 +34,6 @@ import {
   adjudicationReviewClaim,
   counterReviewClaim,
   parseTaskPathClaim,
-  selfReviewClaim,
   toRepositoryPathClaim,
   triageReviewClaim,
 } from "../contracts/path-claims.js";
@@ -73,6 +76,7 @@ import {
   assertInternalTransactionAuthority,
   type TransactionAuthority,
 } from "./authority.js";
+import { loadCurrentProduceSubject } from "./produce-subject.js";
 import {
   captureProjectionTarget,
   deriveDeclaredSnapshotDigest,
@@ -144,12 +148,10 @@ const ok = <T>(value: T): ProjectResult<T> =>
 function projectionClaim(
   phaseInstance: PhaseInstanceId,
   value: EvidenceResultValue,
-): ReturnType<typeof selfReviewClaim> {
+): ReturnType<typeof counterReviewClaim> {
   if (value.kind === "triage") return triageReviewClaim(phaseInstance);
   if (value.kind === "adjudication") return adjudicationReviewClaim(phaseInstance);
-  return value.evidence.role === "self-review"
-    ? selfReviewClaim(phaseInstance)
-    : counterReviewClaim(phaseInstance);
+  return counterReviewClaim(phaseInstance);
 }
 
 function qualifyAndRender(value: EvidenceResultValue): Readonly<{
@@ -390,7 +392,7 @@ export async function prepareEvidenceResult(
 }
 
 function expectedSourceKind(step: PipelineStep): EvidenceArtifactV1["artifact_kind"] | undefined {
-  if (step === "self_review" || step === "counter_review") return "review-evidence";
+  if (step === "counter_review") return "review-evidence";
   if (step === "triage") return "triage";
   if (step === "adjudicate") return "adjudication-evidence";
   return undefined;
@@ -425,10 +427,8 @@ function validateLoadedEvidence(
   }
   if (
     manifest.source_artifact.artifact_kind === "review-evidence" &&
-    ((reference.step === "self_review" &&
-      manifest.source_artifact.evidence.role !== "self-review") ||
-      (reference.step === "counter_review" &&
-        manifest.source_artifact.evidence.role !== "counter-review"))
+    reference.step === "counter_review" &&
+    manifest.source_artifact.evidence.role !== "counter-review"
   ) {
     throw new TypeError("loaded review evidence role disagrees with its step");
   }
@@ -475,61 +475,35 @@ export async function loadRetainedEvidence(
 }
 
 /**
- * Derives the only admissible ordered self/counter evidence set from retained manifests.
- * This is deliberately independent of caller-supplied set references: the review payloads,
- * their canonical digests, roles, assurances, and family relationship define the set.
+ * Derives the only admissible counter-review evidence set from retained manifests.
+ * This is deliberately independent of caller-supplied set references: the review payload,
+ * its canonical digest, role, assurance, and family relationship define the set.
  */
 export function deriveCurrentEvidenceSet(
   retained: RetainedEvidenceSet,
 ): DerivedCurrentEvidenceSet {
-  const selfEntry = retained.get("self_review");
   const counterEntry = retained.get("counter_review");
-  if (selfEntry === undefined || counterEntry === undefined) {
-    throw new TypeError("current review reconstruction requires self and counter evidence");
+  if (counterEntry === undefined) {
+    throw new TypeError("current review reconstruction requires counter evidence");
   }
-  const selfSource = selfEntry.manifest.source_artifact;
   const counterSource = counterEntry.manifest.source_artifact;
-  if (
-    selfSource.artifact_kind !== "review-evidence" ||
-    counterSource.artifact_kind !== "review-evidence"
-  ) {
+  if (counterSource.artifact_kind !== "review-evidence") {
     throw new TypeError("current review manifests have the wrong source kind");
   }
-  const self = selfSource.evidence;
   const counter = counterSource.evidence;
   if (
-    self.role !== "self-review" ||
-    self.assurance !== "agent-declared" ||
-    self.model_family !== self.producer_family ||
     counter.role !== "counter-review" ||
     (counter.assurance !== "server-attested" && counter.assurance !== "degraded") ||
-    counter.model_family === counter.producer_family ||
-    self.task_id !== counter.task_id ||
-    self.phase_instance !== counter.phase_instance ||
-    self.subject_digest !== counter.subject_digest ||
-    self.input_fingerprint !== counter.input_fingerprint ||
-    self.rubric_digest !== counter.rubric_digest ||
-    self.producer_family !== counter.producer_family
+    counter.model_family === counter.producer_family
   ) {
     throw new TypeError("retained reviews do not form one current review set");
   }
 
-  const verifiedSelf = createVerifiedEvidenceReference(self);
   const verifiedCounter = createVerifiedEvidenceReference(counter);
-  if (
-    verifiedSelf.evidence_digest !== selfEntry.manifest.artifact_digest ||
-    verifiedCounter.evidence_digest !== counterEntry.manifest.artifact_digest
-  ) {
+  if (verifiedCounter.evidence_digest !== counterEntry.manifest.artifact_digest) {
     throw new TypeError("retained review evidence digest does not match its manifest");
   }
   const slots = parseRequiredReviewSlots([{
-    role: "self-review",
-    evidence_digest: verifiedSelf.evidence_digest,
-    assurance: "agent-declared",
-    producer_family: self.producer_family,
-    reviewer_family: self.model_family,
-    independence: "same-family-self",
-  }, {
     role: "counter-review",
     evidence_digest: verifiedCounter.evidence_digest,
     assurance: counter.assurance,
@@ -538,20 +512,132 @@ export function deriveCurrentEvidenceSet(
     independence: "opposite-family",
   }]) as RequiredReviewSlots;
   return Object.freeze({
-    task_id: self.task_id,
-    phase_instance: self.phase_instance as PhaseInstanceId,
-    subject_digest: self.subject_digest,
-    input_fingerprint: self.input_fingerprint,
+    task_id: counter.task_id,
+    phase_instance: counter.phase_instance as PhaseInstanceId,
+    subject_digest: counter.subject_digest,
+    input_fingerprint: counter.input_fingerprint,
     current_evidence_set: currentEvidenceSetRef(slots),
     reviews: Object.freeze([
-      verifiedSelf,
       verifiedCounter,
     ]) as readonly VerifiedReferencedEvidence<"review">[],
   });
 }
 
+type RetainedEditorialTriage = Readonly<{
+  triage: TriageCandidate;
+  triage_result_digest: Sha256Digest;
+}>;
+
+// A static edge here participates in the production -> state-results -> evidence-results ->
+// produce-subject module cycle, which is safe: the binding is only dereferenced at call time,
+// long after module initialization. A dynamic import() here is what actually breaks the bundle —
+// it forces esbuild to wrap the whole cycle (and, transitively, zod) in lazy __esm closures,
+// which reorders bundle initialization and crashes the bundled runtime before main.
+async function currentProduceSubject(
+  dependencies: RetainedEvidenceDependencies,
+  state: TaskStateV1,
+): ReturnType<typeof loadCurrentProduceSubject> {
+  return loadCurrentProduceSubject(dependencies, state);
+}
+
 /**
- * Reconstructs the current self/counter pair from canonical durable authority. This is the
+ * The retained triage entry, but only when it is an editorial authorizer: every accepted finding
+ * is `accepted-editorial` and the triage binds the derived current review set exactly.
+ */
+function retainedEditorialTriage(retained: RetainedEvidenceSet): RetainedEditorialTriage | undefined {
+  const entry = retained.get("triage");
+  const source = entry?.manifest.source_artifact;
+  if (entry === undefined || source?.artifact_kind !== "triage") return undefined;
+  const triage = source.evidence;
+  if (triage.accepted_count !== 0 || (triage.accepted_editorial_count ?? 0) === 0) return undefined;
+  let derived: DerivedCurrentEvidenceSet;
+  try {
+    derived = deriveCurrentEvidenceSet(retained);
+  } catch {
+    return undefined;
+  }
+  if (
+    triage.subject_digest !== derived.subject_digest ||
+    triage.input_fingerprint !== derived.input_fingerprint ||
+    triage.current_evidence_set_digest !== derived.current_evidence_set.set_digest ||
+    triage.source_evidence_digests.length !== derived.current_evidence_set.slots.length ||
+    triage.source_evidence_digests.some((digest, index) =>
+      digest !== derived.current_evidence_set.slots[index]!.evidence_digest)
+  ) return undefined;
+  return Object.freeze({ triage, triage_result_digest: entry.reference.result_digest });
+}
+
+/**
+ * Derives the editorial predecessor link a produce re-entry must declare, entirely from durable
+ * authority: the retained produce result the pending editorial triage judged. Returns undefined
+ * when durable state shows no pending editorial revision — the triage is absent, has plain
+ * accepts, or is already bound to a predecessor rather than to the retained artifact itself.
+ */
+export async function derivePendingEditorialPredecessor(
+  dependencies: RetainedEvidenceDependencies,
+  state: TaskStateV1,
+): Promise<EditorialPredecessorRef | undefined> {
+  const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
+  if (!retained.ok) return undefined;
+  const editorial = retainedEditorialTriage(retained.value);
+  if (editorial === undefined) return undefined;
+  const produced = await currentProduceSubject(dependencies, state);
+  if (!produced.ok || produced.value.artifact.artifact_kind !== "document") return undefined;
+  if (editorial.triage.subject_digest !== produced.value.artifact_digest) return undefined;
+  // The pair carries the fingerprint the review evidence is bound to — the review cycle's, from
+  // the triage — not the produce artifact's own produce-time fingerprint (the two differ: the
+  // rubric joins the fingerprint subject at counter-review time).
+  return Object.freeze({
+    subject_digest: produced.value.artifact_digest,
+    input_fingerprint: editorial.triage.input_fingerprint,
+    triage_result_digest: editorial.triage_result_digest,
+  });
+}
+
+/**
+ * Record-time validation of a declared editorial predecessor. Accepts the artifact only when the
+ * declared predecessor is the produce result currently retained in durable authority, the
+ * retained triage authorizes exactly this revision (current for the predecessor pair, editorial
+ * accepts only, result digest as declared), and the bytes actually changed.
+ */
+export async function validateEditorialPredecessorDeclaration(
+  dependencies: RetainedEvidenceDependencies,
+  state: TaskStateV1,
+  artifact: DocumentArtifactV1,
+): Promise<ProjectResult<undefined>> {
+  const declared = artifact.editorial_predecessor;
+  if (declared === undefined) return ok(undefined);
+  const invalid = (issue: string): ProjectResult<undefined> => Object.freeze({
+    schema_version: "1",
+    ok: false,
+    error: createProjectError("STATE_INVALID", {
+      phase_instance: state.phase_instance,
+      issue_code: issue,
+    }),
+  });
+  const produced = await currentProduceSubject(dependencies, state);
+  if (
+    !produced.ok ||
+    produced.value.artifact.artifact_kind !== "document" ||
+    produced.value.artifact_digest !== declared.subject_digest
+  ) return invalid("editorial-predecessor-not-current-produce");
+  const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
+  if (!retained.ok) return invalid("editorial-authorizing-triage-invalid");
+  const editorial = retainedEditorialTriage(retained.value);
+  if (
+    editorial === undefined ||
+    editorial.triage.subject_digest !== declared.subject_digest ||
+    editorial.triage.input_fingerprint !== declared.input_fingerprint ||
+    editorial.triage_result_digest !== declared.triage_result_digest
+  ) return invalid("editorial-authorizing-triage-invalid");
+  if (artifact.content_digest === produced.value.artifact.content_digest) {
+    return invalid("editorial-revision-unchanged-bytes");
+  }
+  return ok(undefined);
+}
+
+/**
+ * Reconstructs the current counter review from canonical durable authority. This is the
  * production path to the branded set consumed by triage: callers provide neither an authority
  * brand for the set nor invented receipt/revision facts for either review.
  */
@@ -590,10 +676,28 @@ export async function loadCurrentReviewSet(
   const derived = deriveCurrentEvidenceSet(retained.value);
   if (
     derived.task_id !== authority.task_id ||
-    derived.phase_instance !== phase_instance ||
-    derived.input_fingerprint !== stateDocument.value.input_fingerprint
+    derived.phase_instance !== phase_instance
   ) {
     throw new TypeError("retained reviews do not form one current review set");
+  }
+  if (derived.input_fingerprint !== stateDocument.value.input_fingerprint) {
+    // After an editorial revision the retained counter review stays bound to the predecessor
+    // bytes. It remains the one current review set exactly when the current produce artifact
+    // declares that predecessor — one hop, authenticated from retained authority, no chaining.
+    const produced = await currentProduceSubject(
+      { load_retained_result: dependencies.load_retained_result },
+      stateDocument.value,
+    );
+    const predecessor = produced.ok && produced.value.artifact.artifact_kind === "document"
+      ? produced.value.artifact.editorial_predecessor
+      : undefined;
+    if (
+      predecessor === undefined ||
+      derived.subject_digest !== predecessor.subject_digest ||
+      derived.input_fingerprint !== predecessor.input_fingerprint
+    ) {
+      throw new TypeError("retained reviews do not form one current review set");
+    }
   }
   const current = Object.freeze({
     ...derived,

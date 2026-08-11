@@ -1,5 +1,5 @@
 export const PHASE_IDS = ["explore", "prd", "design", "phase-design", "phase-impl"] as const;
-export const PIPELINE_STEPS = ["produce", "self_review", "counter_review", "triage", "adjudicate"] as const;
+export const PIPELINE_STEPS = ["produce", "counter_review", "triage", "adjudicate"] as const;
 export const GATE_POLICIES = ["never", "always", "on_trigger"] as const;
 export const ITERATION_POLICIES = ["per_phase"] as const;
 

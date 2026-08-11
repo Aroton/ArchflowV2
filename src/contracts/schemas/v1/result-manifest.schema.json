@@ -27,7 +27,7 @@
     "repository_identity_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
     "result_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" },
     "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-    "step": { "enum": ["produce", "self_review", "counter_review", "triage", "adjudicate"] },
+    "step": { "enum": ["produce", "counter_review", "triage", "adjudicate"] },
     "artifact_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
     "source_artifact": {
       "oneOf": [

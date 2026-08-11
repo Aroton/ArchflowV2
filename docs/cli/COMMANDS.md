@@ -9,11 +9,12 @@ A packaging note that trips up maintainers: there is no `bin` entry in `package.
 ## Invocation shape
 
 ```
-archflow-local <command> [--task <task>] [--input <json-file>]
+archflow-local <command> [--task <task>] [--input <json-file>] [--brief]
 ```
 
 - Payload commands read JSON from `--input <file>`, or stdin when `--input` is omitted. If stdin is a TTY and no `--input` was given, the command fails immediately rather than hanging.
 - Input-free commands (`status`, `manual-status`, `init`, `task-init`) never read stdin at all.
+- `--brief` (status only) projects the routine-loop view from the same computed status: position, blockers, open-gate and reconciliation summaries, constitution digest with active rule ids, and the one `next_action` — with no rule text, counter-review prompt, or decision-template bodies (`projectBriefStatus` in `src/state/status.ts`).
 - Output is always canonical JSON on stdout. **Exit codes are not the failure signal**: most failures return `{"ok": false, ...}` with exit 0 — callers must inspect the JSON. (Whether that's a bug or a contract is an open question flagged in `../COMPLEXITY.md`.)
 - `--help` is generated from the same command table that drives dispatch (`LOCAL_COMMAND_CONTRACTS` in `src/local/commands.ts`), so help can't drift from behavior.
 
@@ -33,7 +34,7 @@ archflow-local <command> [--task <task>] [--input <json-file>]
 
 | Command | Purpose |
 |---|---|
-| `status` | The reconciled durable truth plus exactly one `next_action`, often with a prefilled request — the normal driver loop |
+| `status` | The reconciled durable truth plus exactly one `next_action`, often with a prefilled request — the normal driver loop; `--brief` projects the loop-sized view |
 | `manual-status` | The degraded-mode counterpart; classifies `normal` / `degraded` / `repair-required` |
 | `envelope` | Authenticate an *already-authored* complete tool request (fingerprint + request digest) |
 
@@ -66,15 +67,18 @@ So `build-request` inverts the contract: **the caller supplies only judgment; th
 
 ```mermaid
 flowchart LR
-    J["Judgment only:<br/>findings, dispositions,<br/>rationales, summaries"] --> BR["build-request<br/>kind: initialize | produce | running |<br/>self-review | triage | counter-review |<br/>adjudicate | gate"]
+    J["Judgment only:<br/>findings, dispositions,<br/>rationales, summaries"] --> BR["build-request<br/>kind: initialize | produce | running |<br/>triage | counter-review |<br/>adjudicate | gate"]
     DS[("durable state,<br/>pinned config,<br/>retained evidence")] --> BR
     BR --> ENV["call envelope:<br/>fingerprint + request digest"]
-    ENV --> OUT["request.tool + request.input<br/>— copied verbatim into the MCP call"]
+    ENV --> STG["staged request on disk:<br/>intents/&lt;intent-id&gt;.request.json"]
+    ENV --> OUT["staged.reference — four fields<br/>pasted into the MCP call<br/>(request.input is the fallback)"]
 ```
 
 Properties worth knowing:
 
 - Each kind guards the transition with the server's own rule first, so an illegal move fails at compose time with the server's own error, not on the network call.
+- Every kind except `initialize` also **stages** the resolved request at `.archflow/tasks/<task>/intents/<intent-id>.request.json` (atomically, overwrite-on-recompose) and adds `staged: {path, reference}` to the envelope. The reference — `{schema_version, task_id, intent_id, request_digest}` — is the whole MCP tool input; the server rehydrates the staged bytes and refuses on any digest disagreement, so the multi-kilobyte payload never crosses the model's context. Passing `request.input` verbatim remains the documented fallback.
+- `intent_id` is optional: when omitted, the composer generates `<kind>-<UTC stamp>-<4 hex>` and echoes it in the request and reference. An explicit id is only for replaying or resuming an interrupted call.
 - `triage` enforces exactly one disposition per current finding — unknown IDs, duplicates, and gaps are rejected before the server ever sees them.
 - `gate` picks the gate kind from the phase (`phase-impl` → `commit-authorization`, else `artifact-approval`); the author writes only the summary.
 - `initialize` is the documented exception: the only composer that writes (it must stage the task before a fingerprint can resolve), legal only before durable state exists.

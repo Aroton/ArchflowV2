@@ -30,7 +30,11 @@ import {
 } from "../state/transaction.js";
 import { identifyTransactionRequest } from "../state/request.js";
 import { planStateTransition } from "../state/transitions.js";
-import { type DispatchEnvelope, type ReviewEnvelopeInput } from "./envelopes.js";
+import {
+  type DispatchEnvelope,
+  type DispatchSubject,
+  type ReviewEnvelopeSeed,
+} from "./envelopes.js";
 import { buildReviewEnvelopeWithCap } from "./pinned-context.js";
 
 export type CounterReviewDispatchResult = Readonly<{
@@ -59,7 +63,7 @@ export type RunCounterReviewInput = Readonly<{
   phase_kind: keyof NonNullable<ConfigV1["overrides"]>;
   producer_family: ModelFamily;
   measured_at_revision: SafeInteger;
-  envelope: ReviewEnvelopeInput;
+  envelope: ReviewEnvelopeSeed;
   projection_digest: ReviewEvidence["subject_digest"];
 }>;
 
@@ -88,7 +92,13 @@ export async function runCounterReview(
     "counter-reviewer",
     input.producer_family,
   );
-  const envelope = buildReviewEnvelopeWithCap(input.envelope);
+  // The server stamps the durable attempt counter into the child-visible subject from the same
+  // transaction authority the dispatch runs under, so the round number is never a caller claim.
+  const subject: DispatchSubject = Object.freeze({
+    ...input.envelope.subject,
+    attempt: input.authority.context.attempt,
+  });
+  const envelope = buildReviewEnvelopeWithCap({ ...input.envelope, subject });
   const dispatched = await serializeDispatch(() =>
     dependencies.dispatch(route, envelope, reviewOutputSchema as PlainJsonValue));
   const currentProjection = await dependencies.reobserve_projection_digest();
@@ -104,7 +114,7 @@ export async function runCounterReview(
     };
   }
   const observed = mintReviewObservation({
-    subject: input.envelope.subject,
+    subject,
     adapter: route.adapter,
     cli_version: dispatched.cli_version,
     route,

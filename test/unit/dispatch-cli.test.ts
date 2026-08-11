@@ -235,8 +235,8 @@ describe("CLI invocation construction", () => {
       required: reviewSchema.required,
     });
     expect(properties).toMatchObject({
-      step: { type: "string", enum: ["self_review", "counter_review"] },
-      role: { type: "string", enum: ["self-review", "counter-review", "gate-counter-review"] },
+      step: { const: "counter_review" },
+      role: { type: "string", enum: ["counter-review", "gate-counter-review"] },
     });
     const definitions = projected.$defs as Record<string, Record<string, unknown>>;
     expect(definitions.taskSlug).toMatchObject({
@@ -263,17 +263,6 @@ describe("CLI invocation construction", () => {
     const properties = projected.properties as Record<string, Record<string, unknown>>;
 
     for (const [key, value] of Object.entries(subject)) expect(properties[key]).toEqual({ const: value });
-  });
-
-  it("preserves a supplied self-review identity instead of coercing it to counter-review", () => {
-    const projected = projectCliOutputSchema(reviewSchema as PlainJsonValue, "review", "claude-cli", {
-      step: "self_review",
-      role: "self-review",
-    }) as Record<string, unknown>;
-    const properties = projected.properties as Record<string, Record<string, unknown>>;
-
-    expect(properties.step).toEqual({ const: "self_review" });
-    expect(properties.role).toEqual({ const: "self-review" });
   });
 
   it("keeps Claude-supported simple patterns while simplifying only the task-slug lookahead", () => {

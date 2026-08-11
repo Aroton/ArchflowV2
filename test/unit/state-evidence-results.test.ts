@@ -16,7 +16,7 @@ import {
   parseTaskSlug,
 } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
-import type { AgentDeclaredReview, DegradedReview, ReviewEvidence } from "../../src/contracts/review.js";
+import type { DegradedReview, ReviewEvidence } from "../../src/contracts/review.js";
 import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import {
   createTestAuthorityLink,
@@ -91,13 +91,13 @@ async function fixture() {
   return { runner: discovered.value, authority: authority.value };
 }
 
-function selfReview(): AgentDeclaredReview {
+function counterReview(): DegradedReview {
   return {
     schema_version: "1",
     task_id: task,
     phase_instance: phase,
-    step: "self_review",
-    role: "self-review",
+    step: "counter_review",
+    role: "counter-review",
     subject_digest: digest("a"),
     input_fingerprint: digest("b"),
     rubric_digest: digest("c"),
@@ -106,18 +106,6 @@ function selfReview(): AgentDeclaredReview {
     matched_rule_versions: [],
     verdict: "pass",
     blocking_count: 0,
-    assurance: "agent-declared",
-    model_family: "claude",
-    model: "claude",
-    effort: "high",
-  };
-}
-
-function counterReview(): DegradedReview {
-  return {
-    ...selfReview(),
-    step: "counter_review",
-    role: "counter-review",
     assurance: "degraded",
     model_family: "codex",
     model: "manual",
@@ -132,9 +120,7 @@ function qualifyReview(evidence: ReviewEvidence): QualifiedReviewEvidence {
     evidence_digest: evidenceDigest,
     evidence,
   } as never);
-  const authority = evidence.assurance === "agent-declared"
-    ? { kind: "agent-declared", result_id: "test", result_digest: digest("8"), state_revision: 1 } as const
-    : { kind: "degraded", checkpoint_digest: digest("8"), checkpoint_revision: 1 } as const;
+  const authority = { kind: "degraded", checkpoint_digest: digest("8"), checkpoint_revision: 1 } as const;
   return authorityQualifier.qualifyReview(createTestAuthorityLink({
     schema_version: "1",
     evidence_kind: "review",
@@ -159,7 +145,7 @@ function stateWithResults(
     repository_identity_digest: authority.repository_identity_digest,
     revision: parseSafeInteger(7),
     phase_instance: phase,
-    step: "self_review",
+    step: "counter_review",
     status: "succeeded",
     attempt: parseSafeInteger(1),
     input_fingerprint: digest("b"),
@@ -177,11 +163,11 @@ function stateWithResults(
 describe("evidence result preparation", () => {
   it("separates canonical evidence identity from rendered projection identity", async () => {
     const h = await fixture();
-    const evidence = selfReview();
+    const evidence = counterReview();
     const prepared = await prepareEvidenceResult({
       authority: h.authority,
       runner: h.runner,
-      result_id: parseSafeId("self-result"),
+      result_id: parseSafeId("counter-result"),
       retained_task_bytes: parseSafeInteger(0),
       measured_at_revision: parseSafeInteger(7),
       scanner: cleanScanner,
@@ -193,8 +179,8 @@ describe("evidence result preparation", () => {
         evidence_digest: canonicalJsonDigest(evidence),
         reference: {
           phase_instance: phase,
-          step: "self_review",
-          result_id: "self-result",
+          step: "counter_review",
+          result_id: "counter-result",
         },
         prepared: {
           manifest: {
@@ -219,25 +205,15 @@ describe("evidence result preparation", () => {
     expect(prepared.value.rendered_digest).not.toBe(prepared.value.evidence_digest);
     expect(prepared.value.projection_plan.entries).toHaveLength(1);
     expect(prepared.value.projection_plan.entries[0]?.path).toBe(
-      `.archflow/tasks/${task}/reviews/${phase}.self.md`,
+      `.archflow/tasks/${task}/reviews/${phase}.counter.md`,
     );
   });
 
-  it("uses the exact canonical projection claim for all four evidence steps", async () => {
+  it("uses the exact canonical projection claim for every evidence step", async () => {
     const h = await fixture();
-    const self = selfReview();
     const counter = counterReview();
-    const selfDigest = canonicalJsonDigest(self);
     const counterDigest = canonicalJsonDigest(counter);
     const slots = [
-      {
-        role: "self-review",
-        evidence_digest: selfDigest,
-        assurance: "agent-declared",
-        producer_family: "claude",
-        reviewer_family: "claude",
-        independence: "same-family-self",
-      },
       {
         role: "counter-review",
         evidence_digest: counterDigest,
@@ -255,7 +231,7 @@ describe("evidence result preparation", () => {
         input_fingerprint: digest("b"),
         slots,
       }),
-      [qualifyReview(self), qualifyReview(counter)],
+      [qualifyReview(counter)],
     );
     const triage = {
       schema_version: "1",
@@ -265,10 +241,11 @@ describe("evidence result preparation", () => {
       subject_digest: digest("a"),
       input_fingerprint: digest("b"),
       current_evidence_set_digest: current.current_evidence_set.set_digest,
-      source_evidence_digests: [selfDigest, counterDigest],
+      source_evidence_digests: [counterDigest],
       dispositions: [],
       accepted_count: 0,
       rejected_count: 0,
+      accepted_editorial_count: 0,
     } as const;
     const rawAdjudication = JSON.parse(await readFile(
       new URL("../fixtures/contracts/adjudication/valid.json", import.meta.url),
@@ -287,7 +264,6 @@ describe("evidence result preparation", () => {
       reason: "manual fallback",
     } as unknown as DegradedAdjudication;
     const values = [
-      { value: { kind: "review" as const, evidence: self }, suffix: ".self.md" },
       { value: { kind: "review" as const, evidence: counter }, suffix: ".counter.md" },
       { value: { kind: "triage" as const, current_reviews: current, evidence: triage }, suffix: ".triage.md" },
       { value: { kind: "adjudication" as const, evidence: adjudication }, suffix: ".adjudication.md" },
@@ -315,11 +291,11 @@ describe("evidence result preparation", () => {
     const prepared = await prepareEvidenceResult({
       authority: h.authority,
       runner: h.runner,
-      result_id: parseSafeId("self-result"),
+      result_id: parseSafeId("counter-result"),
       retained_task_bytes: parseSafeInteger(0),
       measured_at_revision: parseSafeInteger(7),
       scanner: cleanScanner,
-      value: { kind: "review", evidence: selfReview() },
+      value: { kind: "review", evidence: counterReview() },
     });
     if (!prepared.ok) throw new Error("evidence preparation failed");
     const state = stateWithResults(h.authority, [prepared.value.reference]);
@@ -338,14 +314,14 @@ describe("evidence result preparation", () => {
     expect(loaded).toMatchObject({
       ok: true,
       value: new Map([[
-        "self_review",
-        { reference: { result_id: "self-result" }, manifest: { step: "self_review" } },
+        "counter_review",
+        { reference: { result_id: "counter-result" }, manifest: { step: "counter_review" } },
       ]]),
     });
 
     const wrongReference = {
       ...prepared.value.reference,
-      step: "counter_review" as const,
+      step: "triage" as const,
     };
     await expect(loadRetainedEvidence({
       load_retained_result: async () => ({

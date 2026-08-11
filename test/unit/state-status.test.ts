@@ -12,7 +12,8 @@ import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } fro
 import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
 import { resolvePinnedConstitution } from "../../src/state/constitution.js";
 import { createProductionServices } from "../../src/state/production.js";
-import { buildCommitAuthorizationInput, computeTaskStatus } from "../../src/state/status.js";
+import { buildCommitAuthorizationInput, computeTaskStatus, partitionExpectedReentryEdits } from "../../src/state/status.js";
+import type { ReconciliationFinding } from "../../src/state/reconciliation.js";
 import type { CurrentProduceSubject } from "../../src/state/produce-subject.js";
 
 const roots: string[] = [];
@@ -29,11 +30,9 @@ const gitEnv = {
 const configText = `schema_version: "1"
 roles:
   producer: { model: claude-opus-4-6, effort: high }
-  self-reviewer: { model: claude-opus-4-6, effort: high }
 overrides:
   phase-impl:
     producer: { model: gpt-5.4, effort: high }
-    self-reviewer: { model: gpt-5.4, effort: high }
 `;
 
 async function harness() {
@@ -67,12 +66,33 @@ async function harness() {
   return { root, services: created.value, state };
 }
 
+describe("partitionExpectedReentryEdits", () => {
+  it("treats produce-projection drift as expected while a produce re-entry is recorded", () => {
+    const path = `.archflow/tasks/${TASK}/prd.md`;
+    const finding = {
+      kind: "projection-mismatch", path, recorded_digest: D("a"),
+      next_action: "restore-or-record-new-transition",
+    } as unknown as ReconciliationFinding;
+    const subject = {
+      retained: { prepared: { manifest: { value: { projections: [{ path }] } } } },
+    } as unknown as CurrentProduceSubject;
+    // No fixed-point authorization: the durable produce running entry alone is the declared
+    // intent that authorizes rewriting the produce projection (the new-information door).
+    const during = partitionExpectedReentryEdits([finding], undefined, subject, { step: "produce", status: "running" });
+    expect(during.remaining).toEqual([]);
+    expect(during.expected_reentry_edits).toEqual([path]);
+    // The same drift outside any produce re-entry keeps blocking exactly as before.
+    const outside = partitionExpectedReentryEdits([finding], undefined, subject, { step: "counter_review", status: "succeeded" });
+    expect(outside.remaining).toEqual([finding]);
+    expect(outside.expected_reentry_edits).toEqual([]);
+  });
+});
+
 describe("computeTaskStatus", () => {
   it("materializes sorted retained commit-authorization resume facts without a rubric digest", () => {
     const evidence = {
       set_digest: D("8"),
       slots: [
-        { role: "self-review", evidence_digest: D("9"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
         { role: "counter-review", evidence_digest: D("a"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       ],
     } as const;
@@ -118,11 +138,7 @@ describe("computeTaskStatus", () => {
       ok: true,
       value: {
         config: { verified: true },
-        routes: { producer: { family: "codex", model: "gpt-5.4" }, self_review: { family: "codex", model: "gpt-5.4" } },
-        expected_self_review_provenance: {
-          assurance: "agent-declared", producer_family: "codex", model_family: "codex",
-          model: "gpt-5.4", effort: "high",
-        },
+        routes: { producer: { family: "codex", model: "gpt-5.4" } },
         constitution: { active_rules: [{ id: "trust", version: 1, text: "Pinned rule text." }] },
       },
     });
@@ -149,7 +165,6 @@ describe("computeTaskStatus", () => {
       task_id: TASK, phase_instance: PHASE, summary: "Approve", subject_digest: D("8"),
       context_digest: computeGateContextDigest("artifact-approval", context),
       current_evidence: { set_digest: D("9"), slots: [
-        { role: "self-review", evidence_digest: D("a"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
         { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       ] },
       kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"],
@@ -200,7 +215,6 @@ describe("computeTaskStatus", () => {
       task_id: TASK, phase_instance: PHASE, summary: "Approve revised implementation", subject_digest: D("8"),
       context_digest: computeGateContextDigest("artifact-approval", context),
       current_evidence: { set_digest: D("9"), slots: [
-        { role: "self-review", evidence_digest: D("a"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
         { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       ] },
       supersedes: { superseded_gate_id: "gate-original", accepted_triage_digest: D("d"), old_subject_digest: D("e") },

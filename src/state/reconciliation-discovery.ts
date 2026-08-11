@@ -240,6 +240,9 @@ async function discoverIntent(
   const candidates: CanonicalDocument<IntentReceiptV1>[] = [];
   for (const name of names.sort()) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$/u.test(name)) continue;
+    // `.request.json` names are staged requests, a different path class in the same directory;
+    // resolving one as an intent receipt would fail classification and abort discovery.
+    if (name.endsWith(".request.json")) continue;
     const target = await resolveTaskPath({
       runner: dependencies.runner,
       taskId: authority.task_id,

@@ -184,7 +184,6 @@ describe("manual recovery trust boundaries", () => {
       task_id: TASK, phase_instance: PHASE, kind: "commit-authorization", summary: "Authorize final commit",
       subject_digest: subject, context_digest: contextDigest, context,
       current_evidence: { set_digest: D("a"), slots: [
-        { role: "self-review", evidence_digest: D("b"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
         { role: "counter-review", evidence_digest: D("c"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       ] },
       allowed_decisions: ["authorize-commit", "revise", "abort", "cancel"], opened_at_revision: 1,
@@ -402,7 +401,6 @@ describe("manual recovery trust boundaries", () => {
     const request = parseGateRequest({
       schema_version: "1", ...common, intent_id: "manual-intent", request_digest: D("8"), summary: "Approve phase",
       current_evidence: { set_digest: D("9"), slots: [
-        { role: "self-review", evidence_digest: D("a"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
         { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       ] }, context: gateContext,
       allowed_decisions: ["approve", "revise", "reject", "cancel"], opened_at_revision: 4,
@@ -571,7 +569,6 @@ describe("manual recovery trust boundaries", () => {
     const request = parseGateRequest({
       schema_version: "1", ...common, intent_id: `manual-${variant}-intent`, request_digest: D("8"), summary: "Resolve gate",
       current_evidence: { set_digest: D("9"), slots: [
-        { role: "self-review", evidence_digest: D("a"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
         { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       ] }, context: gateContext, allowed_decisions: ["approve", "revise", "reject", "cancel"], opened_at_revision: 2,
     });

@@ -8,12 +8,11 @@ import { parseSha256Digest } from "../../src/contracts/evidence.js";
 
 const d = (character: string) => parseSha256Digest(character.repeat(64));
 const provenance = { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "decision-1", helper_invocation_id: "helper-1", recorded_at: "2026-07-30T12:00:00.000Z" } as const;
-const self = { role: "self-review", evidence_digest: d("1"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" } as const;
 const counter = { role: "counter-review", evidence_digest: d("2"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
 const context = { artifact_kind: "phase-implementation" } as const;
 const gateId = computeGateId({ task_identity_digest: d("a"), intent_id: "intent-1" as never, request_digest: d("b") });
 const contextDigest = computeGateContextDigest("artifact-approval", context);
-const request = () => parseGateRequest({ schema_version: "1", gate_id: gateId, intent_id: "intent-1", request_digest: d("b"), task_id: "task-1", phase_instance: "phase-impl-2", summary: "Approve implementation", subject_digest: d("c"), context_digest: contextDigest, current_evidence: { set_digest: d("3"), slots: [self, counter] }, kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"], opened_at_revision: 4 });
+const request = () => parseGateRequest({ schema_version: "1", gate_id: gateId, intent_id: "intent-1", request_digest: d("b"), task_id: "task-1", phase_instance: "phase-impl-2", summary: "Approve implementation", subject_digest: d("c"), context_digest: contextDigest, current_evidence: { set_digest: d("3"), slots: [counter] }, kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"], opened_at_revision: 4 });
 const decision = () => parseGateDecisionRecord({ schema_version: "1", gate_id: gateId, task_id: "task-1", phase_instance: "phase-impl-2", kind: "artifact-approval", subject_digest: d("c"), context_digest: contextDigest, supplemental: [], outcome: "decided", envelope: { schema_version: "1", gate_id: gateId, task_id: "task-1", phase_instance: "phase-impl-2", kind: "artifact-approval", subject_digest: d("c"), context_digest: contextDigest, human_provenance: provenance, payload: { decision: "approve", reason: "Approved" } } });
 
 describe("durable gate roots", () => {
@@ -30,7 +29,7 @@ describe("durable gate roots", () => {
   });
 
   it("keeps supplemental outcome outside the request digest", () => {
-    const base = { schema_version: "1", repository_identity_digest: d("4"), task_identity_digest: d("5"), input_fingerprint: d("6"), tool: "archflow_gate", operation: "gate", operation_fields: { phase_instance: "phase-impl-2", summary: "Approve implementation", subject_digest: d("c"), current_evidence: { set_digest: d("3"), slots: [self, counter] }, kind: "artifact-approval", context } } as const;
+    const base = { schema_version: "1", repository_identity_digest: d("4"), task_identity_digest: d("5"), input_fingerprint: d("6"), tool: "archflow_gate", operation: "gate", operation_fields: { phase_instance: "phase-impl-2", summary: "Approve implementation", subject_digest: d("c"), current_evidence: { set_digest: d("3"), slots: [counter] }, kind: "artifact-approval", context } } as const;
     const gate = { prior_gate_id: gateId, task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: d("c"), input_fingerprint: d("6") };
     const firstInput = { ...base.operation_fields, supplemental_outcome: { action: "decline", gate, reason: "Proceed without review" } } as const;
     const secondInput = { ...base.operation_fields, supplemental_outcome: { action: "decline", gate, reason: "Human reconfirmed decline" } } as const;

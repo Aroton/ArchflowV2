@@ -28,7 +28,6 @@ const TEMPLATE_FINGERPRINT_SENTINEL = "0".repeat(64);
 
 const TERMINAL_ARTIFACT_PLACEHOLDERS: Partial<Record<PipelineStep, string>> = {
   produce: "Replace with the complete document or implementation-output artifact; archflow-local build-request emits this entire request already completed and fingerprint-resolved.",
-  self_review: "Replace with the complete agent-declared self-review evidence artifact; archflow-local build-request (kind \"self-review\") composes this entire request from the rubric, findings, and matched rule versions.",
   triage: "Replace with the complete triage artifact; archflow-local build-request (kind \"triage\") composes this entire request from the dispositions alone.",
 };
 
@@ -165,7 +164,9 @@ export function buildNextActionRequest(next: NextAction, facts: NextActionReques
     }, envelopeGuidance(
       facts.task_id,
       "archflow_state",
-      `This is the running entry for the ${step} step; the terminal write that follows the work carries the step artifact and a succeeded or failed status.`,
+      next.editorial_revision === true && step === "produce"
+        ? "This is the running entry for the editorial produce re-entry: apply exactly the accepted editorial revision intents to the artifact — nothing else — then record the terminal produce result with archflow-local build-request (kind \"produce\"), which attaches the editorial predecessor link from durable authority. Reviews are not re-run; adjudication is."
+        : `This is the running entry for the ${step} step; the terminal write that follows the work carries the step artifact and a succeeded or failed status.`,
     ));
   }
 

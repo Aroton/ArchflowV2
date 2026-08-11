@@ -49,6 +49,8 @@ export type NextAction = Readonly<{
   skill?: string;
   gate_id?: PathSafeId;
   gate_kind?: GateKind;
+  /** Set on the produce run-step routed by `editorial_revision_required`: the produce re-entry applies exactly the accepted editorial revision intents and preserves review evidence. */
+  editorial_revision?: boolean;
   request?: NextActionRequest;
   guidance?: string;
 }>;
@@ -197,6 +199,13 @@ export function deriveNextAction(input: NextActionInput): NextAction {
   if (!currentProduce) {
     return action("run-step", runStepDetail(state, "produce"), false, state, { step: "produce" });
   }
+  // Mid-produce (running or failed) the only legal move is finishing produce. This covers every
+  // produce re-entry once its running entry is recorded — accepted findings, editorial revision,
+  // or the author-initiated new-information door: prior-cycle evidence is still retained but
+  // must not re-route the next action while the artifact is being rewritten.
+  if (state.step === "produce" && state.status !== "succeeded") {
+    return action("run-step", runStepDetail(state, "produce"), false, state, { step: "produce" });
+  }
   const next = input.assessment?.next;
   if (next !== undefined) {
     if (next === "advance") return advanceAction(input, state);
@@ -210,14 +219,16 @@ export function deriveNextAction(input: NextActionInput): NextAction {
             gate_kind: input.adjudication_gate_kind,
           });
     }
-    // The fixed point reports next: "self_review" whenever the review *set* is underivable,
-    // including when the self-review itself is already recorded and only the counter-review is
-    // missing. From self_review-succeeded the only legal movement is the counter_review entry,
-    // so that is the action — a repeat self_review would be rejected by the transition law.
-    const step = next === "self_review" && state.step === "self_review" && state.status === "succeeded"
-      ? "counter_review"
-      : next;
-    return action("run-step", runStepDetail(state, step), false, state, { step });
+    if (next === "produce" && input.assessment?.editorial_revision_required === true) {
+      return action(
+        "run-step",
+        "Apply exactly the accepted editorial revision intents to the artifact, then run the produce step; reviews are not re-run, adjudication is.",
+        false,
+        state,
+        { step: "produce", editorial_revision: true },
+      );
+    }
+    return action("run-step", runStepDetail(state, next), false, state, { step: next });
   }
   return input.evidence_available === false
     ? action("inspect-state", "Inspect why current evidence is unavailable.", true, state)

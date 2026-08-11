@@ -26,10 +26,10 @@ export type WorkflowV1 = z.infer<typeof workflowV1Schema>;
 export const WORKFLOW_V1: WorkflowV1 = {
   phases: [
     { id: "explore", skill: "archflow-explore", pipeline: ["produce"], gate: "never", optional: true },
-    { id: "prd", skill: "archflow-prd", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "always" },
-    { id: "design", skill: "archflow-design", requires: ["prd"], pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "always" },
-    { id: "phase-design", skill: "archflow-phase-design", requires: ["design"], iterates: "per_phase", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "on_trigger" },
-    { id: "phase-impl", skill: "archflow-phase-impl", requires: ["phase-design"], iterates: "per_phase", pipeline: ["produce", "self_review", "counter_review", "triage", "adjudicate"], gate: "on_trigger" },
+    { id: "prd", skill: "archflow-prd", pipeline: ["produce", "counter_review", "triage", "adjudicate"], gate: "always" },
+    { id: "design", skill: "archflow-design", requires: ["prd"], pipeline: ["produce", "counter_review", "triage", "adjudicate"], gate: "always" },
+    { id: "phase-design", skill: "archflow-phase-design", requires: ["design"], iterates: "per_phase", pipeline: ["produce", "counter_review", "triage", "adjudicate"], gate: "on_trigger" },
+    { id: "phase-impl", skill: "archflow-phase-impl", requires: ["phase-design"], iterates: "per_phase", pipeline: ["produce", "counter_review", "triage", "adjudicate"], gate: "on_trigger" },
   ],
 };
 

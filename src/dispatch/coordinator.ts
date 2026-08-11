@@ -70,6 +70,12 @@ type AttemptTelemetry = Readonly<{
   child_result: DispatchChildResult | undefined;
 }>;
 
+/**
+ * Persists the forensic record of one FAILED dispatch. Successful dispatches write nothing:
+ * their evidence is the retained result itself, and per-success telemetry was pure
+ * write-only ceremony that grew without bound. The failure record is what canary/leak
+ * forensics reads (see docs/LIMITATIONS.md), so its shape is unchanged.
+ */
 async function writeAttemptRecord(
   input: DispatchCoordinatorInput,
   attemptId: string,
@@ -79,7 +85,7 @@ async function writeAttemptRecord(
   telemetry: AttemptTelemetry,
 ): Promise<void> {
   const writer = input.dependencies.projection_writer;
-  if (writer === undefined) return;
+  if (writer === undefined || error === undefined) return;
 
   await ensureAttemptDirectory(input.authority, input.phase_instance);
   const target = await resolveTaskPath({
@@ -92,11 +98,10 @@ async function writeAttemptRecord(
   if (!target.ok) return;
 
   const code = failureCode(error);
-  const failed = error !== undefined;
   const channels: DispatchFailureChannels | DispatchChildResult | undefined = telemetry.child_result
     ?? (error instanceof DispatchProcessError ? error.channels : undefined);
-  const stdoutTail = failed && channels !== undefined ? channelTail(channels.stdout) : "";
-  const stderrTail = failed && channels !== undefined ? channelTail(channels.stderr) : "";
+  const stdoutTail = channels === undefined ? "" : channelTail(channels.stdout);
+  const stderrTail = channels === undefined ? "" : channelTail(channels.stderr);
   const record = {
     schema_version: "1",
     attempt_id: attemptId,
@@ -106,7 +111,7 @@ async function writeAttemptRecord(
     family: route.family,
     model: route.model,
     effort: route.effort,
-    status: failed ? "failed" : "succeeded",
+    status: "failed",
     started_at: telemetry.started_at,
     duration_ms: telemetry.duration_ms,
     ...(preflight === undefined ? {} : {
@@ -116,9 +121,7 @@ async function writeAttemptRecord(
     }),
     ...(code === undefined ? {} : { failure_code: code }),
     ...(code === "CANCELLED" ? { cancellation_source: input.cancellation_source } : {}),
-    ...(failed && telemetry.child_result !== undefined
-      ? { exit_class: exitClass(telemetry.child_result) }
-      : {}),
+    ...(telemetry.child_result === undefined ? {} : { exit_class: exitClass(telemetry.child_result) }),
     ...(stdoutTail === "" ? {} : { stdout_tail: stdoutTail }),
     ...(stderrTail === "" ? {} : { stderr_tail: stderrTail }),
   } satisfies PlainJsonValue;
@@ -178,11 +181,13 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
       throw error;
     } finally {
       await workspace?.dispose().catch(() => undefined);
-      await writeAttemptRecord(input, attemptId, route, preflight, primaryError, {
-        started_at: startedAt.toISOString(),
-        duration_ms: Date.now() - startedAt.getTime(),
-        child_result: childResult,
-      }).catch(() => undefined);
+      if (primaryError !== undefined) {
+        await writeAttemptRecord(input, attemptId, route, preflight, primaryError, {
+          started_at: startedAt.toISOString(),
+          duration_ms: Date.now() - startedAt.getTime(),
+          child_result: childResult,
+        }).catch(() => undefined);
+      }
     }
   };
 }

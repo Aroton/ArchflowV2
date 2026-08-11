@@ -22,14 +22,14 @@ import {
 } from "./internal/trust-brands.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { decodePhaseInstance, encodePhaseInstance } from "./phase-instance.js";
-import type { AgentDeclaredReview, AdapterId, DegradedReview, ModelFamily, ReviewEvidence, ReviewRole, ServerAttestedReview } from "./review.js";
+import type { AdapterId, DegradedReview, ModelFamily, ReviewEvidence, ReviewRole, ServerAttestedReview } from "./review.js";
 import { EFFORT_VALUES, parseAndDeriveReview, parseReferencedReviewEvidence, reviewEvidenceSchema } from "./review.js";
 import { assertPlainJson } from "./plain-json.js";
 
 export type EvidenceKind = "review" | "adjudication";
 export type Assurance = "agent-declared" | "server-attested" | "degraded";
 export interface EvidenceValueByKindAndAssurance {
-  readonly review: { readonly "agent-declared": AgentDeclaredReview; readonly "server-attested": ServerAttestedReview; readonly degraded: DegradedReview };
+  readonly review: { readonly "agent-declared": never; readonly "server-attested": ServerAttestedReview; readonly degraded: DegradedReview };
   readonly adjudication: { readonly "agent-declared": AgentDeclaredAdjudication; readonly "server-attested": ServerAttestedAdjudication; readonly degraded: DegradedAdjudication };
 }
 export interface EvidenceRoleByKind { readonly review: ReviewRole; readonly adjudication: "adjudication" }
@@ -129,10 +129,9 @@ export type AuthorityLink<K extends EvidenceKind = EvidenceKind, A extends Assur
 export type VerifiedReferencedEvidence<K extends EvidenceKind = EvidenceKind, A extends Assurance = Assurance> = { readonly [P in K]: { readonly [Q in A]: ReferencedEvidence<EvidenceValueByKindAndAssurance[P][Q]> & { readonly [verifiedReferencedEvidenceBrand]: `${P}:${Q}` } }[A] }[K];
 
 export type ReviewEvidenceSlot =
-  | Readonly<{ role: "self-review"; evidence_digest: Sha256Digest; assurance: "agent-declared"; producer_family: ModelFamily; reviewer_family: ModelFamily; independence: "same-family-self" }>
   | Readonly<{ role: "counter-review"; evidence_digest: Sha256Digest; assurance: "server-attested" | "degraded"; producer_family: ModelFamily; reviewer_family: ModelFamily; independence: "opposite-family" }>
   | Readonly<{ role: "gate-counter-review"; evidence_digest: Sha256Digest; assurance: "server-attested" | "degraded"; producer_family: ModelFamily; reviewer_family: ModelFamily; independence: "opposite-family"; gate_id: PathSafeId }>;
-export type RequiredReviewSlots = readonly [Extract<ReviewEvidenceSlot, { role: "self-review" }>, Extract<ReviewEvidenceSlot, { role: "counter-review" }>] | readonly [Extract<ReviewEvidenceSlot, { role: "self-review" }>, Extract<ReviewEvidenceSlot, { role: "counter-review" }>, Extract<ReviewEvidenceSlot, { role: "gate-counter-review" }>];
+export type RequiredReviewSlots = readonly [Extract<ReviewEvidenceSlot, { role: "counter-review" }>] | readonly [Extract<ReviewEvidenceSlot, { role: "counter-review" }>, Extract<ReviewEvidenceSlot, { role: "gate-counter-review" }>];
 export interface CurrentReviewSetAuthority { readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest; readonly slots: RequiredReviewSlots; readonly [currentReviewSetAuthorityBrand]: true }
 export type CurrentEvidenceSetRef = { readonly set_digest: Sha256Digest; readonly slots: RequiredReviewSlots };
 
@@ -145,17 +144,16 @@ const agentAuthoritySchema = z.object({ kind: z.literal("agent-declared"), resul
 const serverAuthoritySchema = z.object({ kind: z.literal("server"), invocation_id: idSchema, result_id: idSchema, receipt_id: idSchema, state_revision: safeInteger, envelope_input_digest: digestSchema, observed_output_digest: digestSchema, result_digest: digestSchema }).strict();
 const degradedAuthoritySchema = z.object({ kind: z.literal("degraded"), checkpoint_digest: digestSchema, checkpoint_revision: safeInteger }).strict();
 const authorityReferencesSchema = z.discriminatedUnion("kind", [agentAuthoritySchema, serverAuthoritySchema, degradedAuthoritySchema]);
-export const authorityLinkDataSchema = z.object({ schema_version: z.literal("1"), evidence_kind: z.enum(["review", "adjudication"]), assurance: z.enum(["agent-declared", "server-attested", "degraded"]), role: z.enum(["self-review", "counter-review", "gate-counter-review", "adjudication"]), task_id: taskSlugV1Schema, phase_instance: phaseSchema, subject_digest: digestSchema, input_fingerprint: digestSchema, evidence_digest: digestSchema, gate_id: pathSafeIdV1Schema.optional(), authority: authorityReferencesSchema }).strict().superRefine((link, context) => {
+export const authorityLinkDataSchema = z.object({ schema_version: z.literal("1"), evidence_kind: z.enum(["review", "adjudication"]), assurance: z.enum(["agent-declared", "server-attested", "degraded"]), role: z.enum(["counter-review", "gate-counter-review", "adjudication"]), task_id: taskSlugV1Schema, phase_instance: phaseSchema, subject_digest: digestSchema, input_fingerprint: digestSchema, evidence_digest: digestSchema, gate_id: pathSafeIdV1Schema.optional(), authority: authorityReferencesSchema }).strict().superRefine((link, context) => {
   if ((link.evidence_kind === "adjudication") !== (link.role === "adjudication")) context.addIssue({ code: "custom", path: ["role"], message: "role must match evidence kind" });
   const expectedAuthorityKind = link.assurance === "server-attested" ? "server" : link.assurance;
   if (link.authority.kind !== expectedAuthorityKind) context.addIssue({ code: "custom", path: ["authority", "kind"], message: "authority references must match assurance" });
   if ((link.role === "gate-counter-review") !== (link.gate_id !== undefined)) context.addIssue({ code: "custom", path: ["gate_id"], message: "gate_id is required only for gate-counter-review authority" });
 });
 const slotBase = { evidence_digest: digestSchema, producer_family: familySchema, reviewer_family: familySchema };
-const selfSlotSchema = z.object({ ...slotBase, role: z.literal("self-review"), assurance: z.literal("agent-declared"), independence: z.literal("same-family-self") }).strict().superRefine((slot, context) => { if (slot.producer_family !== slot.reviewer_family) context.addIssue({ code: "custom", message: "self-review families must match" }); });
 const counterSlotSchema = z.object({ ...slotBase, role: z.literal("counter-review"), assurance: z.enum(["server-attested", "degraded"]), independence: z.literal("opposite-family") }).strict().superRefine((slot, context) => { if (slot.producer_family === slot.reviewer_family) context.addIssue({ code: "custom", message: "counter-review families must differ" }); });
 const gateCounterSlotSchema = z.object({ ...slotBase, role: z.literal("gate-counter-review"), assurance: z.enum(["server-attested", "degraded"]), independence: z.literal("opposite-family"), gate_id: pathSafeIdV1Schema }).strict().superRefine((slot, context) => { if (slot.producer_family === slot.reviewer_family) context.addIssue({ code: "custom", message: "gate-counter-review families must differ" }); });
-export const requiredReviewSlotsSchema = z.union([z.tuple([selfSlotSchema, counterSlotSchema]), z.tuple([selfSlotSchema, counterSlotSchema, gateCounterSlotSchema])]);
+export const requiredReviewSlotsSchema = z.union([z.tuple([counterSlotSchema]), z.tuple([counterSlotSchema, gateCounterSlotSchema])]);
 export const currentEvidenceSetRefSchema = z.object({ set_digest: digestSchema, slots: requiredReviewSlotsSchema }).strict();
 export const referencedEvidenceSchema = z.union([
   z.object({ evidence_digest: digestSchema, evidence: reviewEvidenceSchema }).strict(),
@@ -208,10 +206,9 @@ function assertLinkMatches<K extends EvidenceKind, A extends Assurance>(kind: K,
   }
 }
 function validateSlots(slots: readonly ReviewEvidenceSlot[]): asserts slots is RequiredReviewSlots {
-  if ((slots.length !== 2 && slots.length !== 3) || slots[0]?.role !== "self-review" || slots[1]?.role !== "counter-review" || (slots.length === 3 && slots[2]?.role !== "gate-counter-review")) throw new TypeError("review slots must use canonical role order");
+  if ((slots.length !== 1 && slots.length !== 2) || slots[0]?.role !== "counter-review" || (slots.length === 2 && slots[1]?.role !== "gate-counter-review")) throw new TypeError("review slots must use canonical role order");
   for (const slot of slots) {
-    if (slot.role === "self-review") { if (slot.assurance !== "agent-declared" || slot.independence !== "same-family-self" || slot.producer_family !== slot.reviewer_family) throw new TypeError("invalid self-review slot"); }
-    else if (slot.independence !== "opposite-family" || slot.producer_family === slot.reviewer_family) throw new TypeError("invalid opposite-family review slot");
+    if (slot.independence !== "opposite-family" || slot.producer_family === slot.reviewer_family) throw new TypeError("invalid opposite-family review slot");
   }
   if (new Set(slots.map((slot) => slot.evidence_digest)).size !== slots.length) throw new TypeError("review slot evidence digests must be unique");
 }

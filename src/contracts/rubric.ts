@@ -11,14 +11,14 @@ export interface RubricCriterionV1 {
 export interface RubricV1 {
   readonly schema_version: "1";
   readonly kind: "artifact" | "implementation";
-  readonly mode: "self_review" | "adversarial";
+  readonly mode: "adversarial";
   readonly criteria: readonly RubricCriterionV1[];
 }
 
 export const rubricV1Schema = z.object({
   schema_version: z.literal("1"),
   kind: z.enum(["artifact", "implementation"]),
-  mode: z.enum(["self_review", "adversarial"]),
+  mode: z.enum(["adversarial"]),
   criteria: z.array(z.object({
     id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
     text: z.string().min(1).refine((value) => value.trim().length > 0, "criterion text must contain a non-whitespace character"),

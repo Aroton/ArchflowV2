@@ -101,13 +101,13 @@ async function setup(kind: "normal" | "legacy" | "chain" = "normal") {
       attempt: 1, input_fingerprint: fingerprint, initialization_digest: canonicalJsonDigest(initialization), initialization,
       authoritative_results: [], projections: [], evidence_chain: [], approvals: [], waivers: [] } as unknown as ManualCheckpointV1;
     const second = { ...structuredClone(imported.chain[1]!), task_id: taskId,
-      repository_identity_digest: authority.value.repository_identity_digest, phase_instance: "prd", step: "self_review", status: "running",
+      repository_identity_digest: authority.value.repository_identity_digest, phase_instance: "prd", step: "counter_review", status: "running",
       attempt: 1, input_fingerprint: fingerprint, initialization_digest: first.initialization_digest,
       authoritative_results: [], projections: [], evidence_chain: [], approvals: [], waivers: [],
       predecessor: { revision: first.revision, checkpoint_digest: checkpointSelfDigest(first) } } as unknown as ManualCheckpointV1;
     artifact = parseManualCheckpointImport({ schema_version: "1", artifact_kind: "manual-checkpoint-import", task_id: taskId,
       repository_identity_digest: authority.value.repository_identity_digest, import_mode: "initial", chain: [first, second] });
-    callStep = "self_review";
+    callStep = "counter_review";
   }
   await writeFile(join(taskRoot, "checkpoint-child-input.json"), JSON.stringify({ context, subject, call: { schema_version: "1", task_id: taskId,
     intent_id: "initialize", expected_revision: 0, input_fingerprint: fingerprint, phase_instance: callPhase, step: callStep, status: callStatus, artifact } }));

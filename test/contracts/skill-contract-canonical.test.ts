@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
 import { PROJECT_ERROR_DEFINITIONS } from "../../src/contracts/errors.js";
-import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
@@ -171,6 +171,7 @@ describe("canonical skill contracts", () => {
           phase_instance: parsePhaseInstanceId("prd"),
           role: "counter-review",
           step: "counter_review",
+          attempt: parseSafeInteger(1),
           subject_digest: parseSha256Digest("a".repeat(64)),
           input_fingerprint: parseSha256Digest("b".repeat(64)),
           rubric_digest: rubricDigest,

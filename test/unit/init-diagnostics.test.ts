@@ -1,3 +1,7 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import type { DispatchChildSpec } from "../../src/dispatch/process.js";
@@ -20,7 +24,16 @@ vi.mock("../../src/dispatch/process.js", async (importOriginal) => ({
   runDispatchChild,
 }));
 
-import { collectInitDiagnostics } from "../../src/init/diagnostics.js";
+import { claudeTimeoutFinding, codexTimeoutFinding, collectInitDiagnostics } from "../../src/init/diagnostics.js";
+import {
+  CLAUDE_MCP_TIMEOUT_MS,
+  CODEX_MANAGED_BLOCK,
+  CODEX_TOOL_TIMEOUT_SEC,
+} from "../../src/init/registration.js";
+
+function claudeConfig(entry: Record<string, unknown>): string {
+  return `${JSON.stringify({ mcpServers: { archflow: entry } }, null, 2)}\n`;
+}
 
 const workspace = Object.freeze({
   root: "/tmp/archflow-init-diagnostics",
@@ -62,6 +75,72 @@ describe("init diagnostics", () => {
       authenticated: false,
       error: { code: "AUTH_UNAVAILABLE" },
     });
+  });
+
+  it("reports no timeout finding when both host configs carry the registered timeouts", () => {
+    const claude = claudeConfig({ type: "stdio", command: "archflow-mcp", args: [], timeout: CLAUDE_MCP_TIMEOUT_MS });
+    expect(claudeTimeoutFinding(claude)).toBeUndefined();
+    expect(codexTimeoutFinding(CODEX_MANAGED_BLOCK)).toBeUndefined();
+  });
+
+  it("reports a finding when a registered entry is missing its timeout field", () => {
+    const claude = claudeConfig({ type: "stdio", command: "archflow-mcp", args: [] });
+    const claudeFinding = claudeTimeoutFinding(claude);
+    expect(claudeFinding).toContain(`is missing "timeout": ${CLAUDE_MCP_TIMEOUT_MS}`);
+    expect(claudeFinding).toContain("fifteen minutes");
+    expect(claudeFinding).toContain("~2 minutes");
+    expect(claudeFinding).toContain("archflow-init");
+
+    const codex = "[mcp_servers.archflow]\ncommand = \"archflow-mcp\"\nargs = []\n";
+    const codexFinding = codexTimeoutFinding(codex);
+    expect(codexFinding).toContain(`missing tool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SEC}`);
+    expect(codexFinding).toContain("fifteen minutes");
+    expect(codexFinding).toContain("~2 minutes");
+    expect(codexFinding).toContain("archflow-init");
+  });
+
+  it("reports a finding when a registered entry carries a different timeout value", () => {
+    const claude = claudeConfig({ type: "stdio", command: "archflow-mcp", args: [], timeout: 120_000 });
+    expect(claudeTimeoutFinding(claude))
+      .toContain(`has "timeout" 120000 instead of ${CLAUDE_MCP_TIMEOUT_MS}`);
+
+    const codex = "[mcp_servers.archflow]\ncommand = \"archflow-mcp\"\ntool_timeout_sec = 120\n";
+    expect(codexTimeoutFinding(codex))
+      .toContain(`has tool_timeout_sec = 120 instead of ${CODEX_TOOL_TIMEOUT_SEC}`);
+  });
+
+  it("ignores absent host configs and absent entries when checking timeouts", () => {
+    expect(claudeTimeoutFinding(undefined)).toBeUndefined();
+    expect(claudeTimeoutFinding("{\"mcpServers\": {}}")).toBeUndefined();
+    expect(codexTimeoutFinding(undefined)).toBeUndefined();
+    expect(codexTimeoutFinding("[mcp_servers.other]\ncommand = \"other\"\n")).toBeUndefined();
+  });
+
+  it("surfaces timeout findings from the working directory's host configs", async () => {
+    stat.mockRejectedValue(Object.assign(new Error("missing"), { code: "ENOENT" }));
+    createDispatchWorkspace.mockRejectedValue(new Error("workspace unavailable"));
+    const repository = await mkdtemp(join(tmpdir(), "archflow-init-diagnostics-"));
+    try {
+      await writeFile(
+        join(repository, ".mcp.json"),
+        claudeConfig({ type: "stdio", command: "archflow-mcp", args: [], timeout: 120_000 }),
+        "utf8",
+      );
+      await mkdir(join(repository, ".codex"), { recursive: true });
+      await writeFile(
+        join(repository, ".codex", "config.toml"),
+        "[mcp_servers.archflow]\ncommand = \"archflow-mcp\"\nargs = []\n",
+        "utf8",
+      );
+
+      const result = await collectInitDiagnostics({ working_directory: repository });
+
+      expect(result.timeout_findings).toHaveLength(2);
+      expect(result.timeout_findings[0]).toContain(".mcp.json");
+      expect(result.timeout_findings[1]).toContain(".codex/config.toml");
+    } finally {
+      await rm(repository, { recursive: true, force: true });
+    }
   });
 
   it("maps unexpected workspace failures to the existing init-preflight IO error", async () => {

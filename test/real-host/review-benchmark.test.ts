@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import reviewOutputSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
 import { canonicalJsonBytes, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
 import { parseConfigYaml } from "../../src/contracts/config.js";
-import { parseSafeId, parseSha256Digest } from "../../src/contracts/evidence.js";
+import { parseSafeId, parseSafeInteger, parseSha256Digest } from "../../src/contracts/evidence.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { parseRubricV1 } from "../../src/contracts/rubric.js";
@@ -57,9 +57,6 @@ roles:
   producer:
     model: claude-opus-5
     effort: high
-  self-reviewer:
-    model: claude-opus-5
-    effort: high
   counter-reviewer:
     model: gpt-5.6-sol
     effort: xhigh
@@ -71,9 +68,6 @@ roles:
 const codexProducerConfig = `schema_version: "1"
 roles:
   producer:
-    model: gpt-5.6-sol
-    effort: xhigh
-  self-reviewer:
     model: gpt-5.6-sol
     effort: xhigh
   counter-reviewer:
@@ -311,6 +305,7 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
               phase_instance: phase,
               role: "counter-review" as const,
               step: "counter_review" as const,
+              attempt: parseSafeInteger(1),
               subject_digest: artifactDigest,
               input_fingerprint: inputFingerprint,
               rubric_digest: rubricDigest,

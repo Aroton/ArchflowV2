@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
-import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import * as publicContracts from "../../src/contracts/index.js";
 import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import { mintAdjudicationObservation, mintReviewObservation } from "../../src/dispatch/cli.js";
@@ -18,6 +18,7 @@ const subject = (producer_family: "claude" | "codex"): DispatchSubject => ({
   phase_instance: encodePhaseInstance({ kind: "phase-impl", phase: 13 as never }),
   role: "counter-review",
   step: "counter_review",
+  attempt: parseSafeInteger(1),
   subject_digest: digest("a"),
   input_fingerprint: digest("b"),
   rubric_digest: digest("c"),

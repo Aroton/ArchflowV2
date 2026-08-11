@@ -12,9 +12,6 @@ roles:
   producer:
     model: gpt-5.6-sol
     effort: xhigh
-  self-reviewer:
-    model: gpt-5.6-sol
-    effort: xhigh
   counter-reviewer:
     model: claude-opus-5
     effort: high

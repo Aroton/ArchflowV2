@@ -49,14 +49,14 @@ export function renderReviewEvidence(
 
 function renderDisposition(disposition: TriageDisposition): string[] {
   const lines = [`### ${canonical(disposition.disposition)} ${visibleJsonString(disposition.review_evidence_digest)} ${visibleJsonString(disposition.finding_id)}`, prose("rationale", disposition.rationale)];
-  if (disposition.disposition === "accepted") lines.push(prose("revision_intent", disposition.revision_intent));
-  else lines.push(prose("evidence", disposition.evidence));
+  if (disposition.disposition === "rejected") lines.push(prose("evidence", disposition.evidence));
+  else lines.push(prose("revision_intent", disposition.revision_intent));
   return lines;
 }
 export function renderTriage(value: ValidatedTriage): Uint8Array {
   if (!authenticValidatedTriage(value)) throw new TypeError("validated triage is required");
   const lines = ["# ArchFlow Review Triage", ...metadata([
-    ["schema_version", value.schema_version], ["task_id", value.task_id], ["phase_instance", value.phase_instance], ["step", value.step], ["subject_digest", value.subject_digest], ["input_fingerprint", value.input_fingerprint], ["current_evidence_set_digest", value.current_evidence_set_digest], ["source_evidence_digests", value.source_evidence_digests], ["accepted_count", value.accepted_count], ["rejected_count", value.rejected_count],
+    ["schema_version", value.schema_version], ["task_id", value.task_id], ["phase_instance", value.phase_instance], ["step", value.step], ["subject_digest", value.subject_digest], ["input_fingerprint", value.input_fingerprint], ["current_evidence_set_digest", value.current_evidence_set_digest], ["source_evidence_digests", value.source_evidence_digests], ["accepted_count", value.accepted_count], ["accepted_editorial_count", value.accepted_editorial_count], ["rejected_count", value.rejected_count],
   ]), "", "## Dispositions"];
   for (const disposition of value.dispositions) lines.push("", ...renderDisposition(disposition));
   return linesToBytes(lines);

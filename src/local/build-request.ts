@@ -1,17 +1,20 @@
-import { canonicalJsonDigest } from "../contracts/canonical.js";
-import { parseConfigYaml } from "../contracts/config.js";
+import { randomUUID } from "node:crypto";
+
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
-import { parsePathSafeId } from "../contracts/evidence.js";
+import { parsePathSafeId, type PathSafeId } from "../contracts/evidence.js";
 import { decodePhaseInstance } from "../contracts/phase-instance.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
-import { parseReviewEvidence } from "../contracts/review.js";
 import { parseRubricV1 } from "../contracts/rubric.js";
 import { parseTriageCandidate, type TriageDisposition } from "../contracts/triage.js";
 import { PIPELINE_STEPS, type PipelineStep } from "../contracts/vocabulary.js";
-import { resolveDispatchRoute } from "../dispatch/routing.js";
+import { parseDocumentArtifact } from "../contracts/durable-document.js";
 import { stageTaskInitialization } from "../init/task-initialization.js";
 import { buildDocumentArtifact, type DocumentArtifactInput } from "../state/document-artifact.js";
-import { deriveCurrentEvidenceSet, loadRetainedEvidence } from "../state/evidence-results.js";
+import {
+  deriveCurrentEvidenceSet,
+  derivePendingEditorialPredecessor,
+  loadRetainedEvidence,
+} from "../state/evidence-results.js";
 import { buildImplementationOutput, type ImplementationOutputInput } from "../state/implementation-manifest.js";
 import {
   phaseDocumentDefaults,
@@ -24,23 +27,24 @@ import { APPROVAL_ARTIFACT_KINDS } from "../state/request-templates.js";
 import { buildCommitAuthorizationInput, currentTargetRef } from "../state/status.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "../state/transitions.js";
+import { writeStagedRequest } from "../state/staged-requests.js";
 import { computeCallEnvelope, type CallEnvelope } from "./envelope.js";
 
+const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 const fail = <T = never>(error: ProjectError): ProjectResult<T> =>
   Object.freeze({ schema_version: "1", ok: false, error });
 
 export const BUILD_REQUEST_KINDS = Object.freeze([
-  "initialize", "produce", "running", "self-review", "triage",
+  "initialize", "produce", "running", "triage",
   "counter-review", "adjudicate", "gate",
 ] as const);
 export type BuildRequestKind = typeof BUILD_REQUEST_KINDS[number];
 
 const PAYLOAD_SHAPE =
-  `{"intent_id":<fresh id>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},` +
+  `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},` +
   '"step"?:<pipeline step for kind running>,' +
   '"document"?:{...},"implementation"?:{...},' +
-  '"review"?:{"rubric":<rubric object>,"findings":[...],"matched_rule_versions":[...]},' +
-  '"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],' +
+  '"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],' +
   '"rubric"?:<rubric object for kind counter-review>,"summary"?:<gate summary text>}';
 
 function record(value: unknown, name: string): Record<string, unknown> {
@@ -168,7 +172,16 @@ async function composeProduce(
       input_fingerprint: state.input_fingerprint,
     } as unknown as DocumentArtifactInput);
     if (!built.ok) return built;
-    artifact = built.value as unknown as PlainJsonValue;
+    // When durable authority shows a pending editorial revision — the retained triage accepted
+    // only editorial findings against the retained produce artifact — the predecessor link is
+    // attached here from that authority, never hand-copied by the model.
+    const editorial = await derivePendingEditorialPredecessor(services.dependencies, state);
+    artifact = (editorial === undefined
+      ? built.value
+      : parseDocumentArtifact({
+          ...built.value,
+          editorial_predecessor: editorial,
+        })) as unknown as PlainJsonValue;
   }
 
   return computeCallEnvelope(services, {
@@ -207,89 +220,6 @@ function composeRunning(
   });
 }
 
-async function composeSelfReview(
-  services: ProductionServices,
-  state: TaskStateV1,
-  intentId: string,
-  snapshot: Record<string, unknown>,
-): Promise<ProjectResult<CallEnvelope>> {
-  if (legalRunStepStatus(state, "self_review") !== "succeeded") {
-    return transitionInvalid(state, "self_review-succeeded");
-  }
-  const review = record(
-    snapshot.review,
-    'build-request self-review facts (required: {"rubric":<rubric object>,"findings":[...],"matched_rule_versions":[...]})',
-  );
-  const rubric = parseRubricV1(review.rubric);
-  if (review.matched_rule_versions === undefined) {
-    throw new TypeError('self-review facts require "matched_rule_versions"; an empty array is the explicit value when no pinned active rule matched');
-  }
-  if (!Array.isArray(review.findings)) {
-    throw new TypeError('self-review facts require "findings" as an array; an empty array is a valid result of actually applying the rubric');
-  }
-  const subject = await loadCurrentProduceSubject(services.dependencies, state);
-  if (!subject.ok) return subject;
-
-  const config = await services.dependencies.read_config(services.authority.config);
-  if (config.kind !== "valid") {
-    return fail(createProjectError("CONFIG_INVALID", { issue_code: `config-${config.kind}` }));
-  }
-  if (config.snapshot.digest !== state.config_digest) {
-    return fail(createProjectError("PINNED_CONFIG_MISMATCH", {
-      expected_digest: state.config_digest,
-      observed_digest: config.snapshot.digest,
-    }));
-  }
-  const parsedConfig = parseConfigYaml(
-    new TextDecoder("utf-8", { fatal: true }).decode(config.snapshot.bytes),
-    "task config",
-  );
-  const phaseKind = decodePhaseInstance(state.phase_instance).kind;
-  const producer = resolveDispatchRoute(parsedConfig, phaseKind, "producer", "claude");
-  const selfRoute = resolveDispatchRoute(parsedConfig, phaseKind, "self-reviewer", producer.family);
-  if (producer.family !== selfRoute.family) {
-    throw new TypeError("producer and self-review routes must share a family");
-  }
-
-  const blockingCount = review.findings
-    .filter((finding) => (finding as Record<string, unknown> | null)?.blocking === true).length;
-  const verdict = blockingCount > 0 ? "fail" : review.findings.length > 0 ? "advisory" : "pass";
-  const evidence = parseReviewEvidence({
-    schema_version: "1",
-    task_id: services.authority.task_id,
-    phase_instance: state.phase_instance,
-    step: "self_review",
-    role: "self-review",
-    subject_digest: subject.value.artifact_digest,
-    input_fingerprint: state.input_fingerprint,
-    rubric_digest: canonicalJsonDigest(rubric as unknown as PlainJsonValue),
-    producer_family: producer.family,
-    findings: review.findings,
-    matched_rule_versions: review.matched_rule_versions,
-    verdict,
-    blocking_count: blockingCount,
-    model_family: selfRoute.family,
-    model: selfRoute.model,
-    effort: selfRoute.effort,
-    assurance: "agent-declared",
-  });
-
-  return computeCallEnvelope(services, {
-    tool: "archflow_state",
-    input: {
-      ...mechanicalInput(services, state, intentId),
-      phase_instance: state.phase_instance,
-      step: "self_review",
-      status: "succeeded",
-      artifact: {
-        schema_version: "1",
-        artifact_kind: "review-evidence",
-        evidence: evidence as unknown as PlainJsonValue,
-      },
-    },
-  });
-}
-
 async function composeTriage(
   services: ProductionServices,
   state: TaskStateV1,
@@ -314,9 +244,12 @@ async function composeTriage(
 
   const digestsByFindingId = new Map<string, string[]>();
   const expected = new Set<string>();
+  const blocking = new Set<string>();
   for (const reviewRef of derived.reviews) {
     for (const finding of reviewRef.evidence.findings) {
-      expected.add(`${reviewRef.evidence_digest}:${finding.finding_id}`);
+      const key = `${reviewRef.evidence_digest}:${finding.finding_id}`;
+      expected.add(key);
+      if (finding.blocking) blocking.add(key);
       const digests = digestsByFindingId.get(finding.finding_id) ?? [];
       digests.push(reviewRef.evidence_digest);
       digestsByFindingId.set(finding.finding_id, digests);
@@ -342,10 +275,13 @@ async function composeTriage(
       throw new TypeError(`review_evidence_digest ${evidenceDigest} does not carry finding ${findingId}`);
     }
     const base = { review_evidence_digest: evidenceDigest, finding_id: findingId } as const;
-    if (item.disposition === "accepted") {
+    if (item.disposition === "accepted" || item.disposition === "accepted-editorial") {
+      if (item.disposition === "accepted-editorial" && blocking.has(`${evidenceDigest}:${findingId}`)) {
+        throw new TypeError(`finding ${findingId} is blocking; "accepted-editorial" is only for non-blocking wording or formatting fixes — use "accepted" or "rejected"`);
+      }
       return {
         ...base,
-        disposition: "accepted",
+        disposition: item.disposition,
         rationale: String(item.rationale ?? ""),
         revision_intent: String(item.revision_intent ?? ""),
       } as TriageDisposition;
@@ -358,7 +294,7 @@ async function composeTriage(
         evidence: String(item.evidence ?? ""),
       } as TriageDisposition;
     }
-    throw new TypeError(`triage disposition for ${findingId} must set disposition "accepted" or "rejected"`);
+    throw new TypeError(`triage disposition for ${findingId} must set disposition "accepted", "accepted-editorial", or "rejected"`);
   });
 
   const actual = new Set(dispositions.map((item) => `${item.review_evidence_digest}:${item.finding_id}`));
@@ -370,6 +306,7 @@ async function composeTriage(
     throw new TypeError(`triage dispositions must cover every current finding; missing: ${missing.join(", ")}`);
   }
   const acceptedCount = dispositions.filter((item) => item.disposition === "accepted").length;
+  const acceptedEditorialCount = dispositions.filter((item) => item.disposition === "accepted-editorial").length;
   const candidate = parseTriageCandidate({
     schema_version: "1",
     task_id: services.authority.task_id,
@@ -381,7 +318,8 @@ async function composeTriage(
     source_evidence_digests: derived.current_evidence_set.slots.map((slot) => slot.evidence_digest),
     dispositions,
     accepted_count: acceptedCount,
-    rejected_count: dispositions.length - acceptedCount,
+    rejected_count: dispositions.length - acceptedCount - acceptedEditorialCount,
+    accepted_editorial_count: acceptedEditorialCount,
   });
 
   return computeCallEnvelope(services, {
@@ -505,15 +443,55 @@ async function composeGate(
  * request composed without durable state — it stages the initialization artifact itself and is
  * refused once state exists.
  */
+/**
+ * A generated intent id: kind, second-resolution UTC stamp, four hex characters of crypto
+ * randomness. The caller only supplies `intent_id` explicitly to replay or resume an interrupted
+ * call by reusing the id the envelope echoed.
+ */
+function generateIntentId(kind: string): PathSafeId {
+  const stamp = new Date().toISOString().replaceAll("-", "").replaceAll(":", "").slice(0, 15);
+  const random = randomUUID().replaceAll("-", "").slice(0, 4);
+  return parsePathSafeId(`${kind}-${stamp}-${random}`);
+}
+
+/**
+ * Stages the resolved request beside the intent receipt slot and returns the envelope augmented
+ * with the staged path plus the four-field reference the MCP call pastes instead of the payload.
+ * Overwrite semantics are deliberate — recomposing the same intent replaces the staged file, and
+ * the request digest is what protects against stale or mismatched use.
+ */
+async function withStagedRequest(
+  services: ProductionServices,
+  intentId: PathSafeId,
+  result: ProjectResult<CallEnvelope>,
+): Promise<ProjectResult<CallEnvelope>> {
+  if (!result.ok) return result;
+  const staged = await writeStagedRequest({
+    services,
+    intent_id: intentId,
+    tool: result.value.tool,
+    request_input: result.value.request.input,
+    request_digest: result.value.request_digest,
+  });
+  if (!staged.ok) return staged;
+  return ok(Object.freeze({ ...result.value, staged: staged.value }));
+}
+
 export async function runBuildRequest(
   services: ProductionServices,
   value: PlainJsonValue,
 ): Promise<ProjectResult<CallEnvelope>> {
   assertPlainJson(value, "build-request input");
   const snapshot = record(structuredClone(value), "build-request input");
-  const intentId = parsePathSafeId(String(snapshot.intent_id ?? ""));
   const kind = snapshot.kind === undefined ? "produce" : String(snapshot.kind);
+  const intentId = snapshot.intent_id === undefined
+    ? generateIntentId(kind)
+    : parsePathSafeId(String(snapshot.intent_id));
   if (kind === "initialize") {
+    // Initialize keeps its full-payload flow unstaged: it is the one request composed before
+    // durable state exists, and the initialization transaction owns the first authoritative
+    // writes into the task directory — staging a request file next to a not-yet-adopted
+    // scaffold would put bytes there that no durable authority accounts for yet.
     return services.state === undefined
       ? composeInitialize(services, intentId)
       : transitionInvalid(services.state.value, "initialize");
@@ -526,13 +504,12 @@ export async function runBuildRequest(
   const state = services.state.value;
 
   switch (kind) {
-    case "produce": return composeProduce(services, state, intentId, snapshot);
-    case "running": return composeRunning(services, state, intentId, snapshot);
-    case "self-review": return composeSelfReview(services, state, intentId, snapshot);
-    case "triage": return composeTriage(services, state, intentId, snapshot);
-    case "counter-review": return composeCounterReview(services, state, intentId, snapshot);
-    case "adjudicate": return composeAdjudicate(services, state, intentId);
-    case "gate": return composeGate(services, state, intentId, snapshot);
+    case "produce": return withStagedRequest(services, intentId, await composeProduce(services, state, intentId, snapshot));
+    case "running": return withStagedRequest(services, intentId, await composeRunning(services, state, intentId, snapshot));
+    case "triage": return withStagedRequest(services, intentId, await composeTriage(services, state, intentId, snapshot));
+    case "counter-review": return withStagedRequest(services, intentId, await composeCounterReview(services, state, intentId, snapshot));
+    case "adjudicate": return withStagedRequest(services, intentId, await composeAdjudicate(services, state, intentId));
+    case "gate": return withStagedRequest(services, intentId, await composeGate(services, state, intentId, snapshot));
     default:
       throw new TypeError(`build-request kind ${JSON.stringify(kind)} is not recognized; expected ${PAYLOAD_SHAPE}`);
   }

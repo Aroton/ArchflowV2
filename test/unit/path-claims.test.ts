@@ -115,7 +115,7 @@ describe("repository path claims", () => {
 describe("path classes", () => {
   it("partitions the class vocabulary between the two frames", () => {
     expect(PATH_CLASSES).toEqual([...TASK_PATH_CLASSES, ...REPOSITORY_PATH_CLASSES]);
-    expect(TASK_PATH_CLASSES).toHaveLength(15);
+    expect(TASK_PATH_CLASSES).toHaveLength(16);
     expect(REPOSITORY_PATH_CLASSES).toHaveLength(4);
     expect(new Set(PATH_CLASSES).size).toBe(PATH_CLASSES.length);
     expect(READ_ONLY_PATH_CLASSES).toEqual(["shared-workflow", "shared-constitution"]);

@@ -30,7 +30,7 @@ import { enumerateMaintenanceCandidates, enumerateMaintenanceManifests, enumerat
 import { writeManualCheckpoint } from "../state/manual-checkpoints.js";
 import { readManualCheckpoints } from "../state/manual-checkpoints.js";
 import { createProductionServices } from "../state/production.js";
-import { computeTaskStatus } from "../state/status.js";
+import { computeTaskStatus, projectBriefStatus } from "../state/status.js";
 import { buildDocumentArtifact, type DocumentArtifactInput } from "../state/document-artifact.js";
 import { buildImplementationOutput, type ImplementationOutputInput } from "../state/implementation-manifest.js";
 import { installSnapshot, prepareSnapshot, restoreSnapshotOutput } from "../state/snapshots.js";
@@ -81,7 +81,7 @@ export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommand
   envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
   "build-document": { payload: "<document artifact input>", task: "required" },
   "build-implementation-output": { payload: "<implementation output input>", task: "required" },
-  "build-request": { payload: `{"intent_id":<fresh id>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},...kind facts: none (initialize), "step" (running), "document"/"implementation" (produce), "review":{rubric,findings,matched_rule_versions} (self-review), "dispositions":[...] (triage), "rubric" (counter-review), "summary" (gate)}`, task: "required" },
+  "build-request": { payload: `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},...kind facts: none (initialize), "step" (running), "document"/"implementation" (produce), "dispositions":[...] (triage), "rubric" (counter-review), "summary" (gate)}`, task: "required" },
   "manual-status": { payload: null, task: "required" },
   "manual-next": { payload: "<selector/source artifact requested by manual-status>", task: "required" },
   "manual-handoff": { payload: '{"expected_head":<digest>,"initialization"?:<task-init artifact>}', task: "required" },
@@ -98,6 +98,8 @@ type CommandInput = Readonly<{
   working_directory: string;
   task_id?: string;
   value?: unknown;
+  /** status only: project the routine-loop brief view of the same computed status. */
+  brief?: boolean;
 }>;
 
 function requireValue(input: CommandInput): PlainJsonValue {
@@ -297,7 +299,11 @@ export async function runLocalCommand(input: CommandInput): Promise<PlainJsonVal
       ...(value.initialization === undefined ? {} : { initialization: value.initialization as never }),
     });
   }
-  if (input.command === "status") return computeTaskStatus(created.value.dependencies, created.value.authority);
+  if (input.command === "status") {
+    const status = await computeTaskStatus(created.value.dependencies, created.value.authority);
+    if (!status.ok || input.brief !== true) return status;
+    return Object.freeze({ schema_version: "1", ok: true, value: projectBriefStatus(status.value) });
+  }
   if (input.command === "envelope") return computeCallEnvelope(created.value, requireValue(input));
   if (input.command === "build-document") {
     return buildDocumentArtifact(

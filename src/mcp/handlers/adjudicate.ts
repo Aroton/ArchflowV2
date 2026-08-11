@@ -103,11 +103,25 @@ export async function handleAdjudicate(
       return fail(createProjectError("CONTRACT_INVALID", { tool: call.name, issue_code: "artifact-not-utf8" }));
     }
     const subjectDigest = produce.value.artifact_digest;
-    if (subjectDigest !== currentReviews.value.subject_digest) {
+    // A record-time-validated editorial revision keeps the retained reviews bound to the
+    // predecessor bytes it declares; adjudication itself re-runs against the new subject.
+    const editorialPredecessor = produce.value.artifact.artifact_kind === "document"
+      ? produce.value.artifact.editorial_predecessor
+      : undefined;
+    const reviewsBindPredecessor = editorialPredecessor !== undefined &&
+      currentReviews.value.subject_digest === editorialPredecessor.subject_digest &&
+      currentReviews.value.input_fingerprint === editorialPredecessor.input_fingerprint;
+    if (subjectDigest !== currentReviews.value.subject_digest && !reviewsBindPredecessor) {
       return fail(createProjectError("STATE_INVALID", {
         phase_instance: state.value.phase_instance, issue_code: "adjudication-subject-not-current",
       }));
     }
+    const editorialPredecessorPair = reviewsBindPredecessor && editorialPredecessor !== undefined
+      ? Object.freeze({
+          subject_digest: editorialPredecessor.subject_digest,
+          input_fingerprint: editorialPredecessor.input_fingerprint,
+        })
+      : undefined;
 
     const deriveUpstreams = async (
       durable: typeof state.value,
@@ -302,6 +316,7 @@ export async function handleAdjudicate(
           subject_digest: adjudicationSource.evidence.subject_digest,
           input_fingerprint: adjudicationSource.evidence.input_fingerprint,
           constitution: constitution.value,
+          ...(editorialPredecessorPair === undefined ? {} : { editorial_predecessor: editorialPredecessorPair }),
           approved_upstream_digests: approvedUpstreamDigests,
           authenticated_gate_approvals: Object.freeze(approvals),
           ...(session.value.config.max_attempts === undefined ? {} : { max_attempts: session.value.config.max_attempts }),
@@ -354,6 +369,7 @@ export async function handleAdjudicate(
     }, {
       authority: services.authority, call, config: session.value.config,
       phase_kind: session.value.phase_kind, producer_family: session.value.producer_family,
+      ...(editorialPredecessorPair === undefined ? {} : { editorial_predecessor: editorialPredecessorPair }),
       envelope: {
         artifact,
         rules: Object.freeze([...constitution.value.rules.values()]

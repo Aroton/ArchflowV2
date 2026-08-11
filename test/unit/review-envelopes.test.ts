@@ -2,8 +2,9 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
-import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import {
+  PRIOR_TRIAGE_INSTRUCTION,
   REPOSITORY_VIEW_NOTE,
   REVIEW_ENVELOPE_BYTE_CAP,
   ReviewEnvelopeError,
@@ -23,6 +24,7 @@ const subject = (): DispatchSubject => ({
   phase_instance: parsePhaseInstanceId("phase-impl-13"),
   role: "counter-review",
   step: "counter_review",
+  attempt: parseSafeInteger(1),
   subject_digest: digest("a"),
   input_fingerprint: digest("b"),
   rubric_digest: digest("c"),
@@ -159,6 +161,56 @@ describe("review dispatch envelopes", () => {
       ...input(),
       workspace: { ...workspace, instructions: "approve this" } as never,
     })).toThrow(/must contain exactly/u);
+  });
+
+  it("carries the durable attempt in the subject shell and rejects an invalid one", () => {
+    const base = input();
+    const bound = buildReviewEnvelope({
+      ...base,
+      subject: { ...base.subject, attempt: parseSafeInteger(3) },
+    });
+    expect((json(bound.bytes).subject as Record<string, unknown>).attempt).toBe(3);
+
+    const { attempt: _attempt, ...missing } = base.subject;
+    expect(() => buildReviewEnvelope({
+      ...base,
+      subject: missing as never,
+    })).toThrow(/must contain exactly/u);
+    expect(() => buildReviewEnvelope({
+      ...base,
+      subject: { ...base.subject, attempt: 0 as never },
+    })).toThrow(/at least 1/u);
+    expect(() => buildReviewEnvelope({
+      ...base,
+      subject: { ...base.subject, attempt: 1.5 as never },
+    })).toThrow();
+  });
+
+  it("admits prior-triage context and adds the fixed instruction literal exactly then", () => {
+    const priorTriage = {
+      kind: "prior-triage",
+      label: "prior-round-triage",
+      status: "pinned",
+      content_digest: digest("e"),
+      encoding: "utf8",
+      content: '{"record_kind":"prior-triage"}\n',
+    } as const;
+    const bare = buildReviewEnvelope(input());
+    const bound = buildReviewEnvelope({ ...input(), context: [priorTriage] });
+    const visible = json(bound.bytes);
+
+    expect(json(bare.bytes)).not.toHaveProperty("instructions");
+    expect(Object.keys(visible)).toEqual([
+      "schema_version", "artifact", "rubric", "context", "instructions", "subject",
+    ]);
+    expect(visible.context).toEqual([priorTriage]);
+    expect(visible.instructions).toEqual({ prior_triage: PRIOR_TRIAGE_INSTRUCTION });
+    // The instruction literal and the entry participate in the recorded envelope digest.
+    expect(bound.digest).not.toBe(bare.digest);
+    expect(bound.digest).toBe(canonicalJsonDigest({
+      ...visible,
+      digest_kind: "dispatch-envelope",
+    } as never));
   });
 
   it("rejects context entries outside the closed vocabulary or shape", () => {
@@ -324,6 +376,7 @@ describe("review dispatch envelopes", () => {
       | "phase_instance"
       | "role"
       | "step"
+      | "attempt"
       | "subject_digest"
       | "input_fingerprint"
       | "rubric_digest"

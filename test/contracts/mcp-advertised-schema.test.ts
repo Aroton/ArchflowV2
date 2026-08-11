@@ -44,14 +44,12 @@ const schemaDocumentPaths = [
   "../../src/contracts/schemas/v1/manual-checkpoint.schema.json",
   "../../src/contracts/schemas/v1/manual-checkpoint-import.schema.json",
   "../../src/contracts/schemas/v1/secret-scan-result.schema.json",
-  "../../src/contracts/schemas/v1/review-evidence.schema.json",
   "../../src/contracts/schemas/v1/triage.schema.json"
 ] as const;
 
 const validatingKeywordCoverage = {
   "x-archflow-max-utf8-bytes": ["path-utf8-input", "path-utf8-output", "project-error-path-utf8"],
   "x-archflow-unique-by": ["rubric-unique-by"],
-  "x-archflow-review-summary": ["review-summary"],
   "x-archflow-mcp-semantics": [
     "mcp-current-evidence",
     "mcp-waiver-origin-task",
@@ -119,9 +117,9 @@ const RULE_A = Object.freeze({ rule_id: "Rule:A", rule_version: 1 });
 const RULE_B = Object.freeze({ rule_id: "Rule:B", rule_version: 1 });
 const PROVENANCE = Object.freeze({ schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "Decision:1", helper_invocation_id: "Helper:1", recorded_at: "2026-07-27T12:00:00.000Z" });
 const COMMON = Object.freeze({ schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: D("a") });
-const SELF = Object.freeze({ role: "self-review", evidence_digest: D("1"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" });
 const COUNTER = Object.freeze({ role: "counter-review", evidence_digest: D("2"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" });
-const CURRENT_EVIDENCE = Object.freeze({ set_digest: D("3"), slots: [SELF, COUNTER] });
+const GATE_COUNTER = Object.freeze({ role: "gate-counter-review", evidence_digest: D("1"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-1" });
+const CURRENT_EVIDENCE = Object.freeze({ set_digest: D("3"), slots: [COUNTER] });
 const AUTHORITY = Object.freeze({ link_digest: D("4"), purpose: "restore-adoption", proposed_generation_digest: D("5"), changed_input_fingerprint: D("6") });
 const SCOPE = Object.freeze({ operation: "review-trigger", boundary: "subject" });
 const MANUAL_CHECKPOINT = JSON.parse(await readFile(
@@ -170,24 +168,6 @@ function materialize(entry: CorpusCase): MaterializedCase {
     case "path-utf8-input": return { value: counterCall(longPath) };
     case "path-nfc-input": return { value: counterCall(nfdPath) };
     case "rubric-unique": return { value: counterCall("phases/phase-3.md", [{ id: "paths", text: "First", blocking: true }, { id: "paths", text: "Second", blocking: false }]) };
-    case "review-summary": return {
-      value: {
-        ...stateCall("succeeded"),
-        step: "self_review",
-        artifact: {
-          schema_version: "1",
-          artifact_kind: "review-evidence",
-          evidence: {
-            schema_version: "1", task_id: COMMON.task_id, phase_instance: "phase-impl-3",
-            step: "self_review", role: "self-review", subject_digest: D("b"),
-            input_fingerprint: COMMON.input_fingerprint, rubric_digest: D("c"),
-            producer_family: "claude", findings: [], matched_rule_versions: [],
-            verdict: "fail", blocking_count: 0, assurance: "agent-declared",
-            model_family: "claude", model: "claude", effort: "high",
-          },
-        },
-      },
-    };
     case "checkpoint-authoritative-result-order": {
       const checkpoint = structuredClone(MANUAL_CHECKPOINT);
       const results = checkpoint.authoritative_results as unknown[];
@@ -207,7 +187,7 @@ function materialize(entry: CorpusCase): MaterializedCase {
       };
     }
     case "waiver-origin-task": return { value: { ...waiverCall(), task_id: "other" } };
-    case "current-evidence": return { value: { ...artifactGateCall, current_evidence: { ...CURRENT_EVIDENCE, slots: [SELF, { ...COUNTER, evidence_digest: SELF.evidence_digest }] } } };
+    case "current-evidence": return { value: { ...artifactGateCall, current_evidence: { ...CURRENT_EVIDENCE, slots: [COUNTER, { ...GATE_COUNTER, evidence_digest: COUNTER.evidence_digest }] } } };
     case "review-rule-order": return { value: gateCall("review-trigger", { ...reviewContext(), matched_rules: [RULE_B, RULE_A], eligible_waiver_rules: [] }) };
     case "adjudication-rule-order": return { value: gateCall("adjudication-failure", { ...adjudicationContext(), failed_rules: [RULE_B, RULE_A] }) };
     case "review-eligible-subset": return { value: gateCall("review-trigger", { ...reviewContext(), eligible_waiver_rules: [RULE_B] }) };

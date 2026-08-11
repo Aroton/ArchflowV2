@@ -39,11 +39,10 @@ rule
 const provenance = { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "decision-1", helper_invocation_id: "helper-1", recorded_at: "2026-07-30T12:00:00.000Z" } as const;
 const RULE = { rule_id: "trust-boundary", rule_version: 1 } as const;
 const context = { artifact_kind: "phase-implementation" } as const;
-const self = { role: "self-review", evidence_digest: D("7"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" } as const;
 const counter = { role: "counter-review", evidence_digest: D("8"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
 const gateId = computeGateId({ task_identity_digest: D("a"), intent_id: "intent-1" as never, request_digest: D("b") });
 const contextDigest = computeGateContextDigest("artifact-approval", context);
-const request = () => parseGateRequest({ schema_version: "1", gate_id: gateId, intent_id: "intent-1", request_digest: D("b"), task_id: "task-1", phase_instance: "phase-impl-2", summary: "Approve", subject_digest: D("c"), context_digest: contextDigest, current_evidence: { set_digest: D("3"), slots: [self, counter] }, kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"], opened_at_revision: 4 });
+const request = () => parseGateRequest({ schema_version: "1", gate_id: gateId, intent_id: "intent-1", request_digest: D("b"), task_id: "task-1", phase_instance: "phase-impl-2", summary: "Approve", subject_digest: D("c"), context_digest: contextDigest, current_evidence: { set_digest: D("3"), slots: [counter] }, kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"], opened_at_revision: 4 });
 const decision = (choice: "approve" | "revise") => parseGateDecisionRecord({ schema_version: "1", gate_id: gateId, task_id: "task-1", phase_instance: "phase-impl-2", kind: "artifact-approval", subject_digest: D("c"), context_digest: contextDigest, supplemental: [], outcome: "decided", envelope: { schema_version: "1", gate_id: gateId, task_id: "task-1", phase_instance: "phase-impl-2", kind: "artifact-approval", subject_digest: D("c"), context_digest: contextDigest, human_provenance: provenance, payload: { decision: choice, reason: "Reviewed" } } });
 const state = (): TaskStateV1 => ({ schema_version: "1", task_id: parseTaskSlug("task-1"), repository_identity_digest: D("1"), revision: parseSafeInteger(4), phase_instance: "phase-impl-2" as TaskStateV1["phase_instance"], step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("2"), initialization_digest: D("3"), config_digest: D("4"), workflow_digest: D("5"), constitution_digest: constitution.digest, policy_base_commit: "abcdef0123456789abcdef0123456789abcdef01" as TaskStateV1["policy_base_commit"], authoritative_results: [], approvals: [], waivers: [] });
 
@@ -73,7 +72,7 @@ function authorityPair(entry: (typeof EFFECT_CASES)[number], index: number) {
   const matrixContextDigest = computeGateContextDigest(entry.kind, entry.context as never);
   const common = { gate_id: matrixGateId, task_id: "task-1", phase_instance: "phase-impl-2", kind: entry.kind, subject_digest: D("c"), context_digest: matrixContextDigest };
   return {
-    request: parseGateRequest({ schema_version: "1", ...common, intent_id: `intent-matrix-${index}`, request_digest: D("f"), summary: "Effect matrix", current_evidence: { set_digest: D("3"), slots: [self, counter] }, context: entry.context, allowed_decisions: entry.allowed, opened_at_revision: 4 }),
+    request: parseGateRequest({ schema_version: "1", ...common, intent_id: `intent-matrix-${index}`, request_digest: D("f"), summary: "Effect matrix", current_evidence: { set_digest: D("3"), slots: [counter] }, context: entry.context, allowed_decisions: entry.allowed, opened_at_revision: 4 }),
     decision: parseGateDecisionRecord({ schema_version: "1", ...common, supplemental: [], outcome: "decided", envelope: { schema_version: "1", ...common, human_provenance: { ...provenance, decision_event_id: `decision-matrix-${index}` }, payload: entry.payload } }),
   };
 }
@@ -130,28 +129,21 @@ describe("gate manual authority import", () => {
       schema_version: "1", task_id: "task-1", phase_instance: initial.phase_instance,
       subject_digest: D("c"), input_fingerprint: inputFingerprint,
     } as const;
-    const review = (role: "self-review" | "counter-review") => ({
-      ...base, step: role === "self-review" ? "self_review" : "counter_review", role,
+    const review = () => ({
+      ...base, step: "counter_review", role: "counter-review",
       rubric_digest: D("d"), producer_family: "claude", findings: [],
       matched_rule_versions: [], verdict: "pass", blocking_count: 0,
-      assurance: role === "self-review" ? "agent-declared" : "server-attested",
-      model_family: role === "self-review" ? "claude" : "codex",
+      assurance: "server-attested",
+      model_family: "codex",
       model: "fixture", effort: "high",
-      ...(role === "self-review" ? {} : {
-        adapter: "codex-cli",
-        cli_version: "fixture-1",
-        invocation_id: "fixture-invocation",
-        envelope_input_digest: D("e"),
-        observed_output_digest: D("f"),
-        result_id: "fixture-result",
-      }),
+      adapter: "codex-cli",
+      cli_version: "fixture-1",
+      invocation_id: "fixture-invocation",
+      envelope_input_digest: D("e"),
+      observed_output_digest: D("f"),
+      result_id: "fixture-result",
     });
-    const selfEvidence = review("self-review");
-    const counterEvidence = review("counter-review");
-    const selfSlot = {
-      ...self,
-      evidence_digest: canonicalJsonDigest(selfEvidence),
-    };
+    const counterEvidence = review();
     const counterSlot = {
       ...counter,
       evidence_digest: canonicalJsonDigest(counterEvidence),
@@ -168,7 +160,6 @@ describe("gate manual authority import", () => {
       },
     }) as never;
     const currentEvidence = deriveCurrentEvidenceSet(new Map([
-      ["self_review", reviewEntry(selfSlot.evidence_digest, selfEvidence)],
       ["counter_review", reviewEntry(counterSlot.evidence_digest, counterEvidence)],
     ])).current_evidence_set;
     const lifecycle = { authority, expected_revision: initial.revision, intent_id: "intent-1" as never, request_digest: D("b"), input_fingerprint: inputFingerprint, phase_instance: initial.phase_instance, summary: "Approve", subject_digest: D("c"), current_evidence: currentEvidence, kind: "review-trigger" as const, context: reviewContext };
@@ -208,7 +199,7 @@ describe("gate manual authority import", () => {
 
     const triage = {
       ...base, step: "triage", current_evidence_set_digest: currentEvidence.set_digest,
-      source_evidence_digests: [selfSlot.evidence_digest, counterSlot.evidence_digest],
+      source_evidence_digests: [counterSlot.evidence_digest],
       dispositions: [], accepted_count: 0, rejected_count: 0,
     };
     const adjudication = {
@@ -221,7 +212,6 @@ describe("gate manual authority import", () => {
     const entry = (artifact_digest: ReturnType<typeof D>, source_artifact: object) =>
       ({ reference: {}, manifest: { artifact_digest, source_artifact } }) as never;
     const retained = new Map([
-      ["self_review", entry(selfSlot.evidence_digest, { schema_version: "1", artifact_kind: "review-evidence", evidence: selfEvidence })],
       ["counter_review", entry(counterSlot.evidence_digest, { schema_version: "1", artifact_kind: "review-evidence", evidence: counterEvidence })],
       ["triage", entry(D("a"), { schema_version: "1", artifact_kind: "triage", evidence: triage })],
       ["adjudicate", entry(D("b"), { schema_version: "1", artifact_kind: "adjudication-evidence", evidence: adjudication })],
@@ -293,7 +283,7 @@ describe("gate manual authority import", () => {
     const authorityResult = await createInternalTransactionAuthority({ runner: runnerResult.value, environment: git.value, task_id: parseTaskSlug("task-1"), context: operation }); if (!authorityResult.ok) throw new Error("authority failed");
     const authority = authorityResult.value;
     const inputFingerprint = D("2");
-    const evidence = currentEvidenceSetRef([self, counter]);
+    const evidence = currentEvidenceSetRef([counter]);
     let retained: unknown;
     const dependencies = {
       runner: runnerResult.value, environment: git.value, atomic: createAtomicWriter(), lock: createTaskLock(),

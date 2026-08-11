@@ -121,10 +121,36 @@ function harness(root: string) {
       expect(result.ok, JSON.stringify(result.error ?? result)).toBe(true);
       return outcome.result as PlainJsonValue;
     },
+    /** Like invoke, but returns the raw result so refusal tests can assert the exact error. */
+    async invokeRaw(tool: string, input: PlainJsonValue): Promise<{
+      ok: boolean;
+      error?: { code?: string; diagnostic?: { parameters?: Record<string, unknown> } };
+    }> {
+      sequence += 1;
+      const context = createInvocationContext(connection, {
+        invocation_id: `invocation-${sequence}`,
+        transport_metadata: { request_id: `request-${sequence}`, operation: "tools/call" },
+      }, new AbortController().signal);
+      const outcome = await boundary.invoke(tool, structuredClone(input), context);
+      if (outcome.kind !== "project-result") throw new Error("tool invocation failed outside the result contract");
+      return outcome.result as {
+        ok: boolean;
+        error?: { code?: string; diagnostic?: { parameters?: Record<string, unknown> } };
+      };
+    },
   };
 }
 
-function installReviewerStub(root: string): { restore: () => void } {
+const DEFAULT_STUB_FINDINGS = [{
+  finding_id: "requirement-untestable", severity: "minor", blocking: false,
+  summary: "One requirement is not testable as written.", evidence: "prd.md line 3.",
+  suggested_resolution: "State the observable behavior.",
+}] as const;
+
+function installReviewerStub(
+  root: string,
+  findings: readonly Record<string, unknown>[] = DEFAULT_STUB_FINDINGS,
+): { restore: () => void } {
   const bin = join(root, "stub-bin");
   const stubHome = join(root, "stub-home");
   mkdirSync(join(stubHome, ".codex"), { recursive: true });
@@ -138,15 +164,31 @@ else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logg
 else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8")); const subject = envelope.subject;
-  const output = {
+  const output = subject.role === "counter-review" ? {
     schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
     step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
     input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
     producer_family: subject.producer_family,
-    findings: [{ finding_id: "requirement-untestable", severity: "minor", blocking: false,
-      summary: "One requirement is not testable as written.", evidence: "prd.md line 3.",
-      suggested_resolution: "State the observable behavior." }],
-    matched_rule_versions: [], verdict: "advisory", blocking_count: 0
+    findings: ${JSON.stringify(findings)},
+    matched_rule_versions: [],
+    verdict: ${JSON.stringify(findings.some((finding) => finding.blocking === true) ? "fail" : "advisory")},
+    blocking_count: ${JSON.stringify(findings.filter((finding) => finding.blocking === true).length)}
+  } : {
+    schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
+    pinned_constitution_digest: subject.pinned_constitution_digest,
+    approved_upstream_digests: subject.approved_upstream_digests,
+    source_evidence_set_digest: subject.source_evidence_set_digest,
+    rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
+      compliance: "pass",
+      rationale: "Checked the retained subject.",
+      trigger: "not-matched", trigger_evidence: "No review trigger matched.",
+      enforced_by: rule.enforced_by.map((mechanism) => ({ mechanism, state: "current",
+        subject_digest: subject.subject_digest, evidence_digest: subject.subject_digest,
+        details: "Mechanically verified in fixture." })) })),
+    drift_findings: subject.approved_upstream_digests.map((upstream_digest) => ({ upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift found." })),
+    constitution: "pass",
+    drift: "aligned", matched_rule_versions: [], uncertain_rule_versions: []
   };
   await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
@@ -187,13 +229,6 @@ describe("post-triage re-entry edits are expected", () => {
     writeFileSync(prdPath, "# PRD\n\nRe-entry requirements.\n");
     const produceComposed = await h.buildRequest({ intent_id: "produce-1" });
     await h.invoke(produceComposed.request.tool, produceComposed.request.input);
-    const reviewEntry = await h.buildRequest({ intent_id: "review-entry-1", kind: "running", step: "self_review" });
-    await h.invoke(reviewEntry.request.tool, reviewEntry.request.input);
-    const selfComposed = await h.buildRequest({
-      intent_id: "self-review-1", kind: "self-review",
-      review: { rubric, findings: [], matched_rule_versions: [] },
-    });
-    await h.invoke(selfComposed.request.tool, selfComposed.request.input);
     const counterEntry = await h.buildRequest({ intent_id: "counter-entry-1", kind: "running", step: "counter_review" });
     await h.invoke(counterEntry.request.tool, counterEntry.request.input);
     const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review", rubric });
@@ -284,7 +319,312 @@ describe("post-triage re-entry edits are expected", () => {
       expect(revised.subject_digest).not.toBe(produceComposed.artifact_digest);
       expect(revised.reconciliation?.classification).toBe("consistent");
       expect(revised.reconciliation?.expected_reentry_edits).toBeUndefined();
-      expect(revised.next_action).toMatchObject({ code: "run-step", step: "self_review" });
+      expect(revised.next_action).toMatchObject({ code: "run-step", step: "counter_review" });
+
+      // Stale prior-cycle reviews never authorize the direct adjudicate entry: the revised
+      // artifact declares no editorial predecessor, so the evidence guard refuses before any
+      // transition commits and the pipeline still demands the fresh counter-review.
+      const staleEntry = await h.buildRequest({ intent_id: "adjudicate-entry-stale", kind: "running", step: "adjudicate" });
+      const staleRefused = await h.invokeRaw(staleEntry.request.tool, staleEntry.request.input);
+      expect(staleRefused.ok).toBe(false);
+      expect(staleRefused.error?.diagnostic?.parameters).toMatchObject({ issue_code: "adjudication-subject-not-current" });
+      expect(await h.status()).toMatchObject({ step: "produce", status: "succeeded" });
+    } finally {
+      stub.restore();
+    }
+  }, TIMEOUT);
+
+  it("routes editorial-only acceptance through the evidence-preserving produce re-entry", async () => {
+    const fixture = await repository();
+    const h = harness(fixture.root);
+    const prdPath = join(fixture.root, ".archflow", "tasks", task, "prd.md");
+    const prdClaim = `.archflow/tasks/${task}/prd.md`;
+    const rubric = {
+      schema_version: "1", kind: "artifact", mode: "adversarial",
+      criteria: [{ id: "scope", text: "Check scope against the ask.", blocking: true }],
+    };
+
+    // Drive the PRD phase to counter_review-succeeded with one blocking and one purely
+    // editorial finding, so both the compose-time refusal and the editorial route are real.
+    const created = await h.status();
+    const createRequest = structuredClone(created.next_action.request) as unknown as {
+      tool: string; input: Record<string, PlainJsonValue>;
+    };
+    createRequest.input.artifact = fixture.initialization as unknown as PlainJsonValue;
+    const createResolved = await h.envelope(createRequest as unknown as PlainJsonValue);
+    await h.invoke(createResolved.request.tool, createResolved.request.input);
+    writeFileSync(join(fixture.root, ".archflow", "tasks", task, "ask.md"), "Build the editorial proof.\n");
+    const originalPrd = "# PRD\n\nEditorial requirements, teh original wording.\n";
+    writeFileSync(prdPath, originalPrd);
+    const produceComposed = await h.buildRequest({ intent_id: "produce-1" });
+    await h.invoke(produceComposed.request.tool, produceComposed.request.input);
+
+    // A plain produce with no current reviews is refused the direct adjudicate entry by the
+    // evidence guard before any transition commits: the edge is structural, the guard semantic.
+    const guardedEntry = await h.buildRequest({ intent_id: "adjudicate-entry-refused", kind: "running", step: "adjudicate" });
+    const guarded = await h.invokeRaw(guardedEntry.request.tool, guardedEntry.request.input);
+    expect(guarded.ok).toBe(false);
+    expect(guarded.error?.diagnostic?.parameters).toMatchObject({ issue_code: "adjudication-subject-not-current" });
+    expect(await h.status()).toMatchObject({ step: "produce", status: "succeeded", attempt: 1 });
+    const counterEntry = await h.buildRequest({ intent_id: "counter-entry-1", kind: "running", step: "counter_review" });
+    await h.invoke(counterEntry.request.tool, counterEntry.request.input);
+    const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review", rubric });
+    const stub = installReviewerStub(fixture.root, [
+      {
+        finding_id: "scope-mismatch", severity: "blocker", blocking: true,
+        summary: "The stated scope contradicts the ask.", evidence: "prd.md scope section.",
+        suggested_resolution: "Align the scope with the ask.",
+      },
+      {
+        finding_id: "wording-typo", severity: "minor", blocking: false,
+        summary: "A requirement sentence contains a typo.", evidence: "prd.md line 3: 'teh'.",
+        suggested_resolution: "Fix the typo; no meaning change.",
+      },
+    ]);
+    try {
+      await h.invoke(counterComposed.request.tool, counterComposed.request.input);
+      const triageEntry = await h.buildRequest({ intent_id: "triage-entry-1", kind: "running", step: "triage" });
+      await h.invoke(triageEntry.request.tool, triageEntry.request.input);
+
+      // Compose-time refusal: an editorial acceptance of a blocking finding never composes.
+      await expect(h.buildRequest({
+        intent_id: "triage-refused", kind: "triage",
+        dispositions: [
+          { finding_id: "scope-mismatch", disposition: "accepted-editorial", rationale: "Wording only.", revision_intent: "Reword the scope." },
+          { finding_id: "wording-typo", disposition: "rejected", rationale: "Not a defect.", evidence: "Reads fine." },
+        ],
+      })).rejects.toThrow(/blocking/u);
+
+      // The recorded triage: the blocker is rejected with evidence, the typo accepted as
+      // purely editorial. accepted_count stays 0; only the editorial count is populated.
+      const triageComposed = await h.buildRequest({
+        intent_id: "triage-1", kind: "triage",
+        dispositions: [
+          {
+            finding_id: "scope-mismatch", disposition: "rejected",
+            rationale: "The scope matches the recorded ask verbatim.",
+            evidence: "ask.md and prd.md scope wording agree.",
+          },
+          {
+            finding_id: "wording-typo", disposition: "accepted-editorial",
+            rationale: "The typo changes wording, not meaning.",
+            revision_intent: "Replace 'teh' with 'the' in the requirements sentence.",
+          },
+        ],
+      });
+      const composedTriage = (triageComposed.request.input as { artifact: { evidence: Record<string, unknown> } }).artifact.evidence;
+      expect(composedTriage).toMatchObject({ accepted_count: 0, accepted_editorial_count: 1, rejected_count: 1 });
+      await h.invoke(triageComposed.request.tool, triageComposed.request.input);
+
+      // Editorial-only acceptance is not a re-entry: the attempt budget is untouched and the
+      // next action is the produce step with the editorial wording, not a fresh review loop.
+      const pending = await h.status();
+      expect(pending).toMatchObject({ step: "triage", status: "succeeded", attempt: 1 });
+      expect(pending.evidence?.assessment).toMatchObject({
+        editorial_revision_required: true,
+        reentry_required: false,
+        exhausted: false,
+        next: "produce",
+      });
+      expect(pending.next_action).toMatchObject({ code: "run-step", step: "produce", editorial_revision: true });
+      expect(pending.next_action.detail).toMatch(/editorial/u);
+      expect(pending.next_action.guidance).toMatch(/editorial/u);
+      const predecessorDigest = pending.subject_digest;
+      expect(predecessorDigest).toBe(produceComposed.artifact_digest);
+
+      // The artifact edit is expected under the editorial flag exactly as under full re-entry.
+      writeFileSync(prdPath, "# PRD\n\nEditorial requirements, the original wording.\n");
+      const afterEdit = await h.status();
+      expect(afterEdit.reconciliation?.classification).toBe("consistent");
+      expect(afterEdit.reconciliation?.expected_reentry_edits).toEqual([prdClaim]);
+      expect(afterEdit.next_action).toMatchObject({ code: "run-step", step: "produce" });
+      writeFileSync(prdPath, originalPrd);
+
+      // Enter the produce re-entry. The shared triage-succeeded -> produce-running movement
+      // rule still increments the durable attempt; only the fixed point treats the editorial
+      // pass as attempt-neutral (it never demands re-entry, so it can never exhaust).
+      const produceEntry = await h.buildRequest({ intent_id: "produce-editorial-entry", kind: "running", step: "produce" });
+      await h.invoke(produceEntry.request.tool, produceEntry.request.input);
+
+      // Degenerate self-link: recording without changing any byte is refused.
+      const degenerate = await h.buildRequest({ intent_id: "produce-editorial-degenerate" });
+      const degenerateArtifact = (degenerate.request.input as {
+        artifact: { editorial_predecessor?: Record<string, string> };
+      }).artifact;
+      expect(degenerateArtifact.editorial_predecessor).toMatchObject({ subject_digest: predecessorDigest });
+      const unchanged = await h.invokeRaw(degenerate.request.tool, degenerate.request.input);
+      expect(unchanged.ok).toBe(false);
+      expect(unchanged.error?.diagnostic?.parameters).toMatchObject({ issue_code: "editorial-revision-unchanged-bytes" });
+
+      // A predecessor digest that is not the retained produce result is refused.
+      const wrongPredecessor = structuredClone(degenerate.request.input) as {
+        intent_id: string; artifact: { editorial_predecessor: Record<string, string> };
+      } & Record<string, PlainJsonValue>;
+      wrongPredecessor.intent_id = "produce-editorial-wrong-predecessor";
+      wrongPredecessor.artifact.editorial_predecessor.subject_digest = "f".repeat(64);
+      const wrongPredecessorResolved = await h.envelope({
+        tool: "archflow_state", input: wrongPredecessor,
+      } as unknown as PlainJsonValue);
+      const wrongPredecessorResult = await h.invokeRaw(wrongPredecessorResolved.request.tool, wrongPredecessorResolved.request.input);
+      expect(wrongPredecessorResult.ok).toBe(false);
+      expect(wrongPredecessorResult.error?.diagnostic?.parameters).toMatchObject({ issue_code: "editorial-predecessor-not-current-produce" });
+
+      // A triage result digest that is not the retained authorizing triage is refused.
+      const wrongTriage = structuredClone(degenerate.request.input) as {
+        intent_id: string; artifact: { editorial_predecessor: Record<string, string> };
+      } & Record<string, PlainJsonValue>;
+      wrongTriage.intent_id = "produce-editorial-wrong-triage";
+      wrongTriage.artifact.editorial_predecessor.triage_result_digest = "e".repeat(64);
+      const wrongTriageResolved = await h.envelope({
+        tool: "archflow_state", input: wrongTriage,
+      } as unknown as PlainJsonValue);
+      const wrongTriageResult = await h.invokeRaw(wrongTriageResolved.request.tool, wrongTriageResolved.request.input);
+      expect(wrongTriageResult.ok).toBe(false);
+      expect(wrongTriageResult.error?.diagnostic?.parameters).toMatchObject({ issue_code: "editorial-authorizing-triage-invalid" });
+
+      // The genuine editorial revision: apply exactly the revision intent and record produce.
+      // build-request attaches the predecessor link from durable authority.
+      writeFileSync(prdPath, "# PRD\n\nEditorial requirements, the original wording.\n");
+      const revisedComposed = await h.buildRequest({ intent_id: "produce-editorial-2" });
+      expect((revisedComposed.request.input as {
+        artifact: { editorial_predecessor?: Record<string, string> };
+      }).artifact.editorial_predecessor).toMatchObject({ subject_digest: predecessorDigest });
+      await h.invoke(revisedComposed.request.tool, revisedComposed.request.input);
+
+      // After the editorial produce: the reviews and triage stay current for exactly this one
+      // hop, the next action is adjudicate — never counter_review — and status surfaces the
+      // editorial block the gate presenter needs, with the review-set subject still naming the
+      // predecessor bytes the reviews actually evaluated.
+      const revised = await h.status();
+      expect(revised.subject_digest).toBe(revisedComposed.artifact_digest);
+      expect(revised.subject_digest).not.toBe(predecessorDigest);
+      expect(revised.evidence?.available).toBe(true);
+      expect(revised.evidence?.available === true && revised.evidence.subject_digest).toBe(predecessorDigest);
+      expect(revised.evidence?.assessment).toMatchObject({
+        current: ["counter_review", "triage"],
+        stale: [],
+        reentry_required: false,
+        editorial_revision_required: false,
+        next: "adjudicate",
+      });
+      expect(revised.next_action).toMatchObject({ code: "run-step", step: "adjudicate" });
+      expect(revised.editorial_revision).toMatchObject({
+        predecessor_subject_digest: predecessorDigest,
+        dispositions: [{
+          finding_id: "wording-typo",
+          revision_intent: "Replace 'teh' with 'the' in the requirements sentence.",
+        }],
+      });
+      expect(revised.reconciliation?.classification).toBe("consistent");
+
+      // The movement rules admit the produce-succeeded -> adjudicate-running entry the
+      // editorial route needs, at the same attempt; the state handler's evidence guard accepts
+      // it because the retained reviews bind the declared predecessor.
+      const adjEntry = await h.buildRequest({ intent_id: "adjudicate-entry-1", kind: "running", step: "adjudicate" });
+      await h.invoke(adjEntry.request.tool, adjEntry.request.input);
+      const midAdjudicate = await h.status();
+      expect(midAdjudicate).toMatchObject({ step: "adjudicate", status: "running", attempt: 2 });
+      expect(midAdjudicate.next_action).toMatchObject({ code: "run-step", step: "adjudicate" });
+
+      // Adjudication runs against the new bytes and the loop closes at the approval gate.
+      const adjComposed = await h.buildRequest({ intent_id: "adjudicate-1", kind: "adjudicate" });
+      expect(adjComposed.request.tool).toBe("archflow_adjudicate");
+      await h.invoke(adjComposed.request.tool, adjComposed.request.input);
+      const adjudicated = await h.status();
+      expect(adjudicated).toMatchObject({ step: "adjudicate", status: "succeeded" });
+      expect(adjudicated.evidence?.assessment).toMatchObject({ next: "advance" });
+      expect(adjudicated.next_action).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval" });
+    } finally {
+      stub.restore();
+    }
+  }, TIMEOUT);
+
+  it("admits the author-initiated produce re-entry door from counter_review-succeeded", async () => {
+    const fixture = await repository();
+    const h = harness(fixture.root);
+    const prdPath = join(fixture.root, ".archflow", "tasks", task, "prd.md");
+    const prdClaim = `.archflow/tasks/${task}/prd.md`;
+    const rubric = {
+      schema_version: "1", kind: "artifact", mode: "adversarial",
+      criteria: [{ id: "scope", text: "Check scope against the ask.", blocking: true }],
+    };
+
+    const created = await h.status();
+    const createRequest = structuredClone(created.next_action.request) as unknown as {
+      tool: string; input: Record<string, PlainJsonValue>;
+    };
+    createRequest.input.artifact = fixture.initialization as unknown as PlainJsonValue;
+    const createResolved = await h.envelope(createRequest as unknown as PlainJsonValue);
+    await h.invoke(createResolved.request.tool, createResolved.request.input);
+    writeFileSync(join(fixture.root, ".archflow", "tasks", task, "ask.md"), "Build the door proof.\n");
+    writeFileSync(prdPath, "# PRD\n\nDoor requirements.\n");
+    const produceComposed = await h.buildRequest({ intent_id: "produce-1" });
+    await h.invoke(produceComposed.request.tool, produceComposed.request.input);
+    const counterEntry = await h.buildRequest({ intent_id: "counter-entry-1", kind: "running", step: "counter_review" });
+    await h.invoke(counterEntry.request.tool, counterEntry.request.input);
+    const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review", rubric });
+    const stub = installReviewerStub(fixture.root);
+    try {
+      await h.invoke(counterComposed.request.tool, counterComposed.request.input);
+
+      // New information arrives at counter_review-succeeded, with no accepted finding anywhere.
+      // The sanctioned door: record the produce running entry FIRST — build-request composes it
+      // from the server's own movement rule — and only then edit the artifact.
+      const door = await h.buildRequest({ intent_id: "produce-door-entry", kind: "running", step: "produce" });
+      expect(door.request.input).toMatchObject({ step: "produce", status: "running" });
+      await h.invoke(door.request.tool, door.request.input);
+      const entered = await h.status();
+      expect(entered).toMatchObject({ step: "produce", status: "running", attempt: 2 });
+      expect(entered.next_action).toMatchObject({
+        code: "run-step", step: "produce", human_required: false,
+        detail: "Record the terminal produce result.",
+      });
+      expect(entered.reconciliation?.classification).toBe("consistent");
+
+      // The revision under the recorded running entry is an expected re-entry edit: no drift
+      // finding, no dead end, and the suppressed path is named honestly.
+      writeFileSync(prdPath, "# PRD\n\nDoor requirements, restated after the upstream change.\n");
+      const afterEdit = await h.status();
+      expect(afterEdit.reconciliation?.findings).toEqual([]);
+      expect(afterEdit.reconciliation?.classification).toBe("consistent");
+      expect(afterEdit.reconciliation?.expected_reentry_edits).toEqual([prdClaim]);
+      expect(afterEdit.blocking_reasons).not.toContain("projection-mismatch");
+      expect(afterEdit.next_action).toMatchObject({ code: "run-step", step: "produce" });
+
+      // The terminal produce records the new bytes; downstream evidence goes stale exactly as
+      // an accepted re-entry, and the loop re-runs from counter_review.
+      const revisedComposed = await h.buildRequest({ intent_id: "produce-door-2" });
+      await h.invoke(revisedComposed.request.tool, revisedComposed.request.input);
+      const revised = await h.status();
+      expect(revised.subject_digest).toBe(revisedComposed.artifact_digest);
+      expect(revised.subject_digest).not.toBe(produceComposed.artifact_digest);
+      expect(revised.reconciliation?.classification).toBe("consistent");
+      expect(revised.reconciliation?.expected_reentry_edits).toBeUndefined();
+      expect(revised.evidence?.assessment).toMatchObject({ next: "counter_review", stale: ["counter_review"] });
+      expect(revised.next_action).toMatchObject({ code: "run-step", step: "counter_review" });
+
+      const counterEntry2 = await h.buildRequest({ intent_id: "counter-entry-2", kind: "running", step: "counter_review" });
+      await h.invoke(counterEntry2.request.tool, counterEntry2.request.input);
+      const counterComposed2 = await h.buildRequest({ intent_id: "counter-2", kind: "counter-review", rubric });
+      await h.invoke(counterComposed2.request.tool, counterComposed2.request.input);
+      const triageEntry = await h.buildRequest({ intent_id: "triage-entry-1", kind: "running", step: "triage" });
+      await h.invoke(triageEntry.request.tool, triageEntry.request.input);
+      const triageComposed = await h.buildRequest({
+        intent_id: "triage-1", kind: "triage",
+        dispositions: [{
+          finding_id: "requirement-untestable", disposition: "rejected",
+          rationale: "The restated requirement names observable behavior.",
+          evidence: "prd.md restated requirement.",
+        }],
+      });
+      await h.invoke(triageComposed.request.tool, triageComposed.request.input);
+      const adjEntry = await h.buildRequest({ intent_id: "adjudicate-entry-1", kind: "running", step: "adjudicate" });
+      await h.invoke(adjEntry.request.tool, adjEntry.request.input);
+      const adjComposed = await h.buildRequest({ intent_id: "adjudicate-1", kind: "adjudicate" });
+      await h.invoke(adjComposed.request.tool, adjComposed.request.input);
+      const closed = await h.status();
+      expect(closed.evidence?.assessment).toMatchObject({ next: "advance" });
+      expect(closed.next_action).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval" });
     } finally {
       stub.restore();
     }

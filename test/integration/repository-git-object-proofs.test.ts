@@ -79,7 +79,7 @@ describe("Git object proofs", () => {
     if (!runnerResult.ok) throw new Error("worktree discovery failed");
     const runner = runnerResult.value;
     const baseCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim() as ImplementationOutputV1["base_commit"];
-    const path = parseRepositoryPathClaim(`.archflow/tasks/${taskId}/reviews/phase-impl-11.self.md`);
+    const path = parseRepositoryPathClaim(`.archflow/tasks/${taskId}/reviews/phase-impl-11.counter.md`);
     const bytes = new TextEncoder().encode("new output\n");
     mkdirSync(join(root, ".archflow", "tasks", taskId, "reviews"), { recursive: true });
     writeFileSync(join(root, path), bytes);

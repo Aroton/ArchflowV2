@@ -2,7 +2,8 @@ import { readFile } from "node:fs/promises";
 import { specTypeSchemas } from "@modelcontextprotocol/server";
 import { describe, expect, it } from "vitest";
 import { parseTransportRequestId } from "../../src/contracts/contexts.js";
-import { parseToolCall, TOOL_DEFINITIONS, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
+import { classifyToolCallInput, parseStagedRequestReference, parseToolCall, TOOL_DEFINITIONS, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
+import { TOOL_NAMES } from "../../src/contracts/tool-names.js";
 import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
 import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
 
@@ -41,6 +42,29 @@ describe("MCP contract schema agreement", () => {
     expect(parseToolCall("archflow_state", valid).name).toBe("archflow_state");
     expect(() => parseToolCall("archflow_state", invalid)).toThrow();
     expect(Object.values(TOOL_DEFINITIONS).every((definition) => definition.input_schema_id.startsWith("https://archflow.dev/schemas/v1/mcp-tools#/$defs/"))).toBe(true);
+  });
+
+  it("admits the staged-reference arm of every tool input union in both authorities", async () => {
+    const mcp = await load("../../src/contracts/schemas/v1/mcp-tools.schema.json") as { $defs: Record<string, { input: object }> };
+    const references = [await load("../../src/contracts/schemas/v1/supplemental-review.schema.json"), await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
+    const reference = { schema_version: "1", task_id: "task-1", intent_id: "produce-20260810T120000-ab12", request_digest: "b".repeat(64) };
+    const fullState = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: "a".repeat(64), phase_instance: "phase-impl-2", step: "produce", status: "running" };
+    for (const tool of TOOL_NAMES) {
+      const validator = createJsonSchemaValidator({ $schema: "https://json-schema.org/draft/2020-12/schema", ...mcp.$defs[tool]!.input, $defs: mcp.$defs }, references);
+      expect(validator.validate(reference), `${tool} reference arm`).toBe(true);
+      expect(validator.validate({ ...reference, extra: true }), `${tool} reference strictness`).toBe(false);
+      expect(validator.validate({ ...reference, request_digest: "not-a-digest" }), `${tool} reference digest`).toBe(false);
+      // The runtime union agrees: the reference arm classifies as a staged reference and never
+      // as a full-payload call, while a full payload still parses as its call.
+      const classified = classifyToolCallInput(tool, reference);
+      expect(classified.kind).toBe("staged-reference");
+      expect(() => parseToolCall(tool, reference)).toThrow();
+    }
+    expect(createJsonSchemaValidator({ $schema: "https://json-schema.org/draft/2020-12/schema", ...mcp.$defs.archflow_state!.input, $defs: mcp.$defs }, references).validate(fullState)).toBe(true);
+    const classifiedFull = classifyToolCallInput("archflow_state", fullState);
+    expect(classifiedFull.kind).toBe("call");
+    expect(parseStagedRequestReference(reference)).toEqual(reference);
+    expect(() => parseStagedRequestReference(fullState)).toThrow();
   });
 
   it("keeps waiver success rule versions within the shared positive safe-integer bounds", async () => {
@@ -85,11 +109,11 @@ describe("MCP contract schema agreement", () => {
     const mcp = await load("../../src/contracts/schemas/v1/mcp-tools.schema.json");
     const references = [await load("../../src/contracts/schemas/v1/supplemental-review.schema.json"), await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
     const validator = createJsonSchemaValidator(mcp, references);
-    const self = { role: "self-review", evidence_digest: "1".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" };
     const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
-    const gate = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: "a".repeat(64), phase_instance: "phase-impl-2", summary: "Review", subject_digest: "a".repeat(64), current_evidence: { set_digest: "3".repeat(64), slots: [self, counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } };
+    const gateCounter = { role: "gate-counter-review", evidence_digest: "1".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-1" };
+    const gate = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: "a".repeat(64), phase_instance: "phase-impl-2", summary: "Review", subject_digest: "a".repeat(64), current_evidence: { set_digest: "3".repeat(64), slots: [counter, gateCounter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } };
     expect(validator.validate(gate)).toBe(true);
-    for (const invalid of [{ ...gate, current_evidence: { ...gate.current_evidence, slots: [counter, self] } }, { ...gate, current_evidence: { ...gate.current_evidence, slots: [self, { ...counter, evidence_digest: self.evidence_digest }] } }, { ...gate, kind: "attempts-exhausted", context: { step: "produce", attempts: 1, maximum_attempts: 2 } }]) {
+    for (const invalid of [{ ...gate, current_evidence: { ...gate.current_evidence, slots: [gateCounter, counter] } }, { ...gate, current_evidence: { ...gate.current_evidence, slots: [counter, { ...gateCounter, evidence_digest: counter.evidence_digest }] } }, { ...gate, kind: "attempts-exhausted", context: { step: "produce", attempts: 1, maximum_attempts: 2 } }]) {
       expect(validator.validate(invalid)).toBe(false);
       expect(() => parseToolCall("archflow_gate", invalid)).toThrow();
     }

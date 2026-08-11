@@ -201,7 +201,6 @@ describe("pinned-config enforcement sites", () => {
       current_evidence: {
         set_digest: D("a"),
         slots: [
-          { role: "self-review", evidence_digest: D("b"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
           { role: "counter-review", evidence_digest: D("c"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
         ],
       },

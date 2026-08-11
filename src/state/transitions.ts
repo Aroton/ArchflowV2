@@ -91,8 +91,12 @@ function sameSubject(current: TaskStateV1, target: TransitionTarget): boolean {
  * The status a same-phase run-step request may legally target for `step` from `current`, derived
  * from the same movement rules `legalMovement` enforces: mid-step work records its terminal
  * result, a failed step re-enters running, a succeeded step hands off to its pipeline successor
- * (or back to produce from triage/adjudicate). `undefined` means no run-step request from this
- * state can legally target `step`, so no request template may honestly be emitted for it.
+ * (or back to produce from any succeeded step — the author-initiated re-entry). A succeeded
+ * produce may also enter adjudicate directly: the editorial-revision path re-runs adjudication
+ * while retained reviews stay bound to the declared predecessor. That edge is structural here;
+ * the archflow_state handler refuses it semantically when no current evidence covers the
+ * subject or its declared predecessor. `undefined` means no run-step request from this state
+ * can legally target `step`, so no request template may honestly be emitted for it.
  */
 export function legalRunStepStatus(
   current: Pick<TaskStateV1, "phase_instance" | "step" | "status" | "terminal" | "open_gate">,
@@ -102,10 +106,12 @@ export function legalRunStepStatus(
   if (current.step === step) {
     if (current.status === "running") return "succeeded";
     if (current.status === "failed") return "running";
-    return undefined;
+    // Withdraw-and-redo: a succeeded produce may re-enter its own running state (attempt + 1).
+    return step === "produce" && current.status === "succeeded" ? "running" : undefined;
   }
   if (current.status !== "succeeded") return undefined;
-  if ((current.step === "triage" || current.step === "adjudicate") && step === "produce") return "running";
+  if (step === "produce") return "running";
+  if (current.step === "produce" && step === "adjudicate") return "running";
   const steps = pipeline(current.phase_instance);
   const index = steps.indexOf(current.step);
   return index >= 0 && steps[index + 1] === step ? "running" : undefined;
@@ -133,15 +139,29 @@ function legalMovement(input: TransitionPlanInput): boolean {
     if (current.status === "running") {
       return target.attempt === current.attempt && (target.status === "succeeded" || target.status === "failed");
     }
-    return current.status === "failed" && target.status === "running" && target.attempt === current.attempt + 1;
+    if (current.status === "failed") {
+      return target.status === "running" && target.attempt === current.attempt + 1;
+    }
+    // A succeeded step re-entering itself is legal only through the backward-to-produce rule
+    // below (produce-succeeded -> produce-running, withdraw-and-redo); fall through to it.
   }
   if (current.status !== "succeeded" || target.status !== "running") return false;
+  if (target.phase_instance === current.phase_instance && target.step === "produce") {
+    // Author-initiated produce re-entry from any succeeded pipeline step (attempt + 1): the
+    // triage/adjudicate cases are the accepted-finding re-entry, the produce/counter_review
+    // cases are the sanctioned new-information door — downstream evidence simply goes stale.
+    return target.attempt === current.attempt + 1;
+  }
   if (
     target.phase_instance === current.phase_instance &&
-    (current.step === "triage" || current.step === "adjudicate") &&
-    target.step === "produce"
+    current.step === "produce" &&
+    target.step === "adjudicate"
   ) {
-    return target.attempt === current.attempt + 1;
+    // Editorial re-entry into adjudication at the same attempt. Structurally this admits any
+    // succeeded produce; the archflow_state handler refuses the entry unless current review
+    // evidence covers the subject or its declared editorial predecessor, so a task can never
+    // strand in adjudicate without evidence.
+    return target.attempt === current.attempt;
   }
   const steps = pipeline(current.phase_instance);
   const index = steps.indexOf(current.step);
@@ -172,7 +192,7 @@ function artifactMatches(input: TransitionPlanInput): boolean {
     // artifact. A successful `produce` step does: that is the artifact-producing boundary.
     return input.target.status !== "succeeded" || input.target.step !== "produce";
   }
-  const artifactTaskId = artifact.artifact_kind === "review-evidence" || artifact.artifact_kind === "triage"
+  const artifactTaskId = artifact.artifact_kind === "triage"
     ? artifact.evidence.task_id
     : artifact.task_id;
   if (artifactTaskId !== input.current.task_id) return false;
@@ -185,7 +205,7 @@ function artifactMatches(input: TransitionPlanInput): boolean {
       artifact.step === input.target.step &&
       artifact.input_fingerprint === input.recomputed_input_fingerprint;
   }
-  if (artifact.artifact_kind === "review-evidence" || artifact.artifact_kind === "triage") {
+  if (artifact.artifact_kind === "triage") {
     return artifact.evidence.phase_instance === input.target.phase_instance &&
       artifact.evidence.step === input.target.step &&
       artifact.evidence.input_fingerprint === input.recomputed_input_fingerprint;
@@ -201,8 +221,7 @@ function artifactMatches(input: TransitionPlanInput): boolean {
 function resultReferenceMatches(input: TransitionPlanInput): boolean {
   const reference = input.result_reference;
   const sourceKind = input.artifact?.artifact_kind;
-  const evidenceStep = input.target.step === "self_review" ||
-    input.target.step === "counter_review" ||
+  const evidenceStep = input.target.step === "counter_review" ||
     input.target.step === "triage" ||
     input.target.step === "adjudicate";
   const producing = input.target.status === "succeeded" && (

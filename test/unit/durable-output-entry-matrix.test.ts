@@ -350,8 +350,8 @@ describe("OutputEntry rejection — both authorities agree on every off-table sh
     agreedRejection("delete/symlink before.mode 100644", withProperties(leaf(14), { before: regular644 }));
   });
 
-  it("rejects all eleven server-owned path classes", () => {
-    expect(SERVER_OWNED_PATH_CLASSES).toHaveLength(11);
+  it("rejects all twelve server-owned path classes", () => {
+    expect(SERVER_OWNED_PATH_CLASSES).toHaveLength(12);
     for (const pathClass of SERVER_OWNED_PATH_CLASSES) {
       agreedRejection(`path_class ${pathClass}`, withProperties(leaf(1), { path_class: pathClass }));
       agreedRejection(`delete + path_class ${pathClass}`, withProperties(leaf(13), { path_class: pathClass }));

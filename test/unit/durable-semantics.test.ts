@@ -69,7 +69,7 @@ const intentPair = async (): Promise<{
 }> => {
   const prepared = withoutCommittedIntent(await state());
   const predecessor: TaskStateV1 = { ...prepared, revision: parseSafeInteger(prepared.revision - 1) };
-  const outcome = { result_id: "phase-impl-1:self_review:2", revision: prepared.revision };
+  const outcome = { result_id: "phase-impl-1:counter_review:2", revision: prepared.revision };
   const receipt = {
     schema_version: "1",
     intent_id: "intent-0001",
@@ -569,7 +569,7 @@ describe("validateDurableSemantics — positive path", () => {
         DURABLE_ISSUE_CODES.intentReceiptReferenceRevisionMismatch,
       ],
       [
-        withReference({ result_id: "phase-impl-1:self_review:99" as never }),
+        withReference({ result_id: "phase-impl-1:counter_review:99" as never }),
         DURABLE_ISSUE_CODES.intentReceiptReferenceResultMismatch,
       ],
       [{ ...exactState, status: "failed" }, DURABLE_ISSUE_CODES.intentReceiptFinalStateMismatch],

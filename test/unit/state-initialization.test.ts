@@ -187,7 +187,7 @@ describe("revision-0 state initialization", () => {
     const failed = continued(firstCheckpoint, 2, "produce", "failed", 1);
     const retried = continued(failed, 3, "produce", "running", 2);
     const succeeded = continued(retried, 4, "produce", "succeeded", 2);
-    const reset = continued(succeeded, 5, "self_review", "running", 1);
+    const reset = continued(succeeded, 5, "counter_review", "running", 1);
     const manual = parseManualCheckpointImport({
       schema_version: "1",
       artifact_kind: "manual-checkpoint-import",
@@ -266,7 +266,7 @@ describe("revision-0 state initialization", () => {
     // combination would write a revision-1 state no transition could have produced.
     const entryPointMismatches = [
       { intent_id: "wrong-phase", phase_instance: "design", step: "produce", status: "running" },
-      { intent_id: "wrong-step", phase_instance: "prd", step: "self_review", status: "running" },
+      { intent_id: "wrong-step", phase_instance: "prd", step: "counter_review", status: "running" },
       { intent_id: "wrong-status", phase_instance: "prd", step: "produce", status: "succeeded" },
     ] as const;
     for (const mismatch of entryPointMismatches) {

@@ -15,14 +15,24 @@ Task root: `.archflow/tasks/<task-id>/`. The important entries:
 | `ask.md`, `prd.md`, `design.md`, `phases/<n>/…` | human-readable projections of retained results | derived, replaceable |
 | `gate.json` / `gate.decision` | the mutable *interface* a human answers a gate through | transient |
 | `decisions/<gate-id>/` | gate request + decision archive | **immutable** |
-| `results/sha256/<digest>/` | content-addressed store — the after-image of every step | **immutable** |
+| `results/sha256/<digest>/` | content-addressed store — the after-image of every step | manifest **immutable & permanent**; superseded `payload/` bytes reclaimed |
 | `intents/<intent-id>.json` | intent receipts — the transaction journal | **immutable** |
+| `intents/<intent-id>.request.json` | staged requests — the resolved request `build-request` composed, awaiting its digest-checked MCP call | replaced on recompose; deletable once the intent is retired |
 | `manual/checkpoints/` | the offline checkpoint chain | append-only |
-| `attempts/`, `maintenance/`, `imports/` | dispatch telemetry, deletion records, legacy staging | append-only |
+| `attempts/`, `maintenance/`, `imports/` | failed-dispatch forensics, reclamation records, legacy staging | append-only |
 
 `state.json` holds identity, position (`phase_instance`, `step`, `status`, `attempt`), a strictly increasing `revision` (the compare-and-swap token), the pinned input digests, sorted sets of authoritative results / approvals / waivers, and **at most one** `open_gate` — modelled as an optional object rather than an array, so a second concurrent gate is unrepresentable rather than merely rejected. Deliberately absent: any recorded "blocking reason" — blocking is always recomputed, so there's no second source of truth to disagree.
 
-A key distinction to internalize: the markdown files humans read are **projections** — derived copies of retained results. The authority is always the canonical JSON in `results/` + `state.json`. Losing a projection loses convenience, never truth.
+A key distinction to internalize: the markdown files humans read are **projections** — derived copies of retained results. The authority is always the canonical JSON in `results/` + `state.json`. Losing a projection loses convenience, never truth — and for every *referenced* result the payload bytes are still there to restore it. That restore guarantee is deliberately scoped: superseded payloads are reclaimed (next section), so only results something can still read keep their byte copies.
+
+### Retention and reclamation
+
+Every produce/review round stores a full copy of its output under `results/sha256/<digest>/payload/`, so a phase that loops N times would otherwise retain N near-identical copies. Two rules keep that bounded without ever touching truth:
+
+- **A result is *referenced* — never pruned — while anything can still read it back:** it appears in `state.json`'s `authoritative_results`, a manual checkpoint, an archived gate document under `decisions/` (or a retained review record, the checkpoint chain, or the live gate interface — matched conservatively, by digest-shaped string, so an unrecognized future reference shape fails toward keeping), or the intent receipt for the current revision or its not-yet-promoted successor — the only receipts crash arbitration ever consumes. Retired receipts replay from their own recorded outcome bytes, so they no longer pin payloads. Staged requests (`*.request.json`, a distinct path class that can never classify as a receipt) are never roots: their content is re-authenticated by request digest on every use, so a stale one pins nothing and is simply deletable.
+- **Everything else loses only its `payload/` byte copies.** The `manifest.json` stays forever as the digest-bound authority record, and each reclamation pass writes an immutable record under `maintenance/` (reachability proof digest, exact deletion set, byte counts) *before* deleting, so every reclaimed byte is accounted for.
+
+Reclamation runs opportunistically: after a commit that replaces an authoritative result, the transaction kernel triggers a best-effort prune (`pruneSupersededResultPayloads`). A prune failure is never a transaction failure — the commit is already durable, and the next superseding commit retries. The human-run `archflow-local maintain` command performs the same pass on demand and is additionally the only path allowed to delete attempt records: dispatches write an `attempts/` record **only on failure** (timeout, cancellation, nonzero exit — the forensic evidence for canary/leak analysis); successful dispatches write nothing.
 
 ## How writes stay safe
 

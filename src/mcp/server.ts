@@ -4,14 +4,16 @@ import { assertAuthenticInvocationContext, type InvocationContext } from "../con
 import { createProjectError, createProtocolError, parseProtocolError, type ProtocolError } from "../contracts/errors.js";
 import { safeVersionV1Schema } from "../contracts/evidence.js";
 import {
-  parseToolCall,
+  classifyToolCallInput,
   validateProjectFailureStructure,
   validateProjectResultStructure,
   type ParsedToolCall,
+  type StagedRequestReference,
   type StructurallyValidProjectResult
 } from "../contracts/mcp-tools.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { isToolName, type ToolName } from "../contracts/tool-names.js";
+import { rehydrateStagedToolCall } from "../state/staged-requests.js";
 import { reportInternalError } from "./diagnostics.js";
 
 export type ToolHandler<K extends ToolName> = (
@@ -148,7 +150,9 @@ function copyRegistry(handlers: ToolHandlerRegistry): ToolHandlerRegistry {
 function classifyVersionedArgs<K extends ToolName>(
   tool: K,
   args: unknown
-): { readonly call: Extract<ParsedToolCall, { readonly name: K }> } | { readonly outcome: ToolBoundaryOutcome } {
+): { readonly call: Extract<ParsedToolCall, { readonly name: K }> }
+  | { readonly reference: StagedRequestReference }
+  | { readonly outcome: ToolBoundaryOutcome } {
   try {
     assertPlainJson(args, `${tool} input`);
   } catch {
@@ -181,7 +185,10 @@ function classifyVersionedArgs<K extends ToolName>(
     };
   }
   try {
-    return { call: parseToolCall(tool, args) };
+    const classified = classifyToolCallInput(tool, args);
+    return classified.kind === "staged-reference"
+      ? { reference: classified.reference }
+      : { call: classified.call };
   } catch {
     return { outcome: invalidInput(tool, "input-invalid") };
   }
@@ -202,6 +209,34 @@ export function createToolBoundary(handlers: ToolHandlerRegistry): ToolBoundary 
       const classified = classifyVersionedArgs(name, args);
       if ("outcome" in classified) return classified.outcome;
 
+      // The staged-reference arm is resolved here, at the one entry all five tools share:
+      // the reference rehydrates to an authentic full-payload call — digest-checked against
+      // both the staged file and the model-typed reference — before any handler runs, so a
+      // mismatch fails closed with no state change.
+      let call: Extract<ParsedToolCall, { readonly name: typeof name }>;
+      if ("reference" in classified) {
+        let rehydrated;
+        try {
+          rehydrated = await rehydrateStagedToolCall(
+            name,
+            classified.reference,
+            context.connection.startup_repository_candidate.working_directory
+          );
+        } catch (error) {
+          return internalFailure(name, context, error);
+        }
+        if (!rehydrated.ok) {
+          try {
+            return projectOutcome(name, validateProjectFailureStructure(name, copyJson(rehydrated)));
+          } catch (error) {
+            return internalFailure(name, context, error);
+          }
+        }
+        call = rehydrated.value;
+      } else {
+        call = classified.call;
+      }
+
       const handler = registry[name] as ToolHandler<typeof name> | undefined;
       if (handler === undefined) {
         return protocolOutcome(createProtocolError("TOOL_DISABLED", {
@@ -212,15 +247,15 @@ export function createToolBoundary(handlers: ToolHandlerRegistry): ToolBoundary 
 
       let returned: unknown;
       try {
-        returned = await handler(classified.call, context);
+        returned = await handler(call, context);
       } catch (error) {
         return internalFailure(name, context, error);
       }
 
       try {
-        validateProjectResultStructure(classified.call, returned);
+        validateProjectResultStructure(call, returned);
         const copied = copyJson(returned as PlainJsonValue);
-        return projectOutcome(name, validateProjectResultStructure(classified.call, copied));
+        return projectOutcome(name, validateProjectResultStructure(call, copied));
       } catch (error) {
         return internalFailure(name, context, error);
       }

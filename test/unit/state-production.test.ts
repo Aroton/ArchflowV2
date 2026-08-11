@@ -10,7 +10,7 @@ import { canonicalDocument } from "../../src/contracts/canonical.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parseSafeCode, parseSafeId, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
-import type { AgentDeclaredReview } from "../../src/contracts/review.js";
+import type { DegradedReview } from "../../src/contracts/review.js";
 import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import { createAtomicWriter } from "../../src/state/atomic.js";
 import { prepareEvidenceResult } from "../../src/state/evidence-results.js";
@@ -105,11 +105,11 @@ describe("production dependency assembly", () => {
     const input = { working_directory: root, task_id: task, operation: parseSafeCode("production-retained-test"), phase_instance: committedPhase };
     const service = await createProductionServices(input);
     if (!service.ok) throw new Error("production setup failed");
-    const review: AgentDeclaredReview = {
-      schema_version: "1", task_id: task, phase_instance: committedPhase, step: "self_review", role: "self-review",
+    const review: DegradedReview = {
+      schema_version: "1", task_id: task, phase_instance: committedPhase, step: "counter_review", role: "counter-review",
       subject_digest: D("a"), input_fingerprint: D("b"), rubric_digest: D("c"), producer_family: "claude",
       findings: [], matched_rule_versions: [], verdict: "pass", blocking_count: 0,
-      assurance: "agent-declared", model_family: "claude", model: "claude", effort: "high",
+      assurance: "degraded", reason: "manual fallback", model_family: "codex", model: "unknown", effort: "unknown",
     };
     const scanner: SecretScanner = { scan: async (candidates) => ({
       schema_version: "1", outcome: "clean", detector_set_id: parseSafeId("test"),
@@ -147,7 +147,7 @@ describe("production dependency assembly", () => {
     expect(installed.ok, installed.ok ? undefined : JSON.stringify(installed.error)).toBe(true);
     const state: TaskStateV1 = {
       schema_version: "1", task_id: task, repository_identity_digest: service.value.authority.repository_identity_digest,
-      revision: parseSafeInteger(4), phase_instance: committedPhase, step: "self_review", status: "succeeded",
+      revision: parseSafeInteger(4), phase_instance: committedPhase, step: "counter_review", status: "succeeded",
       attempt: parseSafeInteger(1), input_fingerprint: D("b"), initialization_digest: D("2"), config_digest: D("3"),
       workflow_digest: D("4"), constitution_digest: D("5"),
       policy_base_commit: "abcdef0123456789abcdef0123456789abcdef01" as TaskStateV1["policy_base_commit"],

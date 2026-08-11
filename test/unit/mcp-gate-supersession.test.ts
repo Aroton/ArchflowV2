@@ -63,7 +63,6 @@ describe("gate handler supersession classification", () => {
         current_evidence: {
           set_digest: "e".repeat(64),
           slots: [
-            { role: "self-review", evidence_digest: "1".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
             { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
           ],
         },

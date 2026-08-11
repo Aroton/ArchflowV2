@@ -43,6 +43,7 @@ import { verifyRepositoryIdentity, type RootBoundGitRunner } from "../repository
 import { resolveTaskPath, type ResolvedPath, type ResolvedTaskPath } from "../repository/paths.js";
 import { AtomicReplaceError, type AtomicWriter, type ProjectionWriter } from "./atomic.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
+import { pruneSupersededResultPayloads } from "./maintenance-roots.js";
 import type { InputFingerprintResolver } from "./fingerprint.js";
 import { identifyTransactionRequest } from "./request.js";
 import {
@@ -256,7 +257,6 @@ function operationFor(call: ParsedToolCall): IntentReceiptV1["operation"] {
         case "legacy-import-initialization": return "adopt-legacy-import-initialization" as IntentReceiptV1["operation"];
         case "document": return "record-document-artifact" as IntentReceiptV1["operation"];
         case "implementation-output": return "record-implementation-output" as IntentReceiptV1["operation"];
-        case "review-evidence": return "record-self-review" as IntentReceiptV1["operation"];
         case "triage": return "record-triage" as IntentReceiptV1["operation"];
         case "manual-checkpoint-import": return "adopt-manual-checkpoint-import" as IntentReceiptV1["operation"];
       }
@@ -574,11 +574,9 @@ function expectedInstallationSource(
     const matches =
       (step === "produce" &&
         (source.artifact_kind === "document" || source.artifact_kind === "implementation-output")) ||
-      (step === "self_review" && source.artifact_kind === "review-evidence" &&
-        source.evidence.role === "self-review" && source.evidence.step === "self_review") ||
       (step === "triage" && source.artifact_kind === "triage");
     if (!matches) throw new TypeError("result source kind is not legal for the archflow_state step");
-    if (source.artifact_kind === "review-evidence" || source.artifact_kind === "triage") {
+    if (source.artifact_kind === "triage") {
       if (call.input.artifact === undefined) {
         throw new TypeError("evidence result installation requires an archflow_state artifact");
       }
@@ -897,6 +895,32 @@ async function installResultFacts(
   return ok(undefined);
 }
 
+/**
+ * Post-commit, best-effort: when a commit drops an authoritative result reference — the single
+ * point at which a result becomes superseded — the replaced result's payload bytes have just
+ * become unreadable and are reclaimed through the maintenance machinery, which writes an
+ * immutable maintenance record before deleting anything. Failure never surfaces: the committed
+ * outcome is already durable, and an unfinished prune is retried by the next superseding commit.
+ */
+async function reclaimSupersededPayloads(
+  dependencies: TransactionDependencies,
+  authority: TransactionAuthority,
+  previous: TaskStateV1,
+  committed: TaskStateV1,
+): Promise<void> {
+  try {
+    const retained = new Set(committed.authoritative_results.map((reference) => reference.result_digest));
+    if (!previous.authoritative_results.some((reference) => !retained.has(reference.result_digest))) return;
+    // The maintenance enumerators sit above modules that depend on this kernel, so this static
+    // edge is part of a module cycle — safe, because the binding is only dereferenced here at
+    // call time. A dynamic import() must not be used: it forces esbuild to lazy-wrap the whole
+    // cycle (and, transitively, zod), which breaks bundled runtime initialization before main.
+    await pruneSupersededResultPayloads(dependencies, authority);
+  } catch {
+    // Best-effort by contract; whatever was reclaimed is accounted for by its maintenance record.
+  }
+}
+
 async function installPlan<K extends ToolName>(
   dependencies: TransactionDependencies,
   request: TransactionRequest<K>,
@@ -907,7 +931,6 @@ async function installPlan<K extends ToolName>(
 ): Promise<ProjectResult<TransactionOutcome<K>>> {
   const resumesResult = plan.receipt.value.operation === "record-document-artifact" ||
     plan.receipt.value.operation === "record-implementation-output" ||
-    plan.receipt.value.operation === "record-self-review" ||
     plan.receipt.value.operation === "record-triage" ||
     plan.receipt.value.operation === "counter-review" ||
     plan.receipt.value.operation === "adjudicate";
@@ -978,6 +1001,7 @@ async function installPlan<K extends ToolName>(
   }
   const committed = validateDurableSemantics(createCommittedIntentSubject(observed.document, plan.receipt));
   if (!committed.ok) return committed;
+  await reclaimSupersededPayloads(dependencies, request.authority, current.value, observed.document.value);
   return outcomeResult(observed.document, plan.outcome, false);
 }
 

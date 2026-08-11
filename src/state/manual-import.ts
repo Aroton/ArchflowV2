@@ -608,9 +608,10 @@ export function reduceAuthenticatedManualChain(
       if (resultReference !== undefined && retainedArtifact === undefined) {
         return invalid(checkpoint.phase_instance, "manual-import-result-evidence-missing");
       }
-      const transitionArtifact = retainedArtifact?.artifact_kind === "adjudication-evidence"
-        ? undefined
-        : retainedArtifact;
+      const transitionArtifact =
+        retainedArtifact?.artifact_kind === "adjudication-evidence" || retainedArtifact?.artifact_kind === "review-evidence"
+          ? undefined
+          : retainedArtifact;
       const transition = planStateTransition({
         current: cursor,
         target: {

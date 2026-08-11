@@ -6,12 +6,12 @@
   "required": ["schema_version", "evidence_kind", "assurance", "role", "task_id", "phase_instance", "subject_digest", "input_fingerprint", "evidence_digest", "authority"],
   "properties": {
     "schema_version": { "const": "1" }, "evidence_kind": { "enum": ["review", "adjudication"] }, "assurance": { "enum": ["agent-declared", "server-attested", "degraded"] },
-    "role": { "enum": ["self-review", "counter-review", "gate-counter-review", "adjudication"] }, "task_id": { "$ref": "#/$defs/taskSlug" }, "phase_instance": { "$ref": "#/$defs/phase" },
+    "role": { "enum": ["counter-review", "gate-counter-review", "adjudication"] }, "task_id": { "$ref": "#/$defs/taskSlug" }, "phase_instance": { "$ref": "#/$defs/phase" },
     "subject_digest": { "$ref": "#/$defs/digest" }, "input_fingerprint": { "$ref": "#/$defs/digest" }, "evidence_digest": { "$ref": "#/$defs/digest" }, "gate_id": { "$ref": "#/$defs/pathSafeId" },
     "authority": { "oneOf": [{ "$ref": "#/$defs/agent" }, { "$ref": "#/$defs/server" }, { "$ref": "#/$defs/degraded" }] }
   },
   "allOf": [
-    { "if": { "properties": { "evidence_kind": { "const": "adjudication" } }, "required": ["evidence_kind"] }, "then": { "properties": { "role": { "const": "adjudication" } } }, "else": { "properties": { "role": { "enum": ["self-review", "counter-review", "gate-counter-review"] } } } },
+    { "if": { "properties": { "evidence_kind": { "const": "adjudication" } }, "required": ["evidence_kind"] }, "then": { "properties": { "role": { "const": "adjudication" } } }, "else": { "properties": { "role": { "enum": ["counter-review", "gate-counter-review"] } } } },
     { "if": { "properties": { "assurance": { "const": "agent-declared" } }, "required": ["assurance"] }, "then": { "properties": { "authority": { "$ref": "#/$defs/agent" } } } },
     { "if": { "properties": { "assurance": { "const": "server-attested" } }, "required": ["assurance"] }, "then": { "properties": { "authority": { "$ref": "#/$defs/server" } } } },
     { "if": { "properties": { "assurance": { "const": "degraded" } }, "required": ["assurance"] }, "then": { "properties": { "authority": { "$ref": "#/$defs/degraded" } } } },

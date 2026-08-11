@@ -22,7 +22,6 @@ import {
   adjudicationReviewClaim,
   counterReviewClaim,
   parseTaskPathClaim,
-  selfReviewClaim,
   toRepositoryPathClaim,
   triageReviewClaim,
   type PathClass,
@@ -40,7 +39,6 @@ declare const resolvedTaskPathBrand: unique symbol;
 export {
   adjudicationReviewClaim,
   counterReviewClaim,
-  selfReviewClaim,
   triageReviewClaim,
 };
 
@@ -66,6 +64,11 @@ export type ResolvedSourcePath = Readonly<{
 
 export function gateRequestClaim(gateId: PathSafeId): TaskPathClaim {
   return parseTaskPathClaim(`decisions/${gateId}/request.json`);
+}
+
+/** The staged-request slot for one intent; distinct by suffix from the `intents/<id>.json` receipt. */
+export function stagedRequestClaim(intentId: PathSafeId): TaskPathClaim {
+  return parseTaskPathClaim(`intents/${intentId}.request.json`);
 }
 
 export function gateDecisionClaim(gateId: PathSafeId): TaskPathClaim {
@@ -125,11 +128,12 @@ const anchored = (body: string): RegExp => new RegExp(`^${body}$`, "u");
  * | `gate-interface`    | `gate.json` \| `gate.decision`                                                              | —                               |
  * | `document`          | `prd.md` \| `design.md` \| `phases/<n>/design.md` \| `phases/<n>/impl-notes.md`             | positive phase number           |
  * | `verification-transcript` | `phases/<n>/verification.txt`                                                         | positive phase number           |
- * | `review`            | `reviews/<phase-instance>.{self,counter,triage,adjudication}.md` \| `reviews/<phase-instance>.gate-counter.<gate-id>.md` | phase instance; gate ID for the last form |
+ * | `review`            | `reviews/<phase-instance>.{counter,triage,adjudication}.md` \| `reviews/<phase-instance>.gate-counter.<gate-id>.md` | phase instance; gate ID for the last form |
  * | `decision`          | `decisions/<gate-id>/request.json` \| `decisions/<gate-id>/decision.json` \| `decisions/<gate-id>/supplemental-review.json` | gate ID |
  * | `result-manifest`   | `results/sha256/<result-digest>/manifest.json`                                              | result digest                   |
  * | `result-payload`    | `results/sha256/<result-digest>/payload/<declared-output-path>`                              | result digest; declared output claim |
  * | `intent`            | `intents/<intent-id>.json`                                                                  | intent ID                       |
+ * | `staged-request`    | `intents/<intent-id>.request.json`                                                          | intent ID                       |
  * | `attempt`           | `attempts/<phase-instance>/<attempt-id>.json`                                               | phase instance; attempt ID      |
  * | `manual-checkpoint` | `manual/checkpoints/<revision>-<checkpoint-digest>.json`                                    | revision; checkpoint digest     |
  * | `maintenance-record`| `maintenance/<maintenance-id>.json`                                                         | maintenance ID                  |
@@ -156,7 +160,7 @@ const TASK_CLASS_RULES: readonly ClassRule<TaskPathClass>[] = [
   {
     path_class: "review",
     pattern: anchored(
-      `reviews/${PHASE_INSTANCE}\\.(?:self|counter|triage|adjudication)\\.md` +
+      `reviews/${PHASE_INSTANCE}\\.(?:counter|triage|adjudication)\\.md` +
         `|reviews/${PHASE_INSTANCE}\\.gate-counter\\.${PATH_SAFE_ID}\\.md`
     ),
   },
@@ -166,7 +170,11 @@ const TASK_CLASS_RULES: readonly ClassRule<TaskPathClass>[] = [
   },
   { path_class: "result-manifest", pattern: anchored(`results/sha256/${SHA256}/manifest\\.json`) },
   { path_class: "result-payload", pattern: anchored(`results/sha256/${SHA256}/payload/.+`) },
-  { path_class: "intent", pattern: anchored(`intents/${PATH_SAFE_ID}\\.json`) },
+  // The two intent-directory suffixes are disjoint by construction: the receipt rule refuses any
+  // name ending in `.request.json` via lookbehind, so a staged request can never classify as a
+  // receipt regardless of rule order, and a receipt id may still legally contain dots.
+  { path_class: "staged-request", pattern: anchored(`intents/${PATH_SAFE_ID}\\.request\\.json`) },
+  { path_class: "intent", pattern: anchored(`intents/${PATH_SAFE_ID}(?<!\\.request)\\.json`) },
   { path_class: "attempt", pattern: anchored(`attempts/${PHASE_INSTANCE}/${PATH_SAFE_ID}\\.json`) },
   {
     path_class: "manual-checkpoint",

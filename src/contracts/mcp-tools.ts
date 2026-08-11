@@ -5,7 +5,7 @@ import { manualCheckpointImportV1Schema } from "./durable-checkpoint.js";
 import { documentArtifactV1Schema } from "./durable-document.js";
 import { implementationOutputV1Schema } from "./durable-implementation-output.js";
 import { legacyImportInitializationV1Schema } from "./durable-legacy-import.js";
-import type { ReviewEvidenceArtifactV1, TriageArtifactV1 } from "./durable-result-manifest.js";
+import type { TriageArtifactV1 } from "./durable-result-manifest.js";
 import { taskInitializationV1Schema } from "./durable-task-initialization.js";
 import type { DurableArtifact } from "./durable.js";
 import { parseProjectError, type ProjectResult } from "./errors.js";
@@ -15,7 +15,6 @@ import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { taskPathClaimV1Schema, type TaskPathClaim } from "./path-claims.js";
 import { rubricV1Schema, type RubricV1 } from "./rubric.js";
-import { reviewEvidenceSchema } from "./review.js";
 import { parseSupplementalReviewOutcome, type GateSupersessionRef, type SupplementalReviewOutcome } from "./supplemental.js";
 import { TOOL_NAMES, type ToolName } from "./tool-names.js";
 import { parseCurrentEvidenceSetRef, type CurrentEvidenceSetRef } from "./trust.js";
@@ -39,7 +38,7 @@ const provenance = humanDecisionProvenanceV1Schema as z.ZodType<HumanDecisionPro
 const common = { schema_version: z.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger, input_fingerprint: digest } as const;
 
 export type CommonToolInput = { readonly schema_version: "1"; readonly task_id: TaskSlug; readonly intent_id: PathSafeId; readonly expected_revision: number; readonly input_fingerprint: Sha256Digest };
-export type StateInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "self_review" | "counter_review" | "triage" | "adjudicate"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact };
+export type StateInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "counter_review" | "triage" | "adjudicate"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact };
 // Every success value optionally echoes the request_digest the server recorded for the call, so
 // a client can compare one string against its envelope output to prove the arguments arrived
 // untranscribed. Optional in the contract because receipts recorded before the echo existed must
@@ -73,16 +72,24 @@ const durableArtifact = z.union([
   manualCheckpointImportV1Schema,
   z.object({
     schema_version: z.literal("1"),
-    artifact_kind: z.literal("review-evidence"),
-    evidence: reviewEvidenceSchema,
-  }).strict() as z.ZodType<ReviewEvidenceArtifactV1>,
-  z.object({
-    schema_version: z.literal("1"),
     artifact_kind: z.literal("triage"),
     evidence: triageCandidateSchema,
   }).strict() as z.ZodType<TriageArtifactV1>,
 ]) as unknown as z.ZodType<DurableArtifact>;
-const stateInput = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "self_review", "counter_review", "triage", "adjudicate"]), status: z.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
+const stateInput = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "counter_review", "triage", "adjudicate"]), status: z.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
+/**
+ * The staged-request reference arm shared by every tool input union. It is structurally disjoint
+ * from every full-payload arm: strictness rejects any full payload (extra fields), and every full
+ * payload requires `expected_revision`/`input_fingerprint`, which the reference lacks — so
+ * classification between the arms is never ambiguous. The server resolves the reference to the
+ * staged file `build-request` wrote and refuses on any digest disagreement.
+ */
+const stagedReferenceInput = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest }).strict();
+export type StagedRequestReference = Readonly<{ schema_version: "1"; task_id: TaskSlug; intent_id: PathSafeId; request_digest: Sha256Digest }>;
+export function parseStagedRequestReference(value: unknown): StagedRequestReference {
+  assertPlainJson(value, "staged request reference");
+  return deepFreeze(stagedReferenceInput.parse(structuredClone(value))) as StagedRequestReference;
+}
 const counterInput = z.object({ ...common, artifact_path: taskPathClaimV1Schema, rubric: rubricV1Schema }).strict();
 const adjudicateInput = z.object({ ...common, artifact_path: taskPathClaimV1Schema, upstream_paths: z.array(taskPathClaimV1Schema) }).strict();
 const supersedes = z.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest, old_subject_digest: digest }).strict();
@@ -127,6 +134,22 @@ export function parseToolCall<K extends ToolName>(name: K, value: unknown): Extr
   const call = Object.freeze({ name, input }) as unknown as Extract<ParsedToolCall, { name: K }>;
   parsedCalls.add(call);
   return call;
+}
+export type ClassifiedToolCallInput<K extends ToolName> =
+  | Readonly<{ kind: "call"; call: Extract<ParsedToolCall, { name: K }> }>
+  | Readonly<{ kind: "staged-reference"; tool: K; reference: StagedRequestReference }>;
+/**
+ * The union entry for every tool input: a full payload parses to an authentic call, and the
+ * staged-request reference arm is returned for the server to rehydrate from durable staging.
+ */
+export function classifyToolCallInput<K extends ToolName>(name: K, value: unknown): ClassifiedToolCallInput<K> {
+  if (!(TOOL_NAMES as readonly string[]).includes(name)) throw new TypeError("unknown tool");
+  assertPlainJson(value, `${name} input`);
+  const reference = stagedReferenceInput.safeParse(structuredClone(value));
+  if (reference.success) {
+    return Object.freeze({ kind: "staged-reference", tool: name, reference: deepFreeze(reference.data) as StagedRequestReference });
+  }
+  return Object.freeze({ kind: "call", call: parseToolCall(name, value) });
 }
 export type RequestIdentifiedToolCall<K extends ToolName = ToolName> = ParsedToolCall<K> & { readonly request_digest: Sha256Digest };
 export function bindParsedToolCallRequest<K extends ToolName>(call: Extract<ParsedToolCall, { name: K }>, requestDigest: Sha256Digest): Extract<RequestIdentifiedToolCall, { name: K }> { if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required"); digest.parse(requestDigest); requestDigests.set(call, requestDigest); return call as Extract<RequestIdentifiedToolCall, { name: K }>; }

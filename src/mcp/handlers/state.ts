@@ -18,6 +18,7 @@ import {
 import {
   loadCurrentReviewSet,
   prepareEvidenceResult,
+  validateEditorialPredecessorDeclaration,
   type EvidenceResultValue,
   type PreparedEvidenceResult,
 } from "../../state/evidence-results.js";
@@ -91,10 +92,65 @@ export async function handleState(
       services.dependencies,
       { authority: services.authority, call },
       async (current, identifiedCall): Promise<ProjectResult<PreparedTransaction<"archflow_state">>> => {
+        if (
+          artifact === undefined &&
+          call.input.step === "adjudicate" &&
+          call.input.status === "running" &&
+          current.value.step === "produce" &&
+          current.value.status === "succeeded"
+        ) {
+          // The produce-succeeded -> adjudicate-running edge is structural in the movement
+          // rules; its semantic guard lives here, before any transition commits: adjudication
+          // may be entered directly from a succeeded produce only when current review evidence
+          // covers the retained artifact or its declared editorial predecessor. A plain produce
+          // with stale or absent reviews is refused, so a task can never strand mid-adjudicate
+          // without the evidence adjudication needs.
+          const loadRetained = services.dependencies.load_retained_result;
+          if (loadRetained === undefined) throw new TypeError("evidence preparation dependencies are unavailable");
+          const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
+          if (!produce.ok) return produce;
+          const notCurrent = (): ProjectResult<PreparedTransaction<"archflow_state">> =>
+            fail(createProjectError("STATE_INVALID", {
+              phase_instance: current.value.phase_instance,
+              issue_code: "adjudication-subject-not-current",
+            }));
+          let reviews;
+          try {
+            reviews = await loadCurrentReviewSet(
+              { read_state: services.dependencies.read_state, load_retained_result: loadRetained },
+              services.authority,
+              current.value.phase_instance,
+            );
+          } catch {
+            return notCurrent();
+          }
+          if (!reviews.ok) return reviews;
+          const predecessor = produce.value.artifact.artifact_kind === "document"
+            ? produce.value.artifact.editorial_predecessor
+            : undefined;
+          const reviewsBindPredecessor = predecessor !== undefined &&
+            reviews.value.subject_digest === predecessor.subject_digest &&
+            reviews.value.input_fingerprint === predecessor.input_fingerprint;
+          if (produce.value.artifact_digest !== reviews.value.subject_digest && !reviewsBindPredecessor) {
+            return notCurrent();
+          }
+        }
         let preparedResult: PreparedStateResult | PreparedEvidenceResult | undefined;
         if (artifact?.artifact_kind === "document" || artifact?.artifact_kind === "implementation-output") {
           if (retainedBytes === undefined || scanner === undefined) {
             throw new TypeError("snapshot preparation dependencies are unavailable");
+          }
+          if (artifact.artifact_kind === "document" && artifact.editorial_predecessor !== undefined) {
+            // An editorial revision is accepted only against the retained produce result it
+            // names, only when the retained triage authorizes exactly it, and only when the
+            // bytes actually changed. `current.value` still holds the predecessor's reference:
+            // this very transaction is what replaces it.
+            const authorized = await validateEditorialPredecessorDeclaration(
+              services.dependencies,
+              current.value,
+              artifact,
+            );
+            if (!authorized.ok) return authorized;
           }
           const common = {
             services,
@@ -109,7 +165,7 @@ export async function handleState(
           if (!prepared.ok) return prepared;
           preparedResult = prepared.value;
         }
-        if (artifact?.artifact_kind === "review-evidence" || artifact?.artifact_kind === "triage") {
+        if (artifact?.artifact_kind === "triage") {
           const loadRetained = services.dependencies.load_retained_result;
           if (retainedBytes === undefined || scanner === undefined || loadRetained === undefined) {
             throw new TypeError("evidence preparation dependencies are unavailable");
@@ -122,18 +178,13 @@ export async function handleState(
               issue_code: "review-subject-not-current-produce-artifact",
             }));
           }
-          let value: EvidenceResultValue;
-          if (artifact.artifact_kind === "review-evidence") {
-            value = { kind: "review", evidence: artifact.evidence };
-          } else {
-            const reviews = await loadCurrentReviewSet(
-              { read_state: services.dependencies.read_state, load_retained_result: loadRetained },
-              services.authority,
-              call.input.phase_instance,
-            );
-            if (!reviews.ok) return reviews;
-            value = { kind: "triage", current_reviews: reviews.value, evidence: artifact.evidence };
-          }
+          const reviews = await loadCurrentReviewSet(
+            { read_state: services.dependencies.read_state, load_retained_result: loadRetained },
+            services.authority,
+            call.input.phase_instance,
+          );
+          if (!reviews.ok) return reviews;
+          const value: EvidenceResultValue = { kind: "triage", current_reviews: reviews.value, evidence: artifact.evidence };
           const prepared = await prepareEvidenceResult({
             authority: services.authority,
             runner: services.runner,
@@ -264,8 +315,7 @@ export async function handleState(
             attempt: call.input.phase_instance !== current.value.phase_instance
               ? parseSafeInteger(1)
               : (current.value.status === "failed" && call.input.step === current.value.step) ||
-                  ((current.value.step === "triage" || current.value.step === "adjudicate") &&
-                    call.input.step === "produce")
+                  (current.value.status === "succeeded" && call.input.step === "produce")
                 ? parseSafeInteger(current.value.attempt + 1)
                 : current.value.attempt,
             input_fingerprint: call.input.input_fingerprint,

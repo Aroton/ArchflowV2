@@ -106,13 +106,12 @@ describe("local call envelopes", () => {
     const currentEvidence = {
       set_digest: D("a"),
       slots: [
-        { role: "self-review" as const, evidence_digest: D("b"), assurance: "agent-declared" as const, producer_family: "claude" as const, reviewer_family: "claude" as const, independence: "same-family-self" as const },
         { role: "counter-review" as const, evidence_digest: D("c"), assurance: "server-attested" as const, producer_family: "claude" as const, reviewer_family: "codex" as const, independence: "opposite-family" as const },
       ] as const,
     };
     const rubric = { schema_version: "1" as const, kind: "artifact" as const, mode: "adversarial" as const, criteria: [{ id: "scope", text: "Check scope.", blocking: true }] };
     const values = [
-      { tool: "archflow_state" as const, input: { ...common, intent_id: "state-envelope", phase_instance: "prd", step: "self_review", status: "running" } },
+      { tool: "archflow_state" as const, input: { ...common, intent_id: "state-envelope", phase_instance: "prd", step: "counter_review", status: "running" } },
       { tool: "archflow_counter_review" as const, input: { ...common, intent_id: "counter-envelope", artifact_path: "prd.md", rubric } },
       { tool: "archflow_adjudicate" as const, input: { ...common, intent_id: "adjudicate-envelope", artifact_path: "prd.md", upstream_paths: [] } },
     ];

@@ -49,7 +49,6 @@ const GIT_ENV: NodeJS.ProcessEnv = {
 const CONFIG_TEXT = `schema_version: "1"
 roles:
   producer: {model: claude-test, effort: medium}
-  self-reviewer: {model: claude-test, effort: medium}
 `;
 
 type Harness = Readonly<{ root: string; authority: TransactionAuthority; dependencies: GateLifecycleDependencies }>;
@@ -172,7 +171,6 @@ function gateInput(h: Harness, intent: string): GateOpenInput {
     current_evidence: {
       set_digest: D("a"),
       slots: [
-        { role: "self-review", evidence_digest: D("b"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
         { role: "counter-review", evidence_digest: D("c"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       ],
     },

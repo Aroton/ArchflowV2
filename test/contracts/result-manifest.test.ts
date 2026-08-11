@@ -42,8 +42,8 @@ const reviewSource = (): ReviewEvidenceArtifactV1 => ({
     schema_version: "1",
     task_id: source.task_id,
     phase_instance: source.phase_instance,
-    step: "self_review",
-    role: "self-review",
+    step: "counter_review",
+    role: "counter-review",
     subject_digest: parseSha256Digest("1".repeat(64)),
     input_fingerprint: source.input_fingerprint,
     rubric_digest: parseSha256Digest("2".repeat(64)),
@@ -52,24 +52,30 @@ const reviewSource = (): ReviewEvidenceArtifactV1 => ({
     matched_rule_versions: [],
     verdict: "pass",
     blocking_count: 0,
-    assurance: "agent-declared",
-    model_family: "claude",
-    model: "claude",
+    assurance: "server-attested",
+    adapter: "codex-cli",
+    cli_version: "1.0.0",
+    model_family: "codex",
+    model: "gpt-test",
     effort: "high",
+    invocation_id: "invocation-1",
+    envelope_input_digest: parseSha256Digest("a".repeat(64)),
+    observed_output_digest: parseSha256Digest("b".repeat(64)),
+    result_id: "result-1",
   },
 });
 
 const reviewManifest = (): ResultManifestV1 => {
   const sourceArtifact = reviewSource();
-  const path = `.archflow/tasks/${source.task_id}/reviews/${source.phase_instance}.self.md` as typeof firstOutput.path;
+  const path = `.archflow/tasks/${source.task_id}/reviews/${source.phase_instance}.counter.md` as typeof firstOutput.path;
   const renderedDigest = parseSha256Digest("3".repeat(64));
   return {
     schema_version: "1",
     task_id: source.task_id,
     repository_identity_digest: repositoryDigest,
-    result_id: "self-review-result-1" as ResultManifestV1["result_id"],
+    result_id: "counter-review-result-1" as ResultManifestV1["result_id"],
     phase_instance: source.phase_instance,
-    step: "self_review",
+    step: "counter_review",
     artifact_digest: canonicalJsonDigest(sourceArtifact.evidence),
     source_artifact: sourceArtifact,
     input_fingerprint: source.input_fingerprint,
@@ -148,7 +154,7 @@ describe("ResultManifestV1", () => {
         `.archflow/tasks/${manifestDocument.value.task_id}/results/sha256/${manifestDocument.digest}/manifest.json`,
       ),
     };
-    const retained = createRetainedEvidenceReference<"review", "agent-declared">(manifestDocument, reference);
+    const retained = createRetainedEvidenceReference<"review", "server-attested">(manifestDocument, reference);
     expect(retained.verified.evidence_digest).toBe(manifestDocument.value.artifact_digest);
     expect(() => createRetainedEvidenceReference(manifestDocument, {
       ...reference,

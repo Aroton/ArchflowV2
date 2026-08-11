@@ -32,16 +32,29 @@ import {
 export const DEFAULT_MAX_ATTEMPTS = 3;
 
 const EVIDENCE_STEPS = Object.freeze([
-  "self_review",
   "counter_review",
   "triage",
   "adjudicate",
 ] as const);
 
+/** The one-hop pair the current produce artifact may declare as its editorial predecessor. */
+export type EditorialPredecessorPair = Readonly<{
+  subject_digest: Sha256Digest;
+  input_fingerprint: Sha256Digest;
+}>;
+
 export type EvidenceSubject = Readonly<{
   subject_digest: Sha256Digest;
   input_fingerprint: Sha256Digest;
   constitution: ResolvedConstitution;
+  /**
+   * Present only when the current produce artifact declares an editorial predecessor. Review and
+   * triage evidence bound to this pair counts as current for the subject — exactly one hop, no
+   * chaining: the pair always comes from the current artifact's own declaration, so evidence two
+   * revisions back never matches. Adjudication currency deliberately stays exact on the new
+   * subject; only its triage binding relaxes.
+   */
+  editorial_predecessor?: EditorialPredecessorPair;
   approved_upstream_digests?: readonly Sha256Digest[];
   authenticated_gate_approvals?: readonly AuthenticatedGateApproval[];
   max_attempts?: number;
@@ -53,10 +66,15 @@ export type EvidenceAssessment = Readonly<{
   every_finding_dispositioned: boolean;
   blocker_remains: boolean;
   reentry_required: boolean;
+  /**
+   * Triage succeeded with only `accepted-editorial` findings and the produce artifact does not
+   * yet declare that triage as its authorizer: the next produce applies exactly the editorial
+   * revision intents without invalidating review evidence or requiring a full re-entry.
+   */
+  editorial_revision_required: boolean;
   exhausted: boolean;
   adjudication_gate_pending: boolean;
   next:
-    | "self_review"
     | "counter_review"
     | "triage"
     | "adjudicate"
@@ -80,13 +98,32 @@ function evidencePayload(manifest: ResultManifestV1):
   return undefined;
 }
 
+function boundToSubjectExactly(
+  bound: Readonly<{ subject_digest: Sha256Digest; input_fingerprint: Sha256Digest }>,
+  subject: EvidenceSubject,
+): boolean {
+  return bound.subject_digest === subject.subject_digest &&
+    bound.input_fingerprint === subject.input_fingerprint;
+}
+
+function boundToDeclaredPredecessor(
+  bound: Readonly<{ subject_digest: Sha256Digest; input_fingerprint: Sha256Digest }>,
+  subject: EvidenceSubject,
+): boolean {
+  const predecessor = subject.editorial_predecessor;
+  return predecessor !== undefined &&
+    bound.subject_digest === predecessor.subject_digest &&
+    bound.input_fingerprint === predecessor.input_fingerprint;
+}
+
 function subjectCurrent(
   evidence: ReviewEvidence | TriageCandidate | AdjudicationEvidence | undefined,
   subject: EvidenceSubject,
+  allowPredecessor: boolean,
 ): boolean {
-  return evidence !== undefined &&
-    evidence.subject_digest === subject.subject_digest &&
-    evidence.input_fingerprint === subject.input_fingerprint;
+  if (evidence === undefined) return false;
+  return boundToSubjectExactly(evidence, subject) ||
+    (allowPredecessor && boundToDeclaredPredecessor(evidence, subject));
 }
 
 function currentReviewSet(
@@ -95,8 +132,8 @@ function currentReviewSet(
 ): DerivedCurrentEvidenceSet | undefined {
   try {
     const derived = deriveCurrentEvidenceSet(retained);
-    return derived.subject_digest === subject.subject_digest &&
-      derived.input_fingerprint === subject.input_fingerprint
+    return boundToSubjectExactly(derived, subject) ||
+      boundToDeclaredPredecessor(derived, subject)
       ? derived
       : undefined;
   } catch {
@@ -111,10 +148,12 @@ function currentFor(
   reviews: DerivedCurrentEvidenceSet | undefined,
   currentTriage: TriageCandidate | undefined,
 ): boolean {
-  if (step === "self_review" || step === "counter_review") return reviews !== undefined;
+  if (step === "counter_review") return reviews !== undefined;
   const entry = retained.get(step);
   const evidence = entry === undefined ? undefined : evidencePayload(entry.manifest);
-  if (!subjectCurrent(evidence, subject) || reviews === undefined) return false;
+  // Triage may be bound to the declared editorial predecessor (one hop); adjudication currency
+  // deliberately stays exact against the new subject, so it is re-run after an editorial revision.
+  if (!subjectCurrent(evidence, subject, step === "triage") || reviews === undefined) return false;
   if (step === "triage") {
     const triage = evidence as TriageCandidate;
     return triage.current_evidence_set_digest === reviews.current_evidence_set.set_digest &&
@@ -132,12 +171,6 @@ function currentFor(
         digest === (subject.approved_upstream_digests ?? [])[index]);
   }
   return false;
-}
-
-function reviewAt(retained: RetainedEvidenceSet, step: "self_review" | "counter_review"):
-  ReviewEvidence | undefined {
-  const source = retained.get(step)?.manifest.source_artifact;
-  return source?.artifact_kind === "review-evidence" ? source.evidence : undefined;
 }
 
 function triageAt(retained: RetainedEvidenceSet): TriageCandidate | undefined {
@@ -159,7 +192,6 @@ function adjudicationGateSatisfied(
   gate: NonNullable<ReturnType<typeof selectAdjudicationGate>>,
 ): boolean {
   const contextDigest = computeGateContextDigest(gate.kind, gate.context);
-  const selfDigest = retained.get("self_review")?.manifest.artifact_digest;
   const counterDigest = retained.get("counter_review")?.manifest.artifact_digest;
   const triage = triageAt(retained);
   const adjudication = adjudicationAt(retained);
@@ -175,18 +207,17 @@ function adjudicationGateSatisfied(
       request.phase_instance !== state.phase_instance ||
       decision.context_digest !== contextDigest ||
       decision.envelope.context_digest !== contextDigest ||
-      selfDigest === undefined ||
       counterDigest === undefined ||
       triage === undefined ||
       adjudication === undefined ||
-      triage.subject_digest !== subject.subject_digest ||
-      triage.input_fingerprint !== subject.input_fingerprint ||
+      // The triage binding alone relaxes to the declared editorial predecessor (one hop);
+      // adjudication stays exact so the constitution verdict is honest for the final bytes.
+      !(boundToSubjectExactly(triage, subject) || boundToDeclaredPredecessor(triage, subject)) ||
       adjudication.subject_digest !== subject.subject_digest ||
       adjudication.input_fingerprint !== subject.input_fingerprint ||
       adjudication.source_evidence_set_digest !== request.current_evidence.set_digest ||
       request.current_evidence.set_digest !== triage.current_evidence_set_digest ||
-      request.current_evidence.slots[0].evidence_digest !== selfDigest ||
-      request.current_evidence.slots[1].evidence_digest !== counterDigest
+      request.current_evidence.slots[0].evidence_digest !== counterDigest
     ) continue;
     return true;
   }
@@ -226,25 +257,14 @@ function dispositionState(
   blocker: boolean;
   accepted: boolean;
 }> {
-  const self = reviews?.reviews[0]?.evidence;
-  const counter = reviews?.reviews[1]?.evidence;
-  if (
-    reviews === undefined ||
-    self === undefined ||
-    counter === undefined ||
-    triage === undefined
-  ) {
+  const counter = reviews?.reviews[0]?.evidence;
+  if (reviews === undefined || counter === undefined || triage === undefined) {
     return Object.freeze({ complete: false, blocker: false, accepted: false });
   }
-  const reviewSet = reviews;
+  const counterDigest = reviews.current_evidence_set.slots[0].evidence_digest;
   const expected = new Map<string, boolean>();
-  for (const review of [self, counter]) {
-    for (const finding of review.findings) {
-      const digest = review === self
-        ? reviewSet.current_evidence_set.slots[0].evidence_digest
-        : reviewSet.current_evidence_set.slots[1].evidence_digest;
-      expected.set(`${digest}:${finding.finding_id}`, finding.blocking);
-    }
+  for (const finding of counter.findings) {
+    expected.set(`${counterDigest}:${finding.finding_id}`, finding.blocking);
   }
   const actual = new Map(triage.dispositions.map((item) => [
     `${item.review_evidence_digest}:${item.finding_id}`,
@@ -298,10 +318,19 @@ export function assessCurrentEvidence(
 
   let next: EvidenceAssessment["next"];
   let reentry = false;
+  let editorialRevision = false;
   let gatePending = false;
   const acceptedReentry = disposition.accepted &&
     state.step === "triage" &&
     state.status === "succeeded";
+  // Editorial-only acceptance authorizes a produce re-entry that keeps review evidence current.
+  // The flag clears as soon as the produce artifact declares this triage as its authorizer —
+  // at that point the triage is bound to the declared predecessor, not to the subject itself.
+  const editorialPending = triageCurrent !== undefined &&
+    disposition.complete &&
+    triageCurrent.accepted_count === 0 &&
+    (triageCurrent.accepted_editorial_count ?? 0) > 0 &&
+    boundToSubjectExactly(triageCurrent, subject);
   const staleAdjudicationReentry =
     retained.has("adjudicate") &&
     !current.includes("adjudicate") &&
@@ -310,11 +339,14 @@ export function assessCurrentEvidence(
   if (acceptedReentry || staleAdjudicationReentry) {
     reentry = true;
     next = "produce";
-  } else if (!current.includes("self_review")) next = "self_review";
-  else if (!current.includes("counter_review")) next = "counter_review";
+  } else if (!current.includes("counter_review")) next = "counter_review";
   else if (!current.includes("triage") || !disposition.complete) next = "triage";
   else if (disposition.accepted) {
     next = "triage";
+  } else if (editorialPending) {
+    // Not a re-entry: the attempt budget and the retained review evidence both survive.
+    editorialRevision = true;
+    next = "produce";
   } else if (!current.includes("adjudicate")) {
     next = "adjudicate";
   } else {
@@ -341,6 +373,7 @@ export function assessCurrentEvidence(
     every_finding_dispositioned: disposition.complete,
     blocker_remains: disposition.blocker,
     reentry_required: reentry,
+    editorial_revision_required: editorialRevision,
     exhausted,
     adjudication_gate_pending: gatePending,
     next: exhausted ? "attempts-exhausted" : next,

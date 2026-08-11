@@ -27,7 +27,7 @@
     "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
     "step": {
       "$comment": "D19 — exactly PIPELINE_STEPS (`vocabulary.ts:2`).",
-      "enum": ["produce", "self_review", "counter_review", "triage", "adjudicate"]
+      "enum": ["produce", "counter_review", "triage", "adjudicate"]
     },
     "document_path": {
       "$comment": "TASK-relative frame (D3).",
@@ -56,6 +56,17 @@
     "projection_target": {
       "$comment": "REPOSITORY frame (D3).",
       "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+    },
+    "editorial_predecessor": {
+      "$comment": "Optional editorial-revision link: the predecessor produce artifact digest, its input fingerprint, and the retained result digest of the authorizing accepted-editorial triage. Record-time semantics are enforced by the state handler, not here.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subject_digest", "input_fingerprint", "triage_result_digest"],
+      "properties": {
+        "subject_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
+        "triage_result_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" }
+      }
     }
   }
 }

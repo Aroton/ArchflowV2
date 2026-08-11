@@ -172,13 +172,12 @@ describe("bundled local CLI", () => {
     const evidence = {
       set_digest: digest("a"),
       slots: [
-        { role: "self-review", evidence_digest: digest("b"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
         { role: "counter-review", evidence_digest: digest("c"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       ],
     };
     const rubric = { schema_version: "1", kind: "artifact", mode: "adversarial", criteria: [{ id: "scope", text: "Check scope.", blocking: true }] };
     const calls = [
-      { tool: "archflow_state", input: { ...common, intent_id: "state-cli", phase_instance: "prd", step: "self_review", status: "running" } },
+      { tool: "archflow_state", input: { ...common, intent_id: "state-cli", phase_instance: "prd", step: "counter_review", status: "running" } },
       { tool: "archflow_counter_review", input: { ...common, intent_id: "counter-cli", artifact_path: "prd.md", rubric } },
       { tool: "archflow_adjudicate", input: { ...common, intent_id: "adjudicate-cli", artifact_path: "prd.md", upstream_paths: [] } },
     ];
@@ -285,7 +284,6 @@ describe("bundled local CLI", () => {
       input: { schema_version: "1", task_id: task, intent_id: "missing-state", expected_revision: 0,
         input_fingerprint: digest("0"), phase_instance: "prd", summary: "Missing", subject_digest: digest("1"),
         current_evidence: { set_digest: digest("2"), slots: [
-          { role: "self-review", evidence_digest: digest("3"), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
           { role: "counter-review", evidence_digest: digest("4"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
         ] }, kind: "artifact-approval", context: { artifact_kind: "prd" } },
     });

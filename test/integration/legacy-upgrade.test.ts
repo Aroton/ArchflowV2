@@ -238,7 +238,6 @@ describe("bundled legacy upgrade workflow", () => {
     }).bytes);
 
     const evidence = currentEvidenceSetRef([
-      { role: "self-review", evidence_digest: sha256Bytes(new TextEncoder().encode("legacy-self")), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
       { role: "counter-review", evidence_digest: sha256Bytes(new TextEncoder().encode("legacy-counter")), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
     ]);
     for (const [index, reference] of references.entries()) {

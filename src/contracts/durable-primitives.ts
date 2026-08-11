@@ -53,8 +53,8 @@ export const CLAIMABLE_OUTPUT_PATH_CLASSES = [
 export type ClaimableOutputPathClass = (typeof CLAIMABLE_OUTPUT_PATH_CLASSES)[number];
 
 /**
- * The 11 classes an output may never claim. Together with `CLAIMABLE_OUTPUT_PATH_CLASSES` this
- * partitions all 19 `PATH_CLASSES`. The two members `READ_ONLY_PATH_CLASSES`
+ * The 12 classes an output may never claim. Together with `CLAIMABLE_OUTPUT_PATH_CLASSES` this
+ * partitions all 20 `PATH_CLASSES`. The two members `READ_ONLY_PATH_CLASSES`
  * (`path-claims.ts:101`) also names are re-listed literally rather than spread: this must stay a
  * closed `as const` tuple whose element type is a literal union, and `READ_ONLY_PATH_CLASSES` is
  * typed `readonly PathClass[]`. `task-ask` is agent-authored PRD-phase context rather than
@@ -62,7 +62,7 @@ export type ClaimableOutputPathClass = (typeof CLAIMABLE_OUTPUT_PATH_CLASSES)[nu
  */
 export const SERVER_OWNED_PATH_CLASSES = [
   "attempt", "decision", "gate-interface", "intent", "maintenance-record", "result-manifest",
-  "shared-constitution", "shared-workflow", "task-ask", "task-config", "task-state",
+  "shared-constitution", "shared-workflow", "staged-request", "task-ask", "task-config", "task-state",
 ] as const;
 
 /**

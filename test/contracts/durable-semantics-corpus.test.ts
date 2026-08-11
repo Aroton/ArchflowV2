@@ -475,7 +475,6 @@ describe("rank 4 — the phase-instance residue, CONTRACT_INVALID in every slot"
       current_evidence: {
         set_digest: "3".repeat(64),
         slots: [
-          { role: "self-review", evidence_digest: "4".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
           { role: "counter-review", evidence_digest: "5".repeat(64), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
         ],
       },
@@ -1166,7 +1165,6 @@ describe("the reported error is a total function of the subject", () => {
       current_evidence: {
         set_digest: "3".repeat(64),
         slots: [
-          { role: "self-review", evidence_digest: "4".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" },
           { role: "counter-review", evidence_digest: "5".repeat(64), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
         ],
       },
@@ -1409,8 +1407,8 @@ describe("manual import carrier and reachability proofs", () => {
 });
 
 describe("evidence-slot composition observations", () => {
-  const self = { role: "self-review", evidence_digest: "1".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" };
   const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
+  const gateCounter = { role: "gate-counter-review", evidence_digest: "1".repeat(64), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-1" };
   const checkpointWith = (slots: unknown[]): Json => {
     const checkpoint = copy(list(INITIAL_IMPORT, "chain")[0]!);
     checkpoint.evidence_chain = [{
@@ -1424,12 +1422,12 @@ describe("evidence-slot composition observations", () => {
   };
 
   it("the composed checkpoint mirror preserves role order and family independence", () => {
-    expect(manualCheckpointV1Schema.safeParse(checkpointWith([counter, self])).success).toBe(false);
-    expect(manualCheckpointV1Schema.safeParse(checkpointWith([self, { ...counter, reviewer_family: "claude" }])).success).toBe(false);
+    expect(manualCheckpointV1Schema.safeParse(checkpointWith([gateCounter, counter])).success).toBe(false);
+    expect(manualCheckpointV1Schema.safeParse(checkpointWith([{ ...counter, reviewer_family: "claude" }])).success).toBe(false);
   });
 
   it("records the inherited evidence-digest uniqueness gap explicitly", () => {
-    const duplicate = { set_digest: "5".repeat(64), slots: [self, { ...counter, evidence_digest: self.evidence_digest }] };
+    const duplicate = { set_digest: "5".repeat(64), slots: [counter, { ...gateCounter, evidence_digest: counter.evidence_digest }] };
     expect(manualCheckpointV1Schema.safeParse(checkpointWith(duplicate.slots)).success).toBe(true);
     expect(() => parseCurrentEvidenceSetRef(duplicate)).toThrow(/unique/u);
   });

@@ -4,7 +4,7 @@
   "repository_identity_digest": "1111111111111111111111111111111111111111111111111111111111111111",
   "revision": 7,
   "phase_instance": "phase-impl-1",
-  "step": "self_review",
+  "step": "counter_review",
   "status": "running",
   "attempt": 2,
   "input_fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
@@ -75,7 +75,7 @@
     "gate_kind": "commit-authorization",
     "subject_digest": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
     "context_digest": "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
-    "frozen_state_digest": "51ae34ac632d452ba5080e0156da7707d7a2e02642e575f361b8e73812584d5c",
+    "frozen_state_digest": "3a1494eaf16809503723b4aed46b17474bc61526dccbe68d97bc007f6cf8701e",
     "opened_at_revision": 7
   },
   "committed_intent": {
@@ -85,7 +85,7 @@
     "outcome_digest": "4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e",
     "prior_revision": 6,
     "resulting_revision": 7,
-    "result_id": "phase-impl-1:self_review:2"
+    "result_id": "phase-impl-1:counter_review:2"
   },
   "adopted_checkpoint": {
     "revision": 7,

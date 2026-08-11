@@ -157,8 +157,13 @@ async function attemptRecord(repository: string): Promise<Record<string, unknown
   return JSON.parse(await readFile(join(directory, names[0]!), "utf8")) as Record<string, unknown>;
 }
 
+async function attemptsAbsent(repository: string): Promise<void> {
+  await expect(readdir(join(repository, ".archflow", "tasks", TASK, "attempts")))
+    .rejects.toMatchObject({ code: "ENOENT" });
+}
+
 describe("createDispatchCoordinator", () => {
-  it("runs preflight and dispatch, disposes its workspace, and finalizes managed-policy telemetry", async () => {
+  it("runs preflight and dispatch, disposes its workspace, and writes no attempt telemetry on success", async () => {
     const h = await harness("success");
     const coordinator = createDispatchCoordinator({
       authority: h.authority,
@@ -176,26 +181,7 @@ describe("createDispatchCoordinator", () => {
 
     expect(result.cli_version).toBe("0.146.0");
     expect(JSON.parse(Buffer.from(result.extracted_output_bytes).toString("utf8"))).toEqual({ schema_version: "1" });
-    const persistedAttempt = await attemptRecord(h.repository);
-    expect(persistedAttempt).toMatchObject({
-      schema_version: "1",
-      task_id: TASK,
-      phase_instance: PHASE,
-      adapter: "codex-cli",
-      status: "succeeded",
-      cli_version: "0.146.0",
-      managed_policy_present: expect.any(Boolean),
-      managed_policy_paths: expect.any(Array),
-      started_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
-      duration_ms: expect.any(Number),
-    });
-    expect(persistedAttempt).not.toHaveProperty("cancellation_source");
-    expect(persistedAttempt).not.toHaveProperty("exit_class");
-    expect(persistedAttempt).not.toHaveProperty("stdout_tail");
-    expect(persistedAttempt).not.toHaveProperty("stderr_tail");
-    const canaries = ["credential-canary-7429", "routing-sentinel-1836"];
-    const persistedDiagnostics = Buffer.from(JSON.stringify(persistedAttempt));
-    expect(scanDispatchOutput({ stdout: persistedDiagnostics, stderr: Buffer.alloc(0) }, canaries)).toEqual([]);
+    await attemptsAbsent(h.repository);
   });
 
   it("dispatches from a Codex host through the assembled Claude CLI coordinator", async () => {
@@ -219,12 +205,7 @@ describe("createDispatchCoordinator", () => {
 
     expect(result.cli_version).toBe("2.1.220");
     expect(JSON.parse(Buffer.from(result.extracted_output_bytes).toString("utf8"))).toEqual({ schema_version: "1" });
-    expect(await attemptRecord(h.repository)).toMatchObject({
-      adapter: "claude-cli",
-      family: "claude",
-      status: "succeeded",
-      cli_version: "2.1.220",
-    });
+    await attemptsAbsent(h.repository);
   });
 
   it("materializes a read-only repository view for review dispatch and targets the child at it", async () => {
@@ -379,17 +360,25 @@ describe("createDispatchCoordinator", () => {
     });
     const persistedAttempt = await attemptRecord(h.repository);
     expect(persistedAttempt).toMatchObject({
+      schema_version: "1",
+      task_id: TASK,
+      phase_instance: PHASE,
       adapter: "codex-cli",
       status: "failed",
       failure_code: "PROCESS_FAILED",
       exit_class: "exit-3",
       stderr_tail: "stream error: exceeded retry limit\n",
       cli_version: "0.146.0",
+      managed_policy_present: expect.any(Boolean),
+      managed_policy_paths: expect.any(Array),
       started_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
       duration_ms: expect.any(Number),
     });
     expect(persistedAttempt).not.toHaveProperty("cancellation_source");
     expect(persistedAttempt).not.toHaveProperty("stdout_tail");
+    const canaries = ["credential-canary-7429", "routing-sentinel-1836"];
+    const persistedDiagnostics = Buffer.from(JSON.stringify(persistedAttempt));
+    expect(scanDispatchOutput({ stdout: persistedDiagnostics, stderr: Buffer.alloc(0) }, canaries)).toEqual([]);
   });
 
   it("preserves a real coordinator classification through the live tool boundary", async () => {

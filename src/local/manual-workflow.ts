@@ -913,7 +913,7 @@ export async function runManualNext(input: RunManualNextInput): Promise<ProjectR
         if (produce === undefined) return invalid(input.services, "manual-gate-current-subject-missing");
         const references = facts.head?.authoritative_results ?? facts.state?.value.authoritative_results ?? [];
         const retained = new Map();
-        for (const step of ["self_review", "counter_review"] as const) {
+        for (const step of ["counter_review"] as const) {
           const reference = references.find((candidate) =>
             candidate.phase_instance === state.phase_instance && candidate.step === step);
           const manifest = reference === undefined ? undefined : facts.retained_manifests.find((candidate) =>

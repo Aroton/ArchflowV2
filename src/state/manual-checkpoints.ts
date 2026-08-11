@@ -330,9 +330,10 @@ export async function buildNextManualCheckpoint(
     const bootstrap = authority.state === undefined && authority.head === undefined;
     if (!bootstrap) {
       const sourceArtifact = installed?.manifest.value.source_artifact;
-      const transitionArtifact = sourceArtifact?.artifact_kind === "adjudication-evidence"
-        ? undefined
-        : sourceArtifact;
+      const transitionArtifact =
+        sourceArtifact?.artifact_kind === "adjudication-evidence" || sourceArtifact?.artifact_kind === "review-evidence"
+          ? undefined
+          : sourceArtifact;
       const requiresCommit = decodePhaseInstance(current.phase_instance).kind === "phase-impl" &&
         current.step === "adjudicate" && current.status === "succeeded" &&
         phaseInstance !== current.phase_instance;

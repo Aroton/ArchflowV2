@@ -75,6 +75,7 @@ import {
   type TransactionAuthority,
 } from "../../src/state/authority.js";
 import {
+  deriveCurrentEvidenceSet,
   loadCurrentReviewSet,
   loadRetainedEvidence,
   prepareEvidenceResult,
@@ -357,7 +358,7 @@ async function durableState(authority: TransactionAuthority): Promise<TaskStateV
 }
 
 function reviewOutput(
-  role: "self-review" | "counter-review",
+  role: "counter-review",
   subject: Sha256Digest,
   fingerprint: Sha256Digest,
   finding: "accepted" | "blocker" | "clean",
@@ -376,7 +377,7 @@ function reviewOutput(
     schema_version: "1" as const,
     task_id: task,
     phase_instance: phase,
-    step: role === "self-review" ? "self_review" as const : "counter_review" as const,
+    step: "counter_review" as const,
     role,
     subject_digest: subject,
     input_fingerprint: fingerprint,
@@ -391,26 +392,14 @@ function reviewOutput(
   };
 }
 
-function selfReview(
-  subject: Sha256Digest,
-  fingerprint: Sha256Digest,
-  finding: "accepted" | "blocker" | "clean",
-): ReviewEvidence {
-  return {
-    ...reviewOutput("self-review", subject, fingerprint, finding),
-    assurance: "agent-declared",
-    model_family: "claude",
-    model: "claude-fixture",
-    effort: "high",
-  };
-}
+type TriageMode = "accepted" | "rejected" | "editorial";
 
 function triageCandidate(
   current: CurrentReviewSet,
-  accepted: boolean,
+  mode: TriageMode,
 ): TriageCandidate {
   const dispositions = current.reviews.flatMap((review) =>
-    review.evidence.findings.map((finding) => accepted
+    review.evidence.findings.map((finding) => mode === "accepted"
       ? {
           review_evidence_digest: review.evidence_digest,
           finding_id: finding.finding_id,
@@ -418,13 +407,21 @@ function triageCandidate(
           rationale: "rewrite required",
           revision_intent: "rewrite" as const,
         }
-      : {
-          review_evidence_digest: review.evidence_digest,
-          finding_id: finding.finding_id,
-          disposition: "rejected" as const,
-          rationale: "not applicable",
-          evidence: "fixture rejection evidence",
-        }));
+      : mode === "editorial"
+        ? {
+            review_evidence_digest: review.evidence_digest,
+            finding_id: finding.finding_id,
+            disposition: "accepted-editorial" as const,
+            rationale: "wording only",
+            revision_intent: "polish the wording without changing meaning" as const,
+          }
+        : {
+            review_evidence_digest: review.evidence_digest,
+            finding_id: finding.finding_id,
+            disposition: "rejected" as const,
+            rationale: "not applicable",
+            evidence: "fixture rejection evidence",
+          }));
   return {
     schema_version: "1",
     task_id: task,
@@ -435,8 +432,9 @@ function triageCandidate(
     current_evidence_set_digest: current.current_evidence_set.set_digest,
     source_evidence_digests: current.reviews.map((review) => review.evidence_digest),
     dispositions,
-    accepted_count: accepted ? dispositions.length : 0,
-    rejected_count: accepted ? 0 : dispositions.length,
+    accepted_count: mode === "accepted" ? dispositions.length : 0,
+    rejected_count: mode === "rejected" ? dispositions.length : 0,
+    accepted_editorial_count: mode === "editorial" ? dispositions.length : 0,
   };
 }
 
@@ -618,30 +616,6 @@ async function enterStep(
   if (!result.ok) throw new Error(JSON.stringify(result.error));
 }
 
-async function commitSelf(
-  h: Harness,
-  dependencies: TransactionDependencies,
-  version: number,
-  evidence: ReviewEvidence,
-) {
-  await enterStep(
-    h,
-    dependencies,
-    `self-running-v${version}`,
-    "self_review",
-    evidence.input_fingerprint,
-  );
-  const prepared = await prepareEvidence(h, `self-v${version}`, {
-    kind: "review",
-    evidence,
-  });
-  await commitStateEvidence(h, dependencies, `self-intent-v${version}`, prepared, {
-    schema_version: "1",
-    artifact_kind: "review-evidence",
-    evidence,
-  });
-}
-
 async function reconstruct(
   h: Harness,
   dependencies: TransactionDependencies,
@@ -658,7 +632,7 @@ async function commitTriage(
   h: Harness,
   dependencies: TransactionDependencies,
   version: number,
-  accepted: boolean,
+  mode: TriageMode,
 ) {
   const fingerprint = (await durableState(h.authority)).input_fingerprint;
   await enterStep(
@@ -669,7 +643,7 @@ async function commitTriage(
     fingerprint,
   );
   const current = await reconstruct(h, dependencies);
-  const candidate = triageCandidate(current, accepted);
+  const candidate = triageCandidate(current, mode);
   validateTriage(current, candidate);
   const prepared = await prepareEvidence(h, `triage-v${version}`, {
     kind: "triage",
@@ -978,6 +952,10 @@ async function assessment(
   dependencies: TransactionDependencies,
   subject: Sha256Digest,
   fingerprint: Sha256Digest,
+  editorialPredecessor?: Readonly<{
+    subject_digest: Sha256Digest;
+    input_fingerprint: Sha256Digest;
+  }>,
 ): Promise<EvidenceAssessment> {
   const state = await durableState(h.authority);
   const loaded = await loadRetainedEvidence({
@@ -988,6 +966,9 @@ async function assessment(
     subject_digest: subject,
     input_fingerprint: fingerprint,
     constitution,
+    ...(editorialPredecessor === undefined
+      ? {}
+      : { editorial_predecessor: editorialPredecessor }),
   });
 }
 
@@ -1219,11 +1200,9 @@ describe("durable review fixed point", () => {
     const fingerprints = [0, 1, 2].map((version) =>
       computeInputFingerprint(fingerprintSubject(version)));
 
-    await commitSelf(h, dependencies, 0,
-      selfReview(subjects[0]!, fingerprints[0]!, "accepted"));
     await commitCounter(h, dependencies, 0,
-      subjects[0]!, fingerprints[0]!, "clean");
-    await commitTriage(h, dependencies, 0, true);
+      subjects[0]!, fingerprints[0]!, "accepted");
+    await commitTriage(h, dependencies, 0, "accepted");
     expect(await assessment(h, dependencies, subjects[0]!, fingerprints[0]!))
       .toMatchObject({ reentry_required: true, next: "produce" });
     expect((await durableState(h.authority)).authoritative_results
@@ -1233,31 +1212,27 @@ describe("durable review fixed point", () => {
     expect(await assessment(h, dependencies, subjects[1]!, fingerprints[1]!))
       .toMatchObject({
         current: [],
-        stale: ["self_review", "counter_review", "triage"],
-        next: "self_review",
+        stale: ["counter_review", "triage"],
+        next: "counter_review",
       });
 
-    await commitSelf(h, dependencies, 1,
-      selfReview(subjects[1]!, fingerprints[1]!, "accepted"));
     await commitCounter(h, dependencies, 1,
       subjects[1]!, fingerprints[1]!, "blocker");
     expect(await assessment(h, dependencies, subjects[1]!, fingerprints[1]!))
       .toMatchObject({ blocker_remains: false, next: "triage" });
     expect((await assessment(h, dependencies, subjects[1]!, fingerprints[1]!)).next)
       .not.toBe("advance");
-    await commitTriage(h, dependencies, 1, true);
+    await commitTriage(h, dependencies, 1, "accepted");
     expect(await assessment(h, dependencies, subjects[1]!, fingerprints[1]!))
       .toMatchObject({ reentry_required: true, next: "produce" });
     expect((await durableState(h.authority)).authoritative_results
       .some((reference) => reference.step === "adjudicate")).toBe(false);
 
     dependencies = await rewrite(h, dependencies, 2);
-    await commitSelf(h, dependencies, 2,
-      selfReview(subjects[2]!, fingerprints[2]!, "clean"));
     await commitCounter(h, dependencies, 2,
       subjects[2]!, fingerprints[2]!, "clean");
     const finalReviews = await reconstruct(h, dependencies);
-    await commitTriage(h, dependencies, 2, false);
+    await commitTriage(h, dependencies, 2, "rejected");
     expect(await assessment(h, dependencies, subjects[2]!, fingerprints[2]!))
       .toMatchObject({ blocker_remains: false, next: "adjudicate" });
     await commitAdjudication(
@@ -1281,7 +1256,7 @@ describe("durable review fixed point", () => {
     expect(restartedReviews.subject_digest).toBe(subjects[2]);
     expect(await assessment(h, dependencies, subjects[2]!, fingerprints[2]!))
       .toMatchObject({
-        current: ["self_review", "counter_review", "triage", "adjudicate"],
+        current: ["counter_review", "triage", "adjudicate"],
         stale: [],
         blocker_remains: false,
         reentry_required: false,
@@ -1292,8 +1267,133 @@ describe("durable review fixed point", () => {
         "adjudicate",
         "counter_review",
         "produce",
-        "self_review",
         "triage",
       ]);
+  });
+});
+
+describe("editorial revision fixed point", () => {
+  it("keeps evidence current for exactly the declared one-hop predecessor", async () => {
+    const h = await fixture();
+    const dependencies = h.dependencies;
+    const predecessorSubject = canonicalJsonDigest({ artifact: "editorial-0" });
+    const predecessorFingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const revisedSubject = canonicalJsonDigest({ artifact: "editorial-1" });
+    const revisedFingerprint = computeInputFingerprint(fingerprintSubject(1));
+
+    // A non-blocking finding, triaged as editorial only: not a re-entry, and the durable
+    // attempt is untouched. The next act is the produce revision.
+    await commitCounter(h, dependencies, 0,
+      predecessorSubject, predecessorFingerprint, "accepted");
+    await commitTriage(h, dependencies, 0, "editorial");
+    expect((await durableState(h.authority)).attempt).toBe(1);
+    expect(await assessment(h, dependencies, predecessorSubject, predecessorFingerprint))
+      .toMatchObject({
+        current: ["counter_review", "triage"],
+        editorial_revision_required: true,
+        reentry_required: false,
+        exhausted: false,
+        next: "produce",
+      });
+    expect((await durableState(h.authority)).attempt).toBe(1);
+
+    // The revised subject inherits currency only through the declared predecessor pair.
+    expect(await assessment(h, dependencies, revisedSubject, revisedFingerprint, {
+      subject_digest: predecessorSubject,
+      input_fingerprint: predecessorFingerprint,
+    })).toMatchObject({
+      current: ["counter_review", "triage"],
+      stale: [],
+      editorial_revision_required: false,
+      reentry_required: false,
+      next: "adjudicate",
+    });
+    // Without the declaration nothing is current.
+    expect(await assessment(h, dependencies, revisedSubject, revisedFingerprint))
+      .toMatchObject({ current: [], next: "counter_review" });
+    // A second editorial revision on top of the first does NOT inherit currency: the evidence
+    // is bound to the original bytes, two hops from this subject. One hop, no chaining.
+    const secondRevision = canonicalJsonDigest({ artifact: "editorial-2" });
+    expect(await assessment(
+      h, dependencies,
+      secondRevision, computeInputFingerprint(fingerprintSubject(2)),
+      { subject_digest: revisedSubject, input_fingerprint: revisedFingerprint },
+    )).toMatchObject({ current: [], next: "counter_review" });
+
+    // Adjudication currency deliberately stays exact: an adjudication bound to the predecessor
+    // never counts for the revised subject, while one bound to the revised bytes closes the
+    // loop at "advance" exactly as a normal clean pass would.
+    const state = await durableState(h.authority);
+    const loaded = await loadRetainedEvidence({
+      load_retained_result: dependencies.load_retained_result!,
+    }, structuredClone(state), phase);
+    if (!loaded.ok) throw new Error(loaded.error.code);
+    const setDigest = deriveCurrentEvidenceSet(loaded.value)
+      .current_evidence_set.set_digest;
+    const adjudicationFor = (
+      subject: Sha256Digest,
+      fingerprint: Sha256Digest,
+    ): AdjudicationEvidence => ({
+      schema_version: "1",
+      task_id: task,
+      phase_instance: phase,
+      step: "adjudicate",
+      subject_digest: subject,
+      input_fingerprint: fingerprint,
+      pinned_constitution_digest: constitution.digest,
+      approved_upstream_digests: [],
+      source_evidence_set_digest: setDigest,
+      rule_findings: [],
+      drift_findings: [],
+      constitution: "pass",
+      drift: "aligned",
+      matched_rule_versions: [],
+      uncertain_rule_versions: [],
+      assurance: "degraded",
+      model_family: "unknown",
+      model: "manual",
+      effort: "unknown",
+      reason: "manual fallback",
+    } as AdjudicationEvidence);
+    const withAdjudication = async (
+      resultId: string,
+      evidence: AdjudicationEvidence,
+    ) => {
+      const prepared = await prepareEvidence(h, resultId, {
+        kind: "adjudication",
+        evidence,
+      });
+      const retained = new Map(loaded.value);
+      retained.set("adjudicate", Object.freeze({
+        reference: prepared.reference,
+        manifest: prepared.prepared.manifest.value,
+      }));
+      return assessCurrentEvidence(state, retained, {
+        subject_digest: revisedSubject,
+        input_fingerprint: revisedFingerprint,
+        constitution,
+        editorial_predecessor: {
+          subject_digest: predecessorSubject,
+          input_fingerprint: predecessorFingerprint,
+        },
+      });
+    };
+    expect(await withAdjudication(
+      "adjudication-predecessor-bound",
+      adjudicationFor(predecessorSubject, predecessorFingerprint),
+    )).toMatchObject({
+      current: ["counter_review", "triage"],
+      next: "adjudicate",
+    });
+    expect(await withAdjudication(
+      "adjudication-revised-bound",
+      adjudicationFor(revisedSubject, revisedFingerprint),
+    )).toMatchObject({
+      current: ["counter_review", "triage", "adjudicate"],
+      blocker_remains: false,
+      reentry_required: false,
+      editorial_revision_required: false,
+      next: "advance",
+    });
   });
 });

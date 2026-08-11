@@ -31,6 +31,7 @@
         "result-manifest",
         "result-payload",
         "intent",
+        "staged-request",
         "attempt",
         "manual-checkpoint",
         "maintenance-record",
@@ -1428,6 +1429,108 @@
         }
       ]
     },
+    "E_STAGED_REQUEST_NOT_FOUND": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/errorBase"
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "STAGED_REQUEST_NOT_FOUND"
+            },
+            "owner": {
+              "const": "intent"
+            },
+            "retryable": {
+              "const": false
+            },
+            "diagnostic": {
+              "properties": {
+                "template_id": {
+                  "const": "STAGED_REQUEST_NOT_FOUND"
+                },
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "task_id",
+                    "intent_id"
+                  ],
+                  "properties": {
+                    "task_id": {
+                      "$ref": "#/$defs/taskSlug"
+                    },
+                    "intent_id": {
+                      "$ref": "#/$defs/pathSafeId"
+                    }
+                  }
+                }
+              },
+              "type": "object"
+            },
+            "next_action": {
+              "const": "stage-request-with-build-request"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    "E_STAGED_REQUEST_MISMATCH": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/errorBase"
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "STAGED_REQUEST_MISMATCH"
+            },
+            "owner": {
+              "const": "intent"
+            },
+            "retryable": {
+              "const": false
+            },
+            "diagnostic": {
+              "properties": {
+                "template_id": {
+                  "const": "STAGED_REQUEST_MISMATCH"
+                },
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "intent_id",
+                    "issue_code"
+                  ],
+                  "properties": {
+                    "intent_id": {
+                      "$ref": "#/$defs/pathSafeId"
+                    },
+                    "issue_code": {
+                      "$ref": "#/$defs/code"
+                    },
+                    "expected_digest": {
+                      "$ref": "#/$defs/digest"
+                    },
+                    "observed_digest": {
+                      "$ref": "#/$defs/digest"
+                    }
+                  }
+                }
+              },
+              "type": "object"
+            },
+            "next_action": {
+              "const": "rebuild-staged-request"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
     "E_SNAPSHOT_LIMIT": {
       "allOf": [
         {
@@ -2755,6 +2858,12 @@
     },
     {
       "$ref": "#/$defs/E_INTENT_NOT_CURRENT"
+    },
+    {
+      "$ref": "#/$defs/E_STAGED_REQUEST_NOT_FOUND"
+    },
+    {
+      "$ref": "#/$defs/E_STAGED_REQUEST_MISMATCH"
     },
     {
       "$ref": "#/$defs/E_SNAPSHOT_LIMIT"

@@ -47,9 +47,8 @@ describe("correlated MCP tool contracts", () => {
     expect(Object.isFrozen(waiver.input.origin.rule)).toBe(true);
     expect(Object.isFrozen(waiver.input.origin.scope)).toBe(true);
 
-    const self = { role: "self-review", evidence_digest: "5".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" };
     const counterSlot = { role: "counter-review", evidence_digest: "6".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
-    const gate = parseToolCall("archflow_gate", { schema_version: "1", task_id: "task-1", intent_id: "intent-4", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: "7".repeat(64), current_evidence: { set_digest: "8".repeat(64), slots: [self, counterSlot] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } });
+    const gate = parseToolCall("archflow_gate", { schema_version: "1", task_id: "task-1", intent_id: "intent-4", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: "7".repeat(64), current_evidence: { set_digest: "8".repeat(64), slots: [counterSlot] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } });
     expect(Object.isFrozen(gate.input.current_evidence.slots)).toBe(true);
     expect(Object.isFrozen(gate.input.current_evidence.slots[0])).toBe(true);
     expect(Object.isFrozen(gate.input.context)).toBe(true);
@@ -64,17 +63,16 @@ describe("correlated MCP tool contracts", () => {
     expect(Object.isFrozen(call.input.artifact)).toBe(true);
     const reviewEvidence = {
       schema_version: "1", task_id: "task-1", phase_instance: "phase-impl-2",
-      step: "self_review", role: "self-review", subject_digest: digest,
+      step: "counter_review", role: "counter-review", subject_digest: digest,
       input_fingerprint: digest, rubric_digest: digest, producer_family: "claude",
       findings: [], matched_rule_versions: [], verdict: "pass", blocking_count: 0,
-      model_family: "claude", model: "claude", effort: "high", assurance: "agent-declared",
+      model_family: "codex", model: "manual", effort: "unknown", assurance: "degraded", reason: "manual fallback",
     } as const;
-    const review = parseToolCall("archflow_state", {
-      ...stateInput, step: "self_review",
+    // Review evidence is no longer a durable state artifact: the union rejects it outright.
+    expect(() => parseToolCall("archflow_state", {
+      ...stateInput, step: "counter_review",
       artifact: { schema_version: "1", artifact_kind: "review-evidence", evidence: reviewEvidence },
-    });
-    expect(review.input.artifact?.artifact_kind).toBe("review-evidence");
-    expect(Object.isFrozen(review.input.artifact && "evidence" in review.input.artifact ? review.input.artifact.evidence : undefined)).toBe(true);
+    })).toThrow();
     const triage = parseToolCall("archflow_state", {
       ...stateInput, step: "triage",
       artifact: {
@@ -192,19 +190,18 @@ describe("correlated MCP tool contracts", () => {
   });
 
   it("uses the authoritative exact current-evidence tuple parser for gates", () => {
-    const self = { role: "self-review", evidence_digest: "1".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" };
     const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
-    const base = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: digest, current_evidence: { set_digest: "3".repeat(64), slots: [self, counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } };
+    const gateCounter = { role: "gate-counter-review", evidence_digest: "1".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-1" };
+    const base = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: digest, current_evidence: { set_digest: "3".repeat(64), slots: [counter, gateCounter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } };
     expect(parseToolCall("archflow_gate", base).input.task_id).toBe("task-1");
-    expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [counter, self] } })).toThrow();
-    expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [self, { ...counter, evidence_digest: self.evidence_digest }] } })).toThrow();
-    expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [self, { ...counter, reviewer_family: "claude" }] } })).toThrow();
+    expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [gateCounter, counter] } })).toThrow();
+    expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [counter, { ...gateCounter, evidence_digest: counter.evidence_digest }] } })).toThrow();
+    expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [counter, { ...gateCounter, reviewer_family: "claude" }] } })).toThrow();
   });
 
   it("revalidates gate success decisions against the authentic call context", () => {
     const ruleA = { rule_id: "Rule:A", rule_version: 1 } as const;
     const ruleB = { rule_id: "Rule:B", rule_version: 1 } as const;
-    const self = { role: "self-review", evidence_digest: "1".repeat(64), assurance: "agent-declared", producer_family: "claude", reviewer_family: "claude", independence: "same-family-self" } as const;
     const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
     const commonInput = {
       schema_version: "1",
@@ -215,7 +212,7 @@ describe("correlated MCP tool contracts", () => {
       phase_instance: "phase-impl-2",
       summary: "Review",
       subject_digest: digest,
-      current_evidence: { set_digest: "3".repeat(64), slots: [self, counter] }
+      current_evidence: { set_digest: "3".repeat(64), slots: [counter] }
     } as const;
     const humanProvenance = {
       schema_version: "1",

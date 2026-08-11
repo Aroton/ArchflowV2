@@ -145,7 +145,7 @@ function derivedRequest(status: TaskStatusV1): RequestShape {
 }
 
 describe("status-derived requests execute against the real handlers", () => {
-  it("drives the PRD phase from create-task through the recorded self-review using only derived requests", async () => {
+  it("drives the PRD phase from create-task into counter-review using only derived requests", async () => {
     const fixture = await repository();
     const h = harness(fixture.root);
 
@@ -184,16 +184,16 @@ describe("status-derived requests execute against the real handlers", () => {
     expect(produceResult.value.request_digest).toBe(produceComposed.request_digest);
 
     // 3. Produce recorded: the subject digest is now a status fact, and the derived action is
-    //    the self_review running entry whose resolved request differs from the template only in
-    //    the judgment fields the client filled.
+    //    the counter_review running entry whose resolved request differs from the template only
+    //    in the judgment fields the client filled.
     const produced = await h.status();
     expect(produced.subject_digest).toBe(produceComposed.artifact_digest);
     expect(produced.next_action).toMatchObject({
-      code: "run-step", step: "self_review",
-      request: { tool: "archflow_state", input: { step: "self_review", status: "running" } },
+      code: "run-step", step: "counter_review",
+      request: { tool: "archflow_state", input: { step: "counter_review", status: "running" } },
     });
     const entryRequest = derivedRequest(produced);
-    entryRequest.input.intent_id = "self-review-entry-1";
+    entryRequest.input.intent_id = "counter-review-entry-1";
     const entryResolved = await h.envelope(entryRequest as unknown as PlainJsonValue);
     expect(entryResolved.request.input).toEqual({
       ...entryRequest.input,
@@ -201,57 +201,18 @@ describe("status-derived requests execute against the real handlers", () => {
     });
     await h.invoke(entryResolved.request.tool, entryResolved.request.input);
 
-    // 4. Mid-self_review: the derived action is the terminal record carrying the review
-    //    artifact, authored purely from status facts — subject digest, fingerprint, and the
-    //    expected provenance status now publishes.
+    // 4. Mid-counter_review: the derived action is the terminal record through the dedicated
+    //    counter-review tool, authored purely from status facts — subject digest, fingerprint,
+    //    and the canonical review subject path.
     const midReview = await h.status();
     expect(midReview).toMatchObject({
-      step: "self_review", status: "running",
+      step: "counter_review", status: "running",
       next_action: {
-        code: "run-step", step: "self_review",
-        detail: "Record the terminal self_review result.",
-        request: { tool: "archflow_state", input: { step: "self_review", status: "succeeded" } },
+        code: "run-step", step: "counter_review",
+        request: { tool: "archflow_counter_review", input: { artifact_path: "prd.md" } },
       },
     });
     expect(midReview.subject_digest).toBeDefined();
-    expect(midReview.expected_self_review_provenance).toBeDefined();
-    const provenance = midReview.expected_self_review_provenance!;
-    const rubric = {
-      schema_version: "1", kind: "artifact", mode: "adversarial",
-      criteria: [{ id: "scope", text: "Check scope against the ask.", blocking: true }],
-    };
-    const evidence: ReviewEvidence = {
-      schema_version: "1",
-      task_id: task,
-      phase_instance: midReview.phase_instance!,
-      step: "self_review",
-      role: "self-review",
-      subject_digest: midReview.subject_digest!,
-      input_fingerprint: midReview.input_fingerprint!,
-      rubric_digest: canonicalJsonDigest(rubric),
-      producer_family: provenance.producer_family,
-      findings: [],
-      matched_rule_versions: [],
-      verdict: "pass",
-      blocking_count: 0,
-      assurance: provenance.assurance,
-      model_family: provenance.model_family,
-      model: provenance.model,
-      effort: provenance.effort,
-    } as ReviewEvidence;
-    const reviewRequest = derivedRequest(midReview);
-    reviewRequest.input.intent_id = "self-review-record-1";
-    reviewRequest.input.artifact = {
-      schema_version: "1", artifact_kind: "review-evidence", evidence,
-    } as unknown as PlainJsonValue;
-    const reviewResolved = await h.envelope(reviewRequest as unknown as PlainJsonValue);
-    await h.invoke(reviewResolved.request.tool, reviewResolved.request.input);
-
-    // 5. The recorded review is durable authority: the next derived action moves on to
-    //    counter_review instead of re-deriving self_review.
-    const reviewed = await h.status();
-    expect(reviewed).toMatchObject({ step: "self_review", status: "succeeded" });
-    expect(reviewed.next_action).toMatchObject({ code: "run-step", step: "counter_review" });
   }, TIMEOUT);
 
   it("drives the whole PRD pipeline through build-request composers alone", async () => {
@@ -286,10 +247,10 @@ describe("status-derived requests execute against the real handlers", () => {
 
     // Illegal targets refuse at compose time with the transition law's own answer, and payload
     // shape errors name the expected facts.
-    expect(await h.buildRequestError({ intent_id: "early-1", kind: "self-review", review: { rubric, findings: [], matched_rule_versions: [] } })).toBe("TRANSITION_INVALID");
+    expect(await h.buildRequestError({ intent_id: "early-1", kind: "counter-review", rubric })).toBe("TRANSITION_INVALID");
     expect(await h.buildRequestError({ intent_id: "early-2", kind: "triage", dispositions: [] })).toBe("TRANSITION_INVALID");
     expect(await h.buildRequestError({ intent_id: "early-3", kind: "running", step: "produce" })).toBe("TRANSITION_INVALID");
-    await expect(h.buildRequest({ intent_id: "early-4", kind: "running", step: "nonsense" })).rejects.toThrow(/one of produce, self_review/u);
+    await expect(h.buildRequest({ intent_id: "early-4", kind: "running", step: "nonsense" })).rejects.toThrow(/one of produce, counter_review/u);
     await expect(h.buildRequest({ intent_id: "early-5", kind: "review-everything" })).rejects.toThrow(/not recognized/u);
     await expect(h.buildRequest({ intent_id: "early-6", kind: "gate", summary: "  " })).rejects.toThrow(/summary/u);
 
@@ -297,42 +258,18 @@ describe("status-derived requests execute against the real handlers", () => {
     const produceComposed = await h.buildRequest({ intent_id: "produce-1" });
     await h.invoke(produceComposed.request.tool, produceComposed.request.input);
 
-    // Running boundary: the composer emits the one legal entry with no payload beyond the step.
-    const reviewEntry = await h.buildRequest({ intent_id: "review-entry-1", kind: "running", step: "self_review" });
-    expect(reviewEntry.request.input).toMatchObject({ step: "self_review", status: "running" });
-    await h.invoke(reviewEntry.request.tool, reviewEntry.request.input);
-
-    // Terminal self-review: the caller supplies rubric, findings, and matched rules; every
-    // identity, provenance, and summary field is composed from durable authority.
-    const selfFinding = {
-      finding_id: "scope-drift-note", severity: "minor", blocking: false,
-      summary: "Scope wording drifts from the ask.", evidence: "prd.md line 3.",
-      suggested_resolution: "Align the wording.",
-    };
-    const selfComposed = await h.buildRequest({
-      intent_id: "self-review-1", kind: "self-review",
-      review: { rubric, findings: [selfFinding], matched_rule_versions: [] },
-    });
-    const composedEvidence = (selfComposed.request.input as {
-      artifact: { evidence: ReviewEvidence };
-    }).artifact.evidence;
-    expect(composedEvidence).toMatchObject({
-      step: "self_review", role: "self-review", assurance: "agent-declared",
-      rubric_digest: canonicalJsonDigest(rubric), verdict: "advisory", blocking_count: 0,
-    });
-    // Envelope over the composed request is a fixed point: same digests, nothing left to resolve.
-    const selfReplay = await h.envelope(selfComposed.request as unknown as PlainJsonValue);
-    expect(selfReplay.request_digest).toBe(selfComposed.request_digest);
-    await h.invoke(selfComposed.request.tool, selfComposed.request.input);
-
     // Counter-review entry, then the composed archflow_counter_review call invoked for real
     // against a stub reviewer CLI on PATH (the default config routes the counter-reviewer to the
     // codex family), so the composed request must satisfy the whole dispatch pipeline.
     const counterEntry = await h.buildRequest({ intent_id: "counter-entry-1", kind: "running", step: "counter_review" });
+    expect(counterEntry.request.input).toMatchObject({ step: "counter_review", status: "running" });
     await h.invoke(counterEntry.request.tool, counterEntry.request.input);
     const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review", rubric });
     expect(counterComposed.request.tool).toBe("archflow_counter_review");
     expect(counterComposed.request.input).toMatchObject({ artifact_path: "prd.md", rubric });
+    // Envelope over the composed request is a fixed point: same digests, nothing left to resolve.
+    const counterReplay = await h.envelope(counterComposed.request as unknown as PlainJsonValue);
+    expect(counterReplay.request_digest).toBe(counterComposed.request_digest);
 
     const bin = join(fixture.root, "stub-bin");
     const stubHome = join(fixture.root, "stub-home");
@@ -390,7 +327,6 @@ else {
       const triageComposed = await h.buildRequest({
         intent_id: "triage-1", kind: "triage",
         dispositions: [
-          { finding_id: "scope-drift-note", disposition: "rejected", rationale: "Wording is faithful to the ask.", evidence: "ask.md line 1." },
           { finding_id: "requirement-untestable", disposition: "rejected", rationale: "The requirement names observable output.", evidence: "prd.md line 3." },
         ],
       });
@@ -402,12 +338,12 @@ else {
         artifact: { evidence: { source_evidence_digests: readonly string[]; accepted_count: number; rejected_count: number } };
       }).artifact.evidence;
       expect(triageArtifact.source_evidence_digests).toEqual(slots);
-      expect(triageArtifact).toMatchObject({ accepted_count: 0, rejected_count: 2 });
+      expect(triageArtifact).toMatchObject({ accepted_count: 0, rejected_count: 1 });
 
       // A disposition set that misses a finding refuses at compose time, before any tool call.
       await expect(h.buildRequest({
         intent_id: "triage-short", kind: "triage",
-        dispositions: [{ finding_id: "scope-drift-note", disposition: "rejected", rationale: "r", evidence: "e" }],
+        dispositions: [],
       })).rejects.toThrow(/cover every current finding/u);
       await h.invoke(triageComposed.request.tool, triageComposed.request.input);
 

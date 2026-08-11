@@ -11,7 +11,7 @@
       "repository_identity_digest": "1111111111111111111111111111111111111111111111111111111111111111",
       "revision": 4,
       "phase_instance": "phase-impl-8",
-      "step": "self_review",
+      "step": "counter_review",
       "status": "running",
       "attempt": 1,
       "input_fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
@@ -33,7 +33,7 @@
       "repository_identity_digest": "1111111111111111111111111111111111111111111111111111111111111111",
       "revision": 5,
       "phase_instance": "phase-impl-8",
-      "step": "self_review",
+      "step": "counter_review",
       "status": "running",
       "attempt": 1,
       "input_fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
@@ -41,7 +41,7 @@
       "initialization_digest": "817534ce02dc4334035765abc41e1766ba2733c567770e59e7da2689c4a3d66c",
       "predecessor": {
         "revision": 4,
-        "checkpoint_digest": "bffabc7cd737b950f868094c7897f6c29141dd6b352c839ffdc021ede1547d38"
+        "checkpoint_digest": "91264aba6c7ad7d8bdc65a98787f314108c33d9854fc2ae1e5068f580bb44eb5"
       },
       "authoritative_results": [],
       "projections": [],

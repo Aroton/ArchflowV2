@@ -28,7 +28,7 @@
     "repository_identity_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
     "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
     "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-    "step": { "enum": ["produce", "self_review", "counter_review", "triage", "adjudicate"] },
+    "step": { "enum": ["produce", "counter_review", "triage", "adjudicate"] },
     "status": { "$ref": "urn:archflow:schema:v1:task-state#/$defs/stepStatus" },
     "attempt": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
     "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
@@ -140,7 +140,7 @@
       "required": ["phase_instance", "step", "subject_digest", "input_fingerprint", "current_evidence"],
       "properties": {
         "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-        "step": { "enum": ["produce", "self_review", "counter_review", "triage", "adjudicate"] },
+        "step": { "enum": ["produce", "counter_review", "triage", "adjudicate"] },
         "subject_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
         "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
         "current_evidence": { "$ref": "#/$defs/currentEvidenceSetRef" }

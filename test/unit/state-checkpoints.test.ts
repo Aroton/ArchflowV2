@@ -49,17 +49,16 @@ async function fixture(): Promise<{
     status: "succeeded",
     attempt: state.attempt,
     input_fingerprint: state.input_fingerprint,
-    authoritative_results: [
-      ...state.authoritative_results,
-      {
-        phase_instance: state.phase_instance,
-        step: state.step,
-        result_digest: "d".repeat(64),
-        result_id: "checkpoint-self-review",
-        input_fingerprint: state.input_fingerprint,
-        manifest_path: `.archflow/tasks/${state.task_id}/results/sha256/${"d".repeat(64)}/manifest.json`,
-      },
-    ],
+    authoritative_results: state.authoritative_results.map((entry) =>
+      entry.phase_instance === state.phase_instance && entry.step === state.step
+        ? {
+            ...entry,
+            result_digest: "d".repeat(64),
+            result_id: "checkpoint-counter-review",
+            input_fingerprint: state.input_fingerprint,
+            manifest_path: `.archflow/tasks/${state.task_id}/results/sha256/${"d".repeat(64)}/manifest.json`,
+          }
+        : entry),
     state_anchor: stateAnchor,
   } as unknown as ManualCheckpointV1;
   const second = {

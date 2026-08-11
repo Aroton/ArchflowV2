@@ -37,7 +37,7 @@
     "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
     "step": {
       "$comment": "`PIPELINE_STEPS` (`vocabulary.ts:2`), re-exported by `workflow.ts:7-8`.",
-      "enum": ["produce", "self_review", "counter_review", "triage", "adjudicate"]
+      "enum": ["produce", "counter_review", "triage", "adjudicate"]
     },
     "status": { "$ref": "#/$defs/stepStatus" },
     "attempt": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
@@ -114,7 +114,7 @@
       "required": ["phase_instance", "step", "result_digest", "result_id", "input_fingerprint", "manifest_path"],
       "properties": {
         "phase_instance": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-        "step": { "enum": ["produce", "self_review", "counter_review", "triage", "adjudicate"] },
+        "step": { "enum": ["produce", "counter_review", "triage", "adjudicate"] },
         "result_digest": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
         "result_id": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId" },
         "input_fingerprint": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
