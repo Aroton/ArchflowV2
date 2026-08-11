@@ -29,6 +29,18 @@ Every dispatch is a fresh reviewer with no memory, so without help round N tends
 
 **The retention boundary, honestly:** durable state (`authoritative_results`) keeps exactly one triage result per phase instance — installing a new one replaces the reference to the old, and unreferenced manifests are not durable authority. So the pinned record covers only the *immediately preceding* round, which is also the round whose accepted findings the current attempt is answering; earlier rounds are superseded and deliberately not reconstructed. The record does not carry the historical attempt number of that prior round either — durable state never recorded it — only the current attempt (in the subject and in the record) is authoritative. Attempt 1, or a retry that never reached triage, pins nothing: absence is the accurate record. Disposition strings render as-is, so a grown triage vocabulary (for example `accepted-editorial`) never breaks assembly.
 
+## The materiality bar: why review converges
+
+The rubric is not a server asset — it is a JSON literal in each skill's markdown, and the server validates only its shape. That is where convergence pressure lives, because the loop's exit condition is a triage judgment (see `../workflow/LIFECYCLE.md`), not a finding count.
+
+Three rubric clauses do the work, added after a real PRD session spent three xhigh dispatches converging on a document that was decision-ready after one:
+
+- **`substantive-correctness` carries a materiality bar.** A blocking finding must name the concrete consequence of shipping the artifact unchanged, and that consequence must survive the artifact's *own* stated non-goals and priority order. "Requires producer action" alone is true of every refinement, which is why it never terminated.
+- **Challenges are qualified.** The envelope invites a reviewer to challenge a prior disposition by naming its `finding_id` — the right escape hatch, but unqualified it produced a chain where each round challenged the previous round's accepted fix. A challenge is blocking only if the recorded revision intent was not carried out, or the fix introduced a *new* defect. A residual weakness left by a fix that did what it said is advisory.
+- **`unverifiable-claims` no longer fires on stated assumptions.** A scope choice the artifact explicitly records as an assumption is covered by `stated-assumptions`; an envelope gap is for something asserted as established fact that no pinned evidence can confirm. Each distinct gap is reported once, and a gap already named in the pinned prior-triage record is not re-raised.
+
+The honest limit: `prior-triage` reaches back exactly one round (see the retention boundary above), so these clauses shrink the class at the source rather than relying on the reviewer remembering every prior rejection.
+
 ## Pinned context: evidence, not narrative
 
 "Pinning" means the **server itself** reads the evidence bytes from an immutable, authenticated source and records their SHA-256 — never the model, never a summary. Each context entry declares its status so no gap is silent:
@@ -64,7 +76,7 @@ If the envelope still overflows after tiering and cap relief, the result is `ENV
 4. **Dispatch** — the opposite-family CLI runs headless (see `../mcp/DISPATCH.md`); output is parsed and bound to its provenance (adapter, CLI version, route, envelope digest).
 5. **Currency re-check** — if the artifact drifted mid-dispatch, the result is discarded (`counter-review-subject-not-current`).
 6. **Commit** — the evidence lands in a state transaction. A `fail` verdict is a successful recording, never an error.
-7. **Triage** — the producer dispositions every finding; any accepted finding forces re-entry into produce with a new attempt (capped, default 3). The next round's reviewer then receives this triage record as pinned `prior-triage` context and the new round number in the subject's `attempt`.
+7. **Triage** — the producer dispositions every finding; any accepted finding forces re-entry into produce with a new attempt (capped, default 3). Rejecting a finding — including a blocking one — is a sanctioned disposition that lets the loop advance, which is what makes the materiality bar below effective. The next round's reviewer then receives this triage record as pinned `prior-triage` context and the new round number in the subject's `attempt`.
 8. **Adjudicate** — see `ADJUDICATION.md`.
 
 Editing the artifact changes its digest, which invalidates all downstream evidence — that currency rule (enforced by `src/review/fixed-point.ts`) is what makes the loop converge honestly. You iterate until produce, counter-review, triage, and adjudication all agree about the same bytes with no accepted findings.

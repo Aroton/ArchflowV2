@@ -50,6 +50,10 @@ Every gated stage runs the same evidence pipeline to a fixed point:
 
 Editing the artifact changes the subject digest, which invalidates all downstream evidence — the pipeline re-runs until everything agrees about the same bytes. Re-entry is bounded (`max_attempts`, default 3); exhaustion opens an `attempts-exhausted` gate rather than looping forever.
 
+**What actually ends the loop is triage, not the finding count.** The exit condition is `accepted_count === 0` — a plain `accepted` disposition is the only thing that forces another round (`src/review/fixed-point.ts`). A blocking finding that triage *rejects* with a rationale does not continue the loop; `blocker_remains` is computed and reported but routes nothing. That is deliberate: an adversarial reviewer at high effort always has another refinement, so the rubric carries a materiality bar (a blocking finding must name a consequence that survives the artifact's stated non-goals and priority order) and the producer rejects findings that do not clear it. The attempt cap is a thrash backstop, not the primary brake.
+
+Because that means artifacts can reach approval with findings the producer judged immaterial, `status.evidence.findings` carries each finding's severity, summary, and recorded disposition, and every gate presents rejected blocking findings as an **Open findings** section beside the existing **Envelope gaps** section. The human sees exactly what was waved through and can disagree — silent dissent would make the materiality bar a way to hide disagreement rather than a way to converge.
+
 ### The editorial shortcut
 
 When a round's only accepted findings are `accepted-editorial`, the producer revises the artifact and re-enters **adjudicate directly** instead of restarting the whole pipeline. The revised artifact declares a server-validated, strictly one-hop `editorial_predecessor` link — `{subject_digest, input_fingerprint, triage_result_digest}` naming the exact reviewed bytes, their inputs, and the triage round that authorized the shortcut. Retained reviews stay *current for the predecessor*; adjudication re-runs on the final bytes; and the eventual human gate presents the predecessor→final diff with an explicit predecessor disclosure, so the human sees precisely what changed after review. A plain `accepted` disposition anywhere in the round still forces full re-entry — the shortcut exists only for rounds that are editorial through and through.
@@ -74,7 +78,7 @@ Nine gate kinds exist (`src/contracts/gates.ts`):
 | `review-trigger` | a constitution rule's `review_trigger` condition matched |
 | `adjudication-failure` | the adjudicator found a rule `fail` or `uncertain` |
 | `material-drift` | an approved upstream document drifted materially |
-| `attempts-exhausted` | the produce/review loop hit its attempt cap |
+| `attempts-exhausted` | the produce/review loop hit its attempt cap (status prefills its request; `build-request` composes only the approval kinds, so complete it through `archflow-local envelope`) |
 | `constitution-edit` | a task branch tried to amend its own governing constitution |
 | `restore-collision` | a drift repair would overwrite conflicting bytes |
 | `migration-audit` | a legacy import is ready for its guarded resume jump |

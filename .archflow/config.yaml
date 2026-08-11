@@ -13,6 +13,11 @@ roles:
     model: gpt-5.6-sol
     effort: xhigh
 
+# Optional. Caps produce re-entries per phase instance before the attempts-exhausted
+# gate opens; defaults to 3. This is a thrash backstop, not the primary brake — the
+# loop ends when triage accepts nothing, so review convergence is a triage judgment.
+# max_attempts: 3
+
 # Codex-producer orientation (replace the active document above with this block):
 # schema_version: "1"
 # roles:

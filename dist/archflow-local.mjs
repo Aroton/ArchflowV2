@@ -37258,7 +37258,12 @@ import { mkdir as mkdir3, readdir as readdir4 } from "node:fs/promises";
 import { join as join10, relative as relative3, sep as sep3 } from "node:path";
 
 // src/contracts/durable-maintenance.ts
-var MAINTENANCE_DELETION_CATEGORIES = ["unreferenced-attempt", "superseded-payload"];
+var MAINTENANCE_DELETION_CATEGORIES = [
+  "unreferenced-attempt",
+  "superseded-payload",
+  "retired-intent",
+  "retired-staged-request"
+];
 
 // src/contracts/schemas/v1/maintenance-record.schema.json
 var maintenance_record_schema_default = {
@@ -37322,7 +37327,7 @@ var maintenance_record_schema_default = {
         byte_count: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" },
         category: {
           $comment: "`MAINTENANCE_DELETION_CATEGORIES` (`durable-maintenance.ts`).",
-          enum: ["unreferenced-attempt", "superseded-payload"]
+          enum: ["unreferenced-attempt", "superseded-payload", "retired-intent", "retired-staged-request"]
         }
       }
     }
@@ -37330,7 +37335,7 @@ var maintenance_record_schema_default = {
 };
 
 // src/state/maintenance.ts
-import { unlink as unlink2 } from "node:fs/promises";
+import { rmdir, unlink as unlink2 } from "node:fs/promises";
 import { dirname as dirname3 } from "node:path";
 function ownEnumerableData(value, key) {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
@@ -37387,12 +37392,25 @@ function computeMaintenanceProof(input) {
       }
     }
   }
+  const retainedIntents = new Set(roots.unreceipted_staged_requests);
+  for (const intent of roots.intents) {
+    const retained = intent.resulting_revision >= roots.current_state.revision || intent.operation !== "record-state-boundary" || intent.intent_id === roots.current_state.committed_intent?.intent_id;
+    if (!retained) continue;
+    retainedIntents.add(intent.path);
+    if (intent.staged_request_path !== void 0) retainedIntents.add(intent.staged_request_path);
+  }
   const permitted = candidates.filter((candidate) => {
     if (candidate.path !== candidate.target.repositoryRelative) {
       throw new TypeError("maintenance candidate and resolved target disagree");
     }
     if (candidate.category === "unreferenced-attempt") {
       return candidate.target.path_class === "attempt";
+    }
+    if (candidate.category === "retired-intent") {
+      return candidate.target.path_class === "intent" && !retainedIntents.has(candidate.path);
+    }
+    if (candidate.category === "retired-staged-request") {
+      return candidate.target.path_class === "staged-request" && !retainedIntents.has(candidate.path);
     }
     return candidate.target.path_class === "result-payload" && !reachablePayloads.has(candidate.path);
   }).sort((left, right) => ordinal4(left.digest, right.digest));
@@ -37401,18 +37419,21 @@ function computeMaintenanceProof(input) {
   }
   const reachableManifestList = [...reachableManifests].sort(ordinal4);
   const reachablePayloadList = [...reachablePayloads].sort(ordinal4);
+  const retainedIntentList = [...retainedIntents].sort(ordinal4);
   const subject = {
     schema_version: "1",
     digest_kind: "maintenance-reachability",
     task_id: taskId,
     reachable_manifests: reachableManifestList,
     reachable_payloads: reachablePayloadList,
+    retained_intents: retainedIntentList,
     permitted_deletions: permitted.map(({ target: _target, ...deletion }) => deletion)
   };
   return Object.freeze({
     task_id: taskId,
     reachable_manifests: Object.freeze(reachableManifestList),
     reachable_payloads: Object.freeze(reachablePayloadList),
+    retained_intents: Object.freeze(retainedIntentList),
     permitted_deletions: Object.freeze(permitted),
     digest: canonicalJsonDigest(subject)
   });
@@ -37423,6 +37444,23 @@ async function readResolved(path2) {
     return await handle.readFile();
   } finally {
     await handle.close();
+  }
+}
+async function removeEmptyParents(candidate) {
+  if (candidate.category !== "superseded-payload") return;
+  const segments = candidate.path.split("/");
+  const anchor = segments.findIndex((segment, index) => segment === "payload" && segments[index - 2] === "sha256");
+  if (anchor === -1) return;
+  let directory = dirname3(candidate.target.absolute);
+  for (let index = segments.length - 2; index >= anchor; index -= 1) {
+    try {
+      await rmdir(directory);
+    } catch (error51) {
+      const code = error51.code;
+      if (code === "ENOTEMPTY" || code === "ENOENT" || code === "EEXIST") return;
+      throw error51;
+    }
+    directory = dirname3(directory);
   }
 }
 function sameDeletion(left, right) {
@@ -37454,6 +37492,7 @@ async function performMaintenance(input) {
       }
       await unlink2(candidate.target.absolute);
       deleted += 1;
+      await removeEmptyParents(candidate);
     } catch (error51) {
       if (error51.code !== "ENOENT") throw error51;
     }
@@ -44348,7 +44387,7 @@ function createProductionInputFingerprintResolver() {
 
 // src/state/lock.ts
 import { AsyncLocalStorage } from "node:async_hooks";
-import { lstat as lstat4, mkdir, open as open3, readdir, realpath as realpath3, rename as rename2, rmdir } from "node:fs/promises";
+import { lstat as lstat4, mkdir, open as open3, readdir, realpath as realpath3, rename as rename2, rmdir as rmdir2 } from "node:fs/promises";
 import { join as join3 } from "node:path";
 import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
@@ -44401,7 +44440,7 @@ function createTaskLock() {
     }
     scopedRoots.delete(taskRoot);
     try {
-      await rmdir(lockPath);
+      await rmdir2(lockPath);
     } catch {
       throw new TaskLockError("release", workThrew ? workError : void 0);
     }
@@ -48426,6 +48465,25 @@ function buildNextActionRequest(next, facts) {
         "Write the summary for the human reviewer."
       ));
     }
+    if (next.gate_kind === "attempts-exhausted" && facts.subject_digest !== void 0 && facts.current_evidence !== void 0 && facts.maximum_attempts !== void 0) {
+      return request("archflow_gate", {
+        ...mechanicalPrefix(facts.task_id, state, state.input_fingerprint),
+        phase_instance: state.phase_instance,
+        summary: TEMPLATE_SUMMARY,
+        subject_digest: facts.subject_digest,
+        current_evidence: facts.current_evidence,
+        kind: "attempts-exhausted",
+        context: {
+          step: state.step,
+          attempts: state.attempt,
+          maximum_attempts: facts.maximum_attempts
+        }
+      }, envelopeGuidance(
+        facts.task_id,
+        "archflow_gate",
+        "Write the summary for the human reviewer: state what the remaining findings are, what the last round changed, and why the loop reached the attempt ceiling. The human chooses retry-once, revise, or abort \u2014 say plainly whether you believe the artifact is decision-ready despite the open findings, and list them."
+      ));
+    }
   }
   return void 0;
 }
@@ -49286,11 +49344,27 @@ async function computeTaskStatus(dependencies, authority) {
   try {
     const derived = deriveCurrentEvidenceSet(retained);
     if (assessment === void 0) throw new TypeError("evidence assessment unavailable");
-    const findings = derived.reviews.flatMap((review) => review.evidence.findings.map((finding) => Object.freeze({
-      review_evidence_digest: review.evidence_digest,
-      finding_id: finding.finding_id,
-      blocking: finding.blocking
-    })));
+    const recordedTriage = retained.get("triage")?.manifest.source_artifact;
+    const dispositions = /* @__PURE__ */ new Map();
+    if (recordedTriage?.artifact_kind === "triage") {
+      for (const item of recordedTriage.evidence.dispositions) {
+        dispositions.set(`${item.review_evidence_digest}:${item.finding_id}`, Object.freeze({
+          disposition: item.disposition,
+          rationale: item.rationale
+        }));
+      }
+    }
+    const findings = derived.reviews.flatMap((review) => review.evidence.findings.map((finding) => {
+      const recorded = dispositions.get(`${review.evidence_digest}:${finding.finding_id}`);
+      return Object.freeze({
+        review_evidence_digest: review.evidence_digest,
+        finding_id: finding.finding_id,
+        blocking: finding.blocking,
+        severity: finding.severity,
+        summary: finding.summary,
+        ...recorded === void 0 ? {} : { disposition: recorded.disposition, rationale: recorded.rationale }
+      });
+    }));
     const counter = derived.reviews[0].evidence;
     evidence = Object.freeze({
       available: true,
@@ -49387,7 +49461,8 @@ async function computeTaskStatus(dependencies, authority) {
       subject_digest: subjectDigest ?? evidence.subject_digest,
       current_evidence: evidence.current_evidence
     } : {},
-    ...gateInput2 === void 0 ? {} : { commit_authorization: gateInput2 }
+    ...gateInput2 === void 0 ? {} : { commit_authorization: gateInput2 },
+    maximum_attempts: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS
   });
   return ok16(Object.freeze({
     task_id: authority.task_id,
@@ -51229,15 +51304,31 @@ async function enumerateMaintenanceRoots(dependencies, authority) {
   if (!checkpoints.ok) return checkpoints;
   try {
     const receipts = [];
-    for (const path2 of await regularFiles(join10(authority.task_root, "intents"))) {
+    const intents = [];
+    const stagedRequests = /* @__PURE__ */ new Set();
+    const intentClaim = (name) => parseRepositoryPathClaim(`.archflow/tasks/${authority.task_id}/intents/${name}`);
+    const intentFiles = await regularFiles(join10(authority.task_root, "intents"));
+    for (const path2 of intentFiles) {
       if (!path2.endsWith(".json")) throw new TypeError("invalid intent inventory");
-      if (path2.endsWith(".request.json")) continue;
+      if (path2.endsWith(".request.json")) {
+        stagedRequests.add(path2);
+        continue;
+      }
       const document2 = parseCanonicalDocument(await readTaskFile(authority, `intents/${path2}`), "intent receipt");
       const receipt = parseIntentReceipt(document2.value);
       if (receipt.resulting_revision >= stateRead.document.value.revision) {
         receipts.push({ prepared_state: receipt.prepared_state });
       }
+      const stagedName = `${receipt.intent_id}.request.json`;
+      intents.push(Object.freeze({
+        path: intentClaim(path2),
+        intent_id: receipt.intent_id,
+        operation: receipt.operation,
+        resulting_revision: receipt.resulting_revision,
+        ...intentFiles.includes(stagedName) ? { staged_request_path: intentClaim(stagedName) } : {}
+      }));
     }
+    for (const intent of intents) stagedRequests.delete(`${intent.intent_id}.request.json`);
     const decisionReviewEvidence = [];
     for (const directory of ["decisions", "reviews"]) {
       for (const path2 of await regularFiles(join10(authority.task_root, directory))) {
@@ -51253,7 +51344,9 @@ async function enumerateMaintenanceRoots(dependencies, authority) {
       current_state: stateRead.document.value,
       checkpoints: Object.freeze(checkpoints.value.map((document2) => document2.value)),
       resumable_receipts: Object.freeze(receipts),
-      decision_review_evidence: Object.freeze(decisionReviewEvidence)
+      decision_review_evidence: Object.freeze(decisionReviewEvidence),
+      intents: Object.freeze(intents),
+      unreceipted_staged_requests: Object.freeze([...stagedRequests].sort().map(intentClaim))
     }));
   } catch {
     return fail21(authority, "enumerate-maintenance-roots");
@@ -51322,6 +51415,31 @@ async function enumerateMaintenanceCandidates(dependencies, authority, roots, ca
         if (!target2.ok) return target2;
         const bytes = await readTaskFile(authority, claim);
         candidates.push({ path: target2.value.repositoryRelative, target: target2.value, digest: sha256Bytes(bytes), byte_count: bytes.byteLength, category: "superseded-payload" });
+      }
+    }
+    const wantsIntents = categories.includes("retired-intent");
+    const wantsStaged = categories.includes("retired-staged-request");
+    if (wantsIntents || wantsStaged) {
+      for (const path2 of await regularFiles(join10(authority.task_root, "intents"))) {
+        const staged = path2.endsWith(".request.json");
+        if (staged ? !wantsStaged : !wantsIntents) continue;
+        const claim = parseTaskPathClaim(`intents/${path2}`);
+        const target2 = await resolveTaskPath({
+          runner: dependencies.runner,
+          taskId: authority.task_id,
+          claim,
+          expectedClass: staged ? "staged-request" : "intent",
+          context: authority.context
+        });
+        if (!target2.ok) return target2;
+        const bytes = await readTaskFile(authority, claim);
+        candidates.push({
+          path: target2.value.repositoryRelative,
+          target: target2.value,
+          digest: sha256Bytes(bytes),
+          byte_count: bytes.byteLength,
+          category: staged ? "retired-staged-request" : "retired-intent"
+        });
       }
     }
     return ok22(Object.freeze(candidates.sort((a, b) => a.digest.localeCompare(b.digest))));

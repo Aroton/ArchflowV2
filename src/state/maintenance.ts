@@ -1,4 +1,4 @@
-import { unlink } from "node:fs/promises";
+import { rmdir, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../contracts/canonical.js";
@@ -16,12 +16,28 @@ export type MaintenanceReferenceRoot = Readonly<{
   authoritative_results: readonly AuthoritativeResultRef[];
 }>;
 
+/**
+ * The complete `intents/` inventory, supplied so intent retention is decided by the same
+ * proof-then-delete walk as payloads rather than by an ad-hoc filter at the delete site.
+ */
+export type MaintenanceIntentInventory = Readonly<{
+  path: RepositoryPathClaim;
+  intent_id: string;
+  operation: string;
+  resulting_revision: number;
+  /** Present only for `intents/<id>.request.json`; a staged request with no receipt is in flight. */
+  staged_request_path?: RepositoryPathClaim;
+}>;
+
 export type MaintenanceRoots = Readonly<{
   inventory_complete: true;
   current_state: TaskStateV1;
   checkpoints: readonly MaintenanceReferenceRoot[];
   resumable_receipts: readonly Readonly<{ prepared_state: TaskStateV1 }>[];
   decision_review_evidence: readonly MaintenanceReferenceRoot[];
+  intents: readonly MaintenanceIntentInventory[];
+  /** Staged-request paths with no corresponding receipt: pre-call buffers, always retained. */
+  unreceipted_staged_requests: readonly RepositoryPathClaim[];
 }>;
 
 export type MaintenanceManifest = Readonly<{
@@ -36,6 +52,8 @@ export type MaintenanceProof = Readonly<{
   task_id: TaskSlug;
   reachable_manifests: readonly RepositoryPathClaim[];
   reachable_payloads: readonly RepositoryPathClaim[];
+  /** Intent receipts and staged requests a reader can still reach; deletion is refused for these. */
+  retained_intents: readonly RepositoryPathClaim[];
   permitted_deletions: readonly MaintenanceCandidate[];
   digest: Sha256Digest;
 }>;
@@ -102,12 +120,32 @@ export function computeMaintenanceProof(input: Readonly<{
     }
   }
 
+  // Intent retention, decided here so the surviving set is bound into the proof digest.
+  // A receipt survives unless it is a boundary marker that is strictly behind the current
+  // revision: adjudication and gate replay read retired receipts by intent id, and only
+  // `record-state-boundary` receipts — which install no result — have no such reader.
+  const retainedIntents = new Set<RepositoryPathClaim>(roots.unreceipted_staged_requests);
+  for (const intent of roots.intents) {
+    const retained = intent.resulting_revision >= roots.current_state.revision ||
+      intent.operation !== "record-state-boundary" ||
+      intent.intent_id === roots.current_state.committed_intent?.intent_id;
+    if (!retained) continue;
+    retainedIntents.add(intent.path);
+    if (intent.staged_request_path !== undefined) retainedIntents.add(intent.staged_request_path);
+  }
+
   const permitted = candidates.filter((candidate) => {
     if (candidate.path !== candidate.target.repositoryRelative) {
       throw new TypeError("maintenance candidate and resolved target disagree");
     }
     if (candidate.category === "unreferenced-attempt") {
       return candidate.target.path_class === "attempt";
+    }
+    if (candidate.category === "retired-intent") {
+      return candidate.target.path_class === "intent" && !retainedIntents.has(candidate.path);
+    }
+    if (candidate.category === "retired-staged-request") {
+      return candidate.target.path_class === "staged-request" && !retainedIntents.has(candidate.path);
     }
     return candidate.target.path_class === "result-payload" && !reachablePayloads.has(candidate.path);
   }).sort((left, right) => ordinal(left.digest, right.digest));
@@ -117,18 +155,21 @@ export function computeMaintenanceProof(input: Readonly<{
 
   const reachableManifestList = [...reachableManifests].sort(ordinal);
   const reachablePayloadList = [...reachablePayloads].sort(ordinal);
+  const retainedIntentList = [...retainedIntents].sort(ordinal);
   const subject = {
     schema_version: "1",
     digest_kind: "maintenance-reachability",
     task_id: taskId,
     reachable_manifests: reachableManifestList,
     reachable_payloads: reachablePayloadList,
+    retained_intents: retainedIntentList,
     permitted_deletions: permitted.map(({ target: _target, ...deletion }) => deletion),
   } as const satisfies PlainJsonValue;
   return Object.freeze({
     task_id: taskId,
     reachable_manifests: Object.freeze(reachableManifestList),
     reachable_payloads: Object.freeze(reachablePayloadList),
+    retained_intents: Object.freeze(retainedIntentList),
     permitted_deletions: Object.freeze(permitted),
     digest: canonicalJsonDigest(subject),
   });
@@ -140,6 +181,32 @@ async function readResolved(path: ResolvedPath): Promise<Uint8Array> {
     return await handle.readFile();
   } finally {
     await handle.close();
+  }
+}
+
+/**
+ * A payload is stored under a full mirror of its repository path, so deleting one leaves a tower
+ * of empty directories — four or five deep — standing per reclaimed file. Walk back up from the
+ * deleted file to the result's own `payload/` directory, removing whatever is now empty and
+ * stopping at the first directory that is not. The result directory and its `manifest.json` are
+ * never touched. Only payloads mirror a path this way; `intents/` is a fixed task child and stays.
+ */
+async function removeEmptyParents(candidate: MaintenanceCandidate): Promise<void> {
+  if (candidate.category !== "superseded-payload") return;
+  const segments = candidate.path.split("/");
+  const anchor = segments.findIndex((segment, index) =>
+    segment === "payload" && segments[index - 2] === "sha256");
+  if (anchor === -1) return;
+  let directory = dirname(candidate.target.absolute);
+  for (let index = segments.length - 2; index >= anchor; index -= 1) {
+    try {
+      await rmdir(directory);
+    } catch (error) {
+      const code = (error as { code?: unknown }).code;
+      if (code === "ENOTEMPTY" || code === "ENOENT" || code === "EEXIST") return;
+      throw error;
+    }
+    directory = dirname(directory);
   }
 }
 
@@ -182,6 +249,7 @@ export async function performMaintenance(input: Readonly<{
       }
       await unlink(candidate.target.absolute);
       deleted += 1;
+      await removeEmptyParents(candidate);
     } catch (error) {
       if ((error as { code?: unknown }).code !== "ENOENT") throw error;
     }

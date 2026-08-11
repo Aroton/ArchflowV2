@@ -112,6 +112,8 @@ describe("retention, maintenance, and accounting", () => {
         checkpoints: [root(taskId, [refs[0]!])],
         resumable_receipts: [{ prepared_state: root(taskId, [refs[1]!]) as TaskStateV1 }],
         decision_review_evidence: [root(taskId, [refs[2]!])],
+        intents: [],
+        unreceipted_staged_requests: [],
       },
       manifests,
       candidates: [...livePaths.map(candidate), candidate(orphan)],

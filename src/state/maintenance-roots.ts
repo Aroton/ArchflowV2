@@ -12,7 +12,7 @@ import {
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parsePathSafeId, parseSafeInteger } from "../contracts/evidence.js";
-import { parseTaskPathClaim } from "../contracts/path-claims.js";
+import { parseRepositoryPathClaim, parseTaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import maintenanceRecordSchema from "../contracts/schemas/v1/maintenance-record.schema.json" with { type: "json" };
 import pathClaimSchema from "../contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
@@ -25,6 +25,7 @@ import {
   computeMaintenanceProof,
   performMaintenance,
   type MaintenanceCandidate,
+  type MaintenanceIntentInventory,
   type MaintenanceManifest,
   type MaintenanceReferenceRoot,
   type MaintenanceRoots,
@@ -81,14 +82,21 @@ export async function enumerateMaintenanceRoots(
   if (!checkpoints.ok) return checkpoints;
   try {
     const receipts = [];
-    for (const path of await regularFiles(join(authority.task_root, "intents"))) {
+    const intents: MaintenanceIntentInventory[] = [];
+    const stagedRequests = new Set<string>();
+    // Repository-relative, matching how candidates report themselves, so the proof can compare
+    // the retained set against candidate paths directly.
+    const intentClaim = (name: string) =>
+      parseRepositoryPathClaim(`.archflow/tasks/${authority.task_id}/intents/${name}`);
+    const intentFiles = await regularFiles(join(authority.task_root, "intents"));
+    for (const path of intentFiles) {
       if (!path.endsWith(".json")) throw new TypeError("invalid intent inventory");
       // Staged requests share the intents directory under the reserved `.request.json` suffix.
       // They are convenience bytes the request digest re-authenticates on use, never roots:
       // treating one as a receipt would both fail receipt parsing and, worse, let a stale
       // staged file pin superseded payloads. A staged request for a retired intent is simply
-      // deletable.
-      if (path.endsWith(".request.json")) continue;
+      // deletable — collected here so the proof can decide that rather than a delete-site filter.
+      if (path.endsWith(".request.json")) { stagedRequests.add(path); continue; }
       const document = parseCanonicalDocument<PlainJsonValue>(await readTaskFile(authority, `intents/${path}`), "intent receipt");
       const receipt = parseIntentReceipt(document.value);
       // Only receipts arbitration can still consume pin results: the receipt committed at the
@@ -98,7 +106,16 @@ export async function enumerateMaintenanceRoots(
       if (receipt.resulting_revision >= stateRead.document.value.revision) {
         receipts.push({ prepared_state: receipt.prepared_state });
       }
+      const stagedName = `${receipt.intent_id}.request.json`;
+      intents.push(Object.freeze({
+        path: intentClaim(path),
+        intent_id: receipt.intent_id,
+        operation: receipt.operation,
+        resulting_revision: receipt.resulting_revision,
+        ...(intentFiles.includes(stagedName) ? { staged_request_path: intentClaim(stagedName) } : {}),
+      }));
     }
+    for (const intent of intents) stagedRequests.delete(`${intent.intent_id}.request.json`);
     const decisionReviewEvidence: MaintenanceReferenceRoot[] = [];
     for (const directory of ["decisions", "reviews"] as const) {
       for (const path of await regularFiles(join(authority.task_root, directory))) {
@@ -115,6 +132,8 @@ export async function enumerateMaintenanceRoots(
       checkpoints: Object.freeze(checkpoints.value.map((document) => document.value)),
       resumable_receipts: Object.freeze(receipts),
       decision_review_evidence: Object.freeze(decisionReviewEvidence),
+      intents: Object.freeze(intents),
+      unreceipted_staged_requests: Object.freeze([...stagedRequests].sort().map(intentClaim)),
     }));
   } catch { return fail(authority, "enumerate-maintenance-roots"); }
 }
@@ -201,6 +220,31 @@ export async function enumerateMaintenanceCandidates(
         candidates.push({ path: target.value.repositoryRelative, target: target.value, digest: sha256Bytes(bytes), byte_count: bytes.byteLength as MaintenanceCandidate["byte_count"], category: "superseded-payload" });
       }
     }
+    const wantsIntents = categories.includes("retired-intent");
+    const wantsStaged = categories.includes("retired-staged-request");
+    if (wantsIntents || wantsStaged) {
+      for (const path of await regularFiles(join(authority.task_root, "intents"))) {
+        const staged = path.endsWith(".request.json");
+        if (staged ? !wantsStaged : !wantsIntents) continue;
+        const claim = parseTaskPathClaim(`intents/${path}`);
+        const target = await resolveTaskPath({
+          runner: dependencies.runner,
+          taskId: authority.task_id,
+          claim,
+          expectedClass: staged ? "staged-request" : "intent",
+          context: authority.context,
+        });
+        if (!target.ok) return target;
+        const bytes = await readTaskFile(authority, claim);
+        candidates.push({
+          path: target.value.repositoryRelative,
+          target: target.value,
+          digest: sha256Bytes(bytes),
+          byte_count: bytes.byteLength as MaintenanceCandidate["byte_count"],
+          category: staged ? "retired-staged-request" : "retired-intent",
+        });
+      }
+    }
     return ok(Object.freeze(candidates.sort((a, b) => a.digest.localeCompare(b.digest))));
   } catch { return fail(authority, "enumerate-maintenance-candidates"); }
 }
@@ -211,12 +255,15 @@ const maintenanceRecordValidator = createJsonSchemaValidator<MaintenanceRecordV1
 );
 
 /**
- * Reclaims result payload bytes no reader can reach any more. Manifests are never candidates —
- * `results/sha256/<digest>/manifest.json` remains the permanent digest-bound authority record;
- * only the byte copies under `payload/` go. Attempts are never candidates here either:
- * failed-dispatch records are forensic evidence and only the human-run `maintain` command may
- * remove them. Any pass that deletes something writes an immutable maintenance record first, so
- * every reclamation is accounted for.
+ * Reclaims result payload bytes and intent records no reader can reach any more. Manifests are
+ * never candidates — `results/sha256/<digest>/manifest.json` remains the permanent digest-bound
+ * authority record; only the byte copies under `payload/` go. Attempts are never candidates here
+ * either: failed-dispatch records are forensic evidence and only the human-run `maintain` command
+ * may remove them. Retired boundary receipts and their staged requests are candidates because
+ * nothing reads them: reconciliation keeps only the receipt at the current revision, and the
+ * retired-receipt readers (adjudication replay, gate replay) never target a boundary marker.
+ * Any pass that deletes something writes an immutable maintenance record first, so every
+ * reclamation is accounted for.
  */
 export async function pruneSupersededResultPayloads(
   dependencies: TransactionDependencies,
@@ -227,7 +274,12 @@ export async function pruneSupersededResultPayloads(
   if (!roots.ok) return roots;
   const manifests = await enumerateMaintenanceManifests(dependencies, authority, roots.value);
   if (!manifests.ok) return manifests;
-  const candidates = await enumerateMaintenanceCandidates(dependencies, authority, roots.value, ["superseded-payload"]);
+  const candidates = await enumerateMaintenanceCandidates(
+    dependencies,
+    authority,
+    roots.value,
+    ["superseded-payload", "retired-intent", "retired-staged-request"],
+  );
   if (!candidates.ok) return candidates;
   try {
     const proof = computeMaintenanceProof({ roots: roots.value, manifests: manifests.value, candidates: candidates.value });
@@ -252,7 +304,7 @@ export async function pruneSupersededResultPayloads(
       maintenance_id: maintenanceId,
       task_id: authority.task_id,
       performed_at_revision: roots.value.current_state.revision,
-      human_reason: "automatic post-commit reclamation of superseded result payloads",
+      human_reason: "automatic post-commit reclamation of superseded result payloads and retired intent records",
       reachability_proof_digest: proof.digest,
       deletions,
       total_bytes_deleted: parseSafeInteger(deletions.reduce((total, deletion) => total + deletion.byte_count, 0)),

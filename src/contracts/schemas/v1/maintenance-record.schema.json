@@ -59,7 +59,7 @@
         "byte_count": { "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger" },
         "category": {
           "$comment": "`MAINTENANCE_DELETION_CATEGORIES` (`durable-maintenance.ts`).",
-          "enum": ["unreferenced-attempt", "superseded-payload"]
+          "enum": ["unreferenced-attempt", "superseded-payload", "retired-intent", "retired-staged-request"]
         }
       }
     }

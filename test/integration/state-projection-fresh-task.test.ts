@@ -6,7 +6,7 @@
  * happy-path first review install failed with an opaque INTERNAL_ERROR.
  */
 import { execFileSync } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -421,10 +421,18 @@ describe("superseded result payload reclamation at commit", () => {
       "utf8",
     )) as { performed_at_revision: number; deletions: readonly { path: string; category: string }[] };
     expect(record.performed_at_revision).toBe(committed.revision);
-    expect(record.deletions).toMatchObject([{
+    expect(record.deletions).toEqual(expect.arrayContaining([expect.objectContaining({
       category: "superseded-payload",
       path: `.archflow/tasks/${task}/results/sha256/${oldDocument.digest}/payload/evidence.json`,
-    }]);
+    })]));
+    // The same pass reclaims retired boundary receipts: nothing reads a record-state-boundary
+    // receipt once its step's terminal result commits. Result-bearing receipts are retained,
+    // because adjudication and gate replay both read retired receipts by intent id.
+    expect(record.deletions.some((deletion) => deletion.category === "retired-intent")).toBe(true);
+    expect(await readFile(join(h.authority.task_root, "intents", "counter-intent-2.json"), "utf8"))
+      .toContain("counter-intent-2");
+    // Reclaiming a payload leaves no empty mirror directory tower behind.
+    await expect(readdir(join(oldDirectory, "payload"))).rejects.toMatchObject({ code: "ENOENT" });
 
     // The retained-result reader — what crash arbitration and resume consume — still verifies.
     const newReference = committed.authoritative_results.find((entry) => entry.step === "counter_review")!;

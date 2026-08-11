@@ -17,7 +17,7 @@ import type { SupplementalReviewOutcome, SupplementalReviewRef } from "../contra
 import { resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
 import { renderGateCounterPrompt } from "../local/envelope.js";
 import { selectAdjudicationGates } from "../review/adjudication.js";
-import { assessCurrentEvidence, waiverInForce, type EvidenceAssessment } from "../review/fixed-point.js";
+import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS, waiverInForce, type EvidenceAssessment } from "../review/fixed-point.js";
 import { readTaskState } from "./read.js";
 import type { TransactionAuthority } from "./authority.js";
 import { assertInternalTransactionAuthority } from "./authority.js";
@@ -74,10 +74,22 @@ type StatusEvidence = Readonly<{
   available: true;
   subject_digest: Sha256Digest;
   current_evidence: CurrentEvidenceSetRef;
+  /**
+   * Every finding in the current review, joined to its recorded triage disposition when one
+   * exists. `severity`/`summary` are reviewer-authored; `disposition`/`rationale` are the
+   * producer's recorded answer. The join is keyed on the review evidence digest as well as the
+   * finding id, so a triage bound to superseded review bytes contributes nothing rather than
+   * mislabelling a current finding. Gate presentation reads this to show the human which
+   * blocking findings were rejected as immaterial rather than fixed.
+   */
   findings: readonly Readonly<{
     review_evidence_digest: Sha256Digest;
     finding_id: string;
     blocking: boolean;
+    severity: ReviewEvidence["findings"][number]["severity"];
+    summary: string;
+    disposition?: string;
+    rationale?: string;
   }>[];
   counter_review_provenance: Readonly<{
     assurance: string;
@@ -865,11 +877,29 @@ export async function computeTaskStatus(
   try {
     const derived = deriveCurrentEvidenceSet(retained);
     if (assessment === undefined) throw new TypeError("evidence assessment unavailable");
-    const findings = derived.reviews.flatMap((review) => review.evidence.findings.map((finding) => Object.freeze({
-      review_evidence_digest: review.evidence_digest,
-      finding_id: finding.finding_id,
-      blocking: finding.blocking,
-    })));
+    // Recorded dispositions, keyed by the review bytes they answered. A stale triage keys on a
+    // superseded evidence digest and therefore joins to nothing.
+    const recordedTriage = retained.get("triage")?.manifest.source_artifact;
+    const dispositions = new Map<string, Readonly<{ disposition: string; rationale: string }>>();
+    if (recordedTriage?.artifact_kind === "triage") {
+      for (const item of recordedTriage.evidence.dispositions) {
+        dispositions.set(`${item.review_evidence_digest}:${item.finding_id}`, Object.freeze({
+          disposition: item.disposition as string,
+          rationale: item.rationale,
+        }));
+      }
+    }
+    const findings = derived.reviews.flatMap((review) => review.evidence.findings.map((finding) => {
+      const recorded = dispositions.get(`${review.evidence_digest}:${finding.finding_id}`);
+      return Object.freeze({
+        review_evidence_digest: review.evidence_digest,
+        finding_id: finding.finding_id,
+        blocking: finding.blocking,
+        severity: finding.severity,
+        summary: finding.summary,
+        ...(recorded === undefined ? {} : { disposition: recorded.disposition, rationale: recorded.rationale }),
+      });
+    }));
     const counter = derived.reviews[0]!.evidence;
     evidence = Object.freeze({
       available: true,
@@ -979,6 +1009,7 @@ export async function computeTaskStatus(
         }
       : {}),
     ...(gateInput === undefined ? {} : { commit_authorization: gateInput }),
+    maximum_attempts: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS,
   });
 
   return ok(Object.freeze({

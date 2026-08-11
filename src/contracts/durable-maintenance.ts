@@ -10,7 +10,20 @@ import type { RepositoryPathClaim } from "./path-claims.js";
  * mirror. Every type is a `type` alias rather than an `interface` (D1).
  */
 
-export const MAINTENANCE_DELETION_CATEGORIES = ["unreferenced-attempt", "superseded-payload"] as const;
+/**
+ * `retired-intent` covers only `record-state-boundary` receipts that no longer sit at or after the
+ * current revision. Every other receipt kind is retained indefinitely, because adjudication
+ * (`loadRetiredOutcome`) and gate replay both read *retired* receipts by intent id; a boundary
+ * receipt installs no result and has no such reader. `retired-staged-request` covers the
+ * compose-to-call handoff buffer once its receipt exists — the request digest, not the file, is
+ * what a rehydration is authenticated against.
+ */
+export const MAINTENANCE_DELETION_CATEGORIES = [
+  "unreferenced-attempt",
+  "superseded-payload",
+  "retired-intent",
+  "retired-staged-request",
+] as const;
 export type MaintenanceDeletionCategory = (typeof MAINTENANCE_DELETION_CATEGORIES)[number];
 
 /**

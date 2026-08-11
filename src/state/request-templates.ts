@@ -37,6 +37,8 @@ export type NextActionRequestFacts = Readonly<{
   subject_digest?: Sha256Digest;
   current_evidence?: CurrentEvidenceSetRef;
   commit_authorization?: CommitAuthorizationInput;
+  /** The resolved attempt ceiling, needed to prefill the attempts-exhausted gate context. */
+  maximum_attempts?: number;
 }>;
 
 function deepFreeze<T>(value: T): T {
@@ -196,6 +198,32 @@ export function buildNextActionRequest(next: NextAction, facts: NextActionReques
         facts.task_id,
         "archflow_gate",
         "Write the summary for the human reviewer.",
+      ));
+    }
+    // Exhaustion is a decision point, not a failure: without a template the human's entire view
+    // of it is agent-authored prose. The context is mechanical, so only the summary is authored.
+    if (
+      next.gate_kind === "attempts-exhausted" &&
+      facts.subject_digest !== undefined &&
+      facts.current_evidence !== undefined &&
+      facts.maximum_attempts !== undefined
+    ) {
+      return request("archflow_gate", {
+        ...mechanicalPrefix(facts.task_id, state, state.input_fingerprint),
+        phase_instance: state.phase_instance,
+        summary: TEMPLATE_SUMMARY,
+        subject_digest: facts.subject_digest,
+        current_evidence: facts.current_evidence as unknown as PlainJsonValue,
+        kind: "attempts-exhausted",
+        context: {
+          step: state.step,
+          attempts: state.attempt,
+          maximum_attempts: facts.maximum_attempts,
+        },
+      }, envelopeGuidance(
+        facts.task_id,
+        "archflow_gate",
+        "Write the summary for the human reviewer: state what the remaining findings are, what the last round changed, and why the loop reached the attempt ceiling. The human chooses retry-once, revise, or abort — say plainly whether you believe the artifact is decision-ready despite the open findings, and list them.",
       ));
     }
   }

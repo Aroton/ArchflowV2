@@ -5,7 +5,6 @@ import { parseSingleYamlDocument } from "./yaml.js";
 
 export const ROUTING_ROLES = ["producer", "counter-reviewer", "adjudicator"] as const;
 export const REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"] as const;
-export const DEFAULT_MAX_ATTEMPTS = 3;
 
 const routeSchema = z.object({
   model: z.string().min(1).refine((value) => value.trim().length > 0, "model must contain a non-whitespace character"),

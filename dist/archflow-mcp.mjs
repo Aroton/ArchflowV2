@@ -57270,7 +57270,12 @@ import { mkdir as mkdir3, readdir as readdir4 } from "node:fs/promises";
 import { join as join7, relative as relative3, sep as sep3 } from "node:path";
 
 // src/contracts/durable-maintenance.ts
-var MAINTENANCE_DELETION_CATEGORIES = ["unreferenced-attempt", "superseded-payload"];
+var MAINTENANCE_DELETION_CATEGORIES = [
+  "unreferenced-attempt",
+  "superseded-payload",
+  "retired-intent",
+  "retired-staged-request"
+];
 
 // src/contracts/schemas/v1/maintenance-record.schema.json
 var maintenance_record_schema_default = {
@@ -57334,7 +57339,7 @@ var maintenance_record_schema_default = {
         byte_count: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" },
         category: {
           $comment: "`MAINTENANCE_DELETION_CATEGORIES` (`durable-maintenance.ts`).",
-          enum: ["unreferenced-attempt", "superseded-payload"]
+          enum: ["unreferenced-attempt", "superseded-payload", "retired-intent", "retired-staged-request"]
         }
       }
     }
@@ -57342,7 +57347,7 @@ var maintenance_record_schema_default = {
 };
 
 // src/state/maintenance.ts
-import { unlink as unlink2 } from "node:fs/promises";
+import { rmdir as rmdir2, unlink as unlink2 } from "node:fs/promises";
 import { dirname as dirname3 } from "node:path";
 function ownEnumerableData3(value, key) {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
@@ -57399,12 +57404,25 @@ function computeMaintenanceProof(input) {
       }
     }
   }
+  const retainedIntents = new Set(roots.unreceipted_staged_requests);
+  for (const intent of roots.intents) {
+    const retained = intent.resulting_revision >= roots.current_state.revision || intent.operation !== "record-state-boundary" || intent.intent_id === roots.current_state.committed_intent?.intent_id;
+    if (!retained) continue;
+    retainedIntents.add(intent.path);
+    if (intent.staged_request_path !== void 0) retainedIntents.add(intent.staged_request_path);
+  }
   const permitted = candidates.filter((candidate) => {
     if (candidate.path !== candidate.target.repositoryRelative) {
       throw new TypeError("maintenance candidate and resolved target disagree");
     }
     if (candidate.category === "unreferenced-attempt") {
       return candidate.target.path_class === "attempt";
+    }
+    if (candidate.category === "retired-intent") {
+      return candidate.target.path_class === "intent" && !retainedIntents.has(candidate.path);
+    }
+    if (candidate.category === "retired-staged-request") {
+      return candidate.target.path_class === "staged-request" && !retainedIntents.has(candidate.path);
     }
     return candidate.target.path_class === "result-payload" && !reachablePayloads.has(candidate.path);
   }).sort((left, right) => ordinal6(left.digest, right.digest));
@@ -57413,18 +57431,21 @@ function computeMaintenanceProof(input) {
   }
   const reachableManifestList = [...reachableManifests].sort(ordinal6);
   const reachablePayloadList = [...reachablePayloads].sort(ordinal6);
+  const retainedIntentList = [...retainedIntents].sort(ordinal6);
   const subject = {
     schema_version: "1",
     digest_kind: "maintenance-reachability",
     task_id: taskId,
     reachable_manifests: reachableManifestList,
     reachable_payloads: reachablePayloadList,
+    retained_intents: retainedIntentList,
     permitted_deletions: permitted.map(({ target: _target, ...deletion }) => deletion)
   };
   return Object.freeze({
     task_id: taskId,
     reachable_manifests: Object.freeze(reachableManifestList),
     reachable_payloads: Object.freeze(reachablePayloadList),
+    retained_intents: Object.freeze(retainedIntentList),
     permitted_deletions: Object.freeze(permitted),
     digest: canonicalJsonDigest(subject)
   });
@@ -57435,6 +57456,23 @@ async function readResolved(path2) {
     return await handle.readFile();
   } finally {
     await handle.close();
+  }
+}
+async function removeEmptyParents(candidate) {
+  if (candidate.category !== "superseded-payload") return;
+  const segments = candidate.path.split("/");
+  const anchor = segments.findIndex((segment, index) => segment === "payload" && segments[index - 2] === "sha256");
+  if (anchor === -1) return;
+  let directory = dirname3(candidate.target.absolute);
+  for (let index = segments.length - 2; index >= anchor; index -= 1) {
+    try {
+      await rmdir2(directory);
+    } catch (error51) {
+      const code = error51.code;
+      if (code === "ENOTEMPTY" || code === "ENOENT" || code === "EEXIST") return;
+      throw error51;
+    }
+    directory = dirname3(directory);
   }
 }
 function sameDeletion(left, right) {
@@ -57466,6 +57504,7 @@ async function performMaintenance(input) {
       }
       await unlink2(candidate.target.absolute);
       deleted += 1;
+      await removeEmptyParents(candidate);
     } catch (error51) {
       if (error51.code !== "ENOENT") throw error51;
     }
@@ -59079,15 +59118,31 @@ async function enumerateMaintenanceRoots(dependencies, authority) {
   if (!checkpoints.ok) return checkpoints;
   try {
     const receipts = [];
-    for (const path2 of await regularFiles(join7(authority.task_root, "intents"))) {
+    const intents = [];
+    const stagedRequests = /* @__PURE__ */ new Set();
+    const intentClaim = (name) => parseRepositoryPathClaim(`.archflow/tasks/${authority.task_id}/intents/${name}`);
+    const intentFiles = await regularFiles(join7(authority.task_root, "intents"));
+    for (const path2 of intentFiles) {
       if (!path2.endsWith(".json")) throw new TypeError("invalid intent inventory");
-      if (path2.endsWith(".request.json")) continue;
+      if (path2.endsWith(".request.json")) {
+        stagedRequests.add(path2);
+        continue;
+      }
       const document2 = parseCanonicalDocument(await readTaskFile(authority, `intents/${path2}`), "intent receipt");
       const receipt = parseIntentReceipt(document2.value);
       if (receipt.resulting_revision >= stateRead.document.value.revision) {
         receipts.push({ prepared_state: receipt.prepared_state });
       }
+      const stagedName = `${receipt.intent_id}.request.json`;
+      intents.push(Object.freeze({
+        path: intentClaim(path2),
+        intent_id: receipt.intent_id,
+        operation: receipt.operation,
+        resulting_revision: receipt.resulting_revision,
+        ...intentFiles.includes(stagedName) ? { staged_request_path: intentClaim(stagedName) } : {}
+      }));
     }
+    for (const intent of intents) stagedRequests.delete(`${intent.intent_id}.request.json`);
     const decisionReviewEvidence = [];
     for (const directory of ["decisions", "reviews"]) {
       for (const path2 of await regularFiles(join7(authority.task_root, directory))) {
@@ -59103,7 +59158,9 @@ async function enumerateMaintenanceRoots(dependencies, authority) {
       current_state: stateRead.document.value,
       checkpoints: Object.freeze(checkpoints.value.map((document2) => document2.value)),
       resumable_receipts: Object.freeze(receipts),
-      decision_review_evidence: Object.freeze(decisionReviewEvidence)
+      decision_review_evidence: Object.freeze(decisionReviewEvidence),
+      intents: Object.freeze(intents),
+      unreceipted_staged_requests: Object.freeze([...stagedRequests].sort().map(intentClaim))
     }));
   } catch {
     return fail11(authority, "enumerate-maintenance-roots");
@@ -59174,6 +59231,31 @@ async function enumerateMaintenanceCandidates(dependencies, authority, roots, ca
         candidates.push({ path: target2.value.repositoryRelative, target: target2.value, digest: sha256Bytes(bytes), byte_count: bytes.byteLength, category: "superseded-payload" });
       }
     }
+    const wantsIntents = categories.includes("retired-intent");
+    const wantsStaged = categories.includes("retired-staged-request");
+    if (wantsIntents || wantsStaged) {
+      for (const path2 of await regularFiles(join7(authority.task_root, "intents"))) {
+        const staged = path2.endsWith(".request.json");
+        if (staged ? !wantsStaged : !wantsIntents) continue;
+        const claim = parseTaskPathClaim(`intents/${path2}`);
+        const target2 = await resolveTaskPath({
+          runner: dependencies.runner,
+          taskId: authority.task_id,
+          claim,
+          expectedClass: staged ? "staged-request" : "intent",
+          context: authority.context
+        });
+        if (!target2.ok) return target2;
+        const bytes = await readTaskFile(authority, claim);
+        candidates.push({
+          path: target2.value.repositoryRelative,
+          target: target2.value,
+          digest: sha256Bytes(bytes),
+          byte_count: bytes.byteLength,
+          category: staged ? "retired-staged-request" : "retired-intent"
+        });
+      }
+    }
     return ok11(Object.freeze(candidates.sort((a, b) => a.digest.localeCompare(b.digest))));
   } catch {
     return fail11(authority, "enumerate-maintenance-candidates");
@@ -59189,7 +59271,12 @@ async function pruneSupersededResultPayloads(dependencies, authority) {
   if (!roots.ok) return roots;
   const manifests = await enumerateMaintenanceManifests(dependencies, authority, roots.value);
   if (!manifests.ok) return manifests;
-  const candidates = await enumerateMaintenanceCandidates(dependencies, authority, roots.value, ["superseded-payload"]);
+  const candidates = await enumerateMaintenanceCandidates(
+    dependencies,
+    authority,
+    roots.value,
+    ["superseded-payload", "retired-intent", "retired-staged-request"]
+  );
   if (!candidates.ok) return candidates;
   try {
     const proof = computeMaintenanceProof({ roots: roots.value, manifests: manifests.value, candidates: candidates.value });
@@ -59212,7 +59299,7 @@ async function pruneSupersededResultPayloads(dependencies, authority) {
       maintenance_id: maintenanceId,
       task_id: authority.task_id,
       performed_at_revision: roots.value.current_state.revision,
-      human_reason: "automatic post-commit reclamation of superseded result payloads",
+      human_reason: "automatic post-commit reclamation of superseded result payloads and retired intent records",
       reachability_proof_digest: proof.digest,
       deletions,
       total_bytes_deleted: parseSafeInteger(deletions.reduce((total, deletion) => total + deletion.byte_count, 0))

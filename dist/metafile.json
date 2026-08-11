@@ -5240,7 +5240,7 @@
       ]
     },
     "src/contracts/config.ts": {
-      "bytes": 1562,
+      "bytes": 1523,
       "format": "esm",
       "imports": [
         {
@@ -5590,7 +5590,7 @@
       ]
     },
     "src/contracts/durable-maintenance.ts": {
-      "bytes": 1948,
+      "bytes": 2537,
       "format": "esm",
       "imports": []
     },
@@ -6217,7 +6217,7 @@
       }
     },
     "src/contracts/schemas/v1/maintenance-record.schema.json": {
-      "bytes": 3210,
+      "bytes": 3254,
       "format": "esm",
       "imports": [],
       "with": {
@@ -10054,7 +10054,7 @@
       ]
     },
     "src/state/maintenance-roots.ts": {
-      "bytes": 15256,
+      "bytes": 17940,
       "format": "esm",
       "imports": [
         {
@@ -10164,7 +10164,7 @@
       ]
     },
     "src/state/maintenance.ts": {
-      "bytes": 8874,
+      "bytes": 12365,
       "format": "esm",
       "imports": [
         {
@@ -10733,7 +10733,7 @@
       ]
     },
     "src/state/request-templates.ts": {
-      "bytes": 10183,
+      "bytes": 11617,
       "format": "esm",
       "imports": [
         {
@@ -10943,7 +10943,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 46773,
+      "bytes": 48518,
       "format": "esm",
       "imports": [
         {
@@ -11238,7 +11238,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2185587,
+      "bytes": 2191214,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -12558,7 +12558,7 @@
           "bytesInOutput": 1721
         },
         "src/contracts/durable-maintenance.ts": {
-          "bytesInOutput": 86
+          "bytesInOutput": 140
         },
         "src/contracts/durable-primitives.ts": {
           "bytesInOutput": 6986
@@ -12651,7 +12651,7 @@
           "bytesInOutput": 2310
         },
         "src/contracts/schemas/v1/maintenance-record.schema.json": {
-          "bytesInOutput": 3167
+          "bytesInOutput": 3211
         },
         "src/contracts/schemas/v1/path-claim.schema.json": {
           "bytesInOutput": 536
@@ -12822,13 +12822,13 @@
           "bytesInOutput": 5599
         },
         "src/state/lock.ts": {
-          "bytesInOutput": 2261
+          "bytesInOutput": 2272
         },
         "src/state/maintenance-roots.ts": {
-          "bytesInOutput": 8210
+          "bytesInOutput": 10176
         },
         "src/state/maintenance.ts": {
-          "bytesInOutput": 6256
+          "bytesInOutput": 7940
         },
         "src/state/manual-checkpoints.ts": {
           "bytesInOutput": 21992
@@ -12858,7 +12858,7 @@
           "bytesInOutput": 5880
         },
         "src/state/request-templates.ts": {
-          "bytesInOutput": 7121
+          "bytesInOutput": 8169
         },
         "src/state/request.ts": {
           "bytesInOutput": 3121
@@ -12873,7 +12873,7 @@
           "bytesInOutput": 1341
         },
         "src/state/status.ts": {
-          "bytesInOutput": 29671
+          "bytesInOutput": 30491
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 264
@@ -12884,7 +12884,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2871610,
+      "bytes": 2875459,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -14190,7 +14190,7 @@
           "bytesInOutput": 1721
         },
         "src/contracts/durable-maintenance.ts": {
-          "bytesInOutput": 86
+          "bytesInOutput": 140
         },
         "src/contracts/durable-primitives.ts": {
           "bytesInOutput": 6986
@@ -14292,7 +14292,7 @@
           "bytesInOutput": 5253
         },
         "src/contracts/schemas/v1/maintenance-record.schema.json": {
-          "bytesInOutput": 3167
+          "bytesInOutput": 3211
         },
         "src/contracts/schemas/v1/manual-checkpoint-import.schema.json": {
           "bytesInOutput": 2833
@@ -14517,10 +14517,10 @@
           "bytesInOutput": 2272
         },
         "src/state/maintenance-roots.ts": {
-          "bytesInOutput": 10472
+          "bytesInOutput": 12528
         },
         "src/state/maintenance.ts": {
-          "bytesInOutput": 6260
+          "bytesInOutput": 7955
         },
         "src/state/manual-checkpoints.ts": {
           "bytesInOutput": 2700
