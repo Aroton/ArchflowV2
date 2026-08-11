@@ -86,16 +86,16 @@
   ],
   "artifacts": [
     {
-      "digest": "6439cbc1cb9c0bf5deca71d146b158fdc1f684c5574c4d7e2c13228c67b86f26",
+      "digest": "aaad3173df9a524c4964f4765f1c1161929c64af508cfe85bf4927f167e6a6f8",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 1573015
+      "size": 1572992
     },
     {
-      "digest": "64f39077ac3e2a30d583eab3b0e18a072697dab0e18ca87eb42e1cb5624c369d",
+      "digest": "e83e07f6d6f660d8ea9b38179c5f81a29fcef9d9f1c75961f339d7270ea7fbf7",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 2443175
+      "size": 2443152
     },
     {
       "digest": "d25516b74a3296a41d46b5051d06ccc13bd3bd1255ca4804ae7bd13828a055cc",
@@ -104,7 +104,7 @@
       "size": 785
     },
     {
-      "digest": "548d64213ab68fcea08925c34300dec81ab2ca53a45c0b0a012379527ea34e91",
+      "digest": "eb72fc5cfedd78a88067dc29ed2f4efa55ac3138430917fe2c0171c14ea34bcf",
       "path": "legal/review.json",
       "role": "legal-review",
       "size": 34050
@@ -216,7 +216,7 @@
       "role": "manifest"
     },
     {
-      "digest": "2690091a8e8681e57f6b991624cc0de76d577f059de5444c15f954d0462b0131",
+      "digest": "66ee6655d9032829f6de6fb603ed84cfb688842d9e05985ce84a7874ce4f0be9",
       "path": "metafile.json",
       "role": "metafile",
       "size": 318417
@@ -238,7 +238,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "64f39077ac3e2a30d583eab3b0e18a072697dab0e18ca87eb42e1cb5624c369d",
+  "bundle_digest": "e83e07f6d6f660d8ea9b38179c5f81a29fcef9d9f1c75961f339d7270ea7fbf7",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -3408,7 +3408,7 @@
     },
     {
       "bytes_in_output": 7344,
-      "digest": "61525ff04ca0720c88eeb6c3e619926a6849b19bc019e045d7ba078073bd94b7",
+      "digest": "3799ba7d66a88b351c507bf0a6566be9e4274b423e8757f029d0887cdcc7a1a4",
       "key": "src/mcp/server.ts",
       "origin": {
         "kind": "repository",
@@ -3537,14 +3537,14 @@
       "size": 25322
     },
     {
-      "bytes_in_output": 11471,
-      "digest": "c4a1d72d9f2129578c5e798df552127ac2e1b1872d43e68323d4677623803b59",
+      "bytes_in_output": 11425,
+      "digest": "64c968105a1b972e6e453af5e55ba83dcffa1deca5d16060b0d8e06af34f8842",
       "key": "src/state/atomic.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/atomic.ts"
       },
-      "size": 7304
+      "size": 7283
     },
     {
       "bytes_in_output": 5026,
@@ -4804,7 +4804,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "64f39077ac3e2a30d583eab3b0e18a072697dab0e18ca87eb42e1cb5624c369d",
+      "output_digest": "e83e07f6d6f660d8ea9b38179c5f81a29fcef9d9f1c75961f339d7270ea7fbf7",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -5098,7 +5098,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "6439cbc1cb9c0bf5deca71d146b158fdc1f684c5574c4d7e2c13228c67b86f26",
+      "output_digest": "aaad3173df9a524c4964f4765f1c1161929c64af508cfe85bf4927f167e6a6f8",
       "output_path": "archflow-local.mjs"
     }
   ],
@@ -5174,7 +5174,7 @@
     }
   },
   "legal_review": {
-    "digest": "548d64213ab68fcea08925c34300dec81ab2ca53a45c0b0a012379527ea34e91",
+    "digest": "eb72fc5cfedd78a88067dc29ed2f4efa55ac3138430917fe2c0171c14ea34bcf",
     "payload_path": "legal/review.json",
     "source_path": "release/legal-review.json"
   },
@@ -5252,7 +5252,7 @@
       "size": 1060
     },
     {
-      "digest": "9afe0bbab014048162cf0f222ff09818b9562255ade8814a4e9d3f28e860636c",
+      "digest": "68ec9cae9c92583660579905adfe2f419f8a784928d1dfb580262136d216a9cb",
       "path": "release/evidence/focused-inert-reachability.json",
       "size": 910
     },
@@ -5267,7 +5267,7 @@
       "size": 832
     },
     {
-      "digest": "548d64213ab68fcea08925c34300dec81ab2ca53a45c0b0a012379527ea34e91",
+      "digest": "eb72fc5cfedd78a88067dc29ed2f4efa55ac3138430917fe2c0171c14ea34bcf",
       "path": "release/legal-review.json",
       "size": 34050
     },

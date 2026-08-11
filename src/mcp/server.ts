@@ -209,7 +209,7 @@ export function createToolBoundary(handlers: ToolHandlerRegistry): ToolBoundary 
       const classified = classifyVersionedArgs(name, args);
       if ("outcome" in classified) return classified.outcome;
 
-      // The staged-reference arm is resolved here, at the one entry all five tools share:
+      // The staged-reference arm is resolved here, at the one entry all four tools share:
       // the reference rehydrates to an authentic full-payload call — digest-checked against
       // both the staged file and the model-typed reference — before any handler runs, so a
       // mismatch fails closed with no state change.

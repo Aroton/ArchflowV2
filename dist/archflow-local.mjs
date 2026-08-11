@@ -33528,7 +33528,6 @@ var PROJECTABLE = /* @__PURE__ */ new Set([
   "attempt",
   "document",
   "import",
-  "manual-checkpoint",
   "repository-source",
   "result-payload",
   "review",

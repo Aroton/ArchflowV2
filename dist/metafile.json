@@ -6815,7 +6815,7 @@
       ]
     },
     "src/state/atomic.ts": {
-      "bytes": 7304,
+      "bytes": 7283,
       "format": "esm",
       "imports": [
         {
@@ -8642,7 +8642,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1573015,
+      "bytes": 1572992,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -9783,7 +9783,7 @@
           "bytesInOutput": 12289
         },
         "src/state/atomic.ts": {
-          "bytesInOutput": 5754
+          "bytesInOutput": 5731
         },
         "src/state/authority.ts": {
           "bytesInOutput": 2513
@@ -9878,7 +9878,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2443175,
+      "bytes": 2443152,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -11108,7 +11108,7 @@
           "bytesInOutput": 15864
         },
         "src/state/atomic.ts": {
-          "bytesInOutput": 5717
+          "bytesInOutput": 5694
         },
         "src/state/authority.ts": {
           "bytesInOutput": 2513

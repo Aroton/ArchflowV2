@@ -136,7 +136,7 @@ export function createAtomicWriter(): AtomicWriter {
 }
 
 const PROJECTABLE = new Set([
-  "attempt", "document", "import", "manual-checkpoint", "repository-source", "result-payload", "review",
+  "attempt", "document", "import", "repository-source", "result-payload", "review",
   "task-branch-constitution", "verification-transcript",
 ]);
 

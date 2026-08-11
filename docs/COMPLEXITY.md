@@ -18,7 +18,7 @@ Three categories recur:
 
 The audit asked directly: how often is the MCP server actually down, and could degraded mode shrink to "read-only status + stop" instead of a full recording workflow? It could, and it did. `manual-import.ts`, `manual-checkpoints.ts`, the manual half of `gates.ts`, and the `manual-workflow.ts` driver (~3,000 lines of mirror machinery, every normal-path invariant change carrying a mirror obligation) are retired; `manual-status` survives as a read-only classifier. Pre-retirement checkpoint chains are stranded with no recovery path — see `LIMITATIONS.md`.
 
-### 2. `gates.ts` at 2,311 lines — load-bearing but overdue for a split
+### 2. `gates.ts` at 2,311 lines — resolved 2026-08-11
 
 **Resolved 2026-08-11.** The audit found at least five responsibilities in one file: gate lifecycle, decision templates, interface projection, approval re-authentication, and design-document phase parsing. (The sixth — an entire manual gate lifecycle, nearly a second implementation of the first — left with the degraded-mode retirement, #1.) The file is now split along those seams with no behavior change: `gate-core.ts` (shared vocabulary, dependency types, small pure helpers), `gate-approvals.ts` (the approval trust brand — WeakSet, assert, and the single mint site in `loadAuthenticatedGateApproval`, co-resident so minting stays module-private), `gate-decision-interface.ts` (decision templates and the human decision file), `legacy-import-resume.ts`, `planned-final-phase.ts`, and a ~900-line `gates.ts` that keeps the gate lifecycle itself.
 
@@ -52,7 +52,7 @@ The child-CLI lockdown argvs (long literal flag lists per host) and the regex-ba
 
 ### 9. Things that look removable
 
-- **`workflow.ts`** parses workflow YAML and then rejects anything that doesn't deep-equal a hard-coded constant — a full file/schema/parse pipeline validating a compile-time value.
+- **`workflow.ts`** parses workflow YAML and then rejects anything that doesn't deep-equal a hard-coded constant — a full file/schema/parse pipeline validating a compile-time value. Deliberate keep (2026-08-11): 47 tested lines; the pinned graph now also anchors the generated `workflow.schema.json` emission, so removal is no longer free.
 - **Orphaned schemas** — resolved 2026-08-11: the two true orphans (`authority-link`, `evidence-reference`) are deleted; the two release/legal schemas stay by declared exception as the hand-written inputs to `release-support.mjs`.
 - **`internal/test-capabilities.ts`** — resolved 2026-08-11: the three production-imported factories now live in `internal/trust-mints.ts` (mints beside the `trust-brands.ts` registries they register with); `test-capabilities.ts` keeps only test-only factories and no production module imports it.
 - **Advertised-schema pruning** in `mcp/tools.ts` — a small custom JSON-Schema `$ref` resolver owned forever, motivated by a measured 179 KB saving; worth keeping only while that saving matters.
