@@ -9,12 +9,12 @@ import { taskInitializationV1Schema } from "./durable-task-initialization.js";
 import type { DurableArtifact } from "./durable.js";
 import { parseProjectError, type ProjectResult } from "./errors.js";
 import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type Sha256Digest, type TaskSlug } from "./evidence.js";
-import { GATE_KINDS, humanDecisionProvenanceV1Schema, parseGateContext, parseGateDecisionEnvelope, validateGateDecision, type GateContext, type GateDecisionEnvelope, type GateKind, type HumanDecisionProvenance, type RuleVersionRef, type WaiverOriginRef, type WaiverScope } from "./gates.js";
+import { GATE_KINDS, gateDecisionEnvelopeV1Schema, humanDecisionProvenanceV1Schema, parseGateContext, parseGateDecisionEnvelope, validateGateDecision, type GateContext, type GateDecisionEnvelope, type GateKind, type HumanDecisionProvenance, type RuleVersionRef, type WaiverOriginRef, type WaiverScope } from "./gates.js";
 import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { taskPathClaimV1Schema, type TaskPathClaim } from "./path-claims.js";
 import { rubricV1Schema, type RubricV1 } from "./rubric.js";
-import { parseSupplementalReviewOutcome, type GateSupersessionRef, type SupplementalReviewOutcome } from "./supplemental.js";
+import { parseSupplementalReviewOutcome, supplementalReviewOutcomeSchema, type GateSupersessionRef, type SupplementalReviewOutcome } from "./supplemental.js";
 import { TOOL_NAMES, type ToolName } from "./tool-names.js";
 import { parseCurrentEvidenceSetRef, type CurrentEvidenceSetRef } from "./trust.js";
 import { triageCandidateSchema } from "./triage.js";
@@ -30,10 +30,13 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/u) as unknown as z.ZodType<Sha25
 const safeId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
 const text = z.string().min(1).max(4096).regex(/\S/u);
 const safeInteger = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-const phase = z.string().refine((v) => { try { decodePhaseInstance(v); return true; } catch { return false; } }) as unknown as z.ZodType<PhaseInstanceId>;
+const phase = z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((v) => { try { decodePhaseInstance(v); return true; } catch { return false; } }) as unknown as z.ZodType<PhaseInstanceId>;
 const rule = z.object({ rule_id: safeId, rule_version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict();
 const scope = z.object({ operation: z.enum(["review-trigger", "adjudication-failure"]), boundary: z.enum(["subject", "phase", "task"]) }).strict();
-const provenance = humanDecisionProvenanceV1Schema as z.ZodType<HumanDecisionProvenance>;
+// A parentless clone: the shared instance is registered as `gate-decision-record#/$defs/provenance`,
+// which the advertised catalogue's document set does not carry, so the waiver success must emit the
+// union body (two gate-decision refs) rather than a cross-document reference to it.
+const provenance = humanDecisionProvenanceV1Schema.clone(humanDecisionProvenanceV1Schema.def) as z.ZodType<HumanDecisionProvenance>;
 const common = { schema_version: z.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger, input_fingerprint: digest } as const;
 
 export type CommonToolInput = { readonly schema_version: "1"; readonly task_id: TaskSlug; readonly intent_id: PathSafeId; readonly expected_revision: number; readonly input_fingerprint: Sha256Digest };
@@ -80,7 +83,7 @@ const durableArtifact = z.union([
     evidence: triageCandidateSchema,
   }).strict() as z.ZodType<TriageArtifactV1>,
 ]) as unknown as z.ZodType<DurableArtifact>;
-const stateInput = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "counter_review", "triage"]), status: z.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
+export const stateInputSchema = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "counter_review", "triage"]), status: z.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
 /**
  * The staged-request reference arm shared by every tool input union. It is structurally disjoint
  * from every full-payload arm: strictness rejects any full payload (extra fields), and every full
@@ -94,19 +97,19 @@ export function parseStagedRequestReference(value: unknown): StagedRequestRefere
   assertPlainJson(value, "staged request reference");
   return deepFreeze(stagedReferenceInput.parse(structuredClone(value))) as StagedRequestReference;
 }
-const counterInput = z.object({ ...common, artifact_path: taskPathClaimV1Schema, rubric: rubricV1Schema }).strict();
+export const counterReviewInputSchema = z.object({ ...common, artifact_path: taskPathClaimV1Schema, rubric: rubricV1Schema }).strict();
 const supersedes = z.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest, old_subject_digest: digest }).strict();
-export const gateInputSchema = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), supersedes: supersedes.optional(), supplemental_outcome: z.unknown().optional(), kind: z.enum(GATE_KINDS), context: z.unknown() }).strict().superRefine((input, context) => {
+export const gateInputSchema = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), supersedes: supersedes.optional(), supplemental_outcome: supplementalReviewOutcomeSchema.optional(), kind: z.enum(GATE_KINDS), context: z.unknown() }).strict().superRefine((input, context) => {
   try { parseGateContext(input.kind, input.context); } catch (error) { context.addIssue({ code: "custom", path: ["context"], message: error instanceof Error ? error.message : "invalid gate context" }); }
   try { parseCurrentEvidenceSetRef(input.current_evidence); } catch (error) { context.addIssue({ code: "custom", path: ["current_evidence"], message: error instanceof Error ? error.message : "invalid current evidence" }); }
 });
 const waiverOrigin = z.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest, origin_context_digest: digest, task_id: taskSlugV1Schema, phase_instance: phase, subject_digest: digest, current_evidence_set_digest: digest, rule, scope }).strict();
-export const waiverInputSchema = z.object({ ...common, origin: waiverOrigin, rationale: text, supplemental_outcome: z.unknown().optional() }).strict().superRefine((input, context) => {
+export const waiverInputSchema = z.object({ ...common, origin: waiverOrigin, rationale: text, supplemental_outcome: supplementalReviewOutcomeSchema.optional() }).strict().superRefine((input, context) => {
   if (input.task_id !== input.origin.task_id) context.addIssue({ code: "custom", path: ["task_id"], message: "waiver task_id must match origin task_id" });
 });
 
 function inputFor<K extends ToolName>(name: K, value: unknown): ToolInput<K> {
-  const parsed = name === "archflow_state" ? stateInput.parse(value) : name === "archflow_counter_review" ? counterInput.parse(value) : name === "archflow_waiver" ? waiverInputSchema.parse(value) : gateInputSchema.parse(value);
+  const parsed = name === "archflow_state" ? stateInputSchema.parse(value) : name === "archflow_counter_review" ? counterReviewInputSchema.parse(value) : name === "archflow_waiver" ? waiverInputSchema.parse(value) : gateInputSchema.parse(value);
   if (name === "archflow_gate") { const v = parsed as z.infer<typeof gateInputSchema>; return { ...v, current_evidence: parseCurrentEvidenceSetRef(v.current_evidence), ...(v.supplemental_outcome === undefined ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) }) } as ToolInput<K>; }
   if (name === "archflow_waiver") {
     const v = parsed as z.infer<typeof waiverInputSchema>;
@@ -161,7 +164,7 @@ export function classifyToolCallInput<K extends ToolName>(name: K, value: unknow
 export type RequestIdentifiedToolCall<K extends ToolName = ToolName> = ParsedToolCall<K> & { readonly request_digest: Sha256Digest };
 export function bindParsedToolCallRequest<K extends ToolName>(call: Extract<ParsedToolCall, { name: K }>, requestDigest: Sha256Digest): Extract<RequestIdentifiedToolCall, { name: K }> { if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required"); digest.parse(requestDigest); requestDigests.set(call, requestDigest); return call as Extract<RequestIdentifiedToolCall, { name: K }>; }
 
-const successSchemas = {
+export const toolSuccessSchemas = {
   archflow_state: z.object({ path: taskPathClaimV1Schema, revision: safeInteger, status: z.enum(["running", "succeeded", "failed"]), request_digest: digest.optional() }).strict(),
   archflow_counter_review: z.object({
     path: taskPathClaimV1Schema,
@@ -174,11 +177,29 @@ const successSchemas = {
     revision: safeInteger,
     request_digest: digest.optional(),
   }).strict(),
-  archflow_gate: z.object({ kind: z.enum(GATE_KINDS), decision: z.unknown(), notes: text, revision: safeInteger, request_digest: digest.optional() }).strict(),
+  archflow_gate: z.object({ kind: z.enum(GATE_KINDS), decision: gateDecisionEnvelopeV1Schema, notes: text, revision: safeInteger, request_digest: digest.optional() }).strict(),
   archflow_waiver: z.union([z.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId, rule_version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest, current_evidence_set_digest: digest, scope, human_provenance: provenance, granted: z.literal(true), expires: z.literal("task-complete"), notes: text, revision: safeInteger, request_digest: digest.optional() }).strict(), z.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId, rule_version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest, current_evidence_set_digest: digest, scope, human_provenance: provenance, granted: z.literal(false), notes: text, revision: safeInteger, request_digest: digest.optional() }).strict()])
 } as const;
+/**
+ * The shared `mcp-tools.schema.json` leaf `$defs` the generator emits, keyed by committed def
+ * name. The advertised catalogue in `src/mcp/tools.ts` reaches `integer` and `durableArtifact`
+ * by pointer and the gate-input emission references the rest, so every name here is pinned.
+ * Registering these local instances keeps each use site a `#/$defs/<name>` reference instead of
+ * an inline copy, mirroring the def layout the hand-written document established.
+ */
+export const mcpToolsSchemaDefs: Readonly<Record<string, z.ZodType>> = Object.freeze({
+  digest,
+  id: safeId,
+  text,
+  integer: safeInteger,
+  phase,
+  durableArtifact,
+  rule,
+  scope,
+  stagedReference: stagedReferenceInput,
+});
 function successFor<K extends ToolName>(call: Extract<ParsedToolCall, { name: K }>, value: unknown): ToolSuccess<K> {
-  const parsed = successSchemas[call.name].parse(value) as ToolSuccess<K>;
+  const parsed = toolSuccessSchemas[call.name].parse(value) as ToolSuccess<K>;
   if (call.name === "archflow_state" && (parsed as StateSuccess).status !== (call.input as ParsedToolInput<"archflow_state">).status) throw new TypeError("state status mismatch");
   if (call.name === "archflow_gate") {
     const input = call.input as ParsedToolInput<"archflow_gate">;
@@ -224,9 +245,9 @@ export function validateProjectFailureStructure<K extends ToolName>(name: K, val
 export type ResultExpectationDataByTool = { readonly [P in ToolName]: ResultIdentityPayload<P> };
 export type ResultExpectation<K extends ToolName> = ResultExpectationDataByTool[K] & { readonly [resultExpectationBrand]: K };
 export const resultExpectationDataSchema = z.object({ schema_version: z.literal("1"), tool: z.enum(TOOL_NAMES), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, input_fingerprint: digest, request_digest: digest, result_id: safeId, resulting_revision: safeInteger, success: z.unknown() }).strict().superRefine((expectation, context) => {
-  const success = successSchemas[expectation.tool].safeParse(expectation.success);
+  const success = toolSuccessSchemas[expectation.tool].safeParse(expectation.success);
   if (!success.success) { context.addIssue({ code: "custom", path: ["success"], message: `invalid ${expectation.tool} success value` }); return; }
   if (expectation.resulting_revision !== success.data.revision) context.addIssue({ code: "custom", path: ["resulting_revision"], message: "expectation resulting revision must equal success revision" });
 });
-export function createInternalResultExpectation<K extends ToolName>(value: ResultIdentityPayload<K>): ResultExpectation<K> { assertPlainJson(value, "result expectation"); const base = resultExpectationDataSchema.parse(value); const success = successSchemas[base.tool].parse(base.success) as ToolSuccess<K>; const expectation = Object.assign({}, base, { success }) as unknown as ResultExpectation<K>; Object.defineProperty(expectation, resultExpectationBrand, { value: value.tool, enumerable: false, writable: false, configurable: false }); Object.freeze(expectation); resultExpectations.add(expectation); return expectation; }
+export function createInternalResultExpectation<K extends ToolName>(value: ResultIdentityPayload<K>): ResultExpectation<K> { assertPlainJson(value, "result expectation"); const base = resultExpectationDataSchema.parse(value); const success = toolSuccessSchemas[base.tool].parse(base.success) as ToolSuccess<K>; const expectation = Object.assign({}, base, { success }) as unknown as ResultExpectation<K>; Object.defineProperty(expectation, resultExpectationBrand, { value: value.tool, enumerable: false, writable: false, configurable: false }); Object.freeze(expectation); resultExpectations.add(expectation); return expectation; }
 export function correlateProjectResult<K extends ToolName>(call: Extract<RequestIdentifiedToolCall, { name: K }>, expectation: NoInfer<ResultExpectation<K>>, result: NoInfer<StructurallyValidProjectResult<K>>): ProjectResult<ToolSuccess<K>> { const requestDigest = requestDigests.get(call); if (requestDigest === undefined || !parsedCalls.has(call) || !resultExpectations.has(expectation) || !structuralResults.has(result)) throw new TypeError("authentic request/result identities are required"); if (expectation[resultExpectationBrand] !== call.name || result[structuralResultBrand] !== call.name || expectation.tool !== call.name) throw new TypeError("result correlation tool mismatch"); if (expectation.request_digest !== requestDigest || expectation.task_id !== call.input.task_id || expectation.intent_id !== call.input.intent_id || expectation.input_fingerprint !== call.input.input_fingerprint) throw new TypeError("expectation invocation mismatch"); if (result.ok && (expectation.resulting_revision !== result.value.revision || !isDeepStrictEqual(expectation.success, result.value))) throw new TypeError("result expectation mismatch"); return result; }

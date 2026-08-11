@@ -19,7 +19,10 @@ export type SchemaDocumentPlan = {
   /**
    * The `$defs` layout in emission order: def name → the exact Zod object other schemas in this
    * manifest reference. Identity matters — a `$ref` is emitted only where the registered object
-   * itself appears, so defs must be the shared exported schema, not a structural copy.
+   * itself appears, so defs must be the shared exported schema, not a structural copy. A name
+   * containing `/` publishes a nested member — `archflow_state/input` is written to
+   * `$defs.archflow_state.input` and referenced as `#/$defs/archflow_state/input`, the form the
+   * per-tool input/success/result inventory of `mcp-tools.schema.json` pins.
    */
   readonly defs?: Readonly<Record<string, ZodType>>;
   /**
@@ -113,7 +116,16 @@ export function renderGeneratedSchemaFiles(): Readonly<Record<string, string>> {
     const defs: Record<string, unknown> = {};
     for (const name of Object.keys(document.defs ?? {})) {
       const override = document.overrides?.[name];
-      defs[name] = override ?? stripEmissionEnvelope(requireEmitted(schemas, `${document.file}#${name}`));
+      const body = override ?? stripEmissionEnvelope(requireEmitted(schemas, `${document.file}#${name}`));
+      const segments = name.split("/");
+      let target = defs;
+      for (const segment of segments.slice(0, -1)) {
+        const nested = target[segment] ?? {};
+        if (typeof nested !== "object" || nested === null) throw new Error(`nested def name collides with a schema body: ${name}`);
+        target[segment] = nested;
+        target = nested as Record<string, unknown>;
+      }
+      target[segments[segments.length - 1] as string] = body;
     }
     const assembled = {
       $schema: "https://json-schema.org/draft/2020-12/schema",

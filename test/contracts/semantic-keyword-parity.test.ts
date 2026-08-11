@@ -17,9 +17,10 @@ import {
  * Each custom Ajv semantic keyword's logic is wired into the Zod side, which is now the single
  * shape authority for the generated documents. Where a document has been regenerated its custom
  * keyword is retired from the committed schema (`jsonKeywordRetired: true`): the compiled schema
- * accepts the semantic violation and only Zod rejects it. Documents still hand-written
- * (`mcp-tools`) keep keyword parity: both authorities reject. Valid fixtures are accepted by both
- * authorities without mutation in every case.
+ * accepts the semantic violation and only Zod rejects it. The generated `mcp-tools` document
+ * deliberately re-emits `x-archflow-mcp-semantics` on its root via `.meta`, so it keeps keyword
+ * parity: both authorities reject. Valid fixtures are accepted by both authorities without
+ * mutation in every case.
  */
 
 const SCHEMA_DIR = new URL("../../src/contracts/schemas/v1/", import.meta.url);

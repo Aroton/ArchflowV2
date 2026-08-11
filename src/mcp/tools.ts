@@ -249,17 +249,19 @@ function branchShape(branch: unknown, projected: ReadonlyMap<string, unknown>): 
 
 /**
  * MCP hosts expect an advertised inputSchema whose root is a plain object schema. The normative
- * input contract is a oneOf (full payload | staged reference) built from $ref/allOf composition,
- * and at least one host flattens a root-level oneOf by dropping every branch it cannot resolve —
- * observed advertising all five tools as zero-field objects, which left models composing calls
- * from guessed (all-string) types. The advertised projection therefore merges the branches into
- * one object schema: the union of both groups' properties, the fields common to both groups as
- * required, and a description naming the groups. Root-level combinators are deliberately absent;
- * the server's strict oneOf validation in parseToolCall is unchanged and remains the authority.
+ * input contract is a two-branch union (full payload | staged reference) — emitted as anyOf by
+ * the schema generator, oneOf in the hand-authored gate emission; the disjoint strict branches
+ * make the two keywords admit the same values — and at least one host flattens a root-level
+ * combinator by dropping every branch it cannot resolve — observed advertising all five tools as
+ * zero-field objects, which left models composing calls from guessed (all-string) types. The
+ * advertised projection therefore merges the branches into one object schema: the union of both
+ * groups' properties, the fields common to both groups as required, and a description naming the
+ * groups. Root-level combinators are deliberately absent; the server's strict union validation
+ * in parseToolCall is unchanged and remains the authority.
  */
 function mergedInputFragment(name: ToolName, fragment: JsonObject, projected: ReadonlyMap<string, unknown>): JsonObject {
-  const branches = fragment.oneOf;
-  if (!Array.isArray(branches) || branches.length !== 2) throw new TypeError(`expected a two-branch oneOf input fragment for ${name}`);
+  const branches = Array.isArray(fragment.oneOf) ? fragment.oneOf : fragment.anyOf;
+  if (!Array.isArray(branches) || branches.length !== 2) throw new TypeError(`expected a two-branch input union fragment for ${name}`);
   const [full, staged] = branches.map((branch) => branchShape(branch, projected)) as [BranchShape, BranchShape];
   if (!staged.required.has("request_digest")) throw new TypeError(`expected the staged-reference branch second in the ${name} input fragment`);
 

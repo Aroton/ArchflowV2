@@ -106,11 +106,12 @@ const resultCorrelationCoverage = [
 
 const annotationKeywords = ["x-archflow-effect"] as const;
 /**
- * The `x-archflow-*` keywords still carried by the source documents: `mcp-tools` stays
- * hand-written, and the generated `project-error` document preserves its path and ordering
- * keywords by emission override. Every other keyword in `validatingKeywordCoverage` (and the
- * `x-archflow-effect` annotation) retired to its shape's Zod authority when the documents became
- * generated; the semantic categories those keywords named remain runtime-enforced.
+ * The `x-archflow-*` keywords still carried by the source documents: the generated `mcp-tools`
+ * document keeps `x-archflow-mcp-semantics` on its root by deliberate `.meta` emission, and the
+ * generated `project-error` document preserves its path and ordering keywords by emission
+ * override. Every other keyword in `validatingKeywordCoverage` (and the `x-archflow-effect`
+ * annotation) retired to its shape's Zod authority when the documents became generated; the
+ * semantic categories those keywords named remain runtime-enforced.
  */
 const survivingSourceKeywords = [
   "x-archflow-max-utf8-bytes",
@@ -292,10 +293,10 @@ describe("advertised MCP tool catalogue", () => {
   });
 
   it("advertises every input as a flat object root that survives host oneOf-flattening", () => {
-    // Regression fence: the normative input contract is a oneOf, and at least one MCP host
-    // flattens a root-level oneOf by dropping branches it cannot resolve through $ref/allOf —
-    // observed advertising all five tools as zero-field objects. The advertised root must carry
-    // the merged field surface directly and leave combinators below the root.
+    // Regression fence: the normative input contract is a two-branch union, and at least one MCP
+    // host flattens a root-level combinator by dropping branches it cannot resolve through
+    // $ref/allOf — observed advertising all five tools as zero-field objects. The advertised root
+    // must carry the merged field surface directly and leave combinators below the root.
     const stagedReference = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", request_digest: D("c") };
     for (const descriptor of ADVERTISED_TOOL_CATALOGUE) {
       const schema = descriptor.inputSchema;

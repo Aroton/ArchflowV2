@@ -60,6 +60,13 @@ const projectErrorVariantDefs = Object.fromEntries(
   (Object.keys(projectVariants) as readonly ProjectErrorCode[]).map((code) => [`E_${code}`, projectVariants[code]]),
 ) as Readonly<Record<string, ZodType>>;
 
+/**
+ * The serialized project-error union is this document's root and is also embedded by the
+ * mcp-tools failure envelope, whose emission must stay a `$ref` to this document — sharing the
+ * instance is what makes the generator emit the reference instead of an inline copy.
+ */
+export const serializedProjectErrorV1Schema: ZodType = z.union(Object.values(projectVariants));
+
 /** Error shapes: project-error and protocol-error, derived from the frozen error registry. */
 export const errorSchemaGroup: SchemaGenerationGroup = {
   group: "errors",
@@ -67,7 +74,7 @@ export const errorSchemaGroup: SchemaGenerationGroup = {
     {
       file: "project-error",
       id: SCHEMA_IDS.projectError,
-      root: z.union(Object.values(projectVariants)),
+      root: serializedProjectErrorV1Schema,
       defs: {
         ...internalErrorSchemaTables.project.primitives,
         ...internalErrorSchemaTables.project.shared,

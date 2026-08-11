@@ -1,21 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://archflow.dev/schemas/v1/mcp-tools",
-  "type": "object",
-  "x-archflow-mcp-semantics": true,
   "$defs": {
     "digest": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
     "id": {
-      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
-    },
-    "taskSlug": {
-      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
-    },
-    "pathSafeId": {
-      "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
     },
     "text": {
       "type": "string",
@@ -32,11 +25,8 @@
       "type": "string",
       "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
     },
-    "path": {
-      "$ref": "urn:archflow:schema:v1:path-claim"
-    },
     "durableArtifact": {
-      "oneOf": [
+      "anyOf": [
         {
           "$ref": "urn:archflow:schema:v1:task-initialization"
         },
@@ -51,74 +41,98 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "schema_version",
-            "artifact_kind",
-            "evidence"
-          ],
           "properties": {
             "schema_version": {
+              "type": "string",
               "const": "1"
             },
             "artifact_kind": {
+              "type": "string",
               "const": "triage"
             },
             "evidence": {
               "$ref": "urn:archflow:schema:v1:triage"
             }
-          }
+          },
+          "required": [
+            "schema_version",
+            "artifact_kind",
+            "evidence"
+          ],
+          "additionalProperties": false
         }
       ]
     },
     "rule": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "rule_id",
-        "rule_version"
-      ],
       "properties": {
         "rule_id": {
           "$ref": "#/$defs/id"
         },
         "rule_version": {
           "type": "integer",
-          "minimum": 1,
+          "exclusiveMinimum": 0,
           "maximum": 9007199254740991
         }
-      }
+      },
+      "required": [
+        "rule_id",
+        "rule_version"
+      ],
+      "additionalProperties": false
     },
     "scope": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "operation",
-        "boundary"
-      ],
       "properties": {
         "operation": {
+          "type": "string",
           "enum": [
             "review-trigger",
             "adjudication-failure"
           ]
         },
         "boundary": {
+          "type": "string",
           "enum": [
             "subject",
             "phase",
             "task"
           ]
         }
-      }
+      },
+      "required": [
+        "operation",
+        "boundary"
+      ],
+      "additionalProperties": false
+    },
+    "stagedReference": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "intent_id",
+        "request_digest"
+      ],
+      "additionalProperties": false
     },
     "currentEvidence": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "set_digest",
-        "slots"
-      ],
       "properties": {
         "set_digest": {
           "$ref": "#/$defs/digest"
@@ -126,139 +140,91 @@
         "slots": {
           "$ref": "urn:archflow:schema:v1:evidence-slots"
         }
-      }
-    },
-    "common": {
-      "type": "object",
+      },
       "required": [
-        "schema_version",
-        "task_id",
-        "intent_id",
-        "expected_revision",
-        "input_fingerprint"
+        "set_digest",
+        "slots"
       ],
-      "properties": {
-        "schema_version": {
-          "const": "1"
-        },
-        "task_id": {
-          "$ref": "#/$defs/taskSlug"
-        },
-        "intent_id": {
-          "$ref": "#/$defs/pathSafeId"
-        },
-        "expected_revision": {
-          "$ref": "#/$defs/integer"
-        },
-        "input_fingerprint": {
-          "$ref": "#/$defs/digest"
-        }
-      }
-    },
-    "stagedReference": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "schema_version",
-        "task_id",
-        "intent_id",
-        "request_digest"
-      ],
-      "properties": {
-        "schema_version": {
-          "const": "1"
-        },
-        "task_id": {
-          "$ref": "#/$defs/taskSlug"
-        },
-        "intent_id": {
-          "$ref": "#/$defs/pathSafeId"
-        },
-        "request_digest": {
-          "$ref": "#/$defs/digest"
-        }
-      }
+      "additionalProperties": false
     },
     "failure": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "schema_version",
-        "ok",
-        "error"
-      ],
       "properties": {
         "schema_version": {
+          "type": "string",
           "const": "1"
         },
         "ok": {
+          "type": "boolean",
           "const": false
         },
         "error": {
           "$ref": "urn:archflow:schema:v1:project-error"
         }
-      }
+      },
+      "required": [
+        "schema_version",
+        "ok",
+        "error"
+      ],
+      "additionalProperties": false
     },
     "archflow_state": {
       "input": {
-        "oneOf": [
+        "anyOf": [
           {
-            "allOf": [
-              {
-                "$ref": "#/$defs/common"
+            "type": "object",
+            "properties": {
+              "schema_version": {
+                "type": "string",
+                "const": "1"
               },
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "schema_version",
-                  "task_id",
-                  "intent_id",
-                  "expected_revision",
-                  "input_fingerprint",
-                  "phase_instance",
-                  "step",
-                  "status"
-                ],
-                "properties": {
-                  "schema_version": {
-                    "const": "1"
-                  },
-                  "task_id": {
-                    "$ref": "#/$defs/taskSlug"
-                  },
-                  "intent_id": {
-                    "$ref": "#/$defs/pathSafeId"
-                  },
-                  "expected_revision": {
-                    "$ref": "#/$defs/integer"
-                  },
-                  "input_fingerprint": {
-                    "$ref": "#/$defs/digest"
-                  },
-                  "phase_instance": {
-                    "$ref": "#/$defs/phase"
-                  },
-                  "step": {
-                    "enum": [
-                      "produce",
-                      "counter_review",
-                      "triage"
-                    ]
-                  },
-                  "status": {
-                    "enum": [
-                      "running",
-                      "succeeded",
-                      "failed"
-                    ]
-                  },
-                  "artifact": {
-                    "$ref": "#/$defs/durableArtifact"
-                  }
-                }
+              "task_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+              },
+              "intent_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+              },
+              "expected_revision": {
+                "$ref": "#/$defs/integer"
+              },
+              "input_fingerprint": {
+                "$ref": "#/$defs/digest"
+              },
+              "phase_instance": {
+                "$ref": "#/$defs/phase"
+              },
+              "step": {
+                "type": "string",
+                "enum": [
+                  "produce",
+                  "counter_review",
+                  "triage"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "running",
+                  "succeeded",
+                  "failed"
+                ]
+              },
+              "artifact": {
+                "$ref": "#/$defs/durableArtifact"
               }
-            ]
+            },
+            "required": [
+              "schema_version",
+              "task_id",
+              "intent_id",
+              "expected_revision",
+              "input_fingerprint",
+              "phase_instance",
+              "step",
+              "status"
+            ],
+            "additionalProperties": false
           },
           {
             "$ref": "#/$defs/stagedReference"
@@ -267,20 +233,15 @@
       },
       "success": {
         "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "path",
-          "revision",
-          "status"
-        ],
         "properties": {
           "path": {
-            "$ref": "#/$defs/path"
+            "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
           },
           "revision": {
             "$ref": "#/$defs/integer"
           },
           "status": {
+            "type": "string",
             "enum": [
               "running",
               "succeeded",
@@ -290,42 +251,73 @@
           "request_digest": {
             "$ref": "#/$defs/digest"
           }
-        }
+        },
+        "required": [
+          "path",
+          "revision",
+          "status"
+        ],
+        "additionalProperties": false
       },
       "result": {
-        "oneOf": [
+        "anyOf": [
           {
             "$ref": "#/$defs/failure"
           },
           {
             "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "schema_version",
-              "ok",
-              "value"
-            ],
             "properties": {
               "schema_version": {
+                "type": "string",
                 "const": "1"
               },
               "ok": {
+                "type": "boolean",
                 "const": true
               },
               "value": {
                 "$ref": "#/$defs/archflow_state/success"
               }
-            }
+            },
+            "required": [
+              "schema_version",
+              "ok",
+              "value"
+            ],
+            "additionalProperties": false
           }
         ]
       }
     },
     "archflow_counter_review": {
       "input": {
-        "oneOf": [
+        "anyOf": [
           {
             "type": "object",
-            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "type": "string",
+                "const": "1"
+              },
+              "task_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+              },
+              "intent_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+              },
+              "expected_revision": {
+                "$ref": "#/$defs/integer"
+              },
+              "input_fingerprint": {
+                "$ref": "#/$defs/digest"
+              },
+              "artifact_path": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
+              },
+              "rubric": {
+                "$ref": "urn:archflow:schema:v1:rubric"
+              }
+            },
             "required": [
               "schema_version",
               "task_id",
@@ -335,29 +327,7 @@
               "artifact_path",
               "rubric"
             ],
-            "properties": {
-              "schema_version": {
-                "const": "1"
-              },
-              "task_id": {
-                "$ref": "#/$defs/taskSlug"
-              },
-              "intent_id": {
-                "$ref": "#/$defs/pathSafeId"
-              },
-              "expected_revision": {
-                "$ref": "#/$defs/integer"
-              },
-              "input_fingerprint": {
-                "$ref": "#/$defs/digest"
-              },
-              "artifact_path": {
-                "$ref": "#/$defs/path"
-              },
-              "rubric": {
-                "$ref": "urn:archflow:schema:v1:rubric"
-              }
-            }
+            "additionalProperties": false
           },
           {
             "$ref": "#/$defs/stagedReference"
@@ -366,19 +336,12 @@
       },
       "success": {
         "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "path",
-          "verdict",
-          "blocking_count",
-          "constitution",
-          "revision"
-        ],
         "properties": {
           "path": {
-            "$ref": "#/$defs/path"
+            "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
           },
           "verdict": {
+            "type": "string",
             "enum": [
               "pass",
               "advisory",
@@ -389,25 +352,19 @@
             "$ref": "#/$defs/integer"
           },
           "constitution": {
-            "oneOf": [
+            "anyOf": [
               {
                 "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "status",
-                  "path",
-                  "constitution",
-                  "drift",
-                  "triggers"
-                ],
                 "properties": {
                   "status": {
+                    "type": "string",
                     "const": "evaluated"
                   },
                   "path": {
-                    "$ref": "#/$defs/path"
+                    "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
                   },
                   "constitution": {
+                    "type": "string",
                     "enum": [
                       "pass",
                       "fail",
@@ -415,6 +372,7 @@
                     ]
                   },
                   "drift": {
+                    "type": "string",
                     "enum": [
                       "aligned",
                       "incidental",
@@ -427,23 +385,33 @@
                       "$ref": "#/$defs/rule"
                     }
                   }
-                }
+                },
+                "required": [
+                  "status",
+                  "path",
+                  "constitution",
+                  "drift",
+                  "triggers"
+                ],
+                "additionalProperties": false
               },
               {
                 "type": "object",
-                "additionalProperties": false,
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "const": "not-run"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "const": "no-active-constitution-rules"
+                  }
+                },
                 "required": [
                   "status",
                   "reason"
                 ],
-                "properties": {
-                  "status": {
-                    "const": "not-run"
-                  },
-                  "reason": {
-                    "const": "no-active-constitution-rules"
-                  }
-                }
+                "additionalProperties": false
               }
             ]
           },
@@ -453,32 +421,42 @@
           "request_digest": {
             "$ref": "#/$defs/digest"
           }
-        }
+        },
+        "required": [
+          "path",
+          "verdict",
+          "blocking_count",
+          "constitution",
+          "revision"
+        ],
+        "additionalProperties": false
       },
       "result": {
-        "oneOf": [
+        "anyOf": [
           {
             "$ref": "#/$defs/failure"
           },
           {
             "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "schema_version",
-              "ok",
-              "value"
-            ],
             "properties": {
               "schema_version": {
+                "type": "string",
                 "const": "1"
               },
               "ok": {
+                "type": "boolean",
                 "const": true
               },
               "value": {
                 "$ref": "#/$defs/archflow_counter_review/success"
               }
-            }
+            },
+            "required": [
+              "schema_version",
+              "ok",
+              "value"
+            ],
+            "additionalProperties": false
           }
         ]
       }
@@ -507,10 +485,10 @@
                 "const": "1"
               },
               "task_id": {
-                "$ref": "#/$defs/taskSlug"
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
               },
               "intent_id": {
-                "$ref": "#/$defs/pathSafeId"
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
               },
               "expected_revision": {
                 "$ref": "#/$defs/integer"
@@ -540,7 +518,7 @@
                 ],
                 "properties": {
                   "superseded_gate_id": {
-                    "$ref": "#/$defs/pathSafeId"
+                    "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
                   },
                   "accepted_triage_digest": {
                     "$ref": "#/$defs/digest"
@@ -674,15 +652,9 @@
       },
       "success": {
         "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "kind",
-          "decision",
-          "notes",
-          "revision"
-        ],
         "properties": {
           "kind": {
+            "type": "string",
             "enum": [
               "artifact-approval",
               "review-trigger",
@@ -707,60 +679,60 @@
           "request_digest": {
             "$ref": "#/$defs/digest"
           }
-        }
+        },
+        "required": [
+          "kind",
+          "decision",
+          "notes",
+          "revision"
+        ],
+        "additionalProperties": false
       },
       "result": {
-        "oneOf": [
+        "anyOf": [
           {
             "$ref": "#/$defs/failure"
           },
           {
             "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "schema_version",
-              "ok",
-              "value"
-            ],
             "properties": {
               "schema_version": {
+                "type": "string",
                 "const": "1"
               },
               "ok": {
+                "type": "boolean",
                 "const": true
               },
               "value": {
                 "$ref": "#/$defs/archflow_gate/success"
               }
-            }
+            },
+            "required": [
+              "schema_version",
+              "ok",
+              "value"
+            ],
+            "additionalProperties": false
           }
         ]
       }
     },
     "archflow_waiver": {
       "input": {
-        "oneOf": [
+        "anyOf": [
           {
             "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "schema_version",
-              "task_id",
-              "intent_id",
-              "expected_revision",
-              "input_fingerprint",
-              "origin",
-              "rationale"
-            ],
             "properties": {
               "schema_version": {
+                "type": "string",
                 "const": "1"
               },
               "task_id": {
-                "$ref": "#/$defs/taskSlug"
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
               },
               "intent_id": {
-                "$ref": "#/$defs/pathSafeId"
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
               },
               "expected_revision": {
                 "$ref": "#/$defs/integer"
@@ -770,21 +742,9 @@
               },
               "origin": {
                 "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "origin_gate_id",
-                  "origin_decision_digest",
-                  "origin_context_digest",
-                  "task_id",
-                  "phase_instance",
-                  "subject_digest",
-                  "current_evidence_set_digest",
-                  "rule",
-                  "scope"
-                ],
                 "properties": {
                   "origin_gate_id": {
-                    "$ref": "#/$defs/pathSafeId"
+                    "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
                   },
                   "origin_decision_digest": {
                     "$ref": "#/$defs/digest"
@@ -793,7 +753,7 @@
                     "$ref": "#/$defs/digest"
                   },
                   "task_id": {
-                    "$ref": "#/$defs/taskSlug"
+                    "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
                   },
                   "phase_instance": {
                     "$ref": "#/$defs/phase"
@@ -810,7 +770,19 @@
                   "scope": {
                     "$ref": "#/$defs/scope"
                   }
-                }
+                },
+                "required": [
+                  "origin_gate_id",
+                  "origin_decision_digest",
+                  "origin_context_digest",
+                  "task_id",
+                  "phase_instance",
+                  "subject_digest",
+                  "current_evidence_set_digest",
+                  "rule",
+                  "scope"
+                ],
+                "additionalProperties": false
               },
               "rationale": {
                 "$ref": "#/$defs/text"
@@ -818,7 +790,17 @@
               "supplemental_outcome": {
                 "$ref": "urn:archflow:schema:v1:supplemental-review"
               }
-            }
+            },
+            "required": [
+              "schema_version",
+              "task_id",
+              "intent_id",
+              "expected_revision",
+              "input_fingerprint",
+              "origin",
+              "rationale"
+            ],
+            "additionalProperties": false
           },
           {
             "$ref": "#/$defs/stagedReference"
@@ -826,133 +808,184 @@
         ]
       },
       "success": {
-        "type": "object",
-        "required": [
-          "origin_gate_id",
-          "waiver_gate_id",
-          "task_id",
-          "rule_id",
-          "rule_version",
-          "subject_digest",
-          "current_evidence_set_digest",
-          "scope",
-          "human_provenance",
-          "granted",
-          "notes",
-          "revision"
-        ],
-        "properties": {
-          "origin_gate_id": {
-            "$ref": "#/$defs/pathSafeId"
-          },
-          "waiver_gate_id": {
-            "$ref": "#/$defs/pathSafeId"
-          },
-          "task_id": {
-            "$ref": "#/$defs/taskSlug"
-          },
-          "rule_id": {
-            "$ref": "#/$defs/id"
-          },
-          "rule_version": {
-            "$ref": "#/$defs/rule/properties/rule_version"
-          },
-          "subject_digest": {
-            "$ref": "#/$defs/digest"
-          },
-          "current_evidence_set_digest": {
-            "$ref": "#/$defs/digest"
-          },
-          "scope": {
-            "$ref": "#/$defs/scope"
-          },
-          "human_provenance": {
-            "oneOf": [
-              {
-                "$ref": "urn:archflow:schema:v1:gate-decision#/$defs/connected"
-              },
-              {
-                "$ref": "urn:archflow:schema:v1:gate-decision#/$defs/local"
-              }
-            ]
-          },
-          "granted": {
-            "type": "boolean"
-          },
-          "expires": {
-            "const": "task-complete"
-          },
-          "notes": {
-            "$ref": "#/$defs/text"
-          },
-          "revision": {
-            "$ref": "#/$defs/integer"
-          },
-          "request_digest": {
-            "$ref": "#/$defs/digest"
-          }
-        },
-        "allOf": [
+        "anyOf": [
           {
-            "if": {
-              "properties": {
-                "granted": {
-                  "const": true
-                }
-              }
-            },
-            "then": {
-              "properties": {
-                "expires": {}
+            "type": "object",
+            "properties": {
+              "origin_gate_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
               },
-              "required": [
-                "expires"
-              ]
-            },
-            "else": {
-              "not": {
-                "properties": {
-                  "expires": {}
-                },
-                "required": [
-                  "expires"
+              "waiver_gate_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+              },
+              "task_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+              },
+              "rule_id": {
+                "$ref": "#/$defs/id"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "subject_digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "current_evidence_set_digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "scope": {
+                "$ref": "#/$defs/scope"
+              },
+              "human_provenance": {
+                "anyOf": [
+                  {
+                    "$ref": "urn:archflow:schema:v1:gate-decision#/$defs/connected"
+                  },
+                  {
+                    "$ref": "urn:archflow:schema:v1:gate-decision#/$defs/local"
+                  }
                 ]
+              },
+              "granted": {
+                "type": "boolean",
+                "const": true
+              },
+              "expires": {
+                "type": "string",
+                "const": "task-complete"
+              },
+              "notes": {
+                "$ref": "#/$defs/text"
+              },
+              "revision": {
+                "$ref": "#/$defs/integer"
+              },
+              "request_digest": {
+                "$ref": "#/$defs/digest"
               }
-            }
+            },
+            "required": [
+              "origin_gate_id",
+              "waiver_gate_id",
+              "task_id",
+              "rule_id",
+              "rule_version",
+              "subject_digest",
+              "current_evidence_set_digest",
+              "scope",
+              "human_provenance",
+              "granted",
+              "expires",
+              "notes",
+              "revision"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "origin_gate_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+              },
+              "waiver_gate_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+              },
+              "task_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+              },
+              "rule_id": {
+                "$ref": "#/$defs/id"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "subject_digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "current_evidence_set_digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "scope": {
+                "$ref": "#/$defs/scope"
+              },
+              "human_provenance": {
+                "anyOf": [
+                  {
+                    "$ref": "urn:archflow:schema:v1:gate-decision#/$defs/connected"
+                  },
+                  {
+                    "$ref": "urn:archflow:schema:v1:gate-decision#/$defs/local"
+                  }
+                ]
+              },
+              "granted": {
+                "type": "boolean",
+                "const": false
+              },
+              "notes": {
+                "$ref": "#/$defs/text"
+              },
+              "revision": {
+                "$ref": "#/$defs/integer"
+              },
+              "request_digest": {
+                "$ref": "#/$defs/digest"
+              }
+            },
+            "required": [
+              "origin_gate_id",
+              "waiver_gate_id",
+              "task_id",
+              "rule_id",
+              "rule_version",
+              "subject_digest",
+              "current_evidence_set_digest",
+              "scope",
+              "human_provenance",
+              "granted",
+              "notes",
+              "revision"
+            ],
+            "additionalProperties": false
           }
-        ],
-        "unevaluatedProperties": false
+        ]
       },
       "result": {
-        "oneOf": [
+        "anyOf": [
           {
             "$ref": "#/$defs/failure"
           },
           {
             "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "schema_version",
-              "ok",
-              "value"
-            ],
             "properties": {
               "schema_version": {
+                "type": "string",
                 "const": "1"
               },
               "ok": {
+                "type": "boolean",
                 "const": true
               },
               "value": {
                 "$ref": "#/$defs/archflow_waiver/success"
               }
-            }
+            },
+            "required": [
+              "schema_version",
+              "ok",
+              "value"
+            ],
+            "additionalProperties": false
           }
         ]
       }
     }
   },
-  "oneOf": [
+  "anyOf": [
     {
       "$ref": "#/$defs/archflow_state/input"
     },
@@ -965,5 +998,7 @@
     {
       "$ref": "#/$defs/archflow_waiver/input"
     }
-  ]
+  ],
+  "type": "object",
+  "x-archflow-mcp-semantics": true
 }
