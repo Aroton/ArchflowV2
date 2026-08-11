@@ -154,15 +154,19 @@ function assertCallTranscript(bytes, initialize, calls, workingDirectory) {
       },
     },
   });
-  for (const [index, request] of [[4, calls.missing_arguments], [5, calls.non_object_arguments]]) {
-    const frame = lines[index];
-    assert.equal(frame.id, request.id);
-    assert.equal(frame.result?.isError, true);
-    assert.equal(frame.result?.structuredContent?.ok, false);
-    assert.equal(frame.result?.structuredContent?.error?.code, "CONTRACT_INVALID");
-    assert.equal(frame.result?.structuredContent?.error?.diagnostic?.parameters?.issue_code, "input-not-object");
-    assert.equal(frame.result?.content?.[0]?.text, JSON.stringify(frame.result.structuredContent));
-  }
+  // The SDK's wire schema rejects non-object arguments synchronously, so that
+  // response lands before the handler-path response to the earlier call.
+  const nonObject = lines[4];
+  assert.equal(nonObject.id, calls.non_object_arguments.id);
+  assert.equal(nonObject.error?.code, -32602);
+  assert.match(nonObject.error?.message ?? "", /^Invalid tools\/call request:/u);
+  const missing = lines[5];
+  assert.equal(missing.id, calls.missing_arguments.id);
+  assert.equal(missing.result?.isError, true);
+  assert.equal(missing.result?.structuredContent?.ok, false);
+  assert.equal(missing.result?.structuredContent?.error?.code, "CONTRACT_INVALID");
+  assert.equal(missing.result?.structuredContent?.error?.diagnostic?.parameters?.issue_code, "input-not-object");
+  assert.equal(missing.result?.content?.[0]?.text, JSON.stringify(missing.result.structuredContent));
   const projectError = {
     schema_version: "1", code: "REPOSITORY_NOT_FOUND", owner: "repository", retryable: false,
     diagnostic: {

@@ -47,8 +47,8 @@
     "jsonrpc": "2.0",
     "id": "malformed-initialize",
     "error": {
-      "code": -32602,
-      "message": "Invalid params"
+      "code": -32603,
+      "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"params\",\n      \"clientInfo\",\n      \"name\"\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  }\n]"
     }
   }
 }

@@ -1,11 +1,10 @@
 import { Buffer } from "node:buffer";
 import type { Readable, Writable } from "node:stream";
-import { isDeepStrictEqual } from "node:util";
 
 import {
+  isJSONRPCRequest,
   ProtocolError as SdkProtocolError,
   Server,
-  specTypeSchemas,
   type JSONRPCMessage,
   type ListToolsResult,
   type Transport
@@ -16,23 +15,16 @@ import {
   createInvocationContext,
   type ConnectionContext
 } from "../contracts/contexts.js";
-import type { ProtocolError } from "../contracts/errors.js";
+import { createProtocolError, type ProtocolError } from "../contracts/errors.js";
 import { deriveHostIdentity } from "../contracts/hosts.js";
 import { createJsonLineFramer, type IngressFrame } from "./framing.js";
 import { createSendQueue, type SendSource } from "./send-queue.js";
 import {
+  assertAuthenticToolBoundaryOutcome,
   createToolBoundary,
   type ToolBoundaryOutcome,
   type ToolHandlerRegistry
 } from "./server.js";
-import {
-  createSessionController,
-  type ArgumentsCandidate,
-  type ExpectedProjection,
-  type JsonRpcId,
-  type NameCandidate,
-  type SessionAction
-} from "./session.js";
 import { ADVERTISED_TOOL_CATALOGUE } from "./tools.js";
 
 export interface McpRuntimeOptions {
@@ -56,12 +48,7 @@ const PROTOCOL_VERSION = "2025-11-25";
 const CONNECTION_ID = "connection-1";
 const JSON_RPC = "2.0";
 
-interface ForwardedCall {
-  readonly requestToken: string;
-  readonly externalId: JsonRpcId;
-  readonly nameCandidate: NameCandidate;
-  readonly argumentsCandidate: ArgumentsCandidate;
-}
+type JsonRpcId = string | number;
 
 interface Deferred<T> {
   readonly promise: Promise<T>;
@@ -115,47 +102,30 @@ function protocolResponse(id: JsonRpcId, error: ProtocolError): Readonly<Record<
   return { jsonrpc: JSON_RPC, id, error: { code: protocolCode(error), message: error.code, data: error } };
 }
 
-function internalResponse(id: JsonRpcId): Readonly<Record<string, unknown>> {
-  return { jsonrpc: JSON_RPC, id, error: { code: -32603, message: "Internal error" } };
-}
-
 function wireResult(outcome: Extract<ToolBoundaryOutcome, { kind: "project-result" }>): unknown {
   return JSON.parse(JSON.stringify(outcome.result)) as unknown;
 }
 
-function projectOutcome(
-  server: Server,
-  id: JsonRpcId,
-  expected: ExpectedProjection
-): Readonly<Record<string, unknown>> {
-  const outcome = expected.outcome;
-  if (outcome.kind === "protocol-error") return protocolResponse(id, outcome.error.value);
-  const descriptor = ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === outcome.tool);
-  if (descriptor === undefined) throw new TypeError("the projected tool is not advertised");
-  const result = outcome.result;
-  const structuredContent = wireResult(outcome);
-  const projected = server.projectCallToolResult({
-    structuredContent,
-    content: [{ type: "text", text: JSON.stringify(structuredContent) }],
-    isError: !result.ok
-  }, descriptor.outputSchema);
-  return { jsonrpc: JSON_RPC, id, result: projected };
+// The pinned SDK's legacy codec rewrites -32002 to -32602 on egress (probe-pinned).
+// The registry freezes each protocol error's wire code, so the code is restored
+// whenever the error demonstrably carries a registry protocol-error payload.
+function restoreProtocolErrorCode(message: Record<string, unknown>): Readonly<Record<string, unknown>> {
+  const error = message.error;
+  if (!isObject(error) || !isObject(error.data)) return message;
+  const name = error.message;
+  if (typeof name !== "string" || !Object.hasOwn(PROTOCOL_CODES, name)) return message;
+  if (error.data.code !== name) return message;
+  const code = PROTOCOL_CODES[name as keyof typeof PROTOCOL_CODES];
+  if (error.code === code) return message;
+  return { ...message, error: { ...error, code } };
 }
 
-function matchesExpectedProjection(
-  server: Server,
-  message: Readonly<Record<string, unknown>>,
-  expected: ExpectedProjection
-): boolean {
-  const outcome = expected.outcome;
-  if (outcome.kind === "protocol-error") {
-    const error = message.error;
-    return isObject(error) && error.message === outcome.error.value.code &&
-      isDeepStrictEqual(error.data, outcome.error.value);
-  }
-  if (!Object.hasOwn(message, "result")) return false;
-  const expectedMessage = projectOutcome(server, 0, expected);
-  return isDeepStrictEqual(message.result, expectedMessage.result);
+function requestKey(id: JsonRpcId): string {
+  return typeof id === "string" ? `s:${id}` : `n:${id}`;
+}
+
+function externalRequestId(id: JsonRpcId): JsonRpcId {
+  return typeof id === "number" && Object.is(id, -0) ? 0 : id;
 }
 
 export async function startMcpRuntime(options: McpRuntimeOptions): Promise<McpRuntimeHandle> {
@@ -165,7 +135,6 @@ export async function startMcpRuntime(options: McpRuntimeOptions): Promise<McpRu
 
   const handlers = options.handlers ?? {};
   const boundary = createToolBoundary(handlers);
-  const session = createSessionController({ connectionId: CONNECTION_ID });
   const startup = connectionContextFactory.captureStartup({
     connection_id: CONNECTION_ID,
     startup_repository_candidate: { working_directory: options.workingDirectory }
@@ -177,10 +146,15 @@ export async function startMcpRuntime(options: McpRuntimeOptions): Promise<McpRu
   server.registerCapabilities({ tools: {} });
 
   const framer = createJsonLineFramer();
-  const forwardedCalls = new Map<number, ForwardedCall>();
-  const sdkValidationCandidates = new Set<number>();
+  // One token per SDK-dispatched request, minted at ingress and settled when the
+  // response is enqueued. Duplicate in-flight IDs overwrite each other; a trusted
+  // local host never reuses in-flight IDs (documented limitation).
+  const requestTokens = new Map<string, string>();
   const closed = deferred<RuntimeTermination>();
   let connection: ConnectionContext | undefined;
+  let nextRequestNumber = 1;
+  let initializeAccepted = false;
+  let initializeInFlightKey: string | undefined;
   let closing = false;
   let terminated = false;
   let processing = false;
@@ -212,117 +186,31 @@ export async function startMcpRuntime(options: McpRuntimeOptions): Promise<McpRu
   const enqueue = (
     source: SendSource,
     message: Readonly<Record<string, unknown>>,
-    requestToken?: string,
-    expectedProjection?: ExpectedProjection
+    requestToken?: string
   ): Promise<void> => {
     if (closing) return Promise.reject(new Error("MCP runtime is closing"));
-    let selected = message;
     try {
-      if (expectedProjection !== undefined) {
-        const id = message.id;
-        if (typeof id !== "string" && typeof id !== "number") throw new TypeError("missing response ID");
-        selected = matchesExpectedProjection(server, message, expectedProjection)
-          ? projectOutcome(server, id, expectedProjection)
-          : internalResponse(id);
-      }
-      const receipt = queue.enqueue({ source, frame: canonicalMessage(selected), ...(requestToken === undefined ? {} : { requestToken }) });
+      const frame = canonicalMessage(message);
+      const id = message.id;
+      const settlesInitialize = initializeInFlightKey !== undefined &&
+        (typeof id === "string" || typeof id === "number") &&
+        requestKey(id) === initializeInFlightKey;
+      const initializeSucceeded = Object.hasOwn(message, "result");
+      const receipt = queue.enqueue({ source, frame, ...(requestToken === undefined ? {} : { requestToken }) });
       void receipt.admitted.then(
         () => {
-          session.onSendAdmitted(requestToken);
+          if (settlesInitialize && initializeInFlightKey !== undefined) {
+            initializeInFlightKey = undefined;
+            if (initializeSucceeded) initializeAccepted = true;
+          }
           drainFrames();
         },
         () => undefined
       );
-      void receipt.completed.then(
-        () => { if (requestToken !== undefined) session.onRouteSettled(requestToken); },
-        () => undefined
-      );
       return receipt.completed;
     } catch {
-      if (requestToken !== undefined && typeof message.id !== "undefined") {
-        try {
-          const fallback = queue.enqueue({ source: "fallback", frame: canonicalMessage(internalResponse(message.id as JsonRpcId)), requestToken });
-          void fallback.admitted.then(() => session.onSendAdmitted(requestToken), () => undefined);
-          void fallback.completed.then(() => session.onRouteSettled(requestToken), () => undefined);
-          return fallback.completed;
-        } catch {
-          // The terminal path below owns cleanup.
-        }
-      }
       void terminate("protocol-fatal");
-      return Promise.reject(new Error("MCP response projection failed"));
-    }
-  };
-
-  const applyActions = (actions: readonly SessionAction[]): void => {
-    if (closing) return;
-    for (const action of actions) {
-      if (closing) return;
-      if (action.kind === "protocol-fatal") {
-        void terminate("protocol-fatal");
-      } else if (action.kind === "connection-ready") {
-        const client = server.getClientVersion();
-        const protocolVersion = server.getNegotiatedProtocolVersion();
-        if (client === undefined || protocolVersion === undefined) {
-          void terminate("protocol-fatal");
-          return;
-        }
-        try {
-          connection = startup.initialize({
-            client,
-            host: deriveHostIdentity(client),
-            protocol_version: protocolVersion
-          });
-        } catch {
-          void terminate("protocol-fatal");
-        }
-      } else if (action.kind === "send") {
-        void enqueue(action.source, action.message, action.requestToken, action.expectedProjection).catch(() => undefined);
-      } else if (action.kind === "validate-cancellation") {
-        if (specTypeSchemas.CancelledNotification["~standard"].validate(action.message).issues === undefined) {
-          applyActions(session.acceptSdkMessage({
-            kind: "cancellation-accepted",
-            requestToken: action.requestToken
-          }));
-        }
-      } else {
-        if (action.route === "tools-call") {
-          forwardedCalls.set(action.internalId, {
-            requestToken: action.requestToken,
-            externalId: action.externalId,
-            nameCandidate: action.nameCandidate,
-            argumentsCandidate: action.argumentsCandidate
-          });
-        }
-        if (action.route === "tools-call" || action.route === "tools-list") {
-          sdkValidationCandidates.add(action.internalId);
-          const schema = action.route === "tools-call"
-            ? specTypeSchemas.CallToolRequest
-            : specTypeSchemas.ListToolsRequest;
-          if (schema["~standard"].validate(action.message).issues !== undefined) {
-            sdkValidationCandidates.delete(action.internalId);
-            forwardedCalls.delete(action.internalId);
-            const rejected = session.acceptSdkMessage({
-              jsonrpc: JSON_RPC,
-              id: action.internalId,
-              error: { code: -32602, message: "Invalid params" }
-            });
-            for (const response of rejected) {
-              if (response.kind === "send") {
-                void enqueue("sdk", {
-                  jsonrpc: JSON_RPC,
-                  id: response.message.id,
-                  error: { code: -32602, message: "Invalid params" }
-                }, response.requestToken).catch(() => undefined);
-              } else {
-                applyActions([response]);
-              }
-            }
-            continue;
-          }
-        }
-        transport.onmessage?.(action.message as JSONRPCMessage);
-      }
+      return Promise.reject(new Error("MCP response canonicalization failed"));
     }
   };
 
@@ -330,80 +218,60 @@ export async function startMcpRuntime(options: McpRuntimeOptions): Promise<McpRu
     start: async () => undefined,
     send: async (message) => {
       if (closing) throw new Error("MCP runtime is closing");
-      const rawMessage = message as unknown as Record<string, unknown>;
-      const id = Object.hasOwn(rawMessage, "id") ? rawMessage.id : undefined;
-      if (server.getNegotiatedProtocolVersion() !== undefined && typeof id === "number") {
-        const token = `request-${id}`;
-        applyActions(session.acceptSdkMessage({ kind: "initialize-mutated", requestToken: token }));
+      const raw = message as unknown as Record<string, unknown>;
+      const id = Object.hasOwn(raw, "id") ? raw.id : undefined;
+      let requestToken: string | undefined;
+      if (typeof id === "string" || typeof id === "number") {
+        const key = requestKey(id);
+        requestToken = requestTokens.get(key);
+        if (requestToken !== undefined) requestTokens.delete(key);
       }
-      const actions = session.acceptSdkMessage(message);
-      const completions: Promise<void>[] = [];
-      for (const action of actions) {
-        if (action.kind === "send") {
-          if (typeof id === "number" && sdkValidationCandidates.delete(id) && Object.hasOwn(rawMessage, "error")) {
-            forwardedCalls.delete(id);
-            completions.push(enqueue("sdk", {
-              jsonrpc: JSON_RPC,
-              id: action.message.id,
-              error: { code: -32602, message: "Invalid params" }
-            }, action.requestToken));
-          } else {
-            completions.push(enqueue(action.source, action.message, action.requestToken, action.expectedProjection));
-          }
-        } else {
-          applyActions([action]);
-        }
-      }
-      await Promise.all(completions);
+      await enqueue("sdk", restoreProtocolErrorCode(raw), requestToken);
+      if (eofPending && !closing && requestTokens.size === 0) drainFrames();
     },
     close: async () => { transport.onclose?.(); }
   };
 
-  server.setRequestHandler("tools/list", async (_request, ctx) => {
-    if (typeof ctx.mcpReq.id === "number") sdkValidationCandidates.delete(ctx.mcpReq.id);
-    const token = `request-${String(ctx.mcpReq.id)}`;
+  server.setRequestHandler("tools/list", async () => (
+    { tools: structuredClone(ADVERTISED_TOOL_CATALOGUE) } as unknown as ListToolsResult
+  ));
+  server.setRequestHandler("tools/call", async (request, ctx) => {
+    const id = ctx.mcpReq.id;
+    const requestToken = requestTokens.get(requestKey(id)) ?? `request-${nextRequestNumber++}`;
+    // A cancelled request never sends a response, so its token must settle
+    // here or an EOF drain would wait on it forever.
+    ctx.mcpReq.signal.addEventListener("abort", () => {
+      const key = requestKey(id);
+      if (requestTokens.delete(key) && eofPending && !closing && requestTokens.size === 0) drainFrames();
+    }, { once: true });
+    if (connection === undefined) throw new SdkProtocolError(-32603, "Internal error");
+    const params = request.params;
+    const args = Object.hasOwn(params, "arguments") ? params.arguments : undefined;
+    let outcome: ToolBoundaryOutcome;
     try {
-      return { tools: structuredClone(ADVERTISED_TOOL_CATALOGUE) } as unknown as ListToolsResult;
-    } finally {
-      session.onRouteSettled(token);
-    }
-  });
-  server.setRequestHandler("tools/call", async (_request, ctx) => {
-    const internalId = ctx.mcpReq.id;
-    if (typeof internalId === "number") sdkValidationCandidates.delete(internalId);
-    const record = typeof internalId === "number" ? forwardedCalls.get(internalId) : undefined;
-    if (record === undefined || connection === undefined || !record.nameCandidate.present) {
+      const invocation = createInvocationContext(connection, {
+        invocation_id: requestToken,
+        transport_metadata: { request_id: externalRequestId(id), operation: "tools/call" }
+      }, ctx.mcpReq.signal);
+      outcome = await boundary.invoke(params.name, args, invocation);
+      assertAuthenticToolBoundaryOutcome(outcome);
+    } catch {
+      // No branded outcome may cross the tool boundary unauthenticated; any
+      // failure to produce one answers a prose-free internal error.
       throw new SdkProtocolError(-32603, "Internal error");
     }
-    try {
-      const args = record.argumentsCandidate.present ? record.argumentsCandidate.value : undefined;
-      const invocation = createInvocationContext(connection, {
-        invocation_id: record.requestToken,
-        transport_metadata: { request_id: record.externalId, operation: "tools/call" }
-      }, ctx.mcpReq.signal);
-      const outcome = await boundary.invoke(record.nameCandidate.value, args, invocation);
-      applyActions(session.acceptSdkMessage({
-        kind: "tool-boundary-outcome",
-        requestToken: record.requestToken,
-        outcome
-      }));
-      if (outcome.kind === "protocol-error") {
-        const error = outcome.error.value;
-        throw new SdkProtocolError(protocolCode(error), error.code, error);
-      }
-      const descriptor = ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === outcome.tool);
-      if (descriptor === undefined) throw new SdkProtocolError(-32603, "Internal error");
-      const result = outcome.result;
-      const structuredContent = wireResult(outcome);
-      return server.projectCallToolResult({
-        structuredContent,
-        content: [{ type: "text", text: JSON.stringify(structuredContent) }],
-        isError: !result.ok
-      }, descriptor.outputSchema);
-    } finally {
-      forwardedCalls.delete(Number(internalId));
-      session.onRouteSettled(record.requestToken);
+    if (outcome.kind === "protocol-error") {
+      const error = outcome.error.value;
+      throw new SdkProtocolError(protocolCode(error), error.code, error);
     }
+    const descriptor = ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === outcome.tool);
+    if (descriptor === undefined) throw new SdkProtocolError(-32603, "Internal error");
+    const structuredContent = wireResult(outcome);
+    return server.projectCallToolResult({
+      structuredContent,
+      content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+      isError: !outcome.result.ok
+    }, descriptor.outputSchema);
   });
 
   function handleFrame(frame: IngressFrame): void {
@@ -414,11 +282,26 @@ export async function startMcpRuntime(options: McpRuntimeOptions): Promise<McpRu
       if (frame.fatal) void terminate("protocol-fatal");
       return;
     }
-    applyActions(session.accept(frame.value));
+    const value = frame.value;
+    // The SDK's own dispatch predicate decides what counts as a request; the SDK
+    // answers every dispatched request, so a token minted here always settles.
+    if (isJSONRPCRequest(value as JSONRPCMessage)) {
+      const request = value as { readonly id: JsonRpcId; readonly method: string };
+      if (request.method === "initialize") {
+        if (initializeAccepted || initializeInFlightKey !== undefined) {
+          const repeated = createProtocolError("INITIALIZATION_REPEATED", { connection_id: CONNECTION_ID });
+          void enqueue("direct", protocolResponse(externalRequestId(request.id), repeated)).catch(() => undefined);
+          return;
+        }
+        initializeInFlightKey = requestKey(request.id);
+      }
+      requestTokens.set(requestKey(request.id), `request-${nextRequestNumber++}`);
+    }
+    transport.onmessage?.(value as JSONRPCMessage);
   }
 
   function drainFrames(): void {
-    if (processing || closing || queue.backpressured || session.state === "INITIALIZING") return;
+    if (processing || closing || queue.backpressured || initializeInFlightKey !== undefined) return;
     processing = true;
     try {
       const frame = framer.next();
@@ -433,7 +316,9 @@ export async function startMcpRuntime(options: McpRuntimeOptions): Promise<McpRu
         if (final !== undefined) {
           handleFrame(final);
           queueMicrotask(drainFrames);
-        } else if (!closing) {
+        } else if (requestTokens.size === 0) {
+          // Input is done and every dispatched request has settled; responses
+          // still in flight keep the runtime alive until their tokens clear.
           void terminate("input-eof");
         }
       }
@@ -461,11 +346,9 @@ export async function startMcpRuntime(options: McpRuntimeOptions): Promise<McpRu
   async function terminate(reason: RuntimeTermination["reason"]): Promise<void> {
     if (closePromise !== undefined) return closePromise;
     closing = true;
-    session.close();
     removeInputListeners();
     options.input.pause();
-    forwardedCalls.clear();
-    sdkValidationCandidates.clear();
+    requestTokens.clear();
     closePromise = (async () => {
       let closeFailed = false;
       try { await server.close(); } catch { closeFailed = true; }
@@ -480,8 +363,22 @@ export async function startMcpRuntime(options: McpRuntimeOptions): Promise<McpRu
   }
 
   server.oninitialized = () => {
-    applyActions(session.acceptSdkMessage({ kind: "initialized-accepted" }));
-    drainFrames();
+    if (closing || connection !== undefined) return;
+    const client = server.getClientVersion();
+    const protocolVersion = server.getNegotiatedProtocolVersion();
+    if (client === undefined || protocolVersion === undefined) {
+      void terminate("protocol-fatal");
+      return;
+    }
+    try {
+      connection = startup.initialize({
+        client,
+        host: deriveHostIdentity(client),
+        protocol_version: protocolVersion
+      });
+    } catch {
+      void terminate("protocol-fatal");
+    }
   };
 
   await server.connect(transport);

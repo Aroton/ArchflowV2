@@ -29,37 +29,35 @@ Every tool input is a union of two arms. The full payload is the complete reques
 sequenceDiagram
     participant H as Host (stdin/stdout)
     participant F as framing.ts
-    participant S as session.ts
     participant A as sdk-adapter.ts<br/>+ MCP SDK
     participant B as server.ts<br/>tool boundary
     participant HD as handlers/*
     participant Q as send-queue.ts
 
     H->>F: bytes
-    F->>S: one JSON frame
-    S->>S: validate envelope,<br/>rewrite external ID → internal ID
-    S->>A: forward
+    F->>A: one JSON frame
+    A->>A: mint request token,<br/>-32004 guard on repeated initialize
+    A->>A: SDK dispatches: envelope,<br/>method, params, cancellation
     A->>B: validated tools/call
     B->>B: name lookup, schema_version gate,<br/>zod parse of input<br/>(full payload or staged reference)
     B->>B: staged reference? rehydrate from<br/>intents/&lt;id&gt;.request.json, recheck digest
     B->>HD: dispatch
-    HD->>HD: open session, replay probe,<br/>state transaction / dispatch
+    HD->>HD: open handler session, replay probe,<br/>state transaction / dispatch
     HD-->>B: result
     B-->>A: re-validated, frozen result
-    A-->>S: checked against expected projection
-    S-->>Q: response on caller's external ID
+    A-->>Q: canonicalized response<br/>(result-xor-error checked)
     Q-->>H: ordered, backpressured write
 ```
 
-## Why the protocol plumbing exists
+## The trust posture: the SDK is the JSON-RPC authority
 
-Three modules look like reimplementations of things the MCP SDK already does. Each exists because the SDK is *used but not trusted* to be the sole authority over the wire:
+The pinned `@modelcontextprotocol/server`/`core` 2.0.0 SDK — version-pinned exactly, behaviorally probed by `scripts/probe-mcp-sdk-compatibility.mjs`, and import-fenced into `sdk-adapter.ts` — is the authority for JSON-RPC envelopes, method routing, request-schema validation, and cancellation. ArchFlow's own authority begins at the tool boundary (`server.ts`). An earlier design ran a full second JSON-RPC state machine (`session.ts`) in front of the SDK; it was retired 2026-08-11 once the probe pinned every SDK behavior the session had re-implemented. Consequences of the new posture — silently dropped malformed envelopes, SDK validator prose on the wire, no duplicate-ID ledger — are documented limitations consistent with the trusted-developer-machine stance; see `../LIMITATIONS.md`.
+
+What remains adapter-owned, and why:
 
 - **`framing.ts`** — stdin is a byte stream, not a message stream. Hand-written newline-delimited framer with a 10 MiB cap and a deliberate fatal/non-fatal split: malformed JSON gets a `-32700` response (recoverable), but malformed UTF-8 or an oversized frame kills the connection, because after those the next message boundary can't be trusted.
-- **`send-queue.ts`** — makes stdout writes ordered, bounded, and observable. Each frame gets a two-phase receipt (admitted to the stream / flushed); the session state machine advances on *admitted*, so e.g. the connection is never treated as initialized before the initialize response has actually entered the stream. Caps in-flight output and propagates backpressure so stdin pauses rather than buffering unboundedly.
-- **`sdk-adapter.ts`** — a containment shim around `@modelcontextprotocol/server`. The server's own session state machine and ID rewriting run *before* the SDK sees anything, and every outbound tool result the SDK produces is compared against an expected projection derived from the authenticated tool-boundary outcome — a mismatch is replaced with a plain `-32603` rather than trusted.
-
-`session.ts` is a full JSON-RPC/MCP state machine (`PRE_INIT → … → READY → CLOSED`) with duplicate-ID tracking and strict per-method key allowlists. Yes, this means most messages are validated twice (once here, once by the SDK) — that overlap is deliberate but is also the biggest complexity concentration in `src/mcp/`; see `../COMPLEXITY.md`.
+- **`send-queue.ts`** — makes stdout writes ordered, bounded, and observable. Each frame gets a two-phase receipt (admitted to the stream / flushed); initialize acceptance advances on *admitted*, so the connection is never treated as initialized before the initialize response has actually entered the stream. Caps in-flight output and propagates backpressure so stdin pauses rather than buffering unboundedly.
+- **`sdk-adapter.ts`** — the fold point: framer in, SDK dispatch, send-queue out. It mints one request token per SDK-dispatched request at ingress (settled when the response is enqueued), holds frame draining while an initialize is in flight so the handshake stays in protocol order, answers a repeated initialize itself with the registry's `INITIALIZATION_REPEATED` (`-32004`) — the SDK would silently re-negotiate — and captures the connection identity exactly once via the SDK's initialized hook. On egress every response is rebuilt through one canonical serializer that enforces result-xor-error, and the registry-frozen `TOOL_DISABLED` code is restored where the SDK's legacy codec rewrites `-32002` to `-32602` (a probe-pinned rewrite). Each tool result's wire projection is computed exactly once, in the `tools/call` handler, from the WeakSet-branded tool-boundary outcome; if no authentic outcome can be produced the handler answers a prose-free `-32603`.
 
 ## Process lifecycle
 

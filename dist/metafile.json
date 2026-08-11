@@ -8081,18 +8081,13 @@
       "imports": []
     },
     "src/mcp/sdk-adapter.ts": {
-      "bytes": 18312,
+      "bytes": 14717,
       "format": "esm",
       "imports": [
         {
           "external": true,
           "kind": "import-statement",
           "path": "node:buffer"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:util"
         },
         {
           "kind": "import-statement",
@@ -8103,6 +8098,11 @@
           "kind": "import-statement",
           "original": "../contracts/contexts.js",
           "path": "src/contracts/contexts.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/errors.js",
+          "path": "src/contracts/errors.ts"
         },
         {
           "kind": "import-statement",
@@ -8123,11 +8123,6 @@
           "kind": "import-statement",
           "original": "./server.js",
           "path": "src/mcp/server.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./session.js",
-          "path": "src/mcp/session.ts"
         },
         {
           "kind": "import-statement",
@@ -8189,37 +8184,6 @@
           "kind": "import-statement",
           "original": "./diagnostics.js",
           "path": "src/mcp/diagnostics.ts"
-        }
-      ]
-    },
-    "src/mcp/session.ts": {
-      "bytes": 21494,
-      "format": "esm",
-      "imports": [
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:buffer"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/errors.js",
-          "path": "src/contracts/errors.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/plain-json.js",
-          "path": "src/contracts/plain-json.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/tool-names.js",
-          "path": "src/contracts/tool-names.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./server.js",
-          "path": "src/mcp/server.ts"
         }
       ]
     },
@@ -12205,7 +12169,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2763176,
+      "bytes": 2743280,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12253,11 +12217,6 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:buffer"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:util"
         },
         {
           "external": true,
@@ -12462,11 +12421,6 @@
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:buffer"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
           "path": "node:crypto"
         },
         {
@@ -12630,7 +12584,7 @@
           "bytesInOutput": 34870
         },
         "node_modules/@modelcontextprotocol/server/dist/ajvProvider-CEoC__sr.mjs": {
-          "bytesInOutput": 272039
+          "bytesInOutput": 272032
         },
         "node_modules/@modelcontextprotocol/server/dist/chunk-Br0eD_fh.mjs": {
           "bytesInOutput": 1403
@@ -12738,7 +12692,7 @@
           "bytesInOutput": 641
         },
         "node_modules/ajv/dist/compile/resolve.js": {
-          "bytesInOutput": 5109
+          "bytesInOutput": 5102
         },
         "node_modules/ajv/dist/compile/rules.js": {
           "bytesInOutput": 1029
@@ -13713,16 +13667,13 @@
           "bytesInOutput": 3937
         },
         "src/mcp/sdk-adapter.ts": {
-          "bytesInOutput": 15152
+          "bytesInOutput": 10812
         },
         "src/mcp/send-queue.ts": {
           "bytesInOutput": 4970
         },
         "src/mcp/server.ts": {
           "bytesInOutput": 7338
-        },
-        "src/mcp/session.ts": {
-          "bytesInOutput": 15516
         },
         "src/mcp/tools.ts": {
           "bytesInOutput": 11561
@@ -13782,7 +13733,7 @@
           "bytesInOutput": 3466
         },
         "src/state/gate-core.ts": {
-          "bytesInOutput": 7726
+          "bytesInOutput": 7723
         },
         "src/state/gate-wait.ts": {
           "bytesInOutput": 2065

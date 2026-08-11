@@ -1,10 +1,18 @@
 # LIMITATIONS
 
-**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/dispatch/`, `src/init/diagnostics.ts`
+**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/dispatch/`, `src/init/diagnostics.ts`, `src/mcp/`
 
 ArchFlow is a local developer-workflow prototype, not a security sandbox. The controls below reduce accidental context leakage and constrain ordinary operation, but the listed cases are unsupported because the current implementation cannot prove the claimed boundary. A planted canary not appearing in output is evidence about that run; it is not proof that the child could not read the canary.
 
 These limitations assume a trusted developer account and a filesystem not being changed by a malicious local process. They are acceptable for the prototype's current operating envelope because ArchFlow runs locally for that developer, model output is validated before it becomes evidence, and advancement and approval remain subject to the workflow's durable evidence and human gates. They would not be acceptable as claims of isolation from hostile code, another process running as the same user, or a malicious local user.
+
+## Adversarial stdio peers at the JSON-RPC layer
+
+**Not protected:** The MCP server's JSON-RPC layer trusts the pinned MCP SDK and the local host process on the other end of stdio. It does not defend against an adversarial stdio peer: duplicate or pathological request IDs are served as the SDK serves them (both responses carry the same ID; there is no duplicate-ID ledger or cap), malformed envelopes — null or fractional IDs, extra top-level members, non-object `_meta` — are dropped silently with no wire response, and wire-schema violations such as non-object `tools/call` arguments are answered with the SDK's own validator prose rather than a canonicalized message. SDK error prose can therefore reach the wire.
+
+**Existing mitigation:** Both SDK packages are pinned to exact version 2.0.0 and every retired defense is replaced by a behavioral pin in `scripts/probe-mcp-sdk-compatibility.mjs`, so an SDK behavior change fails the gate instead of shipping silently. SDK imports are fenced into `src/mcp/sdk-adapter.ts` (`check:mcp-sdk-boundary`). The framer still enforces newline framing, a 10 MiB cap, and the fatal malformed-UTF-8 split; the send queue still bounds and orders all output; the adapter still rejects repeated initialization (`-32004`) and enforces result-xor-error at the single egress point. ArchFlow's own validation begins unweakened at the tool boundary: `assertPlainJson` on every input, schema and digest rechecks, and WeakSet-branded outcomes — a `tools/call` without an authentic branded outcome answers a prose-free `-32603`.
+
+**Why accepted:** The only intended stdio peer is the developer's own host CLI on a trusted machine — the same trusted developer account/machine stance the rest of this page assumes. The retired second JSON-RPC state machine (`session.ts`, 554 lines) validated nearly every message twice to defend against a peer the prototype does not claim to withstand; the pinned-and-probed SDK is the honest authority for that layer, and the human trust boundaries live in durable state and gates, not in wire canonicalization.
 
 ## Child repository reads
 

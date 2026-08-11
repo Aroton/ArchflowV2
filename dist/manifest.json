@@ -92,10 +92,10 @@
       "size": 1982400
     },
     {
-      "digest": "dae5b09afd511f256e65c9ddd84e13b99590a46496c275fcc65b01106f8adbc3",
+      "digest": "379bae0241bbeadda8c4ec6e8e2080dc1622d423dc8fa5b7df7f48c05cdc13f3",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 2763176
+      "size": 2743280
     },
     {
       "digest": "a0421bd8ac95f0efe2215f3bf8a5f3b213b654651a8f596f5fabbc77351414e7",
@@ -104,7 +104,7 @@
       "size": 937
     },
     {
-      "digest": "20f7d4150a136e6c0fc8662422367d80403a2860f404df6ce884b17e82eabd7f",
+      "digest": "b20b6f0bfb9144ca897d79a382db87c8c9f35bce0866573078e350c6771058d4",
       "path": "legal/review.json",
       "role": "legal-review",
       "size": 42993
@@ -246,10 +246,10 @@
       "role": "manifest"
     },
     {
-      "digest": "75c78c052f63f1bacb5241ed83abbcc74ad1225222528a7b0a2d1883d4c2c51d",
+      "digest": "06f1e3c9e33c6646582fc62ffd7f5bc4c81e757f6f63c78f2544caf45fb8c6e4",
       "path": "metafile.json",
       "role": "metafile",
-      "size": 401943
+      "size": 400701
     }
   ],
   "build_entries": [
@@ -268,7 +268,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "dae5b09afd511f256e65c9ddd84e13b99590a46496c275fcc65b01106f8adbc3",
+  "bundle_digest": "379bae0241bbeadda8c4ec6e8e2080dc1622d423dc8fa5b7df7f48c05cdc13f3",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -295,7 +295,7 @@
       "size": 11434
     },
     {
-      "bytes_in_output": 272039,
+      "bytes_in_output": 272032,
       "digest": "218157a99879a59cdea0b720a484dfe9989fa768f3d05318c2803b61705373fa",
       "key": "node_modules/@modelcontextprotocol/server/dist/ajvProvider-CEoC__sr.mjs",
       "origin": {
@@ -751,7 +751,7 @@
       "size": 543
     },
     {
-      "bytes_in_output": 10207,
+      "bytes_in_output": 10200,
       "digest": "df75af0e0cf03fa1c6452e8dc61019f5aec645a8a5f6f494dc4e13cb5502d2d9",
       "key": "node_modules/ajv/dist/compile/resolve.js",
       "origin": {
@@ -4615,14 +4615,14 @@
       "size": 5695
     },
     {
-      "bytes_in_output": 15152,
-      "digest": "6d20e277ea4745a1af989693eb2b156f17a8c652bcb1f790c262ff972eb3f38e",
+      "bytes_in_output": 10812,
+      "digest": "cd4bbc1d49edeecba0b15050f3836ec8d043db8a6fd5442fe781edbcf13a8904",
       "key": "src/mcp/sdk-adapter.ts",
       "origin": {
         "kind": "repository",
         "path": "src/mcp/sdk-adapter.ts"
       },
-      "size": 18312
+      "size": 14717
     },
     {
       "bytes_in_output": 4970,
@@ -4643,16 +4643,6 @@
         "path": "src/mcp/server.ts"
       },
       "size": 11178
-    },
-    {
-      "bytes_in_output": 15516,
-      "digest": "307167530a39cf35597f609b7cc1f19bf0156ed9342b5f3e8649f8e23c34df7c",
-      "key": "src/mcp/session.ts",
-      "origin": {
-        "kind": "repository",
-        "path": "src/mcp/session.ts"
-      },
-      "size": 21494
     },
     {
       "bytes_in_output": 11561,
@@ -4855,7 +4845,7 @@
       "size": 5340
     },
     {
-      "bytes_in_output": 13661,
+      "bytes_in_output": 13658,
       "digest": "ed3989eec12fa7cab6c545b1b45d97a62c3abc37023789ed081e3b232dd08860",
       "key": "src/state/gate-core.ts",
       "origin": {
@@ -5501,7 +5491,6 @@
     "src/mcp/sdk-adapter.ts",
     "src/mcp/send-queue.ts",
     "src/mcp/server.ts",
-    "src/mcp/session.ts",
     "src/mcp/tools.ts",
     "src/repository/attributes.ts",
     "src/repository/git.ts",
@@ -5600,7 +5589,7 @@
     ],
     "workflow": "assets/workflow.yaml"
   },
-  "dependency_inventory_digest": "82784af9c780058fea222384acbd82584ce348d3267e1fffdbfb0155c3b40c93",
+  "dependency_inventory_digest": "18f0aa8e66d2347939a7eca26bae36a9bd34b108ce0f5ed42fa83c7b1c19f5e5",
   "dependency_provenance_inputs": [
     {
       "digest": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
@@ -6285,7 +6274,6 @@
         "src/mcp/sdk-adapter.ts",
         "src/mcp/send-queue.ts",
         "src/mcp/server.ts",
-        "src/mcp/session.ts",
         "src/mcp/tools.ts",
         "src/repository/attributes.ts",
         "src/repository/git.ts",
@@ -6328,7 +6316,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "dae5b09afd511f256e65c9ddd84e13b99590a46496c275fcc65b01106f8adbc3",
+      "output_digest": "379bae0241bbeadda8c4ec6e8e2080dc1622d423dc8fa5b7df7f48c05cdc13f3",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -6794,7 +6782,7 @@
         "path": "test/fixtures/mcp/runtime/calls.json"
       },
       {
-        "digest": "5547b92a1f0667ef70c712cd99800fa38074278e4470a20231893e023c1504dc",
+        "digest": "8a7be271e572dd9ed0d879a78f2a47eda7cde73ca9a41ceac2408559be87abae",
         "path": "test/fixtures/mcp/runtime/initialize.json"
       }
     ],
@@ -6812,7 +6800,7 @@
     }
   },
   "legal_review": {
-    "digest": "20f7d4150a136e6c0fc8662422367d80403a2860f404df6ce884b17e82eabd7f",
+    "digest": "b20b6f0bfb9144ca897d79a382db87c8c9f35bce0866573078e350c6771058d4",
     "payload_path": "legal/review.json",
     "source_path": "release/legal-review.json"
   },
@@ -6890,7 +6878,7 @@
       "size": 1060
     },
     {
-      "digest": "f50682e22077a4c28cc321fe99ff5d88f1d69d1d9400723c907322ee494a940c",
+      "digest": "d202d39a76fe79df9933296e83e472ae2c08382b033435f5f405ef871e2d13cd",
       "path": "release/evidence/focused-inert-reachability.json",
       "size": 910
     },
@@ -6905,7 +6893,7 @@
       "size": 832
     },
     {
-      "digest": "20f7d4150a136e6c0fc8662422367d80403a2860f404df6ce884b17e82eabd7f",
+      "digest": "b20b6f0bfb9144ca897d79a382db87c8c9f35bce0866573078e350c6771058d4",
       "path": "release/legal-review.json",
       "size": 42993
     },
@@ -7040,9 +7028,9 @@
       "size": 510
     },
     {
-      "digest": "e57803cecb0c660e96729bc936b1da868fe3f5da1a04970bac928f537b134eb4",
+      "digest": "f8b631239d74845509ccbcf242b9e3a597e03aff35033bb7a5cb1a14b7d61a7c",
       "path": "scripts/smoke-release-bundle.mjs",
-      "size": 14998
+      "size": 15281
     },
     {
       "digest": "ca67fdbef8798c831458b06ebbc2f027b3298826d5723302e085fa6bf9c8c773",
@@ -7130,9 +7118,9 @@
       "size": 1145
     },
     {
-      "digest": "5547b92a1f0667ef70c712cd99800fa38074278e4470a20231893e023c1504dc",
+      "digest": "8a7be271e572dd9ed0d879a78f2a47eda7cde73ca9a41ceac2408559be87abae",
       "path": "test/fixtures/mcp/runtime/initialize.json",
-      "size": 1091
+      "size": 1308
     },
     {
       "digest": "044dfd578041d22f584729f216cf5e82644ad6b45e54a8deee61e33e79dc32ca",
@@ -7140,9 +7128,9 @@
       "size": 3289
     },
     {
-      "digest": "884c438e889288f9a9f9b034e0b559426bafdacf59cc3e545909a33049b60fb3",
+      "digest": "a14f82fce68bf5a1353ac713220cac8cbbe7ddee61b37e149fcd567a77b482b8",
       "path": "test/integration/mcp-stdio.test.ts",
-      "size": 17423
+      "size": 18223
     },
     {
       "digest": "dae39c5f090afb101fcf636e81614453a6ea1b5092788fe91d637658abde1b2f",

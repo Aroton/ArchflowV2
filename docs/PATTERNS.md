@@ -52,7 +52,7 @@ export type DocumentArtifactV1 = {
 // src/contracts/durable-document.ts
 ```
 
-This is about declaration form, not branded strings, optional properties, or readonly arrays. It also intentionally prevents declaration merging from widening a persisted shape beyond its JSON Schema. Interfaces remain normal for non-persisted service contracts such as `GitRunner` and `GitCommandSpec` in `src/repository/git.ts`, or MCP runtime controllers in `src/mcp/session.ts`.
+This is about declaration form, not branded strings, optional properties, or readonly arrays. It also intentionally prevents declaration merging from widening a persisted shape beyond its JSON Schema. Interfaces remain normal for non-persisted service contracts such as `GitRunner` and `GitCommandSpec` in `src/repository/git.ts`, or the MCP runtime options in `src/mcp/sdk-adapter.ts`.
 
 ### Branded boundary values
 
@@ -95,7 +95,7 @@ if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerab
 // src/state/transaction.ts, ownDataField
 ```
 
-The checks prevent different hazards. Rejecting accessors prevents split observation from a getter. Rejecting non-enumerable data prevents a field invisible to `JSON.stringify`, canonical bytes, and their digests from being treated as authenticated input. The same convention appears in `src/contracts/durable.ts`, `src/mcp/session.ts`, and the transaction kernel.
+The checks prevent different hazards. Rejecting accessors prevents split observation from a getter. Rejecting non-enumerable data prevents a field invisible to `JSON.stringify`, canonical bytes, and their digests from being treated as authenticated input. The same convention appears in `src/contracts/durable.ts`, `src/mcp/server.ts`, and the transaction kernel.
 
 ### Materialize once before repeated inspection
 
@@ -154,7 +154,7 @@ Durable objects and capability handles are commonly frozen. Authentic internal a
 - `src/main.ts` is intentionally small: validate that the MCP executable received no arguments, then wire stdin/stdout/stderr into the runtime.
 - The local CLI parses the command before reading input. Commands in `INPUT_FREE_COMMANDS` never read stdin; payload commands read `--input` or stdin only after command classification (`src/local/main.ts`). This prevents input-free commands from hanging when a parent keeps stdin open.
 - Command and tool surfaces are table-driven (`src/local/commands.ts`, `src/mcp/tools.ts`), keeping advertised schemas, dispatch, and validation aligned.
-- Stdio protocol bytes stay off diagnostic output. MCP framing/session/send-queue responsibilities are split across `src/mcp/framing.ts`, `src/mcp/session.ts`, `src/mcp/send-queue.ts`, and `src/mcp/sdk-adapter.ts`.
+- Stdio protocol bytes stay off diagnostic output. MCP framing/dispatch/send-queue responsibilities are split across `src/mcp/framing.ts`, `src/mcp/send-queue.ts`, and `src/mcp/sdk-adapter.ts`.
 
 ## Testing conventions
 

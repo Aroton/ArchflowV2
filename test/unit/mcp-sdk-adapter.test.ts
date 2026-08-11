@@ -88,17 +88,40 @@ async function ready(runtime: Harness): Promise<void> {
 }
 
 describe("MCP SDK adapter", () => {
-  it("pins canonical initialize bytes and retries after a prose-free malformed initialize", async () => {
+  it("pins canonical initialize bytes and retries after an SDK-rejected malformed initialize", async () => {
     const runtime = await harness();
     runtime.send(initialize(1, { name: 1, version: "bad" }));
     await runtime.waitForLines(1);
-    expect(runtime.lines[0]).toBe('{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"Invalid params"}}');
+    const rejection = JSON.parse(runtime.lines[0]!) as { id: number; error: { code: number; message: string } };
+    expect(rejection.id).toBe(1);
+    expect(rejection.error.code).toBe(-32603);
+    expect(rejection.error.message).toContain("clientInfo");
 
     runtime.send(initialize(2));
     await runtime.waitForLines(2);
     expect(runtime.lines[1]).toBe('{"jsonrpc":"2.0","id":2,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"archflow-mcp","version":"0.0.0"}}}');
     await runtime.handle.close();
     await expect(runtime.handle.closed).resolves.toEqual({ reason: "caller-close", close_failed: false });
+  });
+
+  it("rejects a repeated initialize with the authentic INITIALIZATION_REPEATED projection", async () => {
+    const runtime = await harness();
+    await ready(runtime);
+    runtime.send(initialize("again"));
+    await runtime.waitForLines(2);
+    expect(JSON.parse(runtime.lines[1]!)).toMatchObject({
+      jsonrpc: "2.0",
+      id: "again",
+      error: {
+        code: -32004,
+        message: "INITIALIZATION_REPEATED",
+        data: { code: "INITIALIZATION_REPEATED", diagnostic: { parameters: { connection_id: "connection-1" } } }
+      }
+    });
+    runtime.send({ jsonrpc: "2.0", id: "list", method: "tools/list" });
+    await runtime.waitForLines(3);
+    expect(JSON.parse(runtime.lines[2]!)).toEqual({ jsonrpc: "2.0", id: "list", result: { tools: ADVERTISED_TOOL_CATALOGUE } });
+    await runtime.handle.close();
   });
 
   it("returns the exact advertised catalogue and one LF per response", async () => {
@@ -111,34 +134,44 @@ describe("MCP SDK adapter", () => {
     await runtime.handle.close();
   });
 
-  it("enters READY only through the SDK initialized hook and preserves same-chunk order", async () => {
-    const malformed = await harness();
-    malformed.send(initialize("init"));
-    await malformed.waitForLines(1);
-    malformed.input.write(
-      `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: null })}\n` +
-      `${JSON.stringify({ jsonrpc: "2.0", id: "blocked", method: "tools/list", params: {} })}\n`
-    );
-    await malformed.waitForLines(2);
-    expect(malformed.lines[1]).toBe(
-      '{"jsonrpc":"2.0","id":"blocked","error":{"code":-32600,"message":"Invalid Request"}}'
-    );
-    await malformed.handle.close();
+  it("captures the connection only through the SDK initialized hook and answers -32603 before it", async () => {
+    const runtime = await harness();
+    runtime.send(initialize("init"));
+    await runtime.waitForLines(1);
+    // No branded outcome can exist before the connection is captured, so the
+    // handler-side invariant answers a prose-free internal error.
+    runtime.send({ jsonrpc: "2.0", id: "early", method: "tools/call", params: { name: "archflow_state", arguments: {} } });
+    await runtime.waitForLines(2);
+    expect(runtime.lines[1]).toBe('{"jsonrpc":"2.0","id":"early","error":{"code":-32603,"message":"Internal error"}}');
 
-    const valid = await harness();
-    valid.send(initialize("init"));
-    await valid.waitForLines(1);
-    valid.input.write(
-      `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n` +
-      `${JSON.stringify({ jsonrpc: "2.0", id: "list", method: "tools/list", params: {} })}\n`
+    // A malformed initialized notification fails the SDK envelope and is dropped,
+    // so the connection stays uncaptured; tools/list is served regardless.
+    runtime.input.write(
+      `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: null })}\n` +
+      `${JSON.stringify({ jsonrpc: "2.0", id: "list-open", method: "tools/list", params: {} })}\n` +
+      `${JSON.stringify({ jsonrpc: "2.0", id: "still-early", method: "tools/call", params: { name: "archflow_state", arguments: {} } })}\n`
     );
-    await valid.waitForLines(2);
-    expect(JSON.parse(valid.lines[1]!)).toEqual({
+    await runtime.waitForLines(4);
+    expect(JSON.parse(runtime.lines[2]!)).toEqual({
       jsonrpc: "2.0",
-      id: "list",
+      id: "list-open",
       result: { tools: ADVERTISED_TOOL_CATALOGUE }
     });
-    await valid.handle.close();
+    expect(runtime.lines[3]).toBe('{"jsonrpc":"2.0","id":"still-early","error":{"code":-32603,"message":"Internal error"}}');
+
+    // The exact initialized notification mints the connection; same-chunk
+    // requests observe it in protocol order.
+    runtime.input.write(
+      `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n` +
+      `${JSON.stringify({ jsonrpc: "2.0", id: "call", method: "tools/call", params: { name: "unknown", arguments: {} } })}\n`
+    );
+    await runtime.waitForLines(5);
+    expect(JSON.parse(runtime.lines[4]!)).toMatchObject({
+      jsonrpc: "2.0",
+      id: "call",
+      error: { code: -32001, message: "TOOL_NOT_FOUND" }
+    });
+    await runtime.handle.close();
   });
 
   it("survives real recorded Claude Code clientInfo with extra fields through connection-ready", async () => {
@@ -167,20 +200,24 @@ describe("MCP SDK adapter", () => {
     await runtime.handle.close();
   });
 
-  it("recovers missing and non-object arguments at the authentic boundary", async () => {
+  it("routes missing arguments to the boundary and lets the SDK reject non-object arguments", async () => {
     const runtime = await harness();
     await ready(runtime);
     runtime.send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "archflow_state" } });
+    await runtime.waitForLines(2);
     runtime.send({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "archflow_state", arguments: "bad" } });
+    await runtime.waitForLines(3);
     runtime.send({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "unknown", arguments: {} } });
     runtime.send({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "archflow_state", arguments: stateInput } });
     await runtime.waitForLines(5);
     const responses = runtime.lines.slice(1).map((line) => JSON.parse(line) as Record<string, unknown>);
-    for (const response of responses.slice(0, 2)) {
-      const result = response.result as { structuredContent: { ok: boolean; error: { code: string } }; isError: boolean };
-      expect(result.structuredContent.error.code).toBe("CONTRACT_INVALID");
-      expect(result.isError).toBe(true);
-    }
+    const missingArguments = responses[0] as { result: { structuredContent: { error: { code: string } }; isError: boolean } };
+    expect(missingArguments.result.structuredContent.error.code).toBe("CONTRACT_INVALID");
+    expect(missingArguments.result.isError).toBe(true);
+    const nonObjectArguments = responses[1] as { id: number; error: { code: number; message: string } };
+    expect(nonObjectArguments.id).toBe(2);
+    expect(nonObjectArguments.error.code).toBe(-32602);
+    expect(nonObjectArguments.error.message.startsWith("Invalid tools/call request:")).toBe(true);
     expect(responses[2]).toMatchObject({
       jsonrpc: "2.0",
       id: 3,
@@ -191,15 +228,10 @@ describe("MCP SDK adapter", () => {
       id: 4,
       error: { code: -32002, message: "TOOL_DISABLED", data: { code: "TOOL_DISABLED" } }
     });
-    runtime.send({ jsonrpc: "2.0", id: 1, method: "ping" });
-    await runtime.waitForLines(6);
-    expect(runtime.lines[5]).toBe(
-      '{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request"}}'
-    );
     await runtime.handle.close();
   });
 
-  it("bounds SDK metadata validator errors without leaking validator prose", async () => {
+  it("surfaces SDK wire-schema rejections and silently drops unparseable envelopes", async () => {
     const runtime = await harness();
     await ready(runtime);
     runtime.send({ jsonrpc: "2.0", id: 1, method: "tools/list", params: { _meta: null } });
@@ -209,11 +241,16 @@ describe("MCP SDK adapter", () => {
       method: "tools/call",
       params: { name: "archflow_state", task: "invalid", arguments: {} }
     });
-    await runtime.waitForLines(3);
-    expect(runtime.lines.slice(1)).toEqual([
-      '{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"Invalid params"}}',
-      '{"jsonrpc":"2.0","id":2,"error":{"code":-32602,"message":"Invalid params"}}'
-    ]);
+    await runtime.waitForLines(2);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // The null _meta fails the SDK's strict JSON-RPC envelope, so id 1 gets no
+    // response at all; the invalid task shape is rejected by the SDK's own
+    // tools/call wire schema with its validator prose.
+    expect(runtime.lines).toHaveLength(2);
+    const rejection = JSON.parse(runtime.lines[1]!) as { id: number; error: { code: number; message: string } };
+    expect(rejection.id).toBe(2);
+    expect(rejection.error.code).toBe(-32602);
+    expect(rejection.error.message.startsWith("Invalid tools/call request:")).toBe(true);
     await runtime.handle.close();
   });
 
@@ -252,15 +289,13 @@ describe("MCP SDK adapter", () => {
       id: "call",
       result: { structuredContent: { schema_version: "1", ok: true } }
     });
-    runtime.send({ jsonrpc: "2.0", id: "call", method: "ping" });
+    runtime.send({ jsonrpc: "2.0", id: "after", method: "ping" });
     await runtime.waitForLines(3);
-    expect(runtime.lines[2]).toBe(
-      '{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request"}}'
-    );
+    expect(runtime.lines[2]).toBe('{"jsonrpc":"2.0","id":"after","result":{}}');
     await runtime.handle.close();
   });
 
-  it("accepts valid cancellation through the SDK schema, aborts, and retains the ID tombstone", async () => {
+  it("accepts valid cancellation through the SDK schema, aborts, and suppresses the response", async () => {
     let started!: () => void;
     const didStart = new Promise<void>((resolve) => { started = resolve; });
     let aborted!: () => void;
@@ -292,11 +327,9 @@ describe("MCP SDK adapter", () => {
     await didAbort;
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(runtime.lines).toHaveLength(1);
-    runtime.send({ jsonrpc: "2.0", id: 7, method: "ping" });
+    runtime.send({ jsonrpc: "2.0", id: 8, method: "ping" });
     await runtime.waitForLines(2);
-    expect(runtime.lines[1]).toBe(
-      '{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request"}}'
-    );
+    expect(runtime.lines[1]).toBe('{"jsonrpc":"2.0","id":8,"result":{}}');
     await runtime.handle.close();
   });
 
@@ -326,15 +359,72 @@ describe("MCP SDK adapter", () => {
     expect(runtime.lines).toHaveLength(1);
   });
 
-  it("emits fixed parse errors, preserves ID spending, and terminates without owning streams", async () => {
+  it("answers every dispatched request before terminating on input EOF", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const runtime = await harness({
+      archflow_state: async () => {
+        await gate;
+        return stateSuccess;
+      }
+    });
+    runtime.send(initialize("init"));
+    runtime.send({ jsonrpc: "2.0", method: "notifications/initialized" });
+    runtime.send({
+      jsonrpc: "2.0",
+      id: "slow",
+      method: "tools/call",
+      params: { name: "archflow_state", arguments: stateInput }
+    });
+    runtime.input.end();
+    await runtime.waitForLines(1);
+    release();
+    const termination = await runtime.handle.closed;
+    expect(termination.reason).toBe("input-eof");
+    await runtime.waitForLines(2);
+    const slow = JSON.parse(runtime.lines[1]!) as { id: string; result: { isError: boolean } };
+    expect(slow.id).toBe("slow");
+    expect(slow.result.isError).toBe(false);
+  });
+
+  it("does not wait for a cancelled request when draining at input EOF", async () => {
+    let abortable!: AbortSignal;
+    let started!: () => void;
+    const didStart = new Promise<void>((resolve) => { started = resolve; });
+    const runtime = await harness({
+      archflow_state: async (_input, context) => {
+        abortable = context.signal;
+        started();
+        await new Promise<never>(() => undefined);
+        return stateSuccess;
+      }
+    });
+    await ready(runtime);
+    runtime.send({
+      jsonrpc: "2.0",
+      id: "doomed",
+      method: "tools/call",
+      params: { name: "archflow_state", arguments: stateInput }
+    });
+    await didStart;
+    runtime.send({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: "doomed" } });
+    runtime.input.end();
+    const termination = await runtime.handle.closed;
+    expect(termination.reason).toBe("input-eof");
+    expect(abortable.aborted).toBe(true);
+    expect(runtime.lines).toHaveLength(1);
+  });
+
+  it("emits fixed parse errors, serializes -0 ids as 0, and terminates without owning streams", async () => {
     const runtime = await harness();
     runtime.input.write("not-json\n");
     runtime.send(initialize(-0));
     await runtime.waitForLines(2);
-    runtime.send({ jsonrpc: "2.0", id: 0, method: "ping" });
+    runtime.send({ jsonrpc: "2.0", id: 1, method: "ping" });
     await runtime.waitForLines(3);
     expect(runtime.lines[0]).toBe('{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}');
-    expect(runtime.lines[2]).toBe('{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request"}}');
+    expect((JSON.parse(runtime.lines[1]!) as { id: number }).id).toBe(0);
+    expect(runtime.lines[2]).toBe('{"jsonrpc":"2.0","id":1,"result":{}}');
     await runtime.handle.close();
     expect(runtime.input.destroyed).toBe(false);
     expect(runtime.output.destroyed).toBe(false);

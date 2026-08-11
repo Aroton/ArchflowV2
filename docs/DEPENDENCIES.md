@@ -42,7 +42,7 @@ There is no ESLint, Prettier, Biome, dotenv loader, web framework, database clie
 
 `src/main.ts` is the `archflow-mcp` entry point. It accepts no payload arguments and connects `stdin`, `stdout`, and `stderr` to `src/mcp/process-runner.ts` and `src/mcp/sdk-adapter.ts`.
 
-- The transport is newline-delimited JSON-RPC over stdio. `src/mcp/framing.ts`, `src/mcp/send-queue.ts`, and `src/mcp/session.ts` own framing, ordered output/backpressure, and session state. The SDK's `StdioServerTransport` is not used; `sdk-adapter.ts` provides a local `Transport` so output remains under the repository's queue and projection checks.
+- The transport is newline-delimited JSON-RPC over stdio. `src/mcp/framing.ts` and `src/mcp/send-queue.ts` own framing and ordered output/backpressure; the pinned SDK owns JSON-RPC dispatch and validation (see `mcp/SERVER.md`). The SDK's `StdioServerTransport` is not used; `sdk-adapter.ts` provides a local `Transport` so output remains under the repository's queue and its canonical result-xor-error egress check.
 - The server identifies itself as `archflow-mcp@0.0.0` and supports MCP protocol `2025-11-25` (`PROTOCOL_VERSION` in `src/mcp/sdk-adapter.ts`).
 - The only SDK import in production is the public root in `src/mcp/sdk-adapter.ts`. `scripts/check-mcp-sdk-boundary.mjs` enforces that boundary; `scripts/test-mcp-sdk-boundary-policy.mjs` mutation-tests the checker.
 - `scripts/probe-mcp-sdk-compatibility.mjs` verifies the exact SDK/core package identities and the public/behavioral surfaces the adapter relies on. It also runs `npm view ... dist-tags --json`, so this verification step requires registry network access.

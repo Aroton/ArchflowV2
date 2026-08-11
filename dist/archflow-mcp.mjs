@@ -2243,7 +2243,7 @@ var require_resolve2 = __commonJS({
     }
     function getFullPath(resolver, id5 = "", normalize) {
       if (normalize !== false)
-        id5 = normalizeId2(id5);
+        id5 = normalizeId(id5);
       const p = resolver.parse(id5);
       return _getFullPath(resolver, p);
     }
@@ -2254,12 +2254,12 @@ var require_resolve2 = __commonJS({
     }
     exports._getFullPath = _getFullPath;
     var TRAILING_SLASH_HASH = /#\/?$/;
-    function normalizeId2(id5) {
+    function normalizeId(id5) {
       return id5 ? id5.replace(TRAILING_SLASH_HASH, "") : "";
     }
-    exports.normalizeId = normalizeId2;
+    exports.normalizeId = normalizeId;
     function resolveUrl(resolver, baseId, id5) {
-      id5 = normalizeId2(id5);
+      id5 = normalizeId(id5);
       return resolver.resolve(baseId, id5);
     }
     exports.resolveUrl = resolveUrl;
@@ -2268,7 +2268,7 @@ var require_resolve2 = __commonJS({
       if (typeof schema == "boolean")
         return {};
       const { schemaId, uriResolver } = this.opts;
-      const schId = normalizeId2(schema[schemaId] || baseId);
+      const schId = normalizeId(schema[schemaId] || baseId);
       const baseIds = { "": schId };
       const pathPrefix = getFullPath(uriResolver, schId, false);
       const localRefs = {};
@@ -2285,7 +2285,7 @@ var require_resolve2 = __commonJS({
         baseIds[jsonPtr] = innerBaseId;
         function addRef(ref) {
           const _resolve = this.opts.uriResolver.resolve;
-          ref = normalizeId2(innerBaseId ? _resolve(innerBaseId, ref) : ref);
+          ref = normalizeId(innerBaseId ? _resolve(innerBaseId, ref) : ref);
           if (schemaRefs.has(ref))
             throw ambiguos(ref);
           schemaRefs.add(ref);
@@ -2294,7 +2294,7 @@ var require_resolve2 = __commonJS({
             schOrRef = this.refs[schOrRef];
           if (typeof schOrRef == "object") {
             checkAmbiguosRef(sch, schOrRef.schema, ref);
-          } else if (ref !== normalizeId2(fullPath)) {
+          } else if (ref !== normalizeId(fullPath)) {
             if (ref[0] === "#") {
               checkAmbiguosRef(sch, localRefs[ref], ref);
               localRefs[ref] = sch;
@@ -15977,8 +15977,7 @@ async function runMcpProcess(bindings, start) {
 }
 
 // src/mcp/sdk-adapter.ts
-import { Buffer as Buffer3 } from "node:buffer";
-import { isDeepStrictEqual as isDeepStrictEqual8 } from "node:util";
+import { Buffer as Buffer2 } from "node:buffer";
 
 // node_modules/@modelcontextprotocol/server/dist/chunk-Br0eD_fh.mjs
 var __create2 = Object.create;
@@ -37805,7 +37804,7 @@ var require_resolve = /* @__PURE__ */ __commonJSMin(((exports) => {
     return count;
   }
   function getFullPath(resolver, id5 = "", normalize) {
-    if (normalize !== false) id5 = normalizeId2(id5);
+    if (normalize !== false) id5 = normalizeId(id5);
     return _getFullPath(resolver, resolver.parse(id5));
   }
   exports.getFullPath = getFullPath;
@@ -37814,12 +37813,12 @@ var require_resolve = /* @__PURE__ */ __commonJSMin(((exports) => {
   }
   exports._getFullPath = _getFullPath;
   const TRAILING_SLASH_HASH = /#\/?$/;
-  function normalizeId2(id5) {
+  function normalizeId(id5) {
     return id5 ? id5.replace(TRAILING_SLASH_HASH, "") : "";
   }
-  exports.normalizeId = normalizeId2;
+  exports.normalizeId = normalizeId;
   function resolveUrl(resolver, baseId, id5) {
-    id5 = normalizeId2(id5);
+    id5 = normalizeId(id5);
     return resolver.resolve(baseId, id5);
   }
   exports.resolveUrl = resolveUrl;
@@ -37827,7 +37826,7 @@ var require_resolve = /* @__PURE__ */ __commonJSMin(((exports) => {
   function getSchemaRefs(schema, baseId) {
     if (typeof schema == "boolean") return {};
     const { schemaId, uriResolver } = this.opts;
-    const schId = normalizeId2(schema[schemaId] || baseId);
+    const schId = normalizeId(schema[schemaId] || baseId);
     const baseIds = { "": schId };
     const pathPrefix = getFullPath(uriResolver, schId, false);
     const localRefs = {};
@@ -37842,13 +37841,13 @@ var require_resolve = /* @__PURE__ */ __commonJSMin(((exports) => {
       baseIds[jsonPtr] = innerBaseId;
       function addRef(ref) {
         const _resolve = this.opts.uriResolver.resolve;
-        ref = normalizeId2(innerBaseId ? _resolve(innerBaseId, ref) : ref);
+        ref = normalizeId(innerBaseId ? _resolve(innerBaseId, ref) : ref);
         if (schemaRefs.has(ref)) throw ambiguos(ref);
         schemaRefs.add(ref);
         let schOrRef = this.refs[ref];
         if (typeof schOrRef == "string") schOrRef = this.refs[schOrRef];
         if (typeof schOrRef == "object") checkAmbiguosRef(sch, schOrRef.schema, ref);
-        else if (ref !== normalizeId2(fullPath)) if (ref[0] === "#") {
+        else if (ref !== normalizeId(fullPath)) if (ref[0] === "#") {
           checkAmbiguosRef(sch, localRefs[ref], ref);
           localRefs[ref] = sch;
         } else this.refs[ref] = fullPath;
@@ -57313,373 +57312,6 @@ function assertAuthenticToolBoundaryOutcome(value) {
   }
 }
 
-// src/mcp/session.ts
-import { Buffer as Buffer2 } from "node:buffer";
-var JSON_RPC = "2.0";
-var MAX_SEEN_IDS = 65536;
-var MAX_SEEN_ID_BYTES = 10 * 1024 * 1024;
-var REQUEST_KEYS = /* @__PURE__ */ new Set(["jsonrpc", "id", "method", "params"]);
-var NOTIFICATION_KEYS = /* @__PURE__ */ new Set(["jsonrpc", "method", "params"]);
-var LIST_KEYS = /* @__PURE__ */ new Set(["_meta"]);
-var CALL_KEYS = /* @__PURE__ */ new Set(["_meta", "task", "name", "arguments"]);
-function deepFreeze4(value) {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const child of Object.values(value)) deepFreeze4(child);
-    Object.freeze(value);
-  }
-  return value;
-}
-function copiedObject(value) {
-  return deepFreeze4(structuredClone(value));
-}
-function plainObject(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  try {
-    assertPlainJson(value, "JSON-RPC message");
-    return true;
-  } catch {
-    return false;
-  }
-}
-function hasOnlyKeys(value, allowed) {
-  return Object.keys(value).every((key) => allowed.has(key));
-}
-function normalizeId(value) {
-  if (typeof value === "string") return value;
-  if (typeof value !== "number" || !Number.isSafeInteger(value)) return void 0;
-  return Object.is(value, -0) ? 0 : value;
-}
-function idKey(id5) {
-  return typeof id5 === "string" ? `s:${id5}` : `n:${id5}`;
-}
-function errorMessage(id5, code, message, data) {
-  const error51 = { code, message };
-  if (data !== void 0) error51.data = data;
-  return deepFreeze4({ jsonrpc: JSON_RPC, id: id5, error: deepFreeze4(error51) });
-}
-function direct(message) {
-  return [deepFreeze4({ kind: "send", source: "direct", message })];
-}
-function invalidRequest(id5) {
-  return direct(errorMessage(id5, -32600, "Invalid Request"));
-}
-function invalidParams(id5) {
-  return direct(errorMessage(id5, -32602, "Invalid params"));
-}
-function methodNotFound(id5) {
-  return direct(errorMessage(id5, -32601, "Method not found"));
-}
-function limits(options) {
-  const supplied = options.limits ?? {};
-  const bounded = (value, maximum, label) => {
-    const selected = value ?? maximum;
-    if (!Number.isSafeInteger(selected) || selected < 1 || selected > maximum) {
-      throw new TypeError(`${label} must be a positive safe integer no greater than ${maximum}`);
-    }
-    return selected;
-  };
-  return {
-    seenIds: bounded(supplied.seenIds, MAX_SEEN_IDS, "seen ID limit"),
-    seenIdBytes: bounded(supplied.seenIdBytes, MAX_SEEN_ID_BYTES, "seen ID byte limit"),
-    internalId: bounded(supplied.internalId, Number.MAX_SAFE_INTEGER, "internal ID limit")
-  };
-}
-function createSessionController(options) {
-  if (!plainObject(options)) throw new TypeError("session options must be a plain object");
-  if (typeof options.connectionId !== "string") throw new TypeError("a connection ID is required");
-  createProtocolError("INITIALIZATION_REPEATED", { connection_id: options.connectionId });
-  const caps = limits(options);
-  const seen = /* @__PURE__ */ new Set();
-  const byToken = /* @__PURE__ */ new Map();
-  const byInternalId = /* @__PURE__ */ new Map();
-  const byExternalId = /* @__PURE__ */ new Map();
-  const pendingCancellations = /* @__PURE__ */ new Map();
-  let currentState = "PRE_INIT";
-  let seenBytes = 0;
-  let nextInternalId = 1;
-  const fatal = () => {
-    if (currentState === "CLOSING" || currentState === "CLOSED") return [];
-    currentState = "CLOSING";
-    byToken.clear();
-    byInternalId.clear();
-    byExternalId.clear();
-    pendingCancellations.clear();
-    return [deepFreeze4({ kind: "protocol-fatal" })];
-  };
-  const admitId = (id5) => {
-    const key = idKey(id5);
-    if (seen.has(key)) return "seen";
-    const bytes = Buffer2.byteLength(key, "utf8");
-    if (seen.size >= caps.seenIds || seenBytes + bytes > caps.seenIdBytes) return "fatal";
-    seen.add(key);
-    seenBytes += bytes;
-    return "new";
-  };
-  const allocate = (externalId, method, route, nameCandidate = deepFreeze4({ present: false }), argumentsCandidate = deepFreeze4({ present: false })) => {
-    if (nextInternalId > caps.internalId || !Number.isSafeInteger(nextInternalId)) return void 0;
-    const internalId = nextInternalId;
-    nextInternalId += 1;
-    const token = `request-${internalId}`;
-    const record3 = {
-      token,
-      externalId,
-      internalId,
-      method,
-      route,
-      nameCandidate,
-      argumentsCandidate,
-      state: "executing",
-      initializeMutated: false
-    };
-    byToken.set(token, record3);
-    byInternalId.set(internalId, record3);
-    byExternalId.set(idKey(externalId), record3);
-    return record3;
-  };
-  const forward = (record3, message) => {
-    const rewritten = copiedObject({ ...message, id: record3.internalId });
-    if (record3.route === "tools-call") {
-      return [deepFreeze4({
-        kind: "forward-sdk",
-        route: "tools-call",
-        message: rewritten,
-        requestToken: record3.token,
-        externalId: record3.externalId,
-        internalId: record3.internalId,
-        nameCandidate: record3.nameCandidate,
-        argumentsCandidate: record3.argumentsCandidate
-      })];
-    }
-    return [deepFreeze4({
-      kind: "forward-sdk",
-      route: record3.route,
-      message: rewritten,
-      requestToken: record3.token,
-      externalId: record3.externalId,
-      internalId: record3.internalId
-    })];
-  };
-  const acceptRequest = (message) => {
-    const normalizedId = normalizeId(message.id);
-    if (message.jsonrpc !== JSON_RPC || typeof message.method !== "string" || normalizedId === void 0) {
-      return invalidRequest(null);
-    }
-    const idAdmission = admitId(normalizedId);
-    if (idAdmission === "seen") return invalidRequest(null);
-    if (idAdmission === "fatal") return fatal();
-    if (!hasOnlyKeys(message, REQUEST_KEYS)) return invalidRequest(normalizedId);
-    const method = message.method;
-    if (method === "initialize") {
-      if (currentState !== "PRE_INIT") {
-        const error51 = authenticateProtocolError(createProtocolError("INITIALIZATION_REPEATED", {
-          connection_id: options.connectionId
-        }));
-        return direct(errorMessage(normalizedId, -32004, "INITIALIZATION_REPEATED", error51.value));
-      }
-      const record3 = allocate(normalizedId, method, "initialize");
-      if (record3 === void 0) return fatal();
-      currentState = "INITIALIZING";
-      return forward(record3, message);
-    }
-    if (currentState === "PRE_INIT") return invalidRequest(normalizedId);
-    if (method === "ping") {
-      const record3 = allocate(normalizedId, method, "ping");
-      return record3 === void 0 ? fatal() : forward(record3, message);
-    }
-    if (method === "tools/list") {
-      if (currentState !== "READY") return invalidRequest(normalizedId);
-      if (Object.hasOwn(message, "params")) {
-        if (!plainObject(message.params) || !hasOnlyKeys(message.params, LIST_KEYS)) return invalidParams(normalizedId);
-      }
-      const record3 = allocate(normalizedId, method, "tools-list");
-      return record3 === void 0 ? fatal() : forward(record3, message);
-    }
-    if (method === "tools/call") {
-      if (currentState !== "READY") return invalidRequest(normalizedId);
-      if (!plainObject(message.params) || !hasOnlyKeys(message.params, CALL_KEYS)) return invalidParams(normalizedId);
-      const params = message.params;
-      if (typeof params.name !== "string") return invalidParams(normalizedId);
-      const nameCandidate = deepFreeze4({ present: true, value: params.name });
-      const argumentsCandidate = Object.hasOwn(params, "arguments") ? deepFreeze4({ present: true, value: structuredClone(params.arguments) }) : deepFreeze4({ present: false });
-      if (argumentsCandidate.present && !plainObject(argumentsCandidate.value) && !isToolName(params.name)) {
-        return invalidParams(normalizedId);
-      }
-      const record3 = allocate(normalizedId, method, "tools-call", nameCandidate, argumentsCandidate);
-      if (record3 === void 0) return fatal();
-      let forwarded = message;
-      if (argumentsCandidate.present && !plainObject(argumentsCandidate.value)) {
-        forwarded = {
-          ...message,
-          params: { ...params, name: params.name, arguments: {} }
-        };
-      }
-      return forward(record3, forwarded);
-    }
-    return currentState === "READY" ? methodNotFound(normalizedId) : invalidRequest(normalizedId);
-  };
-  const acceptNotification = (message) => {
-    if (message.jsonrpc !== JSON_RPC || typeof message.method !== "string" || !hasOnlyKeys(message, NOTIFICATION_KEYS)) return [];
-    if (message.method === "notifications/initialized") {
-      if (currentState !== "INIT_RESPONSE_ACCEPTED") return [];
-      return [deepFreeze4({
-        kind: "forward-sdk",
-        message: copiedObject(message),
-        route: "notifications/initialized"
-      })];
-    }
-    if (message.method !== "notifications/cancelled" || !plainObject(message.params)) return [];
-    const target2 = normalizeId(message.params.requestId);
-    if (target2 === void 0) return [];
-    const record3 = byExternalId.get(idKey(target2));
-    if (record3 === void 0 || record3.route === "initialize" || record3.state !== "executing") return [];
-    const candidate = copiedObject(message);
-    pendingCancellations.set(record3.token, candidate);
-    return [deepFreeze4({
-      kind: "validate-cancellation",
-      message: candidate,
-      requestToken: record3.token,
-      externalId: record3.externalId,
-      internalId: record3.internalId
-    })];
-  };
-  const accept = (message) => {
-    if (currentState === "CLOSING" || currentState === "CLOSED") return [];
-    if (!plainObject(message)) return invalidRequest(null);
-    if (Object.hasOwn(message, "id") && Object.hasOwn(message, "method")) return acceptRequest(message);
-    if (!Object.hasOwn(message, "id") && Object.hasOwn(message, "method")) return acceptNotification(message);
-    if (Object.hasOwn(message, "id") && message.jsonrpc === JSON_RPC) return [];
-    return invalidRequest(null);
-  };
-  const acceptSdkEvent = (event) => {
-    if (event.kind === "initialized-accepted") {
-      if (currentState !== "INIT_RESPONSE_ACCEPTED") return [];
-      currentState = "READY";
-      return [deepFreeze4({ kind: "connection-ready" })];
-    }
-    const record3 = byToken.get(event.requestToken);
-    if (record3 === void 0 || record3.state === "response-queued") return [];
-    if (event.kind === "cancellation-accepted") {
-      const candidate = pendingCancellations.get(record3.token);
-      if (candidate === void 0 || record3.route === "initialize" || record3.state !== "executing") return [];
-      pendingCancellations.delete(record3.token);
-      record3.state = "cancelling";
-      const params = candidate.params;
-      return [deepFreeze4({
-        kind: "forward-sdk",
-        route: "cancel",
-        message: copiedObject({ ...candidate, params: { ...params, requestId: record3.internalId } }),
-        requestToken: record3.token,
-        internalId: record3.internalId
-      })];
-    }
-    if (event.kind === "initialize-mutated") {
-      if (record3.route === "initialize") record3.initializeMutated = true;
-      return [];
-    }
-    assertAuthenticToolBoundaryOutcome(event.outcome);
-    if (record3.route !== "tools-call") return fatal();
-    record3.outcome = event.outcome;
-    return [];
-  };
-  const isSdkEvent = (value) => {
-    if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-    try {
-      const candidate = value;
-      const kind = Object.getOwnPropertyDescriptor(candidate, "kind");
-      if (kind === void 0 || !("value" in kind)) return false;
-      if (kind.value === "initialized-accepted") return true;
-      const token = Object.getOwnPropertyDescriptor(candidate, "requestToken");
-      if (token === void 0 || !("value" in token)) return false;
-      if (typeof token.value !== "string") return false;
-      return kind.value === "initialize-mutated" || kind.value === "tool-boundary-outcome" || kind.value === "cancellation-accepted";
-    } catch {
-      return false;
-    }
-  };
-  const acceptSdkMessage = (message) => {
-    if (currentState === "CLOSING" || currentState === "CLOSED") return [];
-    if (isSdkEvent(message)) return acceptSdkEvent(message);
-    if (!plainObject(message)) return fatal();
-    const internalId = normalizeId(message.id);
-    if (typeof internalId !== "number" || internalId <= 0) return [];
-    const record3 = byInternalId.get(internalId);
-    if (record3 === void 0 || record3.state === "response-queued") return [];
-    const hasResult = Object.hasOwn(message, "result");
-    const hasError = Object.hasOwn(message, "error");
-    if (message.jsonrpc !== JSON_RPC || hasResult === hasError) return fatal();
-    let projected;
-    let source = "sdk";
-    if (record3.route === "initialize") {
-      if (hasError) {
-        if (record3.initializeMutated) return fatal();
-        projected = errorMessage(record3.externalId, -32602, "Invalid params");
-        record3.admissionTransition = "initialize-error";
-      } else {
-        projected = copiedObject({ jsonrpc: JSON_RPC, id: record3.externalId, result: message.result });
-        record3.admissionTransition = "initialize-success";
-      }
-    } else {
-      projected = copiedObject(hasResult ? { jsonrpc: JSON_RPC, id: record3.externalId, result: message.result } : { jsonrpc: JSON_RPC, id: record3.externalId, error: message.error });
-      record3.admissionTransition = "ordinary";
-      if (record3.route === "tools-call" && record3.outcome === void 0) {
-        projected = errorMessage(record3.externalId, -32603, "Internal error");
-        source = "fallback";
-      }
-    }
-    record3.state = "response-queued";
-    const expectedProjection = record3.outcome === void 0 ? void 0 : deepFreeze4({ kind: "tool-boundary", outcome: record3.outcome });
-    const action = {
-      kind: "send",
-      source,
-      message: projected,
-      requestToken: record3.token,
-      ...expectedProjection === void 0 ? {} : { expectedProjection }
-    };
-    return [deepFreeze4(action)];
-  };
-  const removeRecord = (record3) => {
-    byToken.delete(record3.token);
-    byInternalId.delete(record3.internalId);
-    byExternalId.delete(idKey(record3.externalId));
-    pendingCancellations.delete(record3.token);
-  };
-  const onSendAdmitted = (requestToken) => {
-    if (currentState === "CLOSING" || currentState === "CLOSED" || requestToken === void 0) return;
-    const record3 = byToken.get(requestToken);
-    if (record3 === void 0 || record3.state !== "response-queued") return;
-    const transition = record3.admissionTransition;
-    removeRecord(record3);
-    if (transition === "initialize-success" && currentState === "INITIALIZING") {
-      currentState = "INIT_RESPONSE_ACCEPTED";
-    } else if (transition === "initialize-error" && currentState === "INITIALIZING") {
-      currentState = "PRE_INIT";
-    }
-  };
-  const onRouteSettled = (requestToken) => {
-    if (currentState === "CLOSING" || currentState === "CLOSED") return;
-    const record3 = byToken.get(requestToken);
-    if (record3?.state === "cancelling") removeRecord(record3);
-  };
-  const controller = {
-    get state() {
-      return currentState;
-    },
-    accept,
-    acceptSdkMessage,
-    onSendAdmitted,
-    onRouteSettled,
-    close: () => {
-      if (currentState === "CLOSED") return;
-      currentState = "CLOSED";
-      byToken.clear();
-      byInternalId.clear();
-      byExternalId.clear();
-      pendingCancellations.clear();
-    }
-  };
-  return Object.freeze(controller);
-}
-
 // src/contracts/schemas/v1/mcp-tools.schema.json
 var mcp_tools_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -61953,19 +61585,19 @@ function standaloneSchema(name, member) {
   );
   const fragment = project(schemaFragment(name, member), "mcp-tools");
   const advertised = member === "input" ? mergedInputFragment(name, fragment, projected) : fragment;
-  return deepFreeze5({
+  return deepFreeze4({
     $schema: JSON_SCHEMA_2020_12,
     ...advertised,
     type: "object",
     $defs: reachableDefinitions(advertised, projected)
   });
 }
-function deepFreeze5(value) {
+function deepFreeze4(value) {
   if (typeof value !== "object" && typeof value !== "function" || value === null || Object.isFrozen(value)) return value;
-  for (const child of Object.values(value)) deepFreeze5(child);
+  for (const child of Object.values(value)) deepFreeze4(child);
   return Object.freeze(value);
 }
-var ADVERTISED_TOOL_CATALOGUE = deepFreeze5(
+var ADVERTISED_TOOL_CATALOGUE = deepFreeze4(
   TOOL_NAMES.map((name) => ({
     name,
     inputSchema: standaloneSchema(name, "input"),
@@ -61976,7 +61608,7 @@ var ADVERTISED_TOOL_CATALOGUE = deepFreeze5(
 // src/mcp/sdk-adapter.ts
 var PROTOCOL_VERSION = "2025-11-25";
 var CONNECTION_ID = "connection-1";
-var JSON_RPC2 = "2.0";
+var JSON_RPC = "2.0";
 function deferred3() {
   let resolve2;
   const promise2 = new Promise((settle) => {
@@ -61988,7 +61620,7 @@ function isObject3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function canonicalMessage(value) {
-  const message = { jsonrpc: JSON_RPC2 };
+  const message = { jsonrpc: JSON_RPC };
   if (Object.hasOwn(value, "id")) message.id = value.id;
   if (Object.hasOwn(value, "result")) {
     message.result = value.result;
@@ -62001,7 +61633,7 @@ function canonicalMessage(value) {
   } else {
     throw new TypeError("a response must contain a result or error");
   }
-  return Buffer3.from(`${JSON.stringify(message)}
+  return Buffer2.from(`${JSON.stringify(message)}
 `, "utf8");
 }
 var PROTOCOL_CODES = Object.freeze({
@@ -62014,37 +61646,26 @@ function protocolCode(error51) {
   return PROTOCOL_CODES[error51.code];
 }
 function protocolResponse(id5, error51) {
-  return { jsonrpc: JSON_RPC2, id: id5, error: { code: protocolCode(error51), message: error51.code, data: error51 } };
-}
-function internalResponse(id5) {
-  return { jsonrpc: JSON_RPC2, id: id5, error: { code: -32603, message: "Internal error" } };
+  return { jsonrpc: JSON_RPC, id: id5, error: { code: protocolCode(error51), message: error51.code, data: error51 } };
 }
 function wireResult(outcome) {
   return JSON.parse(JSON.stringify(outcome.result));
 }
-function projectOutcome2(server, id5, expected) {
-  const outcome = expected.outcome;
-  if (outcome.kind === "protocol-error") return protocolResponse(id5, outcome.error.value);
-  const descriptor = ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === outcome.tool);
-  if (descriptor === void 0) throw new TypeError("the projected tool is not advertised");
-  const result = outcome.result;
-  const structuredContent = wireResult(outcome);
-  const projected = server.projectCallToolResult({
-    structuredContent,
-    content: [{ type: "text", text: JSON.stringify(structuredContent) }],
-    isError: !result.ok
-  }, descriptor.outputSchema);
-  return { jsonrpc: JSON_RPC2, id: id5, result: projected };
+function restoreProtocolErrorCode(message) {
+  const error51 = message.error;
+  if (!isObject3(error51) || !isObject3(error51.data)) return message;
+  const name = error51.message;
+  if (typeof name !== "string" || !Object.hasOwn(PROTOCOL_CODES, name)) return message;
+  if (error51.data.code !== name) return message;
+  const code = PROTOCOL_CODES[name];
+  if (error51.code === code) return message;
+  return { ...message, error: { ...error51, code } };
 }
-function matchesExpectedProjection(server, message, expected) {
-  const outcome = expected.outcome;
-  if (outcome.kind === "protocol-error") {
-    const error51 = message.error;
-    return isObject3(error51) && error51.message === outcome.error.value.code && isDeepStrictEqual8(error51.data, outcome.error.value);
-  }
-  if (!Object.hasOwn(message, "result")) return false;
-  const expectedMessage = projectOutcome2(server, 0, expected);
-  return isDeepStrictEqual8(message.result, expectedMessage.result);
+function requestKey(id5) {
+  return typeof id5 === "string" ? `s:${id5}` : `n:${id5}`;
+}
+function externalRequestId(id5) {
+  return typeof id5 === "number" && Object.is(id5, -0) ? 0 : id5;
 }
 async function startMcpRuntime(options) {
   if (!isObject3(options) || typeof options.workingDirectory !== "string") {
@@ -62052,7 +61673,6 @@ async function startMcpRuntime(options) {
   }
   const handlers = options.handlers ?? {};
   const boundary = createToolBoundary(handlers);
-  const session = createSessionController({ connectionId: CONNECTION_ID });
   const startup = connectionContextFactory.captureStartup({
     connection_id: CONNECTION_ID,
     startup_repository_candidate: { working_directory: options.workingDirectory }
@@ -62063,10 +61683,12 @@ async function startMcpRuntime(options) {
   );
   server.registerCapabilities({ tools: {} });
   const framer = createJsonLineFramer();
-  const forwardedCalls = /* @__PURE__ */ new Map();
-  const sdkValidationCandidates = /* @__PURE__ */ new Set();
+  const requestTokens = /* @__PURE__ */ new Map();
   const closed = deferred3();
   let connection;
+  let nextRequestNumber = 1;
+  let initializeAccepted = false;
+  let initializeInFlightKey;
   let closing = false;
   let terminated = false;
   let processing = false;
@@ -62095,204 +61717,108 @@ async function startMcpRuntime(options) {
       void terminate("output-error");
     }
   );
-  const enqueue = (source, message, requestToken, expectedProjection) => {
+  const enqueue = (source, message, requestToken) => {
     if (closing) return Promise.reject(new Error("MCP runtime is closing"));
-    let selected = message;
     try {
-      if (expectedProjection !== void 0) {
-        const id5 = message.id;
-        if (typeof id5 !== "string" && typeof id5 !== "number") throw new TypeError("missing response ID");
-        selected = matchesExpectedProjection(server, message, expectedProjection) ? projectOutcome2(server, id5, expectedProjection) : internalResponse(id5);
-      }
-      const receipt = queue.enqueue({ source, frame: canonicalMessage(selected), ...requestToken === void 0 ? {} : { requestToken } });
+      const frame = canonicalMessage(message);
+      const id5 = message.id;
+      const settlesInitialize = initializeInFlightKey !== void 0 && (typeof id5 === "string" || typeof id5 === "number") && requestKey(id5) === initializeInFlightKey;
+      const initializeSucceeded = Object.hasOwn(message, "result");
+      const receipt = queue.enqueue({ source, frame, ...requestToken === void 0 ? {} : { requestToken } });
       void receipt.admitted.then(
         () => {
-          session.onSendAdmitted(requestToken);
+          if (settlesInitialize && initializeInFlightKey !== void 0) {
+            initializeInFlightKey = void 0;
+            if (initializeSucceeded) initializeAccepted = true;
+          }
           drainFrames();
-        },
-        () => void 0
-      );
-      void receipt.completed.then(
-        () => {
-          if (requestToken !== void 0) session.onRouteSettled(requestToken);
         },
         () => void 0
       );
       return receipt.completed;
     } catch {
-      if (requestToken !== void 0 && typeof message.id !== "undefined") {
-        try {
-          const fallback = queue.enqueue({ source: "fallback", frame: canonicalMessage(internalResponse(message.id)), requestToken });
-          void fallback.admitted.then(() => session.onSendAdmitted(requestToken), () => void 0);
-          void fallback.completed.then(() => session.onRouteSettled(requestToken), () => void 0);
-          return fallback.completed;
-        } catch {
-        }
-      }
       void terminate("protocol-fatal");
-      return Promise.reject(new Error("MCP response projection failed"));
-    }
-  };
-  const applyActions = (actions) => {
-    if (closing) return;
-    for (const action of actions) {
-      if (closing) return;
-      if (action.kind === "protocol-fatal") {
-        void terminate("protocol-fatal");
-      } else if (action.kind === "connection-ready") {
-        const client = server.getClientVersion();
-        const protocolVersion = server.getNegotiatedProtocolVersion();
-        if (client === void 0 || protocolVersion === void 0) {
-          void terminate("protocol-fatal");
-          return;
-        }
-        try {
-          connection = startup.initialize({
-            client,
-            host: deriveHostIdentity(client),
-            protocol_version: protocolVersion
-          });
-        } catch {
-          void terminate("protocol-fatal");
-        }
-      } else if (action.kind === "send") {
-        void enqueue(action.source, action.message, action.requestToken, action.expectedProjection).catch(() => void 0);
-      } else if (action.kind === "validate-cancellation") {
-        if (specTypeSchemas.CancelledNotification["~standard"].validate(action.message).issues === void 0) {
-          applyActions(session.acceptSdkMessage({
-            kind: "cancellation-accepted",
-            requestToken: action.requestToken
-          }));
-        }
-      } else {
-        if (action.route === "tools-call") {
-          forwardedCalls.set(action.internalId, {
-            requestToken: action.requestToken,
-            externalId: action.externalId,
-            nameCandidate: action.nameCandidate,
-            argumentsCandidate: action.argumentsCandidate
-          });
-        }
-        if (action.route === "tools-call" || action.route === "tools-list") {
-          sdkValidationCandidates.add(action.internalId);
-          const schema = action.route === "tools-call" ? specTypeSchemas.CallToolRequest : specTypeSchemas.ListToolsRequest;
-          if (schema["~standard"].validate(action.message).issues !== void 0) {
-            sdkValidationCandidates.delete(action.internalId);
-            forwardedCalls.delete(action.internalId);
-            const rejected = session.acceptSdkMessage({
-              jsonrpc: JSON_RPC2,
-              id: action.internalId,
-              error: { code: -32602, message: "Invalid params" }
-            });
-            for (const response of rejected) {
-              if (response.kind === "send") {
-                void enqueue("sdk", {
-                  jsonrpc: JSON_RPC2,
-                  id: response.message.id,
-                  error: { code: -32602, message: "Invalid params" }
-                }, response.requestToken).catch(() => void 0);
-              } else {
-                applyActions([response]);
-              }
-            }
-            continue;
-          }
-        }
-        transport.onmessage?.(action.message);
-      }
+      return Promise.reject(new Error("MCP response canonicalization failed"));
     }
   };
   const transport = {
     start: async () => void 0,
     send: async (message) => {
       if (closing) throw new Error("MCP runtime is closing");
-      const rawMessage = message;
-      const id5 = Object.hasOwn(rawMessage, "id") ? rawMessage.id : void 0;
-      if (server.getNegotiatedProtocolVersion() !== void 0 && typeof id5 === "number") {
-        const token = `request-${id5}`;
-        applyActions(session.acceptSdkMessage({ kind: "initialize-mutated", requestToken: token }));
+      const raw = message;
+      const id5 = Object.hasOwn(raw, "id") ? raw.id : void 0;
+      let requestToken;
+      if (typeof id5 === "string" || typeof id5 === "number") {
+        const key = requestKey(id5);
+        requestToken = requestTokens.get(key);
+        if (requestToken !== void 0) requestTokens.delete(key);
       }
-      const actions = session.acceptSdkMessage(message);
-      const completions = [];
-      for (const action of actions) {
-        if (action.kind === "send") {
-          if (typeof id5 === "number" && sdkValidationCandidates.delete(id5) && Object.hasOwn(rawMessage, "error")) {
-            forwardedCalls.delete(id5);
-            completions.push(enqueue("sdk", {
-              jsonrpc: JSON_RPC2,
-              id: action.message.id,
-              error: { code: -32602, message: "Invalid params" }
-            }, action.requestToken));
-          } else {
-            completions.push(enqueue(action.source, action.message, action.requestToken, action.expectedProjection));
-          }
-        } else {
-          applyActions([action]);
-        }
-      }
-      await Promise.all(completions);
+      await enqueue("sdk", restoreProtocolErrorCode(raw), requestToken);
+      if (eofPending && !closing && requestTokens.size === 0) drainFrames();
     },
     close: async () => {
       transport.onclose?.();
     }
   };
-  server.setRequestHandler("tools/list", async (_request, ctx) => {
-    if (typeof ctx.mcpReq.id === "number") sdkValidationCandidates.delete(ctx.mcpReq.id);
-    const token = `request-${String(ctx.mcpReq.id)}`;
+  server.setRequestHandler("tools/list", async () => ({ tools: structuredClone(ADVERTISED_TOOL_CATALOGUE) }));
+  server.setRequestHandler("tools/call", async (request, ctx) => {
+    const id5 = ctx.mcpReq.id;
+    const requestToken = requestTokens.get(requestKey(id5)) ?? `request-${nextRequestNumber++}`;
+    ctx.mcpReq.signal.addEventListener("abort", () => {
+      const key = requestKey(id5);
+      if (requestTokens.delete(key) && eofPending && !closing && requestTokens.size === 0) drainFrames();
+    }, { once: true });
+    if (connection === void 0) throw new ProtocolError(-32603, "Internal error");
+    const params = request.params;
+    const args2 = Object.hasOwn(params, "arguments") ? params.arguments : void 0;
+    let outcome;
     try {
-      return { tools: structuredClone(ADVERTISED_TOOL_CATALOGUE) };
-    } finally {
-      session.onRouteSettled(token);
-    }
-  });
-  server.setRequestHandler("tools/call", async (_request, ctx) => {
-    const internalId = ctx.mcpReq.id;
-    if (typeof internalId === "number") sdkValidationCandidates.delete(internalId);
-    const record3 = typeof internalId === "number" ? forwardedCalls.get(internalId) : void 0;
-    if (record3 === void 0 || connection === void 0 || !record3.nameCandidate.present) {
+      const invocation = createInvocationContext(connection, {
+        invocation_id: requestToken,
+        transport_metadata: { request_id: externalRequestId(id5), operation: "tools/call" }
+      }, ctx.mcpReq.signal);
+      outcome = await boundary.invoke(params.name, args2, invocation);
+      assertAuthenticToolBoundaryOutcome(outcome);
+    } catch {
       throw new ProtocolError(-32603, "Internal error");
     }
-    try {
-      const args2 = record3.argumentsCandidate.present ? record3.argumentsCandidate.value : void 0;
-      const invocation = createInvocationContext(connection, {
-        invocation_id: record3.requestToken,
-        transport_metadata: { request_id: record3.externalId, operation: "tools/call" }
-      }, ctx.mcpReq.signal);
-      const outcome = await boundary.invoke(record3.nameCandidate.value, args2, invocation);
-      applyActions(session.acceptSdkMessage({
-        kind: "tool-boundary-outcome",
-        requestToken: record3.requestToken,
-        outcome
-      }));
-      if (outcome.kind === "protocol-error") {
-        const error51 = outcome.error.value;
-        throw new ProtocolError(protocolCode(error51), error51.code, error51);
-      }
-      const descriptor = ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === outcome.tool);
-      if (descriptor === void 0) throw new ProtocolError(-32603, "Internal error");
-      const result = outcome.result;
-      const structuredContent = wireResult(outcome);
-      return server.projectCallToolResult({
-        structuredContent,
-        content: [{ type: "text", text: JSON.stringify(structuredContent) }],
-        isError: !result.ok
-      }, descriptor.outputSchema);
-    } finally {
-      forwardedCalls.delete(Number(internalId));
-      session.onRouteSettled(record3.requestToken);
+    if (outcome.kind === "protocol-error") {
+      const error51 = outcome.error.value;
+      throw new ProtocolError(protocolCode(error51), error51.code, error51);
     }
+    const descriptor = ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === outcome.tool);
+    if (descriptor === void 0) throw new ProtocolError(-32603, "Internal error");
+    const structuredContent = wireResult(outcome);
+    return server.projectCallToolResult({
+      structuredContent,
+      content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+      isError: !outcome.result.ok
+    }, descriptor.outputSchema);
   });
   function handleFrame(frame) {
     if (closing) return;
     if (frame.kind === "parse-error") {
-      void enqueue("direct", { jsonrpc: JSON_RPC2, id: null, error: { code: -32700, message: "Parse error" } }).catch(() => void 0);
+      void enqueue("direct", { jsonrpc: JSON_RPC, id: null, error: { code: -32700, message: "Parse error" } }).catch(() => void 0);
       if (frame.fatal) void terminate("protocol-fatal");
       return;
     }
-    applyActions(session.accept(frame.value));
+    const value = frame.value;
+    if (isJSONRPCRequest(value)) {
+      const request = value;
+      if (request.method === "initialize") {
+        if (initializeAccepted || initializeInFlightKey !== void 0) {
+          const repeated = createProtocolError("INITIALIZATION_REPEATED", { connection_id: CONNECTION_ID });
+          void enqueue("direct", protocolResponse(externalRequestId(request.id), repeated)).catch(() => void 0);
+          return;
+        }
+        initializeInFlightKey = requestKey(request.id);
+      }
+      requestTokens.set(requestKey(request.id), `request-${nextRequestNumber++}`);
+    }
+    transport.onmessage?.(value);
   }
   function drainFrames() {
-    if (processing || closing || queue.backpressured || session.state === "INITIALIZING") return;
+    if (processing || closing || queue.backpressured || initializeInFlightKey !== void 0) return;
     processing = true;
     try {
       const frame = framer.next();
@@ -62304,7 +61830,7 @@ async function startMcpRuntime(options) {
         if (final !== void 0) {
           handleFrame(final);
           queueMicrotask(drainFrames);
-        } else if (!closing) {
+        } else if (requestTokens.size === 0) {
           void terminate("input-eof");
         }
       }
@@ -62314,7 +61840,7 @@ async function startMcpRuntime(options) {
   }
   function onData(chunk) {
     if (closing) return;
-    const bytes = typeof chunk === "string" ? Buffer3.from(chunk, "utf8") : chunk;
+    const bytes = typeof chunk === "string" ? Buffer2.from(chunk, "utf8") : chunk;
     framer.append(bytes);
     drainFrames();
   }
@@ -62328,11 +61854,9 @@ async function startMcpRuntime(options) {
   async function terminate(reason2) {
     if (closePromise !== void 0) return closePromise;
     closing = true;
-    session.close();
     removeInputListeners();
     options.input.pause();
-    forwardedCalls.clear();
-    sdkValidationCandidates.clear();
+    requestTokens.clear();
     closePromise = (async () => {
       let closeFailed = false;
       try {
@@ -62354,8 +61878,22 @@ async function startMcpRuntime(options) {
     return closePromise;
   }
   server.oninitialized = () => {
-    applyActions(session.acceptSdkMessage({ kind: "initialized-accepted" }));
-    drainFrames();
+    if (closing || connection !== void 0) return;
+    const client = server.getClientVersion();
+    const protocolVersion = server.getNegotiatedProtocolVersion();
+    if (client === void 0 || protocolVersion === void 0) {
+      void terminate("protocol-fatal");
+      return;
+    }
+    try {
+      connection = startup.initialize({
+        client,
+        host: deriveHostIdentity(client),
+        protocol_version: protocolVersion
+      });
+    } catch {
+      void terminate("protocol-fatal");
+    }
   };
   await server.connect(transport);
   options.input.on("data", onData);
@@ -62376,7 +61914,7 @@ import { stat as stat2, writeFile } from "node:fs/promises";
 import { join as join6 } from "node:path";
 
 // src/state/transaction.ts
-import { isDeepStrictEqual as isDeepStrictEqual9 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual8 } from "node:util";
 import { isAbsolute as isAbsolute3, relative as relative4 } from "node:path";
 
 // src/state/maintenance-roots.ts
@@ -63005,13 +62543,13 @@ function materializeDraft(value) {
   return structuredClone(value);
 }
 function sameCheckpoint(left, right) {
-  return isDeepStrictEqual9(left, right);
+  return isDeepStrictEqual8(left, right);
 }
 function assertPreserved(current, next) {
   if (next.task_id !== current.task_id || next.repository_identity_digest !== current.repository_identity_digest || next.initialization_digest !== current.initialization_digest || next.config_digest !== current.config_digest || next.workflow_digest !== current.workflow_digest || next.constitution_digest !== current.constitution_digest || next.policy_base_commit !== current.policy_base_commit) {
     throw new TypeError("next state draft changed a transaction-substrate identity or pin");
   }
-  if (!sameCheckpoint(next.adopted_checkpoint, current.adopted_checkpoint) || !isDeepStrictEqual9(next.open_gate, current.open_gate) || !isDeepStrictEqual9(next.approvals, current.approvals) || !isDeepStrictEqual9(next.waivers, current.waivers)) {
+  if (!sameCheckpoint(next.adopted_checkpoint, current.adopted_checkpoint) || !isDeepStrictEqual8(next.open_gate, current.open_gate) || !isDeepStrictEqual8(next.approvals, current.approvals) || !isDeepStrictEqual8(next.waivers, current.waivers)) {
     throw new TypeError("next state draft changed gate authority or the adopted checkpoint");
   }
 }
@@ -63178,7 +62716,7 @@ function materializePlan(value) {
   if (hasInstallation) expected.push("result_installation");
   expected.sort();
   const keys = Reflect.ownKeys(value);
-  if (keys.some((key) => typeof key !== "string") || !isDeepStrictEqual9(keys.sort(), expected)) {
+  if (keys.some((key) => typeof key !== "string") || !isDeepStrictEqual8(keys.sort(), expected)) {
     throw new TypeError("prepared transaction has unexpected or missing slots");
   }
   const expectation = ownDataField2(value, "expectation", "prepared transaction");
@@ -63228,7 +62766,7 @@ function validateInstallationFacts(request, current, identified, nextState, fact
   const manifest = facts.prepared.manifest.value;
   const reference = facts.reference;
   const nextReference = nextState.authoritative_results.find((entry) => entry.phase_instance === reference.phase_instance && entry.step === reference.step);
-  if (!isDeepStrictEqual9(nextReference, reference)) {
+  if (!isDeepStrictEqual8(nextReference, reference)) {
     throw new TypeError("result installation reference does not match the prepared transaction");
   }
   if (reference.input_fingerprint !== identified.input_fingerprint) {
@@ -63676,13 +63214,13 @@ async function runStateTransaction(dependencies, request, prepare) {
 
 // src/contracts/internal/test-capabilities.ts
 function createReviewObservationCapability(binding) {
-  const copiedBinding = deepFreeze6(structuredClone(binding));
+  const copiedBinding = deepFreeze5(structuredClone(binding));
   const capability = Object.freeze({ kind: copiedBinding.kind });
   registerObservationCapability(capability, copiedBinding);
   return capability;
 }
 function createAdjudicationObservationCapability(binding) {
-  const copiedBinding = deepFreeze6(structuredClone(binding));
+  const copiedBinding = deepFreeze5(structuredClone(binding));
   const capability = Object.freeze({ kind: copiedBinding.kind });
   registerObservationCapability(capability, copiedBinding);
   return capability;
@@ -63690,7 +63228,7 @@ function createAdjudicationObservationCapability(binding) {
 function createVerifiedEvidenceReference(evidence) {
   const parsed = evidence.step === "adjudicate" ? parseAdjudicationEvidence(evidence) : parseReviewEvidence(evidence);
   const evidenceDigest = canonicalJsonDigest(parsed);
-  const verified = deepFreeze6({
+  const verified = deepFreeze5({
     evidence_digest: evidenceDigest,
     evidence: parsed
   });
@@ -63698,9 +63236,9 @@ function createVerifiedEvidenceReference(evidence) {
   registerVerifiedEvidence(verified, { kind, assurance: parsed.assurance });
   return verified;
 }
-function deepFreeze6(value) {
+function deepFreeze5(value) {
   if (value !== null && typeof value === "object") {
-    for (const nested of Object.values(value)) deepFreeze6(nested);
+    for (const nested of Object.values(value)) deepFreeze5(nested);
     Object.freeze(value);
   }
   return value;
@@ -65020,7 +64558,7 @@ function renderAdjudicationEvidence(value) {
 }
 
 // src/state/produce-subject.ts
-import { Buffer as Buffer4 } from "node:buffer";
+import { Buffer as Buffer3 } from "node:buffer";
 import { readFile as readFile3 } from "node:fs/promises";
 
 // src/repository/attributes.ts
@@ -65344,7 +64882,7 @@ function visibleBytes(bytes) {
   try {
     return Object.freeze({ encoding: "utf8", content: new TextDecoder("utf-8", { fatal: true }).decode(bytes) });
   } catch {
-    return Object.freeze({ encoding: "base64", content: Buffer4.from(bytes).toString("base64") });
+    return Object.freeze({ encoding: "base64", content: Buffer3.from(bytes).toString("base64") });
   }
 }
 function reviewChangeSide(desired, embed) {
@@ -65809,7 +65347,7 @@ async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
 }
 
 // src/state/transitions.ts
-import { isDeepStrictEqual as isDeepStrictEqual12 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual11 } from "node:util";
 
 // src/contracts/workflow.ts
 var phaseSchema2 = external_exports.object({
@@ -65838,7 +65376,7 @@ function sameJson(left, right) {
 }
 
 // src/state/gate-approvals.ts
-import { isDeepStrictEqual as isDeepStrictEqual11 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual10 } from "node:util";
 
 // src/contracts/durable-gate.ts
 var digest10 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
@@ -65879,7 +65417,7 @@ function parseActiveGate(value) {
 
 // src/state/gate-core.ts
 import { constants as fsConstants6 } from "node:fs";
-import { isDeepStrictEqual as isDeepStrictEqual10 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual9 } from "node:util";
 var DECISIONS = Object.freeze({
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
   "review-trigger": ["approve", "revise", "reject", "waiver-requested", "cancel"],
@@ -65995,7 +65533,7 @@ function parseInterface(value, request, supplemental2 = []) {
   if (request.context !== null && typeof request.context === "object" && "origin" in request.context) {
     const candidate = value;
     const context2 = request.context;
-    if (candidate.gate_id !== request.gate_id || candidate.task_id !== request.task_id || candidate.phase_instance !== request.phase_instance || candidate.subject_digest !== request.subject_digest || candidate.context_digest !== request.context_digest || !isDeepStrictEqual10(candidate.origin, context2.origin) || !isDeepStrictEqual10(candidate.scope, context2.origin.scope)) throw new TypeError("waiver decision does not bind origin");
+    if (candidate.gate_id !== request.gate_id || candidate.task_id !== request.task_id || candidate.phase_instance !== request.phase_instance || candidate.subject_digest !== request.subject_digest || candidate.context_digest !== request.context_digest || !isDeepStrictEqual9(candidate.origin, context2.origin) || !isDeepStrictEqual9(candidate.scope, context2.origin.scope)) throw new TypeError("waiver decision does not bind origin");
     return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, supplemental: supplemental2, outcome: "waiver-decided", granted: candidate.granted, scope: candidate.scope, origin: candidate.origin, notes: candidate.notes, human_provenance: candidate.human_provenance });
   }
   const envelope = parseGateDecisionEnvelope(value);
@@ -66029,7 +65567,7 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
     authority.repository_identity
   ).ok) return issue3("STATE_INVALID", current.value.value, "gate-approval-state-authority-mismatch");
   const durable = current.value.value.approvals.find((entry) => entry.gate_id === claimed.gate_id);
-  if (durable === void 0 || !isDeepStrictEqual11(durable, claimed)) {
+  if (durable === void 0 || !isDeepStrictEqual10(durable, claimed)) {
     return issue3("STATE_INVALID", current.value.value, "gate-approval-not-current");
   }
   const requestPath = await resolvePath7(
@@ -66248,7 +65786,7 @@ function planStateTransition(value) {
       input.constitution_result_reference
     )
   });
-  if (input.result_reference === void 0 && input.constitution_result_reference === void 0 && !isDeepStrictEqual12(draft.authoritative_results, input.current.authoritative_results)) {
+  if (input.result_reference === void 0 && input.constitution_result_reference === void 0 && !isDeepStrictEqual11(draft.authoritative_results, input.current.authoritative_results)) {
     throw new TypeError("transition planning changed authoritative results");
   }
   return ok15(draft);
@@ -66568,7 +66106,7 @@ function buildAdjudicationEnvelope(value) {
 }
 
 // src/review/pinned-context.ts
-import { Buffer as Buffer5 } from "node:buffer";
+import { Buffer as Buffer4 } from "node:buffer";
 import { readFile as readFile4 } from "node:fs/promises";
 import { join as join8, posix } from "node:path";
 var CAP_PRIORITY = [
@@ -66595,7 +66133,7 @@ function visibleContent(bytes) {
       content: new TextDecoder("utf-8", { fatal: true }).decode(bytes)
     });
   } catch {
-    return Object.freeze({ encoding: "base64", content: Buffer5.from(bytes).toString("base64") });
+    return Object.freeze({ encoding: "base64", content: Buffer4.from(bytes).toString("base64") });
   }
 }
 function pinnedContextEntry(kind, label, bytes) {
@@ -67208,7 +66746,7 @@ function requireApprovedUpstreamDigests(approvals, upstreamDigests) {
 }
 
 // src/state/gates.ts
-import { isDeepStrictEqual as isDeepStrictEqual13 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual12 } from "node:util";
 
 // src/state/gate-wait.ts
 import { constants as fsConstants7 } from "node:fs";
@@ -67384,7 +66922,7 @@ async function authenticateWaiverOrigin(dependencies, authority, context2) {
   if (!validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok || decision2.digest !== context2.origin.origin_decision_digest || decision2.value.outcome !== "decided" || decision2.value.envelope.payload.decision !== "waiver-requested") return issue3("CONTRACT_INVALID", void 0, "waiver-origin-decision-invalid");
   const payload = decision2.value.envelope.payload;
   const requestContext = request.value.context;
-  if (!("waiver_scope" in requestContext) || request.value.gate_id !== context2.origin.origin_gate_id || request.value.context_digest !== context2.origin.origin_context_digest || request.value.task_id !== context2.origin.task_id || request.value.phase_instance !== context2.origin.phase_instance || request.value.subject_digest !== context2.origin.subject_digest || request.value.current_evidence.set_digest !== context2.origin.current_evidence_set_digest || !isDeepStrictEqual13(payload.rule, context2.origin.rule) || !isDeepStrictEqual13(requestContext.waiver_scope, context2.origin.scope)) return issue3("CONTRACT_INVALID", void 0, "waiver-origin-binding-invalid");
+  if (!("waiver_scope" in requestContext) || request.value.gate_id !== context2.origin.origin_gate_id || request.value.context_digest !== context2.origin.origin_context_digest || request.value.task_id !== context2.origin.task_id || request.value.phase_instance !== context2.origin.phase_instance || request.value.subject_digest !== context2.origin.subject_digest || request.value.current_evidence.set_digest !== context2.origin.current_evidence_set_digest || !isDeepStrictEqual12(payload.rule, context2.origin.rule) || !isDeepStrictEqual12(requestContext.waiver_scope, context2.origin.scope)) return issue3("CONTRACT_INVALID", void 0, "waiver-origin-binding-invalid");
   return ok14(void 0);
 }
 async function cleanupResolvedInterfaces(dependencies, authority, request, record3) {
@@ -67419,7 +66957,7 @@ async function currentSupplementalLedger(dependencies, authority, request, input
   if (active === "missing" || active === "invalid") return Object.freeze([]);
   const derived = [];
   for (const entry of active.value.supplemental) {
-    if (callerOutcome === void 0 || !isDeepStrictEqual13(entry, callerOutcome)) continue;
+    if (callerOutcome === void 0 || !isDeepStrictEqual12(entry, callerOutcome)) continue;
     const binding = supplementalGate(entry);
     if (binding.prior_gate_id !== request.gate_id || binding.task_id !== request.task_id || binding.phase_instance !== request.phase_instance || binding.subject_digest !== request.subject_digest || binding.input_fingerprint !== inputFingerprint) continue;
     if (entry.action === "decline") {
@@ -67494,7 +67032,7 @@ async function openDurableGate(dependencies, input) {
           const expectedTool = archived.value.outcome === "waiver-decided" ? "archflow_waiver" : "archflow_gate";
           const expectedOperation = archived.value.outcome === "waiver-decided" ? "waiver" : "gate";
           const expectedOutcome = earnsReceipt(archived.value) ? receiptOutcome(archived.value, current.value.revision) : void 0;
-          if (receipt.kind !== "canonical" || expectedOutcome === void 0 || receipt.document.digest !== current.value.committed_intent.receipt_digest || receipt.document.value.tool !== expectedTool || receipt.document.value.operation !== expectedOperation || receipt.document.value.request_digest !== requestRead.value.request_digest || String(receipt.document.value.result_id) !== String(archived.value.gate_id) || !isDeepStrictEqual13(receipt.document.value.outcome, expectedOutcome) || receipt.document.value.outcome_digest !== intentOutcomeDigest(expectedOutcome) || !validateDurableSemantics(createCommittedIntentSubject(current, receipt.document)).ok) {
+          if (receipt.kind !== "canonical" || expectedOutcome === void 0 || receipt.document.digest !== current.value.committed_intent.receipt_digest || receipt.document.value.tool !== expectedTool || receipt.document.value.operation !== expectedOperation || receipt.document.value.request_digest !== requestRead.value.request_digest || String(receipt.document.value.result_id) !== String(archived.value.gate_id) || !isDeepStrictEqual12(receipt.document.value.outcome, expectedOutcome) || receipt.document.value.outcome_digest !== intentOutcomeDigest(expectedOutcome) || !validateDurableSemantics(createCommittedIntentSubject(current, receipt.document)).ok) {
             return issue3("STATE_INVALID", current.value, "gate-replay-receipt-invalid");
           }
           return ok14({ gate_id: gateId, state: current, request: requestRead, replay: archived });
@@ -67563,7 +67101,7 @@ async function openDurableGate(dependencies, input) {
             await dependencies.atomic.removeGateInterface(gateJson2.value);
             return ok14({ gate_id: gateId, state: final, request: activeRequest, replay: document2 });
           }
-          const ledger = active.supplemental.some((entry) => isDeepStrictEqual13(entry, supplemental2)) ? active.supplemental : [...active.supplemental, supplemental2];
+          const ledger = active.supplemental.some((entry) => isDeepStrictEqual12(entry, supplemental2)) ? active.supplemental : [...active.supplemental, supplemental2];
           active = parseActiveGate({ ...active, supplemental: ledger });
           await dependencies.atomic.replace(gateJson2.value, canonicalDocument(active).bytes);
         }
@@ -67578,7 +67116,7 @@ async function openDurableGate(dependencies, input) {
         const manifest = retained.value.prepared.manifest.value;
         const artifact = manifest.source_artifact;
         const context2 = input.context;
-        if (artifact.artifact_kind !== "implementation-output" || artifact.diff_digest !== context2.diff_digest || !isDeepStrictEqual13(context2.current_artifact_digests, [manifest.artifact_digest]) || !isDeepStrictEqual13(context2.parent_document_digests, artifact.parent_documents.map((item) => item.content_digest).sort())) return issue3("STATE_INVALID", current.value, "commit-authorization-manifest-mismatch");
+        if (artifact.artifact_kind !== "implementation-output" || artifact.diff_digest !== context2.diff_digest || !isDeepStrictEqual12(context2.current_artifact_digests, [manifest.artifact_digest]) || !isDeepStrictEqual12(context2.parent_document_digests, artifact.parent_documents.map((item) => item.content_digest).sort())) return issue3("STATE_INVALID", current.value, "commit-authorization-manifest-mismatch");
       }
       if (input.kind === "restore-collision") {
         const reference = [...current.value.authoritative_results].reverse().find((item) => item.phase_instance === input.phase_instance && item.step === "produce");
@@ -67592,7 +67130,7 @@ async function openDurableGate(dependencies, input) {
         if (projectionGenerationDigest((await captureProjectionTarget(entry.target)).observation) !== context2.current_generation_digest) return issue3("STATE_INVALID", current.value, "restore-current-generation-stale");
         if (entry.rename_pair !== void 0) {
           const peer = retained.value.projection_plan.entries.find((item) => item.path === entry.rename_pair.peer_path && item.rename_pair?.peer_path === entry.path);
-          if (peer === void 0 || !isDeepStrictEqual13((await captureProjectionTarget(peer.target)).observation, peer.observed_before)) return issue3("STATE_INVALID", current.value, "restore-rename-peer-changed");
+          if (peer === void 0 || !isDeepStrictEqual12((await captureProjectionTarget(peer.target)).observation, peer.observed_before)) return issue3("STATE_INVALID", current.value, "restore-rename-peer-changed");
         }
         const changed = input.input_fingerprint !== reference.input_fingerprint;
         if (!changed && context2.adoption_candidate !== void 0 || context2.adoption_candidate !== void 0 && (context2.adoption_candidate.changed_input_fingerprint !== input.input_fingerprint || context2.adoption_candidate.proposed_generation_digest !== context2.current_generation_digest)) return issue3("CONTRACT_INVALID", void 0, "restore-adoption-candidate-invalid");
@@ -68052,7 +67590,7 @@ async function resolveAdvancingGate(dependencies, authority, gateId, inputFinger
         if (originalGeneration !== context2.current_generation_digest && originalGeneration !== desiredGenerationDigest(original.desired)) return issue3("STATE_INVALID", current.value, "restore-current-generation-stale");
         if (selected.slice(1).some((entry) => {
           const observation = captures.get(entry.path).observation;
-          return !isDeepStrictEqual13(observation, entry.observed_before) && projectionGenerationDigest(observation) !== desiredGenerationDigest(entry.desired);
+          return !isDeepStrictEqual12(observation, entry.observed_before) && projectionGenerationDigest(observation) !== desiredGenerationDigest(entry.desired);
         })) return issue3("STATE_INVALID", current.value, "restore-rename-peer-changed");
         if (!alreadyApplied) {
           const pending = selected.filter((entry) => projectionGenerationDigest(captures.get(entry.path).observation) !== desiredGenerationDigest(entry.desired));
@@ -69387,11 +68925,11 @@ async function handleState(call, context2) {
 }
 
 // src/mcp/handlers/waiver.ts
-import { isDeepStrictEqual as isDeepStrictEqual14 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual13 } from "node:util";
 var fail26 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function authenticWaiverOriginArchive(request, decision2, origin2) {
   const payload = decision2.value.outcome === "decided" ? decision2.value.envelope.payload : void 0;
-  return request.value.gate_id === origin2.origin_gate_id && request.value.task_id === origin2.task_id && request.value.phase_instance === origin2.phase_instance && request.value.subject_digest === origin2.subject_digest && request.value.context_digest === origin2.origin_context_digest && request.value.current_evidence.set_digest === origin2.current_evidence_set_digest && (request.value.kind === "review-trigger" || request.value.kind === "adjudication-failure") && decision2.digest === origin2.origin_decision_digest && payload?.decision === "waiver-requested" && isDeepStrictEqual14(payload.rule, origin2.rule) && "waiver_scope" in request.value.context && isDeepStrictEqual14(request.value.context.waiver_scope, origin2.scope) && validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok;
+  return request.value.gate_id === origin2.origin_gate_id && request.value.task_id === origin2.task_id && request.value.phase_instance === origin2.phase_instance && request.value.subject_digest === origin2.subject_digest && request.value.context_digest === origin2.origin_context_digest && request.value.current_evidence.set_digest === origin2.current_evidence_set_digest && (request.value.kind === "review-trigger" || request.value.kind === "adjudication-failure") && decision2.digest === origin2.origin_decision_digest && payload?.decision === "waiver-requested" && isDeepStrictEqual13(payload.rule, origin2.rule) && "waiver_scope" in request.value.context && isDeepStrictEqual13(request.value.context.waiver_scope, origin2.scope) && validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok;
 }
 async function handleWaiver(call, context2) {
   return mapHandlerErrors(context2.invocation_id, async () => {

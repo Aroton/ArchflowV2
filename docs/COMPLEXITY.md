@@ -22,9 +22,9 @@ The audit asked directly: how often is the MCP server actually down, and could d
 
 **Resolved 2026-08-11.** The audit found at least five responsibilities in one file: gate lifecycle, decision templates, interface projection, approval re-authentication, and design-document phase parsing. (The sixth — an entire manual gate lifecycle, nearly a second implementation of the first — left with the degraded-mode retirement, #1.) The file is now split along those seams with no behavior change: `gate-core.ts` (shared vocabulary, dependency types, small pure helpers), `gate-approvals.ts` (the approval trust brand — WeakSet, assert, and the single mint site in `loadAuthenticatedGateApproval`, co-resident so minting stays module-private), `gate-decision-interface.ts` (decision templates and the human decision file), `legacy-import-resume.ts`, `planned-final-phase.ts`, and a ~900-line `gates.ts` that keeps the gate lifecycle itself.
 
-### 3. Double protocol validation in `mcp/` — questionable weight
+### 3. Double protocol validation in `mcp/` — resolved 2026-08-11
 
-`session.ts` (554 lines) is a full JSON-RPC state machine with per-method key allowlists — and then the MCP SDK validates the same messages again, with bespoke reconciliation in `sdk-adapter.ts` for when the two disagree. The output-fidelity check also computes every tool result's projection twice. The containment stance ("the SDK is not the authority") is coherent, but this is the single biggest complexity concentration in `mcp/` — worth deciding explicitly how much SDK distrust the prototype needs.
+The audit asked for an explicit decision about how much SDK distrust the prototype needs, and the decision was made: the pinned, behaviorally-probed SDK is the JSON-RPC authority, and ArchFlow's authority begins at the tool boundary. `session.ts` (554 lines) is deleted; the flow is now framer → SDK dispatch → send-queue inside a ~385-line adapter. Every defense the session re-implemented — shape triage, ID normalization and duplicate-ID tombstones, per-method key allowlists, the external↔internal ID rewrite, cancellation and response arbitration, the eager spec-schema pre-pass — is replaced by a behavioral pin in `probe-mcp-sdk-compatibility.mjs`, so drift fails the gate rather than shipping. The tool result's projection is computed once. What the trade gives up — adversarial-stdio-peer defenses, prose-free wire errors — is a documented limitation in `LIMITATIONS.md`; the tool boundary's validation and trust brands are unchanged.
 
 ### 4. Dual shape authorities in `contracts/` — duplication by design, expensive in practice
 
@@ -76,4 +76,4 @@ For balance — machinery that directly implements the trust boundaries and shou
 2. Split `gates.ts` (#2) and name the predicates in `fixed-point.ts` (#6) — pure readability, no behavior change.
 3. Pick one shape authority (#4) — mechanical, high leverage.
 4. Sweep the small items (#7, #9) opportunistically as touched code (#5 is done).
-5. Revisit SDK distrust (#3) only with a deliberate decision about the threat model, since it changes a security stance.
+5. ~~Revisit SDK distrust (#3)~~ — decided and done: the pinned, probed SDK is the JSON-RPC authority; the session layer is retired.

@@ -142,10 +142,12 @@ function projectFailure(issueCode: string): Record<string, unknown> {
   } as const);
 }
 
+// Key order matches the pinned SDK's CallToolResult schema shape, which the
+// codec revalidation applies to every tools/call result on egress.
 function projectErrorResult(result: Readonly<Record<string, unknown>>): Record<string, unknown> {
   return {
-    structuredContent: result,
     content: [{ type: "text", text: JSON.stringify(result) }],
+    structuredContent: result,
     isError: true,
   };
 }
@@ -321,6 +323,9 @@ describe("bundled MCP stdio runtime", () => {
         jsonLine(calls.list),
         jsonLine(calls.unknown),
         jsonLine(calls.missing_arguments),
+      ].join(""));
+      await runtime.waitForLines(4);
+      runtime.child.stdin.write([
         jsonLine(calls.non_object_arguments),
         jsonLine(calls.valid_disabled),
       ].join(""));
@@ -336,12 +341,27 @@ describe("bundled MCP stdio runtime", () => {
         ok: false,
         error: createProjectError("CONFIG_INVALID", { issue_code: "config-missing" }),
       });
+      // Non-object arguments are rejected by the pinned SDK's tools/call wire
+      // schema; the validator prose below is that SDK's exact rejection shape.
+      const sdkArgumentsRejection = [
+        "Invalid tools/call request: [",
+        "  {",
+        '    "expected": "record",',
+        '    "code": "invalid_type",',
+        '    "path": [',
+        '      "params",',
+        '      "arguments"',
+        "    ],",
+        '    "message": "Invalid input: expected record, received string"',
+        "  }",
+        "]",
+      ].join("\n");
       const expected = [
         initialize.response,
         { jsonrpc: "2.0", id: "list-1", result: { tools: ADVERTISED_TOOL_CATALOGUE } },
         { jsonrpc: "2.0", id: "call-unknown", error: { code: -32001, message: "TOOL_NOT_FOUND", data: unknownError } },
         { jsonrpc: "2.0", id: "call-missing", result: projectFailure("input-not-object") },
-        { jsonrpc: "2.0", id: "call-non-object", result: projectFailure("input-not-object") },
+        { jsonrpc: "2.0", id: "call-non-object", error: { code: -32602, message: sdkArgumentsRejection } },
         { jsonrpc: "2.0", id: "call-disabled", result: liveHandlerFailure },
       ].map(jsonLine).join("");
 
