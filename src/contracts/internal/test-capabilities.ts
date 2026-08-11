@@ -1,11 +1,4 @@
-import { canonicalDocument, canonicalJsonDigest, type CanonicalDocument } from "../canonical.js";
-import {
-  parseAdjudicationEvidence,
-  type AdjudicationEvidence,
-  type AgentDeclaredAdjudication,
-  type DegradedAdjudication,
-  type ServerAttestedAdjudication,
-} from "../adjudication.js";
+import { canonicalDocument, type CanonicalDocument } from "../canonical.js";
 import { validateDurableSemantics } from "../durable.js";
 import {
   parseResultManifest,
@@ -13,12 +6,6 @@ import {
 } from "../durable-result-manifest.js";
 import type { AuthoritativeResultRef } from "../durable-state.js";
 import { encodePhaseInstance, decodePhaseInstance } from "../phase-instance.js";
-import {
-  parseReviewEvidence,
-  type DegradedReview,
-  type ReviewEvidence,
-  type ServerAttestedReview,
-} from "../review.js";
 import type { Assurance, AuthorityLink, AuthorityLinkData, CurrentReviewSetAuthority, EvidenceKind, ObservationBindingByKind, ObservationCapability, RequiredReviewSlots, VerifiedReferencedEvidence } from "../trust.js";
 import {
   currentReviewSetAuthorityBrand,
@@ -27,6 +14,7 @@ import {
   registerObservationCapability,
   registerVerifiedEvidence,
 } from "./trust-brands.js";
+import { createVerifiedEvidenceReference } from "./trust-mints.js";
 import type { ReferencedEvidence } from "../evidence.js";
 import { createInternalResultExpectation, type ResultExpectation, type ResultIdentityPayload } from "../mcp-tools.js";
 import type { ToolName } from "../tool-names.js";
@@ -51,18 +39,6 @@ export function createTestObservationCapability<K extends EvidenceKind>(binding:
   registerObservationCapability(capability, copiedBinding);
   return capability;
 }
-export function createReviewObservationCapability(binding: ObservationBindingByKind["review"]): ObservationCapability<"review"> {
-  const copiedBinding = deepFreeze(structuredClone(binding));
-  const capability = Object.freeze({ kind: copiedBinding.kind }) as ObservationCapability<"review">;
-  registerObservationCapability(capability, copiedBinding);
-  return capability;
-}
-export function createAdjudicationObservationCapability(binding: ObservationBindingByKind["adjudication"]): ObservationCapability<"adjudication"> {
-  const copiedBinding = deepFreeze(structuredClone(binding));
-  const capability = Object.freeze({ kind: copiedBinding.kind }) as ObservationCapability<"adjudication">;
-  registerObservationCapability(capability, copiedBinding);
-  return capability;
-}
 export function createTestAuthorityLink<K extends EvidenceKind, A extends Assurance>(data: AuthorityLinkData<K, A>): AuthorityLink<K, A> {
   const link = deepFreeze(structuredClone(data)) as AuthorityLink<K, A>;
   registerAuthorityLink(link, { kind: data.evidence_kind, assurance: data.assurance });
@@ -71,45 +47,6 @@ export function createTestAuthorityLink<K extends EvidenceKind, A extends Assura
 export function createTestVerifiedReferencedEvidence<K extends EvidenceKind, A extends Assurance>(kind: K, value: ReferencedEvidence<VerifiedReferencedEvidence<K, A>["evidence"]>): VerifiedReferencedEvidence<K, A> {
   const verified = deepFreeze(structuredClone(value)) as VerifiedReferencedEvidence<K, A>;
   registerVerifiedEvidence(verified, { kind, assurance: value.evidence.assurance });
-  return verified;
-}
-
-export function createVerifiedEvidenceReference(
-  evidence: ServerAttestedReview,
-): VerifiedReferencedEvidence<"review", "server-attested">;
-export function createVerifiedEvidenceReference(
-  evidence: DegradedReview,
-): VerifiedReferencedEvidence<"review", "degraded">;
-export function createVerifiedEvidenceReference(
-  evidence: ReviewEvidence,
-): VerifiedReferencedEvidence<"review">;
-export function createVerifiedEvidenceReference(
-  evidence: AgentDeclaredAdjudication,
-): VerifiedReferencedEvidence<"adjudication", "agent-declared">;
-export function createVerifiedEvidenceReference(
-  evidence: ServerAttestedAdjudication,
-): VerifiedReferencedEvidence<"adjudication", "server-attested">;
-export function createVerifiedEvidenceReference(
-  evidence: DegradedAdjudication,
-): VerifiedReferencedEvidence<"adjudication", "degraded">;
-export function createVerifiedEvidenceReference(
-  evidence: AdjudicationEvidence,
-): VerifiedReferencedEvidence<"adjudication">;
-export function createVerifiedEvidenceReference(
-  evidence: ReviewEvidence | AdjudicationEvidence,
-): VerifiedReferencedEvidence {
-  const parsed = (
-    evidence.step === "adjudicate"
-      ? parseAdjudicationEvidence(evidence)
-      : parseReviewEvidence(evidence)
-  ) as ReviewEvidence | AdjudicationEvidence;
-  const evidenceDigest = canonicalJsonDigest(parsed);
-  const verified = deepFreeze({
-    evidence_digest: evidenceDigest,
-    evidence: parsed,
-  }) as VerifiedReferencedEvidence;
-  const kind = parsed.step === "adjudicate" ? "adjudication" : "review";
-  registerVerifiedEvidence(verified, { kind, assurance: parsed.assurance });
   return verified;
 }
 

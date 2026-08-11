@@ -8,7 +8,7 @@ import { parseResultManifest } from "../contracts/durable-result-manifest.js";
 import { parseDocumentArtifact } from "../contracts/durable-document.js";
 import { parseImplementationOutput } from "../contracts/durable-implementation-output.js";
 import { parsePathSafeId, parseSafeInteger, parseTaskSlug, type SafeCode } from "../contracts/evidence.js";
-import { createVerifiedEvidenceReference } from "../contracts/internal/test-capabilities.js";
+import { createVerifiedEvidenceReference } from "../contracts/internal/trust-mints.js";
 import { parseTaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { renderReviewEvidence } from "../contracts/renderers.js";
@@ -32,7 +32,7 @@ import type { SupplementalReviewRecordV1 } from "../contracts/supplemental-recor
 import { runInit } from "../init/index.js";
 import { stageLegacyUpgrade } from "../init/legacy-upgrade.js";
 import { BUILD_REQUEST_KINDS, runBuildRequest } from "./build-request.js";
-import { computeCallEnvelope } from "./envelope.js";
+import { computeCallEnvelope } from "./call-envelope.js";
 import { classifyWorkflowStatus } from "./status-classification.js";
 
 export const LOCAL_COMMANDS = Object.freeze([

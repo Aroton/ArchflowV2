@@ -1,8 +1,15 @@
 import { canonicalJsonDigest, sha256Bytes } from "../../contracts/canonical.js";
 import type { InvocationContext } from "../../contracts/contexts.js";
 import { createProjectError, type ProjectResult } from "../../contracts/errors.js";
-import { parsePathSafeId, parseSafeId, parseSafeInteger } from "../../contracts/evidence.js";
+import {
+  parsePathSafeId,
+  parseSafeId,
+  parseSafeInteger,
+  type SafeId,
+  type SafeInteger,
+} from "../../contracts/evidence.js";
 import type { ParsedToolCall, ToolSuccess } from "../../contracts/mcp-tools.js";
+import type { TaskPathClaim } from "../../contracts/path-claims.js";
 import type { PlainJsonValue } from "../../contracts/plain-json.js";
 import type { GitOid } from "../../contracts/canonical.js";
 import type { TaskStateV1 } from "../../contracts/durable-state.js";
@@ -23,7 +30,12 @@ import {
   detectTaskLocalConstitutionEdit,
   resolvePinnedConstitution,
 } from "../../state/constitution.js";
-import { loadCurrentReviewSet, prepareEvidenceResult } from "../../state/evidence-results.js";
+import {
+  loadCurrentReviewSet,
+  prepareEvidenceResult,
+  type EvidenceResultValue,
+  type PreparedEvidenceResult,
+} from "../../state/evidence-results.js";
 import { loadAuthenticatedGateApproval, openDurableGate } from "../../state/gates.js";
 import {
   expectedProduceUpstreamBindings,
@@ -34,8 +46,10 @@ import {
   resolveReviewExclusions,
   reviewChangeEntries,
   type CurrentProduceSubject,
+  type ProduceProjection,
   type ReviewExclusionReason,
 } from "../../state/produce-subject.js";
+import type { ProductionServices } from "../../state/production.js";
 import { mapHandlerErrors } from "./errors.js";
 import { resolvePreDispatchReplay } from "./replay.js";
 import { openHandlerSession } from "./session.js";
@@ -95,6 +109,112 @@ export async function resolveRepositoryViewCommit(
   return artifact.artifact_kind === "implementation-output"
     ? artifact.base_commit
     : readHeadCommit(runner);
+}
+
+/**
+ * Derives the phase's exact workflow upstreams entirely from durable authority — the caller
+ * declares nothing. Each upstream must be the retained produce artifact for its canonical path
+ * and must hold a durable artifact-approval for its exact current digest.
+ */
+async function deriveApprovedUpstreams(
+  services: ProductionServices,
+  toolName: "archflow_counter_review",
+  durable: TaskStateV1,
+): Promise<ProjectResult<readonly AdjudicationUpstreamInput[]>> {
+  const derived: AdjudicationUpstreamInput[] = [];
+  for (const binding of expectedProduceUpstreamBindings(durable)) {
+    const upstream = await loadProduceUpstreamSubject(services.dependencies, durable, binding);
+    if (!upstream.ok) return upstream;
+    const upstreamProjection = await readProduceProjection(
+      services.runner, services.authority, upstream.value, binding.path,
+    );
+    if (!upstreamProjection.ok) return upstreamProjection;
+    let text: string;
+    try {
+      text = new TextDecoder("utf-8", { fatal: true }).decode(upstreamProjection.value.bytes);
+    } catch {
+      return fail(createProjectError("CONTRACT_INVALID", {
+        tool: toolName, issue_code: "adjudication-upstream-not-utf8",
+      }));
+    }
+    const upstreamDigest = upstream.value.artifact_digest;
+    let approved = false;
+    for (const approval of [...durable.approvals]
+      .filter((candidate) => candidate.gate_kind === "artifact-approval" && candidate.subject_digest === upstreamDigest)
+      .sort((left, right) => right.resolved_at_revision - left.resolved_at_revision)) {
+      const authenticated = await loadAuthenticatedGateApproval(
+        services.dependencies, services.authority, approval,
+      );
+      if (!authenticated.ok) return authenticated;
+      if (
+        authenticated.value.request.kind === "artifact-approval" &&
+        authenticated.value.request.context.artifact_kind === binding.artifact_kind
+      ) {
+        approved = true;
+        break;
+      }
+    }
+    if (!approved) {
+      return fail(createProjectError("STATE_INVALID", {
+        phase_instance: durable.phase_instance, issue_code: "upstream-approval-missing",
+      }));
+    }
+    derived.push(Object.freeze({ upstream_digest: upstreamDigest, artifact: text }));
+  }
+  derived.sort((left, right) => left.upstream_digest.localeCompare(right.upstream_digest));
+  return ok(Object.freeze(derived));
+}
+
+/**
+ * Prepares one dispatched review's evidence result. Both the rubric review and the constitution
+ * review flow through here so their sibling results are measured against the same pre-commit
+ * retained-byte base and the install-time staleness check re-derives the same value for each.
+ */
+async function prepareDispatchEvidence(
+  services: ProductionServices,
+  retainedBytes: NonNullable<ProductionServices["dependencies"]["read_retained_task_bytes"]>,
+  resultId: SafeId,
+  value: EvidenceResultValue,
+  measuredAtRevision: SafeInteger,
+): Promise<ProjectResult<PreparedEvidenceResult>> {
+  return prepareEvidenceResult({
+    authority: services.authority,
+    runner: services.runner,
+    result_id: resultId,
+    retained_task_bytes: await retainedBytes(),
+    measured_at_revision: measuredAtRevision,
+    scanner: services.dependencies.gate_secret_scanner!,
+    value,
+  });
+}
+
+/**
+ * Re-authenticates the reviewed subject after dispatch returns: durable state must still be
+ * canonical, must still retain the same produce artifact, and the projection must re-read
+ * cleanly. Returns the freshly observed projection digest for comparison against the
+ * pre-dispatch pin.
+ */
+async function reobserveProjectionDigest(
+  services: ProductionServices,
+  phaseInstance: TaskStateV1["phase_instance"],
+  expectedArtifactDigest: CurrentProduceSubject["artifact_digest"],
+  artifactPath: TaskPathClaim,
+): Promise<ProjectResult<ProduceProjection["digest"]>> {
+  const current = await services.dependencies.read_state(services.authority.state);
+  if (current.kind !== "canonical") return fail(createProjectError("STATE_INVALID", {
+    phase_instance: phaseInstance, issue_code: "counter-review-state-not-current",
+  }));
+  const retained = await loadCurrentProduceSubject(services.dependencies, current.document.value);
+  if (!retained.ok) return retained;
+  if (retained.value.artifact_digest !== expectedArtifactDigest) return fail(createProjectError("STATE_INVALID", {
+    phase_instance: phaseInstance, issue_code: "counter-review-subject-not-current",
+  }));
+  const observed = await readProduceProjection(
+    services.runner, services.authority, retained.value, artifactPath,
+  );
+  return observed.ok
+    ? Object.freeze({ schema_version: "1" as const, ok: true as const, value: observed.value.digest })
+    : observed;
 }
 
 export async function handleCounterReview(
@@ -202,59 +322,9 @@ export async function handleCounterReview(
     const retainedBytes = services.dependencies.read_retained_task_bytes;
     if (retainedBytes === undefined) throw new TypeError("retained byte accounting is unavailable");
 
-    // Derives the phase's exact workflow upstreams entirely from durable authority — the caller
-    // declares nothing. Each upstream must be the retained produce artifact for its canonical
-    // path and must hold a durable artifact-approval for its exact current digest.
-    const deriveApprovedUpstreams = async (
-      durable: TaskStateV1,
-    ): Promise<ProjectResult<readonly AdjudicationUpstreamInput[]>> => {
-      const derived: AdjudicationUpstreamInput[] = [];
-      for (const binding of expectedProduceUpstreamBindings(durable)) {
-        const upstream = await loadProduceUpstreamSubject(services.dependencies, durable, binding);
-        if (!upstream.ok) return upstream;
-        const upstreamProjection = await readProduceProjection(
-          services.runner, services.authority, upstream.value, binding.path,
-        );
-        if (!upstreamProjection.ok) return upstreamProjection;
-        let text: string;
-        try {
-          text = new TextDecoder("utf-8", { fatal: true }).decode(upstreamProjection.value.bytes);
-        } catch {
-          return fail(createProjectError("CONTRACT_INVALID", {
-            tool: call.name, issue_code: "adjudication-upstream-not-utf8",
-          }));
-        }
-        const upstreamDigest = upstream.value.artifact_digest;
-        let approved = false;
-        for (const approval of [...durable.approvals]
-          .filter((candidate) => candidate.gate_kind === "artifact-approval" && candidate.subject_digest === upstreamDigest)
-          .sort((left, right) => right.resolved_at_revision - left.resolved_at_revision)) {
-          const authenticated = await loadAuthenticatedGateApproval(
-            services.dependencies, services.authority, approval,
-          );
-          if (!authenticated.ok) return authenticated;
-          if (
-            authenticated.value.request.kind === "artifact-approval" &&
-            authenticated.value.request.context.artifact_kind === binding.artifact_kind
-          ) {
-            approved = true;
-            break;
-          }
-        }
-        if (!approved) {
-          return fail(createProjectError("STATE_INVALID", {
-            phase_instance: durable.phase_instance, issue_code: "upstream-approval-missing",
-          }));
-        }
-        derived.push(Object.freeze({ upstream_digest: upstreamDigest, artifact: text }));
-      }
-      derived.sort((left, right) => left.upstream_digest.localeCompare(right.upstream_digest));
-      return ok(Object.freeze(derived));
-    };
-
     let constitutionPlan: ConstitutionReviewPlan | undefined;
     if (activeRules) {
-      const upstreams = await deriveApprovedUpstreams(state.value);
+      const upstreams = await deriveApprovedUpstreams(services, call.name, state.value);
       if (!upstreams.ok) return upstreams;
       const approvedUpstreamDigests = requireApprovedUpstreamDigests(
         state.value.approvals,
@@ -277,12 +347,9 @@ export async function handleCounterReview(
         invocation_id: stableId("adjudication-invocation", context.invocation_id),
         result_id: constitutionResultId,
         dispatch: constitutionCoordinator,
-        prepare_evidence: async (evidence, measuredAtRevision) => prepareEvidenceResult({
-          authority: services.authority, runner: services.runner, result_id: constitutionResultId,
-          retained_task_bytes: await retainedBytes(),
-          measured_at_revision: measuredAtRevision, scanner: services.dependencies.gate_secret_scanner!,
-          value: { kind: "adjudication", evidence },
-        }),
+        prepare_evidence: (evidence, measuredAtRevision) => prepareDispatchEvidence(
+          services, retainedBytes, constitutionResultId, { kind: "adjudication", evidence }, measuredAtRevision,
+        ),
       });
     }
 
@@ -315,32 +382,12 @@ export async function handleCounterReview(
     const result = await runCounterReview({
       transaction: services.dependencies,
       dispatch: coordinator,
-      prepare_evidence: async (evidence, measuredAtRevision) => prepareEvidenceResult({
-        authority: services.authority,
-        runner: services.runner,
-        result_id: resultId,
-        retained_task_bytes: await retainedBytes(),
-        measured_at_revision: measuredAtRevision,
-        scanner: services.dependencies.gate_secret_scanner!,
-        value: { kind: "review", evidence },
-      }),
-      reobserve_projection_digest: async () => {
-        const current = await services.dependencies.read_state(services.authority.state);
-        if (current.kind !== "canonical") return fail(createProjectError("STATE_INVALID", {
-          phase_instance: state.value.phase_instance, issue_code: "counter-review-state-not-current",
-        }));
-        const retained = await loadCurrentProduceSubject(services.dependencies, current.document.value);
-        if (!retained.ok) return retained;
-        if (retained.value.artifact_digest !== produce.value.artifact_digest) return fail(createProjectError("STATE_INVALID", {
-          phase_instance: state.value.phase_instance, issue_code: "counter-review-subject-not-current",
-        }));
-        const observed = await readProduceProjection(
-          services.runner, services.authority, retained.value, call.input.artifact_path,
-        );
-        return observed.ok
-          ? Object.freeze({ schema_version: "1" as const, ok: true as const, value: observed.value.digest })
-          : observed;
-      },
+      prepare_evidence: (evidence, measuredAtRevision) => prepareDispatchEvidence(
+        services, retainedBytes, resultId, { kind: "review", evidence }, measuredAtRevision,
+      ),
+      reobserve_projection_digest: () => reobserveProjectionDigest(
+        services, state.value.phase_instance, produce.value.artifact_digest, call.input.artifact_path,
+      ),
     }, {
       authority: services.authority,
       call,

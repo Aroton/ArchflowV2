@@ -16,7 +16,7 @@ import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { currentEvidenceSetRef } from "../../src/contracts/trust.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
-import { computeCallEnvelope } from "../../src/local/envelope.js";
+import { computeCallEnvelope } from "../../src/local/call-envelope.js";
 import { createToolHandlers } from "../../src/mcp/handlers/index.js";
 import { prepareDocumentResult } from "../../src/mcp/handlers/state-results.js";
 import { createToolBoundary } from "../../src/mcp/server.js";

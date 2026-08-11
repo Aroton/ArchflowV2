@@ -30,7 +30,7 @@ import { buildCommitAuthorizationInput, currentTargetRef, pendingAdjudicationGat
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "../state/transitions.js";
 import { writeStagedRequest } from "../state/staged-requests.js";
-import { computeCallEnvelope, type CallEnvelope } from "./envelope.js";
+import { computeCallEnvelope, type CallEnvelope } from "./call-envelope.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 const fail = <T = never>(error: ProjectError): ProjectResult<T> =>

@@ -1,8 +1,9 @@
 import adjudicationOutputSchema from "../contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
 import reviewOutputSchema from "../contracts/schemas/v1/review.schema.json" with { type: "json" };
 
-import { canonicalJsonDigest } from "../contracts/canonical.js";
+import { canonicalJsonDigest, type CanonicalDocument } from "../contracts/canonical.js";
 import type { AdjudicationEvidence } from "../contracts/adjudication.js";
+import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { ConfigV1 } from "../contracts/config.js";
 import type { ConstitutionRegistry } from "../contracts/constitution.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
@@ -12,6 +13,7 @@ import {
   validateProjectResultStructure,
   type CounterReviewConstitutionOutcome,
   type ParsedToolCall,
+  type RequestIdentifiedToolCall,
 } from "../contracts/mcp-tools.js";
 import { adjudicationReviewClaim, counterReviewClaim } from "../contracts/path-claims.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
@@ -29,6 +31,8 @@ import {
   type PreparedEvidenceResult,
 } from "../state/evidence-results.js";
 import type {
+  InternalResultInstallation,
+  PreparedResultTransaction,
   TransactionDependencies,
   TransactionOutcome,
 } from "../state/transaction.js";
@@ -121,6 +125,107 @@ export type RunCounterReviewInput = Readonly<{
    */
   constitution?: ConstitutionReviewPlan;
 }>;
+
+/**
+ * Everything the atomic commit needs from the dispatch stage: the identified request, the fresh
+ * review evidence, the optional constitution evidence bound to it, and the prepared installation
+ * handles. Passed explicitly so the transaction planner is an ordinary function of the re-read
+ * current state rather than a closure over the dispatch flow's locals.
+ */
+type CounterReviewCommitInputs = Readonly<{
+  task_id: TransactionAuthority["task_id"];
+  intent_id: RunCounterReviewInput["call"]["input"]["intent_id"];
+  request_digest: Sha256Digest;
+  review_evidence: ReviewEvidence;
+  constitution_evidence: AdjudicationEvidence | undefined;
+  result_reference: PreparedEvidenceResult["reference"];
+  result_installation: InternalResultInstallation;
+  constitution_reference: PreparedEvidenceResult["reference"] | undefined;
+  constitution_installation: InternalResultInstallation | undefined;
+}>;
+
+/**
+ * Plans the single transaction that retains the fresh review — and, when present, the
+ * constitution result bound to it — against the re-read current state: the success summary, the
+ * internal result expectation, and the counter_review state transition, all committed together
+ * or not at all.
+ */
+async function planCounterReviewCommit(
+  inputs: CounterReviewCommitInputs,
+  current: CanonicalDocument<TaskStateV1>,
+  call: Extract<RequestIdentifiedToolCall, { readonly name: "archflow_counter_review" }>,
+): Promise<ProjectResult<PreparedResultTransaction<"archflow_counter_review">>> {
+  const constitutionEvidence = inputs.constitution_evidence;
+  const revision = parseSafeInteger(current.value.revision + 1);
+  const constitutionOutcome: CounterReviewConstitutionOutcome = constitutionEvidence === undefined
+    ? Object.freeze({
+      status: "not-run" as const,
+      reason: "no-active-constitution-rules" as const,
+    })
+    : Object.freeze({
+      status: "evaluated" as const,
+      path: adjudicationReviewClaim(current.value.phase_instance),
+      constitution: constitutionEvidence.constitution,
+      drift: constitutionEvidence.drift,
+      triggers: canonicalRuleRefs([
+        ...constitutionEvidence.matched_rule_versions,
+        ...constitutionEvidence.uncertain_rule_versions,
+      ]),
+    });
+  const success = Object.freeze({
+    path: counterReviewClaim(current.value.phase_instance),
+    verdict: inputs.review_evidence.verdict,
+    blocking_count: inputs.review_evidence.blocking_count,
+    constitution: constitutionOutcome,
+    revision,
+    request_digest: inputs.request_digest,
+  });
+  const expectation = createInternalResultExpectation({
+    schema_version: "1",
+    tool: "archflow_counter_review",
+    task_id: inputs.task_id,
+    intent_id: inputs.intent_id,
+    input_fingerprint: inputs.result_reference.input_fingerprint,
+    request_digest: inputs.request_digest,
+    result_id: inputs.result_reference.result_id,
+    resulting_revision: revision,
+    success,
+  });
+  const result = validateProjectResultStructure(call, {
+    schema_version: "1",
+    ok: true,
+    value: success,
+  });
+  const next = planStateTransition({
+    current: current.value,
+    target: {
+      phase_instance: current.value.phase_instance,
+      step: "counter_review",
+      status: "succeeded",
+      attempt: current.value.attempt,
+      input_fingerprint: inputs.result_reference.input_fingerprint,
+    },
+    recomputed_input_fingerprint: inputs.result_reference.input_fingerprint,
+    result_reference: inputs.result_reference,
+    ...(inputs.constitution_reference === undefined
+      ? {}
+      : { constitution_result_reference: inputs.constitution_reference }),
+  });
+  if (!next.ok) return next;
+  return {
+    schema_version: "1",
+    ok: true,
+    value: {
+      expectation,
+      result,
+      next_state: next.value,
+      result_installation: inputs.result_installation,
+      ...(inputs.constitution_installation === undefined
+        ? {}
+        : { constitution_installation: inputs.constitution_installation }),
+    },
+  };
+}
 
 /**
  * Runs a fresh opposite-family review — and, when the pinned constitution has active rules, the
@@ -282,77 +387,17 @@ export async function runCounterReview(
   const committed = await runStateTransaction(
     dependencies.transaction,
     { authority: input.authority, call: input.call },
-    async (current, call) => {
-      const revision = parseSafeInteger(current.value.revision + 1);
-      const constitutionOutcome: CounterReviewConstitutionOutcome = summarizedConstitution === undefined
-        ? Object.freeze({
-          status: "not-run" as const,
-          reason: "no-active-constitution-rules" as const,
-        })
-        : Object.freeze({
-          status: "evaluated" as const,
-          path: adjudicationReviewClaim(current.value.phase_instance),
-          constitution: summarizedConstitution.constitution,
-          drift: summarizedConstitution.drift,
-          triggers: canonicalRuleRefs([
-            ...summarizedConstitution.matched_rule_versions,
-            ...summarizedConstitution.uncertain_rule_versions,
-          ]),
-        });
-      const success = Object.freeze({
-        path: counterReviewClaim(current.value.phase_instance),
-        verdict: observed.evidence.verdict,
-        blocking_count: observed.evidence.blocking_count,
-        constitution: constitutionOutcome,
-        revision,
-        request_digest: identified.request_digest,
-      });
-      const expectation = createInternalResultExpectation({
-        schema_version: "1",
-        tool: "archflow_counter_review",
-        task_id: input.authority.task_id,
-        intent_id: input.call.input.intent_id,
-        input_fingerprint: prepared.value.reference.input_fingerprint,
-        request_digest: identified.request_digest,
-        result_id: prepared.value.reference.result_id,
-        resulting_revision: revision,
-        success,
-      });
-      const result = validateProjectResultStructure(call, {
-        schema_version: "1",
-        ok: true,
-        value: success,
-      });
-      const next = planStateTransition({
-        current: current.value,
-        target: {
-          phase_instance: current.value.phase_instance,
-          step: "counter_review",
-          status: "succeeded",
-          attempt: current.value.attempt,
-          input_fingerprint: prepared.value.reference.input_fingerprint,
-        },
-        recomputed_input_fingerprint: prepared.value.reference.input_fingerprint,
-        result_reference: prepared.value.reference,
-        ...(constitutionPrepared === undefined
-          ? {}
-          : { constitution_result_reference: constitutionPrepared.reference }),
-      });
-      if (!next.ok) return next;
-      return {
-        schema_version: "1",
-        ok: true,
-        value: {
-          expectation,
-          result,
-          next_state: next.value,
-          result_installation: installation,
-          ...(constitutionInstallation === undefined
-            ? {}
-            : { constitution_installation: constitutionInstallation }),
-        },
-      };
-    },
+    (current, call) => planCounterReviewCommit({
+      task_id: input.authority.task_id,
+      intent_id: input.call.input.intent_id,
+      request_digest: identified.request_digest,
+      review_evidence: observed.evidence,
+      constitution_evidence: summarizedConstitution,
+      result_reference: prepared.value.reference,
+      result_installation: installation,
+      constitution_reference: constitutionPrepared?.reference,
+      constitution_installation: constitutionInstallation,
+    }, current, call),
   );
   if (!committed.ok) return committed;
   return {

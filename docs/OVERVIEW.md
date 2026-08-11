@@ -78,7 +78,7 @@ Editing the artifact changes its digest, which automatically invalidates every d
 - **Phase instance** — where a task is: `prd`, `design`, `phase-design-N`, or `phase-impl-N`.
 - **Gate** — a durable, recorded human decision point. Nine kinds exist; approval is never inferred from conversation.
 - **Digest / fingerprint** — SHA-256 identities. A *subject digest* names an artifact's exact bytes; an *input fingerprint* names everything a step depended on. Stale identity = invalid evidence.
-- **Call envelope** (`src/local/envelope.ts`) — the authentication wrapper around one outgoing MCP tool call.
+- **Call envelope** (`src/local/call-envelope.ts`) — the authentication wrapper around one outgoing MCP tool call.
 - **Dispatch envelope** (`src/review/envelopes.ts`) — the sealed, byte-capped evidence package handed to a child reviewer. *Same word, unrelated concepts* — a known naming collision.
 - **Constitution** — versioned repository policy rules (`.archflow/constitution/`) that the constitution review — run inside `archflow_counter_review` when active rules exist — judges every artifact against, pinned per task at an approved commit.
 - **Waiver** — a human-granted exemption from one rule version, for one subject digest, for one task. Evaporates if the artifact or the rule changes.

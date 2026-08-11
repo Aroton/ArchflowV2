@@ -13,7 +13,7 @@ import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { stageTaskInitialization } from "../../src/init/task-initialization.js";
 import { LOCAL_COMMANDS } from "../../src/local/commands.js";
-import { computeCallEnvelope, renderGateCounterPrompt } from "../../src/local/envelope.js";
+import { computeCallEnvelope, renderGateCounterPrompt } from "../../src/local/call-envelope.js";
 import { runStateInitialization } from "../../src/state/initialization.js";
 import { createProductionServices } from "../../src/state/production.js";
 
@@ -29,7 +29,7 @@ const gitEnvironment: NodeJS.ProcessEnv = {
   GIT_COMMITTER_NAME: "ArchFlow Test",
   GIT_COMMITTER_EMAIL: "test@example.invalid",
 };
-const task = parseTaskSlug("local-envelope");
+const task = parseTaskSlug("call-envelope");
 const D = (character: string) => parseSha256Digest(character.repeat(64));
 
 function git(root: string, ...argv: string[]): string {
@@ -37,7 +37,7 @@ function git(root: string, ...argv: string[]): string {
 }
 
 async function repository() {
-  const root = mkdtempSync(join(tmpdir(), "archflow-local-envelope-"));
+  const root = mkdtempSync(join(tmpdir(), "archflow-call-envelope-"));
   roots.push(root);
   git(root, "-c", "init.defaultBranch=main", "init", "-q");
   writeFileSync(join(root, "README.md"), "repository\n");

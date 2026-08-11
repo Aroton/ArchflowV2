@@ -34,17 +34,17 @@ Agent-facing shapes existed as JSON Schema *and* a Zod mirror, with `assertZodAg
 
 `task-init`, `build-document`, and `build-implementation-output` were each mostly subsumed by a `build-request` kind; their last remaining callers went away with the degraded-mode retirement (#1) and a phase-impl skill update, and all three are retired. `hash` stays — the gate-counter recipe's printed instructions still use it.
 
-### 6. `fixed-point.ts` gate satisfaction — load-bearing logic in an unreadable shape
+### 6. `fixed-point.ts` gate satisfaction — resolved 2026-08-11
 
-`adjudicationGateSatisfied` is a ~20-clause boolean conjunction where every clause is a silent `continue` with no diagnostic. Decomposing into named predicates that report *which* binding failed would improve both auditability and debuggability. Similarly, `handleCounterReview` (~387 lines, now running both the rubric dispatch and the constitution-review dispatch and committing them in one transaction) is the densest handler.
+The audit found `adjudicationGateSatisfied` as a ~20-clause boolean conjunction of silent `continue`s and `handleCounterReview` as the densest handler. Both are decomposed with zero behavior change: gate satisfaction is now named binding-failure predicates (`approvalBindingFailure`, `requestBindingFailure`, `decisionBindingFailure`, `evidenceBindingFailure`) aggregated by an exported evaluator that reports *which* binding failed first, `assessCurrentEvidence` is named steps ending in a priority-ordered `decideNextAction`, and the counter-review handler's four large closures are module-level functions — the transaction planner's new explicit inputs bag documents exactly what the atomic commit depends on.
 
 ### 7. Naming collisions and small frictions
 
-- **Two unrelated "envelopes"** — the call envelope (`src/local/envelope.ts`) and the dispatch envelope (`src/review/envelopes.ts`). A rename removes a permanent source of confusion.
+- **Two unrelated "envelopes"** — resolved 2026-08-11: the call envelope is now `src/local/call-envelope.ts`, distinct from the dispatch envelope (`src/review/envelopes.ts`).
 - **Exit codes lie** — resolved 2026-08-11: it was a bug. Any `{"ok": false}` result now also exits nonzero, and the skills' prose compensations are gone; the JSON body remains the authority for structured details.
-- **A ~30-line prose recipe as a string literal** in production code (`renderGateCounterPrompt`) embeds exact CLI command lines; any rename silently invalidates it unless a test pins it.
-- **`commands.ts` mixes dispatch with implementation** — three commands have full bodies inline in the dispatcher; extracting them leaves a pure table.
-- Small duplicated helpers: strict-UTF-8 decoding appears inline in at least four places; `visibleContent`/`visibleBytes` are the same function twice.
+- **A ~30-line prose recipe as a string literal** in production code (`renderGateCounterPrompt`) embeds exact CLI command lines — now pinned by a test asserting every `archflow-local <name>` it prints is a published command.
+- **`commands.ts` mixes dispatch with implementation** — resolved 2026-08-11: every command body is a named module-level handler; `runLocalCommand` is a pure dispatch table.
+- Small duplicated helpers — resolved 2026-08-11: strict-UTF-8 decoding and the `visibleContent`/`visibleBytes` twins are one shared `src/contracts/utf8.ts` module with a single `TextDecoder` singleton.
 
 ### 8. Version-coupled external surfaces — fragility, not complexity
 
@@ -53,8 +53,8 @@ The child-CLI lockdown argvs (long literal flag lists per host) and the regex-ba
 ### 9. Things that look removable
 
 - **`workflow.ts`** parses workflow YAML and then rejects anything that doesn't deep-equal a hard-coded constant — a full file/schema/parse pipeline validating a compile-time value.
-- **Five orphaned schemas** (referenced by nothing) and two release/legal schemas (~800 lines) tangential to the workflow the server runs.
-- **`internal/test-capabilities.ts`** — 248 lines of test factories in the production tree, imported by three production modules that would need untangling first.
+- **Orphaned schemas** — resolved 2026-08-11: the two true orphans (`authority-link`, `evidence-reference`) are deleted; the two release/legal schemas stay by declared exception as the hand-written inputs to `release-support.mjs`.
+- **`internal/test-capabilities.ts`** — resolved 2026-08-11: the three production-imported factories now live in `internal/trust-mints.ts` (mints beside the `trust-brands.ts` registries they register with); `test-capabilities.ts` keeps only test-only factories and no production module imports it.
 - **Advertised-schema pruning** in `mcp/tools.ts` — a small custom JSON-Schema `$ref` resolver owned forever, motivated by a measured 179 KB saving; worth keeping only while that saving matters.
 - **The `unified-diff` tier** — with 40 context lines it's nearly full-file for most real files; it's fair to ask whether the hand-rolled Myers diff (~200 lines, with an 8 MB worst-case allocation pattern) earns its place over "embed or digest-only."
 
@@ -73,7 +73,7 @@ For balance — machinery that directly implements the trust boundaries and shou
 ## Suggested audit order
 
 1. ~~Decide the degraded-mode question (#1)~~ — decided and done: degraded mode is read-only status only.
-2. Split `gates.ts` (#2) and name the predicates in `fixed-point.ts` (#6) — pure readability, no behavior change.
+2. ~~Split `gates.ts` (#2) and name the predicates in `fixed-point.ts` (#6)~~ — done: six focused gate modules; named binding-failure predicates.
 3. ~~Pick one shape authority (#4)~~ — done: Zod generates the schemas; Ajv is dev-only.
-4. Sweep the small items (#7, #9) opportunistically as touched code (#5 is done).
+4. ~~Sweep the small items (#7, #9)~~ — done except the two deliberate keeps: the advertised-schema pruner (still buying its measured saving) and the `unified-diff` tier (documented limitation; behavior-changing to remove).
 5. ~~Revisit SDK distrust (#3)~~ — decided and done: the pinned, probed SDK is the JSON-RPC authority; the session layer is retired.

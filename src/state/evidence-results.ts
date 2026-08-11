@@ -28,7 +28,7 @@ import {
 } from "../contracts/evidence.js";
 import {
   createVerifiedEvidenceReference,
-} from "../contracts/internal/test-capabilities.js";
+} from "../contracts/internal/trust-mints.js";
 import { registerCurrentReviewSet } from "../contracts/internal/trust-brands.js";
 import {
   adjudicationReviewClaim,

@@ -11,7 +11,7 @@ import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { parseSafeCode, parseSafeId, parseSafeInteger, parseSha256Digest } from "../../src/contracts/evidence.js";
 import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import { stageLegacyUpgrade } from "../../src/init/legacy-upgrade.js";
-import { computeCallEnvelope } from "../../src/local/envelope.js";
+import { computeCallEnvelope } from "../../src/local/call-envelope.js";
 import { prepareDocumentResult, prepareImplementationResult } from "../../src/mcp/handlers/state-results.js";
 import { resolveTaskPath, type ResolvedTaskPath } from "../../src/repository/paths.js";
 import { buildDocumentArtifact } from "../../src/state/document-artifact.js";

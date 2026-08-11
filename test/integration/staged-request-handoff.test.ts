@@ -20,7 +20,7 @@ import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { runBuildRequest } from "../../src/local/build-request.js";
 import { runLocalCommand } from "../../src/local/commands.js";
-import type { CallEnvelope } from "../../src/local/envelope.js";
+import type { CallEnvelope } from "../../src/local/call-envelope.js";
 import { createToolHandlers } from "../../src/mcp/handlers/index.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
 import { resolveTaskPath } from "../../src/repository/paths.js";

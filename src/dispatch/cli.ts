@@ -10,7 +10,7 @@ import type { AdapterId, ModelFamily } from "../contracts/review.js";
 import {
   createAdjudicationObservationCapability,
   createReviewObservationCapability,
-} from "../contracts/internal/test-capabilities.js";
+} from "../contracts/internal/trust-mints.js";
 import {
   observationSource,
   type ObservationBindingByKind,

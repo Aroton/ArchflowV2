@@ -115,6 +115,13 @@ function boundToDeclaredPredecessor(
     bound.input_fingerprint === predecessor.input_fingerprint;
 }
 
+function boundToSubjectOrDeclaredPredecessor(
+  bound: Readonly<{ subject_digest: Sha256Digest; input_fingerprint: Sha256Digest }>,
+  subject: EvidenceSubject,
+): boolean {
+  return boundToSubjectExactly(bound, subject) || boundToDeclaredPredecessor(bound, subject);
+}
+
 function subjectCurrent(
   evidence: ReviewEvidence | TriageCandidate | AdjudicationEvidence | undefined,
   subject: EvidenceSubject,
@@ -131,10 +138,7 @@ function currentReviewSet(
 ): DerivedCurrentEvidenceSet | undefined {
   try {
     const derived = deriveCurrentEvidenceSet(retained);
-    return boundToSubjectExactly(derived, subject) ||
-      boundToDeclaredPredecessor(derived, subject)
-      ? derived
-      : undefined;
+    return boundToSubjectOrDeclaredPredecessor(derived, subject) ? derived : undefined;
   } catch {
     return undefined;
   }
@@ -183,42 +187,124 @@ function adjudicationAt(retained: RetainedEvidenceSet): AdjudicationEvidence | u
     : undefined;
 }
 
-function adjudicationGateSatisfied(
-  state: TaskStateV1,
-  retained: RetainedEvidenceSet,
+/** The deterministic gate shape an adjudication rule outcome selects. */
+type AdjudicationGate = NonNullable<ReturnType<typeof selectAdjudicationGate>>;
+
+/** The retained evidence trio an authenticated approval must bind to satisfy a gate. */
+export type RetainedGateEvidence = Readonly<{
+  counter_review_digest: Sha256Digest | undefined;
+  triage: TriageCandidate | undefined;
+  adjudication: AdjudicationEvidence | undefined;
+}>;
+
+/**
+ * The first binding an authenticated gate approval fails to hold, named after the exact clause
+ * so a caller can surface why an approval did not satisfy the gate instead of a bare boolean.
+ */
+export type GateApprovalBindingFailure =
+  | "approval-gate-kind"
+  | "approval-subject-digest"
+  | "request-gate-kind"
+  | "request-subject-digest"
+  | "request-context-digest"
+  | "request-phase-instance"
+  | "decision-context-digest"
+  | "decision-envelope-context-digest"
+  | "counter-review-evidence-missing"
+  | "triage-evidence-missing"
+  | "adjudication-evidence-missing"
+  | "triage-not-bound-to-subject"
+  | "adjudication-not-bound-to-subject"
+  | "adjudication-evidence-set-digest"
+  | "triage-evidence-set-digest"
+  | "counter-review-slot-digest";
+
+/** The durable ApprovalRef must name this exact gate. */
+function approvalBindingFailure(
+  approval: AuthenticatedGateApproval["approval"],
+  gate: AdjudicationGate,
+): GateApprovalBindingFailure | undefined {
+  if (approval.gate_kind !== gate.kind) return "approval-gate-kind";
+  if (approval.subject_digest !== gate.subject_digest) return "approval-subject-digest";
+  return undefined;
+}
+
+/** The archived request must be the one this gate, context, and phase instance would mint. */
+function requestBindingFailure(
+  request: AuthenticatedGateApproval["request"],
+  gate: AdjudicationGate,
+  contextDigest: Sha256Digest,
+  phaseInstance: TaskStateV1["phase_instance"],
+): GateApprovalBindingFailure | undefined {
+  if (request.kind !== gate.kind) return "request-gate-kind";
+  if (request.subject_digest !== gate.subject_digest) return "request-subject-digest";
+  if (request.context_digest !== contextDigest) return "request-context-digest";
+  if (request.phase_instance !== phaseInstance) return "request-phase-instance";
+  return undefined;
+}
+
+/** The archived decision and its signed envelope must both cite this gate's context. */
+function decisionBindingFailure(
+  decision: AuthenticatedGateApproval["decision"],
+  contextDigest: Sha256Digest,
+): GateApprovalBindingFailure | undefined {
+  if (decision.context_digest !== contextDigest) return "decision-context-digest";
+  if (decision.envelope.context_digest !== contextDigest) return "decision-envelope-context-digest";
+  return undefined;
+}
+
+/** The retained evidence chain must exist, bind to the subject, and match the request's set. */
+function evidenceBindingFailure(
+  request: AuthenticatedGateApproval["request"],
+  evidence: RetainedGateEvidence,
   subject: EvidenceSubject,
-  gate: NonNullable<ReturnType<typeof selectAdjudicationGate>>,
-): boolean {
-  const contextDigest = computeGateContextDigest(gate.kind, gate.context);
-  const counterDigest = retained.get("counter_review")?.manifest.artifact_digest;
-  const triage = triageAt(retained);
-  const adjudication = adjudicationAt(retained);
-  for (const authenticated of subject.authenticated_gate_approvals ?? []) {
-    assertAuthenticatedGateApproval(authenticated);
-    const { approval, request, decision } = authenticated;
-    if (
-      approval.gate_kind !== gate.kind ||
-      approval.subject_digest !== gate.subject_digest ||
-      request.kind !== gate.kind ||
-      request.subject_digest !== gate.subject_digest ||
-      request.context_digest !== contextDigest ||
-      request.phase_instance !== state.phase_instance ||
-      decision.context_digest !== contextDigest ||
-      decision.envelope.context_digest !== contextDigest ||
-      counterDigest === undefined ||
-      triage === undefined ||
-      adjudication === undefined ||
-      // Both bindings relax to the declared editorial predecessor (one hop): the constitution
-      // review is dispatched with the counter-review, so an editorial revision re-runs neither
-      // and the gate summary discloses that the evidence evaluated the predecessor bytes.
-      !(boundToSubjectExactly(triage, subject) || boundToDeclaredPredecessor(triage, subject)) ||
-      !(boundToSubjectExactly(adjudication, subject) || boundToDeclaredPredecessor(adjudication, subject)) ||
-      adjudication.source_evidence_set_digest !== request.current_evidence.set_digest ||
-      request.current_evidence.set_digest !== triage.current_evidence_set_digest ||
-      request.current_evidence.slots[0].evidence_digest !== counterDigest
-    ) continue;
-    return true;
+): GateApprovalBindingFailure | undefined {
+  const { counter_review_digest: counterDigest, triage, adjudication } = evidence;
+  if (counterDigest === undefined) return "counter-review-evidence-missing";
+  if (triage === undefined) return "triage-evidence-missing";
+  if (adjudication === undefined) return "adjudication-evidence-missing";
+  // Both bindings relax to the declared editorial predecessor (one hop): the constitution
+  // review is dispatched with the counter-review, so an editorial revision re-runs neither
+  // and the gate summary discloses that the evidence evaluated the predecessor bytes.
+  if (!boundToSubjectOrDeclaredPredecessor(triage, subject)) return "triage-not-bound-to-subject";
+  if (!boundToSubjectOrDeclaredPredecessor(adjudication, subject)) {
+    return "adjudication-not-bound-to-subject";
   }
+  if (adjudication.source_evidence_set_digest !== request.current_evidence.set_digest) {
+    return "adjudication-evidence-set-digest";
+  }
+  if (request.current_evidence.set_digest !== triage.current_evidence_set_digest) {
+    return "triage-evidence-set-digest";
+  }
+  if (request.current_evidence.slots[0].evidence_digest !== counterDigest) {
+    return "counter-review-slot-digest";
+  }
+  return undefined;
+}
+
+/**
+ * Evaluates every binding an authenticated approval must hold to satisfy an adjudication gate,
+ * returning the first failed binding or undefined when the approval satisfies the gate. Clause
+ * order matches the historical single-expression check exactly.
+ */
+export function gateApprovalBindingFailure(
+  authenticated: AuthenticatedGateApproval,
+  gate: AdjudicationGate,
+  contextDigest: Sha256Digest,
+  state: TaskStateV1,
+  subject: EvidenceSubject,
+  evidence: RetainedGateEvidence,
+): GateApprovalBindingFailure | undefined {
+  assertAuthenticatedGateApproval(authenticated);
+  const { approval, request, decision } = authenticated;
+  return approvalBindingFailure(approval, gate) ??
+    requestBindingFailure(request, gate, contextDigest, state.phase_instance) ??
+    decisionBindingFailure(decision, contextDigest) ??
+    evidenceBindingFailure(request, evidence, subject);
+}
+
+/** The waiver escape path: a waiverable gate kind whose every eligible rule is durably waived. */
+function waiverPathSatisfiesGate(state: TaskStateV1, gate: AdjudicationGate): boolean {
   if (
     (gate.kind !== "review-trigger" && gate.kind !== "adjudication-failure") ||
     !("eligible_waiver_rules" in gate.context) ||
@@ -235,6 +321,25 @@ function adjudicationGateSatisfied(
     ) !== undefined);
 }
 
+function adjudicationGateSatisfied(
+  state: TaskStateV1,
+  retained: RetainedEvidenceSet,
+  subject: EvidenceSubject,
+  gate: AdjudicationGate,
+): boolean {
+  const contextDigest = computeGateContextDigest(gate.kind, gate.context);
+  const evidence: RetainedGateEvidence = Object.freeze({
+    counter_review_digest: retained.get("counter_review")?.manifest.artifact_digest,
+    triage: triageAt(retained),
+    adjudication: adjudicationAt(retained),
+  });
+  const approvalSatisfies = (subject.authenticated_gate_approvals ?? []).some((authenticated) =>
+    gateApprovalBindingFailure(
+      authenticated, gate, contextDigest, state, subject, evidence,
+    ) === undefined);
+  return approvalSatisfies || waiverPathSatisfiesGate(state, gate);
+}
+
 function adjudicationGatePending(
   state: TaskStateV1,
   gate: NonNullable<ReturnType<typeof selectAdjudicationGate>>,
@@ -246,15 +351,17 @@ function adjudicationGatePending(
     open.context_digest === computeGateContextDigest(gate.kind, gate.context);
 }
 
+type TriageDispositionState = Readonly<{
+  complete: boolean;
+  blocker: boolean;
+  accepted: boolean;
+}>;
+
 function dispositionState(
   retained: RetainedEvidenceSet,
   reviews: DerivedCurrentEvidenceSet | undefined,
   triage: TriageCandidate | undefined,
-): Readonly<{
-  complete: boolean;
-  blocker: boolean;
-  accepted: boolean;
-}> {
+): TriageDispositionState {
   const counter = reviews?.reviews[0]?.evidence;
   if (reviews === undefined || counter === undefined || triage === undefined) {
     return Object.freeze({ complete: false, blocker: false, accepted: false });
@@ -279,15 +386,12 @@ function dispositionState(
   });
 }
 
-/**
- * Computes review currency and the next fixed-point action from durable state and retained
- * manifests only. Attempt exhaustion is deliberately evaluated only when re-entry is required.
- */
-export function assessCurrentEvidence(
+/** The pinned constitution and any retained adjudication must match durable state's digests. */
+function assertSubjectMatchesDurableState(
   state: TaskStateV1,
   retained: RetainedEvidenceSet,
   subject: EvidenceSubject,
-): EvidenceAssessment {
+): void {
   assertResolvedConstitution(subject.constitution);
   if (subject.constitution.digest !== state.constitution_digest) {
     throw new TypeError("fixed-point constitution does not match durable state");
@@ -299,12 +403,126 @@ export function assessCurrentEvidence(
   ) {
     throw new TypeError("retained adjudication does not match the pinned constitution");
   }
+}
+
+function resolveMaxAttempts(subject: EvidenceSubject): number {
   const maximum = subject.max_attempts ?? DEFAULT_MAX_ATTEMPTS;
   if (!Number.isSafeInteger(maximum) || maximum < 1) {
     throw new TypeError("max_attempts must be a positive safe integer");
   }
-  const constitutionRequired = [...subject.constitution.rules.values()]
-    .some((rule) => rule.status === "active");
+  return maximum;
+}
+
+function constitutionReviewRequired(constitution: ResolvedConstitution): boolean {
+  return [...constitution.rules.values()].some((rule) => rule.status === "active");
+}
+
+/** Accepted findings after the triage step itself succeeded force a full produce re-entry. */
+function acceptedFindingsForceReentry(
+  state: TaskStateV1,
+  disposition: TriageDispositionState,
+): boolean {
+  return disposition.accepted &&
+    state.step === "triage" &&
+    state.status === "succeeded";
+}
+
+/**
+ * Editorial-only acceptance authorizes a produce re-entry that keeps review evidence current.
+ * The flag clears as soon as the produce artifact declares this triage as its authorizer —
+ * at that point the triage is bound to the declared predecessor, not to the subject itself.
+ */
+function editorialRevisionPending(
+  triageCurrent: TriageCandidate | undefined,
+  disposition: TriageDispositionState,
+  subject: EvidenceSubject,
+): boolean {
+  return triageCurrent !== undefined &&
+    disposition.complete &&
+    triageCurrent.accepted_count === 0 &&
+    (triageCurrent.accepted_editorial_count ?? 0) > 0 &&
+    boundToSubjectExactly(triageCurrent, subject);
+}
+
+/** The chain's outcome before attempt exhaustion is applied on top. */
+type NextActionDecision = Readonly<{
+  next: Exclude<EvidenceAssessment["next"], "attempts-exhausted">;
+  reentry_required: boolean;
+  editorial_revision_required: boolean;
+  adjudication_gate_pending: boolean;
+}>;
+
+function decision(
+  next: NextActionDecision["next"],
+  flags?: Partial<Omit<NextActionDecision, "next">>,
+): NextActionDecision {
+  return Object.freeze({
+    next,
+    reentry_required: flags?.reentry_required ?? false,
+    editorial_revision_required: flags?.editorial_revision_required ?? false,
+    adjudication_gate_pending: flags?.adjudication_gate_pending ?? false,
+  });
+}
+
+/** Every adjudication gate satisfied advances; otherwise surface the first unmet gate. */
+function resolveAdjudicationGateStep(
+  state: TaskStateV1,
+  retained: RetainedEvidenceSet,
+  subject: EvidenceSubject,
+): NextActionDecision {
+  const adjudication = adjudicationAt(retained);
+  const gates = adjudication === undefined
+    ? []
+    : selectAdjudicationGates(subject.constitution.rules, adjudication);
+  const gate = gates.find((candidate) =>
+    !adjudicationGateSatisfied(state, retained, subject, candidate));
+  if (gate === undefined) return decision("advance");
+  // The same action covers both halves of the commit/publication crash window:
+  // recreate the deterministic gate when absent, or resume the exact open gate.
+  return decision("adjudication-gate", {
+    adjudication_gate_pending: adjudicationGatePending(state, gate),
+  });
+}
+
+/** Walks the fixed-point decision chain in priority order; each step is named above. */
+function decideNextAction(
+  state: TaskStateV1,
+  retained: RetainedEvidenceSet,
+  subject: EvidenceSubject,
+  current: readonly PipelineStep[],
+  disposition: TriageDispositionState,
+  triageCurrent: TriageCandidate | undefined,
+): NextActionDecision {
+  if (acceptedFindingsForceReentry(state, disposition)) {
+    return decision("produce", { reentry_required: true });
+  }
+  if (!current.includes("counter_review")) return decision("counter_review");
+  if (constitutionReviewRequired(subject.constitution) && !current.includes("adjudicate")) {
+    // The merged counter-review call installs review and constitution evidence atomically, so a
+    // current review set without current constitution evidence is reachable only through repair
+    // or an upstream re-approval. The backward-to-produce door is the recovery path.
+    return decision("produce", { reentry_required: true });
+  }
+  if (!current.includes("triage") || !disposition.complete) return decision("triage");
+  if (disposition.accepted) return decision("triage");
+  if (editorialRevisionPending(triageCurrent, disposition, subject)) {
+    // Not a re-entry: the attempt budget and the retained review evidence both survive.
+    return decision("produce", { editorial_revision_required: true });
+  }
+  return resolveAdjudicationGateStep(state, retained, subject);
+}
+
+/**
+ * Computes review currency and the next fixed-point action from durable state and retained
+ * manifests only. Attempt exhaustion is deliberately evaluated only when re-entry is required.
+ */
+export function assessCurrentEvidence(
+  state: TaskStateV1,
+  retained: RetainedEvidenceSet,
+  subject: EvidenceSubject,
+): EvidenceAssessment {
+  assertSubjectMatchesDurableState(state, retained, subject);
+  const maximum = resolveMaxAttempts(subject);
   const reviews = currentReviewSet(retained, subject);
   const candidateTriage = triageAt(retained);
   const triageCurrent = currentFor(
@@ -315,67 +533,18 @@ export function assessCurrentEvidence(
   const stale = EVIDENCE_STEPS.filter((step) =>
     retained.has(step) && !current.includes(step));
   const disposition = dispositionState(retained, reviews, triageCurrent);
-
-  let next: EvidenceAssessment["next"];
-  let reentry = false;
-  let editorialRevision = false;
-  let gatePending = false;
-  const acceptedReentry = disposition.accepted &&
-    state.step === "triage" &&
-    state.status === "succeeded";
-  // Editorial-only acceptance authorizes a produce re-entry that keeps review evidence current.
-  // The flag clears as soon as the produce artifact declares this triage as its authorizer —
-  // at that point the triage is bound to the declared predecessor, not to the subject itself.
-  const editorialPending = triageCurrent !== undefined &&
-    disposition.complete &&
-    triageCurrent.accepted_count === 0 &&
-    (triageCurrent.accepted_editorial_count ?? 0) > 0 &&
-    boundToSubjectExactly(triageCurrent, subject);
-  if (acceptedReentry) {
-    reentry = true;
-    next = "produce";
-  } else if (!current.includes("counter_review")) next = "counter_review";
-  else if (constitutionRequired && !current.includes("adjudicate")) {
-    // The merged counter-review call installs review and constitution evidence atomically, so a
-    // current review set without current constitution evidence is reachable only through repair
-    // or an upstream re-approval. The backward-to-produce door is the recovery path.
-    reentry = true;
-    next = "produce";
-  } else if (!current.includes("triage") || !disposition.complete) next = "triage";
-  else if (disposition.accepted) {
-    next = "triage";
-  } else if (editorialPending) {
-    // Not a re-entry: the attempt budget and the retained review evidence both survive.
-    editorialRevision = true;
-    next = "produce";
-  } else {
-    const adjudication = adjudicationAt(retained);
-    const gates = adjudication === undefined
-      ? []
-      : selectAdjudicationGates(subject.constitution.rules, adjudication);
-    const gate = gates.find((candidate) =>
-      !adjudicationGateSatisfied(state, retained, subject, candidate));
-    if (gate === undefined) {
-      next = "advance";
-    } else {
-      // The same action covers both halves of the commit/publication crash window:
-      // recreate the deterministic gate when absent, or resume the exact open gate.
-      gatePending = adjudicationGatePending(state, gate);
-      next = "adjudication-gate";
-    }
-  }
-
-  const exhausted = reentry && state.attempt >= maximum;
+  const action = decideNextAction(state, retained, subject, current, disposition, triageCurrent);
+  const exhausted = action.reentry_required && state.attempt >= maximum;
   return Object.freeze({
     current: Object.freeze([...current]),
     stale: Object.freeze([...stale]),
     every_finding_dispositioned: disposition.complete,
     blocker_remains: disposition.blocker,
-    reentry_required: reentry,
-    editorial_revision_required: editorialRevision,
+    reentry_required: action.reentry_required,
+    editorial_revision_required: action.editorial_revision_required,
     exhausted,
-    adjudication_gate_pending: gatePending,
-    next: exhausted ? "attempts-exhausted" : next,
+    adjudication_gate_pending: action.adjudication_gate_pending,
+    next: exhausted ? "attempts-exhausted" : action.next,
   });
 }
 

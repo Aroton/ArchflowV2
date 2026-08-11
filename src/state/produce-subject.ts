@@ -1,7 +1,7 @@
-import { Buffer } from "node:buffer";
 import { readFile } from "node:fs/promises";
 
 import { canonicalJsonDigest, sha256Bytes } from "../contracts/canonical.js";
+import { decodeUtf8Strict, visibleContent } from "../contracts/utf8.js";
 import type { DocumentArtifactV1 } from "../contracts/durable-document.js";
 import type { ImplementationOutputV1 } from "../contracts/durable-implementation-output.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
@@ -17,6 +17,9 @@ import { resolveTaskPath } from "../repository/paths.js";
 import type { TransactionAuthority } from "./authority.js";
 import type { ProjectionDesired } from "./snapshots.js";
 import type { TransactionDependencies, RetainedResultInstallation } from "./transaction.js";
+
+/** Throwing decoder for document projections, which must be UTF-8 text — no base64 fallback. */
+const fatalUtf8 = new TextDecoder("utf-8", { fatal: true });
 
 type ProduceArtifact = DocumentArtifactV1 | ImplementationOutputV1;
 
@@ -158,14 +161,6 @@ export async function readProduceProjection(
   return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ bytes, digest }) });
 }
 
-function visibleBytes(bytes: Uint8Array): Readonly<{ encoding: "utf8" | "base64"; content: string }> {
-  try {
-    return Object.freeze({ encoding: "utf8", content: new TextDecoder("utf-8", { fatal: true }).decode(bytes) });
-  } catch {
-    return Object.freeze({ encoding: "base64", content: Buffer.from(bytes).toString("base64") });
-  }
-}
-
 export type ReviewExclusionReason = "generated-attribute" | "excluded-basename";
 
 export type ReviewChangeRendering = "embedded" | "unified-diff" | "digest-only";
@@ -206,7 +201,7 @@ function reviewChangeSide(desired: ProjectionDesired, embed: boolean): ReviewCha
     byte_count: desired.bytes.byteLength,
   };
   return embed
-    ? Object.freeze({ ...identity, ...visibleBytes(desired.bytes) })
+    ? Object.freeze({ ...identity, ...visibleContent(desired.bytes) })
     : Object.freeze(identity);
 }
 
@@ -241,14 +236,6 @@ export async function resolveReviewExclusions(
 
 /** Whole-file embedding ceiling per side; larger text renders as a wide-context unified diff. */
 export const EMBED_WHOLE_BYTE_CEILING = 32_768;
-
-function decodeUtf8Strict(bytes: Uint8Array): string | undefined {
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    return undefined;
-  }
-}
 
 /** Builds the tiered change entries the implementation review material embeds. */
 export function reviewChangeEntries(
@@ -303,7 +290,7 @@ export function renderProduceReviewMaterial(
   exclusions: ReadonlyMap<string, ReviewExclusionReason>,
 ): string {
   if (subject.artifact.artifact_kind === "document") {
-    return new TextDecoder("utf-8", { fatal: true }).decode(selectedProjection.bytes);
+    return fatalUtf8.decode(selectedProjection.bytes);
   }
   return `${JSON.stringify({
     schema_version: "1",

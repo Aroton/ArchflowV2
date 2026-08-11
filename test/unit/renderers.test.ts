@@ -2,7 +2,8 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
-import { createTestAuthorityLink, createTestCurrentReviewSetAuthority, createTestVerifiedReferencedEvidence, createVerifiedEvidenceReference } from "../../src/contracts/internal/test-capabilities.js";
+import { createTestAuthorityLink, createTestCurrentReviewSetAuthority, createTestVerifiedReferencedEvidence } from "../../src/contracts/internal/test-capabilities.js";
+import { createVerifiedEvidenceReference } from "../../src/contracts/internal/trust-mints.js";
 import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import { renderAdjudicationEvidence, renderReviewEvidence, renderTriage } from "../../src/contracts/renderers.js";
 import type { DegradedReview } from "../../src/contracts/review.js";

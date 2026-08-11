@@ -15,7 +15,7 @@ import type { ReviewEvidence } from "../contracts/review.js";
 import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
 import type { SupplementalReviewOutcome, SupplementalReviewRef } from "../contracts/supplemental.js";
 import { resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
-import { renderGateCounterPrompt } from "../local/envelope.js";
+import { renderGateCounterPrompt } from "../local/call-envelope.js";
 import { selectAdjudicationGates } from "../review/adjudication.js";
 import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS, waiverInForce, type EvidenceAssessment } from "../review/fixed-point.js";
 import { createGitRunner, preflightGit } from "../repository/git.js";

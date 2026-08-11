@@ -115,7 +115,7 @@ describe("review observation attestation mint", () => {
   it("keeps capability minting internal while the production mint remains usable", async () => {
     const source = await readFile(new URL("../../src/dispatch/cli.ts", import.meta.url), "utf8");
     expect(publicContracts).not.toHaveProperty("createReviewObservationCapability");
-    expect(source).toContain('from "../contracts/internal/test-capabilities.js"');
+    expect(source).toContain('from "../contracts/internal/trust-mints.js"');
     expect(() => mint("claude")).not.toThrow();
   });
 

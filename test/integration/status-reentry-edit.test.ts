@@ -18,7 +18,7 @@ import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { stageTaskInitialization } from "../../src/init/task-initialization.js";
 import { runBuildRequest } from "../../src/local/build-request.js";
-import { computeCallEnvelope, type CallEnvelope } from "../../src/local/envelope.js";
+import { computeCallEnvelope, type CallEnvelope } from "../../src/local/call-envelope.js";
 import { createToolHandlers } from "../../src/mcp/handlers/index.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
 import { createProductionServices } from "../../src/state/production.js";

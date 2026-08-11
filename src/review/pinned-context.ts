@@ -1,8 +1,8 @@
-import { Buffer } from "node:buffer";
 import { readFile } from "node:fs/promises";
 import { join, posix } from "node:path";
 
 import { sha256Bytes } from "../contracts/canonical.js";
+import { decodeUtf8Strict, visibleContent } from "../contracts/utf8.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import type { Sha256Digest } from "../contracts/evidence.js";
 import { userAskClaim } from "../contracts/path-claims.js";
@@ -53,17 +53,6 @@ const EXCERPT_BYTE_BUDGET = 24_576;
 /** Bounded number of mechanically resolved evidence targets per review. */
 const MECHANICAL_TARGET_LIMIT = 32;
 
-function visibleContent(bytes: Uint8Array): Readonly<{ encoding: "utf8" | "base64"; content: string }> {
-  try {
-    return Object.freeze({
-      encoding: "utf8",
-      content: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-    });
-  } catch {
-    return Object.freeze({ encoding: "base64", content: Buffer.from(bytes).toString("base64") });
-  }
-}
-
 /** Pins evidence bytes whole, recording the digest of exactly those bytes. */
 export function pinnedContextEntry(
   kind: PinnedContextKind,
@@ -92,12 +81,8 @@ export function unavailableContextEntry(
 function utf8SafeHead(bytes: Uint8Array, budget: number): Uint8Array {
   for (let cut = budget; cut > budget - 4 && cut > 0; cut -= 1) {
     const head = bytes.slice(0, cut);
-    try {
-      new TextDecoder("utf-8", { fatal: true }).decode(head);
-      return head;
-    } catch {
-      // keep backtracking to the previous code-point boundary
-    }
+    // Backtrack to the previous code-point boundary until the head decodes cleanly.
+    if (decodeUtf8Strict(head) !== undefined) return head;
   }
   return bytes.slice(0, budget);
 }
@@ -208,12 +193,7 @@ export async function assembleReviewContext(input: {
         ...await implementationMechanicalEvidence(input.runner, input.subject),
       ];
     } else {
-      let artifactText: string | undefined;
-      try {
-        artifactText = new TextDecoder("utf-8", { fatal: true }).decode(input.projection_bytes);
-      } catch {
-        artifactText = undefined;
-      }
+      const artifactText = decodeUtf8Strict(input.projection_bytes);
       mechanical = artifactText === undefined
         ? Object.freeze([])
         : await documentMechanicalEvidence(input.runner, artifactText);
@@ -432,12 +412,8 @@ async function implementationMechanicalEvidence(
     const wanted: { specifier: string; fromPath: string; candidates: readonly string[] }[] = [];
     for (const entry of planEntries) {
       if (entry.desired.state !== "present" || !/\.(?:ts|tsx|mts|js|mjs)$/u.test(entry.path)) continue;
-      let source: string;
-      try {
-        source = new TextDecoder("utf-8", { fatal: true }).decode(entry.desired.bytes);
-      } catch {
-        continue;
-      }
+      const source = decodeUtf8Strict(entry.desired.bytes);
+      if (source === undefined) continue;
       for (const specifier of relativeImportSpecifiers(source)) {
         const candidates = importTargetCandidates(entry.path, specifier);
         if (candidates.length === 0) continue;

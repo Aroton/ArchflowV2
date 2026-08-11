@@ -9,7 +9,7 @@ import type { ProjectResult } from "../../src/contracts/errors.js";
 import { parsePathSafeId, parseSha256Digest } from "../../src/contracts/evidence.js";
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { handleCounterReview } from "../../src/mcp/handlers/counter-review.js";
-import { computeCallEnvelope } from "../../src/local/envelope.js";
+import { computeCallEnvelope } from "../../src/local/call-envelope.js";
 import { openDurableGate, type GateOpenInput } from "../../src/state/gates.js";
 import { identifyStateInitialization } from "../../src/state/initialization.js";
 import { runStateTransaction } from "../../src/state/transaction.js";

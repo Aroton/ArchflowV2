@@ -12,7 +12,7 @@ import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { computeInputFingerprint, type InputFingerprintSubject } from "../../src/contracts/fingerprints.js";
-import { createVerifiedEvidenceReference } from "../../src/contracts/internal/test-capabilities.js";
+import { createVerifiedEvidenceReference } from "../../src/contracts/internal/trust-mints.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { renderReviewEvidence } from "../../src/contracts/renderers.js";
 import type { SupplementalReviewRecordV1 } from "../../src/contracts/supplemental-record.js";
