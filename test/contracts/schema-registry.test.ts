@@ -17,8 +17,6 @@ const SCHEMA_FILES = {
   reviewEvidence: "review-evidence",
   adjudication: "adjudication",
   adjudicationEvidence: "adjudication-evidence",
-  evidenceReference: "evidence-reference",
-  authorityLink: "authority-link",
   evidenceSlots: "evidence-slots",
   triage: "triage",
   supplementalReview: "supplemental-review",

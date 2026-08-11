@@ -128,6 +128,8 @@ describe("package.json dependencies and scripts", () => {
       "check:mcp-sdk-boundary",
       "check:notices",
       "check:release",
+      "check:schemas",
+      "generate:schemas",
       "probe:mcp-sdk-compatibility",
       "release:check",
       "release:mutations",

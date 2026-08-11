@@ -11,8 +11,6 @@ export const SCHEMA_IDS = {
   reviewEvidence: "urn:archflow:schema:v1:review-evidence",
   adjudication: "urn:archflow:schema:v1:adjudication",
   adjudicationEvidence: "urn:archflow:schema:v1:adjudication-evidence",
-  evidenceReference: "urn:archflow:schema:v1:evidence-reference",
-  authorityLink: "urn:archflow:schema:v1:authority-link",
   evidenceSlots: "urn:archflow:schema:v1:evidence-slots",
   triage: "urn:archflow:schema:v1:triage",
   supplementalReview: "urn:archflow:schema:v1:supplemental-review",
