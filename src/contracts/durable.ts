@@ -1,12 +1,5 @@
 import { canonicalDocument, canonicalJsonDigest, type CanonicalDocument } from "./canonical.js";
 import { isDeepStrictEqual } from "node:util";
-import {
-  chainAnchor,
-  chainHeadBreak,
-  checkpointLinkBreak,
-  checkpointSelfBreak,
-  type ManualCheckpointImportV1,
-} from "./durable-checkpoint.js";
 import type { DocumentArtifactV1 } from "./durable-document.js";
 import type { ImplementationOutputV1 } from "./durable-implementation-output.js";
 import type {
@@ -48,7 +41,6 @@ export type DurableArtifact =
   | LegacyImportInitializationV1
   | DocumentArtifactV1
   | ImplementationOutputV1
-  | ManualCheckpointImportV1
   | TriageArtifactV1;
 
 export type DurableSemanticSubject = {
@@ -111,28 +103,6 @@ export const DURABLE_ISSUE_CODES = Object.freeze({
   /** 4b */ implementationOutputPhaseKind: "implementation-output-phase-kind",
   /** 5a */ renamePreviousPathEqualsPath: "rename-previous-path-equals-path",
   /** 5b */ restoreTargetNotDeclared: "restore-target-not-declared",
-  /** 5c */ importChainTaskIdMismatch: "import-chain-task-id-mismatch",
-  /** 5d */ importChainRepositoryIdentityMismatch: "import-chain-repository-identity-mismatch",
-  /** 5e */ importCheckpointRevisionNotSuccessor: "import-checkpoint-revision-not-successor",
-  /** 5f */ importChainGap: "import-chain-gap",
-  /** 5f */ importPredecessorDigestMismatch: "import-predecessor-digest-mismatch",
-  /** 5g */ importChainHeadNotRevisionOne: "import-chain-head-not-revision-one",
-  /** 5h */ importHeadPredecessorRevisionMismatch: "import-head-predecessor-revision-mismatch",
-  /** 5h */ importHeadPredecessorDigestMismatch: "import-head-predecessor-digest-mismatch",
-  /** 5i */ importInitializationDigestMismatch: "import-initialization-digest-mismatch",
-  /** 5j */ importInitializationTaskIdMismatch: "import-initialization-task-id-mismatch",
-  /** 5k */ importInitializationRepositoryIdentityMismatch: "import-initialization-repository-identity-mismatch",
-  /** 5l */ importChainInitializationMismatch: "import-chain-initialization-mismatch",
-  /** 5n */ importContinuationWithoutState: "import-continuation-without-state",
-  /** 5o */ importInitialWithState: "import-initial-with-state",
-  /** 5p */ importStateRevisionMismatch: "import-state-revision-mismatch",
-  /** 5q */ importStateDigestMismatch: "import-state-digest-mismatch",
-  /** 5r */ importStateRepositoryIdentityMismatch: "import-state-repository-identity-mismatch",
-  /** 5s */ importStateAdoptedCheckpointMissing: "import-state-adopted-checkpoint-missing",
-  /** 5s */ importStateAdoptedCheckpointRevisionMismatch: "import-state-adopted-checkpoint-revision-mismatch",
-  /** 5s */ importStateAdoptedCheckpointDigestMismatch: "import-state-adopted-checkpoint-digest-mismatch",
-  /** 5s */ importStateAdoptedCheckpointPresent: "import-state-adopted-checkpoint-present",
-  /** 5t */ importStateInitializationMismatch: "import-state-initialization-mismatch",
   /** 6a */ accountingResultBytesSum: "accounting-result-bytes-sum",
   /** 6b */ accountingTaskBytesBelowResult: "accounting-task-bytes-below-result",
   /** 6c */ accountingEntryUnmatched: "accounting-entry-unmatched",
@@ -161,7 +131,6 @@ export const DURABLE_ISSUE_CODES = Object.freeze({
   /** 8a */ intentReceiptWorkflowMismatch: "intent-receipt-workflow-mismatch",
   /** 8a */ intentReceiptConstitutionMismatch: "intent-receipt-constitution-mismatch",
   /** 8a */ intentReceiptPolicyBaseMismatch: "intent-receipt-policy-base-mismatch",
-  /** 8a */ intentReceiptAdoptedCheckpointMismatch: "intent-receipt-adopted-checkpoint-mismatch",
   /** 8b */ intentReceiptIntentMismatch: "intent-receipt-intent-mismatch",
   /** 8b */ intentReceiptRequestMismatch: "intent-receipt-request-mismatch",
   /** 8a */ intentReceiptInputFingerprintMismatch: "intent-receipt-input-fingerprint-mismatch",
@@ -311,10 +280,6 @@ type InitializationArtifact = TaskInitializationV1 | LegacyImportInitializationV
 
 function isInitialization(artifact: DurableArtifact): artifact is InitializationArtifact {
   return artifact.artifact_kind === "task-initialization" || artifact.artifact_kind === "legacy-import-initialization";
-}
-
-function isCheckpointImport(artifact: DurableArtifact): artifact is ManualCheckpointImportV1 {
-  return artifact.artifact_kind === "manual-checkpoint-import";
 }
 
 /** The two kinds carrying a `step`, and therefore the only ones rank 8's guard can admit (D19). */
@@ -519,39 +484,6 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
         }
       }
     }
-    if (isCheckpointImport(artifact)) {
-      for (const checkpoint of artifact.chain) {
-        if (!decodable(checkpoint.phase_instance)) {
-          return fail(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
-        }
-      }
-      for (const checkpoint of artifact.chain) {
-        for (const result of checkpoint.authoritative_results) {
-          if (!decodable(result.phase_instance)) {
-            return fail(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
-          }
-        }
-      }
-      for (const checkpoint of artifact.chain) {
-        for (const entry of checkpoint.evidence_chain) {
-          if (!decodable(entry.phase_instance)) {
-            return fail(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
-          }
-        }
-      }
-      const first = artifact.chain[0];
-      if (
-        first !== undefined &&
-        "initialization" in first &&
-        first.initialization.artifact_kind === "legacy-import-initialization"
-      ) {
-        for (const entry of first.initialization.mapping) {
-          if (!decodable(entry.phase_instance)) {
-            return fail(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
-          }
-        }
-      }
-    }
   }
 
   /* Rank 4b — an implementation output is produced by an implementation phase and nothing else. */
@@ -683,129 +615,6 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     }
     if (receipt.prepared_state.committed_intent !== undefined) {
       return fail(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptPreparedStateCommittedIntentPresent));
-    }
-  }
-
-  if (artifact !== undefined && isCheckpointImport(artifact)) {
-    const chain = artifact.chain;
-
-    /* Rank 5c — every checkpoint belongs to the wrapper's task. */
-    for (const checkpoint of chain) {
-      if (checkpoint.task_id !== artifact.task_id) {
-        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importChainTaskIdMismatch));
-      }
-    }
-
-    /* Rank 5d — every checkpoint belongs to the wrapper's repository. */
-    for (const checkpoint of chain) {
-      if (checkpoint.repository_identity_digest !== artifact.repository_identity_digest) {
-        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importChainRepositoryIdentityMismatch));
-      }
-    }
-
-    /* Rank 5e — each continuation checkpoint is its predecessor revision's immediate successor. */
-    for (const checkpoint of chain) {
-      const issue = checkpointSelfBreak(checkpoint);
-      if (issue !== undefined) return fail(artifactInvalid(artifact, issue));
-    }
-
-    /* Rank 5f — the supplied chain is contiguous and predecessor-digest linked. */
-    for (let index = 1; index < chain.length; index += 1) {
-      const previous = chain[index - 1];
-      const checkpoint = chain[index];
-      if (previous === undefined || checkpoint === undefined) continue;
-      const issue = checkpointLinkBreak(previous, checkpoint);
-      if (issue !== undefined) return fail(artifactInvalid(artifact, issue));
-    }
-
-    const first = chain[0];
-    if (first !== undefined) {
-      /* Ranks 5g-5h — the head agrees with the wrapper's mode and anchor. */
-      const headIssue = chainHeadBreak(chainAnchor(artifact), first);
-      if (headIssue !== undefined) return fail(artifactInvalid(artifact, headIssue));
-
-      if (artifact.import_mode === "initial") {
-        /* Rank 5i — the initial checkpoint proves the initialization it names. */
-        if (
-          !("initialization" in first) ||
-          first.initialization_digest !== canonicalJsonDigest(first.initialization)
-        ) {
-          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importInitializationDigestMismatch));
-        }
-
-        /* Rank 5j — the embedded initialization belongs to the wrapper's task. */
-        if (first.initialization.task_id !== artifact.task_id) {
-          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importInitializationTaskIdMismatch));
-        }
-
-        /* Rank 5k — the embedded initialization belongs to the wrapper's repository. */
-        if (first.initialization.repository_identity_digest !== artifact.repository_identity_digest) {
-          return fail(
-            artifactInvalid(artifact, DURABLE_ISSUE_CODES.importInitializationRepositoryIdentityMismatch)
-          );
-        }
-      }
-
-      /* Rank 5l — every checkpoint names the chain head's initialization. */
-      for (const checkpoint of chain) {
-        if (checkpoint.initialization_digest !== first.initialization_digest) {
-          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importChainInitializationMismatch));
-        }
-      }
-    }
-
-    /* Ranks 5n-5o — state-anchored and continuation imports require state; initial mode forbids it. */
-    if (artifact.import_mode !== "initial" && state === undefined) {
-      return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importContinuationWithoutState));
-    }
-    if (artifact.import_mode === "initial" && state !== undefined) {
-      return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importInitialWithState));
-    }
-
-    if (artifact.import_mode !== "initial" && state !== undefined) {
-      const expectedStateRevision = artifact.import_mode === "state-anchored"
-        ? artifact.state_anchor.state_revision
-        : artifact.expected_state_revision;
-      const expectedStateDigest = artifact.import_mode === "state-anchored"
-        ? artifact.state_anchor.state_digest
-        : artifact.expected_state_digest;
-
-      /* Rank 5p — the supplied state has the independently expected current revision. */
-      if (state.revision !== expectedStateRevision) {
-        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateRevisionMismatch));
-      }
-
-      /* Rank 5q — the supplied state's canonical bytes have the expected digest. */
-      if (canonicalJsonDigest(state) !== expectedStateDigest) {
-        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateDigestMismatch));
-      }
-
-      /* Rank 5r — the supplied state belongs to the wrapper's repository. */
-      if (state.repository_identity_digest !== artifact.repository_identity_digest) {
-        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateRepositoryIdentityMismatch));
-      }
-
-      /* Rank 5s — bootstrap requires ordinary state; continuation authenticates its checkpoint independently. */
-      if (artifact.import_mode === "state-anchored") {
-        if (state.adopted_checkpoint !== undefined) {
-          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateAdoptedCheckpointPresent));
-        }
-      } else {
-        if (state.adopted_checkpoint === undefined) {
-          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateAdoptedCheckpointMissing));
-        }
-        if (state.adopted_checkpoint.revision !== artifact.predecessor.revision) {
-          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateAdoptedCheckpointRevisionMismatch));
-        }
-        if (state.adopted_checkpoint.checkpoint_digest !== artifact.predecessor.checkpoint_digest) {
-          return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateAdoptedCheckpointDigestMismatch));
-        }
-      }
-
-      /* Rank 5t — the state and supplied chain derive from the same initialization. */
-      if (first !== undefined && first.initialization_digest !== state.initialization_digest) {
-        return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.importStateInitializationMismatch));
-      }
     }
   }
 
@@ -992,12 +801,6 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     }
     if (prepared.policy_base_commit !== intentState.policy_base_commit) {
       return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptPolicyBaseMismatch));
-    }
-    if (
-      receipt.operation !== "adopt-manual-checkpoint-import" &&
-      !isDeepStrictEqual(prepared.adopted_checkpoint, intentState.adopted_checkpoint)
-    ) {
-      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptAdoptedCheckpointMismatch));
     }
   }
 

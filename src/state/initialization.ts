@@ -5,7 +5,6 @@ import {
   canonicalJsonDigest,
   type CanonicalDocument,
 } from "../contracts/canonical.js";
-import { selectGreatestValidChain, chainAnchor } from "../contracts/durable-checkpoint.js";
 import {
   createCommittedIntentSubject,
   validateDurableSemantics,
@@ -42,10 +41,6 @@ import { identifyTransactionRequest } from "./request.js";
 import { IntentLayoutError, ensureIntentDirectory } from "./layout.js";
 import { TaskLockError } from "./lock.js";
 import type { TransactionDependencies, TransactionOutcome, TransactionRequest } from "./transaction.js";
-import {
-  reduceAuthenticatedManualChain,
-  type AuthenticatedManualImportEvidence,
-} from "./manual-import.js";
 
 type InitializationArtifact = TaskInitializationV1 | LegacyImportInitializationV1;
 type StateCall = Extract<ParsedToolCall, { readonly name: "archflow_state" }>;
@@ -67,15 +62,12 @@ function initializationFor(artifact: DurableArtifact): InitializationArtifact | 
   if (artifact.artifact_kind === "task-initialization" || artifact.artifact_kind === "legacy-import-initialization") {
     return artifact;
   }
-  if (artifact.artifact_kind !== "manual-checkpoint-import" || artifact.import_mode !== "initial") return undefined;
-  const first = artifact.chain[0];
-  return first !== undefined && "initialization" in first ? first.initialization : undefined;
+  return undefined;
 }
 
 function operationFor(artifact: DurableArtifact): IntentReceiptV1["operation"] {
   if (artifact.artifact_kind === "task-initialization") return "adopt-task-initialization" as IntentReceiptV1["operation"];
   if (artifact.artifact_kind === "legacy-import-initialization") return "adopt-legacy-import-initialization" as IntentReceiptV1["operation"];
-  if (artifact.artifact_kind === "manual-checkpoint-import") return "adopt-manual-checkpoint-import" as IntentReceiptV1["operation"];
   throw new TypeError("revision-0 initialization received a non-initialization artifact");
 }
 
@@ -176,33 +168,9 @@ async function validateLiveInitialization(
 function initialState(
   call: StateCall,
   artifact: DurableArtifact,
-  evidence?: AuthenticatedManualImportEvidence,
 ): ProjectResult<TaskStateV1> {
   const initialization = initializationFor(artifact);
   if (initialization === undefined) return contract("initialization-artifact-required");
-  if (artifact.artifact_kind === "manual-checkpoint-import") {
-    if (artifact.import_mode !== "initial") return contract("initialization-import-mode-invalid");
-    const selected = selectGreatestValidChain(chainAnchor(artifact), artifact.chain);
-    if (selected.kind !== "chain" || selected.chain.length !== artifact.chain.length) {
-      return contract(selected.kind === "stop" ? `initialization-chain-${selected.outcome}` : "initialization-chain-not-exact");
-    }
-    const head = selected.chain.at(-1);
-    if (head === undefined) return contract("initialization-chain-empty");
-    if (selected.chain.some((checkpoint) => checkpoint.terminal === "abandoned")) {
-      return contract("manual-import-abandoned-authority-unauthenticated");
-    }
-    if (
-      head.phase_instance !== call.input.phase_instance ||
-      head.step !== call.input.step ||
-      head.status !== call.input.status ||
-      head.input_fingerprint !== call.input.input_fingerprint
-    ) return contract("initialization-chain-head-request-mismatch");
-
-    if (evidence === undefined) return contract("manual-import-evidence-required");
-    const reduced = reduceAuthenticatedManualChain({ artifact, evidence });
-    if (!reduced.ok) return reduced;
-    return ok({ ...reduced.value.next_state, revision: 1 as TaskStateV1["revision"] });
-  }
 
   // Task and legacy-import initialization always enter the workflow at its first phase's
   // pipeline head (WORKFLOW_V1.phases: "prd" / "produce"); any other combination would write
@@ -241,7 +209,6 @@ function initialState(
 export async function identifyStateInitialization(
   dependencies: TransactionDependencies,
   request: TransactionRequest<"archflow_state">,
-  evidence?: AuthenticatedManualImportEvidence,
 ): Promise<ProjectResult<StateInitializationIdentification>> {
   assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
   assertAuthenticParsedToolCall(request.call);
@@ -266,7 +233,7 @@ export async function identifyStateInitialization(
     const mapping = validateLegacyMapping(initialization);
     if (!mapping.ok) return mapping;
   }
-  const stateResult = initialState(request.call, artifact, evidence);
+  const stateResult = initialState(request.call, artifact);
   if (!stateResult.ok) return stateResult;
   const preparedState = canonicalDocument(stateResult.value);
   const initializationSemantics = validateDurableSemantics({
@@ -376,7 +343,6 @@ async function executeLocked(
   dependencies: TransactionDependencies,
   request: TransactionRequest<"archflow_state">,
   path: ResolvedPath,
-  evidence?: AuthenticatedManualImportEvidence,
 ): Promise<ProjectResult<TransactionOutcome<"archflow_state">>> {
   const stateRead = await dependencies.read_state(request.authority.state);
   if (stateRead.kind === "canonical") {
@@ -392,7 +358,7 @@ async function executeLocked(
   }
   if (stateRead.kind !== "missing") return contract(stateRead.kind === "unreadable" ? "task-state-unreadable" : "task-state-noncanonical");
 
-  const identification = await identifyStateInitialization(dependencies, request, evidence);
+  const identification = await identifyStateInitialization(dependencies, request);
   if (!identification.ok) return identification;
   const preparedState = identification.value.prepared_state;
   const inputFingerprint = identification.value.input_fingerprint;
@@ -480,7 +446,6 @@ async function executeLocked(
 export async function runStateInitialization(
   dependencies: TransactionDependencies,
   request: TransactionRequest<"archflow_state">,
-  evidence?: AuthenticatedManualImportEvidence,
 ): Promise<ProjectResult<TransactionOutcome<"archflow_state">>> {
   assertInternalTransactionAuthority(request.authority, { runner: dependencies.runner, environment: dependencies.environment });
   assertAuthenticParsedToolCall(request.call);
@@ -489,7 +454,7 @@ export async function runStateInitialization(
   let completed: ProjectResult<TransactionOutcome<"archflow_state">> | undefined;
   try {
     return await dependencies.lock.runExclusive(request.authority.task_root, async () => {
-      completed = await executeLocked(dependencies, request, path.value, evidence);
+      completed = await executeLocked(dependencies, request, path.value);
       return completed;
     });
   } catch (error) {

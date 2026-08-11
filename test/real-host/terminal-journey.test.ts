@@ -282,6 +282,14 @@ function taskState(root: string, task: string): any {
   return JSON.parse(readFileSync(join(root, ".archflow", "tasks", task, "state.json"), "utf8"));
 }
 
+// build-request kind "initialize" is the one composer legal before durable state exists; the
+// staged task-initialization artifact rides inside the composed revision-0 request.
+function stagedInitialization(root: string, task: string): any {
+  const composed = local(root, task, "build-request", { kind: "initialize" });
+  expect(composed.value).toMatchObject({ ok: true, value: { tool: "archflow_state" } });
+  return composed.value.value.request.input.artifact;
+}
+
 function writeTaskState(root: string, task: string, state: any): void {
   writeFileSync(join(root, ".archflow", "tasks", task, "state.json"), canonicalDocument(state).bytes);
 }
@@ -297,7 +305,7 @@ async function replayInitialization(root: string, task: string, artifact: any, i
 }
 
 async function installedImplementationFixture(root: string, task: string, content: string, intent: string) {
-  const staged = local(root, task, "task-init").value.value;
+  const staged = stagedInitialization(root, task);
   expect(await adopt(root, task, staged, `${intent}-init`)).toMatchObject({ ok: true, value: { revision: 1 } });
   const current = taskState(root, task);
   const implementationState = {
@@ -308,18 +316,21 @@ async function installedImplementationFixture(root: string, task: string, conten
   };
   writeTaskState(root, task, implementationState);
   writeFileSync(join(root, "README.md"), content);
-  const artifact = local(root, task, "build-implementation-output", {
-    phase_instance: "phase-impl-1",
-    step: "produce",
-    base_commit: git(root, "rev-parse", "HEAD"),
-    outputs: ["README.md"],
-    restore_targets: ["README.md"],
-    parent_documents: [],
-    declared_inputs: [],
-    input_fingerprint: implementationState.input_fingerprint,
+  const composed = local(root, task, "build-request", {
+    intent_id: `${intent}-produce`,
+    kind: "produce",
+    implementation: {
+      base_commit: git(root, "rev-parse", "HEAD"),
+      outputs: ["README.md"],
+      restore_targets: ["README.md"],
+      parent_documents: [],
+      declared_inputs: [],
+    },
   });
-  expect(artifact.value).toMatchObject({ ok: true, value: { artifact_kind: "implementation-output" } });
-  return { artifact: artifact.value.value, state: implementationState };
+  expect(composed.value).toMatchObject({ ok: true, value: { tool: "archflow_state" } });
+  const request = composed.value.value.request.input;
+  expect(request.artifact).toMatchObject({ artifact_kind: "implementation-output" });
+  return { artifact: request.artifact, request, state: implementationState };
 }
 
 async function installedRestoreCollisionFixture(
@@ -330,28 +341,21 @@ async function installedRestoreCollisionFixture(
 ) {
   expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
   commitPolicy(root);
-  const staged = local(root, task, "task-init").value.value;
+  const staged = stagedInitialization(root, task);
   expect(await adopt(root, task, staged, `${intent}-init`)).toMatchObject({ ok: true, value: { revision: 1 } });
 
   const target = join(root, ".archflow", "tasks", task, "prd.md");
   const retained = Buffer.from("retained installed generation\n");
   writeFileSync(target, retained);
   let state = taskState(root, task);
-  const built = local(root, task, "build-document", {
-    phase_instance: "prd", step: "produce", document_path: "prd.md",
-    declared_inputs: [], input_fingerprint: state.input_fingerprint,
+  const composed = local(root, task, "build-request", {
+    intent_id: `${intent}-produce`, kind: "produce",
+    document: { document_path: "prd.md", declared_inputs: [] },
   });
-  expect(built.value).toMatchObject({ ok: true, value: { artifact_kind: "document" } });
-  const produceDraft = {
-    schema_version: "1", task_id: task, intent_id: `${intent}-produce`,
-    expected_revision: state.revision, input_fingerprint: "0".repeat(64),
-    phase_instance: "prd", step: "produce", status: "succeeded", artifact: built.value.value,
-  };
-  const produceEnvelope = local(root, task, "envelope", { tool: "archflow_state", input: produceDraft });
-  expect(produceEnvelope.value).toMatchObject({ ok: true });
-  const produced = await mcpState(root, {
-    ...produceDraft, input_fingerprint: produceEnvelope.value.value.input_fingerprint,
-  }, `${intent}-produce`);
+  expect(composed.value).toMatchObject({ ok: true, value: { tool: "archflow_state" } });
+  const artifact = composed.value.value.request.input.artifact;
+  expect(artifact).toMatchObject({ artifact_kind: "document" });
+  const produced = await mcpState(root, composed.value.value.request.input, `${intent}-produce`);
   expect(produced, JSON.stringify(produced)).toMatchObject({ ok: true, value: { revision: 2 } });
 
   state = taskState(root, task);
@@ -376,7 +380,7 @@ async function installedRestoreCollisionFixture(
   const collision = Buffer.from("intentional installed collision\n");
   writeFileSync(target, collision);
   return {
-    artifact: built.value.value,
+    artifact,
     collision,
     retained,
     retainedFingerprint,
@@ -441,17 +445,17 @@ afterAll(() => {
 describe.skipIf(!enabled)("installed terminal journeys", () => {
   it("keeps repository initialization and policy-base failure ownership at archflow-local, then adopts revision 1 over stdio", async () => {
     const missing = makeRepository("missing-policy");
-    expect(local(missing, "missing-policy", "task-init").value)
+    expect(local(missing, "missing-policy", "build-request", { kind: "initialize" }).value)
       .toMatchObject({ ok: false, error: { code: "IO_ERROR" } });
 
     const root = makeRepository("normal");
     expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
-    expect(local(root, "normal-task", "task-init").value)
+    expect(local(root, "normal-task", "build-request", { kind: "initialize" }).value)
       .toMatchObject({ ok: false, error: { code: "POLICY_BASE_INVALID" } });
     commitPolicy(root);
-    const staged = local(root, "normal-task", "task-init");
-    expect(staged.value).toMatchObject({ ok: true, value: { artifact_kind: "task-initialization" } });
-    const adopted = await adopt(root, "normal-task", staged.value.value, "installed-normal-init");
+    const staged = stagedInitialization(root, "normal-task");
+    expect(staged).toMatchObject({ artifact_kind: "task-initialization" });
+    const adopted = await adopt(root, "normal-task", staged, "installed-normal-init");
     expect(adopted).toMatchObject({ ok: true, value: { revision: 1 } });
 
     const statePath = join(root, ".archflow", "tasks", "normal-task", "state.json");
@@ -474,41 +478,16 @@ describe.skipIf(!enabled)("installed terminal journeys", () => {
     expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
     commitPolicy(root);
     const task = `mismatch-${_kind}`;
-    const staged = local(root, task, "task-init");
-    expect(staged.value).toMatchObject({ ok: true });
+    const staged = stagedInitialization(root, task);
     const rejected = await adopt(
       root,
       task,
-      staged.value.value,
+      staged,
       `installed-${_kind}-mismatch`,
-      mutate(staged.value.value),
+      mutate(staged),
     );
     expect(rejected).toMatchObject({ ok: false, error: { code: expectedCode } });
     expect(existsSync(join(root, ".archflow", "tasks", task, "state.json"))).toBe(false);
-  }, TIMEOUT);
-
-  it("round-trips an installed manual checkpoint slice without duplicate checkpoint bytes", async () => {
-    const root = makeRepository("manual");
-    expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
-    commitPolicy(root);
-    const staged = local(root, "manual-task", "task-init").value.value;
-    const bootstrap = {
-      schema_version: "1", operation: "bootstrap", initialization: staged,
-    };
-    expect(local(root, "manual-task", "manual-next", bootstrap).value)
-      .toMatchObject({ ok: true, value: { revision: 1 } });
-    const checkpointRoot = join(root, ".archflow", "tasks", "manual-task", "manual", "checkpoints");
-    const firstDigest = digestTree([checkpointRoot]);
-    expect(local(root, "manual-task", "manual-next", {
-      schema_version: "1", operation: "step", phase_instance: "prd", step: "produce", status: "failed",
-    }).value).toMatchObject({ ok: true, value: { revision: 2 } });
-    expect(digestTree([checkpointRoot])).not.toBe(firstDigest);
-    const importCall = local(root, "manual-task", "manual-next", {
-      schema_version: "1", operation: "import-call", intent_id: "installed-manual-import",
-    });
-    expect(importCall.value).toMatchObject({ ok: true, value: { call: { input: { expected_revision: 0 } } } });
-    const adopted = await mcpState(root, importCall.value.value.call.input, "installed-manual-import");
-    expect(adopted).toMatchObject({ ok: true, value: { revision: 1, status: "failed" } });
   }, TIMEOUT);
 
   it("round-trips an installed snapshot and rejects the first byte above either cap", async () => {
@@ -516,7 +495,7 @@ describe.skipIf(!enabled)("installed terminal journeys", () => {
     expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
     commitPolicy(root);
     const task = "snapshot-task";
-    const staged = local(root, task, "task-init").value.value;
+    const staged = stagedInitialization(root, task);
     expect(await adopt(root, task, staged, "installed-snapshot-init"))
       .toMatchObject({ ok: true, value: { revision: 1 } });
     const state = JSON.parse(readFileSync(join(root, ".archflow", "tasks", task, "state.json"), "utf8"));
@@ -557,7 +536,7 @@ describe.skipIf(!enabled)("installed terminal journeys", () => {
     expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
     commitPolicy(root);
     const task = "dirty-replay-task";
-    const staged = local(root, task, "task-init").value.value;
+    const staged = stagedInitialization(root, task);
     const first = await adopt(root, task, staged, "installed-dirty-init");
     expect(first).toMatchObject({ ok: true, value: { revision: 1 } });
     const taskRoot = join(root, ".archflow", "tasks", task);
@@ -665,7 +644,7 @@ describe.skipIf(!enabled)("installed terminal journeys", () => {
     expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
     commitPolicy(root);
     const task = "maintenance-task";
-    const staged = local(root, task, "task-init").value.value;
+    const staged = stagedInitialization(root, task);
     expect(await adopt(root, task, staged, "installed-maintenance-init"))
       .toMatchObject({ ok: true, value: { revision: 1 } });
     const orphan = join(root, ".archflow", "tasks", task, "attempts", "phase-impl-21", "orphan.json");
@@ -705,71 +684,47 @@ describe.skipIf(!enabled)("installed terminal journeys", () => {
     const readmeBefore = readFileSync(join(root, "README.md"));
     const taskRoot = join(root, ".archflow", "tasks", task);
     const durableBefore = digestTree([taskRoot]);
-    const draft = {
-      schema_version: "1", task_id: task, intent_id: "installed-secret-output",
-      expected_revision: fixture.state.revision, input_fingerprint: "0".repeat(64),
-      phase_instance: "phase-impl-1", step: "produce", status: "succeeded", artifact: fixture.artifact,
-    };
-    const envelope = local(root, task, "envelope", { tool: "archflow_state", input: draft });
-    expect(envelope.value).toMatchObject({ ok: true });
-    const rejected = await mcpState(root, {
-      ...draft, input_fingerprint: envelope.value.value.input_fingerprint,
-    }, "installed-secret-output");
+    const rejected = await mcpState(root, fixture.request, "installed-secret-output");
     expect(rejected).toMatchObject({ ok: false, error: { code: "SECRET_DETECTED" } });
     expect(readFileSync(join(root, "README.md"))).toEqual(readmeBefore);
     expect(readFileSync(join(root, ".archflow", "tasks", task, "state.json"))).toEqual(stateBefore);
     expect(digestTree([taskRoot])).toBe(durableBefore);
   }, TIMEOUT);
 
-  it("runs normal and manual legacy upgrades through installed launchers, preserving source and rerun authority", async () => {
-    for (const mode of ["normal", "manual"] as const) {
-      const root = makeRepository(`upgrade-${mode}`);
-      expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
-      const source = join(root, ".archflow", "tasks", "legacy-source");
-      mkdirSync(dirname(source), { recursive: true });
-      cpSync(join(checkoutRoot, "test", "fixtures", "legacy"), source, { recursive: true });
-      const head = commitPolicy(root);
-      git(root, "add", "--", ".archflow/tasks/legacy-source");
-      git(root, "commit", "-q", "-m", "legacy source");
-      const baseline = git(root, "rev-parse", "HEAD");
-      const sourceBefore = digestTree([source]);
-      const value = {
-        source_root: source, task_id: `upgrade-${mode}`, policy_base_commit: head,
-        import_baseline_commit: baseline, code_baseline_commit: baseline,
-      };
-      const first = local(root, `upgrade-${mode}`, "upgrade", value);
-      expect(first.value).toMatchObject({ ok: true, value: { resume_phase: "phase-design-4" } });
-      const destination = join(root, ".archflow", "tasks", `upgrade-${mode}`);
-      const firstDestination = digestTree([destination]);
-      if (mode === "normal") {
-        // Model the last pre-authority crash point: payloads exist, but the manifest that makes
-        // them discoverable was not installed. A launcher rerun must converge exactly.
-        rmSync(join(root, first.value.value.manifest_path));
-        expect(existsSync(join(root, first.value.value.manifest_path))).toBe(false);
-        const recovered = local(root, `upgrade-${mode}`, "upgrade", value);
-        expect(recovered.value).toEqual(first.value);
-        expect(digestTree([destination])).toBe(firstDestination);
-      }
-      const second = local(root, `upgrade-${mode}`, "upgrade", value);
-      expect(second.value).toEqual(first.value);
-      expect(digestTree([destination])).toBe(firstDestination);
-      expect(existsSync(join(destination, "decisions"))).toBe(false);
-      expect(digestTree([source])).toBe(sourceBefore);
+  it("runs a legacy upgrade through installed launchers, preserving source and rerun authority", async () => {
+    const root = makeRepository("upgrade");
+    expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
+    const source = join(root, ".archflow", "tasks", "legacy-source");
+    mkdirSync(dirname(source), { recursive: true });
+    cpSync(join(checkoutRoot, "test", "fixtures", "legacy"), source, { recursive: true });
+    const head = commitPolicy(root);
+    git(root, "add", "--", ".archflow/tasks/legacy-source");
+    git(root, "commit", "-q", "-m", "legacy source");
+    const baseline = git(root, "rev-parse", "HEAD");
+    const sourceBefore = digestTree([source]);
+    const value = {
+      source_root: source, task_id: "upgrade-task", policy_base_commit: head,
+      import_baseline_commit: baseline, code_baseline_commit: baseline,
+    };
+    const first = local(root, "upgrade-task", "upgrade", value);
+    expect(first.value).toMatchObject({ ok: true, value: { resume_phase: "phase-design-4" } });
+    const destination = join(root, ".archflow", "tasks", "upgrade-task");
+    const firstDestination = digestTree([destination]);
+    // Model the last pre-authority crash point: payloads exist, but the manifest that makes
+    // them discoverable was not installed. A launcher rerun must converge exactly.
+    rmSync(join(root, first.value.value.manifest_path));
+    expect(existsSync(join(root, first.value.value.manifest_path))).toBe(false);
+    const recovered = local(root, "upgrade-task", "upgrade", value);
+    expect(recovered.value).toEqual(first.value);
+    expect(digestTree([destination])).toBe(firstDestination);
+    const second = local(root, "upgrade-task", "upgrade", value);
+    expect(second.value).toEqual(first.value);
+    expect(digestTree([destination])).toBe(firstDestination);
+    expect(existsSync(join(destination, "decisions"))).toBe(false);
+    expect(digestTree([source])).toBe(sourceBefore);
 
-      if (mode === "normal") {
-        expect(await adopt(root, `upgrade-${mode}`, first.value.value.initialization, "installed-upgrade-normal"))
-          .toMatchObject({ ok: true, value: { revision: 1 } });
-      } else {
-        expect(local(root, `upgrade-${mode}`, "manual-next", {
-          schema_version: "1", operation: "bootstrap", initialization: first.value.value.initialization,
-        }).value).toMatchObject({ ok: true, value: { revision: 1 } });
-        const call = local(root, `upgrade-${mode}`, "manual-next", {
-          schema_version: "1", operation: "import-call", intent_id: "installed-upgrade-manual",
-        });
-        expect(await mcpState(root, call.value.value.call.input, "installed-upgrade-manual"))
-          .toMatchObject({ ok: true, value: { revision: 1 } });
-      }
-      expect(digestTree([source])).toBe(sourceBefore);
-    }
+    expect(await adopt(root, "upgrade-task", first.value.value.initialization, "installed-upgrade-normal"))
+      .toMatchObject({ ok: true, value: { revision: 1 } });
+    expect(digestTree([source])).toBe(sourceBefore);
   }, TIMEOUT);
 });

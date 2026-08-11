@@ -202,11 +202,6 @@ function artifactMatches(input: TransitionPlanInput): boolean {
       artifact.evidence.step === input.target.step &&
       artifact.evidence.input_fingerprint === input.recomputed_input_fingerprint;
   }
-  if (artifact.artifact_kind === "manual-checkpoint-import") {
-    return artifact.chain.some((checkpoint) => checkpoint.phase_instance === input.target.phase_instance &&
-      checkpoint.step === input.target.step && checkpoint.status === input.target.status &&
-      checkpoint.attempt === input.target.attempt && checkpoint.input_fingerprint === input.recomputed_input_fingerprint);
-  }
   return input.target.phase_instance === input.current.phase_instance && input.target.step === input.current.step;
 }
 

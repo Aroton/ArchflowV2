@@ -1,7 +1,7 @@
 import { canonicalJsonDigest, type CanonicalDocument } from "../contracts/canonical.js";
 import { createCommittedIntentSubject, createPreparedIntentSubject, validateDurableSemantics } from "../contracts/durable.js";
 import { intentOutcomeDigest, intentReceiptDigest, parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
-import type { ProjectionDigestRef } from "../contracts/durable-checkpoint.js";
+import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { ActiveGateV1, GateRequestV1 } from "../contracts/durable-gate.js";
 import { parsePathSafeId, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
@@ -9,7 +9,6 @@ import { assertPlainJson } from "../contracts/plain-json.js";
 
 export type ActiveAuthorityHeads = Readonly<{
   gate?: Readonly<{ gate_id: PathSafeId; subject_digest: Sha256Digest; context_digest: Sha256Digest }>;
-  checkpoint?: Readonly<{ revision: number; checkpoint_digest: Sha256Digest }>;
 }>;
 
 /** Produces the gate reconciliation head only from the mutable projection and its immutable request. */
@@ -49,8 +48,7 @@ export type ReconciliationFinding =
   | Readonly<{ kind: "receipt-only"; request_digest: Sha256Digest; receipt_digest: Sha256Digest; next_action: "resume-exact-intent" }>
   | Readonly<{ kind: "receipt-invalid"; receipt_digest: Sha256Digest; next_action: "inspect-retained-receipt" }>
   | Readonly<{ kind: "intent-mismatch"; requested_digest: Sha256Digest; receipt_request_digest: Sha256Digest; next_action: "create-fresh-intent" }>
-  | Readonly<{ kind: "active-gate-mismatch"; head?: ActiveAuthorityHeads["gate"]; next_action: "resolve-current-authority" }>
-  | Readonly<{ kind: "adopted-checkpoint-mismatch"; head?: ActiveAuthorityHeads["checkpoint"]; next_action: "resolve-current-authority" }>;
+  | Readonly<{ kind: "active-gate-mismatch"; head?: ActiveAuthorityHeads["gate"]; next_action: "resolve-current-authority" }>;
 
 export type ReconciliationResult = Readonly<{
   classification: "consistent" | "reconciliation-required";
@@ -168,12 +166,6 @@ export function reconcileCurrentAuthority(value: ReconciliationInput): Reconcili
       state.open_gate.context_digest === heads.gate.context_digest;
   if (!gateMatches) {
     findings.push(Object.freeze({ kind: "active-gate-mismatch", ...(heads.gate === undefined ? {} : { head: heads.gate }), next_action: "resolve-current-authority" }));
-  }
-  const checkpointMatches = heads.checkpoint === undefined
-    ? state.adopted_checkpoint === undefined
-    : state.adopted_checkpoint?.revision === heads.checkpoint.revision && state.adopted_checkpoint.checkpoint_digest === heads.checkpoint.checkpoint_digest;
-  if (!checkpointMatches) {
-    findings.push(Object.freeze({ kind: "adopted-checkpoint-mismatch", ...(heads.checkpoint === undefined ? {} : { head: heads.checkpoint }), next_action: "resolve-current-authority" }));
   }
   return Object.freeze({
     classification: findings.length === 0 ? "consistent" : "reconciliation-required",

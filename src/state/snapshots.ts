@@ -9,7 +9,7 @@ import {
   sha256Bytes,
   type CanonicalDocument,
 } from "../contracts/canonical.js";
-import type { ProjectionDigestRef } from "../contracts/durable-checkpoint.js";
+import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
 import type { ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import { parseResultManifest } from "../contracts/durable-result-manifest.js";
 import type { OutputEntry, SnapshotAccountingV1 } from "../contracts/durable-primitives.js";

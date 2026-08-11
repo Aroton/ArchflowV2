@@ -1,7 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { CONSTITUTION_RESULTS, DRIFT_RESULTS, type ConstitutionResult, type DriftResult } from "./adjudication.js";
-import { manualCheckpointImportV1Schema } from "./durable-checkpoint.js";
 import { documentArtifactV1Schema } from "./durable-document.js";
 import { implementationOutputV1Schema } from "./durable-implementation-output.js";
 import { legacyImportInitializationV1Schema } from "./durable-legacy-import.js";
@@ -75,7 +74,6 @@ const durableArtifact = z.union([
   legacyImportInitializationV1Schema,
   documentArtifactV1Schema,
   implementationOutputV1Schema,
-  manualCheckpointImportV1Schema,
   z.object({
     schema_version: z.literal("1"),
     artifact_kind: z.literal("triage"),

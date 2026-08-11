@@ -30,7 +30,7 @@ function emptyState(results: TaskStateV1["authoritative_results"] = []): TaskSta
   return { task_id: TASK, authoritative_results: results } as unknown as TaskStateV1;
 }
 function rootSet(current_state: TaskStateV1) {
-  return { inventory_complete: true as const, current_state, checkpoints: [], resumable_receipts: [], decision_review_evidence: [], intents: [], unreceipted_staged_requests: [] };
+  return { inventory_complete: true as const, current_state, resumable_receipts: [], decision_review_evidence: [], intents: [], unreceipted_staged_requests: [] };
 }
 function suppliedManifest(path: RepositoryPathClaim, outputs: SnapshotManifest["outputs"] = []): MaintenanceManifest {
   const manifest = { schema_version: "1", outputs } as unknown as SnapshotManifest;
@@ -49,7 +49,7 @@ function maintenanceRecord(proof: MaintenanceProof): MaintenanceRecordV1 {
 describe("bounded maintenance", () => {
   it("fails closed when a named manifest is absent", () => {
     const state = { task_id: TASK, authoritative_results: [{ result_digest: D("1"), manifest_path: P(".archflow/tasks/demo/results/sha256/x/manifest.json") }] } as unknown as TaskStateV1;
-    expect(() => computeMaintenanceProof({ roots: { inventory_complete: true, current_state: state, checkpoints: [], resumable_receipts: [], decision_review_evidence: [], intents: [], unreceipted_staged_requests: [] }, manifests: [], candidates: [] })).toThrow(/not supplied/u);
+    expect(() => computeMaintenanceProof({ roots: { inventory_complete: true, current_state: state, resumable_receipts: [], decision_review_evidence: [], intents: [], unreceipted_staged_requests: [] }, manifests: [], candidates: [] })).toThrow(/not supplied/u);
   });
 
   it("rejects split-observation inputs and binds every supplied manifest to its content address", () => {
@@ -131,7 +131,7 @@ describe("bounded maintenance", () => {
       target: resolved(`/tmp/${digest}`, path.endsWith(".request.json") ? "staged-request" : "intent", path),
     });
     const proof = computeMaintenanceProof({
-      roots: { inventory_complete: true, current_state: state, checkpoints: [], resumable_receipts: [], decision_review_evidence: [], intents: inventory, unreceipted_staged_requests: [intentPath("pending-10.request.json")] },
+      roots: { inventory_complete: true, current_state: state, resumable_receipts: [], decision_review_evidence: [], intents: inventory, unreceipted_staged_requests: [intentPath("pending-10.request.json")] },
       manifests: [],
       candidates: [
         candidate(intentPath("running-3.json"), "a"),
@@ -158,7 +158,7 @@ describe("bounded maintenance", () => {
     const bytes = Buffer.from("attempt"); await writeFile(candidateTarget.absolute, bytes);
     const state = { task_id: TASK, authoritative_results: [] } as unknown as TaskStateV1;
     const candidate = { digest: sha256Bytes(bytes), path: candidatePath, byte_count: bytes.byteLength as SafeInteger, category: "unreferenced-attempt", target: candidateTarget } as const;
-    const proof = computeMaintenanceProof({ roots: { inventory_complete: true, current_state: state, checkpoints: [], resumable_receipts: [], decision_review_evidence: [], intents: [], unreceipted_staged_requests: [] }, manifests: [], candidates: [candidate] });
+    const proof = computeMaintenanceProof({ roots: { inventory_complete: true, current_state: state, resumable_receipts: [], decision_review_evidence: [], intents: [], unreceipted_staged_requests: [] }, manifests: [], candidates: [candidate] });
     const record: MaintenanceRecordV1 = { schema_version: "1", maintenance_id: "m1" as PathSafeId, task_id: TASK, performed_at_revision: 1 as SafeInteger, human_reason: "remove failed attempt", reachability_proof_digest: proof.digest, deletions: [{ digest: candidate.digest, path: candidate.path, byte_count: candidate.byte_count, category: candidate.category }], total_bytes_deleted: candidate.byte_count };
     const recordTarget = resolved(join(directory, "maintenance", "m1.json"), "maintenance-record", P(".archflow/tasks/demo/maintenance/m1.json"));
     const input = { atomic: createAtomicWriter(), record_target: recordTarget, record, proof, validate_record: (value: unknown) => value as MaintenanceRecordV1 };

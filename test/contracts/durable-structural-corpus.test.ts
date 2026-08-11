@@ -4,21 +4,14 @@ import { describe, expect, it } from "vitest";
 
 import { documentArtifactV1Schema } from "../../src/contracts/durable-document.js";
 import { implementationOutputV1Schema } from "../../src/contracts/durable-implementation-output.js";
-import {
-  manualCheckpointImportV1Schema,
-  manualCheckpointV1Schema,
-} from "../../src/contracts/durable-checkpoint.js";
 import { legacyImportInitializationV1Schema } from "../../src/contracts/durable-legacy-import.js";
 import { snapshotAccountingV1Schema } from "../../src/contracts/durable-primitives.js";
 import { taskInitializationV1Schema } from "../../src/contracts/durable-task-initialization.js";
 import documentArtifactSchema from "../../src/contracts/schemas/v1/document-artifact.schema.json" with { type: "json" };
 import durablePrimitivesSchema from "../../src/contracts/schemas/v1/durable-primitives.schema.json" with { type: "json" };
-import evidenceSlotsSchema from "../../src/contracts/schemas/v1/evidence-slots.schema.json" with { type: "json" };
 import implementationOutputSchema from "../../src/contracts/schemas/v1/implementation-output.schema.json" with { type: "json" };
 import legacyImportSchema from "../../src/contracts/schemas/v1/legacy-import-initialization.schema.json" with { type: "json" };
 import maintenanceRecordSchema from "../../src/contracts/schemas/v1/maintenance-record.schema.json" with { type: "json" };
-import manualCheckpointImportSchema from "../../src/contracts/schemas/v1/manual-checkpoint-import.schema.json" with { type: "json" };
-import manualCheckpointSchema from "../../src/contracts/schemas/v1/manual-checkpoint.schema.json" with { type: "json" };
 import pathClaimSchema from "../../src/contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
 import primitivesSchema from "../../src/contracts/schemas/v1/primitives.schema.json" with { type: "json" };
 import secretScanResultSchema from "../../src/contracts/schemas/v1/secret-scan-result.schema.json" with { type: "json" };
@@ -144,45 +137,6 @@ const snapshotAccounting: Shape = {
   sample: json<JsonObject>(fixture("implementation-output").accounting),
 };
 
-const checkpointReferences = [
-  primitivesSchema,
-  pathClaimSchema,
-  durablePrimitivesSchema,
-  taskStateSchema,
-  taskInitializationSchema,
-  legacyImportSchema,
-  evidenceSlotsSchema,
-];
-
-const manualCheckpoint: Shape = {
-  name: "manual-checkpoint",
-  json: validator(manualCheckpointSchema, checkpointReferences),
-  zod: manualCheckpointV1Schema,
-  sample: fixture("manual-checkpoint"),
-};
-
-const manualCheckpointImport: Shape = {
-  name: "manual-checkpoint-import",
-  json: validator(manualCheckpointImportSchema, [...checkpointReferences, manualCheckpointSchema]),
-  zod: manualCheckpointImportV1Schema,
-  sample: fixture("manual-checkpoint-import"),
-};
-
-const continuationImportSample = fixture("manual-checkpoint-import-continuation");
-const manualCheckpointContinuation: Shape = {
-  name: "manual-checkpoint-continuation",
-  json: validator(manualCheckpointSchema, checkpointReferences),
-  zod: manualCheckpointV1Schema,
-  sample: json<JsonObject>((continuationImportSample.chain as readonly unknown[])[0]),
-};
-
-const manualCheckpointImportContinuation: Shape = {
-  name: "manual-checkpoint-import-continuation",
-  json: validator(manualCheckpointImportSchema, [...checkpointReferences, manualCheckpointSchema]),
-  zod: manualCheckpointImportV1Schema,
-  sample: continuationImportSample,
-};
-
 const SHAPES: readonly Shape[] = [
   taskState,
   maintenanceRecord,
@@ -191,10 +145,6 @@ const SHAPES: readonly Shape[] = [
   documentArtifact,
   implementationOutput,
   snapshotAccounting,
-  manualCheckpoint,
-  manualCheckpointImport,
-  manualCheckpointContinuation,
-  manualCheckpointImportContinuation,
 ];
 
 const shapeByName = new Map(SHAPES.map((shape) => [shape.name, shape]));
@@ -293,11 +243,6 @@ const DECLARED_SETS: readonly { readonly shape: string; readonly path: string; r
   { shape: "implementation-output", path: "declared_inputs" },
   { shape: "implementation-output", path: "undeclared_changes.undeclared_paths" },
   { shape: "snapshot-accounting", path: "counted_entries" },
-  { shape: "manual-checkpoint", path: "authoritative_results" },
-  { shape: "manual-checkpoint", path: "projections" },
-  { shape: "manual-checkpoint", path: "evidence_chain" },
-  { shape: "manual-checkpoint", path: "approvals" },
-  { shape: "manual-checkpoint", path: "waivers" },
 ];
 
 describe("durable set ordering and uniqueness are structural", () => {
@@ -323,8 +268,8 @@ describe("durable set ordering and uniqueness are structural", () => {
 });
 
 /**
- * The sweep. Every array-shaped subschema in the nine schemas must carry an ordering keyword, and
- * the set of them must be exactly the nineteen collections above — nothing exempt, nothing untested.
+ * The sweep. Every array-shaped subschema in the durable schemas must carry an ordering keyword, and
+ * the set of them must be exactly the thirteen collections above — nothing exempt, nothing untested.
  */
 const SCHEMA_FILES: readonly { readonly name: string; readonly schema: object }[] = [
   { name: "durable-primitives", schema: durablePrimitivesSchema },
@@ -334,8 +279,6 @@ const SCHEMA_FILES: readonly { readonly name: string; readonly schema: object }[
   { name: "legacy-import-initialization", schema: legacyImportSchema },
   { name: "document-artifact", schema: documentArtifactSchema },
   { name: "implementation-output", schema: implementationOutputSchema },
-  { name: "manual-checkpoint", schema: manualCheckpointSchema },
-  { name: "manual-checkpoint-import", schema: manualCheckpointImportSchema },
 ];
 
 const collectArraySubschemas = (): readonly { readonly location: string; readonly keywords: readonly string[] }[] => {
@@ -369,7 +312,7 @@ describe("no array in this phase is exempt from set ordering", () => {
     expect(exempt.map((entry) => entry.location)).toStrictEqual([]);
   });
 
-  it("the arrays the schemas declare are exactly the nineteen collections under test", () => {
+  it("the arrays the schemas declare are exactly the thirteen collections under test", () => {
     expect(collectArraySubschemas().map((entry) => entry.location).sort()).toStrictEqual(
       [
         "durable-primitives/$defs/snapshotAccounting/properties/counted_entries",
@@ -381,60 +324,14 @@ describe("no array in this phase is exempt from set ordering", () => {
         "implementation-output/properties/restore_targets",
         "legacy-import-initialization/properties/mapping",
         "legacy-import-initialization/properties/staged_payload_refs",
-        "manual-checkpoint-import/properties/chain",
-        "manual-checkpoint/properties/approvals",
-        "manual-checkpoint/properties/authoritative_results",
-        "manual-checkpoint/properties/evidence_chain",
-        "manual-checkpoint/properties/projections",
-        "manual-checkpoint/properties/waivers",
         "maintenance-record/properties/deletions",
         "task-state/properties/approvals",
         "task-state/properties/authoritative_results",
         "task-state/properties/waivers",
       ].sort()
     );
-    // `chain` is uniqueness-only: its order is semantic, so schemas accept a shuffle.
-    expect(DECLARED_SETS).toHaveLength(collectArraySubschemas().length - 1);
+    expect(DECLARED_SETS).toHaveLength(collectArraySubschemas().length);
   });
-});
-
-describe("checkpoint chain revision uniqueness is structural but order is semantic", () => {
-  it("pins why tupleKey string ordering cannot order numeric revisions", () => {
-    expect(isSortedUniqueBy([{ revision: 9 }, { revision: 10 }], tupleKey("revision"))).toBe(false);
-
-    const nineToTen = at(
-      at(
-        at(
-          at(
-            at(
-              at(manualCheckpointImportContinuation.sample, "chain.0.revision", () => 9),
-              "chain.0.predecessor.revision",
-              () => 8
-            ),
-            "chain.1.revision",
-            () => 10
-          ),
-          "chain.1.predecessor.revision",
-          () => 9
-        ),
-        "predecessor.revision",
-        () => 8
-      ),
-      "expected_state_revision",
-      () => 8
-    );
-    accepts(manualCheckpointImportContinuation, nineToTen, "numeric revision chain 9 to 10");
-  });
-
-  it("accepts a shuffled chain through both schema authorities", () => {
-    accepts(manualCheckpointImport, at(manualCheckpointImport.sample, "chain", shuffled), "chain shuffled");
-  });
-
-  it("rejects a duplicated revision through both schema authorities", () => {
-    rejects(manualCheckpointImport, at(manualCheckpointImport.sample, "chain", withDuplicate), "chain duplicated");
-  });
-
-  // Chunk 7 owns the complementary assertion that the semantic validator rejects the shuffle.
 });
 
 describe("unique object keys are enumerable data properties", () => {
@@ -585,16 +482,12 @@ const POSITIVE_FIELDS: readonly { readonly shape: string; readonly path: string 
   { shape: "maintenance-record", path: "performed_at_revision" },
   { shape: "snapshot-accounting", path: "measured_at_revision" },
   { shape: "task-state", path: "adopted_checkpoint.revision" },
-  { shape: "manual-checkpoint", path: "revision" },
-  { shape: "manual-checkpoint", path: "attempt" },
-  { shape: "manual-checkpoint-continuation", path: "predecessor.revision" },
-  { shape: "manual-checkpoint-import-continuation", path: "expected_state_revision" },
 ];
 
 describe("every >= 1 field rejects 0 (D8)", () => {
-  it("pins the fourteen positive-field routes and eleven exercised shapes", () => {
-    expect(POSITIVE_FIELDS).toHaveLength(14);
-    expect(SHAPES).toHaveLength(11);
+  it("pins the ten positive-field routes and seven exercised shapes", () => {
+    expect(POSITIVE_FIELDS).toHaveLength(10);
+    expect(SHAPES).toHaveLength(7);
   });
 
   for (const field of POSITIVE_FIELDS) {
@@ -748,64 +641,6 @@ describe("absence is omission, never null", () => {
 // ---------------------------------------------------------------------------------------------
 
 describe("shape-specific structural pins", () => {
-  it("manual-checkpoint enforces the initialization and continuation branches", () => {
-    const initialWithPredecessor = at(manualCheckpoint.sample, "predecessor", () => ({
-      revision: 1,
-      checkpoint_digest: "a".repeat(64),
-    }));
-    rejects(manualCheckpoint, initialWithPredecessor, "revision 1 with predecessor");
-    rejects(manualCheckpoint, without(manualCheckpoint.sample, "initialization"), "revision 1 without initialization");
-    rejects(
-      manualCheckpointContinuation,
-      at(manualCheckpointContinuation.sample, "initialization", () => manualCheckpoint.sample.initialization),
-      "revision 2+ with initialization"
-    );
-    rejects(
-      manualCheckpointContinuation,
-      without(manualCheckpointContinuation.sample, "predecessor"),
-      "revision 2+ without predecessor"
-    );
-    rejects(manualCheckpoint, at(manualCheckpoint.sample, "revision", () => 0), "revision 0");
-    rejects(
-      manualCheckpointContinuation,
-      at(manualCheckpointContinuation.sample, "revision", () => 1),
-      "continuation revision 1"
-    );
-  });
-
-  it("manual-checkpoint-import forbids every continuation field individually in initial mode", () => {
-    const fields: readonly [string, unknown][] = [
-      ["predecessor", continuationImportSample.predecessor],
-      ["expected_state_revision", continuationImportSample.expected_state_revision],
-      ["expected_state_digest", continuationImportSample.expected_state_digest],
-    ];
-    for (const [field, value] of fields) {
-      rejects(manualCheckpointImport, at(manualCheckpointImport.sample, field, () => value), `${field} in initial`);
-    }
-  });
-
-  it("manual-checkpoint-import requires every continuation field individually", () => {
-    for (const field of ["predecessor", "expected_state_revision", "expected_state_digest"]) {
-      rejects(
-        manualCheckpointImportContinuation,
-        without(manualCheckpointImportContinuation.sample, field),
-        `${field} missing in continuation`
-      );
-    }
-    rejects(manualCheckpointImport, at(manualCheckpointImport.sample, "chain", () => []), "empty chain");
-  });
-
-  it("manual-checkpoint owned definitions are closed", () => {
-    for (const path of ["projections.0", "evidence_chain.0", "evidence_chain.0.current_evidence"]) {
-      rejects(manualCheckpoint, at(manualCheckpoint.sample, `${path}.unexpected_property`, () => "x"), path);
-    }
-    rejects(
-      manualCheckpointContinuation,
-      at(manualCheckpointContinuation.sample, "predecessor.unexpected_property", () => "x"),
-      "predecessor"
-    );
-  });
-
   it("legacy-import mapping never carries disposition 'approved'", () => {
     for (const disposition of ["draft", "historical"]) {
       accepts(legacyImport, at(legacyImport.sample, "mapping.0.disposition", () => disposition), disposition);

@@ -21,7 +21,6 @@ export type NextActionCode =
   | "open-gate"
   | "resolve-open-gate"
   | "triage-supplemental-review"
-  | "import-manual-checkpoints"
   | "run-step"
   | "commit-phase"
   | "advance-phase"
@@ -67,7 +66,6 @@ export type NextActionInput = Readonly<{
   reconciliation_findings?: readonly ReconciliationFinding[];
   reconciliation_blocking_reasons?: readonly string[];
   untriaged_supplemental_review?: boolean;
-  checkpoint_head_revision?: number;
   assessment?: EvidenceAssessment;
   evidence_available?: boolean;
   subject_digest?: Sha256Digest;
@@ -190,9 +188,6 @@ export function deriveNextAction(input: NextActionInput): NextAction {
           gate_id: state.open_gate.gate_id,
           gate_kind: state.open_gate.gate_kind,
         });
-  }
-  if ((input.checkpoint_head_revision ?? state.revision) > state.revision) {
-    return action("import-manual-checkpoints", "Import the available manual checkpoint chain.", true, state);
   }
   const currentProduce = state.authoritative_results.some((reference) =>
     reference.phase_instance === state.phase_instance && reference.step === "produce");

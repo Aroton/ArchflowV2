@@ -14,13 +14,13 @@ Three categories recur:
 
 ## Ranked simplification targets
 
-### 1. The manual/offline parallel universe (state layer) — duplication, biggest surface
+### 1. The manual/offline parallel universe (state layer) — resolved 2026-08-11
 
-`manual-import.ts` + `manual-checkpoints.ts` + the manual half of `gates.ts` + parts of `production.ts` (~2,000 lines) re-implement the transaction kernel's invariants for the no-MCP case, and `src/local/manual-workflow.ts` (1,014 lines) drives it. Every invariant change to the normal path carries a mirror obligation here. Worth asking directly: how often is the MCP server actually down, and could degraded mode shrink to "read-only status + stop" instead of a full recording workflow?
+The audit asked directly: how often is the MCP server actually down, and could degraded mode shrink to "read-only status + stop" instead of a full recording workflow? It could, and it did. `manual-import.ts`, `manual-checkpoints.ts`, the manual half of `gates.ts`, and the `manual-workflow.ts` driver (~3,000 lines of mirror machinery, every normal-path invariant change carrying a mirror obligation) are retired; `manual-status` survives as a read-only classifier. Pre-retirement checkpoint chains are stranded with no recovery path — see `LIMITATIONS.md`.
 
 ### 2. `gates.ts` at 2,311 lines — load-bearing but overdue for a split
 
-At least six responsibilities in one file: gate lifecycle, decision templates, interface projection, approval re-authentication, design-document phase parsing, and the entire manual gate lifecycle (nearly a second implementation of the first). The obvious first move is splitting along those seams without changing behavior.
+At least five responsibilities in one file: gate lifecycle, decision templates, interface projection, approval re-authentication, and design-document phase parsing. (The sixth — an entire manual gate lifecycle, nearly a second implementation of the first — left with the degraded-mode retirement, #1.) The obvious first move is splitting along the remaining seams without changing behavior.
 
 ### 3. Double protocol validation in `mcp/` — questionable weight
 
@@ -30,9 +30,9 @@ At least six responsibilities in one file: gate lifecycle, decision templates, i
 
 Agent-facing shapes exist as JSON Schema *and* a Zod mirror, with `assertZodAgreement` proving they match — three artifacts per shape. The error taxonomy exists in full twice (a 2,835-line schema and `errors.ts`). Four custom Ajv keywords carry business logic that also partly exists in `durable.ts` — meaning some rules live in *three* places, and external schema consumers can't evaluate the custom keywords anyway, which undercuts the "schemas are the published authority" motivation. Zod can emit JSON Schema; one generated authority would collapse the whole class.
 
-### 5. Four CLI commands overlap `build-request` — duplication with real remaining callers
+### 5. Four CLI commands overlap `build-request` — resolved 2026-08-11
 
-`task-init`, `build-document`, `build-implementation-output`, and `hash` are each mostly subsumed by a `build-request` kind, but each retains one caller (degraded mode, the phase-impl skill, the gate-counter recipe's printed instructions). Retiring them means updating those callers first — cheap, but not free.
+`task-init`, `build-document`, and `build-implementation-output` were each mostly subsumed by a `build-request` kind; their last remaining callers went away with the degraded-mode retirement (#1) and a phase-impl skill update, and all three are retired. `hash` stays — the gate-counter recipe's printed instructions still use it.
 
 ### 6. `fixed-point.ts` gate satisfaction — load-bearing logic in an unreadable shape
 
@@ -41,7 +41,7 @@ Agent-facing shapes exist as JSON Schema *and* a Zod mirror, with `assertZodAgre
 ### 7. Naming collisions and small frictions
 
 - **Two unrelated "envelopes"** — the call envelope (`src/local/envelope.ts`) and the dispatch envelope (`src/review/envelopes.ts`). A rename removes a permanent source of confusion.
-- **Exit codes lie** — CLI failures return `{"ok": false}` with exit 0; every skill compensates in prose. Decide whether that's a contract or a bug.
+- **Exit codes lie** — resolved 2026-08-11: it was a bug. Any `{"ok": false}` result now also exits nonzero, and the skills' prose compensations are gone; the JSON body remains the authority for structured details.
 - **A ~30-line prose recipe as a string literal** in production code (`renderGateCounterPrompt`) embeds exact CLI command lines; any rename silently invalidates it unless a test pins it.
 - **`commands.ts` mixes dispatch with implementation** — three commands have full bodies inline in the dispatcher; extracting them leaves a pure table.
 - Small duplicated helpers: strict-UTF-8 decoding appears inline in at least four places; `visibleContent`/`visibleBytes` are the same function twice.
@@ -68,12 +68,12 @@ For balance — machinery that directly implements the trust boundaries and shou
 - The **WeakSet trust-brand pattern** — why approvals, review sets, and write authority cannot be forged by shape. Non-obvious but cheap, and it's the codebase's signature.
 - **Fail-closed pinned context** and the closed envelope shape — why review evidence can't be quietly narrated around.
 - **Root-bound git runner + `.gitattributes` pinning + "absence is never exit 128"** — each closed a reproduced silent-wrong-answer hole.
-- The **two-phase, human-confirmed lock repair** and the **one-writer handoff protocol** — honest about what filesystem locks and git can and cannot guarantee.
+- The **two-phase, human-confirmed lock repair** — honest about what filesystem locks can and cannot guarantee.
 
 ## Suggested audit order
 
-1. Decide the degraded-mode question (#1) — it dominates the line count.
+1. ~~Decide the degraded-mode question (#1)~~ — decided and done: degraded mode is read-only status only.
 2. Split `gates.ts` (#2) and name the predicates in `fixed-point.ts` (#6) — pure readability, no behavior change.
 3. Pick one shape authority (#4) — mechanical, high leverage.
-4. Sweep the small items (#5, #7, #9) opportunistically as touched code.
+4. Sweep the small items (#7, #9) opportunistically as touched code (#5 is done).
 5. Revisit SDK distrust (#3) only with a deliberate decision about the threat model, since it changes a security stance.

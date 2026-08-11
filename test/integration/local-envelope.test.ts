@@ -12,7 +12,8 @@ import { computeGateContextDigest, computeGateId } from "../../src/contracts/fin
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { stageTaskInitialization } from "../../src/init/task-initialization.js";
-import { computeCallEnvelope } from "../../src/local/envelope.js";
+import { LOCAL_COMMANDS } from "../../src/local/commands.js";
+import { computeCallEnvelope, renderGateCounterPrompt } from "../../src/local/envelope.js";
 import { runStateInitialization } from "../../src/state/initialization.js";
 import { createProductionServices } from "../../src/state/production.js";
 
@@ -190,6 +191,35 @@ describe("local call envelopes", () => {
       expect(waiver.value.gate?.counter_review_prompt).toContain(originRequest.subject_digest);
       expect(waiver.value.gate?.counter_review_prompt).toContain("retry archflow_waiver once");
       expect(waiver.value.gate?.counter_review_prompt).toContain("same archflow_waiver input");
+    }
+  });
+
+  it("the counter-review recipe names only published local commands", () => {
+    // The recipe is the one interface a human counter-reviewer follows; every archflow-local
+    // invocation it prescribes must exist on the current command surface, so a retired command
+    // can never survive inside the rendered hand-off.
+    const prompt = renderGateCounterPrompt({
+      tool: "archflow_gate",
+      gate_id: "gate-recipe-commands" as never,
+      request_digest: D("1"),
+      task_id: task,
+      phase_instance: "prd" as never,
+      kind: "artifact-approval",
+      subject_digest: D("2"),
+      context_digest: D("3"),
+      input_fingerprint: D("4"),
+      current_evidence: {
+        set_digest: D("5"),
+        slots: [{
+          role: "counter-review", evidence_digest: D("6"), assurance: "server-attested",
+          producer_family: "claude", reviewer_family: "codex", independence: "opposite-family",
+        }],
+      } as never,
+    });
+    const named = [...prompt.matchAll(/archflow-local\s+([a-z][a-z-]*)/gu)].map((match) => match[1]!);
+    expect(named.length).toBeGreaterThan(0);
+    for (const name of named) {
+      expect(LOCAL_COMMANDS as readonly string[], `recipe names unpublished command ${name}`).toContain(name);
     }
   });
 });

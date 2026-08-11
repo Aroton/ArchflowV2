@@ -3,12 +3,10 @@ import { Ajv2020, type AnySchema, type ErrorObject, type ValidateFunction } from
 import * as formatsModule from "ajv-formats";
 import type { FormatsPlugin } from "ajv-formats";
 import type { IntentReceiptV1 } from "./durable-intent.js";
-import type { HandoffRecordV1 } from "./durable-handoff.js";
 import type { ResultManifestV1 } from "./durable-result-manifest.js";
 import type { ActiveGateV1, GateDecisionRecordV1, GateRequestV1 } from "./durable-gate.js";
 import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
 import intentReceiptSchema from "./schemas/v1/intent-receipt.schema.json" with { type: "json" };
-import handoffRecordSchema from "./schemas/v1/handoff-record.schema.json" with { type: "json" };
 import resultManifestSchema from "./schemas/v1/result-manifest.schema.json" with { type: "json" };
 import documentArtifactSchema from "./schemas/v1/document-artifact.schema.json" with { type: "json" };
 import durablePrimitivesSchema from "./schemas/v1/durable-primitives.schema.json" with { type: "json" };
@@ -324,11 +322,6 @@ export const intentReceiptV1Validator = createJsonSchemaValidator<IntentReceiptV
   primitivesSchema,
   pathClaimSchema,
   taskStateSchema,
-]);
-
-/** Compiled normative authority for the server-authored immutable handoff root. */
-export const handoffRecordV1Validator = createJsonSchemaValidator<HandoffRecordV1>(handoffRecordSchema, [
-  primitivesSchema,
 ]);
 
 /** Compiled normative authority for the unmirrored server-internal retained result root. */

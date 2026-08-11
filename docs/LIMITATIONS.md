@@ -54,6 +54,14 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 **Why accepted:** The prototype assumes its task filesystem is not being adversarially rewritten by another same-user process during an operation. The checks reliably reject ordinary malformed and pre-existing escape paths. Closing the race would require a different native/runtime filesystem capability and is outside the current local-developer scope.
 
+## Stranded pre-retirement manual checkpoint chains
+
+**Not recoverable:** Earlier versions recorded offline progress in a manual checkpoint chain under `.archflow/tasks/<task>/manual/checkpoints/` when the MCP server was unavailable. That recording path is retired and no import or recovery path exists: a chain written before retirement can no longer be folded back into workflow state, and work represented only there must be redone through the normal workflow.
+
+**Existing mitigation:** The chain files remain on disk untouched, so a human can still read what was recorded. Payload reclamation still conservatively treats digests those files reference as roots, so retained bytes a stranded chain points at are never pruned. Task state may also carry a legacy `adopted_checkpoint` field from a pre-retirement import; it is accepted when present, preserved verbatim by transactions, and never written by current code.
+
+**Why accepted:** Degraded mode is now read-only — the server records all progress, so no new chains can be created — and the retired machinery was the codebase's largest structural duplication. A stranded chain represents unapproved offline progress from a prototype-stage feature; redoing that work through the gated workflow is the honest recovery.
+
 ## Descendants that escape the process group
 
 **Not protected:** On non-Windows systems ArchFlow terminates the detached child's process group, but a descendant that calls `setsid()` leaves that group. Cancellation, timeout, or server shutdown therefore cannot guarantee termination of that escaped descendant. The bounded Phase 20 observation confirmed the operating-system behavior; it is recorded here instead of kept as a permanent test that could not be fixed by an ArchFlow code change.

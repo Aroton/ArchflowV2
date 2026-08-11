@@ -15,7 +15,7 @@ The system is one codebase with three faces. Understanding which face does what 
 | Surface | What it is | What it's trusted with |
 |---|---|---|
 | **Skills** (`skills/archflow-*`) | Prose playbooks the agent follows (`/archflow-prd`, `/archflow-phase-impl`, …) | Nothing. They are instructions, not enforcement. |
-| **`archflow-local` CLI** (`src/local/`) | A local helper that *composes* requests, reads status, and runs the degraded-mode fallback | Deriving mechanical fields correctly. It writes almost nothing. |
+| **`archflow-local` CLI** (`src/local/`) | A local helper that *composes* requests and reads status — including a read-only classification when the server is down | Deriving mechanical fields correctly. It writes almost nothing. |
 | **`archflow-mcp` MCP server** (`src/mcp/`, `src/state/`, …) | A stdio MCP server exposing four tools | Everything. It is the sole writer of durable state and the sole judge of validity. |
 
 A subtlety worth naming immediately: the `archflow-mcp` binary has **no CLI mode** — it is always a stdio MCP server. The word "CLI" appears in two other senses: `archflow-local` (the helper above), and `src/dispatch/cli.ts`, which spawns the *external* `claude` and `codex` command-line tools as child processes to run counter-reviews.
@@ -82,4 +82,4 @@ Editing the artifact changes its digest, which automatically invalidates every d
 - **Dispatch envelope** (`src/review/envelopes.ts`) — the sealed, byte-capped evidence package handed to a child reviewer. *Same word, unrelated concepts* — a known naming collision.
 - **Constitution** — versioned repository policy rules (`.archflow/constitution/`) that the constitution review — run inside `archflow_counter_review` when active rules exist — judges every artifact against, pinned per task at an approved commit.
 - **Waiver** — a human-granted exemption from one rule version, for one subject digest, for one task. Evaporates if the artifact or the rule changes.
-- **Degraded mode** — the manual checkpoint workflow used when the MCP server is unavailable; progress is recorded locally and folded back in later. Never a shortcut around gates.
+- **Degraded mode** — the read-only stance when the MCP server is unavailable: `manual-status` reports where the task stands and the answer is to wait; no offline recording exists, and it is never a shortcut around gates.

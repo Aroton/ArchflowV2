@@ -83,15 +83,6 @@ describe("createAtomicWriter.createExclusive", () => {
     expect(await readFile(target, "utf8")).toBe("decision");
   });
 
-  it("admits immutable manual checkpoints", async () => {
-    const root = await temporaryRoot();
-    const target = join(root, "checkpoint.json");
-    await expect(createAtomicWriter().createExclusive(
-      resolved(target, "manual-checkpoint"),
-      new TextEncoder().encode("checkpoint"),
-    )).resolves.toBe("created");
-  });
-
   it("rejects a class mismatch before touching the filesystem", async () => {
     const root = await temporaryRoot();
     const target = join(root, "state.json");

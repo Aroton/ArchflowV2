@@ -30,7 +30,6 @@ import {
   type MaintenanceReferenceRoot,
   type MaintenanceRoots,
 } from "./maintenance.js";
-import { readManualCheckpoints } from "./manual-checkpoints.js";
 import { readTaskState } from "./read.js";
 import type { SnapshotManifest } from "./snapshots.js";
 import type { TransactionDependencies } from "./transaction.js";
@@ -78,8 +77,6 @@ export async function enumerateMaintenanceRoots(
   assertInternalTransactionAuthority(authority, dependencies);
   const stateRead = await readTaskState(authority.state);
   if (stateRead.kind !== "canonical") return fail(authority, "enumerate-maintenance-state");
-  const checkpoints = await readManualCheckpoints(dependencies, authority);
-  if (!checkpoints.ok) return checkpoints;
   try {
     const receipts = [];
     const intents: MaintenanceIntentInventory[] = [];
@@ -129,7 +126,6 @@ export async function enumerateMaintenanceRoots(
     return ok(Object.freeze({
       inventory_complete: true as const,
       current_state: stateRead.document.value,
-      checkpoints: Object.freeze(checkpoints.value.map((document) => document.value)),
       resumable_receipts: Object.freeze(receipts),
       decision_review_evidence: Object.freeze(decisionReviewEvidence),
       intents: Object.freeze(intents),
@@ -145,7 +141,7 @@ export async function enumerateMaintenanceManifests(
 ): Promise<ProjectResult<readonly MaintenanceManifest[]>> {
   assertInternalTransactionAuthority(authority, dependencies);
   const references = new Map<string, string>();
-  for (const root of [roots.current_state, ...roots.checkpoints, ...roots.resumable_receipts.map((item) => item.prepared_state), ...roots.decision_review_evidence]) {
+  for (const root of [roots.current_state, ...roots.resumable_receipts.map((item) => item.prepared_state), ...roots.decision_review_evidence]) {
     for (const reference of root.authoritative_results) references.set(reference.result_digest, reference.manifest_path);
   }
   try {
@@ -161,11 +157,11 @@ export async function enumerateMaintenanceManifests(
 }
 
 /**
- * Digest-shaped strings observed anywhere in the gate archive, retained review records, the
- * manual checkpoint chain, or the live gate interface. The match is deliberately lexical rather
- * than parsed: those documents reference results through several envelope shapes (authority
- * links, evidence slots, supersession refs), and an unrecognized future shape must fail toward
- * keeping bytes, never toward deleting them.
+ * Digest-shaped strings observed anywhere in the gate archive, retained review records, or the
+ * live gate interface. The match is deliberately lexical rather than parsed: those documents
+ * reference results through several envelope shapes (authority links, evidence slots,
+ * supersession refs), and an unrecognized future shape must fail toward keeping bytes, never
+ * toward deleting them.
  */
 async function conservativelyReferencedDigests(authority: TransactionAuthority): Promise<ReadonlySet<string>> {
   const digests = new Set<string>();
@@ -173,6 +169,8 @@ async function conservativelyReferencedDigests(authority: TransactionAuthority):
   const collect = (bytes: Uint8Array): void => {
     for (const match of decoder.decode(bytes).matchAll(/[0-9a-f]{64}/gu)) digests.add(match[0]);
   };
+  // `manual/` holds legacy on-disk checkpoint files; they still conservatively pin any digest
+  // they reference (fail toward keeping bytes).
   for (const directory of ["decisions", "reviews", "manual"] as const) {
     for (const path of await regularFiles(join(authority.task_root, directory))) {
       collect(await readTaskFile(authority, `${directory}/${path}`));
@@ -195,7 +193,7 @@ export async function enumerateMaintenanceCandidates(
   categories: readonly MaintenanceDeletionCategory[] = MAINTENANCE_DELETION_CATEGORIES,
 ): Promise<ProjectResult<readonly MaintenanceCandidate[]>> {
   assertInternalTransactionAuthority(authority, dependencies);
-  const referenced = new Set([roots.current_state, ...roots.checkpoints, ...roots.resumable_receipts.map((item) => item.prepared_state), ...roots.decision_review_evidence]
+  const referenced = new Set([roots.current_state, ...roots.resumable_receipts.map((item) => item.prepared_state), ...roots.decision_review_evidence]
     .flatMap((root) => root.authoritative_results.map((item) => item.result_digest)));
   try {
     const candidates: MaintenanceCandidate[] = [];

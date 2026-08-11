@@ -6,8 +6,6 @@ import gateDecisionSchema from "../contracts/schemas/v1/gate-decision.schema.jso
 import mcpToolsSchema from "../contracts/schemas/v1/mcp-tools.schema.json" with { type: "json" };
 import implementationOutputSchema from "../contracts/schemas/v1/implementation-output.schema.json" with { type: "json" };
 import legacyImportInitializationSchema from "../contracts/schemas/v1/legacy-import-initialization.schema.json" with { type: "json" };
-import manualCheckpointSchema from "../contracts/schemas/v1/manual-checkpoint.schema.json" with { type: "json" };
-import manualCheckpointImportSchema from "../contracts/schemas/v1/manual-checkpoint-import.schema.json" with { type: "json" };
 import pathClaimSchema from "../contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
 import primitivesSchema from "../contracts/schemas/v1/primitives.schema.json" with { type: "json" };
 import projectErrorSchema from "../contracts/schemas/v1/project-error.schema.json" with { type: "json" };
@@ -46,8 +44,6 @@ const schemaDocuments = Object.freeze([
   Object.freeze({ key: "legacy-import-initialization", id: "urn:archflow:schema:v1:legacy-import-initialization", schema: legacyImportInitializationSchema }),
   Object.freeze({ key: "document-artifact", id: "urn:archflow:schema:v1:document-artifact", schema: documentArtifactSchema }),
   Object.freeze({ key: "implementation-output", id: "urn:archflow:schema:v1:implementation-output", schema: implementationOutputSchema }),
-  Object.freeze({ key: "manual-checkpoint", id: "urn:archflow:schema:v1:manual-checkpoint", schema: manualCheckpointSchema }),
-  Object.freeze({ key: "manual-checkpoint-import", id: "urn:archflow:schema:v1:manual-checkpoint-import", schema: manualCheckpointImportSchema }),
   Object.freeze({ key: "secret-scan-result", id: "urn:archflow:schema:v1:secret-scan-result", schema: secretScanResultSchema }),
   Object.freeze({ key: "triage", id: "urn:archflow:schema:v1:triage", schema: triageSchema })
 ] as const);

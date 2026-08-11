@@ -186,7 +186,7 @@ describe("production dependency assembly", () => {
     const service = await createProductionServices(input);
     if (!service.ok) throw new Error("production restart failed");
     const maintenanceRoots = await enumerateMaintenanceRoots(service.value.dependencies, service.value.authority);
-    expect(maintenanceRoots).toMatchObject({ ok: true, value: { current_state: state, checkpoints: [], resumable_receipts: [], decision_review_evidence: [] } });
+    expect(maintenanceRoots).toMatchObject({ ok: true, value: { current_state: state, resumable_receipts: [], decision_review_evidence: [] } });
     if (!maintenanceRoots.ok) return;
     const candidates = await enumerateMaintenanceCandidates(service.value.dependencies, service.value.authority, maintenanceRoots.value);
     expect(candidates.ok).toBe(true);

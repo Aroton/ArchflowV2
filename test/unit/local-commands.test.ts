@@ -1,11 +1,16 @@
-import { readFile } from "node:fs/promises";
-
 import { describe, expect, it } from "vitest";
 
 import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
-import { assertGateCounterRequestBinding, runLocalCommand, validateCheckpointExtension } from "../../src/local/commands.js";
+import { LOCAL_COMMANDS, assertGateCounterRequestBinding, runLocalCommand } from "../../src/local/commands.js";
 
 describe("archflow-local pure adapters", () => {
+  it("publishes exactly the fifteen local commands", () => {
+    expect([...LOCAL_COMMANDS].sort()).toEqual([
+      "build-request", "decide", "envelope", "gate-counter", "hash", "init", "maintain",
+      "manual-status", "reconcile", "render", "restore", "snapshot", "status", "upgrade", "validate",
+    ]);
+  });
+
   it("hashes the exact canonical JSON value", async () => {
     const value = { z: [2, 1], a: "value" } as const;
     await expect(runLocalCommand({
@@ -19,27 +24,13 @@ describe("archflow-local pure adapters", () => {
     await expect(runLocalCommand({
       command: "validate",
       working_directory: process.cwd(),
-      value: { kind: "manual-checkpoint", value: { schema_version: "1" } },
+      value: { kind: "gate-request", value: { schema_version: "1" } },
     })).rejects.toThrow();
     await expect(runLocalCommand({
       command: "validate",
       working_directory: process.cwd(),
       value: { kind: "unknown", value: {} },
     })).rejects.toThrow(/not supported/u);
-  });
-
-  it("selects the complete validated checkpoint import chain", async () => {
-    const artifact = JSON.parse(await readFile(
-      new URL("../fixtures/contracts/durable/manual-checkpoint-import.valid.json", import.meta.url),
-      "utf8",
-    ));
-    const result = await runLocalCommand({
-      command: "import",
-      working_directory: process.cwd(),
-      task_id: artifact.task_id,
-      value: artifact,
-    });
-    expect(result).toMatchObject({ outcome: "valid", greatest_revision: 2 });
   });
 
   it("rejects forged gate bindings and non-degraded helper evidence", () => {
@@ -57,17 +48,5 @@ describe("archflow-local pure adapters", () => {
     expect(() => assertGateCounterRequestBinding(record as never, request, "e".repeat(64))).not.toThrow();
     expect(() => assertGateCounterRequestBinding({ ...record, context_digest: "f".repeat(64) } as never, request, "e".repeat(64))).toThrow(/archived request/u);
     expect(() => assertGateCounterRequestBinding({ ...record, review: { assurance: "server-attested", producer_family: "claude" } } as never, request, "e".repeat(64))).toThrow(/archived request/u);
-  });
-
-  it("refuses checkpoint gaps, forks, and foreign candidates", async () => {
-    const artifact = JSON.parse(await readFile(
-      new URL("../fixtures/contracts/durable/manual-checkpoint-import.valid.json", import.meta.url),
-      "utf8",
-    ));
-    const [first, second] = artifact.chain;
-    expect(() => validateCheckpointExtension([first], second)).not.toThrow();
-    expect(() => validateCheckpointExtension([first], { ...second, revision: 4 })).toThrow(/gap|append|successor/u);
-    expect(() => validateCheckpointExtension([first], { ...second, task_id: "foreign-task" })).toThrow(/foreign/u);
-    expect(() => validateCheckpointExtension([first, second], { ...second, input_fingerprint: "f".repeat(64) })).toThrow(/fork/u);
   });
 });

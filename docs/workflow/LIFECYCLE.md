@@ -98,7 +98,7 @@ These rules recur across every skill and are enforced by the server wherever mec
 - **No code before approved phase design.** Durable state must say `phase-impl-<n>`; a design file existing on disk is explicitly insufficient.
 - **Committing is a double lock.** An `authorize-commit` gate decision bound to the final diff, *and then* a separate stop where the user sees the exact staged diff and message and explicitly confirms.
 - **Waivers are narrow.** A `waiver-requested` decision is not approval; a granted waiver covers one rule version + one subject digest + one task, and evaporates on any change.
-- **Fail closed, honestly.** Degraded mode never advances the workflow by itself; `repair-required` states never become progress; "task complete" means the last planned phase is committed — it does not imply QA, staging, or release.
+- **Fail closed, honestly.** With the MCP server unavailable nothing records progress — degraded mode is a read-only status, not an offline workflow; `repair-required` states never become progress; "task complete" means the last planned phase is committed — it does not imply QA, staging, or release.
 
 ## Where this is heading
 

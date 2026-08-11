@@ -1,9 +1,8 @@
 import type { CanonicalDocument } from "./canonical.js";
-import type { ProjectionDigestRef } from "./durable-checkpoint.js";
 import type { DocumentArtifactV1 } from "./durable-document.js";
 import type { ImplementationOutputV1 } from "./durable-implementation-output.js";
 import type { AdjudicationEvidence } from "./adjudication.js";
-import type { OutputEntry, SnapshotAccountingV1 } from "./durable-primitives.js";
+import type { OutputEntry, ProjectionDigestRef, SnapshotAccountingV1 } from "./durable-primitives.js";
 import type { SafeId, Sha256Digest, TaskSlug } from "./evidence.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson } from "./plain-json.js";

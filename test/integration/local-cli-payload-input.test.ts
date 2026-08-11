@@ -93,7 +93,7 @@ async function repository() {
 // The interactive-TTY guard (isTTY → fail fast) is not reachable from spawned children, which
 // always receive pipes; the empty-stdin cases below assert the same "no payload provided" message.
 describe("payload input modes and error taxonomy", () => {
-  it("accepts --input <file> for envelope and build-document", async () => {
+  it("accepts --input <file> for envelope and build-request", async () => {
     const fixture = await repository();
     const placeholder = digest("0");
     const initialInput = {
@@ -116,11 +116,12 @@ describe("payload input modes and error taxonomy", () => {
     if (!initialized.ok) return;
 
     writeFileSync(join(bootstrap.value.authority.task_root, "prd.md"), "# PRD\n");
-    const built = cliFile(fixture.root, "build-document", JSON.stringify({
-      phase_instance: "prd", step: "produce", document_path: "prd.md", declared_inputs: [],
-      input_fingerprint: initialized.value.state.value.input_fingerprint,
+    const built = cliFile(fixture.root, "build-request", JSON.stringify({
+      intent_id: "produce-file-mode", kind: "produce",
+      document: { document_path: "prd.md", declared_inputs: [] },
     }));
-    expect(built).toMatchObject({ status: 0, value: { ok: true, value: { artifact_kind: "document", document_path: "prd.md" } } });
+    expect(built).toMatchObject({ status: 0, value: { ok: true, value: { tool: "archflow_state" } } });
+    expect(built.value.value.request.input.artifact).toMatchObject({ artifact_kind: "document", document_path: "prd.md" });
   }, TIMEOUT);
 
   it("names the command's input contract when stdin is empty and --input is absent", () => {

@@ -6,10 +6,9 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
+import { sha256Bytes } from "../../src/contracts/canonical.js";
 import type { TaskInitializationV1 } from "../../src/contracts/durable-task-initialization.js";
 import type { LegacyImportInitializationV1 } from "../../src/contracts/durable-legacy-import.js";
-import { checkpointSelfDigest, parseManualCheckpointImport, type ManualCheckpointImportV1, type ManualCheckpointV1 } from "../../src/contracts/durable-checkpoint.js";
 import { computeInputFingerprint, type InputFingerprintSubject } from "../../src/contracts/fingerprints.js";
 import { createGitRunner, preflightGit, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
@@ -17,7 +16,7 @@ import { createInternalTransactionAuthority } from "../../src/state/authority.js
 import { inspectAbandonedTaskLock, removeConfirmedAbandonedTaskLock } from "../../src/state/lock.js";
 import { readTaskState } from "../../src/state/read.js";
 
-const childProgram = new URL("../fixtures/state-checkpoint-child.mjs", import.meta.url);
+const childProgram = new URL("../fixtures/state-initialization-child.mjs", import.meta.url);
 const roots: string[] = [];
 const children = new Set<ChildProcess>();
 const env: NodeJS.ProcessEnv = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null",
@@ -40,7 +39,7 @@ const message = (child: ChildProcess, type: string): Promise<Record<string, unkn
   child.on("error", reject);
 });
 
-function start(taskRoot: string, cut: "checkpoint-receipt-only" | "state-before" | "state-after" | "none"): ChildProcess {
+function start(taskRoot: string, cut: "initialization-receipt-only" | "state-before" | "state-after" | "none"): ChildProcess {
   const child = spawn(process.execPath, [childProgram.pathname, "initialize", taskRoot, cut], {
     cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
@@ -48,7 +47,7 @@ function start(taskRoot: string, cut: "checkpoint-receipt-only" | "state-before"
   return child;
 }
 
-async function setup(kind: "normal" | "legacy" | "chain" = "normal") {
+async function setup(kind: "normal" | "legacy" = "normal") {
   const repository = await mkdtemp(join(tmpdir(), "archflow-init-crash-")); roots.push(repository);
   execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: repository, env });
   await writeFile(join(repository, "tracked.txt"), "root\n");
@@ -77,7 +76,7 @@ async function setup(kind: "normal" | "legacy" | "chain" = "normal") {
       state: `.archflow/tasks/${taskId}/state.json` as never, workflow: ".archflow/workflow.yaml" as never,
       constitution_root: ".archflow/constitution" as never }, config_digest: subject.config_digest,
     workflow_digest: subject.workflow_digest, constitution_digest: subject.constitution_digest };
-  let artifact: TaskInitializationV1 | LegacyImportInitializationV1 | ManualCheckpointImportV1 = kind === "legacy"
+  const artifact: TaskInitializationV1 | LegacyImportInitializationV1 = kind === "legacy"
     ? {
         ...common,
         import_baseline_commit: headCommit,
@@ -90,32 +89,13 @@ async function setup(kind: "normal" | "legacy" | "chain" = "normal") {
         })),
       } as LegacyImportInitializationV1
     : common as TaskInitializationV1;
-  let callPhase = "prd";
-  let callStep = "produce";
-  let callStatus = "running";
-  if (kind === "chain") {
-    const imported = JSON.parse(await readFile(new URL("../fixtures/contracts/durable/manual-checkpoint-import.valid.json", import.meta.url), "utf8")) as ManualCheckpointImportV1;
-    const initialization = common as TaskInitializationV1;
-    const first = { ...structuredClone(imported.chain[0]!), task_id: taskId,
-      repository_identity_digest: authority.value.repository_identity_digest, phase_instance: "prd", step: "produce", status: "succeeded",
-      attempt: 1, input_fingerprint: fingerprint, initialization_digest: canonicalJsonDigest(initialization), initialization,
-      authoritative_results: [], projections: [], evidence_chain: [], approvals: [], waivers: [] } as unknown as ManualCheckpointV1;
-    const second = { ...structuredClone(imported.chain[1]!), task_id: taskId,
-      repository_identity_digest: authority.value.repository_identity_digest, phase_instance: "prd", step: "counter_review", status: "running",
-      attempt: 1, input_fingerprint: fingerprint, initialization_digest: first.initialization_digest,
-      authoritative_results: [], projections: [], evidence_chain: [], approvals: [], waivers: [],
-      predecessor: { revision: first.revision, checkpoint_digest: checkpointSelfDigest(first) } } as unknown as ManualCheckpointV1;
-    artifact = parseManualCheckpointImport({ schema_version: "1", artifact_kind: "manual-checkpoint-import", task_id: taskId,
-      repository_identity_digest: authority.value.repository_identity_digest, import_mode: "initial", chain: [first, second] });
-    callStep = "counter_review";
-  }
-  await writeFile(join(taskRoot, "checkpoint-child-input.json"), JSON.stringify({ context, subject, call: { schema_version: "1", task_id: taskId,
-    intent_id: "initialize", expected_revision: 0, input_fingerprint: fingerprint, phase_instance: callPhase, step: callStep, status: callStatus, artifact } }));
+  await writeFile(join(taskRoot, "initialization-child-input.json"), JSON.stringify({ context, subject, call: { schema_version: "1", task_id: taskId,
+    intent_id: "initialize", expected_revision: 0, input_fingerprint: fingerprint, phase_instance: "prd", step: "produce", status: "running", artifact } }));
   return { taskRoot, authority: authority.value };
 }
 
 describe("revision-0 crash cuts", () => {
-  for (const cut of ["checkpoint-receipt-only", "state-before", "state-after"] as const) {
+  for (const cut of ["initialization-receipt-only", "state-before", "state-after"] as const) {
     it(`leaves prior or complete revision 1 at ${cut}`, async () => {
       const fixture = await setup();
       const child = start(fixture.taskRoot, cut); await message(child, "cut");
@@ -157,7 +137,7 @@ describe("revision-0 crash cuts", () => {
   ] as const) {
     it(`rejects ${label} before receipt installation`, async () => {
       const fixture = await setup();
-      const inputPath = join(fixture.taskRoot, "checkpoint-child-input.json");
+      const inputPath = join(fixture.taskRoot, "initialization-child-input.json");
       const input = JSON.parse(await readFile(inputPath, "utf8")) as { call: { artifact: Record<string, any> } };
       mutate(input.call.artifact);
       await writeFile(inputPath, JSON.stringify(input));
@@ -172,7 +152,7 @@ describe("revision-0 crash cuts", () => {
   for (const field of ["import_baseline_commit", "code_baseline_commit"] as const) {
     it(`validates the legacy ${field} as a current-repository commit`, async () => {
       const fixture = await setup("legacy");
-      const inputPath = join(fixture.taskRoot, "checkpoint-child-input.json");
+      const inputPath = join(fixture.taskRoot, "initialization-child-input.json");
       const input = JSON.parse(await readFile(inputPath, "utf8")) as { call: { artifact: Record<string, unknown> } };
       input.call.artifact[field] = "3".repeat(40);
       await writeFile(inputPath, JSON.stringify(input));
@@ -190,35 +170,9 @@ describe("revision-0 crash cuts", () => {
     const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], {
       cwd: repository, env, encoding: "utf8", input: "not a commit\n",
     }).trim();
-    const inputPath = join(fixture.taskRoot, "checkpoint-child-input.json");
+    const inputPath = join(fixture.taskRoot, "initialization-child-input.json");
     const input = JSON.parse(await readFile(inputPath, "utf8")) as { call: { artifact: Record<string, unknown> } };
     input.call.artifact.policy_base_commit = blob;
-    await writeFile(inputPath, JSON.stringify(input));
-    const child = start(fixture.taskRoot, "none");
-    const result = await message(child, "result");
-    expect(result.ok).toBe(false);
-    expect((await readTaskState(fixture.authority.state)).kind).toBe("missing");
-    expect(existsSync(join(fixture.taskRoot, "intents", "initialize.json"))).toBe(false);
-  }, 20_000);
-
-  it("adopts a legal initial multi-checkpoint chain in one revision-1 commit", async () => {
-    const fixture = await setup("chain");
-    const child = start(fixture.taskRoot, "none");
-    const result = await message(child, "result");
-    expect(result).toMatchObject({ ok: true, revision: 1 });
-    const state = await readTaskState(fixture.authority.state);
-    expect(state.kind).toBe("canonical");
-    if (state.kind === "canonical") expect(state.document.value.adopted_checkpoint?.revision).toBe(2);
-  }, 20_000);
-
-  it("rejects an illegal workflow jump inside an initial chain before receipt", async () => {
-    const fixture = await setup("chain");
-    const inputPath = join(fixture.taskRoot, "checkpoint-child-input.json");
-    const input = JSON.parse(await readFile(inputPath, "utf8")) as {
-      call: { step: string; artifact: { chain: Array<Record<string, unknown>> } };
-    };
-    input.call.step = "triage";
-    input.call.artifact.chain[1]!.step = "triage";
     await writeFile(inputPath, JSON.stringify(input));
     const child = start(fixture.taskRoot, "none");
     const result = await message(child, "result");
@@ -231,7 +185,7 @@ describe("revision-0 crash cuts", () => {
     const fixture = await setup();
     const first = start(fixture.taskRoot, "none");
     expect(await message(first, "result")).toMatchObject({ ok: true, revision: 1 });
-    const inputPath = join(fixture.taskRoot, "checkpoint-child-input.json");
+    const inputPath = join(fixture.taskRoot, "initialization-child-input.json");
     const input = JSON.parse(await readFile(inputPath, "utf8")) as { call: { artifact: Record<string, unknown> } };
     input.call.artifact.code_baseline_commit = "4".repeat(40);
     await writeFile(inputPath, JSON.stringify(input));

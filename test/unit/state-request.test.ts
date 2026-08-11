@@ -168,7 +168,6 @@ describe("internal transaction request identity", () => {
       ["legacy-import-initialization", durableFixture("legacy-import-initialization"), "adopt-legacy-import-initialization"],
       ["document-artifact", durableFixture("document-artifact"), "record-document-artifact"],
       ["implementation-output", durableFixture("implementation-output"), "record-implementation-output"],
-      ["manual-checkpoint-import", durableFixture("manual-checkpoint-import"), "adopt-manual-checkpoint-import"],
       ["triage", triageArtifact, "record-triage"],
     ] as const;
     for (const [label, artifact, operation] of cases) {

@@ -36,7 +36,7 @@ const childProgram = new URL("../fixtures/state-transaction-child.mjs", import.m
 // @ts-expect-error fixture module intentionally has no TypeScript declarations
 const transactionCuts = (await import("../fixtures/state-transaction-child.mjs")).CUT_POINTS as readonly string[];
 // @ts-expect-error fixture module intentionally has no TypeScript declarations
-const checkpointChildCuts = (await import("../fixtures/state-checkpoint-child.mjs")).CUT_POINTS as readonly string[];
+const initializationChildCuts = (await import("../fixtures/state-initialization-child.mjs")).CUT_POINTS as readonly string[];
 // @ts-expect-error fixture module intentionally has no TypeScript declarations
 const gateChildCuts = (await import("../fixtures/state-gate-child.mjs")).CUT_POINTS as readonly string[];
 const gitEnvironment: NodeJS.ProcessEnv = {
@@ -240,15 +240,6 @@ function startResultChild(input: Fixture, action: "run-result-transaction" | "ru
   return child;
 }
 
-function startManualCheckpointChild(input: Fixture): ChildProcess {
-  const child = spawn(process.execPath, [
-    childProgram.pathname, "run-crash-manual-checkpoint", input.taskRoot,
-    "unused-intent", "1", "manual-checkpoint-link",
-  ], { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe", "ipc"] });
-  children.add(child);
-  return child;
-}
-
 async function killAtRealCut(input: Fixture, cutPoint: CrashCutPoint): Promise<Record<string, unknown>> {
   const child = startCrashChild(input, cutPoint);
   const event = await childEvent(child, "cut");
@@ -353,16 +344,6 @@ describe("state transaction crash boundaries", () => {
     });
   }
 
-  it("keeps a linked manual checkpoint outside state authority", async () => {
-    const input = await fixture();
-    const child = startManualCheckpointChild(input);
-    const cut = await childEvent(child, "cut");
-    await new Promise<void>((resolve) => child.once("exit", () => resolve()));
-    expect(cut).toMatchObject({ point: "manual-checkpoint-link" });
-    expect(await readFile(String(cut.path))).not.toHaveLength(0);
-    expect(await expectAuthorityAtPriorOrNext(input, false)).toBe(1);
-  });
-
   it("resumes a result receipt after SIGKILL without invoking preparation", async () => {
     const input = await fixture();
     const killed = startResultChild(input, "run-crash-result-transaction", "receipt-link");
@@ -460,7 +441,7 @@ describe("state transaction crash boundaries", () => {
       readFile(new URL(`../../src/state/${name}`, import.meta.url), "utf8")
     ))).join("\n");
     expect(source).not.toMatch(/process\.env|ARCHFLOW[_-].*(?:FAULT|CUT)|fault[_-]?hook/iu);
-    const cutPattern = new RegExp([...new Set([...transactionCuts, ...checkpointChildCuts, ...gateChildCuts])]
+    const cutPattern = new RegExp([...new Set([...transactionCuts, ...initializationChildCuts, ...gateChildCuts])]
       .map((cut) => JSON.stringify(cut).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join("|"), "u");
     for (const bundleName of ["archflow-mcp.mjs", "archflow-local.mjs"]) {
       const bundle = await readFile(new URL(`../../dist/${bundleName}`, import.meta.url), "utf8");

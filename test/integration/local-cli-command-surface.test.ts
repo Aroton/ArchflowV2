@@ -1,5 +1,5 @@
 import { spawn, spawnSync, execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -90,7 +90,7 @@ async function repository() {
 }
 
 describe("bundled local CLI", () => {
-  it("wires all envelopes, the no-state identification seam, builders, validation, and full status", async () => {
+  it("wires all envelopes, the no-state identification seam, request composition, validation, and full status", async () => {
     const fixture = await repository();
     const placeholder = digest("0");
     // build-request composes the entire revision-0 initialization request before any durable
@@ -121,13 +121,6 @@ describe("bundled local CLI", () => {
     expect(initialized.value.state.value.committed_intent?.request_digest).toBe(first.value.value.request_digest);
 
     writeFileSync(join(bootstrap.value.authority.task_root, "prd.md"), "# PRD\n");
-    const built = cli(fixture.root, "build-document", {
-      phase_instance: "prd", step: "produce", document_path: "prd.md", declared_inputs: [],
-      input_fingerprint: initialized.value.state.value.input_fingerprint,
-    });
-    expect(built).toMatchObject({ status: 0, value: { ok: true, value: { artifact_kind: "document", document_path: "prd.md" } } });
-    expect(cli(fixture.root, "validate", { kind: "document", value: built.value.value }))
-      .toMatchObject({ status: 0, value: { artifact_kind: "document" } });
 
     // build-request composes the whole terminal produce request from one intent line: canonical
     // document defaults, the built artifact, and internal fingerprint resolution — its output is
@@ -145,23 +138,38 @@ describe("bundled local CLI", () => {
         declared_inputs: [{ input_id: "user-ask" }],
       },
     });
+    const builtArtifact = composedRequest.input.artifact;
+    expect(cli(fixture.root, "validate", { kind: "document", value: builtArtifact }))
+      .toMatchObject({ status: 0, value: { artifact_kind: "document" } });
     const composedFixedPoint = cli(fixture.root, "envelope", composedRequest);
     expect(composedFixedPoint).toMatchObject({ status: 0, value: { ok: true, value: {
       request_digest: composed.value.value.request_digest,
       artifact_digest: composed.value.value.artifact_digest,
     } } });
 
+    // build-request composes an implementation-output produce request once the durable position
+    // is a phase-impl produce step; the same command covers both artifact families.
     const baseCommit = git(fixture.root, "rev-parse", "HEAD");
     writeFileSync(join(fixture.root, "README.md"), "repository changed\n");
-    const implementation = cli(fixture.root, "build-implementation-output", {
-      phase_instance: "phase-impl-1", step: "produce", base_commit: baseCommit,
-      outputs: ["README.md"], restore_targets: ["README.md"],
-      parent_documents: [{ document_path: "prd.md", role: "prd" }], declared_inputs: [],
-      input_fingerprint: initialized.value.state.value.input_fingerprint,
+    const statePath = join(bootstrap.value.authority.task_root, "state.json");
+    const stateBytesBefore = readFileSync(statePath);
+    writeFileSync(statePath, canonicalDocument({
+      ...JSON.parse(stateBytesBefore.toString("utf8")),
+      phase_instance: "phase-impl-1", step: "produce", status: "running",
+    }).bytes);
+    const implementation = cli(fixture.root, "build-request", {
+      intent_id: "produce-impl", kind: "produce",
+      implementation: {
+        base_commit: baseCommit, outputs: ["README.md"], restore_targets: ["README.md"],
+        parent_documents: [{ document_path: "prd.md", role: "prd" }], declared_inputs: [],
+      },
     });
-    expect(implementation).toMatchObject({ status: 0, value: { ok: true, value: { artifact_kind: "implementation-output" } } });
-    expect(cli(fixture.root, "validate", { kind: "implementation-output", value: implementation.value.value }))
+    expect(implementation).toMatchObject({ status: 0, value: { ok: true, value: { tool: "archflow_state" } } });
+    const implementationArtifact = implementation.value.value.request.input.artifact;
+    expect(implementationArtifact).toMatchObject({ artifact_kind: "implementation-output" });
+    expect(cli(fixture.root, "validate", { kind: "implementation-output", value: implementationArtifact }))
       .toMatchObject({ status: 0, value: { artifact_kind: "implementation-output" } });
+    writeFileSync(statePath, stateBytesBefore);
 
     const production = await createProductionServices({
       working_directory: fixture.root, task_id: task, operation: parseSafeCode("cli-envelope-tools"),
@@ -186,7 +194,7 @@ describe("bundled local CLI", () => {
 
     const produceTemplate = {
       ...common, intent_id: "produce-cli", phase_instance: "prd", step: "produce", status: "succeeded",
-      artifact: { ...built.value.value, input_fingerprint: placeholder },
+      artifact: { ...builtArtifact, input_fingerprint: placeholder },
     };
     // One envelope pass resolves the fingerprint into both bound places and returns the exact
     // request the digests describe; no client-side substitute-and-rehash pass exists anymore.
@@ -261,7 +269,7 @@ describe("bundled local CLI", () => {
     } } });
   }, TIMEOUT);
 
-  it("does not read stdin for status and keeps structured project failures on exit zero", async () => {
+  it("does not read stdin for status", async () => {
     const fixture = await repository();
     const child = spawn(process.execPath, [localBundle, "status", "--task", task], {
       cwd: fixture.root, env: gitEnvironment, stdio: ["pipe", "pipe", "pipe"],
@@ -277,7 +285,13 @@ describe("bundled local CLI", () => {
     expect(result.code).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, value: { state: "missing" } });
     child.stdin.destroy();
+  }, TIMEOUT);
 
+  it("archflow-local reports a failed result through the process exit code", async () => {
+    const fixture = await repository();
+    // A structured project failure keeps its full JSON body on stdout — scripts still parse the
+    // error — while the exit code turns nonzero so an unchecked shell pipeline cannot mistake the
+    // failure for success.
     const unavailable = cli(fixture.root, "envelope", {
       tool: "archflow_gate",
       input: { schema_version: "1", task_id: task, intent_id: "missing-state", expected_revision: 0,
@@ -286,9 +300,9 @@ describe("bundled local CLI", () => {
           { role: "counter-review", evidence_digest: digest("4"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
         ] }, kind: "artifact-approval", context: { artifact_kind: "prd" } },
     });
-    expect(unavailable).toMatchObject({ status: 0, value: { ok: false, error: { code: "STATE_MISSING" } } });
+    expect(unavailable).toMatchObject({ status: 1, value: { ok: false, error: { code: "STATE_MISSING" } } });
 
     const composerUnavailable = cli(fixture.root, "build-request", { intent_id: "no-state" });
-    expect(composerUnavailable).toMatchObject({ status: 0, value: { ok: false, error: { code: "STATE_MISSING" } } });
+    expect(composerUnavailable).toMatchObject({ status: 1, value: { ok: false, error: { code: "STATE_MISSING" } } });
   }, TIMEOUT);
 });

@@ -33,7 +33,6 @@
         "intent",
         "staged-request",
         "attempt",
-        "manual-checkpoint",
         "maintenance-record",
         "import",
         "shared-workflow",

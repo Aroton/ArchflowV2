@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
+import { canonicalDocument, parseCanonicalDocument } from "../../src/contracts/canonical.js";
 import { STEP_STATUSES, TERMINAL_STATES, type TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { GATE_KINDS } from "../../src/contracts/gates.js";
 import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
@@ -99,6 +100,23 @@ describe("task state contract", () => {
 
   it("rejects an open_gate supplied as an array — a nested gate is unrepresentable, not merely rejected", async () => {
     await rejects((state) => ({ ...state, open_gate: [state.open_gate] }));
+  });
+
+  it("tolerates the legacy adopted_checkpoint field: it parses, validates, and round-trips verbatim", async () => {
+    // The manual checkpoint import flow that wrote adopted_checkpoint is retired; the field stays
+    // in the schema so pre-retirement task states remain readable. Nothing writes it anymore, and a
+    // state that carries it must survive a read/re-serialize cycle byte-identically.
+    const validator = await taskStateValidator();
+    const state = await validState();
+    expect(state.adopted_checkpoint).toBeDefined();
+    expect(validator.validate(state), JSON.stringify(validator.validate.errors)).toBe(true);
+
+    const written = canonicalDocument(state as never);
+    const reread = parseCanonicalDocument<TaskStateV1>(written.bytes, "task state");
+    expect(reread.value).toEqual(state);
+    expect(reread.value.adopted_checkpoint).toEqual(state.adopted_checkpoint);
+    expect(canonicalDocument(reread.value).bytes).toEqual(written.bytes);
+    expect(validator.validate(reread.value)).toBe(true);
   });
 
   it("requires waiver scope and accepts the optional waiver-origin gate marker", async () => {

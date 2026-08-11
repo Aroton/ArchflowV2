@@ -32,7 +32,6 @@ export type MaintenanceIntentInventory = Readonly<{
 export type MaintenanceRoots = Readonly<{
   inventory_complete: true;
   current_state: TaskStateV1;
-  checkpoints: readonly MaintenanceReferenceRoot[];
   resumable_receipts: readonly Readonly<{ prepared_state: TaskStateV1 }>[];
   decision_review_evidence: readonly MaintenanceReferenceRoot[];
   intents: readonly MaintenanceIntentInventory[];
@@ -87,7 +86,6 @@ export function computeMaintenanceProof(input: Readonly<{
   const taskId = roots.current_state.task_id;
   const rootDocuments: readonly MaintenanceReferenceRoot[] = [
     roots.current_state,
-    ...roots.checkpoints,
     ...roots.resumable_receipts.map((receipt) => receipt.prepared_state),
     ...roots.decision_review_evidence,
   ];

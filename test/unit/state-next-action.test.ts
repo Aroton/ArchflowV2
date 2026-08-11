@@ -95,7 +95,6 @@ describe("deriveNextAction", () => {
       ["restore-pinned-config", input({ config_verified: false })],
       ["resolve-open-gate", input({ state: state({ open_gate: gate }) })],
       ["triage-supplemental-review", input({ state: state({ open_gate: gate }), untriaged_supplemental_review: true })],
-      ["import-manual-checkpoints", input({ checkpoint_head_revision: 5 })],
       ["run-step", input({ assessment: assessment("triage") })],
       ["open-gate", input({ assessment: assessment("advance") })],
       ["commit-phase", input({ assessment: assessment("advance"), authenticated_approvals: [{ gate_kind: "commit-authorization", subject_digest: D("a") }] })],
@@ -143,8 +142,6 @@ describe("deriveNextAction", () => {
       .toBe("resume-exact-intent");
     expect(deriveNextAction(input({ state: state({ terminal: "complete", open_gate: openGate }) })).code)
       .toBe("task-complete");
-    expect(deriveNextAction(input({ checkpoint_head_revision: 5, assessment: assessment("advance") })).code)
-      .toBe("import-manual-checkpoints");
   });
 
   it("directs intentional pinned-config changes to a new task or explicit upgrade", () => {

@@ -102,6 +102,10 @@ export type CommittedIntentRef = {
   readonly result_id: SafeId;
 };
 
+/**
+ * Legacy: written only by the retired manual checkpoint import flow. Tolerated so pre-retirement
+ * task states still parse; nothing writes it anymore, and a state carrying it is preserved verbatim.
+ */
 export type AdoptedCheckpointRef = {
   /** `>= 1` (D8). */
   readonly revision: SafeInteger;
@@ -164,6 +168,7 @@ export type TaskStateV1 = {
    */
   readonly open_gate?: OpenGateRef;
   readonly committed_intent?: CommittedIntentRef;
+  /** Legacy — tolerated for pre-retirement task states; never written, preserved verbatim. */
   readonly adopted_checkpoint?: AdoptedCheckpointRef;
   readonly terminal?: TerminalState;
 };

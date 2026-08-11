@@ -26,7 +26,7 @@ import { discoverWorktree, type RootBoundGitRunner } from "../../src/repository/
 import type { ResolvedPath, ResolvedTaskPath } from "../../src/repository/paths.js";
 import { AtomicReplaceError, createAtomicWriter, createProjectionWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "../../src/state/authority.js";
-import { advanceManualGate, importGateDecisions, openDurableGate, resolveDurableGate, runDurableGate, type GateLifecycleDependencies, type GateOpenInput } from "../../src/state/gates.js";
+import { openDurableGate, resolveDurableGate, runDurableGate, type GateLifecycleDependencies, type GateOpenInput } from "../../src/state/gates.js";
 import { readIntentReceipt, readTaskState } from "../../src/state/read.js";
 import type { TransactionDependencies } from "../../src/state/transaction.js";
 import type { SupplementalReviewOutcome } from "../../src/contracts/supplemental.js";
@@ -795,7 +795,7 @@ describe("durable gate lifecycle", () => {
     expect(existsSync(archivePath(h, opened.value.gate_id))).toBe(false);
   });
 
-  it("leaves a wrong-binding decision pending and rejects foreign manual import", async () => {
+  it("leaves a wrong-binding decision pending without advancing durable authority", async () => {
     const h = await harness();
     const input = gateInput(h);
     const opened = await openDurableGate(h.dependencies, input);
@@ -813,16 +813,6 @@ describe("durable gate lifecycle", () => {
     expect(state.kind).toBe("canonical");
     if (state.kind === "canonical") expect(state.document.value.open_gate?.gate_id).toBe(opened.value.gate_id);
     expect(existsSync(archivePath(h, opened.value.gate_id))).toBe(false);
-
-    const foreignRequest = { ...opened.value.request.value, task_id: parseTaskSlug("foreign-task") } as GateRequestV1;
-    const foreignDecision = {
-      schema_version: "1", gate_id: foreignRequest.gate_id, task_id: foreignRequest.task_id,
-      phase_instance: foreignRequest.phase_instance, kind: foreignRequest.kind, subject_digest: foreignRequest.subject_digest,
-      context_digest: foreignRequest.context_digest, supplemental: [], outcome: "decided",
-      envelope: { ...envelope(opened.value.request.value), task_id: foreignRequest.task_id },
-    } as GateDecisionRecordV1;
-    const closedState = initialState(h.authority);
-    expect(() => importGateDecisions(closedState, [{ request: foreignRequest, decision: foreignDecision }])).toThrow(/foreign/u);
   });
 
   it("refuses every unreadable decision shape without advancing durable authority", async () => {
@@ -901,34 +891,6 @@ describe("durable gate lifecycle", () => {
     writeFileSync(join(foreignRoot, "request.json"), canonicalDocument(opened.value.request.value).bytes);
     const wrongResolution = await resolveDurableGate(h.dependencies, h.authority, foreignGateId);
     expect(wrongResolution).toMatchObject({ ok: false, error: { code: "GATE_ACTIVE" } });
-    await expectRefusalDidNotAdvance(h, input.intent_id, before);
-
-    const current = await readTaskState(h.authority.state);
-    if (current.kind !== "canonical") throw new Error("state unavailable");
-    const manual = await advanceManualGate({
-      dependencies: h.dependencies,
-      transaction_authority: h.authority,
-      manual_authority: {},
-      state: current.document.value,
-      action: {
-        kind: "publish",
-        selector: {
-          kind: "gate",
-          gate_kind: "artifact-approval",
-          summary: "Competing manual gate",
-          context: { artifact_kind: "phase-implementation" },
-        },
-      },
-      resolve_publish_material: () => ({
-        schema_version: "1",
-        ok: true,
-        value: {
-          subject_digest: opened.value.request.value.subject_digest,
-          current_evidence: opened.value.request.value.current_evidence,
-        },
-      }),
-    });
-    expect(manual).toMatchObject({ ok: false, error: { code: "GATE_ACTIVE" } });
     await expectRefusalDidNotAdvance(h, input.intent_id, before);
   });
 

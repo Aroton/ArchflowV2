@@ -4,22 +4,22 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 
 export const CUT_POINTS = Object.freeze([
-  "checkpoint-receipt-only",
+  "initialization-receipt-only",
   "state-before",
   "state-after",
 ]);
 
 if (typeof process.send === "function" && process.argv[1] === fileURLToPath(import.meta.url)) {
 const [, , action, taskRoot, cutPoint] = process.argv;
-if ((action !== "initialize" && action !== "adopt") || taskRoot === undefined) {
-  throw new Error("checkpoint child requires initialize|adopt, a task root, and IPC");
+if (action !== "initialize" || taskRoot === undefined) {
+  throw new Error("initialization child requires initialize, a task root, and IPC");
 }
 if (cutPoint !== "none" && (cutPoint === undefined || !CUT_POINTS.includes(cutPoint))) {
-  throw new Error(`unknown checkpoint child cut ${String(cutPoint)}`);
+  throw new Error(`unknown initialization child cut ${String(cutPoint)}`);
 }
 const taskId = taskRoot.split("/").at(-1);
 const repository = taskRoot.slice(0, -(`/.archflow/tasks/${taskId}`).length);
-const input = JSON.parse(await readFile(join(taskRoot, "checkpoint-child-input.json"), "utf8"));
+const input = JSON.parse(await readFile(join(taskRoot, "initialization-child-input.json"), "utf8"));
 const vite = await createServer({ appType: "custom", clearScreen: false, logLevel: "silent", server: { middlewareMode: true } });
 
 const killAt = async (point, path) => {
@@ -30,8 +30,7 @@ const killAt = async (point, path) => {
 };
 
 try {
-  const [canonical, tools, git, identity, authorityModule, atomic, lock, read, initialization, transaction, checkpoints, requestModule, manualImport] = await Promise.all([
-    vite.ssrLoadModule("/src/contracts/canonical.ts"),
+  const [tools, git, identity, authorityModule, atomic, lock, read, initialization] = await Promise.all([
     vite.ssrLoadModule("/src/contracts/mcp-tools.ts"),
     vite.ssrLoadModule("/src/repository/git.ts"),
     vite.ssrLoadModule("/src/repository/identity.ts"),
@@ -40,10 +39,6 @@ try {
     vite.ssrLoadModule("/src/state/lock.ts"),
     vite.ssrLoadModule("/src/state/read.ts"),
     vite.ssrLoadModule("/src/state/initialization.ts"),
-    vite.ssrLoadModule("/src/state/transaction.ts"),
-    vite.ssrLoadModule("/src/state/checkpoints.ts"),
-    vite.ssrLoadModule("/src/state/request.ts"),
-    vite.ssrLoadModule("/src/state/manual-import.ts"),
   ]);
   const runner = git.createGitRunner({ cwd: repository });
   const discovered = await identity.discoverWorktree(runner, input.context);
@@ -61,17 +56,17 @@ try {
   };
   const crashAtomic = {
     createExclusive: async (path, bytes) => {
-      const temporary = join(dirname(path.absolute), `.${basename(path.absolute)}.${process.pid}.checkpoint.tmp`);
+      const temporary = join(dirname(path.absolute), `.${basename(path.absolute)}.${process.pid}.initialization.tmp`);
       await writeTemporary(temporary, bytes);
       try { await link(temporary, path.absolute); } catch (error) {
         if (error?.code === "EEXIST") return "exists";
         throw error;
       } finally { await unlink(temporary).catch(() => undefined); }
-      if (cutPoint === "checkpoint-receipt-only") await killAt(cutPoint, path.absolute);
+      if (cutPoint === "initialization-receipt-only") await killAt(cutPoint, path.absolute);
       return "created";
     },
     replace: async (path, bytes) => {
-      const temporary = join(dirname(path.absolute), `.${basename(path.absolute)}.${process.pid}.checkpoint.tmp`);
+      const temporary = join(dirname(path.absolute), `.${basename(path.absolute)}.${process.pid}.initialization.tmp`);
       await writeTemporary(temporary, bytes);
       if (cutPoint === "state-before") await killAt(cutPoint, temporary);
       await rename(temporary, path.absolute);
@@ -87,36 +82,8 @@ try {
     read_state: read.readTaskState,
     read_config: read.readTaskConfig,
     read_receipt: read.readIntentReceipt,
-    load_retained_result: async () => { throw new Error("empty crash-test chains must not load retained results"); },
   };
-  let evidence;
-  if (call.input.artifact?.artifact_kind === "manual-checkpoint-import") {
-    const loaded = await manualImport.loadManualImportEvidence({
-      dependencies, authority: authority.value, artifact: call.input.artifact,
-    });
-    if (!loaded.ok) {
-      process.send({ type: "result", ok: false, code: loaded.error.code });
-      process.exitCode = 1;
-      throw new Error("manual import evidence failed");
-    }
-    evidence = loaded.value;
-  }
-  let result;
-  if (action === "initialize") {
-    result = await initialization.runStateInitialization(dependencies, { call, authority: authority.value }, evidence);
-  } else {
-    result = await transaction.runStateTransaction(dependencies, { call, authority: authority.value }, async (current) => {
-      const identified = requestModule.identifyTransactionRequest(call, authority.value, call.input.input_fingerprint);
-      const success = { path: "state.json", revision: current.value.revision + 1, status: call.input.status };
-      const expectation = tools.createInternalResultExpectation({
-        schema_version: "1", tool: "archflow_state", task_id: taskId, intent_id: call.input.intent_id,
-        input_fingerprint: call.input.input_fingerprint, request_digest: identified.request_digest,
-        result_id: call.input.intent_id, resulting_revision: success.revision, success,
-      });
-      const toolResult = tools.validateProjectResultStructure(call, { schema_version: "1", ok: true, value: success });
-      return checkpoints.planCheckpointAdoption({ current, call, expectation, result: toolResult, evidence });
-    });
-  }
+  const result = await initialization.runStateInitialization(dependencies, { call, authority: authority.value });
   process.send({ type: "result", ok: result.ok, code: result.ok ? undefined : result.error.code,
     revision: result.ok ? result.value.state.value.revision : undefined, replayed: result.ok ? result.value.replayed : undefined });
 } catch (error) {

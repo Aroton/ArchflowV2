@@ -1412,7 +1412,7 @@ describe("mature state transaction kernel", () => {
         ...prepared,
         value: { ...prepared.value, next_state: { ...prepared.value.next_state, [field]: changed } },
       } as typeof prepared;
-    })).rejects.toThrow(/authentic planner-minted preparation/u);
+    })).rejects.toThrow(/changed gate authority or the adopted checkpoint/u);
     expect(h.events).not.toContain("receipt-create");
     expect(h.events).not.toContain("state-replace");
   });

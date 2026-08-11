@@ -7,11 +7,7 @@ import {
   sha256Bytes,
   type CanonicalDocument,
 } from "../contracts/canonical.js";
-import {
-  checkpointSelfDigest,
-  parseManualCheckpoint,
-  type ProjectionDigestRef,
-} from "../contracts/durable-checkpoint.js";
+import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
 import { parseActiveGate, parseGateRequest } from "../contracts/durable-gate.js";
 import { parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
 import type { ResultManifestV1 } from "../contracts/durable-result-manifest.js";
@@ -193,35 +189,6 @@ async function discoverGateHead(
   }
 }
 
-async function discoverCheckpointHead(
-  dependencies: GateLifecycleDependencies,
-  authority: TransactionAuthority,
-  state: CanonicalDocument<TaskStateV1>,
-): Promise<ProjectResult<Readonly<{
-  head?: NonNullable<ReconciliationInput["active_heads"]["checkpoint"]>;
-  blocker?: string;
-}>>> {
-  const adopted = state.value.adopted_checkpoint;
-  if (adopted === undefined) return ok(Object.freeze({}));
-  const target = await resolveTaskPath({
-    runner: dependencies.runner,
-    taskId: authority.task_id,
-    claim: parseTaskPathClaim(`manual/checkpoints/${adopted.revision}-${adopted.checkpoint_digest}.json`),
-    expectedClass: "manual-checkpoint",
-    context: authority.context,
-  });
-  if (!target.ok) return target;
-  const checkpoint = await readCanonical(target.value, "manual checkpoint", parseManualCheckpoint);
-  if (checkpoint === "missing") return ok(Object.freeze({ blocker: "adopted-checkpoint-missing" }));
-  if (checkpoint === "invalid") return ok(Object.freeze({ blocker: "adopted-checkpoint-invalid" }));
-  const digest = checkpointSelfDigest(checkpoint.value);
-  if (checkpoint.digest !== digest || checkpoint.value.task_id !== authority.task_id ||
-      checkpoint.value.repository_identity_digest !== authority.repository_identity_digest) {
-    return ok(Object.freeze({ blocker: "adopted-checkpoint-invalid" }));
-  }
-  return ok(Object.freeze({ head: Object.freeze({ revision: checkpoint.value.revision, checkpoint_digest: digest }) }));
-}
-
 async function discoverIntent(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
@@ -279,11 +246,9 @@ export async function discoverReconciliationInput(
   if (!projections.ok) return projections;
   const gate = await discoverGateHead(dependencies, authority);
   if (!gate.ok) return gate;
-  const checkpoint = await discoverCheckpointHead(dependencies, authority, state);
-  if (!checkpoint.ok) return checkpoint;
   const intent = await discoverIntent(dependencies, authority, state);
   if (!intent.ok) return intent;
-  const blockers = [gate.value.blocker, checkpoint.value.blocker, intent.value.blocker]
+  const blockers = [gate.value.blocker, intent.value.blocker]
     .filter((value): value is string => value !== undefined);
   return ok(Object.freeze({
     state,
@@ -291,7 +256,6 @@ export async function discoverReconciliationInput(
     current_projections: projections.value.current,
     active_heads: Object.freeze({
       ...(gate.value.head === undefined ? {} : { gate: gate.value.head }),
-      ...(checkpoint.value.head === undefined ? {} : { checkpoint: checkpoint.value.head }),
     }),
     ...(intent.value.intent === undefined ? {} : { intent: intent.value.intent }),
     ...(blockers.length === 0 ? {} : { blocking_reasons: Object.freeze(blockers) }),

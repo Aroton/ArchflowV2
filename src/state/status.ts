@@ -1,12 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { canonicalJsonDigest, parseCanonicalDocument } from "../contracts/canonical.js";
-import { selectGreatestValidChain, type ChainAnchor, type ProjectionDigestRef } from "../contracts/durable-checkpoint.js";
+import { canonicalJsonDigest, parseCanonicalDocument, type CanonicalDocument } from "../contracts/canonical.js";
+import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
 import { parseConfigYaml } from "../contracts/config.js";
 import { parseActiveGate, parseGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
-import { createProjectError, type ProjectResult } from "../contracts/errors.js";
+import type { ProjectResult } from "../contracts/errors.js";
 import { computeGateContextDigest, verifyPinnedConfig } from "../contracts/fingerprints.js";
 import type { PathSafeId, Sha256Digest, TaskSlug } from "../contracts/evidence.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
@@ -18,9 +18,11 @@ import { resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js
 import { renderGateCounterPrompt } from "../local/envelope.js";
 import { selectAdjudicationGates } from "../review/adjudication.js";
 import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS, waiverInForce, type EvidenceAssessment } from "../review/fixed-point.js";
+import { createGitRunner, preflightGit } from "../repository/git.js";
+import { discoverWorktree } from "../repository/identity.js";
 import { readTaskState } from "./read.js";
 import type { TransactionAuthority } from "./authority.js";
-import { assertInternalTransactionAuthority } from "./authority.js";
+import { assertInternalTransactionAuthority, createInternalTransactionAuthority } from "./authority.js";
 import { resolvePinnedConstitution, type ResolvedConstitution } from "./constitution.js";
 import { deriveCurrentEvidenceSet, loadRetainedEvidence, type RetainedEvidenceSet } from "./evidence-results.js";
 import {
@@ -29,7 +31,6 @@ import {
   type AuthenticatedGateApproval,
   type GateLifecycleDependencies,
 } from "./gates.js";
-import { readManualCheckpoints } from "./manual-checkpoints.js";
 import { deriveNextAction, type NextAction } from "./next-action.js";
 import { buildNextActionRequest } from "./request-templates.js";
 import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject } from "./produce-subject.js";
@@ -42,20 +43,7 @@ import {
   type ReconciliationFinding,
   type ReconciliationResult,
 } from "./reconciliation.js";
-import type { TransactionDependencies } from "./transaction.js";
 import { gateCounterReviewClaim } from "../repository/paths.js";
-
-export type DegradedStatus = Readonly<{
-  task_id: TaskSlug;
-  state: "missing" | "active" | "complete" | "abandoned";
-  revision?: number;
-  phase_instance?: PhaseInstanceId;
-  step?: TaskStateV1["step"];
-  status?: TaskStateV1["status"];
-  checkpoint_head_revision?: number;
-  open_gate_id?: PathSafeId;
-  blocking_reasons: readonly string[];
-}>;
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 
@@ -144,7 +132,15 @@ export type CommitAuthorizationInput = Readonly<{
   target_ref_guidance: string;
 }>;
 
-export type TaskStatusV1 = DegradedStatus & Readonly<{
+export type TaskStatusV1 = Readonly<{
+  task_id: TaskSlug;
+  state: "missing" | "active" | "complete" | "abandoned";
+  revision?: number;
+  phase_instance?: PhaseInstanceId;
+  step?: TaskStateV1["step"];
+  status?: TaskStateV1["status"];
+  open_gate_id?: PathSafeId;
+  blocking_reasons: readonly string[];
   attempt?: number;
   input_fingerprint?: Sha256Digest;
   /**
@@ -194,7 +190,7 @@ export type TaskStatusV1 = DegradedStatus & Readonly<{
  */
 export type BriefTaskStatusV1 = Readonly<{
   task_id: TaskSlug;
-  state: DegradedStatus["state"];
+  state: TaskStatusV1["state"];
   revision?: number;
   phase_instance?: PhaseInstanceId;
   step?: TaskStateV1["step"];
@@ -312,15 +308,6 @@ export function partitionExpectedReentryEdits(
     remaining: Object.freeze(remaining),
     expected_reentry_edits: Object.freeze(expected),
   });
-}
-
-/** Checkpoint revisions continue from adopted checkpoint authority, not from state CAS revisions. */
-export function manualCheckpointHeadIsPending(
-  state: Pick<TaskStateV1, "revision" | "adopted_checkpoint">,
-  checkpointHead: number | undefined,
-): boolean {
-  return checkpointHead !== undefined &&
-    checkpointHead > (state.adopted_checkpoint?.revision ?? state.revision);
 }
 
 function unavailableConfig(expected?: Sha256Digest, observed?: Sha256Digest, issue?: string): ConfigVerification {
@@ -705,38 +692,6 @@ export async function computeTaskStatus(
     blockers.push("reconciliation-unavailable");
   }
 
-  let checkpointHead: number | undefined;
-  try {
-    const checkpoints = await readManualCheckpoints(dependencies, authority);
-    if (checkpoints.ok) {
-      const checkpointAnchor: ChainAnchor = state.adopted_checkpoint === undefined
-        ? Object.freeze({
-            mode: "state" as const,
-            task_id: authority.task_id,
-            repository_identity_digest: authority.repository_identity_digest,
-            state_anchor: Object.freeze({
-              anchor_kind: "state" as const,
-              state_revision: state.revision,
-              state_digest: stateDocument.digest,
-            }),
-          })
-        : Object.freeze({
-            mode: "continuation" as const,
-            task_id: authority.task_id,
-            repository_identity_digest: authority.repository_identity_digest,
-            predecessor: state.adopted_checkpoint,
-          });
-      const selected = selectGreatestValidChain(
-        checkpointAnchor,
-        checkpoints.value.map((checkpoint) => checkpoint.value),
-      );
-      if (selected.kind === "chain") checkpointHead = selected.chain.at(-1)?.revision;
-      else blockers.push(`checkpoint-${selected.outcome}`);
-    } else blockers.push("checkpoint-inventory-unavailable");
-  } catch {
-    blockers.push("checkpoint-inventory-unavailable");
-  }
-
   let retained: RetainedEvidenceSet = new Map();
   if (dependencies.load_retained_result === undefined) {
     blockers.push("retained-evidence-unavailable");
@@ -967,7 +922,6 @@ export async function computeTaskStatus(
       gateBindingBlocker = "active-gate-invalid";
     }
   }
-  if (manualCheckpointHeadIsPending(state, checkpointHead)) blockers.push("checkpoint-import-available");
 
   let adjudicationGate: ReturnType<typeof pendingAdjudicationGate>;
   if (assessment?.next === "adjudication-gate" && constitution !== undefined) {
@@ -986,7 +940,6 @@ export async function computeTaskStatus(
     ...(activeGate === undefined ? {} : {
       untriaged_supplemental_review: activeGate.supplemental.some((item) => item.action === "ingest"),
     }),
-    ...(checkpointHead === undefined ? {} : { checkpoint_head_revision: checkpointHead }),
     ...(assessment === undefined ? {} : { assessment }),
     evidence_available: evidence.available,
     ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),
@@ -1033,7 +986,6 @@ export async function computeTaskStatus(
     config,
     ...(routes === undefined ? {} : { routes }),
     ...(constitutionStatus === undefined ? {} : { constitution: constitutionStatus }),
-    ...(checkpointHead === undefined ? {} : { checkpoint_head_revision: checkpointHead }),
     ...(state.open_gate === undefined ? {} : { open_gate_id: state.open_gate.gate_id }),
     ...(openGate === undefined ? {} : { open_gate: openGate }),
     ...(statusReconciliation === undefined ? {} : { reconciliation: statusReconciliation }),
@@ -1055,80 +1007,114 @@ function attachNextActionRequest(
     : Object.freeze({ ...next, request: built.request, guidance: built.guidance });
 }
 
-/** Computes a read-only, explicitly degraded summary from durable local authority. */
-export async function computeDegradedStatus(
-  dependencies: TransactionDependencies,
-  authority: TransactionAuthority,
-): Promise<ProjectResult<DegradedStatus>> {
-  assertInternalTransactionAuthority(authority, dependencies);
-  const stateRead = await readTaskState(authority.state);
-  if (stateRead.kind === "unreadable" || stateRead.kind === "noncanonical") {
-    return Object.freeze({
-      schema_version: "1",
-      ok: false,
-      error: createProjectError("STATE_INVALID", {
-        phase_instance: authority.context.phase_instance,
-        issue_code: stateRead.kind === "unreadable" ? "state-unreadable" : "state-noncanonical",
-      }),
+type UnreadableStateDetails = Readonly<{
+  reason: "state-unreadable" | "state-noncanonical" | "status-authority-invalid";
+  /** Best-effort position fields recovered from the noncanonical bytes; never authoritative. */
+  position?: Readonly<{
+    revision?: number;
+    phase_instance?: string;
+    step?: string;
+    status?: string;
+  }>;
+}>;
+
+export type DurableStateReadability =
+  | Readonly<{ readability: "readable"; state: CanonicalDocument<TaskStateV1> }>
+  | Readonly<{ readability: "absent" }>
+  | Readonly<{
+      readability: "unreadable";
+      /** Human-readable description of where the task last stood, as far as it can be recovered. */
+      summary: string;
+      details: UnreadableStateDetails;
+    }>;
+
+/** Best-effort position fields from noncanonical state bytes; any failure yields undefined. */
+async function recoverStatePosition(
+  statePath: string,
+): Promise<NonNullable<UnreadableStateDetails["position"]> | undefined> {
+  try {
+    const raw: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true })
+      .decode(new Uint8Array(await readFile(statePath))));
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+    const candidate = raw as Record<string, unknown>;
+    const position = Object.freeze({
+      ...(typeof candidate.revision === "number" ? { revision: candidate.revision } : {}),
+      ...(typeof candidate.phase_instance === "string" ? { phase_instance: candidate.phase_instance } : {}),
+      ...(typeof candidate.step === "string" ? { step: candidate.step } : {}),
+      ...(typeof candidate.status === "string" ? { status: candidate.status } : {}),
     });
+    return Object.keys(position).length === 0 ? undefined : position;
+  } catch {
+    return undefined;
   }
-  const checkpoints = await readManualCheckpoints(dependencies, authority);
-  if (!checkpoints.ok) return checkpoints;
-  const candidates = checkpoints.value.map((checkpoint) => checkpoint.value);
-  let anchor: ChainAnchor;
-  if (stateRead.kind === "missing") {
-    anchor = Object.freeze({
-      mode: "initial",
-      task_id: authority.task_id,
-      repository_identity_digest: authority.repository_identity_digest,
+}
+
+function unreadableState(
+  taskId: TaskSlug,
+  reason: UnreadableStateDetails["reason"],
+  position?: UnreadableStateDetails["position"],
+): Extract<DurableStateReadability, { readability: "unreadable" }> {
+  const located = position === undefined
+    ? "its last recorded position could not be recovered"
+    : `it last recorded ${[
+        position.phase_instance === undefined ? undefined : `phase ${position.phase_instance}`,
+        position.step === undefined ? undefined : `step ${position.step}`,
+        position.status === undefined ? undefined : `status ${position.status}`,
+        position.revision === undefined ? undefined : `revision ${position.revision}`,
+      ].filter((part) => part !== undefined).join(", ")}`;
+  const problem = reason === "status-authority-invalid"
+    ? "repository authority for durable state could not be established, so state.json was not consulted"
+    : reason === "state-unreadable"
+      ? "state.json exists but could not be read"
+      : "state.json exists but is not canonical durable state";
+  return Object.freeze({
+    readability: "unreadable" as const,
+    summary: `Task ${taskId}: ${problem}; ${located}.`,
+    details: Object.freeze({ reason, ...(position === undefined ? {} : { position }) }),
+  });
+}
+
+/**
+ * Classifies whether durable task state is readable, without judging or repairing it. Never
+ * throws: an unreadable state is reported as a described position rather than a failure, so a
+ * read-only status classifier can still tell the human where the task stands.
+ */
+export async function classifyDurableStateReadability(input: Readonly<{
+  working_directory: string;
+  task_id: TaskSlug;
+}>): Promise<DurableStateReadability> {
+  let stateRead: Awaited<ReturnType<typeof readTaskState>>;
+  let statePath: string;
+  try {
+    const context = Object.freeze({
+      task_id: input.task_id,
+      phase_instance: "prd" as PhaseInstanceId,
+      operation: "status-readability" as import("../contracts/evidence.js").SafeCode,
+      attempt: 1 as import("../contracts/evidence.js").SafeInteger,
     });
-  } else if (stateRead.kind === "canonical" && stateRead.document.value.adopted_checkpoint !== undefined) {
-    anchor = Object.freeze({
-      mode: "continuation",
-      task_id: authority.task_id,
-      repository_identity_digest: authority.repository_identity_digest,
-      predecessor: stateRead.document.value.adopted_checkpoint,
+    const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), context);
+    if (!discovered.ok) return unreadableState(input.task_id, "status-authority-invalid");
+    const environment = await preflightGit(discovered.value, context);
+    if (!environment.ok) return unreadableState(input.task_id, "status-authority-invalid");
+    const authority = await createInternalTransactionAuthority({
+      runner: discovered.value,
+      environment: environment.value,
+      task_id: input.task_id,
+      context,
     });
-  } else if (stateRead.kind === "canonical") {
-    anchor = Object.freeze({
-      mode: "state",
-      task_id: authority.task_id,
-      repository_identity_digest: authority.repository_identity_digest,
-      state_anchor: Object.freeze({
-        anchor_kind: "state",
-        state_revision: stateRead.document.value.revision,
-        state_digest: stateRead.document.digest,
-      }),
-    });
-  } else {
-    throw new TypeError("unreachable state read classification");
+    if (!authority.ok) return unreadableState(input.task_id, "status-authority-invalid");
+    statePath = authority.value.state.absolute;
+    stateRead = await readTaskState(authority.value.state);
+  } catch {
+    return unreadableState(input.task_id, "status-authority-invalid");
   }
-  const selected = selectGreatestValidChain(anchor, candidates);
-  const head = selected.kind === "chain" ? selected.chain.at(-1)?.revision : undefined;
-  const chainBlocker = selected.kind === "stop" ? `checkpoint-${selected.outcome}` : undefined;
-  if (stateRead.kind === "missing") {
-    return ok(Object.freeze({
-      task_id: authority.task_id,
-      state: "missing" as const,
-      ...(head === undefined ? {} : { checkpoint_head_revision: head }),
-      blocking_reasons: Object.freeze(["state-missing", ...(chainBlocker === undefined ? [] : [chainBlocker])]),
-    }));
+  if (stateRead.kind === "canonical") {
+    return Object.freeze({ readability: "readable" as const, state: stateRead.document });
   }
-  if (stateRead.kind !== "canonical") throw new TypeError("unreachable state read classification");
-  const state = stateRead.document.value;
-  const blockers: string[] = [];
-  if (chainBlocker !== undefined) blockers.push(chainBlocker);
-  if (state.open_gate !== undefined) blockers.push("gate-decision-required");
-  if (manualCheckpointHeadIsPending(state, head)) blockers.push("checkpoint-import-available");
-  return ok(Object.freeze({
-    task_id: authority.task_id,
-    state: state.terminal ?? "active",
-    revision: state.revision,
-    phase_instance: state.phase_instance,
-    step: state.step,
-    status: state.status,
-    ...(head === undefined ? {} : { checkpoint_head_revision: head }),
-    ...(state.open_gate === undefined ? {} : { open_gate_id: state.open_gate.gate_id }),
-    blocking_reasons: Object.freeze(blockers),
-  }));
+  if (stateRead.kind === "missing") return Object.freeze({ readability: "absent" as const });
+  const reason = stateRead.kind === "unreadable"
+    ? "state-unreadable" as const
+    : "state-noncanonical" as const;
+  const position = reason === "state-noncanonical" ? await recoverStatePosition(statePath) : undefined;
+  return unreadableState(input.task_id, reason, position);
 }

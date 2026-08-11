@@ -12,7 +12,7 @@ export const MAX_REPAIR_HISTORY_ENTRIES = 128;
 
 export type SuppliedHistoryEntry = Readonly<{
   path: TaskPathClaim;
-  document_kind: "intent-receipt" | "manual-checkpoint" | "gate-decision" | "result-manifest";
+  document_kind: "intent-receipt" | "gate-decision" | "result-manifest";
   digest: Sha256Digest;
   relation: "current" | "prepared" | "superseded" | "foreign" | "invalid";
 }>;

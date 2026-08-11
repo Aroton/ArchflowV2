@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
-import { checkpointSelfDigest, parseManualCheckpoint } from "../../src/contracts/durable-checkpoint.js";
 import { parseActiveGate, parseGateRequest } from "../../src/contracts/durable-gate.js";
 import { intentOutcomeDigest, parseIntentReceipt } from "../../src/contracts/durable-intent.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
@@ -110,7 +109,7 @@ describe("discoverReconciliationInput", () => {
     if (discovered.ok) expect(discovered.value.intent).toBeUndefined();
   });
 
-  it("discovers retained/current projections and matching gate and checkpoint heads", async () => {
+  it("discovers retained/current projections and a matching gate head", async () => {
     const h = await harness();
     const projectionPath = parseRepositoryPathClaim("tracked.txt");
     const projectionDigest = sha256Bytes(Buffer.from("root\n"));
@@ -150,25 +149,12 @@ describe("discoverReconciliationInput", () => {
     writeFileSync(join(h.services.authority.task_root, "gate.json"), canonicalDocument(active).bytes);
     writeFileSync(join(h.services.authority.task_root, "decisions", gateId, "request.json"), canonicalDocument(request).bytes);
 
-    const checkpoint = parseManualCheckpoint({
-      schema_version: "1", task_id: TASK,
-      repository_identity_digest: h.services.authority.repository_identity_digest,
-      revision: 5, phase_instance: PHASE, step: "produce", status: "running", attempt: 1,
-      input_fingerprint: D("2"), assurance: "degraded", initialization_digest: D("3"),
-      state_anchor: { anchor_kind: "state", state_revision: 4, state_digest: D("d") },
-      authoritative_results: [reference], projections: [{ path: projectionPath, content_digest: projectionDigest }],
-      evidence_chain: [], approvals: [], waivers: [],
-    });
-    const checkpointDigest = checkpointSelfDigest(checkpoint);
-    mkdirSync(join(h.services.authority.task_root, "manual", "checkpoints"), { recursive: true });
-    writeFileSync(join(h.services.authority.task_root, "manual", "checkpoints", `5-${checkpointDigest}.json`), canonicalDocument(checkpoint).bytes);
     const current = h.state({
       authoritative_results: [reference],
       open_gate: {
         gate_id: gateId, gate_kind: request.kind, subject_digest: request.subject_digest,
         context_digest: request.context_digest, frozen_state_digest: D("e"), opened_at_revision: parseSafeInteger(4),
       },
-      adopted_checkpoint: { revision: parseSafeInteger(5), checkpoint_digest: checkpointDigest },
     });
     const dependencies = {
       ...h.services.dependencies,
@@ -191,7 +177,6 @@ describe("discoverReconciliationInput", () => {
         current_projections: [{ path: projectionPath, content_digest: projectionDigest }],
         active_heads: {
           gate: { gate_id: gateId, subject_digest: request.subject_digest, context_digest: request.context_digest },
-          checkpoint: { revision: 5, checkpoint_digest: checkpointDigest },
         },
       },
     });

@@ -153,11 +153,15 @@ describe("installer", () => {
 
     git(root, "add", "--", ".gitattributes", ".archflow/workflow.yaml", ".archflow/constitution", ".archflow/config.yaml");
     git(root, "commit", "-q", "-m", "approve policy");
-    const taskInit = spawnSync(join(bin, "archflow-local"), ["task-init", "--task", "demo"], {
+    const taskInit = spawnSync(join(bin, "archflow-local"), ["build-request", "--task", "demo"], {
       cwd: root, encoding: "utf8", env: hostEnvironment, timeout: TEST_TIMEOUT_MS,
+      input: JSON.stringify({ kind: "initialize" }),
     });
     expect(taskInit.status, taskInit.stderr).toBe(0);
-    expect(JSON.parse(taskInit.stdout)).toMatchObject({ ok: true, value: { artifact_kind: "task-initialization" } });
+    expect(JSON.parse(taskInit.stdout)).toMatchObject({
+      ok: true,
+      value: { tool: "archflow_state", request: { input: { artifact: { artifact_kind: "task-initialization" } } } },
+    });
 
     const portable = [
       await readFile(join(root, ".mcp.json"), "utf8"),

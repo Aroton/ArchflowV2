@@ -11,7 +11,7 @@ import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/con
 import { createGitRunner, preflightGit, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "../../src/state/authority.js";
-import { ensureAttemptDirectory, ensureDecisionDirectory, ensureIntentDirectory, ensureManualCheckpointDirectory, ensureTaskProjectionParent, type DecisionLayoutError, type IntentLayoutError, type ResultLayoutError } from "../../src/state/layout.js";
+import { ensureAttemptDirectory, ensureDecisionDirectory, ensureIntentDirectory, ensureTaskProjectionParent, type DecisionLayoutError, type IntentLayoutError, type ResultLayoutError } from "../../src/state/layout.js";
 import type { ResolvedTaskPath } from "../../src/repository/paths.js";
 
 const roots: string[] = [];
@@ -146,13 +146,10 @@ describe("projection parent layout", () => {
 });
 
 describe("task directory layouts", () => {
-  it("creates verified manual-checkpoint and phase-attempt hierarchies idempotently", async () => {
+  it("creates verified phase-attempt hierarchies idempotently", async () => {
     const { value } = await authority();
-    await ensureManualCheckpointDirectory(value);
-    await ensureManualCheckpointDirectory(value);
     await ensureAttemptDirectory(value, context.phase_instance);
     await ensureAttemptDirectory(value, context.phase_instance);
-    expect((await lstat(join(value.task_root, "manual", "checkpoints"))).isDirectory()).toBe(true);
     expect((await lstat(join(value.task_root, "attempts", context.phase_instance))).isDirectory()).toBe(true);
   });
 });

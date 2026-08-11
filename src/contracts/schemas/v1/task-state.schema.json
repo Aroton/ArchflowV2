@@ -189,7 +189,7 @@
       }
     },
     "adoptedCheckpointRef": {
-      "$comment": "Phase 8 D-M. The manual checkpoint this revision adopted, when it adopted one. Phase 9 owns when it is written; nothing in Phase 8 sets it.",
+      "$comment": "Legacy: written only by the retired checkpoint import flow. Tolerated so pre-retirement task states still validate; nothing writes it anymore, and a state carrying it is preserved verbatim.",
       "type": "object",
       "additionalProperties": false,
       "required": ["revision", "checkpoint_digest"],

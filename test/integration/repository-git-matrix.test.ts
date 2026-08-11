@@ -25,7 +25,6 @@ import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { canonicalDocument, gitBlobOid, parseGitOid } from "../../src/contracts/canonical.js";
-import { parseManualCheckpoint, type ManualCheckpointImportV1 } from "../../src/contracts/durable-checkpoint.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import type { ProjectResult } from "../../src/contracts/errors.js";
 import {
@@ -35,10 +34,6 @@ import {
   parseTaskSlug,
   type TaskSlug,
 } from "../../src/contracts/evidence.js";
-import {
-  observeDivergentHeads,
-  planCleanHandoff,
-} from "../../src/repository/handoff.js";
 import {
   parseRepositoryPathClaim,
   parseTaskPathClaim,
@@ -500,127 +495,6 @@ describe.skipIf(!hasGit)("forced conflict on an .archflow/ file", () => {
     // The whole chain ran to completion around them: nothing threw, and the readiness verdict came
     // from the `.archflow/` conflict rather than from any of these.
     expect(result.history.inProgress).toEqual(["merge"]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 6. Phase 10 divergence preservation and clean handoff
-// ---------------------------------------------------------------------------
-
-describe.skipIf(!hasGit)("preserve-both-heads and clean handoff", () => {
-  it("blocks on conflict, preserves both divergent heads, and records the explicit clean successor", async () => {
-    const upstream = seededRepository("handoff-upstream", { directoryName: "upstream ré po" });
-    upstream.write(`.archflow/tasks/${TASK_ID}/config.yaml`, "task: mcp-integration\n");
-    upstream.commitAll("task config");
-
-    const cloneRoot = temporaryRoot("handoff-clone");
-    const clone = join(cloneRoot, "clean handoff ü space");
-    rawGit(cloneRoot, "clone", "-q", upstream.path, clone);
-
-    // Each writer changes the authoritative state and a Unicode/space-containing source path.
-    const unicodePath = "src/handoff ü space.ts";
-    const writeClone = (path: string, contents: string): void => {
-      const absolute = join(clone, path);
-      mkdirSync(dirname(absolute), { recursive: true });
-      writeFileSync(absolute, contents, "utf8");
-    };
-    writeClone(stateRepositoryClaim, '{"writer":"local"}\n');
-    writeClone(unicodePath, "export const writer = 'local';\n");
-    rawGit(clone, "add", "-A");
-    rawGit(clone, "commit", "-q", "-m", "local successor");
-    const localHead = parseGitOid(rawGit(clone, "rev-parse", "HEAD"));
-
-    upstream.write(stateRepositoryClaim, '{"writer":"upstream"}\n');
-    upstream.write(unicodePath, "export const writer = 'upstream';\n");
-    upstream.commitAll("upstream successor");
-    rawGit(clone, "fetch", "-q");
-    const upstreamHead = parseGitOid(rawGit(clone, "rev-parse", "origin/main"));
-
-    const runner = createGitRunner({ cwd: clone });
-    const environment = unwrap(await preflightGit(runner, context), "handoff preflight");
-    const bound = unwrap(await discoverWorktree(runner, context), "handoff discovery");
-    const authority = unwrap(await createInternalTransactionAuthority({
-      runner: bound,
-      environment,
-      task_id: TASK_ID,
-      context,
-    }), "handoff authority");
-    const digest = (character: string) => parseSha256Digest(character.repeat(64));
-    const fixture = JSON.parse(readFileSync(new URL("../fixtures/contracts/durable/manual-checkpoint-import.valid.json", import.meta.url), "utf8")) as ManualCheckpointImportV1;
-    const commonDocument = canonicalDocument(parseManualCheckpoint({
-      ...fixture.chain[0]!, task_id: TASK_ID, repository_identity_digest: authority.repository_identity_digest,
-    }));
-    const successor = (status: "succeeded" | "failed") => canonicalDocument(parseManualCheckpoint({
-      ...fixture.chain[1]!, task_id: TASK_ID, repository_identity_digest: authority.repository_identity_digest,
-      status,
-      predecessor: { revision: commonDocument.value.revision, checkpoint_digest: commonDocument.digest },
-    }));
-    const localDocument = successor("succeeded");
-    const upstreamDocument = successor("failed");
-    const common = { revision: parseSafeInteger(commonDocument.value.revision), checkpoint_digest: commonDocument.digest };
-    const localCheckpoint = { revision: parseSafeInteger(localDocument.value.revision), checkpoint_digest: localDocument.digest };
-    const upstreamCheckpoint = { revision: parseSafeInteger(upstreamDocument.value.revision), checkpoint_digest: upstreamDocument.digest };
-    const checkpointEvidence = {
-      local_chain: [commonDocument, localDocument],
-      upstream_chain: [commonDocument, upstreamDocument],
-      common,
-    };
-
-    // The same divergent heads are not repair evidence while an `.archflow/` conflict is active.
-    gitAllowFail(clone, "merge", "origin/main");
-    const conflicted = await observeDivergentHeads(
-      { runner: bound }, authority, checkpointEvidence
-    );
-    expect(conflicted.ok ? undefined : conflicted.error.code).toBe("GIT_CONFLICT");
-    rawGit(clone, "merge", "--abort");
-
-    const preserved = await observeDivergentHeads(
-      { runner: bound }, authority, checkpointEvidence
-    );
-    expect(preserved.ok).toBe(true);
-    if (!preserved.ok) return;
-    expect(preserved.value.preserved_heads.map((head) => head.head_oid)).toEqual([
-      localHead,
-      upstreamHead,
-    ]);
-
-    // The human-selected upstream successor is made clean outside the planner. The planner only
-    // observes it and binds the adopted checkpoint; it performs no merge, reset, commit, or push.
-    rawGit(clone, "reset", "--hard", "-q", "origin/main");
-    const state: TaskStateV1 = {
-      schema_version: "1",
-      task_id: TASK_ID,
-      repository_identity_digest: authority.repository_identity_digest,
-      revision: parseSafeInteger(8),
-      phase_instance: context.phase_instance,
-      step: "produce",
-      status: "running",
-      attempt: parseSafeInteger(1),
-      input_fingerprint: digest("2"),
-      initialization_digest: digest("3"),
-      config_digest: digest("4"),
-      workflow_digest: digest("5"),
-      constitution_digest: digest("6"),
-      policy_base_commit: upstreamHead,
-      authoritative_results: [],
-      approvals: [],
-      waivers: [],
-      adopted_checkpoint: upstreamCheckpoint,
-    };
-    const handoff = await planCleanHandoff(
-      { runner: bound }, authority, canonicalDocument(state), preserved.value, upstreamHead
-    );
-    expect(handoff.ok).toBe(true);
-    if (!handoff.ok) return;
-    expect(handoff.value.value).toMatchObject({
-      preserved_heads: [
-        { head_oid: localHead, authoritative_checkpoint: localCheckpoint },
-        { head_oid: upstreamHead, authoritative_checkpoint: upstreamCheckpoint },
-      ],
-      selected_successor_head: upstreamHead,
-      clean_handoff: { head_oid: upstreamHead, authoritative_checkpoint: upstreamCheckpoint },
-    });
-    expect(readFileSync(join(clone, unicodePath), "utf8")).toContain("upstream");
   });
 });
 

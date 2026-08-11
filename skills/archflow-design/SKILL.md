@@ -11,7 +11,7 @@ This session is the **producer** and workflow orchestrator — the server identi
 
 ## Degraded operation
 
-If any workflow tool is unavailable, run input-free `archflow-local manual-status --task <task>` and follow exactly its one `next_action`; do not infer approval or progression from documents. Supply `archflow-local manual-next --task <task>` only the complete plain-JSON selector/source artifact requested by status for the unavailable tool, then use its exact fallback prompt, decision templates, recorded checkpoint, and resume action. The helper derives all authority fields and retains results before they become reachable. Manual review remains explicitly degraded — when active constitution rules exist, the fallback counter-review prompt carries them so the opposite-family reviewer performs the degraded constitution review in the same pass — uncertainty opens a human gate, and approval or waiver never exists until an immutable schema-valid decision is archived and checkpointed. Re-run `manual-status` after every milestone. If both server and helper are unavailable, stop, reinstall with `./install.sh`, and rerun `manual-status`; create no design milestone while authority cannot be classified.
+If any workflow tool is unavailable, run read-only `archflow-local manual-status --task <task>`, report its position, and stop — create no design milestone and record nothing offline, because no offline recording path exists; the MCP server records all progress. Wait for the server to be restored (reinstall with `./install.sh` if needed), then resume through the normal loop below; do not infer approval or progression from documents.
 
 ## Stable rubric
 
@@ -31,7 +31,7 @@ Enter each pipeline step by piping `{"kind":"running","step":"<step>"}` to `arch
 
 To record the terminal produce result, draft `design.md` and pipe `{}` to `archflow-local build-request --task <task>`: it builds the document artifact with the canonical design defaults (`document_path: "design.md"`, declared input `prd` for `.archflow/tasks/<task>/prd.md`), assembles the complete `archflow_state` request, and returns it already resolved and staged — call `archflow_state` with its `staged.reference`. On a fingerprint mismatch, use only the returned expected digest and safe next action, discard the old intent, rebuild, and re-run status.
 
-If status reports initialization, reconciliation, configuration, checkpoint, or inspection work instead of this phase, surface its one safe action. Do not invent degraded or legacy behavior; use only the helper-classified degraded-operation path above.
+If status reports initialization, reconciliation, configuration, or inspection work instead of this phase, surface its one safe action. Do not invent degraded or legacy behavior; use only the degraded-operation path above when a tool is actually unavailable.
 
 ## Phase work
 

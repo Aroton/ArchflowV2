@@ -50,9 +50,6 @@
           "$ref": "urn:archflow:schema:v1:implementation-output"
         },
         {
-          "$ref": "urn:archflow:schema:v1:manual-checkpoint-import"
-        },
-        {
           "type": "object",
           "additionalProperties": false,
           "required": [

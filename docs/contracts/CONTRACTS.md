@@ -2,13 +2,13 @@
 
 **Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/contracts/`
 
-`src/contracts/` is the bottom layer: ~44 modules plus 41 JSON Schemas that define what a valid thing looks like and how to prove a thing is what it claims. Everything else imports from here; nothing here imports back out.
+`src/contracts/` is the bottom layer: ~40 modules plus 38 JSON Schemas that define what a valid thing looks like and how to prove a thing is what it claims. Everything else imports from here; nothing here imports back out.
 
 The premise it serves: durable files in `.archflow/` are the system's *only* memory across sessions, and the things writing them are language models. So the whole layer is built around one idea — **nothing an agent says is trusted until the server has re-derived it.**
 
 ## The five core concepts
 
-**Durable documents.** The JSON files ArchFlow writes into the repo — task state, intent receipts, gate requests/decisions, result manifests, checkpoints. After a crash or a host switch, the server rebuilds its entire understanding by reading them back, which is why their shapes are pinned as first-class types with schemas rather than ad-hoc objects.
+**Durable documents.** The JSON files ArchFlow writes into the repo — task state, intent receipts, gate requests/decisions, result manifests. After a crash or a host switch, the server rebuilds its entire understanding by reading them back, which is why their shapes are pinned as first-class types with schemas rather than ad-hoc objects.
 
 **Canonical JSON.** Given the same logical data, `canonical.ts` produces exactly one byte sequence (sorted keys, fixed indentation, one trailing newline, UTF-8, no `NaN`/`undefined`). This makes "same data" and "same bytes" — and therefore "same digest" — the same statement, so any component can verify any other's claim without coordination. Parsing is strict in an unusual way: it re-renders and byte-compares against the input, so a durable file cannot be tampered with in any way that preserves its digest.
 
@@ -37,7 +37,7 @@ flowchart LR
 - **Validation machinery** — the Ajv setup with ten custom `x-archflow-*` keywords; `assertZodAgreement`, which proves the JSON Schemas and their Zod mirrors accept and reject exactly the same values.
 - **Fingerprints** — all derived identity computation in one module.
 - **Evidence & trust semantics** — review/constitution-review/triage shapes in three assurance flavors (`agent-declared`, `server-attested`, `degraded`), the trust brands, secret-scan shapes, and renderers that escape control characters so rendered evidence can't spoof its own headers.
-- **Durable document shapes** — thirteen `durable-*.ts` modules for the persisted roots, plus `durable.ts`, one large cross-document semantic validator.
+- **Durable document shapes** — the `durable-*.ts` modules for the persisted roots, plus `durable.ts`, one large cross-document semantic validator. Task state tolerates one legacy field: `adopted_checkpoint`, accepted when present on pre-retirement states and preserved verbatim, but never written by current code.
 - **Tool contracts & errors** — the four tools' input/output types (each input is a union: the full payload, or the four-field staged-request reference `{schema_version, task_id, intent_id, request_digest}` the server rehydrates from disk — see `../mcp/SERVER.md`; the former `AdjudicateInput`/`AdjudicateSuccess` are gone, and `CounterReviewSuccess` carries the merged result `{path, verdict, blocking_count, constitution, revision, request_digest}`), gate kinds and decision envelopes, and the ~57-code project error taxonomy where every error carries an owner, a retryable flag, and a suggested action.
 
 ## Design rules that follow from this layer

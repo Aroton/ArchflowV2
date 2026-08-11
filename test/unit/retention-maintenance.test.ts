@@ -88,12 +88,12 @@ function candidate(path: RepositoryPathClaim): MaintenanceCandidate {
 }
 
 describe("retention, maintenance, and accounting", () => {
-  it("keeps results reachable from checkpoint, resumable-receipt, and decision/review evidence roots", () => {
+  it("keeps results reachable from current-state, resumable-receipt, and decision/review evidence roots", () => {
     const taskId = "retention-roots";
-    const checkpointManifest = manifest(taskId, "checkpoint.md");
+    const currentManifest = manifest(taskId, "current.md");
     const receiptManifest = manifest(taskId, "receipt.md");
     const evidenceManifest = manifest(taskId, "evidence.md");
-    const manifests = [checkpointManifest, receiptManifest, evidenceManifest];
+    const manifests = [currentManifest, receiptManifest, evidenceManifest];
     const refs = manifests.map((item, index) => reference(
       taskId,
       item.result_digest,
@@ -108,8 +108,7 @@ describe("retention, maintenance, and accounting", () => {
     const proof = computeMaintenanceProof({
       roots: {
         inventory_complete: true,
-        current_state: root(taskId, []) as TaskStateV1,
-        checkpoints: [root(taskId, [refs[0]!])],
+        current_state: root(taskId, [refs[0]!]) as TaskStateV1,
         resumable_receipts: [{ prepared_state: root(taskId, [refs[1]!]) as TaskStateV1 }],
         decision_review_evidence: [root(taskId, [refs[2]!])],
         intents: [],
@@ -311,5 +310,36 @@ describe("retention, maintenance, and accounting", () => {
     // Idempotent second pass: nothing left to reclaim, and no record collision.
     await expect(pruneSupersededResultPayloads(dependencies, authority))
       .resolves.toMatchObject({ ok: true, value: { deleted: 0 } });
+  });
+
+  it("keeps payloads whose digests appear in legacy on-disk manual checkpoint files", async () => {
+    // The manual workflow is retired and nothing writes under manual/ anymore, but files a
+    // pre-retirement task left there still conservatively pin any result digest they mention:
+    // maintenance fails toward keeping bytes it cannot prove unreferenced.
+    const workspace = await createTaskWorkspace({ taskId: "retention-legacy-manual", label: "retention-legacy-manual" });
+    workspaces.push(workspace);
+    const { authority, dependencies } = workspace.services;
+    const taskRoot = authority.task_root;
+
+    const manifestValue = {
+      schema_version: "1",
+      task_id: workspace.taskId,
+      outputs: [{ path: claim("legacy.md"), storage: "raw-payload" }],
+    } as unknown as ResultManifestV1;
+    const document = canonicalDocument(manifestValue as never);
+    const directory = join(taskRoot, "results", "sha256", document.digest);
+    mkdirSync(join(directory, "payload"), { recursive: true });
+    writeFileSync(join(directory, "manifest.json"), document.bytes);
+    writeFileSync(join(directory, "payload", "legacy.md"), "legacy pinned copy");
+
+    mkdirSync(join(taskRoot, "manual", "checkpoints"), { recursive: true });
+    writeFileSync(
+      join(taskRoot, "manual", "checkpoints", "5-legacy.json"),
+      JSON.stringify({ retired_manual_checkpoint: true, result_digest: document.digest }),
+    );
+
+    await expect(pruneSupersededResultPayloads(dependencies, authority))
+      .resolves.toMatchObject({ ok: true, value: { deleted: 0 } });
+    expect(existsSync(join(directory, "payload", "legacy.md"))).toBe(true);
   });
 });

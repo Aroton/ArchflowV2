@@ -39,13 +39,14 @@ describe("reconcileCurrentAuthority", () => {
     expect(result.findings).toEqual([expect.objectContaining({ kind: "projection-mismatch", recorded_digest: D("a"), observed_digest: D("b") })]);
   });
 
-  it("compares an active gate and adopted checkpoint independently when both exist", () => {
+  it("compares an active gate head and ignores the legacy adopted_checkpoint field", () => {
     const gate = { gate_id: parsePathSafeId("gate-1"), gate_kind: "commit-authorization" as const, subject_digest: D("a"), context_digest: D("b"), frozen_state_digest: D("f"), opened_at_revision: parseSafeInteger(4) };
-    const checkpoint = { revision: parseSafeInteger(3), checkpoint_digest: D("c") };
-    const state = { ...STATE, open_gate: gate, adopted_checkpoint: checkpoint };
+    // adopted_checkpoint is a tolerated legacy field on pre-retirement states; reconciliation
+    // neither compares nor reports it.
+    const state = { ...STATE, open_gate: gate, adopted_checkpoint: { revision: parseSafeInteger(3), checkpoint_digest: D("c") } };
     const result = reconcileCurrentAuthority({
       state: canonicalDocument(state), recorded_projections: [], current_projections: [],
-      active_heads: { gate: { gate_id: gate.gate_id, subject_digest: gate.subject_digest, context_digest: gate.context_digest }, checkpoint },
+      active_heads: { gate: { gate_id: gate.gate_id, subject_digest: gate.subject_digest, context_digest: gate.context_digest } },
     });
     expect(result).toEqual({ classification: "consistent", findings: [] });
   });

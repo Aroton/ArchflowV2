@@ -12,7 +12,6 @@ export const CUT_POINTS = Object.freeze([
   "result-manifest-link",
   "projection-replace-before",
   "projection-replace-after",
-  "manual-checkpoint-link",
   "state-replace-before",
   "state-replace-after",
 ]);
@@ -52,66 +51,6 @@ try {
       });
     });
     process.send({ type: "released", pid: process.pid });
-  } else if (action === "run-crash-manual-checkpoint") {
-    const taskId = target.split("/").at(-1);
-    const repository = target.slice(0, -(`/.archflow/tasks/${taskId}`).length);
-    const [evidence, atomic, production, checkpoints] = await Promise.all([
-      vite.ssrLoadModule("/src/contracts/evidence.ts"),
-      vite.ssrLoadModule("/src/state/atomic.ts"),
-      vite.ssrLoadModule("/src/state/production.ts"),
-      vite.ssrLoadModule("/src/state/manual-checkpoints.ts"),
-    ]);
-    const realAtomic = atomic.createAtomicWriter();
-    const manualAtomic = Object.freeze({
-      ...realAtomic,
-      createExclusive: async (path, bytes) => {
-        const installed = await realAtomic.createExclusive(path, bytes);
-        if (path.path_class === "manual-checkpoint" && installed === "created") {
-          await new Promise((resolve, reject) => {
-            process.send({ type: "cut", point: "manual-checkpoint-link", path: path.absolute, pid: process.pid }, (error) => {
-              if (error !== null) reject(error);
-              else { process.kill(process.pid, "SIGKILL"); resolve(); }
-            });
-          });
-        }
-        return installed;
-      },
-    });
-    const services = await production.createProductionServices({
-      working_directory: repository,
-      task_id: evidence.parseTaskSlug(taskId),
-      operation: evidence.parseSafeCode("manual-checkpoint-crash"),
-      atomic: manualAtomic,
-    });
-    if (!services.ok || services.value.state === undefined) throw new Error("manual checkpoint services unavailable");
-    const state = services.value.state;
-    const checkpoint = {
-      schema_version: "1",
-      task_id: state.value.task_id,
-      repository_identity_digest: state.value.repository_identity_digest,
-      revision: state.value.revision + 1,
-      phase_instance: state.value.phase_instance,
-      step: state.value.step,
-      status: state.value.status,
-      attempt: state.value.attempt,
-      input_fingerprint: state.value.input_fingerprint,
-      assurance: "degraded",
-      initialization_digest: state.value.initialization_digest,
-      state_anchor: { anchor_kind: "state", state_revision: state.value.revision, state_digest: state.digest },
-      authoritative_results: state.value.authoritative_results,
-      projections: [],
-      evidence_chain: [],
-      approvals: state.value.approvals,
-      waivers: state.value.waivers,
-      ...(state.value.open_gate === undefined ? {} : { open_gate: state.value.open_gate }),
-      ...(state.value.terminal === undefined ? {} : { terminal: state.value.terminal }),
-    };
-    const result = await checkpoints.writeManualCheckpoint(
-      services.value.dependencies,
-      services.value.authority,
-      checkpoint,
-    );
-    process.send({ type: "result", ok: result.ok });
   } else if (["run-transaction", "run-crash-transaction", "run-result-transaction", "run-crash-result-transaction"].includes(action)) {
     if (intentId === undefined || expectedRevisionText === undefined) {
       throw new Error("run-transaction requires repository, intent id, and expected revision");

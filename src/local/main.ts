@@ -65,6 +65,9 @@ async function main(): Promise<void> {
   const value = INPUT_FREE_COMMANDS.has(command) ? undefined : await readInput(command, parsed.values.input);
   const result = await runLocalCommand({ command, working_directory: process.cwd(), ...(parsed.values.task === undefined ? {} : { task_id: parsed.values.task }), ...(value === undefined ? {} : { value }), ...(parsed.values.brief === true ? { brief: true } : {}) });
   assertPlainJson(result, "local command result");
+  if (result !== null && typeof result === "object" && !Array.isArray(result) && (result as Record<string, unknown>).ok === false) {
+    process.exitCode = 1;
+  }
   process.stdout.write(canonicalJsonBytes(result as PlainJsonValue));
 }
 

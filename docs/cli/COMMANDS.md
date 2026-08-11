@@ -2,7 +2,7 @@
 
 **Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/local/`, `install.sh`
 
-`archflow-local` is the agent's local helper: it composes requests, reads status, and runs the degraded-mode fallback. It is deliberately *not* the authority — with two narrow exceptions (task initialization staging and the manual/degraded writers), it derives and verifies rather than writes.
+`archflow-local` is the agent's local helper: it composes requests and reads status — including a read-only classification of where a task stands when the MCP server is unavailable. It is deliberately *not* the authority — with one narrow exception (task initialization staging inside `build-request`), it derives and verifies rather than writes.
 
 A packaging note that trips up maintainers: there is no `bin` entry in `package.json`. `install.sh` writes a shell shim into `~/.local/bin` that execs `node dist/archflow-local.mjs`; the source of truth is `src/local/main.ts`.
 
@@ -13,9 +13,9 @@ archflow-local <command> [--task <task>] [--input <json-file>] [--brief]
 ```
 
 - Payload commands read JSON from `--input <file>`, or stdin when `--input` is omitted. If stdin is a TTY and no `--input` was given, the command fails immediately rather than hanging.
-- Input-free commands (`status`, `manual-status`, `init`, `task-init`) never read stdin at all.
+- Input-free commands (`status`, `manual-status`, `init`) never read stdin at all.
 - `--brief` (status only) projects the routine-loop view from the same computed status: position, blockers, open-gate and reconciliation summaries, constitution digest with active rule ids, and the one `next_action` — with no rule text, counter-review prompt, or decision-template bodies (`projectBriefStatus` in `src/state/status.ts`).
-- Output is always canonical JSON on stdout. **Exit codes are not the failure signal**: most failures return `{"ok": false, ...}` with exit 0 — callers must inspect the JSON. (Whether that's a bug or a contract is an open question flagged in `../COMPLEXITY.md`.)
+- Output is always canonical JSON on stdout. **Failures exit nonzero**: any result carrying `{"ok": false, ...}` also exits 1, so shell-level checks and the JSON agree; the JSON body remains the authority for structured details.
 - `--help` is generated from the same command table that drives dispatch (`LOCAL_COMMAND_CONTRACTS` in `src/local/commands.ts`), so help can't drift from behavior.
 
 ## The command surface
@@ -27,7 +27,6 @@ archflow-local <command> [--task <task>] [--input <json-file>] [--brief]
 | `validate` | Run an artifact through its contract parser and echo the parsed value |
 | `hash` | SHA-256 of a value's canonical encoding (mostly superseded by `build-request`) |
 | `render` | Preview the canonical Markdown projection of a review or constitution-review result, with digest |
-| `import` | Analyze a manual-checkpoint chain; reports the greatest valid chain, writes nothing |
 | `init` | Set up the repository: `.archflow/` assets + MCP registrations for both hosts |
 
 **Task-scoped, read-only:**
@@ -35,7 +34,7 @@ archflow-local <command> [--task <task>] [--input <json-file>] [--brief]
 | Command | Purpose |
 |---|---|
 | `status` | The reconciled durable truth plus exactly one `next_action`, often with a prefilled request — the normal driver loop; `--brief` projects the loop-sized view |
-| `manual-status` | The degraded-mode counterpart; classifies `normal` / `degraded` / `repair-required` |
+| `manual-status` | Read-only mode classifier: `normal` (delegates to task status, one next action) / `degraded` (no durable state — wait for the server) / `repair-required` (state present but unreadable — position summary) |
 | `envelope` | Authenticate an *already-authored* complete tool request (fingerprint + request digest) |
 
 **Task-scoped, composing:**
@@ -43,21 +42,17 @@ archflow-local <command> [--task <task>] [--input <json-file>] [--brief]
 | Command | Purpose |
 |---|---|
 | `build-request` | **The one documented door** — see below |
-| `build-document` / `build-implementation-output` / `task-init` | Build bare artifacts; largely subsumed by `build-request` kinds but each retains one real caller |
 
 **Task-scoped, writing durable state:**
 
 | Command | Purpose |
 |---|---|
 | `snapshot` / `restore` | Install / read back a content-addressed retained result |
-| `checkpoint` | Append to the manual checkpoint chain (only as the unique greatest valid extension) |
-| `decide` | Write gate files: a manual gate request/decision, or record the human's chosen decision template |
+| `decide` | Record the human's chosen decision template (`kind: "interface"` only) — the normal-mode human decision channel |
 | `gate-counter` | Ingest an elected gate counter-review after verifying it binds the archived gate request field-for-field |
 | `maintain` | Delete only provably unreachable retained bytes, recording a maintenance record |
 | `reconcile` | Compare recorded projections against what's on disk |
 | `upgrade` | Stage a legacy task into a fresh canonical task (see `../workflow/SKILLS.md`) |
-
-**Degraded workflow:** `manual-next`, `manual-handoff` — see below.
 
 ## build-request: the one documented door
 
@@ -93,11 +88,12 @@ This is **unrelated** to `src/review/envelopes.ts` (the sealed evidence package 
 
 ## Degraded mode
 
-When the MCP server is unavailable, progress is recorded through the local checkpoint chain instead, via `src/local/manual-workflow.ts`:
+When the MCP server is unavailable, there is no offline recording path — the server is the only writer of workflow progress. What remains is `manual-status`, a read-only classifier that never blocks on stdin:
 
-1. `manual-status` classifies the situation and emits exactly one executable `next_action`.
-2. `manual-next` performs one step: it emits a derived checkpoint, a fully-pinned reviewer prompt, or a gate interface with decision templates — the exact serializable substitute for whichever MCP tool is down. The counter-review fallback prompt also carries `constitution_rules` when active rules exist, instructing the opposite-family reviewer to perform the degraded constitution review in the same pass; there is no separate adjudication fallback.
-3. When the server returns, a recovery `archflow_state` call folds the checkpoint chain back into server state.
-4. `manual-handoff` blesses a writer transfer between machines only when the checkpoint is actually committed and pushed and the next writer can cleanly pull.
+- `normal` — the server's durable state is present and readable; the result delegates to task status and returns the one `next_action`.
+- `degraded` — no durable state exists for the task; the single next action is to wait for the server. Once it is available, proceed through the workflow skills as usual (reinstall with `./install.sh` if the server binary is missing).
+- `repair-required` — state is present but unreadable; the result is a position summary for a human to act on.
 
-The authority object in this mode (`ManualAuthority`) is deliberately non-serializable — it can only be minted and used within one process, so no authority ever crosses the CLI's JSON boundary. Degraded mode records progress; it never advances the workflow or resolves gates on its own.
+Nothing in this mode advances the workflow, resolves gates, or records progress.
+
+A historical note: earlier versions recorded offline progress through a manual checkpoint chain (`manual-next`, `manual-handoff`, `checkpoint`, `import`). That machinery is retired with no recovery path — a chain written before retirement is stranded: its files remain on disk and still conservatively pin garbage-collection digests, but nothing reads them back into workflow state (see `../LIMITATIONS.md`).

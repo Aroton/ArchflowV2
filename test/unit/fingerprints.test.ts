@@ -203,7 +203,6 @@ describe("computeRequestDigest", () => {
       ["adopt-legacy-import-initialization", "legacy-import-initialization"],
       ["record-document-artifact", "document"],
       ["record-implementation-output", "implementation-output"],
-      ["adopt-manual-checkpoint-import", "manual-checkpoint-import"],
       ["record-triage", "triage"],
     ] as const;
     for (const [operation, artifact_kind] of cases) {

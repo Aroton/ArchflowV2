@@ -59,12 +59,12 @@ describe("upgrade skill contract", () => {
     ]) expect(source).toContain(required);
   });
 
-  it("pins the standard degraded-operation ladder", () => {
+  it("pins the standard server-outage ladder", () => {
     expect(source).toContain("If an MCP workflow tool is unavailable");
-    expect(source).toContain("input-free `archflow-local manual-status --task <task>`");
-    expect(source).toContain("perform exactly its single `next_action`");
-    expect(source).toContain("If both the MCP workflow and local helper are unavailable");
-    expect(source).toContain("reinstall with `./install.sh`");
+    expect(source).toContain("`archflow-local manual-status --task <task>`");
+    expect(source).toContain("record nothing offline");
+    expect(source).toContain("reinstall");
+    expect(source).toContain("./install.sh");
   });
 
   it("enumerates upgrade only on the non-workflow surfaces", () => {

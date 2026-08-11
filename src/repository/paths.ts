@@ -135,7 +135,6 @@ const anchored = (body: string): RegExp => new RegExp(`^${body}$`, "u");
  * | `intent`            | `intents/<intent-id>.json`                                                                  | intent ID                       |
  * | `staged-request`    | `intents/<intent-id>.request.json`                                                          | intent ID                       |
  * | `attempt`           | `attempts/<phase-instance>/<attempt-id>.json`                                               | phase instance; attempt ID      |
- * | `manual-checkpoint` | `manual/checkpoints/<revision>-<checkpoint-digest>.json`                                    | revision; checkpoint digest     |
  * | `maintenance-record`| `maintenance/<maintenance-id>.json`                                                         | maintenance ID                  |
  * | `import`            | `imports/<import-digest>/manifest.json` \| `imports/<import-digest>/payload/<legacy-relative-path>` | import digest; legacy claim |
  *
@@ -176,10 +175,6 @@ const TASK_CLASS_RULES: readonly ClassRule<TaskPathClass>[] = [
   { path_class: "staged-request", pattern: anchored(`intents/${PATH_SAFE_ID}\\.request\\.json`) },
   { path_class: "intent", pattern: anchored(`intents/${PATH_SAFE_ID}(?<!\\.request)\\.json`) },
   { path_class: "attempt", pattern: anchored(`attempts/${PHASE_INSTANCE}/${PATH_SAFE_ID}\\.json`) },
-  {
-    path_class: "manual-checkpoint",
-    pattern: anchored(`manual/checkpoints/${REVISION}-${SHA256}\\.json`),
-  },
   { path_class: "maintenance-record", pattern: anchored(`maintenance/${PATH_SAFE_ID}\\.json`) },
   {
     path_class: "import",
@@ -560,7 +555,6 @@ export async function resolveRepositoryPath(options: {
 const TASK_OUTPUT_CLASSES: ReadonlySet<ClaimableOutputPathClass> = new Set([
   "document",
   "import",
-  "manual-checkpoint",
   "result-payload",
   "review",
   "verification-transcript",

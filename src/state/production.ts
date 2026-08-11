@@ -1,6 +1,5 @@
 import { canonicalJsonDigest, parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
 import type { BlobIdentity, OutputEntry } from "../contracts/durable-primitives.js";
-import type { ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { computeInputFingerprint } from "../contracts/fingerprints.js";
@@ -27,12 +26,9 @@ import { createInternalTransactionAuthority, type TransactionAuthority } from ".
 import { createProductionInputFingerprintResolver } from "./fingerprint-readers.js";
 import type { GateLifecycleDependencies } from "./gates.js";
 import { createTaskLock } from "./lock.js";
-import { ensurePayloadParent, ensureResultDirectory, ensureTaskProjectionParent } from "./layout.js";
 import { readIntentReceipt, readTaskConfig, readTaskState } from "./read.js";
 import { createSecretlintScanner } from "./secret-scan.js";
 import {
-  applyProjectionPlan,
-  installSnapshot,
   prepareProjectionPlan,
   readSnapshot,
   readSnapshotPayload,
@@ -43,9 +39,6 @@ import {
   type ProjectionSource,
 } from "./snapshots.js";
 import type { RetainedResultInstallation } from "./transaction.js";
-import type { PreparedStateResult } from "../mcp/handlers/state-results.js";
-import type { ManualAuthority } from "../local/manual-workflow.js";
-import { resolveManualAuthority } from "../local/manual-workflow.js";
 
 export type ProductionServices = Readonly<{
   runner: RootBoundGitRunner;
@@ -215,175 +208,6 @@ export async function readRetainedResult(
     projection_plan: projectionPlan.value,
     worktree_root: runner.location.worktreeRoot as ResolvedTaskPath,
   }));
-}
-
-declare const retainedTaskAccountingBrand: unique symbol;
-/** Opaque accounting authority consumed by the shared result preparation seam. */
-export type RetainedTaskAccounting = Readonly<{ readonly [retainedTaskAccountingBrand]: true }>;
-const retainedAccounting = new WeakMap<object, Readonly<{ task_bytes: SafeInteger; measured_at_revision: SafeInteger }>>();
-
-/** Mints accounting only from an authenticated normal state or manual authority. */
-export async function createRetainedTaskAccounting(input: Readonly<{
-  services: ProductionServices;
-  manual_authority?: ManualAuthority;
-}>): Promise<RetainedTaskAccounting> {
-  let taskBytes: SafeInteger;
-  let revision: SafeInteger;
-  if (input.manual_authority !== undefined) {
-    const manual = resolveManualAuthority(input.manual_authority);
-    if (manual.services !== input.services) throw new TypeError("manual accounting authority belongs to another production session");
-    taskBytes = manual.retained_task_bytes;
-    revision = parseSafeInteger((manual.head ?? manual.state?.value)?.revision ?? 1);
-  } else {
-    const state = input.services.state;
-    if (state === undefined) throw new TypeError("normal retained accounting requires current state");
-    const read = input.services.dependencies.read_retained_task_bytes;
-    if (read === undefined) throw new TypeError("normal retained accounting loader is unavailable");
-    taskBytes = await read();
-    revision = state.value.revision;
-  }
-  const capability = Object.freeze({}) as RetainedTaskAccounting;
-  retainedAccounting.set(capability, Object.freeze({ task_bytes: taskBytes, measured_at_revision: revision }));
-  return capability;
-}
-
-/** Normal-mode adapter for the existing authenticated retained-byte loader. */
-export function createRetainedTaskAccountingFromBytes(
-  services: ProductionServices,
-  taskBytes: SafeInteger,
-  measuredAtRevision: SafeInteger,
-): RetainedTaskAccounting {
-  if (services.state === undefined || services.state.value.revision !== measuredAtRevision) {
-    throw new TypeError("normal retained accounting revision does not bind current state");
-  }
-  const capability = Object.freeze({}) as RetainedTaskAccounting;
-  retainedAccounting.set(capability, Object.freeze({ task_bytes: taskBytes, measured_at_revision: measuredAtRevision }));
-  return capability;
-}
-
-export function resolveRetainedTaskAccounting(accounting: RetainedTaskAccounting): Readonly<{
-  task_bytes: SafeInteger;
-  measured_at_revision: SafeInteger;
-}> {
-  const facts = retainedAccounting.get(accounting as object);
-  if (facts === undefined) throw new TypeError("retained task accounting capability is invalid");
-  return facts;
-}
-
-declare const installedManualResultBrand: unique symbol;
-/** Opaque proof that immutable snapshot bytes and all projections were installed together. */
-export type InstalledManualResult = Readonly<{ readonly [installedManualResultBrand]: true }>;
-export type InstalledManualResultFacts = Readonly<{
-  authority: ManualAuthority;
-  reference: PreparedStateResult["reference"];
-  manifest: CanonicalDocument<ResultManifestV1>;
-  projections: ResultManifestV1["projections"];
-}>;
-const installedManualResults = new WeakMap<object, InstalledManualResultFacts>();
-
-export type InstallManualRetainedResultInput = Readonly<{
-  services: ProductionServices;
-  authority: ManualAuthority;
-  prepared: PreparedStateResult;
-}>;
-
-export type RemintManualRetainedResultInput = Readonly<{
-  services: ProductionServices;
-  authority: ManualAuthority;
-  reference: TaskStateV1["authoritative_results"][number];
-}>;
-
-/** Installs immutable bytes first, then collision-safe projections, and only then mints authority. */
-export async function installManualRetainedResult(
-  input: InstallManualRetainedResultInput,
-): Promise<ProjectResult<InstalledManualResult>> {
-  const manual = resolveManualAuthority(input.authority);
-  if (manual.services !== input.services) throw new TypeError("manual result authority belongs to another production session");
-  if (input.prepared.reference.result_digest !== input.prepared.prepared.result_digest ||
-      input.prepared.manifest_target.repositoryRelative !== input.prepared.reference.manifest_path) {
-    throw new TypeError("manual result preparation does not bind its retained reference");
-  }
-  try {
-    await ensureResultDirectory(input.services.authority, input.prepared.prepared.result_digest);
-    for (const payload of input.prepared.prepared.payloads) {
-      await ensurePayloadParent(
-        input.services.authority,
-        input.prepared.prepared.result_digest,
-        payload.target.absolute,
-      );
-    }
-  } catch {
-    return fail(createProjectError("SNAPSHOT_INVALID", {
-      snapshot_digest: input.prepared.prepared.manifest.value.snapshot_digest,
-      issue_code: "immutable-install-disagreement",
-    }));
-  }
-  const installed = await installSnapshot(
-    input.services.dependencies.atomic,
-    input.prepared.prepared,
-    input.prepared.manifest_target,
-    input.services.runner.location.worktreeRoot as ResolvedTaskPath,
-  );
-  if (!installed.ok) return installed;
-  const writer = input.services.dependencies.projection_writer;
-  if (writer === undefined) throw new TypeError("manual result projection writer is unavailable");
-  for (const entry of input.prepared.projection_plan.entries) {
-    await ensureTaskProjectionParent(input.services.authority, entry.target.absolute as ResolvedTaskPath);
-  }
-  const projected = await applyProjectionPlan(writer, input.prepared.projection_plan);
-  if (projected.outcome !== "applied") {
-    return fail(createProjectError("SNAPSHOT_INVALID", {
-      snapshot_digest: input.prepared.prepared.manifest.value.snapshot_digest,
-      issue_code: `projection-${projected.outcome}`,
-    }));
-  }
-  const capability = Object.freeze({}) as InstalledManualResult;
-  installedManualResults.set(capability, Object.freeze({
-    authority: input.authority,
-    reference: input.prepared.reference,
-    manifest: input.prepared.prepared.manifest,
-    projections: input.prepared.prepared.manifest.value.projections,
-  }));
-  return ok(capability);
-}
-
-/** Revalidates an already-authoritative immutable generation and its projections before reminting. */
-export async function remintManualRetainedResult(
-  input: RemintManualRetainedResultInput,
-): Promise<ProjectResult<InstalledManualResult>> {
-  const manual = resolveManualAuthority(input.authority);
-  if (manual.services !== input.services) throw new TypeError("manual result authority belongs to another production session");
-  const retained = await readRetainedResult(input.services.runner, input.services.authority, input.reference);
-  if (!retained.ok) return retained;
-  const writer = input.services.dependencies.projection_writer;
-  if (writer === undefined) throw new TypeError("manual result projection writer is unavailable");
-  for (const entry of retained.value.projection_plan.entries) {
-    await ensureTaskProjectionParent(input.services.authority, entry.target.absolute as ResolvedTaskPath);
-  }
-  const projected = await applyProjectionPlan(writer, retained.value.projection_plan);
-  if (projected.outcome !== "applied") {
-    return fail(createProjectError("SNAPSHOT_INVALID", {
-      snapshot_digest: retained.value.prepared.manifest.value.snapshot_digest,
-      issue_code: `projection-${projected.outcome}`,
-    }));
-  }
-  const capability = Object.freeze({}) as InstalledManualResult;
-  installedManualResults.set(capability, Object.freeze({
-    authority: input.authority,
-    reference: input.reference,
-    manifest: retained.value.prepared.manifest,
-    projections: retained.value.prepared.manifest.value.projections,
-  }));
-  return ok(capability);
-}
-
-export function resolveInstalledManualResult(
-  result: InstalledManualResult,
-  authority: ManualAuthority,
-): InstalledManualResultFacts {
-  const facts = installedManualResults.get(result as object);
-  if (facts === undefined || facts.authority !== authority) throw new TypeError("installed manual result capability is invalid or foreign");
-  return facts;
 }
 
 /** Resolves repository authority and binds every production state/gate dependency. */

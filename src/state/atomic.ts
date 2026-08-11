@@ -59,7 +59,7 @@ async function createExclusive(path: ResolvedPath, bytes: Uint8Array): Promise<E
   if (
     path.path_class !== "intent" && path.path_class !== "maintenance-record" &&
     path.path_class !== "result-manifest" && path.path_class !== "result-payload" &&
-    path.path_class !== "decision" && path.path_class !== "manual-checkpoint"
+    path.path_class !== "decision"
   ) {
     throw new TypeError("createExclusive requires an immutable resolved path");
   }

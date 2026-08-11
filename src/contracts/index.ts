@@ -34,9 +34,7 @@ export * from "./durable-document.js";
 export * from "./durable-implementation-output.js";
 export * from "./durable-result-manifest.js";
 export * from "./durable-gate.js";
-export * from "./durable-checkpoint.js";
 export * from "./durable.js";
-export * from "./durable-handoff.js";
 export {
   TOOL_DEFINITIONS,
   bindParsedToolCallRequest,

@@ -45,16 +45,16 @@ export type SymlinkBlobIdentity = {
 };
 export type BlobIdentity = RegularBlobIdentity | SymlinkBlobIdentity;
 
-/** The 8 classes an implementation output may claim. */
+/** The 7 classes an implementation output may claim. */
 export const CLAIMABLE_OUTPUT_PATH_CLASSES = [
-  "document", "import", "manual-checkpoint", "repository-source",
+  "document", "import", "repository-source",
   "result-payload", "review", "task-branch-constitution", "verification-transcript",
 ] as const;
 export type ClaimableOutputPathClass = (typeof CLAIMABLE_OUTPUT_PATH_CLASSES)[number];
 
 /**
  * The 12 classes an output may never claim. Together with `CLAIMABLE_OUTPUT_PATH_CLASSES` this
- * partitions all 20 `PATH_CLASSES`. The two members `READ_ONLY_PATH_CLASSES`
+ * partitions all 19 `PATH_CLASSES`. The two members `READ_ONLY_PATH_CLASSES`
  * (`path-claims.ts:101`) also names are re-listed literally rather than spread: this must stay a
  * closed `as const` tuple whose element type is a literal union, and `READ_ONLY_PATH_CLASSES` is
  * typed `readonly PathClass[]`. `task-ask` is agent-authored PRD-phase context rather than
@@ -295,6 +295,21 @@ export const declaredInputRefV1Schema = z.object({
   input_id: safeIdV1Schema,
   digest: sha256DigestV1Schema,
 }).strict() as unknown as z.ZodType<DeclaredInputRef>;
+
+/**
+ * One projected worktree file, named by path and content digest. Result manifests record the
+ * projections a snapshot materialized, and reconciliation re-derives each digest from the worktree
+ * to detect drift against the recorded set.
+ */
+export type ProjectionDigestRef = {
+  readonly path: RepositoryPathClaim;
+  readonly content_digest: Sha256Digest;
+};
+
+export const projectionDigestRefV1Schema = z.object({
+  path: repositoryPathClaimV1Schema,
+  content_digest: sha256Digest,
+}).strict() as unknown as z.ZodType<ProjectionDigestRef>;
 
 /**
  * D16 — `git-object ⇒ stored_bytes === 0` is *structural*, a two-branch discriminated union on

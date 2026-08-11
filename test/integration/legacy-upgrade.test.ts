@@ -158,28 +158,6 @@ describe("bundled legacy upgrade workflow", () => {
     })).toMatchObject({ ok: false });
   }, TIMEOUT);
 
-  it("adopts a legacy initialization from a manual initial checkpoint through the real handler", async () => {
-    const { root, source, head } = await repository();
-    const emitted = stage(root, source, head);
-    expect(cli(root, "manual-next", {
-      schema_version: "1", operation: "bootstrap", initialization: emitted.initialization,
-    })).toMatchObject({ status: 0, value: { ok: true, value: { revision: 1 } } });
-    expect(cli(root, "manual-next", {
-      schema_version: "1", operation: "step", phase_instance: "prd", step: "produce", status: "failed",
-    })).toMatchObject({ status: 0, value: { ok: true, value: { revision: 2 } } });
-    const imported = cli(root, "manual-next", {
-      schema_version: "1", operation: "import-call", intent_id: "legacy-manual-import",
-    });
-    expect(imported).toMatchObject({ status: 0, value: { ok: true, value: { call: { input: {
-      expected_revision: 0, artifact: { import_mode: "initial" },
-    } } } } });
-    expect(imported.value.value.call.input.artifact.chain[0].initialization)
-      .toMatchObject({ artifact_kind: "legacy-import-initialization" });
-    expect(await invokeState(root, imported.value.value.call.input, "legacy-manual-import")).toMatchObject({
-      kind: "project-result", result: { ok: true, value: { revision: 1, status: "failed" } },
-    });
-  }, TIMEOUT);
-
   it("opens a real migration audit only over approved design authority and authenticates the resume jump", async () => {
     const { root, source, head } = await repository();
     const emitted = stage(root, source, head);

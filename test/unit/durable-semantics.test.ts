@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest } from "../../src/contracts/canonical.js";
-import type { ManualCheckpointImportV1 } from "../../src/contracts/durable-checkpoint.js";
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { ImplementationOutputV1 } from "../../src/contracts/durable-implementation-output.js";
 import type { LegacyImportInitializationV1 } from "../../src/contracts/durable-legacy-import.js";
@@ -44,10 +43,6 @@ const legacyImport = async (): Promise<LegacyImportInitializationV1> =>
 const documentArtifact = async (): Promise<DocumentArtifactV1> => fixture<DocumentArtifactV1>("document-artifact");
 const implementationOutput = async (): Promise<ImplementationOutputV1> =>
   fixture<ImplementationOutputV1>("implementation-output");
-const checkpointImport = async (): Promise<ManualCheckpointImportV1> =>
-  fixture<ManualCheckpointImportV1>("manual-checkpoint-import");
-const checkpointContinuationImport = async (): Promise<ManualCheckpointImportV1> =>
-  fixture<ManualCheckpointImportV1>("manual-checkpoint-import-continuation");
 const maintenanceRecord = async (): Promise<MaintenanceRecordV1> =>
   fixture<MaintenanceRecordV1>("maintenance-record");
 
@@ -164,64 +159,6 @@ describe("validateDurableSemantics — positive path", () => {
 
   it("accepts an implementation-output artifact supplied alone", async () => {
     accept({ artifact: canonicalDocument(await implementationOutput()) });
-  });
-
-  it("accepts an initial manual-checkpoint import without state", async () => {
-    accept({ artifact: canonicalDocument(await checkpointImport()) });
-  });
-
-  it("accepts a continuation manual-checkpoint import with its computed matching state", async () => {
-    const imported = await checkpointContinuationImport();
-    if (imported.import_mode !== "continuation") throw new TypeError("expected continuation import fixture");
-    const first = imported.chain[0];
-    if (first === undefined) throw new TypeError("expected non-empty checkpoint chain fixture");
-
-    const matchingState: TaskStateV1 = {
-      ...(await state()),
-      task_id: imported.task_id,
-      repository_identity_digest: imported.repository_identity_digest,
-      revision: imported.predecessor.revision,
-      adopted_checkpoint: imported.predecessor,
-      initialization_digest: first.initialization_digest,
-    };
-    const matchingImport: ManualCheckpointImportV1 = {
-      ...imported,
-      expected_state_revision: imported.predecessor.revision,
-      expected_state_digest: canonicalJsonDigest(matchingState),
-    };
-
-    accept({ state: canonicalDocument(matchingState), artifact: canonicalDocument(matchingImport) });
-  });
-
-  it("accepts the first checkpoint anchored to ordinary state with no adopted checkpoint", async () => {
-    const baseState = { ...(await state()) };
-    delete (baseState as { adopted_checkpoint?: unknown }).adopted_checkpoint;
-    const imported = await checkpointImport();
-    const template = structuredClone(imported.chain[1]!);
-    delete (template as { predecessor?: unknown }).predecessor;
-    const stateAnchor = {
-      anchor_kind: "state" as const,
-      state_revision: baseState.revision,
-      state_digest: canonicalJsonDigest(baseState),
-    };
-    const first = {
-      ...template,
-      task_id: baseState.task_id,
-      repository_identity_digest: baseState.repository_identity_digest,
-      revision: (baseState.revision + 1) as never,
-      initialization_digest: baseState.initialization_digest,
-      state_anchor: stateAnchor,
-    };
-    const artifact = {
-      schema_version: "1" as const,
-      artifact_kind: "manual-checkpoint-import" as const,
-      task_id: baseState.task_id,
-      repository_identity_digest: baseState.repository_identity_digest,
-      import_mode: "state-anchored" as const,
-      chain: [first],
-      state_anchor: stateAnchor,
-    };
-    accept({ state: canonicalDocument(baseState), artifact: canonicalDocument(artifact) });
   });
 
   it("accepts a maintenance record supplied alone", async () => {
@@ -501,15 +438,6 @@ describe("validateDurableSemantics — positive path", () => {
         DURABLE_ISSUE_CODES.intentReceiptPolicyBaseMismatch,
       ],
       [
-        receiptWithPrepared(receipt, {
-          adopted_checkpoint: {
-            revision: parseSafeInteger(predecessor.revision - 1),
-            checkpoint_digest: digest("4") as never,
-          },
-        }),
-        DURABLE_ISSUE_CODES.intentReceiptAdoptedCheckpointMismatch,
-      ],
-      [
         { ...receipt, input_fingerprint: digest("3") } as IntentReceiptV1,
         DURABLE_ISSUE_CODES.intentReceiptInputFingerprintMismatch,
       ],
@@ -518,23 +446,6 @@ describe("validateDurableSemantics — positive path", () => {
     for (const [candidate, issueCode] of relationCases) {
       expectIntentIssue(subject(candidate), "STATE_INVALID", stateParameters(issueCode));
     }
-  });
-
-  it("permits adopted-checkpoint movement only for the durable adoption operation", async () => {
-    const { predecessor, receipt } = await intentPair();
-    const changed = receiptWithPrepared(receipt, {
-      adopted_checkpoint: {
-        revision: parseSafeInteger(predecessor.revision + 1),
-        checkpoint_digest: "4".repeat(64) as never,
-      },
-    });
-    const adoptionReceipt = { ...changed, operation: "adopt-manual-checkpoint-import" } as IntentReceiptV1;
-    accept(createPreparedIntentSubject(canonicalDocument(predecessor), canonicalDocument(adoptionReceipt)));
-    expectIntentIssue(
-      createPreparedIntentSubject(canonicalDocument(predecessor), canonicalDocument(changed)),
-      "STATE_INVALID",
-      { phase_instance: predecessor.phase_instance, issue_code: DURABLE_ISSUE_CODES.intentReceiptAdoptedCheckpointMismatch },
-    );
   });
 
   it("reports every committed reference issue at rank 8b with the final STATE_INVALID carrier", async () => {

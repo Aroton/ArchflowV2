@@ -101,15 +101,6 @@ export async function ensureDecisionDirectory(
   await ensureDecisionChild(gate);
 }
 
-/** Creates and verifies the fixed `manual/checkpoints/` hierarchy. */
-export async function ensureManualCheckpointDirectory(
-  authority: TransactionAuthority,
-): Promise<void> {
-  assertInternalTransactionAuthority(authority);
-  await ensureRealDirectory(join(authority.task_root, "manual") as ResolvedTaskPath);
-  await ensureRealDirectory(join(authority.task_root, "manual", "checkpoints") as ResolvedTaskPath);
-}
-
 /** Creates and verifies `attempts/<phase-instance>/` for diagnostic dispatch records. */
 export async function ensureAttemptDirectory(
   authority: TransactionAuthority,

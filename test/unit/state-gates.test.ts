@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
 import { computeGateContextDigest, computeGateId, type InputFingerprintSubject } from "../../src/contracts/fingerprints.js";
-import { parseGateDecisionRecord, parseGateRequest } from "../../src/contracts/durable-gate.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { gateDecisionEffect, type GateContext, type GateEffect, type GateKind } from "../../src/contracts/gates.js";
@@ -20,7 +19,7 @@ import { createAtomicWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import { assessCurrentEvidence } from "../../src/review/fixed-point.js";
 import { deriveCurrentEvidenceSet, type RetainedEvidenceSet } from "../../src/state/evidence-results.js";
-import { importGateDecisions, loadAuthenticatedGateApproval, runDurableGate } from "../../src/state/gates.js";
+import { loadAuthenticatedGateApproval, runDurableGate } from "../../src/state/gates.js";
 import { createTaskLock } from "../../src/state/lock.js";
 import { readIntentReceipt, readTaskConfig, readTaskState } from "../../src/state/read.js";
 import { planStateTransition } from "../../src/state/transitions.js";
@@ -38,12 +37,7 @@ rule
 });
 const provenance = { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "decision-1", helper_invocation_id: "helper-1", recorded_at: "2026-07-30T12:00:00.000Z" } as const;
 const RULE = { rule_id: "trust-boundary", rule_version: 1 } as const;
-const context = { artifact_kind: "phase-implementation" } as const;
 const counter = { role: "counter-review", evidence_digest: D("8"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" } as const;
-const gateId = computeGateId({ task_identity_digest: D("a"), intent_id: "intent-1" as never, request_digest: D("b") });
-const contextDigest = computeGateContextDigest("artifact-approval", context);
-const request = () => parseGateRequest({ schema_version: "1", gate_id: gateId, intent_id: "intent-1", request_digest: D("b"), task_id: "task-1", phase_instance: "phase-impl-2", summary: "Approve", subject_digest: D("c"), context_digest: contextDigest, current_evidence: { set_digest: D("3"), slots: [counter] }, kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"], opened_at_revision: 4 });
-const decision = (choice: "approve" | "revise") => parseGateDecisionRecord({ schema_version: "1", gate_id: gateId, task_id: "task-1", phase_instance: "phase-impl-2", kind: "artifact-approval", subject_digest: D("c"), context_digest: contextDigest, supplemental: [], outcome: "decided", envelope: { schema_version: "1", gate_id: gateId, task_id: "task-1", phase_instance: "phase-impl-2", kind: "artifact-approval", subject_digest: D("c"), context_digest: contextDigest, human_provenance: provenance, payload: { decision: choice, reason: "Reviewed" } } });
 const state = (): TaskStateV1 => ({ schema_version: "1", task_id: parseTaskSlug("task-1"), repository_identity_digest: D("1"), revision: parseSafeInteger(4), phase_instance: "phase-impl-2" as TaskStateV1["phase_instance"], step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("2"), initialization_digest: D("3"), config_digest: D("4"), workflow_digest: D("5"), constitution_digest: constitution.digest, policy_base_commit: "abcdef0123456789abcdef0123456789abcdef01" as TaskStateV1["policy_base_commit"], authoritative_results: [], approvals: [], waivers: [] });
 
 const roots: string[] = [];
@@ -67,44 +61,12 @@ const EFFECT_CASES = [
   { kind: "migration-audit", context: { source_identity_digest: D("a"), destination_identity_digest: D("b"), import_digest: D("c"), code_baseline_digest: D("d"), policy_baseline_digest: D("e") }, allowed: ["accept-import-audit", "revise", "abort", "cancel"], payload: { decision: "accept-import-audit", reason: "Reviewed" }, effect: "advance" },
 ] as const satisfies readonly Readonly<{ kind: GateKind; context: object; allowed: readonly string[]; payload: Readonly<{ decision: string } & Record<string, unknown>>; effect: GateEffect }>[];
 
-function authorityPair(entry: (typeof EFFECT_CASES)[number], index: number) {
-  const matrixGateId = `gate-matrix-${index}`;
-  const matrixContextDigest = computeGateContextDigest(entry.kind, entry.context as never);
-  const common = { gate_id: matrixGateId, task_id: "task-1", phase_instance: "phase-impl-2", kind: entry.kind, subject_digest: D("c"), context_digest: matrixContextDigest };
-  return {
-    request: parseGateRequest({ schema_version: "1", ...common, intent_id: `intent-matrix-${index}`, request_digest: D("f"), summary: "Effect matrix", current_evidence: { set_digest: D("3"), slots: [counter] }, context: entry.context, allowed_decisions: entry.allowed, opened_at_revision: 4 }),
-    decision: parseGateDecisionRecord({ schema_version: "1", ...common, supplemental: [], outcome: "decided", envelope: { schema_version: "1", ...common, human_provenance: { ...provenance, decision_event_id: `decision-matrix-${index}` }, payload: entry.payload } }),
-  };
-}
-
-describe("gate manual authority import", () => {
-  it("imports only advancing decisions and is idempotent by gate id", () => {
-    const imported = importGateDecisions(state(), [{ request: request(), decision: decision("approve") }]);
-    expect(imported.approvals).toHaveLength(1);
-    const repeated = importGateDecisions({ ...state(), approvals: imported.approvals }, [{ request: request(), decision: decision("approve") }]);
-    expect(repeated.approvals).toEqual(imported.approvals);
-    expect(importGateDecisions(state(), [{ request: request(), decision: decision("revise") }]).approvals).toEqual([]);
-  });
-
-  it("derives authority from every decision-effect arm without granting on non-advance", () => {
+describe("durable gate decisions", () => {
+  it("maps every decision-effect arm to its movement outcome", () => {
     expect(new Set(EFFECT_CASES.map(({ payload }) => payload.decision)).size).toBe(14);
-    for (const [index, entry] of EFFECT_CASES.entries()) {
+    for (const entry of EFFECT_CASES) {
       expect(gateDecisionEffect(entry.payload as never), entry.payload.decision).toBe(entry.effect);
-      const imported = importGateDecisions(state(), [authorityPair(entry, index)]);
-      expect(imported.approvals, entry.payload.decision).toHaveLength(entry.effect === "advance" ? 1 : 0);
-      expect(imported.waivers, entry.payload.decision).toEqual([]);
     }
-  });
-
-  it("rejects import while a gate is live and rejects a foreign task pair", () => {
-    const open = { ...state(), open_gate: { gate_id: gateId, gate_kind: "artifact-approval" as const, subject_digest: D("c"), context_digest: contextDigest, frozen_state_digest: D("f"), opened_at_revision: parseSafeInteger(4) } };
-    expect(() => importGateDecisions(open, [])).toThrow(/no live gate/u);
-    expect(() => importGateDecisions({ ...state(), task_id: parseTaskSlug("other") }, [{ request: request(), decision: decision("approve") }])).toThrow(/foreign/u);
-  });
-
-  it("rejects a request/closure binding mismatch", () => {
-    const mismatched = { ...decision("approve"), subject_digest: D("d") };
-    expect(() => importGateDecisions(state(), [{ request: request(), decision: mismatched }])).toThrow(/does not bind/u);
   });
 
   it("leaves an aborted wait pending and resumes through archive, receipt, state, and cleanup", async () => {

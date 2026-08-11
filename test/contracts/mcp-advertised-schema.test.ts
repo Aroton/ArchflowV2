@@ -41,8 +41,6 @@ const schemaDocumentPaths = [
   "../../src/contracts/schemas/v1/legacy-import-initialization.schema.json",
   "../../src/contracts/schemas/v1/document-artifact.schema.json",
   "../../src/contracts/schemas/v1/implementation-output.schema.json",
-  "../../src/contracts/schemas/v1/manual-checkpoint.schema.json",
-  "../../src/contracts/schemas/v1/manual-checkpoint-import.schema.json",
   "../../src/contracts/schemas/v1/secret-scan-result.schema.json",
   "../../src/contracts/schemas/v1/triage.schema.json"
 ] as const;
@@ -85,7 +83,7 @@ const validatingKeywordCoverage = {
   ],
   "x-archflow-nfc": ["path-nfc-input"],
   "x-archflow-sorted-unique": ["project-error-sorted-unique"],
-  "x-archflow-sorted-unique-by": ["checkpoint-authoritative-result-order"]
+  "x-archflow-sorted-unique-by": ["document-declared-input-order"]
 } as const;
 
 const resultCorrelationCoverage = [
@@ -122,8 +120,8 @@ const GATE_COUNTER = Object.freeze({ role: "gate-counter-review", evidence_diges
 const CURRENT_EVIDENCE = Object.freeze({ set_digest: D("3"), slots: [COUNTER] });
 const AUTHORITY = Object.freeze({ link_digest: D("4"), purpose: "restore-adoption", proposed_generation_digest: D("5"), changed_input_fingerprint: D("6") });
 const SCOPE = Object.freeze({ operation: "review-trigger", boundary: "subject" });
-const MANUAL_CHECKPOINT = JSON.parse(await readFile(
-  new URL("../fixtures/contracts/durable/manual-checkpoint.valid.json", import.meta.url),
+const DOCUMENT_ARTIFACT = JSON.parse(await readFile(
+  new URL("../fixtures/contracts/durable/document-artifact.valid.json", import.meta.url),
   "utf8",
 )) as Record<string, unknown>;
 
@@ -167,23 +165,11 @@ function materialize(entry: CorpusCase): MaterializedCase {
     case "path-utf8-input": return { value: counterCall(longPath) };
     case "path-nfc-input": return { value: counterCall(nfdPath) };
     case "rubric-unique": return { value: counterCall("phases/phase-3.md", [{ id: "paths", text: "First", blocking: true }, { id: "paths", text: "Second", blocking: false }]) };
-    case "checkpoint-authoritative-result-order": {
-      const checkpoint = structuredClone(MANUAL_CHECKPOINT);
-      const results = checkpoint.authoritative_results as unknown[];
-      checkpoint.authoritative_results = [results[0], results[0]];
-      return {
-        value: {
-          ...stateCall(),
-          artifact: {
-            schema_version: "1",
-            artifact_kind: "manual-checkpoint-import",
-            task_id: checkpoint.task_id,
-            repository_identity_digest: checkpoint.repository_identity_digest,
-            import_mode: "initial",
-            chain: [checkpoint],
-          },
-        },
-      };
+    case "document-declared-input-order": {
+      const artifact = structuredClone(DOCUMENT_ARTIFACT);
+      const inputs = artifact.declared_inputs as unknown[];
+      artifact.declared_inputs = [inputs[0], inputs[0]];
+      return { value: { ...stateCall("succeeded"), artifact } };
     }
     case "waiver-origin-task": return { value: { ...waiverCall(), task_id: "other" } };
     case "current-evidence": return { value: { ...artifactGateCall, current_evidence: { ...CURRENT_EVIDENCE, slots: [COUNTER, { ...GATE_COUNTER, evidence_digest: COUNTER.evidence_digest }] } } };

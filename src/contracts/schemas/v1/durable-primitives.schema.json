@@ -36,11 +36,10 @@
       ]
     },
     "claimableOutputPathClass": {
-      "$comment": "The 8 classes an implementation output may claim. The 12 server-owned classes are unrepresentable here rather than rejected by a rule.",
+      "$comment": "The 7 classes an implementation output may claim. The 12 server-owned classes are unrepresentable here rather than rejected by a rule.",
       "enum": [
         "document",
         "import",
-        "manual-checkpoint",
         "repository-source",
         "result-payload",
         "review",
