@@ -10,7 +10,7 @@ import projectErrorSchema from "../../src/contracts/schemas/v1/project-error.sch
 import protocolErrorSchema from "../../src/contracts/schemas/v1/protocol-error.schema.json" with { type: "json" };
 import supplementalSchema from "../../src/contracts/schemas/v1/supplemental-review.schema.json" with { type: "json" };
 import { parseSupplementalReviewOutcome } from "../../src/contracts/supplemental.js";
-import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 type JsonObject = Record<string, unknown>;
 type ErrorDefinition = { readonly owner: string; readonly retryable: boolean; readonly action: string; readonly projection: string; readonly parameter_parser: { readonly parse: (value: unknown) => Readonly<Record<string, unknown>> } };

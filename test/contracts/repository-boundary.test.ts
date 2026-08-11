@@ -101,8 +101,6 @@ describe("package.json dependencies and scripts", () => {
       "@modelcontextprotocol/server": "2.0.0",
       "@secretlint/core": "13.0.4",
       "@secretlint/secretlint-rule-preset-recommend": "13.0.4",
-      ajv: "8.20.0",
-      "ajv-formats": "3.0.1",
       "write-file-atomic": "8.0.0",
       yaml: "2.9.0",
       zod: "4.4.3",

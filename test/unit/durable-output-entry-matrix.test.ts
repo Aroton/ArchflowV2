@@ -10,7 +10,7 @@ import {
 } from "../../src/contracts/durable-primitives.js";
 import type { SafeInteger, Sha256Digest } from "../../src/contracts/evidence.js";
 import type { RepositoryPathClaim } from "../../src/contracts/path-claims.js";
-import { assertZodAgreement, createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { assertZodAgreement, createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 /**
  * The adversarial `OutputEntry` matrix (Phase 7, chunk 3). Every expectation below is transcribed

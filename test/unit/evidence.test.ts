@@ -5,7 +5,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import { pathSafeIdV1Schema, taskSlugV1Schema } from "../../src/contracts/evidence.js";
 import { parseTaskPathClaim, parseRepositoryPathClaim, toRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
-import { assertZodAgreement, createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { assertZodAgreement, createJsonSchemaValidator } from "../helpers/json-schema.js";
 import { classifyRepositoryPath, classifyTaskPath } from "../../src/repository/paths.js";
 import {
   parsePathSafeId,

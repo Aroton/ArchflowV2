@@ -86,28 +86,28 @@
   ],
   "artifacts": [
     {
-      "digest": "fcffa85dd7216194bbf2a9c06ff43f878f75a953407b44a735bfcb6f486dc2ef",
+      "digest": "3b5c3e2ffa6cf8254eb1623707ff46ea10a111a47e86d7c3d8c2d08f7a185b98",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 1982400
+      "size": 1570591
     },
     {
-      "digest": "379bae0241bbeadda8c4ec6e8e2080dc1622d423dc8fa5b7df7f48c05cdc13f3",
+      "digest": "67abc60cdb63e33e8974a0b8e3b928c84540c35b6f2fabb18e9992a2820d3f8b",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 2743280
+      "size": 2443368
     },
     {
-      "digest": "a0421bd8ac95f0efe2215f3bf8a5f3b213b654651a8f596f5fabbc77351414e7",
+      "digest": "d25516b74a3296a41d46b5051d06ccc13bd3bd1255ca4804ae7bd13828a055cc",
       "path": "legal/THIRD_PARTY_NOTICES.md",
       "role": "legal-notice",
-      "size": 937
+      "size": 785
     },
     {
-      "digest": "b20b6f0bfb9144ca897d79a382db87c8c9f35bce0866573078e350c6771058d4",
+      "digest": "dc487db4a76bdace8227f8a52b352f30322e7f35ca99ce3d091afc1bdc9b2b15",
       "path": "legal/review.json",
       "role": "legal-review",
-      "size": 42993
+      "size": 34050
     },
     {
       "digest": "a05350a88e318e4f5f2c2a1ff1e2e88daa4dd38e6e78b71cccae422bdc762cc3",
@@ -140,18 +140,6 @@
       "size": 1852
     },
     {
-      "digest": "a05350a88e318e4f5f2c2a1ff1e2e88daa4dd38e6e78b71cccae422bdc762cc3",
-      "path": "legal/upstream/installed-ajv-8.20.0/LICENSE",
-      "role": "upstream-legal",
-      "size": 1090
-    },
-    {
-      "digest": "9df3bb69929a3b650ed73b3bfa1756725aaff0ac296461605753547004eafeaf",
-      "path": "legal/upstream/installed-ajv-formats-3.0.1/LICENSE",
-      "role": "upstream-legal",
-      "size": 1074
-    },
-    {
       "digest": "0e74697a68cebdcd61502c30fe80ab7f9e341d995dcd452023654d57133534b1",
       "path": "legal/upstream/installed-boundary-2.0.0/LICENSE.BSD",
       "role": "upstream-legal",
@@ -162,24 +150,6 @@
       "path": "legal/upstream/installed-debug-4.4.3/LICENSE",
       "role": "upstream-legal",
       "size": 1139
-    },
-    {
-      "digest": "7bf9b2de73a6b356761c948d0e9eeb4be6c1270bd04c79cd489c1e400ffdfc1a",
-      "path": "legal/upstream/installed-fast-deep-equal-3.1.3/LICENSE",
-      "role": "upstream-legal",
-      "size": 1074
-    },
-    {
-      "digest": "b010b0dfdfdb23d7396e03b82cd4621fc9bb8f95d6b0aea70b9c24e12074c786",
-      "path": "legal/upstream/installed-fast-uri-3.1.4/LICENSE",
-      "role": "upstream-legal",
-      "size": 1813
-    },
-    {
-      "digest": "7bf9b2de73a6b356761c948d0e9eeb4be6c1270bd04c79cd489c1e400ffdfc1a",
-      "path": "legal/upstream/installed-json-schema-traverse-1.0.0/LICENSE",
-      "role": "upstream-legal",
-      "size": 1074
     },
     {
       "digest": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
@@ -246,10 +216,10 @@
       "role": "manifest"
     },
     {
-      "digest": "06f1e3c9e33c6646582fc62ffd7f5bc4c81e757f6f63c78f2544caf45fb8c6e4",
+      "digest": "0691348afc41eb985b16e9b8fe8294168c9f8caa7cdb7a56bb24113e76951f87",
       "path": "metafile.json",
       "role": "metafile",
-      "size": 400701
+      "size": 318973
     }
   ],
   "build_entries": [
@@ -268,7 +238,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "379bae0241bbeadda8c4ec6e8e2080dc1622d423dc8fa5b7df7f48c05cdc13f3",
+  "bundle_digest": "67abc60cdb63e33e8974a0b8e3b928c84540c35b6f2fabb18e9992a2820d3f8b",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -295,7 +265,7 @@
       "size": 11434
     },
     {
-      "bytes_in_output": 272032,
+      "bytes_in_output": 272088,
       "digest": "218157a99879a59cdea0b720a484dfe9989fa768f3d05318c2803b61705373fa",
       "key": "node_modules/@modelcontextprotocol/server/dist/ajvProvider-CEoC__sr.mjs",
       "origin": {
@@ -343,7 +313,7 @@
       "size": 80210
     },
     {
-      "bytes_in_output": 40127,
+      "bytes_in_output": 40148,
       "digest": "b25a912ea68ae396bb3f7367fa9fdd64231899266f1dc6e243dd3d2064c0d5af",
       "key": "node_modules/@modelcontextprotocol/server/dist/mcp-DXXb3Vv3.mjs",
       "origin": {
@@ -367,7 +337,7 @@
       "size": 184
     },
     {
-      "bytes_in_output": 184711,
+      "bytes_in_output": 184741,
       "digest": "32ecc5f9aaaab5f35499fdfb11e0f1cb3f39a763d762f21e76c5cd55cc11c9c0",
       "key": "node_modules/@modelcontextprotocol/server/dist/src-CX2iR2pK.mjs",
       "origin": {
@@ -595,7 +565,7 @@
       "size": 448
     },
     {
-      "bytes_in_output": 268716,
+      "bytes_in_output": 268722,
       "digest": "7606f0952720d9320b5f6a019711defa7caa1579a7bc624eb7ac3447f48e5792",
       "key": "node_modules/@secretlint/secretlint-rule-preset-recommend/module/index.js",
       "origin": {
@@ -605,1074 +575,6 @@
         "package_version": "13.0.4"
       },
       "size": 228678
-    },
-    {
-      "bytes_in_output": 24607,
-      "digest": "b61693a26869970a92cc1fe832c931ccd3afe8b6d66802b19c48306349e84880",
-      "key": "node_modules/ajv-formats/dist/formats.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv-formats",
-        "package_relative_path": "dist/formats.js",
-        "package_version": "3.0.1"
-      },
-      "size": 12263
-    },
-    {
-      "bytes_in_output": 3279,
-      "digest": "3f3014150293846086d11058bb8bf43e669e354a98b37adcf10281454d5e753b",
-      "key": "node_modules/ajv-formats/dist/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv-formats",
-        "package_relative_path": "dist/index.js",
-        "package_version": "3.0.1"
-      },
-      "size": 1508
-    },
-    {
-      "bytes_in_output": 5875,
-      "digest": "ffc374031a55c3f6e39dc3fe69e663f8251b9d9d7ddb8f513a6807c985c18bb8",
-      "key": "node_modules/ajv-formats/dist/limit.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv-formats",
-        "package_relative_path": "dist/limit.js",
-        "package_version": "3.0.1"
-      },
-      "size": 2900
-    },
-    {
-      "bytes_in_output": 6116,
-      "digest": "908e9670b478b2ba126802a221b7e47006f50cf467e2c5dd7935d3dbef10a20a",
-      "key": "node_modules/ajv/dist/2020.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/2020.js",
-        "package_version": "8.20.0"
-      },
-      "size": 2894
-    },
-    {
-      "bytes_in_output": 5950,
-      "digest": "edaed56fc546f5551b0d6dc2ff2a9cc25c2d6c83318a086eaa8c3ad0b2479297",
-      "key": "node_modules/ajv/dist/ajv.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/ajv.js",
-        "package_version": "8.20.0"
-      },
-      "size": 2841
-    },
-    {
-      "bytes_in_output": 9679,
-      "digest": "1287153722f1fc3c5342647de7ae1d7b6fb68bdb3378a0776a937d273fc97e0d",
-      "key": "node_modules/ajv/dist/compile/codegen/code.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/codegen/code.js",
-        "package_version": "8.20.0"
-      },
-      "size": 4676
-    },
-    {
-      "bytes_in_output": 47964,
-      "digest": "f03b2b72597ef86878d1d4030580c2d0964046efad4867f3d05aa91065ba034c",
-      "key": "node_modules/ajv/dist/compile/codegen/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/codegen/index.js",
-        "package_version": "8.20.0"
-      },
-      "size": 23127
-    },
-    {
-      "bytes_in_output": 10646,
-      "digest": "d2a0a97af2faa2cad88702314fe421e235ab17f11e0d62883d58d8d4dc734286",
-      "key": "node_modules/ajv/dist/compile/codegen/scope.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/codegen/scope.js",
-        "package_version": "8.20.0"
-      },
-      "size": 5198
-    },
-    {
-      "bytes_in_output": 11994,
-      "digest": "53990f8f2cc05922bba410ae68231d3f869de4f8343277ede5b4834fa564c6c2",
-      "key": "node_modules/ajv/dist/compile/errors.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/errors.js",
-        "package_version": "8.20.0"
-      },
-      "size": 5771
-    },
-    {
-      "bytes_in_output": 18267,
-      "digest": "05b34da22814f3787bfa3ac68dad59c9047f56e55a607e0a20719ebf5afe69ac",
-      "key": "node_modules/ajv/dist/compile/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/index.js",
-        "package_version": "8.20.0"
-      },
-      "size": 10046
-    },
-    {
-      "bytes_in_output": 3194,
-      "digest": "3cab37a2240b996b9bed92fe7a041d91689cfe3ad2e9ae4c0ab99e4146408493",
-      "key": "node_modules/ajv/dist/compile/names.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/names.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1440
-    },
-    {
-      "bytes_in_output": 1280,
-      "digest": "81c98fdf34c3037c91bfcc02277ec32156c71e34048f36cfe4e084416e916cb7",
-      "key": "node_modules/ajv/dist/compile/ref_error.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/ref_error.js",
-        "package_version": "8.20.0"
-      },
-      "size": 543
-    },
-    {
-      "bytes_in_output": 10200,
-      "digest": "df75af0e0cf03fa1c6452e8dc61019f5aec645a8a5f6f494dc4e13cb5502d2d9",
-      "key": "node_modules/ajv/dist/compile/resolve.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/resolve.js",
-        "package_version": "8.20.0"
-      },
-      "size": 5006
-    },
-    {
-      "bytes_in_output": 2057,
-      "digest": "ec1d86500f497aa8e20f9f0c1695951159d9a909669d00a261ce1bb22b3cf0a9",
-      "key": "node_modules/ajv/dist/compile/rules.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/rules.js",
-        "package_version": "8.20.0"
-      },
-      "size": 918
-    },
-    {
-      "bytes_in_output": 14359,
-      "digest": "fa911f5631f29d4d6420adfe086cb693b94b08de2719475c78c54bcb82f831a5",
-      "key": "node_modules/ajv/dist/compile/util.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/util.js",
-        "package_version": "8.20.0"
-      },
-      "size": 7103
-    },
-    {
-      "bytes_in_output": 1983,
-      "digest": "50c5cba5894a7fb9874b3432355b46ec71b73c9368dafb1323ded8567cca8fc0",
-      "key": "node_modules/ajv/dist/compile/validate/applicability.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/validate/applicability.js",
-        "package_version": "8.20.0"
-      },
-      "size": 853
-    },
-    {
-      "bytes_in_output": 3096,
-      "digest": "c08abdbdbd3d8b1dcc0552a20fbc7d837ed44f4ca6abb2e464985590ac94377f",
-      "key": "node_modules/ajv/dist/compile/validate/boolSchema.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/validate/boolSchema.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1531
-    },
-    {
-      "bytes_in_output": 16274,
-      "digest": "697bd7005361ec7066a23c18830a10b0ef28aec1a33138b4e3098bf78c4fae52",
-      "key": "node_modules/ajv/dist/compile/validate/dataType.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/validate/dataType.js",
-        "package_version": "8.20.0"
-      },
-      "size": 8409
-    },
-    {
-      "bytes_in_output": 2861,
-      "digest": "05721971df94faa57b09c8cfd60c2eef81b6d14910a7dea5f539d693a029c428",
-      "key": "node_modules/ajv/dist/compile/validate/defaults.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/validate/defaults.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1448
-    },
-    {
-      "bytes_in_output": 40811,
-      "digest": "cb2103e5f890e04592c10d24b45857dad91155bae9f9460138a2459bdaaea2cd",
-      "key": "node_modules/ajv/dist/compile/validate/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/validate/index.js",
-        "package_version": "8.20.0"
-      },
-      "size": 20552
-    },
-    {
-      "bytes_in_output": 11498,
-      "digest": "ab8f070c75c25eee9be5c837f364748909b58f5db66149a2beccbd2f66afeb76",
-      "key": "node_modules/ajv/dist/compile/validate/keyword.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/validate/keyword.js",
-        "package_version": "8.20.0"
-      },
-      "size": 5695
-    },
-    {
-      "bytes_in_output": 7447,
-      "digest": "ca783d6052af91e65ebb59a5b48b47fb459a2241d37ca6a042f767d4ce451bdc",
-      "key": "node_modules/ajv/dist/compile/validate/subschema.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/compile/validate/subschema.js",
-        "package_version": "8.20.0"
-      },
-      "size": 3858
-    },
-    {
-      "bytes_in_output": 48343,
-      "digest": "51be29c7ed7288622f755c0f1bebd3da4a9907d77aa2c33b0f2a0a5b6b339603",
-      "key": "node_modules/ajv/dist/core.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/core.js",
-        "package_version": "8.20.0"
-      },
-      "size": 25202
-    },
-    {
-      "bytes_in_output": 1123,
-      "digest": "d24ab8a97c18b3f5afdde7d7024a0e0ac1df0614a16a41cb88f81379edcc2db3",
-      "key": "node_modules/ajv/dist/refs/data.json",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/refs/data.json",
-        "package_version": "8.20.0"
-      },
-      "size": 409
-    },
-    {
-      "bytes_in_output": 2149,
-      "digest": "2e39089b0aaa14efa7901ecf5384622ec3d5897b206e1d589d2420f17b9fa6e1",
-      "key": "node_modules/ajv/dist/refs/json-schema-2020-12/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/refs/json-schema-2020-12/index.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1026
-    },
-    {
-      "bytes_in_output": 3420,
-      "digest": "f1e465ff0c0cc86bee5c0cc4b51d2734c532e6ea12c75b60a2ac093a4577b2d4",
-      "key": "node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/refs/json-schema-2020-12/meta/applicator.json",
-        "package_version": "8.20.0"
-      },
-      "size": 1441
-    },
-    {
-      "bytes_in_output": 1333,
-      "digest": "7ede86f2c48d646202bf1332aefaf46db268c943d59752727db7247dc2920516",
-      "key": "node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/refs/json-schema-2020-12/meta/content.json",
-        "package_version": "8.20.0"
-      },
-      "size": 479
-    },
-    {
-      "bytes_in_output": 3230,
-      "digest": "c3a5947992d4fe67c95cda7910911207376bbae41c0a124ec9e7e699172e7a49",
-      "key": "node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/refs/json-schema-2020-12/meta/core.json",
-        "package_version": "8.20.0"
-      },
-      "size": 1344
-    },
-    {
-      "bytes_in_output": 1249,
-      "digest": "1e31131b1ed21f98c007f04deb501343b8c4dd77f1c5a8494a9c2085f68d769d",
-      "key": "node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/refs/json-schema-2020-12/meta/format-annotation.json",
-        "package_version": "8.20.0"
-      },
-      "size": 420
-    },
-    {
-      "bytes_in_output": 2003,
-      "digest": "eb008c756b29bdaa237c1f06d32ea4a21f6ef22148b03c6372cea5e4c0782273",
-      "key": "node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/refs/json-schema-2020-12/meta/meta-data.json",
-        "package_version": "8.20.0"
-      },
-      "size": 758
-    },
-    {
-      "bytes_in_output": 1334,
-      "digest": "8f7f75f4274745faa32e4abdba12de99f49b21df225f52f723b5c62043b0edca",
-      "key": "node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/refs/json-schema-2020-12/meta/unevaluated.json",
-        "package_version": "8.20.0"
-      },
-      "size": 472
-    },
-    {
-      "bytes_in_output": 5298,
-      "digest": "3cae7069843679429e4ada7df261bb8961fa34cac15be89296026e69af312092",
-      "key": "node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/refs/json-schema-2020-12/meta/validation.json",
-        "package_version": "8.20.0"
-      },
-      "size": 2264
-    },
-    {
-      "bytes_in_output": 4891,
-      "digest": "5333c7df76bceee098e865881d0808238dea836126c6c60b49299ec85c6c7a56",
-      "key": "node_modules/ajv/dist/refs/json-schema-2020-12/schema.json",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/refs/json-schema-2020-12/schema.json",
-        "package_version": "8.20.0"
-      },
-      "size": 2166
-    },
-    {
-      "bytes_in_output": 8671,
-      "digest": "f7e8b13cad4fecff9771f3626fef33e20e59027b90938a28fd9d2f6c17cd0773",
-      "key": "node_modules/ajv/dist/refs/json-schema-draft-07.json",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/refs/json-schema-draft-07.json",
-        "package_version": "8.20.0"
-      },
-      "size": 3811
-    },
-    {
-      "bytes_in_output": 630,
-      "digest": "c94467da09ee94e5d194483a7ab821b9bb3bf1c04397270f2ab53dea9de59274",
-      "key": "node_modules/ajv/dist/runtime/equal.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/runtime/equal.js",
-        "package_version": "8.20.0"
-      },
-      "size": 286
-    },
-    {
-      "bytes_in_output": 1407,
-      "digest": "1df012dd3d23fced07255a7204798004509687cb1f431ae0ab976db436bbd890",
-      "key": "node_modules/ajv/dist/runtime/ucs2length.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/runtime/ucs2length.js",
-        "package_version": "8.20.0"
-      },
-      "size": 808
-    },
-    {
-      "bytes_in_output": 592,
-      "digest": "d1d61baf97ed87d7310df847a78ed73d19c8cc003207bf5aaec977500bdb1578",
-      "key": "node_modules/ajv/dist/runtime/uri.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/runtime/uri.js",
-        "package_version": "8.20.0"
-      },
-      "size": 218
-    },
-    {
-      "bytes_in_output": 883,
-      "digest": "11bf5b4affc8114e5e7cdf65b93006c2d997ab60ada1152c22e136f9b828b815",
-      "key": "node_modules/ajv/dist/runtime/validation_error.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/runtime/validation_error.js",
-        "package_version": "8.20.0"
-      },
-      "size": 337
-    },
-    {
-      "bytes_in_output": 4093,
-      "digest": "7beb0fbda5e349907067c8398bb8cc3260a6267b6e5dff9793a5ab2171934099",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/additionalItems.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1931
-    },
-    {
-      "bytes_in_output": 8092,
-      "digest": "e237cb180cd2e3f2e676feb714d7dcc6a42116640f9db2ad830cd20d9dfc540a",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/additionalProperties.js",
-        "package_version": "8.20.0"
-      },
-      "size": 4309
-    },
-    {
-      "bytes_in_output": 1604,
-      "digest": "98f46a6434ebe5f851b406480e18b776dd7f1bcc275e28c16a13bfef3cc067c7",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/allOf.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/allOf.js",
-        "package_version": "8.20.0"
-      },
-      "size": 756
-    },
-    {
-      "bytes_in_output": 899,
-      "digest": "8d7368d4aebad0514b713191b934993b4f0bf570e1bab93b07dc69712db2cec5",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/anyOf.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/anyOf.js",
-        "package_version": "8.20.0"
-      },
-      "size": 343
-    },
-    {
-      "bytes_in_output": 7151,
-      "digest": "56165dc93cd8b0b4611db50a97f1e7d7f9af6c5ffe95a7a5b054d6eeaa7f6a8c",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/contains.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/contains.js",
-        "package_version": "8.20.0"
-      },
-      "size": 3680
-    },
-    {
-      "bytes_in_output": 6733,
-      "digest": "c1a83bf484b6fde4d268935f079ddba5e74a2f589dfc6d15ca2e20ba4d06ee5b",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/dependencies.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/dependencies.js",
-        "package_version": "8.20.0"
-      },
-      "size": 3198
-    },
-    {
-      "bytes_in_output": 940,
-      "digest": "d17d23755b0cf8699c180dd98b8b7270b688d2e4fe5a4c4fcc53ffdcc18ee58e",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/dependentSchemas.js",
-        "package_version": "8.20.0"
-      },
-      "size": 354
-    },
-    {
-      "bytes_in_output": 4901,
-      "digest": "42374ee5dc681433579cc689b0c4ae5343f5bf78d4d6a561722b9277c5335ec4",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/if.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/if.js",
-        "package_version": "8.20.0"
-      },
-      "size": 2438
-    },
-    {
-      "bytes_in_output": 3245,
-      "digest": "5a61978f6d81bbabfa8b9ccb71d7de816ed6dd1fd7de5c72657439a76c2a7cb3",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/index.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1529
-    },
-    {
-      "bytes_in_output": 4187,
-      "digest": "fa87f74adc3aac1f1b5e3e7dddf73294e6850e1dd49ed131fca4352e9645c54e",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/items.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/items.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1993
-    },
-    {
-      "bytes_in_output": 2276,
-      "digest": "c449ef64aec16263c7935293ed450cfc2da3ba66f6df5f99c3198c05f169838f",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/items2020.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/items2020.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1037
-    },
-    {
-      "bytes_in_output": 1710,
-      "digest": "ab2f2758d4ea97ac8763fe5540dd0f4d877859676fe5d6c750a18deca387f718",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/not.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/not.js",
-        "package_version": "8.20.0"
-      },
-      "size": 773
-    },
-    {
-      "bytes_in_output": 3957,
-      "digest": "e2aeb6c22d49fd5f348bedcf7f5c4d7b31f5a05dd7ff1a0c531374c6968792a2",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/oneOf.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/oneOf.js",
-        "package_version": "8.20.0"
-      },
-      "size": 2257
-    },
-    {
-      "bytes_in_output": 5706,
-      "digest": "0d43da49a82452c439ba990de7372ad5cedb663717918a5f6dae07025abff655",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/patternProperties.js",
-        "package_version": "8.20.0"
-      },
-      "size": 3236
-    },
-    {
-      "bytes_in_output": 934,
-      "digest": "16264f7b3233a6dcb98b48700643efbd3ebc4d11e27b3eacffc83ccb5f44fb23",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/prefixItems.js",
-        "package_version": "8.20.0"
-      },
-      "size": 354
-    },
-    {
-      "bytes_in_output": 4316,
-      "digest": "c896873ae7251093a2c8880545b69b6e8cb55c44817a53ec830a49818d74104f",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/properties.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/properties.js",
-        "package_version": "8.20.0"
-      },
-      "size": 2153
-    },
-    {
-      "bytes_in_output": 2571,
-      "digest": "b3411cfeaff8efd5e6de12971bb5dc339e64b61fbe62d3b950794c077315c2e7",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/propertyNames.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1221
-    },
-    {
-      "bytes_in_output": 1074,
-      "digest": "9bc42eb8699d57188a7ec2a710d3f38052f92bd78c5d4d0442cf98cf2ebbe22d",
-      "key": "node_modules/ajv/dist/vocabularies/applicator/thenElse.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/applicator/thenElse.js",
-        "package_version": "8.20.0"
-      },
-      "size": 446
-    },
-    {
-      "bytes_in_output": 12461,
-      "digest": "9212ddf8bd0a4c3b1c4b44cdadd141183b2b36f561b91d13df53c83911e3bf63",
-      "key": "node_modules/ajv/dist/vocabularies/code.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/code.js",
-        "package_version": "8.20.0"
-      },
-      "size": 6216
-    },
-    {
-      "bytes_in_output": 723,
-      "digest": "49c8eff694ce4371450c1f9986e934fcbf4bd143311caef5332113f29175bc11",
-      "key": "node_modules/ajv/dist/vocabularies/core/id.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/core/id.js",
-        "package_version": "8.20.0"
-      },
-      "size": 267
-    },
-    {
-      "bytes_in_output": 922,
-      "digest": "f420e1011b95e27b54c58323a7ed4ffbd0a88cdb4496f771bb6782c2aa22d23e",
-      "key": "node_modules/ajv/dist/vocabularies/core/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/core/index.js",
-        "package_version": "8.20.0"
-      },
-      "size": 357
-    },
-    {
-      "bytes_in_output": 10086,
-      "digest": "1422c1454b3621d890066042048f37746fe1cf213088307099816199889bbfd1",
-      "key": "node_modules/ajv/dist/vocabularies/core/ref.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/core/ref.js",
-        "package_version": "8.20.0"
-      },
-      "size": 5234
-    },
-    {
-      "bytes_in_output": 9344,
-      "digest": "b58b58025d2dbe5a6967376faec9295b860a338664c47037e9a1035c1e8fb88e",
-      "key": "node_modules/ajv/dist/vocabularies/discriminator/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/discriminator/index.js",
-        "package_version": "8.20.0"
-      },
-      "size": 4845
-    },
-    {
-      "bytes_in_output": 839,
-      "digest": "2365341d1f30dc72cece7703e908e47aacb8f904b9f66ec4019fe889ae1e57fa",
-      "key": "node_modules/ajv/dist/vocabularies/discriminator/types.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/discriminator/types.js",
-        "package_version": "8.20.0"
-      },
-      "size": 308
-    },
-    {
-      "bytes_in_output": 1731,
-      "digest": "2d0dc3a14abd48a45ad1407a97f23a0f943fa5244923037f86e95a7de04a7445",
-      "key": "node_modules/ajv/dist/vocabularies/draft2020.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/draft2020.js",
-        "package_version": "8.20.0"
-      },
-      "size": 762
-    },
-    {
-      "bytes_in_output": 1306,
-      "digest": "8c62022c6c3aa302c3ea6f6709a697fc9eb6385d243fa7c2156dbe9f02228170",
-      "key": "node_modules/ajv/dist/vocabularies/draft7.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/draft7.js",
-        "package_version": "8.20.0"
-      },
-      "size": 557
-    },
-    {
-      "bytes_in_output": 2803,
-      "digest": "78222a5b42bab186253d880f9af4b012394ae5988bfab78e79f2510caed0ccf7",
-      "key": "node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/dynamic/dynamicAnchor.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1261
-    },
-    {
-      "bytes_in_output": 3069,
-      "digest": "acc2913c91d11ff57150dde1751cdd5d9f486a0cb156037870ede203273af917",
-      "key": "node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/dynamic/dynamicRef.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1985
-    },
-    {
-      "bytes_in_output": 1093,
-      "digest": "8c05d09948653957427f351d9c6172965b932a5663f7dcb63014a491a533cc0b",
-      "key": "node_modules/ajv/dist/vocabularies/dynamic/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/dynamic/index.js",
-        "package_version": "8.20.0"
-      },
-      "size": 457
-    },
-    {
-      "bytes_in_output": 1235,
-      "digest": "9f6cb7e509f9deada1b884010f08c52876f8eace32dcf0e7da28f6d0d91f3f76",
-      "key": "node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/dynamic/recursiveAnchor.js",
-        "package_version": "8.20.0"
-      },
-      "size": 522
-    },
-    {
-      "bytes_in_output": 864,
-      "digest": "7b0c651e2c5b5218639cd3ad7e5162f1e226fc9814107a85f4c3e47f5138670d",
-      "key": "node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/dynamic/recursiveRef.js",
-        "package_version": "8.20.0"
-      },
-      "size": 325
-    },
-    {
-      "bytes_in_output": 8134,
-      "digest": "6fae0d5124fd821b1a9959492f7d6d7b528bee8830d49a7a4759fc9a9ab81d5f",
-      "key": "node_modules/ajv/dist/vocabularies/format/format.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/format/format.js",
-        "package_version": "8.20.0"
-      },
-      "size": 4317
-    },
-    {
-      "bytes_in_output": 597,
-      "digest": "d5dad5f95c9c5f48f8ca956cdbb927aafc7b56baabfca8c0b0403d92c5ebeb67",
-      "key": "node_modules/ajv/dist/vocabularies/format/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/format/index.js",
-        "package_version": "8.20.0"
-      },
-      "size": 209
-    },
-    {
-      "bytes_in_output": 1087,
-      "digest": "45c178744a7ec57e20c85ceeaea8d9f36b5663636ab7e495ea2c3c1bf4a58609",
-      "key": "node_modules/ajv/dist/vocabularies/metadata.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/metadata.js",
-        "package_version": "8.20.0"
-      },
-      "size": 427
-    },
-    {
-      "bytes_in_output": 958,
-      "digest": "491c4d9738e50a6c22b3090cb1df49911b4bb7c3b7dcafc2f2dd4c074c4d82e7",
-      "key": "node_modules/ajv/dist/vocabularies/next.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/next.js",
-        "package_version": "8.20.0"
-      },
-      "size": 433
-    },
-    {
-      "bytes_in_output": 897,
-      "digest": "4e7936d1a55051e70e2ebbbfc8de94fbe7f1e7b055252df5a984481ea7c156a4",
-      "key": "node_modules/ajv/dist/vocabularies/unevaluated/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/unevaluated/index.js",
-        "package_version": "8.20.0"
-      },
-      "size": 350
-    },
-    {
-      "bytes_in_output": 3323,
-      "digest": "4d7010c39f1b7af4a2fe1a62e5b65c8f763d4e58ac3d710099d367659f5e4fda",
-      "key": "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/unevaluated/unevaluatedItems.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1588
-    },
-    {
-      "bytes_in_output": 5082,
-      "digest": "665029a99612ec32e9bef99c9c4b09a4dc0be6c71d7b920594d414d404806ebe",
-      "key": "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/unevaluated/unevaluatedProperties.js",
-        "package_version": "8.20.0"
-      },
-      "size": 2608
-    },
-    {
-      "bytes_in_output": 1850,
-      "digest": "ace994e9ab97a70899a9484794794f4be5ee03bfb3cf32242d3f091d77f0329a",
-      "key": "node_modules/ajv/dist/vocabularies/validation/const.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/validation/const.js",
-        "package_version": "8.20.0"
-      },
-      "size": 852
-    },
-    {
-      "bytes_in_output": 1020,
-      "digest": "cd69a90089328b24d2232c12edae57858c14f66aaa56923c12929eb3d673e8fa",
-      "key": "node_modules/ajv/dist/vocabularies/validation/dependentRequired.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/validation/dependentRequired.js",
-        "package_version": "8.20.0"
-      },
-      "size": 403
-    },
-    {
-      "bytes_in_output": 3766,
-      "digest": "61062b318a40eb52fc5a8283e7f4781db98349841744961ef4fe04a4722ebf22",
-      "key": "node_modules/ajv/dist/vocabularies/validation/enum.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/validation/enum.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1901
-    },
-    {
-      "bytes_in_output": 2331,
-      "digest": "4a1839832de5f10ff423c1c0c6cb232b5b6e1b34980a28862cf56b2763136de4",
-      "key": "node_modules/ajv/dist/vocabularies/validation/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/validation/index.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1036
-    },
-    {
-      "bytes_in_output": 1186,
-      "digest": "0ea6f2e43359add298e1ed9306fe5020c62e086392f2915f10226b01394b200d",
-      "key": "node_modules/ajv/dist/vocabularies/validation/limitContains.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/validation/limitContains.js",
-        "package_version": "8.20.0"
-      },
-      "size": 495
-    },
-    {
-      "bytes_in_output": 1950,
-      "digest": "49f0427d29b38aef2fa8aead26e68bda12deb9a2da22f7a7804ba0fed44e1fec",
-      "key": "node_modules/ajv/dist/vocabularies/validation/limitItems.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/validation/limitItems.js",
-        "package_version": "8.20.0"
-      },
-      "size": 852
-    },
-    {
-      "bytes_in_output": 2454,
-      "digest": "379c28317faaf7784680b6049c3562692d3df6d65cce33f48e6c6c723beeeec2",
-      "key": "node_modules/ajv/dist/vocabularies/validation/limitLength.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/validation/limitLength.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1130
-    },
-    {
-      "bytes_in_output": 2346,
-      "digest": "3dd4bd41dbfc76c522078ff54b6479683485c4e97faa04cfcfaf2d8cb0fb8e65",
-      "key": "node_modules/ajv/dist/vocabularies/validation/limitNumber.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/validation/limitNumber.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1036
-    },
-    {
-      "bytes_in_output": 2048,
-      "digest": "8523a3f7b36c34882ca32b0ec71a2157d7930907cb86b778a97c1514fa6258ac",
-      "key": "node_modules/ajv/dist/vocabularies/validation/limitProperties.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/validation/limitProperties.js",
-        "package_version": "8.20.0"
-      },
-      "size": 896
-    },
-    {
-      "bytes_in_output": 2080,
-      "digest": "df128c2a6ca74ae57c65fbfe3aea8a101447a3ae8c41fd53cfc5693fa23cc8bd",
-      "key": "node_modules/ajv/dist/vocabularies/validation/multipleOf.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/validation/multipleOf.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1023
-    },
-    {
-      "bytes_in_output": 2805,
-      "digest": "86e84206bfc6a66ef18bf1fe43fbc56ebe7f7f4d57841197b6d044c529e0c195",
-      "key": "node_modules/ajv/dist/vocabularies/validation/pattern.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/validation/pattern.js",
-        "package_version": "8.20.0"
-      },
-      "size": 1323
-    },
-    {
-      "bytes_in_output": 6259,
-      "digest": "b953bc18d94274bd73374dd5b4282d7a21159cec8c0e7a357e1eaf3f326b9054",
-      "key": "node_modules/ajv/dist/vocabularies/validation/required.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/validation/required.js",
-        "package_version": "8.20.0"
-      },
-      "size": 3188
-    },
-    {
-      "bytes_in_output": 5945,
-      "digest": "666d1a2aa25c0dfe3cf41312d0f9d40e9f99eb2c19be7469134ad89005aadd52",
-      "key": "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "ajv",
-        "package_relative_path": "dist/vocabularies/validation/uniqueItems.js",
-        "package_version": "8.20.0"
-      },
-      "size": 3037
     },
     {
       "bytes_in_output": 2768,
@@ -1733,66 +635,6 @@
         "package_version": "4.4.3"
       },
       "size": 4728
-    },
-    {
-      "bytes_in_output": 2607,
-      "digest": "eb469e206280321a3878f2335ec98aa2104a155079d8ed83a23029098dccd215",
-      "key": "node_modules/fast-deep-equal/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "fast-deep-equal",
-        "package_relative_path": "index.js",
-        "package_version": "3.1.3"
-      },
-      "size": 1177
-    },
-    {
-      "bytes_in_output": 22593,
-      "digest": "9d6fdc3569a8fef29d6d30c36e16de1753ebd76895aa6e72a3b1c226eb24cc33",
-      "key": "node_modules/fast-uri/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "fast-uri",
-        "package_relative_path": "index.js",
-        "package_version": "3.1.4"
-      },
-      "size": 13202
-    },
-    {
-      "bytes_in_output": 12720,
-      "digest": "0f9497f8e43c9b002d79c8a916709daa4ae8a6462735b1b5dc6ad587a28a5064",
-      "key": "node_modules/fast-uri/lib/schemes.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "fast-uri",
-        "package_relative_path": "lib/schemes.js",
-        "package_version": "3.1.4"
-      },
-      "size": 7122
-    },
-    {
-      "bytes_in_output": 18987,
-      "digest": "3394986f9670b821493943faafe5d83ccc15109aba908f1b5dd017e27b0d0ea7",
-      "key": "node_modules/fast-uri/lib/utils.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "fast-uri",
-        "package_relative_path": "lib/utils.js",
-        "package_version": "3.1.4"
-      },
-      "size": 10762
-    },
-    {
-      "bytes_in_output": 5655,
-      "digest": "024191b747afac01b28ff11d744e9f82720bbad5f716163ba5c962eb62aa2350",
-      "key": "node_modules/json-schema-traverse/index.js",
-      "origin": {
-        "kind": "dependency",
-        "package_name": "json-schema-traverse",
-        "package_relative_path": "index.js",
-        "package_version": "1.0.0"
-      },
-      "size": 2428
     },
     {
       "bytes_in_output": 5766,
@@ -1867,7 +709,7 @@
       "size": 3446
     },
     {
-      "bytes_in_output": 15764,
+      "bytes_in_output": 15769,
       "digest": "509c0bdb4cef641cc784c130b6cc2b350752f6841798daa1a13cbcaf4fc74c46",
       "key": "node_modules/yaml/dist/compose/composer.js",
       "origin": {
@@ -1939,7 +781,7 @@
       "size": 8927
     },
     {
-      "bytes_in_output": 13856,
+      "bytes_in_output": 13864,
       "digest": "167fa296e6fb75618bb7b315acaa926d4e88b2b63a9ff139f1a7de9c78db4610",
       "key": "node_modules/yaml/dist/compose/resolve-flow-scalar.js",
       "origin": {
@@ -2071,7 +913,7 @@
       "size": 6237
     },
     {
-      "bytes_in_output": 4274,
+      "bytes_in_output": 4285,
       "digest": "c389d9c448193ce1bcb9641f5eda62cbe56467b2104357d2fc8dd86df88cb07b",
       "key": "node_modules/yaml/dist/errors.js",
       "origin": {
@@ -2083,7 +925,7 @@
       "size": 2118
     },
     {
-      "bytes_in_output": 3736,
+      "bytes_in_output": 3734,
       "digest": "2d58984e0ae80de4acbd8f009fab332f5ce77d9e1a5f138a3058a0ada6567fb9",
       "key": "node_modules/yaml/dist/index.js",
       "origin": {
@@ -2227,7 +1069,7 @@
       "size": 1292
     },
     {
-      "bytes_in_output": 13942,
+      "bytes_in_output": 13947,
       "digest": "2f72b634348b04b395408ac427fb4f8ee67432244c327561d4b755a28a783b34",
       "key": "node_modules/yaml/dist/parse/cst-scalar.js",
       "origin": {
@@ -2311,7 +1153,7 @@
       "size": 35551
     },
     {
-      "bytes_in_output": 7810,
+      "bytes_in_output": 7809,
       "digest": "9b318ac7b3a3751127c74f59dd1dd209230a70ca116000348b82faae189f72f0",
       "key": "node_modules/yaml/dist/public-api.js",
       "origin": {
@@ -2419,7 +1261,7 @@
       "size": 1407
     },
     {
-      "bytes_in_output": 1218,
+      "bytes_in_output": 1217,
       "digest": "481d7c64817b40090d519fb65bd83730dadd4c6baec1440b9bf85d29e52c046e",
       "key": "node_modules/yaml/dist/schema/core/schema.js",
       "origin": {
@@ -2443,7 +1285,7 @@
       "size": 1900
     },
     {
-      "bytes_in_output": 6442,
+      "bytes_in_output": 6441,
       "digest": "dba2f42d4dbe8cc8b13f662fd97d253da2da5567e71c47115305efede5a888f2",
       "key": "node_modules/yaml/dist/schema/tags.js",
       "origin": {
@@ -2659,7 +1501,7 @@
       "size": 5470
     },
     {
-      "bytes_in_output": 21912,
+      "bytes_in_output": 21920,
       "digest": "4113b71a9c4c087a197f71452794a6acb9929111f569c973ff4efe7caee8f777",
       "key": "node_modules/yaml/dist/stringify/stringifyString.js",
       "origin": {
@@ -3655,14 +2497,14 @@
       "size": 4498
     },
     {
-      "bytes_in_output": 15602,
-      "digest": "86f208e2fa709522f1e035db76e5db68bee868169c41cc8d0847c8f1e1e355e6",
+      "bytes_in_output": 15874,
+      "digest": "5bd52063625a85f96a35d82009350f338c550559e71fe439983023aabeb1abfb",
       "key": "src/contracts/adjudication.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/adjudication.ts"
       },
-      "size": 11298
+      "size": 11971
     },
     {
       "bytes_in_output": 5632,
@@ -3675,27 +2517,27 @@
       "size": 5900
     },
     {
-      "bytes_in_output": 2438,
-      "digest": "c1737efae43cb82099fd2cbdc81f71f5398114fe587d7b2a4013c08772fe471a",
+      "bytes_in_output": 2532,
+      "digest": "8e84b676f3bb4b289dcc0f36a651816127d9864f88573055fbe613ae7a9f51f9",
       "key": "src/contracts/config.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/config.ts"
       },
-      "size": 1523
+      "size": 1597
     },
     {
-      "bytes_in_output": 4702,
-      "digest": "f3ebd59feccd1e843b1ba9e9d3064fdb9aa31689048ea97864d2f767ec0fd0c7",
+      "bytes_in_output": 4516,
+      "digest": "e50af9c876995e5f901332ecd7fbec9118ba1dd6ac4c68eb610f7cda08761ea7",
       "key": "src/contracts/constitution.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/constitution.ts"
       },
-      "size": 3935
+      "size": 3842
     },
     {
-      "bytes_in_output": 3272,
+      "bytes_in_output": 3275,
       "digest": "0f912659c7e89b339d3e355caaba047f77f1cb6c9e4550c55f0c7bb162d84d20",
       "key": "src/contracts/contexts.ts",
       "origin": {
@@ -3706,123 +2548,133 @@
     },
     {
       "bytes_in_output": 2269,
-      "digest": "65119457f16df9db720ae260ca1e6938bc9d7f9f9186dadfc1c0fd7d2bceda10",
+      "digest": "4de4c26f1a543b2a8cd3fee9dbec74eb67ac2c29cd9534d4fe057a57441ee286",
       "key": "src/contracts/durable-document.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/durable-document.ts"
       },
-      "size": 6853
+      "size": 6779
     },
     {
-      "bytes_in_output": 6255,
-      "digest": "a15060ff13278581018835f3354a360dfdaf94bea5b52624cdfa6e2b20184857",
+      "bytes_in_output": 19195,
+      "digest": "08df463e1f6bd0d59f62a1b534cfcf10730d04580e7d5a9cac9641db434703b9",
       "key": "src/contracts/durable-gate.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/durable-gate.ts"
       },
-      "size": 6818
+      "size": 15665
     },
     {
       "bytes_in_output": 4435,
-      "digest": "dc861fb1988c8165acd97c4501d81992c2e7a674d36e2fb862636942441714ad",
+      "digest": "afdb3ab743323db0f046e676455cddf2fd0960eb070c4acd12b083293080a318",
       "key": "src/contracts/durable-implementation-output.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/durable-implementation-output.ts"
       },
-      "size": 9855
+      "size": 9912
     },
     {
-      "bytes_in_output": 624,
-      "digest": "123282efbec9a1eded38401713becb13340c9d84a397fa65b74aba909b48bcd3",
+      "bytes_in_output": 2090,
+      "digest": "9c88831481738992161936e6336e77257b7c724641612abf55bbe3bb34346cd8",
       "key": "src/contracts/durable-intent.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/durable-intent.ts"
       },
-      "size": 1839
+      "size": 4190
     },
     {
       "bytes_in_output": 3274,
-      "digest": "824a2a3d2fe63a4dde583648773a7c41571f314d5059d40ce04d99f62ee2b7b2",
+      "digest": "43e581b1fc06c7508cc5c6428439328fcaedf9ebaef117316a02c308fd4c59bf",
       "key": "src/contracts/durable-legacy-import.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/durable-legacy-import.ts"
       },
-      "size": 6998
+      "size": 6979
     },
     {
-      "bytes_in_output": 280,
-      "digest": "04650aaa5b9105649d749b00cc99adb7a44e3335bc6fa8ad61872bdabd3af421",
+      "bytes_in_output": 2730,
+      "digest": "8c73b63d129be82b648a2f94dba66865bb5cb44984b5ae1b03b81dba1794bcc6",
       "key": "src/contracts/durable-maintenance.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/durable-maintenance.ts"
       },
-      "size": 2537
+      "size": 4991
     },
     {
-      "bytes_in_output": 14208,
-      "digest": "c56e82edb2c5a3b73dc27aaefd99455a2fcc16c6142f2fbbd8725e6b6776a79f",
+      "bytes_in_output": 14675,
+      "digest": "e4299ba9313ff410df186ca4436de359ebead893e9ffde23b407a1035fb85716",
       "key": "src/contracts/durable-primitives.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/durable-primitives.ts"
       },
-      "size": 19683
+      "size": 20396
     },
     {
-      "bytes_in_output": 308,
-      "digest": "642ef959b92d4ea40cd871acca88455ff7a323f13c76c18d26f3a2aa0477cc05",
+      "bytes_in_output": 3890,
+      "digest": "274188be7611b2fc3ad64c5df84cc199ddb1f58565ec0caf663524f6016b38a9",
       "key": "src/contracts/durable-result-manifest.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/durable-result-manifest.ts"
       },
-      "size": 2972
+      "size": 6199
+    },
+    {
+      "bytes_in_output": 7386,
+      "digest": "3050bfeddcf4dadb0890af8edf9e6a334de10ee70468033a9ba98b88202aa0bc",
+      "key": "src/contracts/durable-state.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/contracts/durable-state.ts"
+      },
+      "size": 13439
     },
     {
       "bytes_in_output": 1062,
-      "digest": "bb41b93096ae9a564f71a2874b6396e937f6c1618a6bc26513f68b7704042082",
+      "digest": "80059626adf4eb1cd21233097f45dcbe2bfcdfade9ef0ef086fe4b6b3ff18b79",
       "key": "src/contracts/durable-task-initialization.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/durable-task-initialization.ts"
       },
-      "size": 3448
+      "size": 3452
     },
     {
       "bytes_in_output": 65804,
-      "digest": "782ae7dc0ab917204de7cde1d93fa3cf1466e189d492a48de5d57c41b3576893",
+      "digest": "944d38d4666d327f8a0269af671a4fc2c713a5cd2072423100e26fdd1b05cdf3",
       "key": "src/contracts/durable.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/durable.ts"
       },
-      "size": 46480
+      "size": 46512
     },
     {
-      "bytes_in_output": 32529,
-      "digest": "426d8acce8f4607bafb98dfc2d41df67414e7be77bb4fcd890fbeb5b437c0bea",
+      "bytes_in_output": 34481,
+      "digest": "6c17c95cb96a7c0bc867b78c16e8348f2bbebf5eb1919f8636de69d44d5356a6",
       "key": "src/contracts/errors.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/errors.ts"
       },
-      "size": 22711
+      "size": 24955
     },
     {
-      "bytes_in_output": 3652,
-      "digest": "859d15ba3e39b32dbb78481a88ce5c5cf3cd2681c66d318a25f22e3f5f5e96fe",
+      "bytes_in_output": 4250,
+      "digest": "b13a905cae3d86ffa00f27e6956b06ccf3a8cbf5051c2eea73e3306784c0ccd0",
       "key": "src/contracts/evidence.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/evidence.ts"
       },
-      "size": 4546
+      "size": 5495
     },
     {
       "bytes_in_output": 13048,
@@ -3835,14 +2687,14 @@
       "size": 15806
     },
     {
-      "bytes_in_output": 28498,
-      "digest": "4a9a939ee721ba56b3780a1d7f2b279b482a74c4be22b476574c94e5bf5dc106",
+      "bytes_in_output": 30185,
+      "digest": "064007d6d327c3dfdf618d50a3f09f2d2ea9a29f165772a5ad9ddbe0d779fa82",
       "key": "src/contracts/gates.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/gates.ts"
       },
-      "size": 21021
+      "size": 22963
     },
     {
       "bytes_in_output": 602,
@@ -3875,34 +2727,34 @@
       "size": 3555
     },
     {
-      "bytes_in_output": 22013,
-      "digest": "ef3fe4dff2fc9234849c19151488faf024930dd6c1792f3e5b04b296f4f1ce89",
+      "bytes_in_output": 25213,
+      "digest": "7b2aaf190d354b2ee94b8686f558576f1edfe3d5fc97ecd8847983c90f2d2412",
       "key": "src/contracts/mcp-tools.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/mcp-tools.ts"
       },
-      "size": 23492
+      "size": 25763
     },
     {
-      "bytes_in_output": 6136,
-      "digest": "96403cca6e8cf9ee6369e9443993a0bc542b40b1d2b567ce6a34ebe5d11c7549",
+      "bytes_in_output": 7036,
+      "digest": "2c61c227d9d053c0765d17410e063e5d194b8e28e367b5abeb2bfc1082051afb",
       "key": "src/contracts/path-claims.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/path-claims.ts"
       },
-      "size": 6577
+      "size": 7601
     },
     {
-      "bytes_in_output": 2836,
-      "digest": "16f519bd4e856da619856126f6eb6f9a276b06ef0d36a15691375200d70af1e2",
+      "bytes_in_output": 4156,
+      "digest": "83e3e313d7368f36f4f3dc0066fbaf20831ff3096062f578cd6e07fe292c716c",
       "key": "src/contracts/phase-instance.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/phase-instance.ts"
       },
-      "size": 2769
+      "size": 3692
     },
     {
       "bytes_in_output": 7580,
@@ -3925,304 +2777,214 @@
       "size": 7966
     },
     {
-      "bytes_in_output": 10592,
-      "digest": "c8cbfa6f79b187e939f1a55dd03f840e1100906044ef7a6221d93585bc91a709",
+      "bytes_in_output": 10693,
+      "digest": "2f86488d5d633fa961d946b04fad1b7e41b1938cfd1e83990efdd4e789d934de",
       "key": "src/contracts/review.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/review.ts"
       },
-      "size": 7941
+      "size": 8510
     },
     {
-      "bytes_in_output": 2016,
-      "digest": "1aaee307ce35f8d917848f474a6c95789305f6bfbdb981b5db94dc5733fa906c",
+      "bytes_in_output": 1954,
+      "digest": "ddc18ef29186a40eaad66c8c33057c86fd271c898b7c773adc57cf99dd46091d",
       "key": "src/contracts/rubric.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/rubric.ts"
       },
-      "size": 1291
+      "size": 1260
     },
     {
-      "bytes_in_output": 8678,
-      "digest": "a4a031a541ab0353ee15af971802cab83cd8f614e44c16dbe240b6577b00e42f",
-      "key": "src/contracts/schemas/v1/active-gate.schema.json",
-      "origin": {
-        "kind": "repository",
-        "path": "src/contracts/schemas/v1/active-gate.schema.json"
-      },
-      "size": 4505
-    },
-    {
-      "bytes_in_output": 12530,
-      "digest": "716ac7e50db30c87c93e113e10a488f2ed29668ce6c400b7796eff99758f504c",
-      "key": "src/contracts/schemas/v1/adjudication-evidence.schema.json",
-      "origin": {
-        "kind": "repository",
-        "path": "src/contracts/schemas/v1/adjudication-evidence.schema.json"
-      },
-      "size": 6713
-    },
-    {
-      "bytes_in_output": 4589,
-      "digest": "28d2fd5ea4fb027a8bb3101a3028292198670acbc3ac0c2c938d1d8b9357b5bc",
+      "bytes_in_output": 5942,
+      "digest": "36833dd58796ec29e81375de5eba6d6108ccbe665f0e955854c97f3389f64984",
       "key": "src/contracts/schemas/v1/adjudication.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/adjudication.schema.json"
       },
-      "size": 4872
+      "size": 6203
     },
     {
-      "bytes_in_output": 7090,
-      "digest": "94f18f42e43b96a3077905054972658c32745eafe78ca3c872e195d56c9dd626",
+      "bytes_in_output": 2369,
+      "digest": "e2529dd94a2da81df604fccd2a48ff0f0c793dbd58451724109acca9ff34f9d7",
       "key": "src/contracts/schemas/v1/document-artifact.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/document-artifact.schema.json"
       },
-      "size": 3605
+      "size": 2427
     },
     {
-      "bytes_in_output": 42860,
-      "digest": "9336dc2a74a7978cee7983441672151c728e4f22a212a5344c8e85d763df0db5",
+      "bytes_in_output": 26376,
+      "digest": "3a954954e04f688c3798de2b19408bb82ec2cd94b78955cb6ac9b1cf30ca3735",
       "key": "src/contracts/schemas/v1/durable-primitives.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/durable-primitives.schema.json"
       },
-      "size": 22340
+      "size": 27223
     },
     {
-      "bytes_in_output": 4128,
-      "digest": "a9da7d42e2626a4f46ea3da3d0ccaeae06a14d16402a53d0361a41e1300ac78a",
+      "bytes_in_output": 2758,
+      "digest": "f0c50f744759ad48b78a1d0e1b0e2ffcbdda63b2d78baf26618f853cb5b85c3e",
       "key": "src/contracts/schemas/v1/evidence-slots.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/evidence-slots.schema.json"
       },
-      "size": 2181
+      "size": 2855
     },
     {
-      "bytes_in_output": 31916,
-      "digest": "3641a39e3c058f487d97535355bbde52eeaf95912c0c7e603fb2904158a07663",
+      "bytes_in_output": 18963,
+      "digest": "453808c369a2767dd74839dd5c8e9d0f1c67c859182bc7231f98a8813551e606",
       "key": "src/contracts/schemas/v1/gate-contract.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/gate-contract.schema.json"
       },
-      "size": 16834
+      "size": 19839
     },
     {
-      "bytes_in_output": 11768,
-      "digest": "c91bcf0a27299274a25d515ba35267ad7ca1e308832b38324cd0132fb4507772",
-      "key": "src/contracts/schemas/v1/gate-decision-record.schema.json",
-      "origin": {
-        "kind": "repository",
-        "path": "src/contracts/schemas/v1/gate-decision-record.schema.json"
-      },
-      "size": 5787
-    },
-    {
-      "bytes_in_output": 18524,
-      "digest": "d73e1e54e2dbe28a77f16712147836825575e5a47dbb0b927055953c688dda87",
+      "bytes_in_output": 15216,
+      "digest": "2de0a30ee5c47a7de8ae2eb0cd4fff4cb523aa0551bc8bf957c008e3af1e0b13",
       "key": "src/contracts/schemas/v1/gate-decision.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/gate-decision.schema.json"
       },
-      "size": 9574
+      "size": 15778
     },
     {
-      "bytes_in_output": 16376,
-      "digest": "1bd4d9241b2fab4c3c4873c176491a7b0e2971e1e70bc7f00b4bd9a2adc5f456",
-      "key": "src/contracts/schemas/v1/gate-request.schema.json",
-      "origin": {
-        "kind": "repository",
-        "path": "src/contracts/schemas/v1/gate-request.schema.json"
-      },
-      "size": 8553
-    },
-    {
-      "bytes_in_output": 15340,
-      "digest": "4cde7b8b44c7e45d6c486d6d37fe4a8a19cd5a004669502280095a500eb27478",
+      "bytes_in_output": 3812,
+      "digest": "480800e887793110449df0e5ef1596e6ae35f866aa417a84a04702346cc65fff",
       "key": "src/contracts/schemas/v1/implementation-output.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/implementation-output.schema.json"
       },
-      "size": 7792
+      "size": 3932
     },
     {
-      "bytes_in_output": 4574,
-      "digest": "e7e5931cb9c90a2f82394c74a17fba013d581a735ecd3c1dceb76a49a514e4d9",
-      "key": "src/contracts/schemas/v1/intent-receipt.schema.json",
-      "origin": {
-        "kind": "repository",
-        "path": "src/contracts/schemas/v1/intent-receipt.schema.json"
-      },
-      "size": 2356
-    },
-    {
-      "bytes_in_output": 5253,
-      "digest": "7388bac352c8b6fe0177ef7228e6093cfc79c8efcada2311d21a8e5e490a1a39",
+      "bytes_in_output": 3369,
+      "digest": "ce7036b88bd3e7251cbfb0624133f1da094ab1814ebdf1447ad2e8172970712e",
       "key": "src/contracts/schemas/v1/legacy-import-initialization.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/legacy-import-initialization.schema.json"
       },
-      "size": 5342
+      "size": 3454
     },
     {
-      "bytes_in_output": 6422,
-      "digest": "feea9a763d11ddaee7c2e1594adaf8d3a512bb803d357f35a2cfcf189f2aacb6",
-      "key": "src/contracts/schemas/v1/maintenance-record.schema.json",
-      "origin": {
-        "kind": "repository",
-        "path": "src/contracts/schemas/v1/maintenance-record.schema.json"
-      },
-      "size": 3254
-    },
-    {
-      "bytes_in_output": 24798,
-      "digest": "a54b44d154a879a790a9ee4fe07071fa6e4a2f806fa8b784750e3f540fa6f388",
+      "bytes_in_output": 27182,
+      "digest": "0de00ca61af6731f13e4469b668d94d615a1b4e26e243dd2f95b3cb3a17fb7b2",
       "key": "src/contracts/schemas/v1/mcp-tools.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/mcp-tools.schema.json"
       },
-      "size": 25706
+      "size": 28156
     },
     {
-      "bytes_in_output": 1072,
-      "digest": "22ccce6f6dc74e57bc34279fd4a499e0f8116e0ba530c2542b1059aea8c1209f",
+      "bytes_in_output": 493,
+      "digest": "2fc940f0c5758e6808bca2daf98e96bddbcd37da0d2d6b0684db33b54cd607df",
       "key": "src/contracts/schemas/v1/path-claim.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/path-claim.schema.json"
       },
-      "size": 513
+      "size": 470
     },
     {
-      "bytes_in_output": 3714,
-      "digest": "0d1c5f2cb5f1eb118cfc90afcc19fb3cc41e8967f56994c4fe7170589812d79d",
+      "bytes_in_output": 1499,
+      "digest": "cde5d0bed3da328ba4978b199f8ea36bd4f3289bc3998fa79a783507f88dc2cd",
       "key": "src/contracts/schemas/v1/primitives.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/primitives.schema.json"
       },
-      "size": 1904
+      "size": 1544
     },
     {
-      "bytes_in_output": 71282,
-      "digest": "ea789f4f30a25eb8710fb621139edd781464778f3c77c15e5e091cd69a1defe8",
+      "bytes_in_output": 87192,
+      "digest": "3bcc6d8fab6d232d65a2c09a8389804111b5aef1302ad8c8f90ac180f423583a",
       "key": "src/contracts/schemas/v1/project-error.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/project-error.schema.json"
       },
-      "size": 74482
+      "size": 91510
     },
     {
-      "bytes_in_output": 8058,
-      "digest": "2f0c039e2afa830eddeff3461988231e0462ba31afdc69c503389f6ea8fb631b",
-      "key": "src/contracts/schemas/v1/result-manifest.schema.json",
-      "origin": {
-        "kind": "repository",
-        "path": "src/contracts/schemas/v1/result-manifest.schema.json"
-      },
-      "size": 4169
-    },
-    {
-      "bytes_in_output": 8326,
-      "digest": "0f2d331058c383ed85a8d302f7cd4e26fc336980be15e44a10f78e0e38db0d8c",
-      "key": "src/contracts/schemas/v1/review-evidence.schema.json",
-      "origin": {
-        "kind": "repository",
-        "path": "src/contracts/schemas/v1/review-evidence.schema.json"
-      },
-      "size": 4355
-    },
-    {
-      "bytes_in_output": 2720,
-      "digest": "5b0fed2b7c0925f2f1b64e2fc9edbe90d2dd43566f92de1e209f1c19450a5bb5",
+      "bytes_in_output": 3241,
+      "digest": "eb9787a128bace5160381065709a002e2f9ccab6fa0cc218eef297621664072f",
       "key": "src/contracts/schemas/v1/review.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/review.schema.json"
       },
-      "size": 2849
+      "size": 3386
     },
     {
-      "bytes_in_output": 745,
-      "digest": "c8e662597e0a49006289f124c7994929698e454ba1c88699f70c1ba401aa8c3b",
+      "bytes_in_output": 1092,
+      "digest": "fd7c79bc4f0576f9b8a6dcec24234b1c104309c62dfd3106867fc58fa5a8d915",
       "key": "src/contracts/schemas/v1/rubric.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/rubric.schema.json"
       },
-      "size": 766
+      "size": 1127
     },
     {
-      "bytes_in_output": 5346,
-      "digest": "efe82109c4755256175bc9f464d020cd726143c56e60d9df46a6bd6d6199ef22",
+      "bytes_in_output": 3221,
+      "digest": "607f5adf983033fc90323c5d83304bd30c6824e65b26eaa8aab16354e2a93550",
       "key": "src/contracts/schemas/v1/secret-scan-result.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/secret-scan-result.schema.json"
       },
-      "size": 2780
+      "size": 3316
     },
     {
-      "bytes_in_output": 3864,
-      "digest": "3da3cf1d14c08350e5bb4e23ea57f8311d4bde2accf596e93686f908eac70d99",
-      "key": "src/contracts/schemas/v1/supplemental-review-record.schema.json",
-      "origin": {
-        "kind": "repository",
-        "path": "src/contracts/schemas/v1/supplemental-review-record.schema.json"
-      },
-      "size": 1983
-    },
-    {
-      "bytes_in_output": 8830,
-      "digest": "662ab2ef8a8a45dd757bc7a808a70ff31ffc99bdb9cf53912f1c0cd6399b6ce4",
+      "bytes_in_output": 5341,
+      "digest": "fda6ae51e317066bc2f08eeaedc7ad7f57448e08f511279ba7fc0f67760eb0a5",
       "key": "src/contracts/schemas/v1/supplemental-review.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/supplemental-review.schema.json"
       },
-      "size": 4651
+      "size": 5557
     },
     {
-      "bytes_in_output": 2023,
-      "digest": "609c59aebd453fae3bb6de1b64c709e46ed429bc653e2e84fc9f3c472e94c874",
+      "bytes_in_output": 1432,
+      "digest": "a6a012bbe8549f3883408cab46f64446bcb9a88f8b1c34f230b2bc97f8393b0e",
       "key": "src/contracts/schemas/v1/task-initialization.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/task-initialization.schema.json"
       },
-      "size": 2033
+      "size": 1446
     },
     {
-      "bytes_in_output": 21708,
-      "digest": "04016031251f9efb9a89c33bcc3e0b51f71648e6ba96c5164f865b13e53f91da",
+      "bytes_in_output": 9057,
+      "digest": "5d244e345c1b0cd1dece24705e08232ccb85fe95b729e40c41acd0f139d1775a",
       "key": "src/contracts/schemas/v1/task-state.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/task-state.schema.json"
       },
-      "size": 11206
+      "size": 9414
     },
     {
-      "bytes_in_output": 6094,
-      "digest": "b1662fd059b276eb04dfb1d365fa425dfb6b2222d8ad3d66c30606bf59ff3567",
+      "bytes_in_output": 4577,
+      "digest": "01fb88d094b06e5f8c945128db63172520b788385d36b3f639ba24888804d173",
       "key": "src/contracts/schemas/v1/triage.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/triage.schema.json"
       },
-      "size": 3162
+      "size": 4768
     },
     {
       "bytes_in_output": 2370,
@@ -4235,24 +2997,24 @@
       "size": 4065
     },
     {
-      "bytes_in_output": 6812,
-      "digest": "5ad7119b6e295907a997db5db0e9690733674315b550a232576957801731147a",
+      "bytes_in_output": 6821,
+      "digest": "ad80f5860d6a1632acabcae9958ea89a05c9a0b9ee08e8b53154b4b88d59110d",
       "key": "src/contracts/supplemental-record.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/supplemental-record.ts"
       },
-      "size": 5390
+      "size": 5008
     },
     {
-      "bytes_in_output": 5832,
-      "digest": "3dde80937886480e74bbcd0d112fa415aaf6495887a80462a151a99f1bfb7b20",
+      "bytes_in_output": 5777,
+      "digest": "0283213590e8cbf9e69d225af765d1a405db9a112dbde19f46387631e6e2ff3f",
       "key": "src/contracts/supplemental.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/supplemental.ts"
       },
-      "size": 4137
+      "size": 4106
     },
     {
       "bytes_in_output": 444,
@@ -4265,34 +3027,34 @@
       "size": 352
     },
     {
-      "bytes_in_output": 7604,
-      "digest": "7eec6e5f4ce80c9d8cc39591c31bf1810f7e9ea05bc292548dd99dc2c12869e2",
+      "bytes_in_output": 8862,
+      "digest": "22d66d4ba703a776764d56b9ddcadb803c56e0e9d90cccef217bf715f5e545e5",
       "key": "src/contracts/triage.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/triage.ts"
       },
-      "size": 7503
+      "size": 8121
     },
     {
-      "bytes_in_output": 28283,
-      "digest": "d83622c8085fcfb5bc50b261262b10b83c6c619f6ea8b5556b1263bae05ff7a7",
+      "bytes_in_output": 28975,
+      "digest": "b6c96bc8fd384870471fdd79c41ed520a4098ac9f719f0fa17b0a7ecf0438c92",
       "key": "src/contracts/trust.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/trust.ts"
       },
-      "size": 25256
+      "size": 25714
     },
     {
-      "bytes_in_output": 29722,
-      "digest": "ad23506e66bd0b49b9a4cbc96704624c089817a9934aafcc9550b9c0a2928570",
+      "bytes_in_output": 1244,
+      "digest": "9086e816ccbc9ac0d706f8933fb38e65eba1d0edd2408d90934e4e178a94c495",
       "key": "src/contracts/validators.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/validators.ts"
       },
-      "size": 20930
+      "size": 3189
     },
     {
       "bytes_in_output": 494,
@@ -4305,17 +3067,17 @@
       "size": 827
     },
     {
-      "bytes_in_output": 3442,
-      "digest": "a634ed19c1e454b4c8c69c9017272cfeb7f5fd4c12d1a13952db4c14f008f1b9",
+      "bytes_in_output": 3548,
+      "digest": "01113511e86a18d9e6f68428edd0f369dfa6479eaeb639bde8d85ef4ec76d10e",
       "key": "src/contracts/workflow.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/workflow.ts"
       },
-      "size": 2256
+      "size": 2598
     },
     {
-      "bytes_in_output": 3172,
+      "bytes_in_output": 3171,
       "digest": "b47ab8fef29cec0a0e716e88df051af0e10422c2a68a98bdfc6d09c8e029f716",
       "key": "src/contracts/yaml.ts",
       "origin": {
@@ -4335,7 +3097,7 @@
       "size": 30277
     },
     {
-      "bytes_in_output": 4411,
+      "bytes_in_output": 4415,
       "digest": "b5e1b4f5ce0c7030cc81efdb4ccee067c7f85a45988beb5590f23465a81c8fc2",
       "key": "src/dispatch/coordinator.ts",
       "origin": {
@@ -4345,7 +3107,7 @@
       "size": 7394
     },
     {
-      "bytes_in_output": 14772,
+      "bytes_in_output": 14788,
       "digest": "7b39d121a8109297437384ad6fa834d781628fa150c9b6f33a1bec6909ab36de",
       "key": "src/dispatch/process.ts",
       "origin": {
@@ -4365,7 +3127,7 @@
       "size": 2981
     },
     {
-      "bytes_in_output": 6766,
+      "bytes_in_output": 6770,
       "digest": "e3a9f86f8cac98371c907ec3fb775583e95cfbc4a0a2ba5b6b51ac654e9cc809",
       "key": "src/dispatch/workspace.ts",
       "origin": {
@@ -4375,7 +3137,7 @@
       "size": 6357
     },
     {
-      "bytes_in_output": 4391,
+      "bytes_in_output": 4393,
       "digest": "7511e31adff141f59549ae36c6ba2c24d4feeb5c5c069518dbd81a1830ee023d",
       "key": "src/init/assets.ts",
       "origin": {
@@ -4415,7 +3177,7 @@
       "size": 17374
     },
     {
-      "bytes_in_output": 12596,
+      "bytes_in_output": 12598,
       "digest": "94cde2bb1a96af50fe2f62746ba98d8033341c2f50f24693b16aa5edd4ad74e1",
       "key": "src/init/registration.ts",
       "origin": {
@@ -4425,7 +3187,7 @@
       "size": 15005
     },
     {
-      "bytes_in_output": 5011,
+      "bytes_in_output": 5013,
       "digest": "30c8bd9ed7dc4366cf2dba80f180da504d68410ac3e91696abcf4098d562232c",
       "key": "src/init/task-initialization.ts",
       "origin": {
@@ -4445,14 +3207,14 @@
       "size": 23332
     },
     {
-      "bytes_in_output": 16198,
-      "digest": "5c184179e8e7b186cc6ea0c1f19f7164c027e10f551cb1efc8779965dc5996b6",
+      "bytes_in_output": 15984,
+      "digest": "7e83f49ea48d2e1d43829e15941643a9d3ced6581f6dc632cedb740e94e8f1c0",
       "key": "src/local/commands.ts",
       "origin": {
         "kind": "repository",
         "path": "src/local/commands.ts"
       },
-      "size": 21409
+      "size": 20836
     },
     {
       "bytes_in_output": 12045,
@@ -4475,7 +3237,7 @@
       "size": 4067
     },
     {
-      "bytes_in_output": 1889,
+      "bytes_in_output": 1897,
       "digest": "a217566794e876fce83eb5120e1898cab46e16a3ff5d89d0739aaf151b887c54",
       "key": "src/local/status-classification.ts",
       "origin": {
@@ -4485,7 +3247,7 @@
       "size": 3033
     },
     {
-      "bytes_in_output": 803,
+      "bytes_in_output": 805,
       "digest": "32871a2a05bba62a047bba37282930368aea8afc171fe71c548ae20edb582625",
       "key": "src/main.ts",
       "origin": {
@@ -4605,7 +3367,7 @@
       "size": 6996
     },
     {
-      "bytes_in_output": 3937,
+      "bytes_in_output": 3941,
       "digest": "67f116110a497fbb73339df3337f1f8bb170e6dd325cde980f5cf992594f428d",
       "key": "src/mcp/process-runner.ts",
       "origin": {
@@ -4615,7 +3377,7 @@
       "size": 5695
     },
     {
-      "bytes_in_output": 10812,
+      "bytes_in_output": 10827,
       "digest": "cd4bbc1d49edeecba0b15050f3836ec8d043db8a6fd5442fe781edbcf13a8904",
       "key": "src/mcp/sdk-adapter.ts",
       "origin": {
@@ -4635,7 +3397,7 @@
       "size": 6425
     },
     {
-      "bytes_in_output": 7338,
+      "bytes_in_output": 7344,
       "digest": "61525ff04ca0720c88eeb6c3e619926a6849b19bc019e045d7ba078073bd94b7",
       "key": "src/mcp/server.ts",
       "origin": {
@@ -4645,14 +3407,14 @@
       "size": 11178
     },
     {
-      "bytes_in_output": 11561,
-      "digest": "b428ddcc1cc0ddf8107ec16dca20f79356b3a6f94ac959b1814e2553bd2d08b0",
+      "bytes_in_output": 11610,
+      "digest": "eb4cdcabfaebf491f5a12eb1fb677b46afe364eef68ae2d7c9f716e5c85c2e06",
       "key": "src/mcp/tools.ts",
       "origin": {
         "kind": "repository",
         "path": "src/mcp/tools.ts"
       },
-      "size": 17085
+      "size": 17286
     },
     {
       "bytes_in_output": 3031,
@@ -4665,7 +3427,7 @@
       "size": 8655
     },
     {
-      "bytes_in_output": 30871,
+      "bytes_in_output": 30881,
       "digest": "5251a105fb644dd0cecd64a54515b81410b16bc1cbca2fe8abfc25f42fa66740",
       "key": "src/repository/git.ts",
       "origin": {
@@ -4695,7 +3457,7 @@
       "size": 6606
     },
     {
-      "bytes_in_output": 22226,
+      "bytes_in_output": 22232,
       "digest": "379a7b92c2a08ae726926948011b352e88c72c652d75c7b3c70deff08790e2ff",
       "key": "src/repository/paths.ts",
       "origin": {
@@ -4835,7 +3597,7 @@
       "size": 4671
     },
     {
-      "bytes_in_output": 6938,
+      "bytes_in_output": 6936,
       "digest": "87ca2620bde9880fde5456a9438ee00811fa7b77323665a77ae00be685fe601b",
       "key": "src/state/gate-approvals.ts",
       "origin": {
@@ -4845,7 +3607,7 @@
       "size": 5340
     },
     {
-      "bytes_in_output": 13658,
+      "bytes_in_output": 13670,
       "digest": "ed3989eec12fa7cab6c545b1b45d97a62c3abc37023789ed081e3b232dd08860",
       "key": "src/state/gate-core.ts",
       "origin": {
@@ -4865,7 +3627,7 @@
       "size": 8692
     },
     {
-      "bytes_in_output": 2065,
+      "bytes_in_output": 2068,
       "digest": "739ce708a0e843f0c418831524630727d58e42873570edbf3f3754bea3b1fe3f",
       "key": "src/state/gate-wait.ts",
       "origin": {
@@ -4935,17 +3697,17 @@
       "size": 8071
     },
     {
-      "bytes_in_output": 22144,
-      "digest": "a479beaafc4ef0f65ae25e415b738d30fa8c95e8e8b9f2000f7f5cef5ba407cf",
+      "bytes_in_output": 21771,
+      "digest": "06dc48cca6917baa5ffdbac311bcf52d674e945b2da5b08a83e7ebc1e042d39e",
       "key": "src/state/maintenance-roots.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/maintenance-roots.ts"
       },
-      "size": 17740
+      "size": 17165
     },
     {
-      "bytes_in_output": 15843,
+      "bytes_in_output": 15851,
       "digest": "5cecf864fec65c765dda3330263b4fdf19d4834b24ff4b126dc12fd02885e06f",
       "key": "src/state/maintenance.ts",
       "origin": {
@@ -4955,7 +3717,7 @@
       "size": 12287
     },
     {
-      "bytes_in_output": 5877,
+      "bytes_in_output": 5892,
       "digest": "8cc0de7f305fc36ca0d84e1682412aa25bbf8b1e6e4bf52aed05d6789695fb09",
       "key": "src/state/next-action.ts",
       "origin": {
@@ -5005,14 +3767,14 @@
       "size": 16021
     },
     {
-      "bytes_in_output": 4650,
-      "digest": "a3a1eb595ae36f2834b33615126d3c3caae2b0f5de4aba9d714dfe282ccde564",
+      "bytes_in_output": 4868,
+      "digest": "13dca6776d8488a88f5604535b757d07b540f71e4554bc7951ecf076a3bdadaf",
       "key": "src/state/read.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/read.ts"
       },
-      "size": 4678
+      "size": 4691
     },
     {
       "bytes_in_output": 7967,
@@ -5075,7 +3837,7 @@
       "size": 35717
     },
     {
-      "bytes_in_output": 4883,
+      "bytes_in_output": 4887,
       "digest": "37237711bc075e9f2c3f52a1c5e27b3db806bcb73bb52e107b6e882f679d19e1",
       "key": "src/state/staged-requests.ts",
       "origin": {
@@ -5085,7 +3847,7 @@
       "size": 7887
     },
     {
-      "bytes_in_output": 32398,
+      "bytes_in_output": 32392,
       "digest": "2e987d37b2100da4dd54c296babf4daed78792bb3948455a52b5ffcbcff71322",
       "key": "src/state/status.ts",
       "origin": {
@@ -5095,7 +3857,7 @@
       "size": 48778
     },
     {
-      "bytes_in_output": 40712,
+      "bytes_in_output": 40714,
       "digest": "d4a72ba4a379c5e74313e6c44e27368729eb50e5153b10db19a005f2944b1d93",
       "key": "src/state/transaction.ts",
       "origin": {
@@ -5141,105 +3903,11 @@
     "node_modules/@secretlint/profiler/module/index.js",
     "node_modules/@secretlint/profiler/module/node.js",
     "node_modules/@secretlint/secretlint-rule-preset-recommend/module/index.js",
-    "node_modules/ajv-formats/dist/formats.js",
-    "node_modules/ajv-formats/dist/index.js",
-    "node_modules/ajv-formats/dist/limit.js",
-    "node_modules/ajv/dist/2020.js",
-    "node_modules/ajv/dist/ajv.js",
-    "node_modules/ajv/dist/compile/codegen/code.js",
-    "node_modules/ajv/dist/compile/codegen/index.js",
-    "node_modules/ajv/dist/compile/codegen/scope.js",
-    "node_modules/ajv/dist/compile/errors.js",
-    "node_modules/ajv/dist/compile/index.js",
-    "node_modules/ajv/dist/compile/names.js",
-    "node_modules/ajv/dist/compile/ref_error.js",
-    "node_modules/ajv/dist/compile/resolve.js",
-    "node_modules/ajv/dist/compile/rules.js",
-    "node_modules/ajv/dist/compile/util.js",
-    "node_modules/ajv/dist/compile/validate/applicability.js",
-    "node_modules/ajv/dist/compile/validate/boolSchema.js",
-    "node_modules/ajv/dist/compile/validate/dataType.js",
-    "node_modules/ajv/dist/compile/validate/defaults.js",
-    "node_modules/ajv/dist/compile/validate/index.js",
-    "node_modules/ajv/dist/compile/validate/keyword.js",
-    "node_modules/ajv/dist/compile/validate/subschema.js",
-    "node_modules/ajv/dist/core.js",
-    "node_modules/ajv/dist/refs/data.json",
-    "node_modules/ajv/dist/refs/json-schema-2020-12/index.js",
-    "node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json",
-    "node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json",
-    "node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json",
-    "node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json",
-    "node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json",
-    "node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json",
-    "node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json",
-    "node_modules/ajv/dist/refs/json-schema-2020-12/schema.json",
-    "node_modules/ajv/dist/refs/json-schema-draft-07.json",
-    "node_modules/ajv/dist/runtime/equal.js",
-    "node_modules/ajv/dist/runtime/ucs2length.js",
-    "node_modules/ajv/dist/runtime/uri.js",
-    "node_modules/ajv/dist/runtime/validation_error.js",
-    "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js",
-    "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js",
-    "node_modules/ajv/dist/vocabularies/applicator/allOf.js",
-    "node_modules/ajv/dist/vocabularies/applicator/anyOf.js",
-    "node_modules/ajv/dist/vocabularies/applicator/contains.js",
-    "node_modules/ajv/dist/vocabularies/applicator/dependencies.js",
-    "node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js",
-    "node_modules/ajv/dist/vocabularies/applicator/if.js",
-    "node_modules/ajv/dist/vocabularies/applicator/index.js",
-    "node_modules/ajv/dist/vocabularies/applicator/items.js",
-    "node_modules/ajv/dist/vocabularies/applicator/items2020.js",
-    "node_modules/ajv/dist/vocabularies/applicator/not.js",
-    "node_modules/ajv/dist/vocabularies/applicator/oneOf.js",
-    "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js",
-    "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js",
-    "node_modules/ajv/dist/vocabularies/applicator/properties.js",
-    "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js",
-    "node_modules/ajv/dist/vocabularies/applicator/thenElse.js",
-    "node_modules/ajv/dist/vocabularies/code.js",
-    "node_modules/ajv/dist/vocabularies/core/id.js",
-    "node_modules/ajv/dist/vocabularies/core/index.js",
-    "node_modules/ajv/dist/vocabularies/core/ref.js",
-    "node_modules/ajv/dist/vocabularies/discriminator/index.js",
-    "node_modules/ajv/dist/vocabularies/discriminator/types.js",
-    "node_modules/ajv/dist/vocabularies/draft2020.js",
-    "node_modules/ajv/dist/vocabularies/draft7.js",
-    "node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js",
-    "node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js",
-    "node_modules/ajv/dist/vocabularies/dynamic/index.js",
-    "node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js",
-    "node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js",
-    "node_modules/ajv/dist/vocabularies/format/format.js",
-    "node_modules/ajv/dist/vocabularies/format/index.js",
-    "node_modules/ajv/dist/vocabularies/metadata.js",
-    "node_modules/ajv/dist/vocabularies/next.js",
-    "node_modules/ajv/dist/vocabularies/unevaluated/index.js",
-    "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js",
-    "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js",
-    "node_modules/ajv/dist/vocabularies/validation/const.js",
-    "node_modules/ajv/dist/vocabularies/validation/dependentRequired.js",
-    "node_modules/ajv/dist/vocabularies/validation/enum.js",
-    "node_modules/ajv/dist/vocabularies/validation/index.js",
-    "node_modules/ajv/dist/vocabularies/validation/limitContains.js",
-    "node_modules/ajv/dist/vocabularies/validation/limitItems.js",
-    "node_modules/ajv/dist/vocabularies/validation/limitLength.js",
-    "node_modules/ajv/dist/vocabularies/validation/limitNumber.js",
-    "node_modules/ajv/dist/vocabularies/validation/limitProperties.js",
-    "node_modules/ajv/dist/vocabularies/validation/multipleOf.js",
-    "node_modules/ajv/dist/vocabularies/validation/pattern.js",
-    "node_modules/ajv/dist/vocabularies/validation/required.js",
-    "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js",
     "node_modules/boundary/lib/index.js",
     "node_modules/debug/src/browser.js",
     "node_modules/debug/src/common.js",
     "node_modules/debug/src/index.js",
     "node_modules/debug/src/node.js",
-    "node_modules/fast-deep-equal/index.js",
-    "node_modules/fast-uri/index.js",
-    "node_modules/fast-uri/lib/schemes.js",
-    "node_modules/fast-uri/lib/utils.js",
-    "node_modules/json-schema-traverse/index.js",
     "node_modules/ms/index.js",
     "node_modules/structured-source/lib/structured-source.js",
     "node_modules/yaml/dist/compose/compose-collection.js",
@@ -5405,6 +4073,7 @@
     "src/contracts/durable-maintenance.ts",
     "src/contracts/durable-primitives.ts",
     "src/contracts/durable-result-manifest.ts",
+    "src/contracts/durable-state.ts",
     "src/contracts/durable-task-initialization.ts",
     "src/contracts/durable.ts",
     "src/contracts/errors.ts",
@@ -5421,30 +4090,21 @@
     "src/contracts/renderers.ts",
     "src/contracts/review.ts",
     "src/contracts/rubric.ts",
-    "src/contracts/schemas/v1/active-gate.schema.json",
-    "src/contracts/schemas/v1/adjudication-evidence.schema.json",
     "src/contracts/schemas/v1/adjudication.schema.json",
     "src/contracts/schemas/v1/document-artifact.schema.json",
     "src/contracts/schemas/v1/durable-primitives.schema.json",
     "src/contracts/schemas/v1/evidence-slots.schema.json",
     "src/contracts/schemas/v1/gate-contract.schema.json",
-    "src/contracts/schemas/v1/gate-decision-record.schema.json",
     "src/contracts/schemas/v1/gate-decision.schema.json",
-    "src/contracts/schemas/v1/gate-request.schema.json",
     "src/contracts/schemas/v1/implementation-output.schema.json",
-    "src/contracts/schemas/v1/intent-receipt.schema.json",
     "src/contracts/schemas/v1/legacy-import-initialization.schema.json",
-    "src/contracts/schemas/v1/maintenance-record.schema.json",
     "src/contracts/schemas/v1/mcp-tools.schema.json",
     "src/contracts/schemas/v1/path-claim.schema.json",
     "src/contracts/schemas/v1/primitives.schema.json",
     "src/contracts/schemas/v1/project-error.schema.json",
-    "src/contracts/schemas/v1/result-manifest.schema.json",
-    "src/contracts/schemas/v1/review-evidence.schema.json",
     "src/contracts/schemas/v1/review.schema.json",
     "src/contracts/schemas/v1/rubric.schema.json",
     "src/contracts/schemas/v1/secret-scan-result.schema.json",
-    "src/contracts/schemas/v1/supplemental-review-record.schema.json",
     "src/contracts/schemas/v1/supplemental-review.schema.json",
     "src/contracts/schemas/v1/task-initialization.schema.json",
     "src/contracts/schemas/v1/task-state.schema.json",
@@ -5551,12 +4211,10 @@
       "src/contracts/schemas/v1/active-gate.schema.json",
       "src/contracts/schemas/v1/adjudication-evidence.schema.json",
       "src/contracts/schemas/v1/adjudication.schema.json",
-      "src/contracts/schemas/v1/authority-link.schema.json",
       "src/contracts/schemas/v1/config.schema.json",
       "src/contracts/schemas/v1/constitution-rule.schema.json",
       "src/contracts/schemas/v1/document-artifact.schema.json",
       "src/contracts/schemas/v1/durable-primitives.schema.json",
-      "src/contracts/schemas/v1/evidence-reference.schema.json",
       "src/contracts/schemas/v1/evidence-slots.schema.json",
       "src/contracts/schemas/v1/gate-contract.schema.json",
       "src/contracts/schemas/v1/gate-decision-record.schema.json",
@@ -5589,7 +4247,7 @@
     ],
     "workflow": "assets/workflow.yaml"
   },
-  "dependency_inventory_digest": "18f0aa8e66d2347939a7eca26bae36a9bd34b108ce0f5ed42fa83c7b1c19f5e5",
+  "dependency_inventory_digest": "640a0dcb487825b1385acaab082a4035f39bcd0bc99fc7d5a9ec1e21a5a1f81e",
   "dependency_provenance_inputs": [
     {
       "digest": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
@@ -5712,38 +4370,6 @@
       "size": 4045
     },
     {
-      "digest": "9df3bb69929a3b650ed73b3bfa1756725aaff0ac296461605753547004eafeaf",
-      "package_name": "ajv-formats",
-      "package_relative_path": "LICENSE",
-      "package_version": "3.0.1",
-      "purpose": "license",
-      "size": 1074
-    },
-    {
-      "digest": "402fb4bcfa457f0226813f3976ac42839dd619907c075c108efba8600d7edb69",
-      "package_name": "ajv-formats",
-      "package_relative_path": "package.json",
-      "package_version": "3.0.1",
-      "purpose": "package-manifest",
-      "size": 1897
-    },
-    {
-      "digest": "a05350a88e318e4f5f2c2a1ff1e2e88daa4dd38e6e78b71cccae422bdc762cc3",
-      "package_name": "ajv",
-      "package_relative_path": "LICENSE",
-      "package_version": "8.20.0",
-      "purpose": "license",
-      "size": 1090
-    },
-    {
-      "digest": "1f9033ee5a6515e7d76938b7072941862d1ed228a6879cc7fe10cdeb75107989",
-      "package_name": "ajv",
-      "package_relative_path": "package.json",
-      "package_version": "8.20.0",
-      "purpose": "package-manifest",
-      "size": 4405
-    },
-    {
       "digest": "0e74697a68cebdcd61502c30fe80ab7f9e341d995dcd452023654d57133534b1",
       "package_name": "boundary",
       "package_relative_path": "LICENSE.BSD",
@@ -5774,54 +4400,6 @@
       "package_version": "4.4.3",
       "purpose": "package-manifest",
       "size": 1479
-    },
-    {
-      "digest": "7bf9b2de73a6b356761c948d0e9eeb4be6c1270bd04c79cd489c1e400ffdfc1a",
-      "package_name": "fast-deep-equal",
-      "package_relative_path": "LICENSE",
-      "package_version": "3.1.3",
-      "purpose": "license",
-      "size": 1074
-    },
-    {
-      "digest": "a5c63940db0260739be9e2ac67f3aac268df4db5770420ee4e34e493152f97d2",
-      "package_name": "fast-deep-equal",
-      "package_relative_path": "package.json",
-      "package_version": "3.1.3",
-      "purpose": "package-manifest",
-      "size": 1496
-    },
-    {
-      "digest": "b010b0dfdfdb23d7396e03b82cd4621fc9bb8f95d6b0aea70b9c24e12074c786",
-      "package_name": "fast-uri",
-      "package_relative_path": "LICENSE",
-      "package_version": "3.1.4",
-      "purpose": "license",
-      "size": 1813
-    },
-    {
-      "digest": "a9fff7e32f1e48fd1f9eee683ff19ab75ac068f6cb62c2261a40d7b5bccbf86a",
-      "package_name": "fast-uri",
-      "package_relative_path": "package.json",
-      "package_version": "3.1.4",
-      "purpose": "package-manifest",
-      "size": 1983
-    },
-    {
-      "digest": "7bf9b2de73a6b356761c948d0e9eeb4be6c1270bd04c79cd489c1e400ffdfc1a",
-      "package_name": "json-schema-traverse",
-      "package_relative_path": "LICENSE",
-      "package_version": "1.0.0",
-      "purpose": "license",
-      "size": 1074
-    },
-    {
-      "digest": "156fb24af02845c190701360d06dfda35ef04282e34a734289ea9535ad9819ae",
-      "package_name": "json-schema-traverse",
-      "package_relative_path": "package.json",
-      "package_version": "1.0.0",
-      "purpose": "package-manifest",
-      "size": 1004
     },
     {
       "digest": "1662fae9b5314d11cf51284e2dcd1f006a354f7343f08712a730fcff9a359801",
@@ -5935,105 +4513,11 @@
         "node_modules/@secretlint/profiler/module/index.js",
         "node_modules/@secretlint/profiler/module/node.js",
         "node_modules/@secretlint/secretlint-rule-preset-recommend/module/index.js",
-        "node_modules/ajv-formats/dist/formats.js",
-        "node_modules/ajv-formats/dist/index.js",
-        "node_modules/ajv-formats/dist/limit.js",
-        "node_modules/ajv/dist/2020.js",
-        "node_modules/ajv/dist/ajv.js",
-        "node_modules/ajv/dist/compile/codegen/code.js",
-        "node_modules/ajv/dist/compile/codegen/index.js",
-        "node_modules/ajv/dist/compile/codegen/scope.js",
-        "node_modules/ajv/dist/compile/errors.js",
-        "node_modules/ajv/dist/compile/index.js",
-        "node_modules/ajv/dist/compile/names.js",
-        "node_modules/ajv/dist/compile/ref_error.js",
-        "node_modules/ajv/dist/compile/resolve.js",
-        "node_modules/ajv/dist/compile/rules.js",
-        "node_modules/ajv/dist/compile/util.js",
-        "node_modules/ajv/dist/compile/validate/applicability.js",
-        "node_modules/ajv/dist/compile/validate/boolSchema.js",
-        "node_modules/ajv/dist/compile/validate/dataType.js",
-        "node_modules/ajv/dist/compile/validate/defaults.js",
-        "node_modules/ajv/dist/compile/validate/index.js",
-        "node_modules/ajv/dist/compile/validate/keyword.js",
-        "node_modules/ajv/dist/compile/validate/subschema.js",
-        "node_modules/ajv/dist/core.js",
-        "node_modules/ajv/dist/refs/data.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/index.js",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/schema.json",
-        "node_modules/ajv/dist/refs/json-schema-draft-07.json",
-        "node_modules/ajv/dist/runtime/equal.js",
-        "node_modules/ajv/dist/runtime/ucs2length.js",
-        "node_modules/ajv/dist/runtime/uri.js",
-        "node_modules/ajv/dist/runtime/validation_error.js",
-        "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js",
-        "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js",
-        "node_modules/ajv/dist/vocabularies/applicator/allOf.js",
-        "node_modules/ajv/dist/vocabularies/applicator/anyOf.js",
-        "node_modules/ajv/dist/vocabularies/applicator/contains.js",
-        "node_modules/ajv/dist/vocabularies/applicator/dependencies.js",
-        "node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js",
-        "node_modules/ajv/dist/vocabularies/applicator/if.js",
-        "node_modules/ajv/dist/vocabularies/applicator/index.js",
-        "node_modules/ajv/dist/vocabularies/applicator/items.js",
-        "node_modules/ajv/dist/vocabularies/applicator/items2020.js",
-        "node_modules/ajv/dist/vocabularies/applicator/not.js",
-        "node_modules/ajv/dist/vocabularies/applicator/oneOf.js",
-        "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js",
-        "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js",
-        "node_modules/ajv/dist/vocabularies/applicator/properties.js",
-        "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js",
-        "node_modules/ajv/dist/vocabularies/applicator/thenElse.js",
-        "node_modules/ajv/dist/vocabularies/code.js",
-        "node_modules/ajv/dist/vocabularies/core/id.js",
-        "node_modules/ajv/dist/vocabularies/core/index.js",
-        "node_modules/ajv/dist/vocabularies/core/ref.js",
-        "node_modules/ajv/dist/vocabularies/discriminator/index.js",
-        "node_modules/ajv/dist/vocabularies/discriminator/types.js",
-        "node_modules/ajv/dist/vocabularies/draft2020.js",
-        "node_modules/ajv/dist/vocabularies/draft7.js",
-        "node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js",
-        "node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js",
-        "node_modules/ajv/dist/vocabularies/dynamic/index.js",
-        "node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js",
-        "node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js",
-        "node_modules/ajv/dist/vocabularies/format/format.js",
-        "node_modules/ajv/dist/vocabularies/format/index.js",
-        "node_modules/ajv/dist/vocabularies/metadata.js",
-        "node_modules/ajv/dist/vocabularies/next.js",
-        "node_modules/ajv/dist/vocabularies/unevaluated/index.js",
-        "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js",
-        "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js",
-        "node_modules/ajv/dist/vocabularies/validation/const.js",
-        "node_modules/ajv/dist/vocabularies/validation/dependentRequired.js",
-        "node_modules/ajv/dist/vocabularies/validation/enum.js",
-        "node_modules/ajv/dist/vocabularies/validation/index.js",
-        "node_modules/ajv/dist/vocabularies/validation/limitContains.js",
-        "node_modules/ajv/dist/vocabularies/validation/limitItems.js",
-        "node_modules/ajv/dist/vocabularies/validation/limitLength.js",
-        "node_modules/ajv/dist/vocabularies/validation/limitNumber.js",
-        "node_modules/ajv/dist/vocabularies/validation/limitProperties.js",
-        "node_modules/ajv/dist/vocabularies/validation/multipleOf.js",
-        "node_modules/ajv/dist/vocabularies/validation/pattern.js",
-        "node_modules/ajv/dist/vocabularies/validation/required.js",
-        "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js",
         "node_modules/boundary/lib/index.js",
         "node_modules/debug/src/browser.js",
         "node_modules/debug/src/common.js",
         "node_modules/debug/src/index.js",
         "node_modules/debug/src/node.js",
-        "node_modules/fast-deep-equal/index.js",
-        "node_modules/fast-uri/index.js",
-        "node_modules/fast-uri/lib/schemes.js",
-        "node_modules/fast-uri/lib/utils.js",
-        "node_modules/json-schema-traverse/index.js",
         "node_modules/ms/index.js",
         "node_modules/structured-source/lib/structured-source.js",
         "node_modules/yaml/dist/compose/compose-collection.js",
@@ -6199,6 +4683,7 @@
         "src/contracts/durable-maintenance.ts",
         "src/contracts/durable-primitives.ts",
         "src/contracts/durable-result-manifest.ts",
+        "src/contracts/durable-state.ts",
         "src/contracts/durable-task-initialization.ts",
         "src/contracts/durable.ts",
         "src/contracts/errors.ts",
@@ -6215,30 +4700,21 @@
         "src/contracts/renderers.ts",
         "src/contracts/review.ts",
         "src/contracts/rubric.ts",
-        "src/contracts/schemas/v1/active-gate.schema.json",
-        "src/contracts/schemas/v1/adjudication-evidence.schema.json",
         "src/contracts/schemas/v1/adjudication.schema.json",
         "src/contracts/schemas/v1/document-artifact.schema.json",
         "src/contracts/schemas/v1/durable-primitives.schema.json",
         "src/contracts/schemas/v1/evidence-slots.schema.json",
         "src/contracts/schemas/v1/gate-contract.schema.json",
-        "src/contracts/schemas/v1/gate-decision-record.schema.json",
         "src/contracts/schemas/v1/gate-decision.schema.json",
-        "src/contracts/schemas/v1/gate-request.schema.json",
         "src/contracts/schemas/v1/implementation-output.schema.json",
-        "src/contracts/schemas/v1/intent-receipt.schema.json",
         "src/contracts/schemas/v1/legacy-import-initialization.schema.json",
-        "src/contracts/schemas/v1/maintenance-record.schema.json",
         "src/contracts/schemas/v1/mcp-tools.schema.json",
         "src/contracts/schemas/v1/path-claim.schema.json",
         "src/contracts/schemas/v1/primitives.schema.json",
         "src/contracts/schemas/v1/project-error.schema.json",
-        "src/contracts/schemas/v1/result-manifest.schema.json",
-        "src/contracts/schemas/v1/review-evidence.schema.json",
         "src/contracts/schemas/v1/review.schema.json",
         "src/contracts/schemas/v1/rubric.schema.json",
         "src/contracts/schemas/v1/secret-scan-result.schema.json",
-        "src/contracts/schemas/v1/supplemental-review-record.schema.json",
         "src/contracts/schemas/v1/supplemental-review.schema.json",
         "src/contracts/schemas/v1/task-initialization.schema.json",
         "src/contracts/schemas/v1/task-state.schema.json",
@@ -6316,7 +4792,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "379bae0241bbeadda8c4ec6e8e2080dc1622d423dc8fa5b7df7f48c05cdc13f3",
+      "output_digest": "67abc60cdb63e33e8974a0b8e3b928c84540c35b6f2fabb18e9992a2820d3f8b",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -6359,105 +4835,11 @@
         "node_modules/@secretlint/profiler/module/index.js",
         "node_modules/@secretlint/profiler/module/node.js",
         "node_modules/@secretlint/secretlint-rule-preset-recommend/module/index.js",
-        "node_modules/ajv-formats/dist/formats.js",
-        "node_modules/ajv-formats/dist/index.js",
-        "node_modules/ajv-formats/dist/limit.js",
-        "node_modules/ajv/dist/2020.js",
-        "node_modules/ajv/dist/ajv.js",
-        "node_modules/ajv/dist/compile/codegen/code.js",
-        "node_modules/ajv/dist/compile/codegen/index.js",
-        "node_modules/ajv/dist/compile/codegen/scope.js",
-        "node_modules/ajv/dist/compile/errors.js",
-        "node_modules/ajv/dist/compile/index.js",
-        "node_modules/ajv/dist/compile/names.js",
-        "node_modules/ajv/dist/compile/ref_error.js",
-        "node_modules/ajv/dist/compile/resolve.js",
-        "node_modules/ajv/dist/compile/rules.js",
-        "node_modules/ajv/dist/compile/util.js",
-        "node_modules/ajv/dist/compile/validate/applicability.js",
-        "node_modules/ajv/dist/compile/validate/boolSchema.js",
-        "node_modules/ajv/dist/compile/validate/dataType.js",
-        "node_modules/ajv/dist/compile/validate/defaults.js",
-        "node_modules/ajv/dist/compile/validate/index.js",
-        "node_modules/ajv/dist/compile/validate/keyword.js",
-        "node_modules/ajv/dist/compile/validate/subschema.js",
-        "node_modules/ajv/dist/core.js",
-        "node_modules/ajv/dist/refs/data.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/index.js",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json",
-        "node_modules/ajv/dist/refs/json-schema-2020-12/schema.json",
-        "node_modules/ajv/dist/refs/json-schema-draft-07.json",
-        "node_modules/ajv/dist/runtime/equal.js",
-        "node_modules/ajv/dist/runtime/ucs2length.js",
-        "node_modules/ajv/dist/runtime/uri.js",
-        "node_modules/ajv/dist/runtime/validation_error.js",
-        "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js",
-        "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js",
-        "node_modules/ajv/dist/vocabularies/applicator/allOf.js",
-        "node_modules/ajv/dist/vocabularies/applicator/anyOf.js",
-        "node_modules/ajv/dist/vocabularies/applicator/contains.js",
-        "node_modules/ajv/dist/vocabularies/applicator/dependencies.js",
-        "node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js",
-        "node_modules/ajv/dist/vocabularies/applicator/if.js",
-        "node_modules/ajv/dist/vocabularies/applicator/index.js",
-        "node_modules/ajv/dist/vocabularies/applicator/items.js",
-        "node_modules/ajv/dist/vocabularies/applicator/items2020.js",
-        "node_modules/ajv/dist/vocabularies/applicator/not.js",
-        "node_modules/ajv/dist/vocabularies/applicator/oneOf.js",
-        "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js",
-        "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js",
-        "node_modules/ajv/dist/vocabularies/applicator/properties.js",
-        "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js",
-        "node_modules/ajv/dist/vocabularies/applicator/thenElse.js",
-        "node_modules/ajv/dist/vocabularies/code.js",
-        "node_modules/ajv/dist/vocabularies/core/id.js",
-        "node_modules/ajv/dist/vocabularies/core/index.js",
-        "node_modules/ajv/dist/vocabularies/core/ref.js",
-        "node_modules/ajv/dist/vocabularies/discriminator/index.js",
-        "node_modules/ajv/dist/vocabularies/discriminator/types.js",
-        "node_modules/ajv/dist/vocabularies/draft2020.js",
-        "node_modules/ajv/dist/vocabularies/draft7.js",
-        "node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js",
-        "node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js",
-        "node_modules/ajv/dist/vocabularies/dynamic/index.js",
-        "node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js",
-        "node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js",
-        "node_modules/ajv/dist/vocabularies/format/format.js",
-        "node_modules/ajv/dist/vocabularies/format/index.js",
-        "node_modules/ajv/dist/vocabularies/metadata.js",
-        "node_modules/ajv/dist/vocabularies/next.js",
-        "node_modules/ajv/dist/vocabularies/unevaluated/index.js",
-        "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js",
-        "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js",
-        "node_modules/ajv/dist/vocabularies/validation/const.js",
-        "node_modules/ajv/dist/vocabularies/validation/dependentRequired.js",
-        "node_modules/ajv/dist/vocabularies/validation/enum.js",
-        "node_modules/ajv/dist/vocabularies/validation/index.js",
-        "node_modules/ajv/dist/vocabularies/validation/limitContains.js",
-        "node_modules/ajv/dist/vocabularies/validation/limitItems.js",
-        "node_modules/ajv/dist/vocabularies/validation/limitLength.js",
-        "node_modules/ajv/dist/vocabularies/validation/limitNumber.js",
-        "node_modules/ajv/dist/vocabularies/validation/limitProperties.js",
-        "node_modules/ajv/dist/vocabularies/validation/multipleOf.js",
-        "node_modules/ajv/dist/vocabularies/validation/pattern.js",
-        "node_modules/ajv/dist/vocabularies/validation/required.js",
-        "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js",
         "node_modules/boundary/lib/index.js",
         "node_modules/debug/src/browser.js",
         "node_modules/debug/src/common.js",
         "node_modules/debug/src/index.js",
         "node_modules/debug/src/node.js",
-        "node_modules/fast-deep-equal/index.js",
-        "node_modules/fast-uri/index.js",
-        "node_modules/fast-uri/lib/schemes.js",
-        "node_modules/fast-uri/lib/utils.js",
-        "node_modules/json-schema-traverse/index.js",
         "node_modules/ms/index.js",
         "node_modules/structured-source/lib/structured-source.js",
         "node_modules/yaml/dist/compose/compose-collection.js",
@@ -6622,6 +5004,7 @@
         "src/contracts/durable-maintenance.ts",
         "src/contracts/durable-primitives.ts",
         "src/contracts/durable-result-manifest.ts",
+        "src/contracts/durable-state.ts",
         "src/contracts/durable-task-initialization.ts",
         "src/contracts/durable.ts",
         "src/contracts/errors.ts",
@@ -6637,27 +5020,6 @@
         "src/contracts/renderers.ts",
         "src/contracts/review.ts",
         "src/contracts/rubric.ts",
-        "src/contracts/schemas/v1/active-gate.schema.json",
-        "src/contracts/schemas/v1/adjudication-evidence.schema.json",
-        "src/contracts/schemas/v1/document-artifact.schema.json",
-        "src/contracts/schemas/v1/durable-primitives.schema.json",
-        "src/contracts/schemas/v1/evidence-slots.schema.json",
-        "src/contracts/schemas/v1/gate-contract.schema.json",
-        "src/contracts/schemas/v1/gate-decision-record.schema.json",
-        "src/contracts/schemas/v1/gate-decision.schema.json",
-        "src/contracts/schemas/v1/gate-request.schema.json",
-        "src/contracts/schemas/v1/implementation-output.schema.json",
-        "src/contracts/schemas/v1/intent-receipt.schema.json",
-        "src/contracts/schemas/v1/maintenance-record.schema.json",
-        "src/contracts/schemas/v1/path-claim.schema.json",
-        "src/contracts/schemas/v1/primitives.schema.json",
-        "src/contracts/schemas/v1/result-manifest.schema.json",
-        "src/contracts/schemas/v1/review-evidence.schema.json",
-        "src/contracts/schemas/v1/secret-scan-result.schema.json",
-        "src/contracts/schemas/v1/supplemental-review-record.schema.json",
-        "src/contracts/schemas/v1/supplemental-review.schema.json",
-        "src/contracts/schemas/v1/task-state.schema.json",
-        "src/contracts/schemas/v1/triage.schema.json",
         "src/contracts/secret-scan.ts",
         "src/contracts/supplemental-record.ts",
         "src/contracts/supplemental.ts",
@@ -6724,7 +5086,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "fcffa85dd7216194bbf2a9c06ff43f878f75a953407b44a735bfcb6f486dc2ef",
+      "output_digest": "3b5c3e2ffa6cf8254eb1623707ff46ea10a111a47e86d7c3d8c2d08f7a185b98",
       "output_path": "archflow-local.mjs"
     }
   ],
@@ -6800,7 +5162,7 @@
     }
   },
   "legal_review": {
-    "digest": "b20b6f0bfb9144ca897d79a382db87c8c9f35bce0866573078e350c6771058d4",
+    "digest": "dc487db4a76bdace8227f8a52b352f30322e7f35ca99ce3d091afc1bdc9b2b15",
     "payload_path": "legal/review.json",
     "source_path": "release/legal-review.json"
   },
@@ -6863,14 +5225,14 @@
       "size": 681
     },
     {
-      "digest": "4bc2adab8e62a9873bb8b20028a6e709ae726886377c8866c5656d9ee0f102d5",
+      "digest": "3bb964725defb2b6742ae1753d68d63e94f8a10fe23372414f634cb6573e1c71",
       "path": "package-lock.json",
-      "size": 72615
+      "size": 72729
     },
     {
-      "digest": "8b7b0b7c8fb7f2ed39ca8cb8b125224cef93febf013663713eeed83d6cf90eac",
+      "digest": "eea1ee1f3681596ef4c787f2404c78c2b56a36d126d541b66c4a5a6f8016dc5f",
       "path": "package.json",
-      "size": 2405
+      "size": 2557
     },
     {
       "digest": "6282adc7c1d1304f245ff5877a2824b05b53f9842dc658282610c981505f0caf",
@@ -6878,7 +5240,7 @@
       "size": 1060
     },
     {
-      "digest": "d202d39a76fe79df9933296e83e472ae2c08382b033435f5f405ef871e2d13cd",
+      "digest": "f1f42b728650b298a92836d909181359a0af6e24738533a0f153565de73a95e2",
       "path": "release/evidence/focused-inert-reachability.json",
       "size": 910
     },
@@ -6893,9 +5255,9 @@
       "size": 832
     },
     {
-      "digest": "b20b6f0bfb9144ca897d79a382db87c8c9f35bce0866573078e350c6771058d4",
+      "digest": "dc487db4a76bdace8227f8a52b352f30322e7f35ca99ce3d091afc1bdc9b2b15",
       "path": "release/legal-review.json",
-      "size": 42993
+      "size": 34050
     },
     {
       "digest": "a05350a88e318e4f5f2c2a1ff1e2e88daa4dd38e6e78b71cccae422bdc762cc3",
@@ -6923,16 +5285,6 @@
       "size": 1852
     },
     {
-      "digest": "a05350a88e318e4f5f2c2a1ff1e2e88daa4dd38e6e78b71cccae422bdc762cc3",
-      "path": "release/legal/upstream/installed-ajv-8.20.0/LICENSE",
-      "size": 1090
-    },
-    {
-      "digest": "9df3bb69929a3b650ed73b3bfa1756725aaff0ac296461605753547004eafeaf",
-      "path": "release/legal/upstream/installed-ajv-formats-3.0.1/LICENSE",
-      "size": 1074
-    },
-    {
       "digest": "0e74697a68cebdcd61502c30fe80ab7f9e341d995dcd452023654d57133534b1",
       "path": "release/legal/upstream/installed-boundary-2.0.0/LICENSE.BSD",
       "size": 1231
@@ -6941,21 +5293,6 @@
       "digest": "3a61c6c96caf5c1d9b623fb9b04c822b783dfcb78aa7e49c76a3f643e6ed7f95",
       "path": "release/legal/upstream/installed-debug-4.4.3/LICENSE",
       "size": 1139
-    },
-    {
-      "digest": "7bf9b2de73a6b356761c948d0e9eeb4be6c1270bd04c79cd489c1e400ffdfc1a",
-      "path": "release/legal/upstream/installed-fast-deep-equal-3.1.3/LICENSE",
-      "size": 1074
-    },
-    {
-      "digest": "b010b0dfdfdb23d7396e03b82cd4621fc9bb8f95d6b0aea70b9c24e12074c786",
-      "path": "release/legal/upstream/installed-fast-uri-3.1.4/LICENSE",
-      "size": 1813
-    },
-    {
-      "digest": "7bf9b2de73a6b356761c948d0e9eeb4be6c1270bd04c79cd489c1e400ffdfc1a",
-      "path": "release/legal/upstream/installed-json-schema-traverse-1.0.0/LICENSE",
-      "size": 1074
     },
     {
       "digest": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
@@ -7043,34 +5380,54 @@
       "size": 604
     },
     {
-      "digest": "7b6d508604bb9e2c9f29f5fc7a3b30c2c448c9aac729830f4f92fb40ba89c1bc",
-      "path": "src/contracts/schemas/v1/authority-link.schema.json",
-      "size": 4013
+      "digest": "9234afa503333362898ac3e6989690b3b329e82fd5d0de34005d8abad415f0f5",
+      "path": "src/contracts/schemas/v1/active-gate.schema.json",
+      "size": 30238
     },
     {
-      "digest": "180a16598206b13d0695d4c8f9561a160bb7171ceb5827dd9405e3647f900a44",
+      "digest": "81720f3bdf8d6268a2798c9bce9bd954f9d9e36294821d59a55ce48074e875e4",
+      "path": "src/contracts/schemas/v1/adjudication-evidence.schema.json",
+      "size": 21597
+    },
+    {
+      "digest": "cf18c1cb3ed8b01c9598e683874dcbf64a379a60d0d00669a42d4ba74bf4972c",
       "path": "src/contracts/schemas/v1/config.schema.json",
-      "size": 1202
+      "size": 1827
     },
     {
-      "digest": "6b98163ecbf98341d2d4e23ceeef1fda7ec46a3b48a191d33b8a3aba48ab28bf",
+      "digest": "5009f3ee3d15e846fb6186a2b59feccde6fe490795e4fed9b60dbf3b4662b897",
       "path": "src/contracts/schemas/v1/constitution-rule.schema.json",
-      "size": 698
+      "size": 941
     },
     {
-      "digest": "3ff3379c5c3d623887b0566699988ad481d653f887be44e880ae596f18d858b7",
-      "path": "src/contracts/schemas/v1/evidence-reference.schema.json",
-      "size": 793
+      "digest": "30e6e2d587f07533564c91fe07c0a130fca69ada31a83cd94cf88ea3384cb638",
+      "path": "src/contracts/schemas/v1/gate-decision-record.schema.json",
+      "size": 8007
     },
     {
-      "digest": "efa7beb830e99ce839b2e24bfa40e9a15defda90813b42bf2c08e62685c37358",
+      "digest": "eaceb3a375dd031a45871cbad6b2a8fb40fea7cd814bfb28b9b174fa9377931d",
+      "path": "src/contracts/schemas/v1/gate-request.schema.json",
+      "size": 27817
+    },
+    {
+      "digest": "3b47e8ed370bb7f75358d7d80ee9793ec47e32cf5e903585b45454e6a0af3568",
+      "path": "src/contracts/schemas/v1/intent-receipt.schema.json",
+      "size": 2543
+    },
+    {
+      "digest": "b925f1bcc80f400f0de8c266a9c9df54dc1d0f1cbd10acf61ad7c70642eb64c2",
+      "path": "src/contracts/schemas/v1/maintenance-record.schema.json",
+      "size": 2010
+    },
+    {
+      "digest": "cf994cc7aca5d86c1d140aeb61a4499a04b7e52d6aa1ad852260c5738bc372a1",
       "path": "src/contracts/schemas/v1/phase-instance.schema.json",
-      "size": 1002
+      "size": 1330
     },
     {
-      "digest": "8add142fd10f5e85fc9a981b502101f4d85789023ce5306f1393b6bc600c2944",
+      "digest": "62fd3b33e7c376cc8d2a83502ee0ac4c65cd39b14440a41802468ef26047beb1",
       "path": "src/contracts/schemas/v1/protocol-error.schema.json",
-      "size": 5798
+      "size": 6843
     },
     {
       "digest": "e9a0879cb1b52d02afe94c471156ab6fe7ebf3f735c9926448d41a8e28963f0e",
@@ -7083,29 +5440,44 @@
       "size": 14114
     },
     {
-      "digest": "94b6612c6ec3b0588996b93dd7a2e71044b94acd35ba65be8f659cf6796e96dd",
+      "digest": "383658934b4fdb6074955e2202d764f044d49ca0295a8dfc46ebe1b8d2030861",
       "path": "src/contracts/schemas/v1/result-expectation.schema.json",
-      "size": 3246
+      "size": 1262
     },
     {
-      "digest": "23dd8e24f6336ef969dbb4d46dd6c277b506ffc26785c10d90fec918a83dcc6d",
+      "digest": "8f8cbbb6ac1f3aadf8edd158f3f17ae1227bd7a664f4ad92de2ea29b1081c433",
+      "path": "src/contracts/schemas/v1/result-manifest.schema.json",
+      "size": 4304
+    },
+    {
+      "digest": "e91b4bb2c16b73c81c846f2324271fac33dac4ce194098eb9d2bec4e5799183a",
+      "path": "src/contracts/schemas/v1/review-evidence.schema.json",
+      "size": 7616
+    },
+    {
+      "digest": "7f408cb3625fe9c4be793691400f4efa0ebb9f0064e7ddfba231c6f83e031cbd",
+      "path": "src/contracts/schemas/v1/supplemental-review-record.schema.json",
+      "size": 2230
+    },
+    {
+      "digest": "1547a660d2f43ce743ad5f39f4da7f6fb82f9e3d2e6630b7106782d96d793b36",
       "path": "src/contracts/schemas/v1/workflow.schema.json",
-      "size": 1153
+      "size": 2032
     },
     {
-      "digest": "344a8f9bc2205167d88d7619fc34ad5227c9574802c003b286461cd4402a9089",
+      "digest": "5a96bf18371db229650ad82fc96e9918bac06962099eddbd9a1addfce988ecbe",
       "path": "src/contracts/versions.ts",
-      "size": 2362
+      "size": 2238
     },
     {
-      "digest": "6533b1be4e808a4a3a2b67e6ee59f4e102663d718a91a2f113d3d7e4d6a8f16f",
+      "digest": "cb5332e9c930be8264371179b6032060f7f440ef01fadde19716049908861382",
       "path": "test/contracts/release-contracts.test.ts",
-      "size": 18384
+      "size": 18376
     },
     {
-      "digest": "44f6e85719a9477775da1299a39cbe446de0ec70357dd0de09bedac3da3df46d",
+      "digest": "7efa5ecb6785e32e8da14cd8576dec935b2db00b56280fbf839b7aeefed1fd94",
       "path": "test/contracts/schema-registry.test.ts",
-      "size": 4340
+      "size": 6605
     },
     {
       "digest": "33401af67624bd2bd7bf8073e50d33a3f20e2ade0bee33fadee00fc1aa3ad53e",

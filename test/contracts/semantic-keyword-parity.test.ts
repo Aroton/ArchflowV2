@@ -11,7 +11,7 @@ import {
   createJsonSchemaValidator,
   type JsonSchemaValidator,
   type ZodLikeSchema,
-} from "../../src/contracts/validators.js";
+} from "../helpers/json-schema.js";
 
 /**
  * Each custom Ajv semantic keyword's logic is wired into the Zod side, which is now the single

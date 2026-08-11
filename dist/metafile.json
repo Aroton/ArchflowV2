@@ -360,1696 +360,6 @@
         }
       ]
     },
-    "node_modules/ajv-formats/dist/formats.js": {
-      "bytes": 12263,
-      "format": "cjs",
-      "imports": []
-    },
-    "node_modules/ajv-formats/dist/index.js": {
-      "bytes": 1508,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./formats",
-          "path": "node_modules/ajv-formats/dist/formats.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./limit",
-          "path": "node_modules/ajv-formats/dist/limit.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "ajv/dist/compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        }
-      ]
-    },
-    "node_modules/ajv-formats/dist/limit.js": {
-      "bytes": 2900,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "ajv",
-          "path": "node_modules/ajv/dist/ajv.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "ajv/dist/compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/2020.js": {
-      "bytes": 2894,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./core",
-          "path": "node_modules/ajv/dist/core.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./vocabularies/draft2020",
-          "path": "node_modules/ajv/dist/vocabularies/draft2020.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./vocabularies/discriminator",
-          "path": "node_modules/ajv/dist/vocabularies/discriminator/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./refs/json-schema-2020-12",
-          "path": "node_modules/ajv/dist/refs/json-schema-2020-12/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./compile/validate",
-          "path": "node_modules/ajv/dist/compile/validate/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./runtime/validation_error",
-          "path": "node_modules/ajv/dist/runtime/validation_error.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./compile/ref_error",
-          "path": "node_modules/ajv/dist/compile/ref_error.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/ajv.js": {
-      "bytes": 2841,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./core",
-          "path": "node_modules/ajv/dist/core.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./vocabularies/draft7",
-          "path": "node_modules/ajv/dist/vocabularies/draft7.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./vocabularies/discriminator",
-          "path": "node_modules/ajv/dist/vocabularies/discriminator/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./refs/json-schema-draft-07.json",
-          "path": "node_modules/ajv/dist/refs/json-schema-draft-07.json"
-        },
-        {
-          "kind": "require-call",
-          "original": "./compile/validate",
-          "path": "node_modules/ajv/dist/compile/validate/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./runtime/validation_error",
-          "path": "node_modules/ajv/dist/runtime/validation_error.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./compile/ref_error",
-          "path": "node_modules/ajv/dist/compile/ref_error.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/compile/codegen/code.js": {
-      "bytes": 4676,
-      "format": "cjs",
-      "imports": []
-    },
-    "node_modules/ajv/dist/compile/codegen/index.js": {
-      "bytes": 23127,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./code",
-          "path": "node_modules/ajv/dist/compile/codegen/code.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./scope",
-          "path": "node_modules/ajv/dist/compile/codegen/scope.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./code",
-          "path": "node_modules/ajv/dist/compile/codegen/code.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./scope",
-          "path": "node_modules/ajv/dist/compile/codegen/scope.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/compile/codegen/scope.js": {
-      "bytes": 5198,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./code",
-          "path": "node_modules/ajv/dist/compile/codegen/code.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/compile/errors.js": {
-      "bytes": 5771,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./names",
-          "path": "node_modules/ajv/dist/compile/names.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/compile/index.js": {
-      "bytes": 10046,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../runtime/validation_error",
-          "path": "node_modules/ajv/dist/runtime/validation_error.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./names",
-          "path": "node_modules/ajv/dist/compile/names.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./resolve",
-          "path": "node_modules/ajv/dist/compile/resolve.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./validate",
-          "path": "node_modules/ajv/dist/compile/validate/index.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/compile/names.js": {
-      "bytes": 1440,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/compile/ref_error.js": {
-      "bytes": 543,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./resolve",
-          "path": "node_modules/ajv/dist/compile/resolve.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/compile/resolve.js": {
-      "bytes": 5006,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "fast-deep-equal",
-          "path": "node_modules/fast-deep-equal/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "json-schema-traverse",
-          "path": "node_modules/json-schema-traverse/index.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/compile/rules.js": {
-      "bytes": 918,
-      "format": "cjs",
-      "imports": []
-    },
-    "node_modules/ajv/dist/compile/util.js": {
-      "bytes": 7103,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./codegen/code",
-          "path": "node_modules/ajv/dist/compile/codegen/code.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/compile/validate/applicability.js": {
-      "bytes": 853,
-      "format": "cjs",
-      "imports": []
-    },
-    "node_modules/ajv/dist/compile/validate/boolSchema.js": {
-      "bytes": 1531,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../errors",
-          "path": "node_modules/ajv/dist/compile/errors.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../names",
-          "path": "node_modules/ajv/dist/compile/names.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/compile/validate/dataType.js": {
-      "bytes": 8409,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../rules",
-          "path": "node_modules/ajv/dist/compile/rules.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./applicability",
-          "path": "node_modules/ajv/dist/compile/validate/applicability.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../errors",
-          "path": "node_modules/ajv/dist/compile/errors.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/compile/validate/defaults.js": {
-      "bytes": 1448,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/compile/validate/index.js": {
-      "bytes": 20552,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./boolSchema",
-          "path": "node_modules/ajv/dist/compile/validate/boolSchema.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./dataType",
-          "path": "node_modules/ajv/dist/compile/validate/dataType.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./applicability",
-          "path": "node_modules/ajv/dist/compile/validate/applicability.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./dataType",
-          "path": "node_modules/ajv/dist/compile/validate/dataType.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./defaults",
-          "path": "node_modules/ajv/dist/compile/validate/defaults.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./keyword",
-          "path": "node_modules/ajv/dist/compile/validate/keyword.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./subschema",
-          "path": "node_modules/ajv/dist/compile/validate/subschema.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../names",
-          "path": "node_modules/ajv/dist/compile/names.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../resolve",
-          "path": "node_modules/ajv/dist/compile/resolve.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../errors",
-          "path": "node_modules/ajv/dist/compile/errors.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/compile/validate/keyword.js": {
-      "bytes": 5695,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../names",
-          "path": "node_modules/ajv/dist/compile/names.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../vocabularies/code",
-          "path": "node_modules/ajv/dist/vocabularies/code.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../errors",
-          "path": "node_modules/ajv/dist/compile/errors.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/compile/validate/subschema.js": {
-      "bytes": 3858,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/core.js": {
-      "bytes": 25202,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./compile/validate",
-          "path": "node_modules/ajv/dist/compile/validate/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./runtime/validation_error",
-          "path": "node_modules/ajv/dist/runtime/validation_error.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./compile/ref_error",
-          "path": "node_modules/ajv/dist/compile/ref_error.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./compile/rules",
-          "path": "node_modules/ajv/dist/compile/rules.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./compile",
-          "path": "node_modules/ajv/dist/compile/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./compile/resolve",
-          "path": "node_modules/ajv/dist/compile/resolve.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./compile/validate/dataType",
-          "path": "node_modules/ajv/dist/compile/validate/dataType.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./refs/data.json",
-          "path": "node_modules/ajv/dist/refs/data.json"
-        },
-        {
-          "kind": "require-call",
-          "original": "./runtime/uri",
-          "path": "node_modules/ajv/dist/runtime/uri.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/refs/data.json": {
-      "bytes": 409,
-      "imports": []
-    },
-    "node_modules/ajv/dist/refs/json-schema-2020-12/index.js": {
-      "bytes": 1026,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./schema.json",
-          "path": "node_modules/ajv/dist/refs/json-schema-2020-12/schema.json"
-        },
-        {
-          "kind": "require-call",
-          "original": "./meta/applicator.json",
-          "path": "node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json"
-        },
-        {
-          "kind": "require-call",
-          "original": "./meta/unevaluated.json",
-          "path": "node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json"
-        },
-        {
-          "kind": "require-call",
-          "original": "./meta/content.json",
-          "path": "node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json"
-        },
-        {
-          "kind": "require-call",
-          "original": "./meta/core.json",
-          "path": "node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json"
-        },
-        {
-          "kind": "require-call",
-          "original": "./meta/format-annotation.json",
-          "path": "node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json"
-        },
-        {
-          "kind": "require-call",
-          "original": "./meta/meta-data.json",
-          "path": "node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json"
-        },
-        {
-          "kind": "require-call",
-          "original": "./meta/validation.json",
-          "path": "node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json": {
-      "bytes": 1441,
-      "imports": []
-    },
-    "node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json": {
-      "bytes": 479,
-      "imports": []
-    },
-    "node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json": {
-      "bytes": 1344,
-      "imports": []
-    },
-    "node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json": {
-      "bytes": 420,
-      "imports": []
-    },
-    "node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json": {
-      "bytes": 758,
-      "imports": []
-    },
-    "node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json": {
-      "bytes": 472,
-      "imports": []
-    },
-    "node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json": {
-      "bytes": 2264,
-      "imports": []
-    },
-    "node_modules/ajv/dist/refs/json-schema-2020-12/schema.json": {
-      "bytes": 2166,
-      "imports": []
-    },
-    "node_modules/ajv/dist/refs/json-schema-draft-07.json": {
-      "bytes": 3811,
-      "imports": []
-    },
-    "node_modules/ajv/dist/runtime/equal.js": {
-      "bytes": 286,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "fast-deep-equal",
-          "path": "node_modules/fast-deep-equal/index.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/runtime/ucs2length.js": {
-      "bytes": 808,
-      "format": "cjs",
-      "imports": []
-    },
-    "node_modules/ajv/dist/runtime/uri.js": {
-      "bytes": 218,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "fast-uri",
-          "path": "node_modules/fast-uri/index.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/runtime/validation_error.js": {
-      "bytes": 337,
-      "format": "cjs",
-      "imports": []
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js": {
-      "bytes": 1931,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js": {
-      "bytes": 4309,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../code",
-          "path": "node_modules/ajv/dist/vocabularies/code.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/names",
-          "path": "node_modules/ajv/dist/compile/names.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/allOf.js": {
-      "bytes": 756,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/anyOf.js": {
-      "bytes": 343,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../code",
-          "path": "node_modules/ajv/dist/vocabularies/code.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/contains.js": {
-      "bytes": 3680,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/dependencies.js": {
-      "bytes": 3198,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../code",
-          "path": "node_modules/ajv/dist/vocabularies/code.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js": {
-      "bytes": 354,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./dependencies",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/dependencies.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/if.js": {
-      "bytes": 2438,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/index.js": {
-      "bytes": 1529,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./additionalItems",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./prefixItems",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./items",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/items.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./items2020",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/items2020.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./contains",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/contains.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./dependencies",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/dependencies.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./propertyNames",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./additionalProperties",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./properties",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/properties.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./patternProperties",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./not",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/not.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./anyOf",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/anyOf.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./oneOf",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/oneOf.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./allOf",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/allOf.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./if",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/if.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./thenElse",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/thenElse.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/items.js": {
-      "bytes": 1993,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../code",
-          "path": "node_modules/ajv/dist/vocabularies/code.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/items2020.js": {
-      "bytes": 1037,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../code",
-          "path": "node_modules/ajv/dist/vocabularies/code.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./additionalItems",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/not.js": {
-      "bytes": 773,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/oneOf.js": {
-      "bytes": 2257,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js": {
-      "bytes": 3236,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../code",
-          "path": "node_modules/ajv/dist/vocabularies/code.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js": {
-      "bytes": 354,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./items",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/items.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/properties.js": {
-      "bytes": 2153,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/validate",
-          "path": "node_modules/ajv/dist/compile/validate/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../code",
-          "path": "node_modules/ajv/dist/vocabularies/code.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./additionalProperties",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js": {
-      "bytes": 1221,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/applicator/thenElse.js": {
-      "bytes": 446,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/code.js": {
-      "bytes": 6216,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../compile/names",
-          "path": "node_modules/ajv/dist/compile/names.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/core/id.js": {
-      "bytes": 267,
-      "format": "cjs",
-      "imports": []
-    },
-    "node_modules/ajv/dist/vocabularies/core/index.js": {
-      "bytes": 357,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./id",
-          "path": "node_modules/ajv/dist/vocabularies/core/id.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./ref",
-          "path": "node_modules/ajv/dist/vocabularies/core/ref.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/core/ref.js": {
-      "bytes": 5234,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/ref_error",
-          "path": "node_modules/ajv/dist/compile/ref_error.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../code",
-          "path": "node_modules/ajv/dist/vocabularies/code.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/names",
-          "path": "node_modules/ajv/dist/compile/names.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile",
-          "path": "node_modules/ajv/dist/compile/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/discriminator/index.js": {
-      "bytes": 4845,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../discriminator/types",
-          "path": "node_modules/ajv/dist/vocabularies/discriminator/types.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile",
-          "path": "node_modules/ajv/dist/compile/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/ref_error",
-          "path": "node_modules/ajv/dist/compile/ref_error.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/discriminator/types.js": {
-      "bytes": 308,
-      "format": "cjs",
-      "imports": []
-    },
-    "node_modules/ajv/dist/vocabularies/draft2020.js": {
-      "bytes": 762,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./core",
-          "path": "node_modules/ajv/dist/vocabularies/core/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./validation",
-          "path": "node_modules/ajv/dist/vocabularies/validation/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./applicator",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./dynamic",
-          "path": "node_modules/ajv/dist/vocabularies/dynamic/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./next",
-          "path": "node_modules/ajv/dist/vocabularies/next.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./unevaluated",
-          "path": "node_modules/ajv/dist/vocabularies/unevaluated/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./format",
-          "path": "node_modules/ajv/dist/vocabularies/format/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./metadata",
-          "path": "node_modules/ajv/dist/vocabularies/metadata.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/draft7.js": {
-      "bytes": 557,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./core",
-          "path": "node_modules/ajv/dist/vocabularies/core/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./validation",
-          "path": "node_modules/ajv/dist/vocabularies/validation/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./applicator",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./format",
-          "path": "node_modules/ajv/dist/vocabularies/format/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./metadata",
-          "path": "node_modules/ajv/dist/vocabularies/metadata.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js": {
-      "bytes": 1261,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/names",
-          "path": "node_modules/ajv/dist/compile/names.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile",
-          "path": "node_modules/ajv/dist/compile/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../core/ref",
-          "path": "node_modules/ajv/dist/vocabularies/core/ref.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js": {
-      "bytes": 1985,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/names",
-          "path": "node_modules/ajv/dist/compile/names.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../core/ref",
-          "path": "node_modules/ajv/dist/vocabularies/core/ref.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/dynamic/index.js": {
-      "bytes": 457,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./dynamicAnchor",
-          "path": "node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./dynamicRef",
-          "path": "node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./recursiveAnchor",
-          "path": "node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./recursiveRef",
-          "path": "node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js": {
-      "bytes": 522,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./dynamicAnchor",
-          "path": "node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js": {
-      "bytes": 325,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./dynamicRef",
-          "path": "node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/format/format.js": {
-      "bytes": 4317,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/format/index.js": {
-      "bytes": 209,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./format",
-          "path": "node_modules/ajv/dist/vocabularies/format/format.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/metadata.js": {
-      "bytes": 427,
-      "format": "cjs",
-      "imports": []
-    },
-    "node_modules/ajv/dist/vocabularies/next.js": {
-      "bytes": 433,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./validation/dependentRequired",
-          "path": "node_modules/ajv/dist/vocabularies/validation/dependentRequired.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./applicator/dependentSchemas",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./validation/limitContains",
-          "path": "node_modules/ajv/dist/vocabularies/validation/limitContains.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/unevaluated/index.js": {
-      "bytes": 350,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./unevaluatedProperties",
-          "path": "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./unevaluatedItems",
-          "path": "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js": {
-      "bytes": 1588,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js": {
-      "bytes": 2608,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/names",
-          "path": "node_modules/ajv/dist/compile/names.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/validation/const.js": {
-      "bytes": 852,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../runtime/equal",
-          "path": "node_modules/ajv/dist/runtime/equal.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/validation/dependentRequired.js": {
-      "bytes": 403,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../applicator/dependencies",
-          "path": "node_modules/ajv/dist/vocabularies/applicator/dependencies.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/validation/enum.js": {
-      "bytes": 1901,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../runtime/equal",
-          "path": "node_modules/ajv/dist/runtime/equal.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/validation/index.js": {
-      "bytes": 1036,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./limitNumber",
-          "path": "node_modules/ajv/dist/vocabularies/validation/limitNumber.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./multipleOf",
-          "path": "node_modules/ajv/dist/vocabularies/validation/multipleOf.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./limitLength",
-          "path": "node_modules/ajv/dist/vocabularies/validation/limitLength.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./pattern",
-          "path": "node_modules/ajv/dist/vocabularies/validation/pattern.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./limitProperties",
-          "path": "node_modules/ajv/dist/vocabularies/validation/limitProperties.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./required",
-          "path": "node_modules/ajv/dist/vocabularies/validation/required.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./limitItems",
-          "path": "node_modules/ajv/dist/vocabularies/validation/limitItems.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./uniqueItems",
-          "path": "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./const",
-          "path": "node_modules/ajv/dist/vocabularies/validation/const.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./enum",
-          "path": "node_modules/ajv/dist/vocabularies/validation/enum.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/validation/limitContains.js": {
-      "bytes": 495,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/validation/limitItems.js": {
-      "bytes": 852,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/validation/limitLength.js": {
-      "bytes": 1130,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../runtime/ucs2length",
-          "path": "node_modules/ajv/dist/runtime/ucs2length.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/validation/limitNumber.js": {
-      "bytes": 1036,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/validation/limitProperties.js": {
-      "bytes": 896,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/validation/multipleOf.js": {
-      "bytes": 1023,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/validation/pattern.js": {
-      "bytes": 1323,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../code",
-          "path": "node_modules/ajv/dist/vocabularies/code.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/validation/required.js": {
-      "bytes": 3188,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../code",
-          "path": "node_modules/ajv/dist/vocabularies/code.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        }
-      ]
-    },
-    "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js": {
-      "bytes": 3037,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "../../compile/validate/dataType",
-          "path": "node_modules/ajv/dist/compile/validate/dataType.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/codegen",
-          "path": "node_modules/ajv/dist/compile/codegen/index.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../compile/util",
-          "path": "node_modules/ajv/dist/compile/util.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "../../runtime/equal",
-          "path": "node_modules/ajv/dist/runtime/equal.js"
-        }
-      ]
-    },
     "node_modules/boundary/lib/index.js": {
       "bytes": 2627,
       "format": "cjs",
@@ -2118,48 +428,6 @@
           "path": "node_modules/debug/src/common.js"
         }
       ]
-    },
-    "node_modules/fast-deep-equal/index.js": {
-      "bytes": 1177,
-      "format": "cjs",
-      "imports": []
-    },
-    "node_modules/fast-uri/index.js": {
-      "bytes": 13202,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./lib/utils",
-          "path": "node_modules/fast-uri/lib/utils.js"
-        },
-        {
-          "kind": "require-call",
-          "original": "./lib/schemes",
-          "path": "node_modules/fast-uri/lib/schemes.js"
-        }
-      ]
-    },
-    "node_modules/fast-uri/lib/schemes.js": {
-      "bytes": 7122,
-      "format": "cjs",
-      "imports": [
-        {
-          "kind": "require-call",
-          "original": "./utils",
-          "path": "node_modules/fast-uri/lib/utils.js"
-        }
-      ]
-    },
-    "node_modules/fast-uri/lib/utils.js": {
-      "bytes": 10762,
-      "format": "cjs",
-      "imports": []
-    },
-    "node_modules/json-schema-traverse/index.js": {
-      "bytes": 2428,
-      "format": "cjs",
-      "imports": []
     },
     "node_modules/ms/index.js": {
       "bytes": 3024,
@@ -5193,7 +3461,7 @@
       ]
     },
     "src/contracts/adjudication.ts": {
-      "bytes": 11298,
+      "bytes": 11971,
       "format": "esm",
       "imports": [
         {
@@ -5240,7 +3508,7 @@
       ]
     },
     "src/contracts/config.ts": {
-      "bytes": 1523,
+      "bytes": 1597,
       "format": "esm",
       "imports": [
         {
@@ -5261,7 +3529,7 @@
       ]
     },
     "src/contracts/constitution.ts": {
-      "bytes": 3935,
+      "bytes": 3842,
       "format": "esm",
       "imports": [
         {
@@ -5303,7 +3571,7 @@
       ]
     },
     "src/contracts/durable-document.ts": {
-      "bytes": 6853,
+      "bytes": 6779,
       "format": "esm",
       "imports": [
         {
@@ -5349,7 +3617,7 @@
       ]
     },
     "src/contracts/durable-gate.ts": {
-      "bytes": 6818,
+      "bytes": 15665,
       "format": "esm",
       "imports": [
         {
@@ -5359,8 +3627,18 @@
         },
         {
           "kind": "import-statement",
+          "original": "./evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "./gates.js",
           "path": "src/contracts/gates.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./trust.js",
+          "path": "src/contracts/trust.ts"
         },
         {
           "kind": "import-statement",
@@ -5371,16 +3649,11 @@
           "kind": "import-statement",
           "original": "./supplemental.js",
           "path": "src/contracts/supplemental.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./validators.js",
-          "path": "src/contracts/validators.ts"
         }
       ]
     },
     "src/contracts/durable-implementation-output.ts": {
-      "bytes": 9855,
+      "bytes": 9912,
       "format": "esm",
       "imports": [
         {
@@ -5436,13 +3709,28 @@
       ]
     },
     "src/contracts/durable-intent.ts": {
-      "bytes": 1839,
+      "bytes": 4190,
       "format": "esm",
       "imports": [
         {
           "kind": "import-statement",
+          "original": "zod",
+          "path": "node_modules/zod/index.js"
+        },
+        {
+          "kind": "import-statement",
           "original": "./canonical.js",
           "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./durable-state.js",
+          "path": "src/contracts/durable-state.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./evidence.js",
+          "path": "src/contracts/evidence.ts"
         },
         {
           "kind": "import-statement",
@@ -5451,13 +3739,13 @@
         },
         {
           "kind": "import-statement",
-          "original": "./validators.js",
-          "path": "src/contracts/validators.ts"
+          "original": "./tool-names.js",
+          "path": "src/contracts/tool-names.ts"
         }
       ]
     },
     "src/contracts/durable-legacy-import.ts": {
-      "bytes": 6998,
+      "bytes": 6979,
       "format": "esm",
       "imports": [
         {
@@ -5503,12 +3791,38 @@
       ]
     },
     "src/contracts/durable-maintenance.ts": {
-      "bytes": 2537,
+      "bytes": 4991,
       "format": "esm",
-      "imports": []
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "zod",
+          "path": "node_modules/zod/index.js"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./path-claims.js",
+          "path": "src/contracts/path-claims.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./plain-json.js",
+          "path": "src/contracts/plain-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./validators.js",
+          "path": "src/contracts/validators.ts"
+        }
+      ]
     },
     "src/contracts/durable-primitives.ts": {
-      "bytes": 19683,
+      "bytes": 20396,
       "format": "esm",
       "imports": [
         {
@@ -5544,9 +3858,44 @@
       ]
     },
     "src/contracts/durable-result-manifest.ts": {
-      "bytes": 2972,
+      "bytes": 6199,
       "format": "esm",
       "imports": [
+        {
+          "kind": "import-statement",
+          "original": "zod",
+          "path": "node_modules/zod/index.js"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./durable-document.js",
+          "path": "src/contracts/durable-document.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./durable-implementation-output.js",
+          "path": "src/contracts/durable-implementation-output.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./adjudication.js",
+          "path": "src/contracts/adjudication.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./durable-primitives.js",
+          "path": "src/contracts/durable-primitives.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
+        },
         {
           "kind": "import-statement",
           "original": "./plain-json.js",
@@ -5554,13 +3903,79 @@
         },
         {
           "kind": "import-statement",
+          "original": "./review.js",
+          "path": "src/contracts/review.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./secret-scan.js",
+          "path": "src/contracts/secret-scan.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./triage.js",
+          "path": "src/contracts/triage.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "./validators.js",
           "path": "src/contracts/validators.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./vocabulary.js",
+          "path": "src/contracts/vocabulary.ts"
+        }
+      ]
+    },
+    "src/contracts/durable-state.ts": {
+      "bytes": 13439,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "zod",
+          "path": "node_modules/zod/index.js"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./canonical.js",
+          "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./evidence.js",
+          "path": "src/contracts/evidence.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./gates.js",
+          "path": "src/contracts/gates.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./path-claims.js",
+          "path": "src/contracts/path-claims.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./phase-instance.js",
+          "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./validators.js",
+          "path": "src/contracts/validators.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./vocabulary.js",
+          "path": "src/contracts/vocabulary.ts"
         }
       ]
     },
     "src/contracts/durable-task-initialization.ts": {
-      "bytes": 3448,
+      "bytes": 3452,
       "format": "esm",
       "imports": [
         {
@@ -5591,7 +4006,7 @@
       ]
     },
     "src/contracts/durable.ts": {
-      "bytes": 46480,
+      "bytes": 46512,
       "format": "esm",
       "imports": [
         {
@@ -5627,7 +4042,7 @@
       ]
     },
     "src/contracts/errors.ts": {
-      "bytes": 22711,
+      "bytes": 24955,
       "format": "esm",
       "imports": [
         {
@@ -5673,7 +4088,7 @@
       ]
     },
     "src/contracts/evidence.ts": {
-      "bytes": 4546,
+      "bytes": 5495,
       "format": "esm",
       "imports": [
         {
@@ -5710,7 +4125,7 @@
       ]
     },
     "src/contracts/gates.ts": {
-      "bytes": 21021,
+      "bytes": 22963,
       "format": "esm",
       "imports": [
         {
@@ -5817,7 +4232,7 @@
       "imports": []
     },
     "src/contracts/mcp-tools.ts": {
-      "bytes": 23492,
+      "bytes": 25763,
       "format": "esm",
       "imports": [
         {
@@ -5913,7 +4328,7 @@
       ]
     },
     "src/contracts/path-claims.ts": {
-      "bytes": 6577,
+      "bytes": 7601,
       "format": "esm",
       "imports": [
         {
@@ -5934,7 +4349,7 @@
       ]
     },
     "src/contracts/phase-instance.ts": {
-      "bytes": 2769,
+      "bytes": 3692,
       "format": "esm",
       "imports": [
         {
@@ -5966,7 +4381,7 @@
       ]
     },
     "src/contracts/review.ts": {
-      "bytes": 7941,
+      "bytes": 8510,
       "format": "esm",
       "imports": [
         {
@@ -5987,7 +4402,7 @@
       ]
     },
     "src/contracts/rubric.ts": {
-      "bytes": 1291,
+      "bytes": 1260,
       "format": "esm",
       "imports": [
         {
@@ -6002,24 +4417,8 @@
         }
       ]
     },
-    "src/contracts/schemas/v1/active-gate.schema.json": {
-      "bytes": 4505,
-      "format": "esm",
-      "imports": [],
-      "with": {
-        "type": "json"
-      }
-    },
-    "src/contracts/schemas/v1/adjudication-evidence.schema.json": {
-      "bytes": 6713,
-      "format": "esm",
-      "imports": [],
-      "with": {
-        "type": "json"
-      }
-    },
     "src/contracts/schemas/v1/adjudication.schema.json": {
-      "bytes": 4872,
+      "bytes": 6203,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6027,7 +4426,7 @@
       }
     },
     "src/contracts/schemas/v1/document-artifact.schema.json": {
-      "bytes": 3605,
+      "bytes": 2427,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6035,7 +4434,7 @@
       }
     },
     "src/contracts/schemas/v1/durable-primitives.schema.json": {
-      "bytes": 22340,
+      "bytes": 27223,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6043,7 +4442,7 @@
       }
     },
     "src/contracts/schemas/v1/evidence-slots.schema.json": {
-      "bytes": 2181,
+      "bytes": 2855,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6051,15 +4450,7 @@
       }
     },
     "src/contracts/schemas/v1/gate-contract.schema.json": {
-      "bytes": 16834,
-      "format": "esm",
-      "imports": [],
-      "with": {
-        "type": "json"
-      }
-    },
-    "src/contracts/schemas/v1/gate-decision-record.schema.json": {
-      "bytes": 5787,
+      "bytes": 19839,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6067,15 +4458,7 @@
       }
     },
     "src/contracts/schemas/v1/gate-decision.schema.json": {
-      "bytes": 9574,
-      "format": "esm",
-      "imports": [],
-      "with": {
-        "type": "json"
-      }
-    },
-    "src/contracts/schemas/v1/gate-request.schema.json": {
-      "bytes": 8553,
+      "bytes": 15778,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6083,15 +4466,7 @@
       }
     },
     "src/contracts/schemas/v1/implementation-output.schema.json": {
-      "bytes": 7792,
-      "format": "esm",
-      "imports": [],
-      "with": {
-        "type": "json"
-      }
-    },
-    "src/contracts/schemas/v1/intent-receipt.schema.json": {
-      "bytes": 2356,
+      "bytes": 3932,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6099,15 +4474,7 @@
       }
     },
     "src/contracts/schemas/v1/legacy-import-initialization.schema.json": {
-      "bytes": 5342,
-      "format": "esm",
-      "imports": [],
-      "with": {
-        "type": "json"
-      }
-    },
-    "src/contracts/schemas/v1/maintenance-record.schema.json": {
-      "bytes": 3254,
+      "bytes": 3454,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6115,7 +4482,7 @@
       }
     },
     "src/contracts/schemas/v1/mcp-tools.schema.json": {
-      "bytes": 25706,
+      "bytes": 28156,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6123,7 +4490,7 @@
       }
     },
     "src/contracts/schemas/v1/path-claim.schema.json": {
-      "bytes": 513,
+      "bytes": 470,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6131,7 +4498,7 @@
       }
     },
     "src/contracts/schemas/v1/primitives.schema.json": {
-      "bytes": 1904,
+      "bytes": 1544,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6139,23 +4506,7 @@
       }
     },
     "src/contracts/schemas/v1/project-error.schema.json": {
-      "bytes": 74482,
-      "format": "esm",
-      "imports": [],
-      "with": {
-        "type": "json"
-      }
-    },
-    "src/contracts/schemas/v1/result-manifest.schema.json": {
-      "bytes": 4169,
-      "format": "esm",
-      "imports": [],
-      "with": {
-        "type": "json"
-      }
-    },
-    "src/contracts/schemas/v1/review-evidence.schema.json": {
-      "bytes": 4355,
+      "bytes": 91510,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6163,7 +4514,7 @@
       }
     },
     "src/contracts/schemas/v1/review.schema.json": {
-      "bytes": 2849,
+      "bytes": 3386,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6171,7 +4522,7 @@
       }
     },
     "src/contracts/schemas/v1/rubric.schema.json": {
-      "bytes": 766,
+      "bytes": 1127,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6179,15 +4530,7 @@
       }
     },
     "src/contracts/schemas/v1/secret-scan-result.schema.json": {
-      "bytes": 2780,
-      "format": "esm",
-      "imports": [],
-      "with": {
-        "type": "json"
-      }
-    },
-    "src/contracts/schemas/v1/supplemental-review-record.schema.json": {
-      "bytes": 1983,
+      "bytes": 3316,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6195,7 +4538,7 @@
       }
     },
     "src/contracts/schemas/v1/supplemental-review.schema.json": {
-      "bytes": 4651,
+      "bytes": 5557,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6203,7 +4546,7 @@
       }
     },
     "src/contracts/schemas/v1/task-initialization.schema.json": {
-      "bytes": 2033,
+      "bytes": 1446,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6211,7 +4554,7 @@
       }
     },
     "src/contracts/schemas/v1/task-state.schema.json": {
-      "bytes": 11206,
+      "bytes": 9414,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6219,7 +4562,7 @@
       }
     },
     "src/contracts/schemas/v1/triage.schema.json": {
-      "bytes": 3162,
+      "bytes": 4768,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6253,7 +4596,7 @@
       ]
     },
     "src/contracts/supplemental-record.ts": {
-      "bytes": 5390,
+      "bytes": 5008,
       "format": "esm",
       "imports": [
         {
@@ -6295,40 +4638,11 @@
           "kind": "import-statement",
           "original": "./triage.js",
           "path": "src/contracts/triage.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./validators.js",
-          "path": "src/contracts/validators.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/supplemental-review-record.schema.json",
-          "path": "src/contracts/schemas/v1/supplemental-review-record.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/review-evidence.schema.json",
-          "path": "src/contracts/schemas/v1/review-evidence.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/triage.schema.json",
-          "path": "src/contracts/schemas/v1/triage.schema.json",
-          "with": {
-            "type": "json"
-          }
         }
       ]
     },
     "src/contracts/supplemental.ts": {
-      "bytes": 4137,
+      "bytes": 4106,
       "format": "esm",
       "imports": [
         {
@@ -6354,7 +4668,7 @@
       "imports": []
     },
     "src/contracts/triage.ts": {
-      "bytes": 7503,
+      "bytes": 8121,
       "format": "esm",
       "imports": [
         {
@@ -6380,7 +4694,7 @@
       ]
     },
     "src/contracts/trust.ts": {
-      "bytes": 25256,
+      "bytes": 25714,
       "format": "esm",
       "imports": [
         {
@@ -6426,180 +4740,13 @@
       ]
     },
     "src/contracts/validators.ts": {
-      "bytes": 20930,
+      "bytes": 3189,
       "format": "esm",
       "imports": [
         {
           "external": true,
           "kind": "import-statement",
           "path": "node:util"
-        },
-        {
-          "kind": "import-statement",
-          "original": "ajv/dist/2020.js",
-          "path": "node_modules/ajv/dist/2020.js"
-        },
-        {
-          "kind": "import-statement",
-          "original": "ajv-formats",
-          "path": "node_modules/ajv-formats/dist/index.js"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./plain-json.js",
-          "path": "src/contracts/plain-json.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/intent-receipt.schema.json",
-          "path": "src/contracts/schemas/v1/intent-receipt.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/result-manifest.schema.json",
-          "path": "src/contracts/schemas/v1/result-manifest.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/document-artifact.schema.json",
-          "path": "src/contracts/schemas/v1/document-artifact.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/durable-primitives.schema.json",
-          "path": "src/contracts/schemas/v1/durable-primitives.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/implementation-output.schema.json",
-          "path": "src/contracts/schemas/v1/implementation-output.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/path-claim.schema.json",
-          "path": "src/contracts/schemas/v1/path-claim.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/primitives.schema.json",
-          "path": "src/contracts/schemas/v1/primitives.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/task-state.schema.json",
-          "path": "src/contracts/schemas/v1/task-state.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/active-gate.schema.json",
-          "path": "src/contracts/schemas/v1/active-gate.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/gate-contract.schema.json",
-          "path": "src/contracts/schemas/v1/gate-contract.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/gate-decision.schema.json",
-          "path": "src/contracts/schemas/v1/gate-decision.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/gate-decision-record.schema.json",
-          "path": "src/contracts/schemas/v1/gate-decision-record.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/gate-request.schema.json",
-          "path": "src/contracts/schemas/v1/gate-request.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/supplemental-review.schema.json",
-          "path": "src/contracts/schemas/v1/supplemental-review.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/evidence-slots.schema.json",
-          "path": "src/contracts/schemas/v1/evidence-slots.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/secret-scan-result.schema.json",
-          "path": "src/contracts/schemas/v1/secret-scan-result.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/review-evidence.schema.json",
-          "path": "src/contracts/schemas/v1/review-evidence.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/triage.schema.json",
-          "path": "src/contracts/schemas/v1/triage.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "./schemas/v1/adjudication-evidence.schema.json",
-          "path": "src/contracts/schemas/v1/adjudication-evidence.schema.json",
-          "with": {
-            "type": "json"
-          }
         }
       ]
     },
@@ -6609,7 +4756,7 @@
       "imports": []
     },
     "src/contracts/workflow.ts": {
-      "bytes": 2256,
+      "bytes": 2598,
       "format": "esm",
       "imports": [
         {
@@ -7278,7 +5425,7 @@
       ]
     },
     "src/local/commands.ts": {
-      "bytes": 21409,
+      "bytes": 20836,
       "format": "esm",
       "imports": [
         {
@@ -7295,6 +5442,11 @@
           "kind": "import-statement",
           "original": "../contracts/canonical.js",
           "path": "src/contracts/canonical.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable-maintenance.js",
+          "path": "src/contracts/durable-maintenance.ts"
         },
         {
           "kind": "import-statement",
@@ -7360,35 +5512,6 @@
           "kind": "import-statement",
           "original": "../contracts/supplemental-record.js",
           "path": "src/contracts/supplemental-record.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/validators.js",
-          "path": "src/contracts/validators.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/schemas/v1/maintenance-record.schema.json",
-          "path": "src/contracts/schemas/v1/maintenance-record.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/schemas/v1/primitives.schema.json",
-          "path": "src/contracts/schemas/v1/primitives.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/schemas/v1/path-claim.schema.json",
-          "path": "src/contracts/schemas/v1/path-claim.schema.json",
-          "with": {
-            "type": "json"
-          }
         },
         {
           "kind": "import-statement",
@@ -8188,7 +6311,7 @@
       ]
     },
     "src/mcp/tools.ts": {
-      "bytes": 17085,
+      "bytes": 17286,
       "format": "esm",
       "imports": [
         {
@@ -9613,7 +7736,7 @@
       ]
     },
     "src/state/maintenance-roots.ts": {
-      "bytes": 17740,
+      "bytes": 17165,
       "format": "esm",
       "imports": [
         {
@@ -9665,35 +7788,6 @@
           "kind": "import-statement",
           "original": "../contracts/plain-json.js",
           "path": "src/contracts/plain-json.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/schemas/v1/maintenance-record.schema.json",
-          "path": "src/contracts/schemas/v1/maintenance-record.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/schemas/v1/path-claim.schema.json",
-          "path": "src/contracts/schemas/v1/path-claim.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/schemas/v1/primitives.schema.json",
-          "path": "src/contracts/schemas/v1/primitives.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/validators.js",
-          "path": "src/contracts/validators.ts"
         },
         {
           "kind": "import-statement",
@@ -9934,7 +8028,7 @@
       ]
     },
     "src/state/read.ts": {
-      "bytes": 4678,
+      "bytes": 4691,
       "format": "esm",
       "imports": [
         {
@@ -9959,32 +8053,8 @@
         },
         {
           "kind": "import-statement",
-          "original": "../contracts/schemas/v1/task-state.schema.json",
-          "path": "src/contracts/schemas/v1/task-state.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/schemas/v1/path-claim.schema.json",
-          "path": "src/contracts/schemas/v1/path-claim.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/schemas/v1/primitives.schema.json",
-          "path": "src/contracts/schemas/v1/primitives.schema.json",
-          "with": {
-            "type": "json"
-          }
-        },
-        {
-          "kind": "import-statement",
-          "original": "../contracts/validators.js",
-          "path": "src/contracts/validators.ts"
+          "original": "../contracts/durable-state.js",
+          "path": "src/contracts/durable-state.ts"
         },
         {
           "kind": "import-statement",
@@ -10586,7 +8656,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1982400,
+      "bytes": 1570591,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10663,17 +8733,12 @@
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:util"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:util"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
           "path": "node:crypto"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
         },
         {
           "external": true,
@@ -11072,274 +9137,7 @@
           "bytesInOutput": 329
         },
         "node_modules/@secretlint/secretlint-rule-preset-recommend/module/index.js": {
-          "bytesInOutput": 134348
-        },
-        "node_modules/ajv-formats/dist/formats.js": {
-          "bytesInOutput": 12309
-        },
-        "node_modules/ajv-formats/dist/index.js": {
-          "bytesInOutput": 1636
-        },
-        "node_modules/ajv-formats/dist/limit.js": {
-          "bytesInOutput": 2936
-        },
-        "node_modules/ajv/dist/2020.js": {
-          "bytesInOutput": 3054
-        },
-        "node_modules/ajv/dist/ajv.js": {
-          "bytesInOutput": 2968
-        },
-        "node_modules/ajv/dist/compile/codegen/code.js": {
-          "bytesInOutput": 4836
-        },
-        "node_modules/ajv/dist/compile/codegen/index.js": {
-          "bytesInOutput": 23988
-        },
-        "node_modules/ajv/dist/compile/codegen/scope.js": {
-          "bytesInOutput": 5322
-        },
-        "node_modules/ajv/dist/compile/errors.js": {
-          "bytesInOutput": 5995
-        },
-        "node_modules/ajv/dist/compile/index.js": {
-          "bytesInOutput": 9136
-        },
-        "node_modules/ajv/dist/compile/names.js": {
-          "bytesInOutput": 1596
-        },
-        "node_modules/ajv/dist/compile/ref_error.js": {
-          "bytesInOutput": 639
-        },
-        "node_modules/ajv/dist/compile/resolve.js": {
-          "bytesInOutput": 5098
-        },
-        "node_modules/ajv/dist/compile/rules.js": {
-          "bytesInOutput": 1028
-        },
-        "node_modules/ajv/dist/compile/util.js": {
-          "bytesInOutput": 7178
-        },
-        "node_modules/ajv/dist/compile/validate/applicability.js": {
-          "bytesInOutput": 991
-        },
-        "node_modules/ajv/dist/compile/validate/boolSchema.js": {
-          "bytesInOutput": 1546
-        },
-        "node_modules/ajv/dist/compile/validate/dataType.js": {
-          "bytesInOutput": 8134
-        },
-        "node_modules/ajv/dist/compile/validate/defaults.js": {
-          "bytesInOutput": 1429
-        },
-        "node_modules/ajv/dist/compile/validate/index.js": {
-          "bytesInOutput": 20399
-        },
-        "node_modules/ajv/dist/compile/validate/keyword.js": {
-          "bytesInOutput": 5748
-        },
-        "node_modules/ajv/dist/compile/validate/subschema.js": {
-          "bytesInOutput": 3722
-        },
-        "node_modules/ajv/dist/core.js": {
-          "bytesInOutput": 24163
-        },
-        "node_modules/ajv/dist/refs/data.json": {
-          "bytesInOutput": 561
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/index.js": {
-          "bytesInOutput": 1072
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json": {
-          "bytesInOutput": 1710
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json": {
-          "bytesInOutput": 666
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json": {
-          "bytesInOutput": 1615
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json": {
-          "bytesInOutput": 624
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json": {
-          "bytesInOutput": 1001
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json": {
-          "bytesInOutput": 667
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json": {
-          "bytesInOutput": 2649
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/schema.json": {
-          "bytesInOutput": 2445
-        },
-        "node_modules/ajv/dist/refs/json-schema-draft-07.json": {
-          "bytesInOutput": 4335
-        },
-        "node_modules/ajv/dist/runtime/equal.js": {
-          "bytesInOutput": 314
-        },
-        "node_modules/ajv/dist/runtime/ucs2length.js": {
-          "bytesInOutput": 703
-        },
-        "node_modules/ajv/dist/runtime/uri.js": {
-          "bytesInOutput": 295
-        },
-        "node_modules/ajv/dist/runtime/validation_error.js": {
-          "bytesInOutput": 441
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js": {
-          "bytesInOutput": 2045
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js": {
-          "bytesInOutput": 4044
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/allOf.js": {
-          "bytesInOutput": 801
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/anyOf.js": {
-          "bytesInOutput": 449
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/contains.js": {
-          "bytesInOutput": 3574
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/dependencies.js": {
-          "bytesInOutput": 3365
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js": {
-          "bytesInOutput": 469
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/if.js": {
-          "bytesInOutput": 2449
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/index.js": {
-          "bytesInOutput": 1614
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/items.js": {
-          "bytesInOutput": 2092
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/items2020.js": {
-          "bytesInOutput": 1136
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/not.js": {
-          "bytesInOutput": 854
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/oneOf.js": {
-          "bytesInOutput": 1977
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js": {
-          "bytesInOutput": 2851
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js": {
-          "bytesInOutput": 466
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/properties.js": {
-          "bytesInOutput": 2156
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js": {
-          "bytesInOutput": 1284
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/thenElse.js": {
-          "bytesInOutput": 536
-        },
-        "node_modules/ajv/dist/vocabularies/code.js": {
-          "bytesInOutput": 6227
-        },
-        "node_modules/ajv/dist/vocabularies/core/id.js": {
-          "bytesInOutput": 361
-        },
-        "node_modules/ajv/dist/vocabularies/core/index.js": {
-          "bytesInOutput": 460
-        },
-        "node_modules/ajv/dist/vocabularies/core/ref.js": {
-          "bytesInOutput": 5040
-        },
-        "node_modules/ajv/dist/vocabularies/discriminator/index.js": {
-          "bytesInOutput": 4669
-        },
-        "node_modules/ajv/dist/vocabularies/discriminator/types.js": {
-          "bytesInOutput": 419
-        },
-        "node_modules/ajv/dist/vocabularies/draft2020.js": {
-          "bytesInOutput": 862
-        },
-        "node_modules/ajv/dist/vocabularies/draft7.js": {
-          "bytesInOutput": 651
-        },
-        "node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js": {
-          "bytesInOutput": 1400
-        },
-        "node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js": {
-          "bytesInOutput": 1534
-        },
-        "node_modules/ajv/dist/vocabularies/dynamic/index.js": {
-          "bytesInOutput": 544
-        },
-        "node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js": {
-          "bytesInOutput": 616
-        },
-        "node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js": {
-          "bytesInOutput": 431
-        },
-        "node_modules/ajv/dist/vocabularies/format/format.js": {
-          "bytesInOutput": 4066
-        },
-        "node_modules/ajv/dist/vocabularies/format/index.js": {
-          "bytesInOutput": 298
-        },
-        "node_modules/ajv/dist/vocabularies/metadata.js": {
-          "bytesInOutput": 543
-        },
-        "node_modules/ajv/dist/vocabularies/next.js": {
-          "bytesInOutput": 477
-        },
-        "node_modules/ajv/dist/vocabularies/unevaluated/index.js": {
-          "bytesInOutput": 447
-        },
-        "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js": {
-          "bytesInOutput": 1660
-        },
-        "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js": {
-          "bytesInOutput": 2539
-        },
-        "node_modules/ajv/dist/vocabularies/validation/const.js": {
-          "bytesInOutput": 923
-        },
-        "node_modules/ajv/dist/vocabularies/validation/dependentRequired.js": {
-          "bytesInOutput": 509
-        },
-        "node_modules/ajv/dist/vocabularies/validation/enum.js": {
-          "bytesInOutput": 1881
-        },
-        "node_modules/ajv/dist/vocabularies/validation/index.js": {
-          "bytesInOutput": 1160
-        },
-        "node_modules/ajv/dist/vocabularies/validation/limitContains.js": {
-          "bytesInOutput": 592
-        },
-        "node_modules/ajv/dist/vocabularies/validation/limitItems.js": {
-          "bytesInOutput": 974
-        },
-        "node_modules/ajv/dist/vocabularies/validation/limitLength.js": {
-          "bytesInOutput": 1225
-        },
-        "node_modules/ajv/dist/vocabularies/validation/limitNumber.js": {
-          "bytesInOutput": 1172
-        },
-        "node_modules/ajv/dist/vocabularies/validation/limitProperties.js": {
-          "bytesInOutput": 1023
-        },
-        "node_modules/ajv/dist/vocabularies/validation/multipleOf.js": {
-          "bytesInOutput": 1038
-        },
-        "node_modules/ajv/dist/vocabularies/validation/pattern.js": {
-          "bytesInOutput": 1401
-        },
-        "node_modules/ajv/dist/vocabularies/validation/required.js": {
-          "bytesInOutput": 3128
-        },
-        "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js": {
-          "bytesInOutput": 2970
+          "bytesInOutput": 134351
         },
         "node_modules/boundary/lib/index.js": {
           "bytesInOutput": 1384
@@ -11355,21 +9153,6 @@
         },
         "node_modules/debug/src/node.js": {
           "bytesInOutput": 4330
-        },
-        "node_modules/fast-deep-equal/index.js": {
-          "bytesInOutput": 1303
-        },
-        "node_modules/fast-uri/index.js": {
-          "bytesInOutput": 11281
-        },
-        "node_modules/fast-uri/lib/schemes.js": {
-          "bytesInOutput": 6359
-        },
-        "node_modules/fast-uri/lib/utils.js": {
-          "bytesInOutput": 9493
-        },
-        "node_modules/json-schema-traverse/index.js": {
-          "bytesInOutput": 2827
         },
         "node_modules/ms/index.js": {
           "bytesInOutput": 2883
@@ -11390,7 +9173,7 @@
           "bytesInOutput": 3434
         },
         "node_modules/yaml/dist/compose/composer.js": {
-          "bytesInOutput": 7882
+          "bytesInOutput": 7884
         },
         "node_modules/yaml/dist/compose/resolve-block-map.js": {
           "bytesInOutput": 4798
@@ -11408,7 +9191,7 @@
           "bytesInOutput": 8132
         },
         "node_modules/yaml/dist/compose/resolve-flow-scalar.js": {
-          "bytesInOutput": 6928
+          "bytesInOutput": 6932
         },
         "node_modules/yaml/dist/compose/resolve-props.js": {
           "bytesInOutput": 4942
@@ -11441,10 +9224,10 @@
           "bytesInOutput": 5897
         },
         "node_modules/yaml/dist/errors.js": {
-          "bytesInOutput": 2137
+          "bytesInOutput": 2142
         },
         "node_modules/yaml/dist/index.js": {
-          "bytesInOutput": 1868
+          "bytesInOutput": 1866
         },
         "node_modules/yaml/dist/log.js": {
           "bytesInOutput": 580
@@ -11480,7 +9263,7 @@
           "bytesInOutput": 889
         },
         "node_modules/yaml/dist/parse/cst-scalar.js": {
-          "bytesInOutput": 6971
+          "bytesInOutput": 6973
         },
         "node_modules/yaml/dist/parse/cst-stringify.js": {
           "bytesInOutput": 1702
@@ -11501,7 +9284,7 @@
           "bytesInOutput": 29481
         },
         "node_modules/yaml/dist/public-api.js": {
-          "bytesInOutput": 3905
+          "bytesInOutput": 3904
         },
         "node_modules/yaml/dist/schema/Schema.js": {
           "bytesInOutput": 1485
@@ -11528,13 +9311,13 @@
           "bytesInOutput": 1584
         },
         "node_modules/yaml/dist/schema/core/schema.js": {
-          "bytesInOutput": 609
+          "bytesInOutput": 608
         },
         "node_modules/yaml/dist/schema/json/schema.js": {
           "bytesInOutput": 2048
         },
         "node_modules/yaml/dist/schema/tags.js": {
-          "bytesInOutput": 3221
+          "bytesInOutput": 3220
         },
         "node_modules/yaml/dist/schema/yaml-1.1/binary.js": {
           "bytesInOutput": 2701
@@ -11588,7 +9371,7 @@
           "bytesInOutput": 5232
         },
         "node_modules/yaml/dist/stringify/stringifyString.js": {
-          "bytesInOutput": 10956
+          "bytesInOutput": 10960
         },
         "node_modules/yaml/dist/visit.js": {
           "bytesInOutput": 5559
@@ -11831,40 +9614,43 @@
           "bytesInOutput": 4611
         },
         "src/contracts/adjudication.ts": {
-          "bytesInOutput": 7801
+          "bytesInOutput": 7937
         },
         "src/contracts/canonical.ts": {
           "bytesInOutput": 2816
         },
         "src/contracts/config.ts": {
-          "bytesInOutput": 1219
+          "bytesInOutput": 1266
         },
         "src/contracts/constitution.ts": {
-          "bytesInOutput": 2351
+          "bytesInOutput": 2258
         },
         "src/contracts/durable-document.ts": {
           "bytesInOutput": 1203
         },
         "src/contracts/durable-gate.ts": {
-          "bytesInOutput": 3113
+          "bytesInOutput": 9576
         },
         "src/contracts/durable-implementation-output.ts": {
           "bytesInOutput": 2292
         },
         "src/contracts/durable-intent.ts": {
-          "bytesInOutput": 312
+          "bytesInOutput": 1045
         },
         "src/contracts/durable-legacy-import.ts": {
           "bytesInOutput": 1553
         },
         "src/contracts/durable-maintenance.ts": {
-          "bytesInOutput": 140
+          "bytesInOutput": 1362
         },
         "src/contracts/durable-primitives.ts": {
-          "bytesInOutput": 7104
+          "bytesInOutput": 7339
         },
         "src/contracts/durable-result-manifest.ts": {
-          "bytesInOutput": 154
+          "bytesInOutput": 1945
+        },
+        "src/contracts/durable-state.ts": {
+          "bytesInOutput": 3693
         },
         "src/contracts/durable-task-initialization.ts": {
           "bytesInOutput": 531
@@ -11873,16 +9659,16 @@
           "bytesInOutput": 32894
         },
         "src/contracts/errors.ts": {
-          "bytesInOutput": 15411
+          "bytesInOutput": 16425
         },
         "src/contracts/evidence.ts": {
-          "bytesInOutput": 1826
+          "bytesInOutput": 2125
         },
         "src/contracts/fingerprints.ts": {
           "bytesInOutput": 6772
         },
         "src/contracts/gates.ts": {
-          "bytesInOutput": 14249
+          "bytesInOutput": 15101
         },
         "src/contracts/internal/test-capabilities.ts": {
           "bytesInOutput": 714
@@ -11891,13 +9677,13 @@
           "bytesInOutput": 1855
         },
         "src/contracts/mcp-tools.ts": {
-          "bytesInOutput": 7937
+          "bytesInOutput": 9755
         },
         "src/contracts/path-claims.ts": {
-          "bytesInOutput": 2855
+          "bytesInOutput": 3305
         },
         "src/contracts/phase-instance.ts": {
-          "bytesInOutput": 1418
+          "bytesInOutput": 2078
         },
         "src/contracts/plain-json.ts": {
           "bytesInOutput": 3790
@@ -11906,109 +9692,46 @@
           "bytesInOutput": 7298
         },
         "src/contracts/review.ts": {
-          "bytesInOutput": 5297
+          "bytesInOutput": 5342
         },
         "src/contracts/rubric.ts": {
-          "bytesInOutput": 1008
-        },
-        "src/contracts/schemas/v1/active-gate.schema.json": {
-          "bytesInOutput": 4339
-        },
-        "src/contracts/schemas/v1/adjudication-evidence.schema.json": {
-          "bytesInOutput": 6265
-        },
-        "src/contracts/schemas/v1/document-artifact.schema.json": {
-          "bytesInOutput": 3545
-        },
-        "src/contracts/schemas/v1/durable-primitives.schema.json": {
-          "bytesInOutput": 21430
-        },
-        "src/contracts/schemas/v1/evidence-slots.schema.json": {
-          "bytesInOutput": 2064
-        },
-        "src/contracts/schemas/v1/gate-contract.schema.json": {
-          "bytesInOutput": 15958
-        },
-        "src/contracts/schemas/v1/gate-decision-record.schema.json": {
-          "bytesInOutput": 5884
-        },
-        "src/contracts/schemas/v1/gate-decision.schema.json": {
-          "bytesInOutput": 9262
-        },
-        "src/contracts/schemas/v1/gate-request.schema.json": {
-          "bytesInOutput": 8188
-        },
-        "src/contracts/schemas/v1/implementation-output.schema.json": {
-          "bytesInOutput": 7670
-        },
-        "src/contracts/schemas/v1/intent-receipt.schema.json": {
-          "bytesInOutput": 2287
-        },
-        "src/contracts/schemas/v1/maintenance-record.schema.json": {
-          "bytesInOutput": 3211
-        },
-        "src/contracts/schemas/v1/path-claim.schema.json": {
-          "bytesInOutput": 536
-        },
-        "src/contracts/schemas/v1/primitives.schema.json": {
-          "bytesInOutput": 1857
-        },
-        "src/contracts/schemas/v1/result-manifest.schema.json": {
-          "bytesInOutput": 4029
-        },
-        "src/contracts/schemas/v1/review-evidence.schema.json": {
-          "bytesInOutput": 4163
-        },
-        "src/contracts/schemas/v1/secret-scan-result.schema.json": {
-          "bytesInOutput": 2673
-        },
-        "src/contracts/schemas/v1/supplemental-review-record.schema.json": {
-          "bytesInOutput": 1932
-        },
-        "src/contracts/schemas/v1/supplemental-review.schema.json": {
-          "bytesInOutput": 4415
-        },
-        "src/contracts/schemas/v1/task-state.schema.json": {
-          "bytesInOutput": 10854
-        },
-        "src/contracts/schemas/v1/triage.schema.json": {
-          "bytesInOutput": 3047
+          "bytesInOutput": 977
         },
         "src/contracts/secret-scan.ts": {
           "bytesInOutput": 1115
         },
         "src/contracts/supplemental-record.ts": {
-          "bytesInOutput": 3406
+          "bytesInOutput": 3415
         },
         "src/contracts/supplemental.ts": {
-          "bytesInOutput": 2912
+          "bytesInOutput": 2888
         },
         "src/contracts/tool-names.ts": {
           "bytesInOutput": 222
         },
         "src/contracts/triage.ts": {
-          "bytesInOutput": 2161
+          "bytesInOutput": 2790
         },
         "src/contracts/trust.ts": {
-          "bytesInOutput": 14152
+          "bytesInOutput": 14497
         },
         "src/contracts/validators.ts": {
-          "bytesInOutput": 14867
+          "bytesInOutput": 622
         },
         "src/contracts/vocabulary.ts": {
           "bytesInOutput": 247
         },
         "src/contracts/workflow.ts": {
-          "bytesInOutput": 1843
+          "bytesInOutput": 1896
         },
         "src/contracts/yaml.ts": {
-          "bytesInOutput": 1586
+          "bytesInOutput": 1585
         },
         "src/dispatch/cli.ts": {
           "bytesInOutput": 20946
         },
         "src/dispatch/process.ts": {
-          "bytesInOutput": 7386
+          "bytesInOutput": 7394
         },
         "src/dispatch/routing.ts": {
           "bytesInOutput": 2091
@@ -12017,7 +9740,7 @@
           "bytesInOutput": 2341
         },
         "src/init/assets.ts": {
-          "bytesInOutput": 4391
+          "bytesInOutput": 4393
         },
         "src/init/diagnostics.ts": {
           "bytesInOutput": 6028
@@ -12029,16 +9752,16 @@
           "bytesInOutput": 14348
         },
         "src/init/registration.ts": {
-          "bytesInOutput": 12596
+          "bytesInOutput": 12598
         },
         "src/init/task-initialization.ts": {
-          "bytesInOutput": 5011
+          "bytesInOutput": 5013
         },
         "src/local/build-request.ts": {
           "bytesInOutput": 16577
         },
         "src/local/commands.ts": {
-          "bytesInOutput": 16198
+          "bytesInOutput": 15984
         },
         "src/local/envelope.ts": {
           "bytesInOutput": 12045
@@ -12047,13 +9770,13 @@
           "bytesInOutput": 3612
         },
         "src/local/status-classification.ts": {
-          "bytesInOutput": 1889
+          "bytesInOutput": 1897
         },
         "src/repository/attributes.ts": {
           "bytesInOutput": 667
         },
         "src/repository/git.ts": {
-          "bytesInOutput": 15066
+          "bytesInOutput": 15071
         },
         "src/repository/identity.ts": {
           "bytesInOutput": 5743
@@ -12062,7 +9785,7 @@
           "bytesInOutput": 2782
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 11391
+          "bytesInOutput": 11394
         },
         "src/review/adjudication.ts": {
           "bytesInOutput": 2480
@@ -12095,7 +9818,7 @@
           "bytesInOutput": 3472
         },
         "src/state/gate-core.ts": {
-          "bytesInOutput": 5935
+          "bytesInOutput": 5941
         },
         "src/state/gate-decision-interface.ts": {
           "bytesInOutput": 6617
@@ -12116,13 +9839,13 @@
           "bytesInOutput": 2295
         },
         "src/state/maintenance-roots.ts": {
-          "bytesInOutput": 9868
+          "bytesInOutput": 9711
         },
         "src/state/maintenance.ts": {
-          "bytesInOutput": 7914
+          "bytesInOutput": 7918
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 5877
+          "bytesInOutput": 5892
         },
         "src/state/phase-documents.ts": {
           "bytesInOutput": 1883
@@ -12134,7 +9857,7 @@
           "bytesInOutput": 11950
         },
         "src/state/read.ts": {
-          "bytesInOutput": 2325
+          "bytesInOutput": 2434
         },
         "src/state/reconciliation-discovery.ts": {
           "bytesInOutput": 7967
@@ -12158,7 +9881,7 @@
           "bytesInOutput": 1336
         },
         "src/state/status.ts": {
-          "bytesInOutput": 32398
+          "bytesInOutput": 32392
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 264
@@ -12169,7 +9892,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2743280,
+      "bytes": 2443368,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12242,11 +9965,6 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:crypto"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:util"
         },
         {
           "external": true,
@@ -12584,7 +10302,7 @@
           "bytesInOutput": 34870
         },
         "node_modules/@modelcontextprotocol/server/dist/ajvProvider-CEoC__sr.mjs": {
-          "bytesInOutput": 272032
+          "bytesInOutput": 272088
         },
         "node_modules/@modelcontextprotocol/server/dist/chunk-Br0eD_fh.mjs": {
           "bytesInOutput": 1403
@@ -12593,10 +10311,10 @@
           "bytesInOutput": 1284
         },
         "node_modules/@modelcontextprotocol/server/dist/mcp-DXXb3Vv3.mjs": {
-          "bytesInOutput": 40127
+          "bytesInOutput": 40148
         },
         "node_modules/@modelcontextprotocol/server/dist/src-CX2iR2pK.mjs": {
-          "bytesInOutput": 184711
+          "bytesInOutput": 184741
         },
         "node_modules/@secretlint/core/module/RuleContext.js": {
           "bytesInOutput": 2398
@@ -12653,274 +10371,7 @@
           "bytesInOutput": 329
         },
         "node_modules/@secretlint/secretlint-rule-preset-recommend/module/index.js": {
-          "bytesInOutput": 134368
-        },
-        "node_modules/ajv-formats/dist/formats.js": {
-          "bytesInOutput": 12298
-        },
-        "node_modules/ajv-formats/dist/index.js": {
-          "bytesInOutput": 1643
-        },
-        "node_modules/ajv-formats/dist/limit.js": {
-          "bytesInOutput": 2939
-        },
-        "node_modules/ajv/dist/2020.js": {
-          "bytesInOutput": 3062
-        },
-        "node_modules/ajv/dist/ajv.js": {
-          "bytesInOutput": 2982
-        },
-        "node_modules/ajv/dist/compile/codegen/code.js": {
-          "bytesInOutput": 4843
-        },
-        "node_modules/ajv/dist/compile/codegen/index.js": {
-          "bytesInOutput": 23976
-        },
-        "node_modules/ajv/dist/compile/codegen/scope.js": {
-          "bytesInOutput": 5324
-        },
-        "node_modules/ajv/dist/compile/errors.js": {
-          "bytesInOutput": 5999
-        },
-        "node_modules/ajv/dist/compile/index.js": {
-          "bytesInOutput": 9131
-        },
-        "node_modules/ajv/dist/compile/names.js": {
-          "bytesInOutput": 1598
-        },
-        "node_modules/ajv/dist/compile/ref_error.js": {
-          "bytesInOutput": 641
-        },
-        "node_modules/ajv/dist/compile/resolve.js": {
-          "bytesInOutput": 5102
-        },
-        "node_modules/ajv/dist/compile/rules.js": {
-          "bytesInOutput": 1029
-        },
-        "node_modules/ajv/dist/compile/util.js": {
-          "bytesInOutput": 7181
-        },
-        "node_modules/ajv/dist/compile/validate/applicability.js": {
-          "bytesInOutput": 992
-        },
-        "node_modules/ajv/dist/compile/validate/boolSchema.js": {
-          "bytesInOutput": 1550
-        },
-        "node_modules/ajv/dist/compile/validate/dataType.js": {
-          "bytesInOutput": 8140
-        },
-        "node_modules/ajv/dist/compile/validate/defaults.js": {
-          "bytesInOutput": 1432
-        },
-        "node_modules/ajv/dist/compile/validate/index.js": {
-          "bytesInOutput": 20412
-        },
-        "node_modules/ajv/dist/compile/validate/keyword.js": {
-          "bytesInOutput": 5750
-        },
-        "node_modules/ajv/dist/compile/validate/subschema.js": {
-          "bytesInOutput": 3725
-        },
-        "node_modules/ajv/dist/core.js": {
-          "bytesInOutput": 24180
-        },
-        "node_modules/ajv/dist/refs/data.json": {
-          "bytesInOutput": 562
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/index.js": {
-          "bytesInOutput": 1077
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json": {
-          "bytesInOutput": 1710
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json": {
-          "bytesInOutput": 667
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json": {
-          "bytesInOutput": 1615
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json": {
-          "bytesInOutput": 625
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json": {
-          "bytesInOutput": 1002
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json": {
-          "bytesInOutput": 667
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json": {
-          "bytesInOutput": 2649
-        },
-        "node_modules/ajv/dist/refs/json-schema-2020-12/schema.json": {
-          "bytesInOutput": 2446
-        },
-        "node_modules/ajv/dist/refs/json-schema-draft-07.json": {
-          "bytesInOutput": 4336
-        },
-        "node_modules/ajv/dist/runtime/equal.js": {
-          "bytesInOutput": 316
-        },
-        "node_modules/ajv/dist/runtime/ucs2length.js": {
-          "bytesInOutput": 704
-        },
-        "node_modules/ajv/dist/runtime/uri.js": {
-          "bytesInOutput": 297
-        },
-        "node_modules/ajv/dist/runtime/validation_error.js": {
-          "bytesInOutput": 442
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js": {
-          "bytesInOutput": 2048
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js": {
-          "bytesInOutput": 4048
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/allOf.js": {
-          "bytesInOutput": 803
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/anyOf.js": {
-          "bytesInOutput": 450
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/contains.js": {
-          "bytesInOutput": 3577
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/dependencies.js": {
-          "bytesInOutput": 3368
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js": {
-          "bytesInOutput": 471
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/if.js": {
-          "bytesInOutput": 2452
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/index.js": {
-          "bytesInOutput": 1631
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/items.js": {
-          "bytesInOutput": 2095
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/items2020.js": {
-          "bytesInOutput": 1140
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/not.js": {
-          "bytesInOutput": 856
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/oneOf.js": {
-          "bytesInOutput": 1980
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js": {
-          "bytesInOutput": 2855
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js": {
-          "bytesInOutput": 468
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/properties.js": {
-          "bytesInOutput": 2160
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js": {
-          "bytesInOutput": 1287
-        },
-        "node_modules/ajv/dist/vocabularies/applicator/thenElse.js": {
-          "bytesInOutput": 538
-        },
-        "node_modules/ajv/dist/vocabularies/code.js": {
-          "bytesInOutput": 6234
-        },
-        "node_modules/ajv/dist/vocabularies/core/id.js": {
-          "bytesInOutput": 362
-        },
-        "node_modules/ajv/dist/vocabularies/core/index.js": {
-          "bytesInOutput": 462
-        },
-        "node_modules/ajv/dist/vocabularies/core/ref.js": {
-          "bytesInOutput": 5046
-        },
-        "node_modules/ajv/dist/vocabularies/discriminator/index.js": {
-          "bytesInOutput": 4675
-        },
-        "node_modules/ajv/dist/vocabularies/discriminator/types.js": {
-          "bytesInOutput": 420
-        },
-        "node_modules/ajv/dist/vocabularies/draft2020.js": {
-          "bytesInOutput": 869
-        },
-        "node_modules/ajv/dist/vocabularies/draft7.js": {
-          "bytesInOutput": 655
-        },
-        "node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js": {
-          "bytesInOutput": 1403
-        },
-        "node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js": {
-          "bytesInOutput": 1535
-        },
-        "node_modules/ajv/dist/vocabularies/dynamic/index.js": {
-          "bytesInOutput": 549
-        },
-        "node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js": {
-          "bytesInOutput": 619
-        },
-        "node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js": {
-          "bytesInOutput": 433
-        },
-        "node_modules/ajv/dist/vocabularies/format/format.js": {
-          "bytesInOutput": 4068
-        },
-        "node_modules/ajv/dist/vocabularies/format/index.js": {
-          "bytesInOutput": 299
-        },
-        "node_modules/ajv/dist/vocabularies/metadata.js": {
-          "bytesInOutput": 544
-        },
-        "node_modules/ajv/dist/vocabularies/next.js": {
-          "bytesInOutput": 481
-        },
-        "node_modules/ajv/dist/vocabularies/unevaluated/index.js": {
-          "bytesInOutput": 450
-        },
-        "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js": {
-          "bytesInOutput": 1663
-        },
-        "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js": {
-          "bytesInOutput": 2543
-        },
-        "node_modules/ajv/dist/vocabularies/validation/const.js": {
-          "bytesInOutput": 927
-        },
-        "node_modules/ajv/dist/vocabularies/validation/dependentRequired.js": {
-          "bytesInOutput": 511
-        },
-        "node_modules/ajv/dist/vocabularies/validation/enum.js": {
-          "bytesInOutput": 1885
-        },
-        "node_modules/ajv/dist/vocabularies/validation/index.js": {
-          "bytesInOutput": 1171
-        },
-        "node_modules/ajv/dist/vocabularies/validation/limitContains.js": {
-          "bytesInOutput": 594
-        },
-        "node_modules/ajv/dist/vocabularies/validation/limitItems.js": {
-          "bytesInOutput": 976
-        },
-        "node_modules/ajv/dist/vocabularies/validation/limitLength.js": {
-          "bytesInOutput": 1229
-        },
-        "node_modules/ajv/dist/vocabularies/validation/limitNumber.js": {
-          "bytesInOutput": 1174
-        },
-        "node_modules/ajv/dist/vocabularies/validation/limitProperties.js": {
-          "bytesInOutput": 1025
-        },
-        "node_modules/ajv/dist/vocabularies/validation/multipleOf.js": {
-          "bytesInOutput": 1042
-        },
-        "node_modules/ajv/dist/vocabularies/validation/pattern.js": {
-          "bytesInOutput": 1404
-        },
-        "node_modules/ajv/dist/vocabularies/validation/required.js": {
-          "bytesInOutput": 3131
-        },
-        "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js": {
-          "bytesInOutput": 2975
+          "bytesInOutput": 134371
         },
         "node_modules/boundary/lib/index.js": {
           "bytesInOutput": 1384
@@ -12936,21 +10387,6 @@
         },
         "node_modules/debug/src/node.js": {
           "bytesInOutput": 4336
-        },
-        "node_modules/fast-deep-equal/index.js": {
-          "bytesInOutput": 1304
-        },
-        "node_modules/fast-uri/index.js": {
-          "bytesInOutput": 11312
-        },
-        "node_modules/fast-uri/lib/schemes.js": {
-          "bytesInOutput": 6361
-        },
-        "node_modules/fast-uri/lib/utils.js": {
-          "bytesInOutput": 9494
-        },
-        "node_modules/json-schema-traverse/index.js": {
-          "bytesInOutput": 2828
         },
         "node_modules/ms/index.js": {
           "bytesInOutput": 2883
@@ -12971,7 +10407,7 @@
           "bytesInOutput": 3434
         },
         "node_modules/yaml/dist/compose/composer.js": {
-          "bytesInOutput": 7882
+          "bytesInOutput": 7885
         },
         "node_modules/yaml/dist/compose/resolve-block-map.js": {
           "bytesInOutput": 4798
@@ -12989,7 +10425,7 @@
           "bytesInOutput": 8132
         },
         "node_modules/yaml/dist/compose/resolve-flow-scalar.js": {
-          "bytesInOutput": 6928
+          "bytesInOutput": 6932
         },
         "node_modules/yaml/dist/compose/resolve-props.js": {
           "bytesInOutput": 4942
@@ -13022,7 +10458,7 @@
           "bytesInOutput": 5900
         },
         "node_modules/yaml/dist/errors.js": {
-          "bytesInOutput": 2137
+          "bytesInOutput": 2143
         },
         "node_modules/yaml/dist/index.js": {
           "bytesInOutput": 1868
@@ -13061,7 +10497,7 @@
           "bytesInOutput": 889
         },
         "node_modules/yaml/dist/parse/cst-scalar.js": {
-          "bytesInOutput": 6971
+          "bytesInOutput": 6974
         },
         "node_modules/yaml/dist/parse/cst-stringify.js": {
           "bytesInOutput": 1702
@@ -13169,7 +10605,7 @@
           "bytesInOutput": 5232
         },
         "node_modules/yaml/dist/stringify/stringifyString.js": {
-          "bytesInOutput": 10956
+          "bytesInOutput": 10960
         },
         "node_modules/yaml/dist/visit.js": {
           "bytesInOutput": 5559
@@ -13412,43 +10848,46 @@
           "bytesInOutput": 4611
         },
         "src/contracts/adjudication.ts": {
-          "bytesInOutput": 7801
+          "bytesInOutput": 7937
         },
         "src/contracts/canonical.ts": {
           "bytesInOutput": 2816
         },
         "src/contracts/config.ts": {
-          "bytesInOutput": 1219
+          "bytesInOutput": 1266
         },
         "src/contracts/constitution.ts": {
-          "bytesInOutput": 2351
+          "bytesInOutput": 2258
         },
         "src/contracts/contexts.ts": {
-          "bytesInOutput": 3272
+          "bytesInOutput": 3275
         },
         "src/contracts/durable-document.ts": {
           "bytesInOutput": 1066
         },
         "src/contracts/durable-gate.ts": {
-          "bytesInOutput": 3142
+          "bytesInOutput": 9619
         },
         "src/contracts/durable-implementation-output.ts": {
           "bytesInOutput": 2143
         },
         "src/contracts/durable-intent.ts": {
-          "bytesInOutput": 312
+          "bytesInOutput": 1045
         },
         "src/contracts/durable-legacy-import.ts": {
           "bytesInOutput": 1721
         },
         "src/contracts/durable-maintenance.ts": {
-          "bytesInOutput": 140
+          "bytesInOutput": 1368
         },
         "src/contracts/durable-primitives.ts": {
-          "bytesInOutput": 7104
+          "bytesInOutput": 7336
         },
         "src/contracts/durable-result-manifest.ts": {
-          "bytesInOutput": 154
+          "bytesInOutput": 1945
+        },
+        "src/contracts/durable-state.ts": {
+          "bytesInOutput": 3693
         },
         "src/contracts/durable-task-initialization.ts": {
           "bytesInOutput": 531
@@ -13457,16 +10896,16 @@
           "bytesInOutput": 32910
         },
         "src/contracts/errors.ts": {
-          "bytesInOutput": 17118
+          "bytesInOutput": 18056
         },
         "src/contracts/evidence.ts": {
-          "bytesInOutput": 1826
+          "bytesInOutput": 2125
         },
         "src/contracts/fingerprints.ts": {
           "bytesInOutput": 6276
         },
         "src/contracts/gates.ts": {
-          "bytesInOutput": 14249
+          "bytesInOutput": 15084
         },
         "src/contracts/hosts.ts": {
           "bytesInOutput": 602
@@ -13478,13 +10917,13 @@
           "bytesInOutput": 1889
         },
         "src/contracts/mcp-tools.ts": {
-          "bytesInOutput": 14076
+          "bytesInOutput": 15458
         },
         "src/contracts/path-claims.ts": {
-          "bytesInOutput": 3281
+          "bytesInOutput": 3731
         },
         "src/contracts/phase-instance.ts": {
-          "bytesInOutput": 1418
+          "bytesInOutput": 2078
         },
         "src/contracts/plain-json.ts": {
           "bytesInOutput": 3790
@@ -13493,94 +10932,67 @@
           "bytesInOutput": 6894
         },
         "src/contracts/review.ts": {
-          "bytesInOutput": 5295
+          "bytesInOutput": 5351
         },
         "src/contracts/rubric.ts": {
-          "bytesInOutput": 1008
-        },
-        "src/contracts/schemas/v1/active-gate.schema.json": {
-          "bytesInOutput": 4339
-        },
-        "src/contracts/schemas/v1/adjudication-evidence.schema.json": {
-          "bytesInOutput": 6265
+          "bytesInOutput": 977
         },
         "src/contracts/schemas/v1/adjudication.schema.json": {
-          "bytesInOutput": 4589
+          "bytesInOutput": 5942
         },
         "src/contracts/schemas/v1/document-artifact.schema.json": {
-          "bytesInOutput": 3545
+          "bytesInOutput": 2369
         },
         "src/contracts/schemas/v1/durable-primitives.schema.json": {
-          "bytesInOutput": 21430
+          "bytesInOutput": 26376
         },
         "src/contracts/schemas/v1/evidence-slots.schema.json": {
-          "bytesInOutput": 2064
+          "bytesInOutput": 2758
         },
         "src/contracts/schemas/v1/gate-contract.schema.json": {
-          "bytesInOutput": 15958
-        },
-        "src/contracts/schemas/v1/gate-decision-record.schema.json": {
-          "bytesInOutput": 5884
+          "bytesInOutput": 18963
         },
         "src/contracts/schemas/v1/gate-decision.schema.json": {
-          "bytesInOutput": 9262
-        },
-        "src/contracts/schemas/v1/gate-request.schema.json": {
-          "bytesInOutput": 8188
+          "bytesInOutput": 15216
         },
         "src/contracts/schemas/v1/implementation-output.schema.json": {
-          "bytesInOutput": 7670
-        },
-        "src/contracts/schemas/v1/intent-receipt.schema.json": {
-          "bytesInOutput": 2287
+          "bytesInOutput": 3812
         },
         "src/contracts/schemas/v1/legacy-import-initialization.schema.json": {
-          "bytesInOutput": 5253
-        },
-        "src/contracts/schemas/v1/maintenance-record.schema.json": {
-          "bytesInOutput": 3211
+          "bytesInOutput": 3369
         },
         "src/contracts/schemas/v1/mcp-tools.schema.json": {
-          "bytesInOutput": 24798
+          "bytesInOutput": 27182
         },
         "src/contracts/schemas/v1/path-claim.schema.json": {
-          "bytesInOutput": 536
+          "bytesInOutput": 493
         },
         "src/contracts/schemas/v1/primitives.schema.json": {
-          "bytesInOutput": 1857
+          "bytesInOutput": 1499
         },
         "src/contracts/schemas/v1/project-error.schema.json": {
-          "bytesInOutput": 71282
-        },
-        "src/contracts/schemas/v1/result-manifest.schema.json": {
-          "bytesInOutput": 4029
-        },
-        "src/contracts/schemas/v1/review-evidence.schema.json": {
-          "bytesInOutput": 4163
+          "bytesInOutput": 87192
         },
         "src/contracts/schemas/v1/review.schema.json": {
-          "bytesInOutput": 2720
+          "bytesInOutput": 3241
         },
         "src/contracts/schemas/v1/rubric.schema.json": {
-          "bytesInOutput": 745
+          "bytesInOutput": 1092
         },
         "src/contracts/schemas/v1/secret-scan-result.schema.json": {
-          "bytesInOutput": 2673
-        },
-        "src/contracts/schemas/v1/supplemental-review-record.schema.json": {
-          "bytesInOutput": 1932
+          "bytesInOutput": 3221
         },
         "src/contracts/schemas/v1/supplemental-review.schema.json": {
-          "bytesInOutput": 4415
+          "bytesInOutput": 5341
         },
         "src/contracts/schemas/v1/task-initialization.schema.json": {
-          "bytesInOutput": 2023
+          "bytesInOutput": 1432
         },
         "src/contracts/schemas/v1/task-state.schema.json": {
-          "bytesInOutput": 10854
+          "bytesInOutput": 9057
         },
         "src/contracts/schemas/v1/triage.schema.json": {
-          "bytesInOutput": 3047
+          "bytesInOutput": 4577
         },
         "src/contracts/secret-scan.ts": {
           "bytesInOutput": 1255
@@ -13589,25 +11001,25 @@
           "bytesInOutput": 3406
         },
         "src/contracts/supplemental.ts": {
-          "bytesInOutput": 2920
+          "bytesInOutput": 2889
         },
         "src/contracts/tool-names.ts": {
           "bytesInOutput": 222
         },
         "src/contracts/triage.ts": {
-          "bytesInOutput": 5443
+          "bytesInOutput": 6072
         },
         "src/contracts/trust.ts": {
-          "bytesInOutput": 14131
+          "bytesInOutput": 14478
         },
         "src/contracts/validators.ts": {
-          "bytesInOutput": 14855
+          "bytesInOutput": 622
         },
         "src/contracts/vocabulary.ts": {
           "bytesInOutput": 247
         },
         "src/contracts/workflow.ts": {
-          "bytesInOutput": 1599
+          "bytesInOutput": 1652
         },
         "src/contracts/yaml.ts": {
           "bytesInOutput": 1586
@@ -13616,19 +11028,19 @@
           "bytesInOutput": 23261
         },
         "src/dispatch/coordinator.ts": {
-          "bytesInOutput": 4411
+          "bytesInOutput": 4415
         },
         "src/dispatch/process.ts": {
-          "bytesInOutput": 7386
+          "bytesInOutput": 7394
         },
         "src/dispatch/routing.ts": {
           "bytesInOutput": 2091
         },
         "src/dispatch/workspace.ts": {
-          "bytesInOutput": 4425
+          "bytesInOutput": 4429
         },
         "src/main.ts": {
-          "bytesInOutput": 803
+          "bytesInOutput": 805
         },
         "src/mcp/diagnostics.ts": {
           "bytesInOutput": 247
@@ -13664,25 +11076,25 @@
           "bytesInOutput": 5565
         },
         "src/mcp/process-runner.ts": {
-          "bytesInOutput": 3937
+          "bytesInOutput": 3941
         },
         "src/mcp/sdk-adapter.ts": {
-          "bytesInOutput": 10812
+          "bytesInOutput": 10827
         },
         "src/mcp/send-queue.ts": {
           "bytesInOutput": 4970
         },
         "src/mcp/server.ts": {
-          "bytesInOutput": 7338
+          "bytesInOutput": 7344
         },
         "src/mcp/tools.ts": {
-          "bytesInOutput": 11561
+          "bytesInOutput": 11610
         },
         "src/repository/attributes.ts": {
           "bytesInOutput": 2364
         },
         "src/repository/git.ts": {
-          "bytesInOutput": 15805
+          "bytesInOutput": 15810
         },
         "src/repository/identity.ts": {
           "bytesInOutput": 5762
@@ -13691,7 +11103,7 @@
           "bytesInOutput": 2782
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 10835
+          "bytesInOutput": 10838
         },
         "src/review/adjudication.ts": {
           "bytesInOutput": 2348
@@ -13730,13 +11142,13 @@
           "bytesInOutput": 2502
         },
         "src/state/gate-approvals.ts": {
-          "bytesInOutput": 3466
+          "bytesInOutput": 3464
         },
         "src/state/gate-core.ts": {
-          "bytesInOutput": 7723
+          "bytesInOutput": 7729
         },
         "src/state/gate-wait.ts": {
-          "bytesInOutput": 2065
+          "bytesInOutput": 2068
         },
         "src/state/gates.ts": {
           "bytesInOutput": 54729
@@ -13757,10 +11169,10 @@
           "bytesInOutput": 2272
         },
         "src/state/maintenance-roots.ts": {
-          "bytesInOutput": 12276
+          "bytesInOutput": 12060
         },
         "src/state/maintenance.ts": {
-          "bytesInOutput": 7929
+          "bytesInOutput": 7933
         },
         "src/state/planned-final-phase.ts": {
           "bytesInOutput": 2977
@@ -13772,7 +11184,7 @@
           "bytesInOutput": 11921
         },
         "src/state/read.ts": {
-          "bytesInOutput": 2325
+          "bytesInOutput": 2434
         },
         "src/state/request.ts": {
           "bytesInOutput": 2840
@@ -13784,10 +11196,10 @@
           "bytesInOutput": 25712
         },
         "src/state/staged-requests.ts": {
-          "bytesInOutput": 3547
+          "bytesInOutput": 3551
         },
         "src/state/transaction.ts": {
-          "bytesInOutput": 40448
+          "bytesInOutput": 40450
         },
         "src/state/transitions.ts": {
           "bytesInOutput": 10323

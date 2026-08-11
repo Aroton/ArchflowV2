@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import { MAINTENANCE_DELETION_CATEGORIES, maintenanceRecordV1Schema, type MaintenanceRecordV1 } from "../../src/contracts/durable-maintenance.js";
-import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 /**
  * Structural coverage for `maintenance-record` against its compiled JSON Schema; the Zod mirror's

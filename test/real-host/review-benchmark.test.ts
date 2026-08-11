@@ -11,7 +11,7 @@ import { parseSafeId, parseSafeInteger, parseSha256Digest } from "../../src/cont
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { parseRubricV1 } from "../../src/contracts/rubric.js";
-import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 import { mintReviewObservation, serializeDispatch } from "../../src/dispatch/cli.js";
 import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
 import { resolveDispatchRoute } from "../../src/dispatch/routing.js";

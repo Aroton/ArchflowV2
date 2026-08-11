@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parseTransportRequestId } from "../../src/contracts/contexts.js";
 import { classifyToolCallInput, parseStagedRequestReference, parseToolCall, resultExpectationDataSchema, TOOL_DEFINITIONS, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
 import { TOOL_NAMES } from "../../src/contracts/tool-names.js";
-import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
 
 const load = async (path: string) => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8")) as object;

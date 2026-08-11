@@ -50,9 +50,9 @@ export type StagedPayloadRef = {
  * through the whole reachable graph.
  *
  * D2 — this shape is Zod-mirrored because an agent supplies it across the MCP tool boundary through
- * `archflow_state.artifact`, so it must be validated from untrusted input. The mirror below is a
- * mirror and never a second model: `assertZodAgreement` proves the two authorities accept and reject
- * exactly the same values.
+ * `archflow_state.artifact`, so it must be validated from untrusted input. This Zod source is the
+ * shape authority: the committed `legacy-import-initialization.schema.json` is generated from it,
+ * so the published document cannot drift.
  *
  * D15 — there is deliberately **no** re-pin field, no amendment field, no upgrade field, and no
  * second config digest. `config_digest` is the destination's config bytes and is the only one; do
@@ -106,9 +106,8 @@ export const stagedPayloadRefV1Schema = z.object({
  * Every field is required: absence is expressed as `.optional()` plus omission from `required`,
  * never as `null`, and this shape has no optional field.
  *
- * D11 — both set orderings call `isSortedUniqueBy` with `tupleKey(...)`, the same two exported
- * functions the `x-archflow-sorted-unique-by` Ajv keyword calls, so the two authorities are
- * literally one predicate and cannot drift. Ordering is structural because `canonicalJsonBytes`
+ * D11 — both set orderings call `isSortedUniqueBy` with `tupleKey(...)`, the shared exported
+ * ordering predicates, so every shape enforces literally the same rule. Ordering is structural because `canonicalJsonBytes`
  * preserves array order: an unsorted set would let two callers digest identical logical content
  * differently.
  */

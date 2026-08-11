@@ -1,6 +1,6 @@
 # DEPENDENCIES
 
-**Explored:** 2026-08-10 · **Commit:** `28c1021` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, CI
+**Explored:** 2026-08-11 · **Commit:** `4bc1c81` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, CI
 
 ## Runtime and package baseline
 
@@ -13,9 +13,7 @@
 | Package | Pin | Concrete use |
 | --- | --- | --- |
 | `@modelcontextprotocol/server` | `2.0.0` | The public-root SDK boundary in `src/mcp/sdk-adapter.ts`: `Server`, `ProtocolError`, `specTypeSchemas`, and MCP types. It resolves `@modelcontextprotocol/core@2.0.0` transitively. |
-| `zod` | `4.4.3` | Strict runtime parsing for agent-facing and in-memory contracts throughout `src/contracts/`, including config, review, gate, evidence, durable-document, and MCP tool inputs. |
-| `ajv` | `8.20.0` | JSON Schema 2020-12 validation in `src/contracts/validators.ts`; release-receipt validation in `scripts/release-support.mjs`. |
-| `ajv-formats` | `3.0.1` | Format support for those Ajv validators. |
+| `zod` | `4.4.3` | The single runtime shape authority: strict parsing for agent-facing, durable, and in-memory contracts throughout `src/contracts/`, and the source the 34 generated JSON Schemas are emitted from (`npm run generate:schemas`). |
 | `yaml` | `2.9.0` | `src/contracts/yaml.ts` implements strict, single-document YAML parsing used by `config.yaml` and `workflow.yaml`. |
 | `@secretlint/core` | `13.0.4` | `src/state/secret-scan.ts` calls `lintSource` before retaining implementation output. |
 | `@secretlint/secretlint-rule-preset-recommend` | `13.0.4` | Supplies the production detector set; the filter-comments rule is removed before scanning. |
@@ -32,6 +30,8 @@
 | `vitest` | `4.1.10` | Unit, integration, contract, crash, and opt-in real-host tests. `vitest.config.ts` uses the Node environment and includes `test/**/*.test.ts`. |
 | `vite` | `7.3.6` | Vitest runtime and the child-process fixture loader used by crash tests. |
 | `esbuild` | `0.28.1` | Temporary bundles in `scripts/build-temp-helper.mjs` and release bundles in `scripts/release-support.mjs`. |
+| `ajv` | `8.20.0` | Dev-only since 2026-08-11: strict compilation of the committed JSON Schemas in tests (`test/helpers/json-schema.ts`) and release-receipt validation in `scripts/release-support.mjs`. Production validates through Zod and never compiles a schema, so Ajv's transitive `fast-uri` also left the runtime dependency closure. |
+| `ajv-formats` | `3.0.1` | Format support for the dev-only Ajv compiler. |
 | `@secretlint/secretlint-rule-aws` | `13.0.4` | Dev-only rule used to exercise secret-scanning behavior. |
 
 There is no ESLint, Prettier, Biome, dotenv loader, web framework, database client, ORM, or telemetry SDK.
@@ -117,7 +117,7 @@ Environment inputs are narrow and purpose-specific:
 
 ## Network and authentication boundaries
 
-Production `src/` contains no `fetch`, HTTP client, listening socket, database driver, auth-provider SDK, or telemetry integration. URL strings in schemas are identifiers and local `$ref` authorities; Ajv does not fetch them.
+Production `src/` contains no `fetch`, HTTP client, listening socket, database driver, auth-provider SDK, or telemetry integration. URL strings in schemas are identifiers and local `$ref` authorities; nothing fetches them.
 
 Network access can still occur at two outer boundaries:
 

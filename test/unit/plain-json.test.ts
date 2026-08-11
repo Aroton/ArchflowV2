@@ -4,10 +4,9 @@ import {
   ContractValidationError,
   PlainJsonError,
   assertPlainJson,
-  assertZodAgreement,
-  createJsonSchemaValidator,
   isPlainJsonValue
 } from "../../src/contracts/index.js";
+import { assertZodAgreement, createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 describe("plain JSON preflight", () => {
   it("accepts JSON trees and does not mutate them", () => {

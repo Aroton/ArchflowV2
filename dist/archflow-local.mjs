@@ -47,7692 +47,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/ajv/dist/compile/codegen/code.js
-var require_code = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/code.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.regexpCode = exports.getEsmExportName = exports.getProperty = exports.safeStringify = exports.stringify = exports.strConcat = exports.addCodeArg = exports.str = exports._ = exports.nil = exports._Code = exports.Name = exports.IDENTIFIER = exports._CodeOrName = void 0;
-    var _CodeOrName = class {
-    };
-    exports._CodeOrName = _CodeOrName;
-    exports.IDENTIFIER = /^[a-z$_][a-z$_0-9]*$/i;
-    var Name = class extends _CodeOrName {
-      constructor(s) {
-        super();
-        if (!exports.IDENTIFIER.test(s))
-          throw new Error("CodeGen: name must be a valid identifier");
-        this.str = s;
-      }
-      toString() {
-        return this.str;
-      }
-      emptyStr() {
-        return false;
-      }
-      get names() {
-        return { [this.str]: 1 };
-      }
-    };
-    exports.Name = Name;
-    var _Code = class extends _CodeOrName {
-      constructor(code) {
-        super();
-        this._items = typeof code === "string" ? [code] : code;
-      }
-      toString() {
-        return this.str;
-      }
-      emptyStr() {
-        if (this._items.length > 1)
-          return false;
-        const item = this._items[0];
-        return item === "" || item === '""';
-      }
-      get str() {
-        var _a3;
-        return (_a3 = this._str) !== null && _a3 !== void 0 ? _a3 : this._str = this._items.reduce((s, c) => `${s}${c}`, "");
-      }
-      get names() {
-        var _a3;
-        return (_a3 = this._names) !== null && _a3 !== void 0 ? _a3 : this._names = this._items.reduce((names, c) => {
-          if (c instanceof Name)
-            names[c.str] = (names[c.str] || 0) + 1;
-          return names;
-        }, {});
-      }
-    };
-    exports._Code = _Code;
-    exports.nil = new _Code("");
-    function _(strs, ...args) {
-      const code = [strs[0]];
-      let i = 0;
-      while (i < args.length) {
-        addCodeArg(code, args[i]);
-        code.push(strs[++i]);
-      }
-      return new _Code(code);
-    }
-    exports._ = _;
-    var plus = new _Code("+");
-    function str(strs, ...args) {
-      const expr = [safeStringify(strs[0])];
-      let i = 0;
-      while (i < args.length) {
-        expr.push(plus);
-        addCodeArg(expr, args[i]);
-        expr.push(plus, safeStringify(strs[++i]));
-      }
-      optimize(expr);
-      return new _Code(expr);
-    }
-    exports.str = str;
-    function addCodeArg(code, arg) {
-      if (arg instanceof _Code)
-        code.push(...arg._items);
-      else if (arg instanceof Name)
-        code.push(arg);
-      else
-        code.push(interpolate(arg));
-    }
-    exports.addCodeArg = addCodeArg;
-    function optimize(expr) {
-      let i = 1;
-      while (i < expr.length - 1) {
-        if (expr[i] === plus) {
-          const res = mergeExprItems(expr[i - 1], expr[i + 1]);
-          if (res !== void 0) {
-            expr.splice(i - 1, 3, res);
-            continue;
-          }
-          expr[i++] = "+";
-        }
-        i++;
-      }
-    }
-    function mergeExprItems(a, b) {
-      if (b === '""')
-        return a;
-      if (a === '""')
-        return b;
-      if (typeof a == "string") {
-        if (b instanceof Name || a[a.length - 1] !== '"')
-          return;
-        if (typeof b != "string")
-          return `${a.slice(0, -1)}${b}"`;
-        if (b[0] === '"')
-          return a.slice(0, -1) + b.slice(1);
-        return;
-      }
-      if (typeof b == "string" && b[0] === '"' && !(a instanceof Name))
-        return `"${a}${b.slice(1)}`;
-      return;
-    }
-    function strConcat(c1, c2) {
-      return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str`${c1}${c2}`;
-    }
-    exports.strConcat = strConcat;
-    function interpolate(x) {
-      return typeof x == "number" || typeof x == "boolean" || x === null ? x : safeStringify(Array.isArray(x) ? x.join(",") : x);
-    }
-    function stringify(x) {
-      return new _Code(safeStringify(x));
-    }
-    exports.stringify = stringify;
-    function safeStringify(x) {
-      return JSON.stringify(x).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
-    }
-    exports.safeStringify = safeStringify;
-    function getProperty(key) {
-      return typeof key == "string" && exports.IDENTIFIER.test(key) ? new _Code(`.${key}`) : _`[${key}]`;
-    }
-    exports.getProperty = getProperty;
-    function getEsmExportName(key) {
-      if (typeof key == "string" && exports.IDENTIFIER.test(key)) {
-        return new _Code(`${key}`);
-      }
-      throw new Error(`CodeGen: invalid export name: ${key}, use explicit $id name mapping`);
-    }
-    exports.getEsmExportName = getEsmExportName;
-    function regexpCode(rx) {
-      return new _Code(rx.toString());
-    }
-    exports.regexpCode = regexpCode;
-  }
-});
-
-// node_modules/ajv/dist/compile/codegen/scope.js
-var require_scope = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/scope.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ValueScope = exports.ValueScopeName = exports.Scope = exports.varKinds = exports.UsedValueState = void 0;
-    var code_1 = require_code();
-    var ValueError = class extends Error {
-      constructor(name) {
-        super(`CodeGen: "code" for ${name} not defined`);
-        this.value = name.value;
-      }
-    };
-    var UsedValueState;
-    (function(UsedValueState2) {
-      UsedValueState2[UsedValueState2["Started"] = 0] = "Started";
-      UsedValueState2[UsedValueState2["Completed"] = 1] = "Completed";
-    })(UsedValueState || (exports.UsedValueState = UsedValueState = {}));
-    exports.varKinds = {
-      const: new code_1.Name("const"),
-      let: new code_1.Name("let"),
-      var: new code_1.Name("var")
-    };
-    var Scope = class {
-      constructor({ prefixes, parent } = {}) {
-        this._names = {};
-        this._prefixes = prefixes;
-        this._parent = parent;
-      }
-      toName(nameOrPrefix) {
-        return nameOrPrefix instanceof code_1.Name ? nameOrPrefix : this.name(nameOrPrefix);
-      }
-      name(prefix) {
-        return new code_1.Name(this._newName(prefix));
-      }
-      _newName(prefix) {
-        const ng = this._names[prefix] || this._nameGroup(prefix);
-        return `${prefix}${ng.index++}`;
-      }
-      _nameGroup(prefix) {
-        var _a3, _b;
-        if (((_b = (_a3 = this._parent) === null || _a3 === void 0 ? void 0 : _a3._prefixes) === null || _b === void 0 ? void 0 : _b.has(prefix)) || this._prefixes && !this._prefixes.has(prefix)) {
-          throw new Error(`CodeGen: prefix "${prefix}" is not allowed in this scope`);
-        }
-        return this._names[prefix] = { prefix, index: 0 };
-      }
-    };
-    exports.Scope = Scope;
-    var ValueScopeName = class extends code_1.Name {
-      constructor(prefix, nameStr) {
-        super(nameStr);
-        this.prefix = prefix;
-      }
-      setValue(value, { property, itemIndex }) {
-        this.value = value;
-        this.scopePath = (0, code_1._)`.${new code_1.Name(property)}[${itemIndex}]`;
-      }
-    };
-    exports.ValueScopeName = ValueScopeName;
-    var line = (0, code_1._)`\n`;
-    var ValueScope = class extends Scope {
-      constructor(opts) {
-        super(opts);
-        this._values = {};
-        this._scope = opts.scope;
-        this.opts = { ...opts, _n: opts.lines ? line : code_1.nil };
-      }
-      get() {
-        return this._scope;
-      }
-      name(prefix) {
-        return new ValueScopeName(prefix, this._newName(prefix));
-      }
-      value(nameOrPrefix, value) {
-        var _a3;
-        if (value.ref === void 0)
-          throw new Error("CodeGen: ref must be passed in value");
-        const name = this.toName(nameOrPrefix);
-        const { prefix } = name;
-        const valueKey = (_a3 = value.key) !== null && _a3 !== void 0 ? _a3 : value.ref;
-        let vs = this._values[prefix];
-        if (vs) {
-          const _name = vs.get(valueKey);
-          if (_name)
-            return _name;
-        } else {
-          vs = this._values[prefix] = /* @__PURE__ */ new Map();
-        }
-        vs.set(valueKey, name);
-        const s = this._scope[prefix] || (this._scope[prefix] = []);
-        const itemIndex = s.length;
-        s[itemIndex] = value.ref;
-        name.setValue(value, { property: prefix, itemIndex });
-        return name;
-      }
-      getValue(prefix, keyOrRef) {
-        const vs = this._values[prefix];
-        if (!vs)
-          return;
-        return vs.get(keyOrRef);
-      }
-      scopeRefs(scopeName, values = this._values) {
-        return this._reduceValues(values, (name) => {
-          if (name.scopePath === void 0)
-            throw new Error(`CodeGen: name "${name}" has no value`);
-          return (0, code_1._)`${scopeName}${name.scopePath}`;
-        });
-      }
-      scopeCode(values = this._values, usedValues, getCode) {
-        return this._reduceValues(values, (name) => {
-          if (name.value === void 0)
-            throw new Error(`CodeGen: name "${name}" has no value`);
-          return name.value.code;
-        }, usedValues, getCode);
-      }
-      _reduceValues(values, valueCode, usedValues = {}, getCode) {
-        let code = code_1.nil;
-        for (const prefix in values) {
-          const vs = values[prefix];
-          if (!vs)
-            continue;
-          const nameSet = usedValues[prefix] = usedValues[prefix] || /* @__PURE__ */ new Map();
-          vs.forEach((name) => {
-            if (nameSet.has(name))
-              return;
-            nameSet.set(name, UsedValueState.Started);
-            let c = valueCode(name);
-            if (c) {
-              const def2 = this.opts.es5 ? exports.varKinds.var : exports.varKinds.const;
-              code = (0, code_1._)`${code}${def2} ${name} = ${c};${this.opts._n}`;
-            } else if (c = getCode === null || getCode === void 0 ? void 0 : getCode(name)) {
-              code = (0, code_1._)`${code}${c}${this.opts._n}`;
-            } else {
-              throw new ValueError(name);
-            }
-            nameSet.set(name, UsedValueState.Completed);
-          });
-        }
-        return code;
-      }
-    };
-    exports.ValueScope = ValueScope;
-  }
-});
-
-// node_modules/ajv/dist/compile/codegen/index.js
-var require_codegen = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.or = exports.and = exports.not = exports.CodeGen = exports.operators = exports.varKinds = exports.ValueScopeName = exports.ValueScope = exports.Scope = exports.Name = exports.regexpCode = exports.stringify = exports.getProperty = exports.nil = exports.strConcat = exports.str = exports._ = void 0;
-    var code_1 = require_code();
-    var scope_1 = require_scope();
-    var code_2 = require_code();
-    Object.defineProperty(exports, "_", { enumerable: true, get: function() {
-      return code_2._;
-    } });
-    Object.defineProperty(exports, "str", { enumerable: true, get: function() {
-      return code_2.str;
-    } });
-    Object.defineProperty(exports, "strConcat", { enumerable: true, get: function() {
-      return code_2.strConcat;
-    } });
-    Object.defineProperty(exports, "nil", { enumerable: true, get: function() {
-      return code_2.nil;
-    } });
-    Object.defineProperty(exports, "getProperty", { enumerable: true, get: function() {
-      return code_2.getProperty;
-    } });
-    Object.defineProperty(exports, "stringify", { enumerable: true, get: function() {
-      return code_2.stringify;
-    } });
-    Object.defineProperty(exports, "regexpCode", { enumerable: true, get: function() {
-      return code_2.regexpCode;
-    } });
-    Object.defineProperty(exports, "Name", { enumerable: true, get: function() {
-      return code_2.Name;
-    } });
-    var scope_2 = require_scope();
-    Object.defineProperty(exports, "Scope", { enumerable: true, get: function() {
-      return scope_2.Scope;
-    } });
-    Object.defineProperty(exports, "ValueScope", { enumerable: true, get: function() {
-      return scope_2.ValueScope;
-    } });
-    Object.defineProperty(exports, "ValueScopeName", { enumerable: true, get: function() {
-      return scope_2.ValueScopeName;
-    } });
-    Object.defineProperty(exports, "varKinds", { enumerable: true, get: function() {
-      return scope_2.varKinds;
-    } });
-    exports.operators = {
-      GT: new code_1._Code(">"),
-      GTE: new code_1._Code(">="),
-      LT: new code_1._Code("<"),
-      LTE: new code_1._Code("<="),
-      EQ: new code_1._Code("==="),
-      NEQ: new code_1._Code("!=="),
-      NOT: new code_1._Code("!"),
-      OR: new code_1._Code("||"),
-      AND: new code_1._Code("&&"),
-      ADD: new code_1._Code("+")
-    };
-    var Node = class {
-      optimizeNodes() {
-        return this;
-      }
-      optimizeNames(_names, _constants) {
-        return this;
-      }
-    };
-    var Def = class extends Node {
-      constructor(varKind, name, rhs) {
-        super();
-        this.varKind = varKind;
-        this.name = name;
-        this.rhs = rhs;
-      }
-      render({ es5, _n }) {
-        const varKind = es5 ? scope_1.varKinds.var : this.varKind;
-        const rhs = this.rhs === void 0 ? "" : ` = ${this.rhs}`;
-        return `${varKind} ${this.name}${rhs};` + _n;
-      }
-      optimizeNames(names, constants2) {
-        if (!names[this.name.str])
-          return;
-        if (this.rhs)
-          this.rhs = optimizeExpr(this.rhs, names, constants2);
-        return this;
-      }
-      get names() {
-        return this.rhs instanceof code_1._CodeOrName ? this.rhs.names : {};
-      }
-    };
-    var Assign = class extends Node {
-      constructor(lhs, rhs, sideEffects) {
-        super();
-        this.lhs = lhs;
-        this.rhs = rhs;
-        this.sideEffects = sideEffects;
-      }
-      render({ _n }) {
-        return `${this.lhs} = ${this.rhs};` + _n;
-      }
-      optimizeNames(names, constants2) {
-        if (this.lhs instanceof code_1.Name && !names[this.lhs.str] && !this.sideEffects)
-          return;
-        this.rhs = optimizeExpr(this.rhs, names, constants2);
-        return this;
-      }
-      get names() {
-        const names = this.lhs instanceof code_1.Name ? {} : { ...this.lhs.names };
-        return addExprNames(names, this.rhs);
-      }
-    };
-    var AssignOp = class extends Assign {
-      constructor(lhs, op, rhs, sideEffects) {
-        super(lhs, rhs, sideEffects);
-        this.op = op;
-      }
-      render({ _n }) {
-        return `${this.lhs} ${this.op}= ${this.rhs};` + _n;
-      }
-    };
-    var Label = class extends Node {
-      constructor(label) {
-        super();
-        this.label = label;
-        this.names = {};
-      }
-      render({ _n }) {
-        return `${this.label}:` + _n;
-      }
-    };
-    var Break = class extends Node {
-      constructor(label) {
-        super();
-        this.label = label;
-        this.names = {};
-      }
-      render({ _n }) {
-        const label = this.label ? ` ${this.label}` : "";
-        return `break${label};` + _n;
-      }
-    };
-    var Throw = class extends Node {
-      constructor(error51) {
-        super();
-        this.error = error51;
-      }
-      render({ _n }) {
-        return `throw ${this.error};` + _n;
-      }
-      get names() {
-        return this.error.names;
-      }
-    };
-    var AnyCode = class extends Node {
-      constructor(code) {
-        super();
-        this.code = code;
-      }
-      render({ _n }) {
-        return `${this.code};` + _n;
-      }
-      optimizeNodes() {
-        return `${this.code}` ? this : void 0;
-      }
-      optimizeNames(names, constants2) {
-        this.code = optimizeExpr(this.code, names, constants2);
-        return this;
-      }
-      get names() {
-        return this.code instanceof code_1._CodeOrName ? this.code.names : {};
-      }
-    };
-    var ParentNode = class extends Node {
-      constructor(nodes = []) {
-        super();
-        this.nodes = nodes;
-      }
-      render(opts) {
-        return this.nodes.reduce((code, n) => code + n.render(opts), "");
-      }
-      optimizeNodes() {
-        const { nodes } = this;
-        let i = nodes.length;
-        while (i--) {
-          const n = nodes[i].optimizeNodes();
-          if (Array.isArray(n))
-            nodes.splice(i, 1, ...n);
-          else if (n)
-            nodes[i] = n;
-          else
-            nodes.splice(i, 1);
-        }
-        return nodes.length > 0 ? this : void 0;
-      }
-      optimizeNames(names, constants2) {
-        const { nodes } = this;
-        let i = nodes.length;
-        while (i--) {
-          const n = nodes[i];
-          if (n.optimizeNames(names, constants2))
-            continue;
-          subtractNames(names, n.names);
-          nodes.splice(i, 1);
-        }
-        return nodes.length > 0 ? this : void 0;
-      }
-      get names() {
-        return this.nodes.reduce((names, n) => addNames(names, n.names), {});
-      }
-    };
-    var BlockNode = class extends ParentNode {
-      render(opts) {
-        return "{" + opts._n + super.render(opts) + "}" + opts._n;
-      }
-    };
-    var Root = class extends ParentNode {
-    };
-    var Else = class extends BlockNode {
-    };
-    Else.kind = "else";
-    var If = class _If extends BlockNode {
-      constructor(condition, nodes) {
-        super(nodes);
-        this.condition = condition;
-      }
-      render(opts) {
-        let code = `if(${this.condition})` + super.render(opts);
-        if (this.else)
-          code += "else " + this.else.render(opts);
-        return code;
-      }
-      optimizeNodes() {
-        super.optimizeNodes();
-        const cond = this.condition;
-        if (cond === true)
-          return this.nodes;
-        let e = this.else;
-        if (e) {
-          const ns = e.optimizeNodes();
-          e = this.else = Array.isArray(ns) ? new Else(ns) : ns;
-        }
-        if (e) {
-          if (cond === false)
-            return e instanceof _If ? e : e.nodes;
-          if (this.nodes.length)
-            return this;
-          return new _If(not(cond), e instanceof _If ? [e] : e.nodes);
-        }
-        if (cond === false || !this.nodes.length)
-          return void 0;
-        return this;
-      }
-      optimizeNames(names, constants2) {
-        var _a3;
-        this.else = (_a3 = this.else) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants2);
-        if (!(super.optimizeNames(names, constants2) || this.else))
-          return;
-        this.condition = optimizeExpr(this.condition, names, constants2);
-        return this;
-      }
-      get names() {
-        const names = super.names;
-        addExprNames(names, this.condition);
-        if (this.else)
-          addNames(names, this.else.names);
-        return names;
-      }
-    };
-    If.kind = "if";
-    var For = class extends BlockNode {
-    };
-    For.kind = "for";
-    var ForLoop = class extends For {
-      constructor(iteration) {
-        super();
-        this.iteration = iteration;
-      }
-      render(opts) {
-        return `for(${this.iteration})` + super.render(opts);
-      }
-      optimizeNames(names, constants2) {
-        if (!super.optimizeNames(names, constants2))
-          return;
-        this.iteration = optimizeExpr(this.iteration, names, constants2);
-        return this;
-      }
-      get names() {
-        return addNames(super.names, this.iteration.names);
-      }
-    };
-    var ForRange = class extends For {
-      constructor(varKind, name, from, to) {
-        super();
-        this.varKind = varKind;
-        this.name = name;
-        this.from = from;
-        this.to = to;
-      }
-      render(opts) {
-        const varKind = opts.es5 ? scope_1.varKinds.var : this.varKind;
-        const { name, from, to } = this;
-        return `for(${varKind} ${name}=${from}; ${name}<${to}; ${name}++)` + super.render(opts);
-      }
-      get names() {
-        const names = addExprNames(super.names, this.from);
-        return addExprNames(names, this.to);
-      }
-    };
-    var ForIter = class extends For {
-      constructor(loop, varKind, name, iterable) {
-        super();
-        this.loop = loop;
-        this.varKind = varKind;
-        this.name = name;
-        this.iterable = iterable;
-      }
-      render(opts) {
-        return `for(${this.varKind} ${this.name} ${this.loop} ${this.iterable})` + super.render(opts);
-      }
-      optimizeNames(names, constants2) {
-        if (!super.optimizeNames(names, constants2))
-          return;
-        this.iterable = optimizeExpr(this.iterable, names, constants2);
-        return this;
-      }
-      get names() {
-        return addNames(super.names, this.iterable.names);
-      }
-    };
-    var Func = class extends BlockNode {
-      constructor(name, args, async) {
-        super();
-        this.name = name;
-        this.args = args;
-        this.async = async;
-      }
-      render(opts) {
-        const _async = this.async ? "async " : "";
-        return `${_async}function ${this.name}(${this.args})` + super.render(opts);
-      }
-    };
-    Func.kind = "func";
-    var Return = class extends ParentNode {
-      render(opts) {
-        return "return " + super.render(opts);
-      }
-    };
-    Return.kind = "return";
-    var Try = class extends BlockNode {
-      render(opts) {
-        let code = "try" + super.render(opts);
-        if (this.catch)
-          code += this.catch.render(opts);
-        if (this.finally)
-          code += this.finally.render(opts);
-        return code;
-      }
-      optimizeNodes() {
-        var _a3, _b;
-        super.optimizeNodes();
-        (_a3 = this.catch) === null || _a3 === void 0 ? void 0 : _a3.optimizeNodes();
-        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNodes();
-        return this;
-      }
-      optimizeNames(names, constants2) {
-        var _a3, _b;
-        super.optimizeNames(names, constants2);
-        (_a3 = this.catch) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants2);
-        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants2);
-        return this;
-      }
-      get names() {
-        const names = super.names;
-        if (this.catch)
-          addNames(names, this.catch.names);
-        if (this.finally)
-          addNames(names, this.finally.names);
-        return names;
-      }
-    };
-    var Catch = class extends BlockNode {
-      constructor(error51) {
-        super();
-        this.error = error51;
-      }
-      render(opts) {
-        return `catch(${this.error})` + super.render(opts);
-      }
-    };
-    Catch.kind = "catch";
-    var Finally = class extends BlockNode {
-      render(opts) {
-        return "finally" + super.render(opts);
-      }
-    };
-    Finally.kind = "finally";
-    var CodeGen = class {
-      constructor(extScope, opts = {}) {
-        this._values = {};
-        this._blockStarts = [];
-        this._constants = {};
-        this.opts = { ...opts, _n: opts.lines ? "\n" : "" };
-        this._extScope = extScope;
-        this._scope = new scope_1.Scope({ parent: extScope });
-        this._nodes = [new Root()];
-      }
-      toString() {
-        return this._root.render(this.opts);
-      }
-      // returns unique name in the internal scope
-      name(prefix) {
-        return this._scope.name(prefix);
-      }
-      // reserves unique name in the external scope
-      scopeName(prefix) {
-        return this._extScope.name(prefix);
-      }
-      // reserves unique name in the external scope and assigns value to it
-      scopeValue(prefixOrName, value) {
-        const name = this._extScope.value(prefixOrName, value);
-        const vs = this._values[name.prefix] || (this._values[name.prefix] = /* @__PURE__ */ new Set());
-        vs.add(name);
-        return name;
-      }
-      getScopeValue(prefix, keyOrRef) {
-        return this._extScope.getValue(prefix, keyOrRef);
-      }
-      // return code that assigns values in the external scope to the names that are used internally
-      // (same names that were returned by gen.scopeName or gen.scopeValue)
-      scopeRefs(scopeName) {
-        return this._extScope.scopeRefs(scopeName, this._values);
-      }
-      scopeCode() {
-        return this._extScope.scopeCode(this._values);
-      }
-      _def(varKind, nameOrPrefix, rhs, constant) {
-        const name = this._scope.toName(nameOrPrefix);
-        if (rhs !== void 0 && constant)
-          this._constants[name.str] = rhs;
-        this._leafNode(new Def(varKind, name, rhs));
-        return name;
-      }
-      // `const` declaration (`var` in es5 mode)
-      const(nameOrPrefix, rhs, _constant) {
-        return this._def(scope_1.varKinds.const, nameOrPrefix, rhs, _constant);
-      }
-      // `let` declaration with optional assignment (`var` in es5 mode)
-      let(nameOrPrefix, rhs, _constant) {
-        return this._def(scope_1.varKinds.let, nameOrPrefix, rhs, _constant);
-      }
-      // `var` declaration with optional assignment
-      var(nameOrPrefix, rhs, _constant) {
-        return this._def(scope_1.varKinds.var, nameOrPrefix, rhs, _constant);
-      }
-      // assignment code
-      assign(lhs, rhs, sideEffects) {
-        return this._leafNode(new Assign(lhs, rhs, sideEffects));
-      }
-      // `+=` code
-      add(lhs, rhs) {
-        return this._leafNode(new AssignOp(lhs, exports.operators.ADD, rhs));
-      }
-      // appends passed SafeExpr to code or executes Block
-      code(c) {
-        if (typeof c == "function")
-          c();
-        else if (c !== code_1.nil)
-          this._leafNode(new AnyCode(c));
-        return this;
-      }
-      // returns code for object literal for the passed argument list of key-value pairs
-      object(...keyValues) {
-        const code = ["{"];
-        for (const [key, value] of keyValues) {
-          if (code.length > 1)
-            code.push(",");
-          code.push(key);
-          if (key !== value || this.opts.es5) {
-            code.push(":");
-            (0, code_1.addCodeArg)(code, value);
-          }
-        }
-        code.push("}");
-        return new code_1._Code(code);
-      }
-      // `if` clause (or statement if `thenBody` and, optionally, `elseBody` are passed)
-      if(condition, thenBody, elseBody) {
-        this._blockNode(new If(condition));
-        if (thenBody && elseBody) {
-          this.code(thenBody).else().code(elseBody).endIf();
-        } else if (thenBody) {
-          this.code(thenBody).endIf();
-        } else if (elseBody) {
-          throw new Error('CodeGen: "else" body without "then" body');
-        }
-        return this;
-      }
-      // `else if` clause - invalid without `if` or after `else` clauses
-      elseIf(condition) {
-        return this._elseNode(new If(condition));
-      }
-      // `else` clause - only valid after `if` or `else if` clauses
-      else() {
-        return this._elseNode(new Else());
-      }
-      // end `if` statement (needed if gen.if was used only with condition)
-      endIf() {
-        return this._endBlockNode(If, Else);
-      }
-      _for(node, forBody) {
-        this._blockNode(node);
-        if (forBody)
-          this.code(forBody).endFor();
-        return this;
-      }
-      // a generic `for` clause (or statement if `forBody` is passed)
-      for(iteration, forBody) {
-        return this._for(new ForLoop(iteration), forBody);
-      }
-      // `for` statement for a range of values
-      forRange(nameOrPrefix, from, to, forBody, varKind = this.opts.es5 ? scope_1.varKinds.var : scope_1.varKinds.let) {
-        const name = this._scope.toName(nameOrPrefix);
-        return this._for(new ForRange(varKind, name, from, to), () => forBody(name));
-      }
-      // `for-of` statement (in es5 mode replace with a normal for loop)
-      forOf(nameOrPrefix, iterable, forBody, varKind = scope_1.varKinds.const) {
-        const name = this._scope.toName(nameOrPrefix);
-        if (this.opts.es5) {
-          const arr = iterable instanceof code_1.Name ? iterable : this.var("_arr", iterable);
-          return this.forRange("_i", 0, (0, code_1._)`${arr}.length`, (i) => {
-            this.var(name, (0, code_1._)`${arr}[${i}]`);
-            forBody(name);
-          });
-        }
-        return this._for(new ForIter("of", varKind, name, iterable), () => forBody(name));
-      }
-      // `for-in` statement.
-      // With option `ownProperties` replaced with a `for-of` loop for object keys
-      forIn(nameOrPrefix, obj, forBody, varKind = this.opts.es5 ? scope_1.varKinds.var : scope_1.varKinds.const) {
-        if (this.opts.ownProperties) {
-          return this.forOf(nameOrPrefix, (0, code_1._)`Object.keys(${obj})`, forBody);
-        }
-        const name = this._scope.toName(nameOrPrefix);
-        return this._for(new ForIter("in", varKind, name, obj), () => forBody(name));
-      }
-      // end `for` loop
-      endFor() {
-        return this._endBlockNode(For);
-      }
-      // `label` statement
-      label(label) {
-        return this._leafNode(new Label(label));
-      }
-      // `break` statement
-      break(label) {
-        return this._leafNode(new Break(label));
-      }
-      // `return` statement
-      return(value) {
-        const node = new Return();
-        this._blockNode(node);
-        this.code(value);
-        if (node.nodes.length !== 1)
-          throw new Error('CodeGen: "return" should have one node');
-        return this._endBlockNode(Return);
-      }
-      // `try` statement
-      try(tryBody, catchCode, finallyCode) {
-        if (!catchCode && !finallyCode)
-          throw new Error('CodeGen: "try" without "catch" and "finally"');
-        const node = new Try();
-        this._blockNode(node);
-        this.code(tryBody);
-        if (catchCode) {
-          const error51 = this.name("e");
-          this._currNode = node.catch = new Catch(error51);
-          catchCode(error51);
-        }
-        if (finallyCode) {
-          this._currNode = node.finally = new Finally();
-          this.code(finallyCode);
-        }
-        return this._endBlockNode(Catch, Finally);
-      }
-      // `throw` statement
-      throw(error51) {
-        return this._leafNode(new Throw(error51));
-      }
-      // start self-balancing block
-      block(body, nodeCount) {
-        this._blockStarts.push(this._nodes.length);
-        if (body)
-          this.code(body).endBlock(nodeCount);
-        return this;
-      }
-      // end the current self-balancing block
-      endBlock(nodeCount) {
-        const len = this._blockStarts.pop();
-        if (len === void 0)
-          throw new Error("CodeGen: not in self-balancing block");
-        const toClose = this._nodes.length - len;
-        if (toClose < 0 || nodeCount !== void 0 && toClose !== nodeCount) {
-          throw new Error(`CodeGen: wrong number of nodes: ${toClose} vs ${nodeCount} expected`);
-        }
-        this._nodes.length = len;
-        return this;
-      }
-      // `function` heading (or definition if funcBody is passed)
-      func(name, args = code_1.nil, async, funcBody) {
-        this._blockNode(new Func(name, args, async));
-        if (funcBody)
-          this.code(funcBody).endFunc();
-        return this;
-      }
-      // end function definition
-      endFunc() {
-        return this._endBlockNode(Func);
-      }
-      optimize(n = 1) {
-        while (n-- > 0) {
-          this._root.optimizeNodes();
-          this._root.optimizeNames(this._root.names, this._constants);
-        }
-      }
-      _leafNode(node) {
-        this._currNode.nodes.push(node);
-        return this;
-      }
-      _blockNode(node) {
-        this._currNode.nodes.push(node);
-        this._nodes.push(node);
-      }
-      _endBlockNode(N1, N2) {
-        const n = this._currNode;
-        if (n instanceof N1 || N2 && n instanceof N2) {
-          this._nodes.pop();
-          return this;
-        }
-        throw new Error(`CodeGen: not in block "${N2 ? `${N1.kind}/${N2.kind}` : N1.kind}"`);
-      }
-      _elseNode(node) {
-        const n = this._currNode;
-        if (!(n instanceof If)) {
-          throw new Error('CodeGen: "else" without "if"');
-        }
-        this._currNode = n.else = node;
-        return this;
-      }
-      get _root() {
-        return this._nodes[0];
-      }
-      get _currNode() {
-        const ns = this._nodes;
-        return ns[ns.length - 1];
-      }
-      set _currNode(node) {
-        const ns = this._nodes;
-        ns[ns.length - 1] = node;
-      }
-    };
-    exports.CodeGen = CodeGen;
-    function addNames(names, from) {
-      for (const n in from)
-        names[n] = (names[n] || 0) + (from[n] || 0);
-      return names;
-    }
-    function addExprNames(names, from) {
-      return from instanceof code_1._CodeOrName ? addNames(names, from.names) : names;
-    }
-    function optimizeExpr(expr, names, constants2) {
-      if (expr instanceof code_1.Name)
-        return replaceName(expr);
-      if (!canOptimize(expr))
-        return expr;
-      return new code_1._Code(expr._items.reduce((items, c) => {
-        if (c instanceof code_1.Name)
-          c = replaceName(c);
-        if (c instanceof code_1._Code)
-          items.push(...c._items);
-        else
-          items.push(c);
-        return items;
-      }, []));
-      function replaceName(n) {
-        const c = constants2[n.str];
-        if (c === void 0 || names[n.str] !== 1)
-          return n;
-        delete names[n.str];
-        return c;
-      }
-      function canOptimize(e) {
-        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants2[c.str] !== void 0);
-      }
-    }
-    function subtractNames(names, from) {
-      for (const n in from)
-        names[n] = (names[n] || 0) - (from[n] || 0);
-    }
-    function not(x) {
-      return typeof x == "boolean" || typeof x == "number" || x === null ? !x : (0, code_1._)`!${par(x)}`;
-    }
-    exports.not = not;
-    var andCode = mappend(exports.operators.AND);
-    function and(...args) {
-      return args.reduce(andCode);
-    }
-    exports.and = and;
-    var orCode = mappend(exports.operators.OR);
-    function or(...args) {
-      return args.reduce(orCode);
-    }
-    exports.or = or;
-    function mappend(op) {
-      return (x, y) => x === code_1.nil ? y : y === code_1.nil ? x : (0, code_1._)`${par(x)} ${op} ${par(y)}`;
-    }
-    function par(x) {
-      return x instanceof code_1.Name ? x : (0, code_1._)`(${x})`;
-    }
-  }
-});
-
-// node_modules/ajv/dist/compile/util.js
-var require_util = __commonJS({
-  "node_modules/ajv/dist/compile/util.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.checkStrictMode = exports.getErrorPath = exports.Type = exports.useFunc = exports.setEvaluated = exports.evaluatedPropsToName = exports.mergeEvaluated = exports.eachItem = exports.unescapeJsonPointer = exports.escapeJsonPointer = exports.escapeFragment = exports.unescapeFragment = exports.schemaRefOrVal = exports.schemaHasRulesButRef = exports.schemaHasRules = exports.checkUnknownRules = exports.alwaysValidSchema = exports.toHash = void 0;
-    var codegen_1 = require_codegen();
-    var code_1 = require_code();
-    function toHash(arr) {
-      const hash3 = {};
-      for (const item of arr)
-        hash3[item] = true;
-      return hash3;
-    }
-    exports.toHash = toHash;
-    function alwaysValidSchema(it, schema) {
-      if (typeof schema == "boolean")
-        return schema;
-      if (Object.keys(schema).length === 0)
-        return true;
-      checkUnknownRules(it, schema);
-      return !schemaHasRules(schema, it.self.RULES.all);
-    }
-    exports.alwaysValidSchema = alwaysValidSchema;
-    function checkUnknownRules(it, schema = it.schema) {
-      const { opts, self: self2 } = it;
-      if (!opts.strictSchema)
-        return;
-      if (typeof schema === "boolean")
-        return;
-      const rules2 = self2.RULES.keywords;
-      for (const key in schema) {
-        if (!rules2[key])
-          checkStrictMode(it, `unknown keyword: "${key}"`);
-      }
-    }
-    exports.checkUnknownRules = checkUnknownRules;
-    function schemaHasRules(schema, rules2) {
-      if (typeof schema == "boolean")
-        return !schema;
-      for (const key in schema)
-        if (rules2[key])
-          return true;
-      return false;
-    }
-    exports.schemaHasRules = schemaHasRules;
-    function schemaHasRulesButRef(schema, RULES) {
-      if (typeof schema == "boolean")
-        return !schema;
-      for (const key in schema)
-        if (key !== "$ref" && RULES.all[key])
-          return true;
-      return false;
-    }
-    exports.schemaHasRulesButRef = schemaHasRulesButRef;
-    function schemaRefOrVal({ topSchemaRef, schemaPath }, schema, keyword, $data) {
-      if (!$data) {
-        if (typeof schema == "number" || typeof schema == "boolean")
-          return schema;
-        if (typeof schema == "string")
-          return (0, codegen_1._)`${schema}`;
-      }
-      return (0, codegen_1._)`${topSchemaRef}${schemaPath}${(0, codegen_1.getProperty)(keyword)}`;
-    }
-    exports.schemaRefOrVal = schemaRefOrVal;
-    function unescapeFragment(str) {
-      return unescapeJsonPointer(decodeURIComponent(str));
-    }
-    exports.unescapeFragment = unescapeFragment;
-    function escapeFragment(str) {
-      return encodeURIComponent(escapeJsonPointer(str));
-    }
-    exports.escapeFragment = escapeFragment;
-    function escapeJsonPointer(str) {
-      if (typeof str == "number")
-        return `${str}`;
-      return str.replace(/~/g, "~0").replace(/\//g, "~1");
-    }
-    exports.escapeJsonPointer = escapeJsonPointer;
-    function unescapeJsonPointer(str) {
-      return str.replace(/~1/g, "/").replace(/~0/g, "~");
-    }
-    exports.unescapeJsonPointer = unescapeJsonPointer;
-    function eachItem(xs, f) {
-      if (Array.isArray(xs)) {
-        for (const x of xs)
-          f(x);
-      } else {
-        f(xs);
-      }
-    }
-    exports.eachItem = eachItem;
-    function makeMergeEvaluated({ mergeNames, mergeToName, mergeValues: mergeValues2, resultToName }) {
-      return (gen, from, to, toName) => {
-        const res = to === void 0 ? from : to instanceof codegen_1.Name ? (from instanceof codegen_1.Name ? mergeNames(gen, from, to) : mergeToName(gen, from, to), to) : from instanceof codegen_1.Name ? (mergeToName(gen, to, from), from) : mergeValues2(from, to);
-        return toName === codegen_1.Name && !(res instanceof codegen_1.Name) ? resultToName(gen, res) : res;
-      };
-    }
-    exports.mergeEvaluated = {
-      props: makeMergeEvaluated({
-        mergeNames: (gen, from, to) => gen.if((0, codegen_1._)`${to} !== true && ${from} !== undefined`, () => {
-          gen.if((0, codegen_1._)`${from} === true`, () => gen.assign(to, true), () => gen.assign(to, (0, codegen_1._)`${to} || {}`).code((0, codegen_1._)`Object.assign(${to}, ${from})`));
-        }),
-        mergeToName: (gen, from, to) => gen.if((0, codegen_1._)`${to} !== true`, () => {
-          if (from === true) {
-            gen.assign(to, true);
-          } else {
-            gen.assign(to, (0, codegen_1._)`${to} || {}`);
-            setEvaluated(gen, to, from);
-          }
-        }),
-        mergeValues: (from, to) => from === true ? true : { ...from, ...to },
-        resultToName: evaluatedPropsToName
-      }),
-      items: makeMergeEvaluated({
-        mergeNames: (gen, from, to) => gen.if((0, codegen_1._)`${to} !== true && ${from} !== undefined`, () => gen.assign(to, (0, codegen_1._)`${from} === true ? true : ${to} > ${from} ? ${to} : ${from}`)),
-        mergeToName: (gen, from, to) => gen.if((0, codegen_1._)`${to} !== true`, () => gen.assign(to, from === true ? true : (0, codegen_1._)`${to} > ${from} ? ${to} : ${from}`)),
-        mergeValues: (from, to) => from === true ? true : Math.max(from, to),
-        resultToName: (gen, items) => gen.var("items", items)
-      })
-    };
-    function evaluatedPropsToName(gen, ps) {
-      if (ps === true)
-        return gen.var("props", true);
-      const props = gen.var("props", (0, codegen_1._)`{}`);
-      if (ps !== void 0)
-        setEvaluated(gen, props, ps);
-      return props;
-    }
-    exports.evaluatedPropsToName = evaluatedPropsToName;
-    function setEvaluated(gen, props, ps) {
-      Object.keys(ps).forEach((p) => gen.assign((0, codegen_1._)`${props}${(0, codegen_1.getProperty)(p)}`, true));
-    }
-    exports.setEvaluated = setEvaluated;
-    var snippets = {};
-    function useFunc(gen, f) {
-      return gen.scopeValue("func", {
-        ref: f,
-        code: snippets[f.code] || (snippets[f.code] = new code_1._Code(f.code))
-      });
-    }
-    exports.useFunc = useFunc;
-    var Type;
-    (function(Type2) {
-      Type2[Type2["Num"] = 0] = "Num";
-      Type2[Type2["Str"] = 1] = "Str";
-    })(Type || (exports.Type = Type = {}));
-    function getErrorPath(dataProp, dataPropType, jsPropertySyntax) {
-      if (dataProp instanceof codegen_1.Name) {
-        const isNumber = dataPropType === Type.Num;
-        return jsPropertySyntax ? isNumber ? (0, codegen_1._)`"[" + ${dataProp} + "]"` : (0, codegen_1._)`"['" + ${dataProp} + "']"` : isNumber ? (0, codegen_1._)`"/" + ${dataProp}` : (0, codegen_1._)`"/" + ${dataProp}.replace(/~/g, "~0").replace(/\\//g, "~1")`;
-      }
-      return jsPropertySyntax ? (0, codegen_1.getProperty)(dataProp).toString() : "/" + escapeJsonPointer(dataProp);
-    }
-    exports.getErrorPath = getErrorPath;
-    function checkStrictMode(it, msg, mode = it.opts.strictSchema) {
-      if (!mode)
-        return;
-      msg = `strict mode: ${msg}`;
-      if (mode === true)
-        throw new Error(msg);
-      it.self.logger.warn(msg);
-    }
-    exports.checkStrictMode = checkStrictMode;
-  }
-});
-
-// node_modules/ajv/dist/compile/names.js
-var require_names = __commonJS({
-  "node_modules/ajv/dist/compile/names.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var names = {
-      // validation function arguments
-      data: new codegen_1.Name("data"),
-      // data passed to validation function
-      // args passed from referencing schema
-      valCxt: new codegen_1.Name("valCxt"),
-      // validation/data context - should not be used directly, it is destructured to the names below
-      instancePath: new codegen_1.Name("instancePath"),
-      parentData: new codegen_1.Name("parentData"),
-      parentDataProperty: new codegen_1.Name("parentDataProperty"),
-      rootData: new codegen_1.Name("rootData"),
-      // root data - same as the data passed to the first/top validation function
-      dynamicAnchors: new codegen_1.Name("dynamicAnchors"),
-      // used to support recursiveRef and dynamicRef
-      // function scoped variables
-      vErrors: new codegen_1.Name("vErrors"),
-      // null or array of validation errors
-      errors: new codegen_1.Name("errors"),
-      // counter of validation errors
-      this: new codegen_1.Name("this"),
-      // "globals"
-      self: new codegen_1.Name("self"),
-      scope: new codegen_1.Name("scope"),
-      // JTD serialize/parse name for JSON string and position
-      json: new codegen_1.Name("json"),
-      jsonPos: new codegen_1.Name("jsonPos"),
-      jsonLen: new codegen_1.Name("jsonLen"),
-      jsonPart: new codegen_1.Name("jsonPart")
-    };
-    exports.default = names;
-  }
-});
-
-// node_modules/ajv/dist/compile/errors.js
-var require_errors = __commonJS({
-  "node_modules/ajv/dist/compile/errors.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.extendErrors = exports.resetErrorsCount = exports.reportExtraError = exports.reportError = exports.keyword$DataError = exports.keywordError = void 0;
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var names_1 = require_names();
-    exports.keywordError = {
-      message: ({ keyword }) => (0, codegen_1.str)`must pass "${keyword}" keyword validation`
-    };
-    exports.keyword$DataError = {
-      message: ({ keyword, schemaType }) => schemaType ? (0, codegen_1.str)`"${keyword}" keyword must be ${schemaType} ($data)` : (0, codegen_1.str)`"${keyword}" keyword is invalid ($data)`
-    };
-    function reportError(cxt, error51 = exports.keywordError, errorPaths, overrideAllErrors) {
-      const { it } = cxt;
-      const { gen, compositeRule, allErrors } = it;
-      const errObj = errorObjectCode(cxt, error51, errorPaths);
-      if (overrideAllErrors !== null && overrideAllErrors !== void 0 ? overrideAllErrors : compositeRule || allErrors) {
-        addError(gen, errObj);
-      } else {
-        returnErrors(it, (0, codegen_1._)`[${errObj}]`);
-      }
-    }
-    exports.reportError = reportError;
-    function reportExtraError(cxt, error51 = exports.keywordError, errorPaths) {
-      const { it } = cxt;
-      const { gen, compositeRule, allErrors } = it;
-      const errObj = errorObjectCode(cxt, error51, errorPaths);
-      addError(gen, errObj);
-      if (!(compositeRule || allErrors)) {
-        returnErrors(it, names_1.default.vErrors);
-      }
-    }
-    exports.reportExtraError = reportExtraError;
-    function resetErrorsCount(gen, errsCount) {
-      gen.assign(names_1.default.errors, errsCount);
-      gen.if((0, codegen_1._)`${names_1.default.vErrors} !== null`, () => gen.if(errsCount, () => gen.assign((0, codegen_1._)`${names_1.default.vErrors}.length`, errsCount), () => gen.assign(names_1.default.vErrors, null)));
-    }
-    exports.resetErrorsCount = resetErrorsCount;
-    function extendErrors({ gen, keyword, schemaValue, data, errsCount, it }) {
-      if (errsCount === void 0)
-        throw new Error("ajv implementation error");
-      const err = gen.name("err");
-      gen.forRange("i", errsCount, names_1.default.errors, (i) => {
-        gen.const(err, (0, codegen_1._)`${names_1.default.vErrors}[${i}]`);
-        gen.if((0, codegen_1._)`${err}.instancePath === undefined`, () => gen.assign((0, codegen_1._)`${err}.instancePath`, (0, codegen_1.strConcat)(names_1.default.instancePath, it.errorPath)));
-        gen.assign((0, codegen_1._)`${err}.schemaPath`, (0, codegen_1.str)`${it.errSchemaPath}/${keyword}`);
-        if (it.opts.verbose) {
-          gen.assign((0, codegen_1._)`${err}.schema`, schemaValue);
-          gen.assign((0, codegen_1._)`${err}.data`, data);
-        }
-      });
-    }
-    exports.extendErrors = extendErrors;
-    function addError(gen, errObj) {
-      const err = gen.const("err", errObj);
-      gen.if((0, codegen_1._)`${names_1.default.vErrors} === null`, () => gen.assign(names_1.default.vErrors, (0, codegen_1._)`[${err}]`), (0, codegen_1._)`${names_1.default.vErrors}.push(${err})`);
-      gen.code((0, codegen_1._)`${names_1.default.errors}++`);
-    }
-    function returnErrors(it, errs) {
-      const { gen, validateName, schemaEnv } = it;
-      if (schemaEnv.$async) {
-        gen.throw((0, codegen_1._)`new ${it.ValidationError}(${errs})`);
-      } else {
-        gen.assign((0, codegen_1._)`${validateName}.errors`, errs);
-        gen.return(false);
-      }
-    }
-    var E = {
-      keyword: new codegen_1.Name("keyword"),
-      schemaPath: new codegen_1.Name("schemaPath"),
-      // also used in JTD errors
-      params: new codegen_1.Name("params"),
-      propertyName: new codegen_1.Name("propertyName"),
-      message: new codegen_1.Name("message"),
-      schema: new codegen_1.Name("schema"),
-      parentSchema: new codegen_1.Name("parentSchema")
-    };
-    function errorObjectCode(cxt, error51, errorPaths) {
-      const { createErrors } = cxt.it;
-      if (createErrors === false)
-        return (0, codegen_1._)`{}`;
-      return errorObject(cxt, error51, errorPaths);
-    }
-    function errorObject(cxt, error51, errorPaths = {}) {
-      const { gen, it } = cxt;
-      const keyValues = [
-        errorInstancePath(it, errorPaths),
-        errorSchemaPath(cxt, errorPaths)
-      ];
-      extraErrorProps(cxt, error51, keyValues);
-      return gen.object(...keyValues);
-    }
-    function errorInstancePath({ errorPath }, { instancePath }) {
-      const instPath = instancePath ? (0, codegen_1.str)`${errorPath}${(0, util_1.getErrorPath)(instancePath, util_1.Type.Str)}` : errorPath;
-      return [names_1.default.instancePath, (0, codegen_1.strConcat)(names_1.default.instancePath, instPath)];
-    }
-    function errorSchemaPath({ keyword, it: { errSchemaPath } }, { schemaPath, parentSchema }) {
-      let schPath = parentSchema ? errSchemaPath : (0, codegen_1.str)`${errSchemaPath}/${keyword}`;
-      if (schemaPath) {
-        schPath = (0, codegen_1.str)`${schPath}${(0, util_1.getErrorPath)(schemaPath, util_1.Type.Str)}`;
-      }
-      return [E.schemaPath, schPath];
-    }
-    function extraErrorProps(cxt, { params, message }, keyValues) {
-      const { keyword, data, schemaValue, it } = cxt;
-      const { opts, propertyName, topSchemaRef, schemaPath } = it;
-      keyValues.push([E.keyword, keyword], [E.params, typeof params == "function" ? params(cxt) : params || (0, codegen_1._)`{}`]);
-      if (opts.messages) {
-        keyValues.push([E.message, typeof message == "function" ? message(cxt) : message]);
-      }
-      if (opts.verbose) {
-        keyValues.push([E.schema, schemaValue], [E.parentSchema, (0, codegen_1._)`${topSchemaRef}${schemaPath}`], [names_1.default.data, data]);
-      }
-      if (propertyName)
-        keyValues.push([E.propertyName, propertyName]);
-    }
-  }
-});
-
-// node_modules/ajv/dist/compile/validate/boolSchema.js
-var require_boolSchema = __commonJS({
-  "node_modules/ajv/dist/compile/validate/boolSchema.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.boolOrEmptySchema = exports.topBoolOrEmptySchema = void 0;
-    var errors_1 = require_errors();
-    var codegen_1 = require_codegen();
-    var names_1 = require_names();
-    var boolError = {
-      message: "boolean schema is false"
-    };
-    function topBoolOrEmptySchema(it) {
-      const { gen, schema, validateName } = it;
-      if (schema === false) {
-        falseSchemaError(it, false);
-      } else if (typeof schema == "object" && schema.$async === true) {
-        gen.return(names_1.default.data);
-      } else {
-        gen.assign((0, codegen_1._)`${validateName}.errors`, null);
-        gen.return(true);
-      }
-    }
-    exports.topBoolOrEmptySchema = topBoolOrEmptySchema;
-    function boolOrEmptySchema(it, valid) {
-      const { gen, schema } = it;
-      if (schema === false) {
-        gen.var(valid, false);
-        falseSchemaError(it);
-      } else {
-        gen.var(valid, true);
-      }
-    }
-    exports.boolOrEmptySchema = boolOrEmptySchema;
-    function falseSchemaError(it, overrideAllErrors) {
-      const { gen, data } = it;
-      const cxt = {
-        gen,
-        keyword: "false schema",
-        data,
-        schema: false,
-        schemaCode: false,
-        schemaValue: false,
-        params: {},
-        it
-      };
-      (0, errors_1.reportError)(cxt, boolError, void 0, overrideAllErrors);
-    }
-  }
-});
-
-// node_modules/ajv/dist/compile/rules.js
-var require_rules = __commonJS({
-  "node_modules/ajv/dist/compile/rules.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.getRules = exports.isJSONType = void 0;
-    var _jsonTypes = ["string", "number", "integer", "boolean", "null", "object", "array"];
-    var jsonTypes = new Set(_jsonTypes);
-    function isJSONType(x) {
-      return typeof x == "string" && jsonTypes.has(x);
-    }
-    exports.isJSONType = isJSONType;
-    function getRules() {
-      const groups = {
-        number: { type: "number", rules: [] },
-        string: { type: "string", rules: [] },
-        array: { type: "array", rules: [] },
-        object: { type: "object", rules: [] }
-      };
-      return {
-        types: { ...groups, integer: true, boolean: true, null: true },
-        rules: [{ rules: [] }, groups.number, groups.string, groups.array, groups.object],
-        post: { rules: [] },
-        all: {},
-        keywords: {}
-      };
-    }
-    exports.getRules = getRules;
-  }
-});
-
-// node_modules/ajv/dist/compile/validate/applicability.js
-var require_applicability = __commonJS({
-  "node_modules/ajv/dist/compile/validate/applicability.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.shouldUseRule = exports.shouldUseGroup = exports.schemaHasRulesForType = void 0;
-    function schemaHasRulesForType({ schema, self: self2 }, type) {
-      const group = self2.RULES.types[type];
-      return group && group !== true && shouldUseGroup(schema, group);
-    }
-    exports.schemaHasRulesForType = schemaHasRulesForType;
-    function shouldUseGroup(schema, group) {
-      return group.rules.some((rule4) => shouldUseRule(schema, rule4));
-    }
-    exports.shouldUseGroup = shouldUseGroup;
-    function shouldUseRule(schema, rule4) {
-      var _a3;
-      return schema[rule4.keyword] !== void 0 || ((_a3 = rule4.definition.implements) === null || _a3 === void 0 ? void 0 : _a3.some((kwd) => schema[kwd] !== void 0));
-    }
-    exports.shouldUseRule = shouldUseRule;
-  }
-});
-
-// node_modules/ajv/dist/compile/validate/dataType.js
-var require_dataType = __commonJS({
-  "node_modules/ajv/dist/compile/validate/dataType.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.reportTypeError = exports.checkDataTypes = exports.checkDataType = exports.coerceAndCheckDataType = exports.getJSONTypes = exports.getSchemaTypes = exports.DataType = void 0;
-    var rules_1 = require_rules();
-    var applicability_1 = require_applicability();
-    var errors_1 = require_errors();
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var DataType;
-    (function(DataType2) {
-      DataType2[DataType2["Correct"] = 0] = "Correct";
-      DataType2[DataType2["Wrong"] = 1] = "Wrong";
-    })(DataType || (exports.DataType = DataType = {}));
-    function getSchemaTypes(schema) {
-      const types = getJSONTypes(schema.type);
-      const hasNull = types.includes("null");
-      if (hasNull) {
-        if (schema.nullable === false)
-          throw new Error("type: null contradicts nullable: false");
-      } else {
-        if (!types.length && schema.nullable !== void 0) {
-          throw new Error('"nullable" cannot be used without "type"');
-        }
-        if (schema.nullable === true)
-          types.push("null");
-      }
-      return types;
-    }
-    exports.getSchemaTypes = getSchemaTypes;
-    function getJSONTypes(ts) {
-      const types = Array.isArray(ts) ? ts : ts ? [ts] : [];
-      if (types.every(rules_1.isJSONType))
-        return types;
-      throw new Error("type must be JSONType or JSONType[]: " + types.join(","));
-    }
-    exports.getJSONTypes = getJSONTypes;
-    function coerceAndCheckDataType(it, types) {
-      const { gen, data, opts } = it;
-      const coerceTo = coerceToTypes(types, opts.coerceTypes);
-      const checkTypes = types.length > 0 && !(coerceTo.length === 0 && types.length === 1 && (0, applicability_1.schemaHasRulesForType)(it, types[0]));
-      if (checkTypes) {
-        const wrongType = checkDataTypes(types, data, opts.strictNumbers, DataType.Wrong);
-        gen.if(wrongType, () => {
-          if (coerceTo.length)
-            coerceData(it, types, coerceTo);
-          else
-            reportTypeError(it);
-        });
-      }
-      return checkTypes;
-    }
-    exports.coerceAndCheckDataType = coerceAndCheckDataType;
-    var COERCIBLE = /* @__PURE__ */ new Set(["string", "number", "integer", "boolean", "null"]);
-    function coerceToTypes(types, coerceTypes) {
-      return coerceTypes ? types.filter((t) => COERCIBLE.has(t) || coerceTypes === "array" && t === "array") : [];
-    }
-    function coerceData(it, types, coerceTo) {
-      const { gen, data, opts } = it;
-      const dataType = gen.let("dataType", (0, codegen_1._)`typeof ${data}`);
-      const coerced = gen.let("coerced", (0, codegen_1._)`undefined`);
-      if (opts.coerceTypes === "array") {
-        gen.if((0, codegen_1._)`${dataType} == 'object' && Array.isArray(${data}) && ${data}.length == 1`, () => gen.assign(data, (0, codegen_1._)`${data}[0]`).assign(dataType, (0, codegen_1._)`typeof ${data}`).if(checkDataTypes(types, data, opts.strictNumbers), () => gen.assign(coerced, data)));
-      }
-      gen.if((0, codegen_1._)`${coerced} !== undefined`);
-      for (const t of coerceTo) {
-        if (COERCIBLE.has(t) || t === "array" && opts.coerceTypes === "array") {
-          coerceSpecificType(t);
-        }
-      }
-      gen.else();
-      reportTypeError(it);
-      gen.endIf();
-      gen.if((0, codegen_1._)`${coerced} !== undefined`, () => {
-        gen.assign(data, coerced);
-        assignParentData(it, coerced);
-      });
-      function coerceSpecificType(t) {
-        switch (t) {
-          case "string":
-            gen.elseIf((0, codegen_1._)`${dataType} == "number" || ${dataType} == "boolean"`).assign(coerced, (0, codegen_1._)`"" + ${data}`).elseIf((0, codegen_1._)`${data} === null`).assign(coerced, (0, codegen_1._)`""`);
-            return;
-          case "number":
-            gen.elseIf((0, codegen_1._)`${dataType} == "boolean" || ${data} === null
-              || (${dataType} == "string" && ${data} && ${data} == +${data})`).assign(coerced, (0, codegen_1._)`+${data}`);
-            return;
-          case "integer":
-            gen.elseIf((0, codegen_1._)`${dataType} === "boolean" || ${data} === null
-              || (${dataType} === "string" && ${data} && ${data} == +${data} && !(${data} % 1))`).assign(coerced, (0, codegen_1._)`+${data}`);
-            return;
-          case "boolean":
-            gen.elseIf((0, codegen_1._)`${data} === "false" || ${data} === 0 || ${data} === null`).assign(coerced, false).elseIf((0, codegen_1._)`${data} === "true" || ${data} === 1`).assign(coerced, true);
-            return;
-          case "null":
-            gen.elseIf((0, codegen_1._)`${data} === "" || ${data} === 0 || ${data} === false`);
-            gen.assign(coerced, null);
-            return;
-          case "array":
-            gen.elseIf((0, codegen_1._)`${dataType} === "string" || ${dataType} === "number"
-              || ${dataType} === "boolean" || ${data} === null`).assign(coerced, (0, codegen_1._)`[${data}]`);
-        }
-      }
-    }
-    function assignParentData({ gen, parentData, parentDataProperty }, expr) {
-      gen.if((0, codegen_1._)`${parentData} !== undefined`, () => gen.assign((0, codegen_1._)`${parentData}[${parentDataProperty}]`, expr));
-    }
-    function checkDataType(dataType, data, strictNums, correct = DataType.Correct) {
-      const EQ = correct === DataType.Correct ? codegen_1.operators.EQ : codegen_1.operators.NEQ;
-      let cond;
-      switch (dataType) {
-        case "null":
-          return (0, codegen_1._)`${data} ${EQ} null`;
-        case "array":
-          cond = (0, codegen_1._)`Array.isArray(${data})`;
-          break;
-        case "object":
-          cond = (0, codegen_1._)`${data} && typeof ${data} == "object" && !Array.isArray(${data})`;
-          break;
-        case "integer":
-          cond = numCond((0, codegen_1._)`!(${data} % 1) && !isNaN(${data})`);
-          break;
-        case "number":
-          cond = numCond();
-          break;
-        default:
-          return (0, codegen_1._)`typeof ${data} ${EQ} ${dataType}`;
-      }
-      return correct === DataType.Correct ? cond : (0, codegen_1.not)(cond);
-      function numCond(_cond = codegen_1.nil) {
-        return (0, codegen_1.and)((0, codegen_1._)`typeof ${data} == "number"`, _cond, strictNums ? (0, codegen_1._)`isFinite(${data})` : codegen_1.nil);
-      }
-    }
-    exports.checkDataType = checkDataType;
-    function checkDataTypes(dataTypes, data, strictNums, correct) {
-      if (dataTypes.length === 1) {
-        return checkDataType(dataTypes[0], data, strictNums, correct);
-      }
-      let cond;
-      const types = (0, util_1.toHash)(dataTypes);
-      if (types.array && types.object) {
-        const notObj = (0, codegen_1._)`typeof ${data} != "object"`;
-        cond = types.null ? notObj : (0, codegen_1._)`!${data} || ${notObj}`;
-        delete types.null;
-        delete types.array;
-        delete types.object;
-      } else {
-        cond = codegen_1.nil;
-      }
-      if (types.number)
-        delete types.integer;
-      for (const t in types)
-        cond = (0, codegen_1.and)(cond, checkDataType(t, data, strictNums, correct));
-      return cond;
-    }
-    exports.checkDataTypes = checkDataTypes;
-    var typeError = {
-      message: ({ schema }) => `must be ${schema}`,
-      params: ({ schema, schemaValue }) => typeof schema == "string" ? (0, codegen_1._)`{type: ${schema}}` : (0, codegen_1._)`{type: ${schemaValue}}`
-    };
-    function reportTypeError(it) {
-      const cxt = getTypeErrorContext(it);
-      (0, errors_1.reportError)(cxt, typeError);
-    }
-    exports.reportTypeError = reportTypeError;
-    function getTypeErrorContext(it) {
-      const { gen, data, schema } = it;
-      const schemaCode = (0, util_1.schemaRefOrVal)(it, schema, "type");
-      return {
-        gen,
-        keyword: "type",
-        data,
-        schema: schema.type,
-        schemaCode,
-        schemaValue: schemaCode,
-        parentSchema: schema,
-        params: {},
-        it
-      };
-    }
-  }
-});
-
-// node_modules/ajv/dist/compile/validate/defaults.js
-var require_defaults = __commonJS({
-  "node_modules/ajv/dist/compile/validate/defaults.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.assignDefaults = void 0;
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    function assignDefaults(it, ty) {
-      const { properties, items } = it.schema;
-      if (ty === "object" && properties) {
-        for (const key in properties) {
-          assignDefault(it, key, properties[key].default);
-        }
-      } else if (ty === "array" && Array.isArray(items)) {
-        items.forEach((sch, i) => assignDefault(it, i, sch.default));
-      }
-    }
-    exports.assignDefaults = assignDefaults;
-    function assignDefault(it, prop, defaultValue) {
-      const { gen, compositeRule, data, opts } = it;
-      if (defaultValue === void 0)
-        return;
-      const childData = (0, codegen_1._)`${data}${(0, codegen_1.getProperty)(prop)}`;
-      if (compositeRule) {
-        (0, util_1.checkStrictMode)(it, `default is ignored for: ${childData}`);
-        return;
-      }
-      let condition = (0, codegen_1._)`${childData} === undefined`;
-      if (opts.useDefaults === "empty") {
-        condition = (0, codegen_1._)`${condition} || ${childData} === null || ${childData} === ""`;
-      }
-      gen.if(condition, (0, codegen_1._)`${childData} = ${(0, codegen_1.stringify)(defaultValue)}`);
-    }
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/code.js
-var require_code2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/code.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.validateUnion = exports.validateArray = exports.usePattern = exports.callValidateCode = exports.schemaProperties = exports.allSchemaProperties = exports.noPropertyInData = exports.propertyInData = exports.isOwnProperty = exports.hasPropFunc = exports.reportMissingProp = exports.checkMissingProp = exports.checkReportMissingProp = void 0;
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var names_1 = require_names();
-    var util_2 = require_util();
-    function checkReportMissingProp(cxt, prop) {
-      const { gen, data, it } = cxt;
-      gen.if(noPropertyInData(gen, data, prop, it.opts.ownProperties), () => {
-        cxt.setParams({ missingProperty: (0, codegen_1._)`${prop}` }, true);
-        cxt.error();
-      });
-    }
-    exports.checkReportMissingProp = checkReportMissingProp;
-    function checkMissingProp({ gen, data, it: { opts } }, properties, missing) {
-      return (0, codegen_1.or)(...properties.map((prop) => (0, codegen_1.and)(noPropertyInData(gen, data, prop, opts.ownProperties), (0, codegen_1._)`${missing} = ${prop}`)));
-    }
-    exports.checkMissingProp = checkMissingProp;
-    function reportMissingProp(cxt, missing) {
-      cxt.setParams({ missingProperty: missing }, true);
-      cxt.error();
-    }
-    exports.reportMissingProp = reportMissingProp;
-    function hasPropFunc(gen) {
-      return gen.scopeValue("func", {
-        // eslint-disable-next-line @typescript-eslint/unbound-method
-        ref: Object.prototype.hasOwnProperty,
-        code: (0, codegen_1._)`Object.prototype.hasOwnProperty`
-      });
-    }
-    exports.hasPropFunc = hasPropFunc;
-    function isOwnProperty(gen, data, property) {
-      return (0, codegen_1._)`${hasPropFunc(gen)}.call(${data}, ${property})`;
-    }
-    exports.isOwnProperty = isOwnProperty;
-    function propertyInData(gen, data, property, ownProperties) {
-      const cond = (0, codegen_1._)`${data}${(0, codegen_1.getProperty)(property)} !== undefined`;
-      return ownProperties ? (0, codegen_1._)`${cond} && ${isOwnProperty(gen, data, property)}` : cond;
-    }
-    exports.propertyInData = propertyInData;
-    function noPropertyInData(gen, data, property, ownProperties) {
-      const cond = (0, codegen_1._)`${data}${(0, codegen_1.getProperty)(property)} === undefined`;
-      return ownProperties ? (0, codegen_1.or)(cond, (0, codegen_1.not)(isOwnProperty(gen, data, property))) : cond;
-    }
-    exports.noPropertyInData = noPropertyInData;
-    function allSchemaProperties(schemaMap) {
-      return schemaMap ? Object.keys(schemaMap).filter((p) => p !== "__proto__") : [];
-    }
-    exports.allSchemaProperties = allSchemaProperties;
-    function schemaProperties(it, schemaMap) {
-      return allSchemaProperties(schemaMap).filter((p) => !(0, util_1.alwaysValidSchema)(it, schemaMap[p]));
-    }
-    exports.schemaProperties = schemaProperties;
-    function callValidateCode({ schemaCode, data, it: { gen, topSchemaRef, schemaPath, errorPath }, it }, func, context2, passSchema) {
-      const dataAndSchema = passSchema ? (0, codegen_1._)`${schemaCode}, ${data}, ${topSchemaRef}${schemaPath}` : data;
-      const valCxt = [
-        [names_1.default.instancePath, (0, codegen_1.strConcat)(names_1.default.instancePath, errorPath)],
-        [names_1.default.parentData, it.parentData],
-        [names_1.default.parentDataProperty, it.parentDataProperty],
-        [names_1.default.rootData, names_1.default.rootData]
-      ];
-      if (it.opts.dynamicRef)
-        valCxt.push([names_1.default.dynamicAnchors, names_1.default.dynamicAnchors]);
-      const args = (0, codegen_1._)`${dataAndSchema}, ${gen.object(...valCxt)}`;
-      return context2 !== codegen_1.nil ? (0, codegen_1._)`${func}.call(${context2}, ${args})` : (0, codegen_1._)`${func}(${args})`;
-    }
-    exports.callValidateCode = callValidateCode;
-    var newRegExp = (0, codegen_1._)`new RegExp`;
-    function usePattern({ gen, it: { opts } }, pattern) {
-      const u = opts.unicodeRegExp ? "u" : "";
-      const { regExp } = opts.code;
-      const rx = regExp(pattern, u);
-      return gen.scopeValue("pattern", {
-        key: rx.toString(),
-        ref: rx,
-        code: (0, codegen_1._)`${regExp.code === "new RegExp" ? newRegExp : (0, util_2.useFunc)(gen, regExp)}(${pattern}, ${u})`
-      });
-    }
-    exports.usePattern = usePattern;
-    function validateArray(cxt) {
-      const { gen, data, keyword, it } = cxt;
-      const valid = gen.name("valid");
-      if (it.allErrors) {
-        const validArr = gen.let("valid", true);
-        validateItems(() => gen.assign(validArr, false));
-        return validArr;
-      }
-      gen.var(valid, true);
-      validateItems(() => gen.break());
-      return valid;
-      function validateItems(notValid) {
-        const len = gen.const("len", (0, codegen_1._)`${data}.length`);
-        gen.forRange("i", 0, len, (i) => {
-          cxt.subschema({
-            keyword,
-            dataProp: i,
-            dataPropType: util_1.Type.Num
-          }, valid);
-          gen.if((0, codegen_1.not)(valid), notValid);
-        });
-      }
-    }
-    exports.validateArray = validateArray;
-    function validateUnion(cxt) {
-      const { gen, schema, keyword, it } = cxt;
-      if (!Array.isArray(schema))
-        throw new Error("ajv implementation error");
-      const alwaysValid = schema.some((sch) => (0, util_1.alwaysValidSchema)(it, sch));
-      if (alwaysValid && !it.opts.unevaluated)
-        return;
-      const valid = gen.let("valid", false);
-      const schValid = gen.name("_valid");
-      gen.block(() => schema.forEach((_sch, i) => {
-        const schCxt = cxt.subschema({
-          keyword,
-          schemaProp: i,
-          compositeRule: true
-        }, schValid);
-        gen.assign(valid, (0, codegen_1._)`${valid} || ${schValid}`);
-        const merged = cxt.mergeValidEvaluated(schCxt, schValid);
-        if (!merged)
-          gen.if((0, codegen_1.not)(valid));
-      }));
-      cxt.result(valid, () => cxt.reset(), () => cxt.error(true));
-    }
-    exports.validateUnion = validateUnion;
-  }
-});
-
-// node_modules/ajv/dist/compile/validate/keyword.js
-var require_keyword = __commonJS({
-  "node_modules/ajv/dist/compile/validate/keyword.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.validateKeywordUsage = exports.validSchemaType = exports.funcKeywordCode = exports.macroKeywordCode = void 0;
-    var codegen_1 = require_codegen();
-    var names_1 = require_names();
-    var code_1 = require_code2();
-    var errors_1 = require_errors();
-    function macroKeywordCode(cxt, def2) {
-      const { gen, keyword, schema, parentSchema, it } = cxt;
-      const macroSchema = def2.macro.call(it.self, schema, parentSchema, it);
-      const schemaRef = useKeyword(gen, keyword, macroSchema);
-      if (it.opts.validateSchema !== false)
-        it.self.validateSchema(macroSchema, true);
-      const valid = gen.name("valid");
-      cxt.subschema({
-        schema: macroSchema,
-        schemaPath: codegen_1.nil,
-        errSchemaPath: `${it.errSchemaPath}/${keyword}`,
-        topSchemaRef: schemaRef,
-        compositeRule: true
-      }, valid);
-      cxt.pass(valid, () => cxt.error(true));
-    }
-    exports.macroKeywordCode = macroKeywordCode;
-    function funcKeywordCode(cxt, def2) {
-      var _a3;
-      const { gen, keyword, schema, parentSchema, $data, it } = cxt;
-      checkAsyncKeyword(it, def2);
-      const validate2 = !$data && def2.compile ? def2.compile.call(it.self, schema, parentSchema, it) : def2.validate;
-      const validateRef = useKeyword(gen, keyword, validate2);
-      const valid = gen.let("valid");
-      cxt.block$data(valid, validateKeyword);
-      cxt.ok((_a3 = def2.valid) !== null && _a3 !== void 0 ? _a3 : valid);
-      function validateKeyword() {
-        if (def2.errors === false) {
-          assignValid();
-          if (def2.modifying)
-            modifyData(cxt);
-          reportErrs(() => cxt.error());
-        } else {
-          const ruleErrs = def2.async ? validateAsync() : validateSync();
-          if (def2.modifying)
-            modifyData(cxt);
-          reportErrs(() => addErrs(cxt, ruleErrs));
-        }
-      }
-      function validateAsync() {
-        const ruleErrs = gen.let("ruleErrs", null);
-        gen.try(() => assignValid((0, codegen_1._)`await `), (e) => gen.assign(valid, false).if((0, codegen_1._)`${e} instanceof ${it.ValidationError}`, () => gen.assign(ruleErrs, (0, codegen_1._)`${e}.errors`), () => gen.throw(e)));
-        return ruleErrs;
-      }
-      function validateSync() {
-        const validateErrs = (0, codegen_1._)`${validateRef}.errors`;
-        gen.assign(validateErrs, null);
-        assignValid(codegen_1.nil);
-        return validateErrs;
-      }
-      function assignValid(_await = def2.async ? (0, codegen_1._)`await ` : codegen_1.nil) {
-        const passCxt = it.opts.passContext ? names_1.default.this : names_1.default.self;
-        const passSchema = !("compile" in def2 && !$data || def2.schema === false);
-        gen.assign(valid, (0, codegen_1._)`${_await}${(0, code_1.callValidateCode)(cxt, validateRef, passCxt, passSchema)}`, def2.modifying);
-      }
-      function reportErrs(errors) {
-        var _a4;
-        gen.if((0, codegen_1.not)((_a4 = def2.valid) !== null && _a4 !== void 0 ? _a4 : valid), errors);
-      }
-    }
-    exports.funcKeywordCode = funcKeywordCode;
-    function modifyData(cxt) {
-      const { gen, data, it } = cxt;
-      gen.if(it.parentData, () => gen.assign(data, (0, codegen_1._)`${it.parentData}[${it.parentDataProperty}]`));
-    }
-    function addErrs(cxt, errs) {
-      const { gen } = cxt;
-      gen.if((0, codegen_1._)`Array.isArray(${errs})`, () => {
-        gen.assign(names_1.default.vErrors, (0, codegen_1._)`${names_1.default.vErrors} === null ? ${errs} : ${names_1.default.vErrors}.concat(${errs})`).assign(names_1.default.errors, (0, codegen_1._)`${names_1.default.vErrors}.length`);
-        (0, errors_1.extendErrors)(cxt);
-      }, () => cxt.error());
-    }
-    function checkAsyncKeyword({ schemaEnv }, def2) {
-      if (def2.async && !schemaEnv.$async)
-        throw new Error("async keyword in sync schema");
-    }
-    function useKeyword(gen, keyword, result) {
-      if (result === void 0)
-        throw new Error(`keyword "${keyword}" failed to compile`);
-      return gen.scopeValue("keyword", typeof result == "function" ? { ref: result } : { ref: result, code: (0, codegen_1.stringify)(result) });
-    }
-    function validSchemaType(schema, schemaType, allowUndefined = false) {
-      return !schemaType.length || schemaType.some((st) => st === "array" ? Array.isArray(schema) : st === "object" ? schema && typeof schema == "object" && !Array.isArray(schema) : typeof schema == st || allowUndefined && typeof schema == "undefined");
-    }
-    exports.validSchemaType = validSchemaType;
-    function validateKeywordUsage({ schema, opts, self: self2, errSchemaPath }, def2, keyword) {
-      if (Array.isArray(def2.keyword) ? !def2.keyword.includes(keyword) : def2.keyword !== keyword) {
-        throw new Error("ajv implementation error");
-      }
-      const deps = def2.dependencies;
-      if (deps === null || deps === void 0 ? void 0 : deps.some((kwd) => !Object.prototype.hasOwnProperty.call(schema, kwd))) {
-        throw new Error(`parent schema must have dependencies of ${keyword}: ${deps.join(",")}`);
-      }
-      if (def2.validateSchema) {
-        const valid = def2.validateSchema(schema[keyword]);
-        if (!valid) {
-          const msg = `keyword "${keyword}" value is invalid at path "${errSchemaPath}": ` + self2.errorsText(def2.validateSchema.errors);
-          if (opts.validateSchema === "log")
-            self2.logger.error(msg);
-          else
-            throw new Error(msg);
-        }
-      }
-    }
-    exports.validateKeywordUsage = validateKeywordUsage;
-  }
-});
-
-// node_modules/ajv/dist/compile/validate/subschema.js
-var require_subschema = __commonJS({
-  "node_modules/ajv/dist/compile/validate/subschema.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.extendSubschemaMode = exports.extendSubschemaData = exports.getSubschema = void 0;
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    function getSubschema(it, { keyword, schemaProp, schema, schemaPath, errSchemaPath, topSchemaRef }) {
-      if (keyword !== void 0 && schema !== void 0) {
-        throw new Error('both "keyword" and "schema" passed, only one allowed');
-      }
-      if (keyword !== void 0) {
-        const sch = it.schema[keyword];
-        return schemaProp === void 0 ? {
-          schema: sch,
-          schemaPath: (0, codegen_1._)`${it.schemaPath}${(0, codegen_1.getProperty)(keyword)}`,
-          errSchemaPath: `${it.errSchemaPath}/${keyword}`
-        } : {
-          schema: sch[schemaProp],
-          schemaPath: (0, codegen_1._)`${it.schemaPath}${(0, codegen_1.getProperty)(keyword)}${(0, codegen_1.getProperty)(schemaProp)}`,
-          errSchemaPath: `${it.errSchemaPath}/${keyword}/${(0, util_1.escapeFragment)(schemaProp)}`
-        };
-      }
-      if (schema !== void 0) {
-        if (schemaPath === void 0 || errSchemaPath === void 0 || topSchemaRef === void 0) {
-          throw new Error('"schemaPath", "errSchemaPath" and "topSchemaRef" are required with "schema"');
-        }
-        return {
-          schema,
-          schemaPath,
-          topSchemaRef,
-          errSchemaPath
-        };
-      }
-      throw new Error('either "keyword" or "schema" must be passed');
-    }
-    exports.getSubschema = getSubschema;
-    function extendSubschemaData(subschema, it, { dataProp, dataPropType: dpType, data, dataTypes, propertyName }) {
-      if (data !== void 0 && dataProp !== void 0) {
-        throw new Error('both "data" and "dataProp" passed, only one allowed');
-      }
-      const { gen } = it;
-      if (dataProp !== void 0) {
-        const { errorPath, dataPathArr, opts } = it;
-        const nextData = gen.let("data", (0, codegen_1._)`${it.data}${(0, codegen_1.getProperty)(dataProp)}`, true);
-        dataContextProps(nextData);
-        subschema.errorPath = (0, codegen_1.str)`${errorPath}${(0, util_1.getErrorPath)(dataProp, dpType, opts.jsPropertySyntax)}`;
-        subschema.parentDataProperty = (0, codegen_1._)`${dataProp}`;
-        subschema.dataPathArr = [...dataPathArr, subschema.parentDataProperty];
-      }
-      if (data !== void 0) {
-        const nextData = data instanceof codegen_1.Name ? data : gen.let("data", data, true);
-        dataContextProps(nextData);
-        if (propertyName !== void 0)
-          subschema.propertyName = propertyName;
-      }
-      if (dataTypes)
-        subschema.dataTypes = dataTypes;
-      function dataContextProps(_nextData) {
-        subschema.data = _nextData;
-        subschema.dataLevel = it.dataLevel + 1;
-        subschema.dataTypes = [];
-        it.definedProperties = /* @__PURE__ */ new Set();
-        subschema.parentData = it.data;
-        subschema.dataNames = [...it.dataNames, _nextData];
-      }
-    }
-    exports.extendSubschemaData = extendSubschemaData;
-    function extendSubschemaMode(subschema, { jtdDiscriminator, jtdMetadata, compositeRule, createErrors, allErrors }) {
-      if (compositeRule !== void 0)
-        subschema.compositeRule = compositeRule;
-      if (createErrors !== void 0)
-        subschema.createErrors = createErrors;
-      if (allErrors !== void 0)
-        subschema.allErrors = allErrors;
-      subschema.jtdDiscriminator = jtdDiscriminator;
-      subschema.jtdMetadata = jtdMetadata;
-    }
-    exports.extendSubschemaMode = extendSubschemaMode;
-  }
-});
-
-// node_modules/fast-deep-equal/index.js
-var require_fast_deep_equal = __commonJS({
-  "node_modules/fast-deep-equal/index.js"(exports, module) {
-    "use strict";
-    module.exports = function equal(a, b) {
-      if (a === b) return true;
-      if (a && b && typeof a == "object" && typeof b == "object") {
-        if (a.constructor !== b.constructor) return false;
-        var length, i, keys;
-        if (Array.isArray(a)) {
-          length = a.length;
-          if (length != b.length) return false;
-          for (i = length; i-- !== 0; )
-            if (!equal(a[i], b[i])) return false;
-          return true;
-        }
-        if (a.constructor === RegExp) return a.source === b.source && a.flags === b.flags;
-        if (a.valueOf !== Object.prototype.valueOf) return a.valueOf() === b.valueOf();
-        if (a.toString !== Object.prototype.toString) return a.toString() === b.toString();
-        keys = Object.keys(a);
-        length = keys.length;
-        if (length !== Object.keys(b).length) return false;
-        for (i = length; i-- !== 0; )
-          if (!Object.prototype.hasOwnProperty.call(b, keys[i])) return false;
-        for (i = length; i-- !== 0; ) {
-          var key = keys[i];
-          if (!equal(a[key], b[key])) return false;
-        }
-        return true;
-      }
-      return a !== a && b !== b;
-    };
-  }
-});
-
-// node_modules/json-schema-traverse/index.js
-var require_json_schema_traverse = __commonJS({
-  "node_modules/json-schema-traverse/index.js"(exports, module) {
-    "use strict";
-    var traverse = module.exports = function(schema, opts, cb) {
-      if (typeof opts == "function") {
-        cb = opts;
-        opts = {};
-      }
-      cb = opts.cb || cb;
-      var pre = typeof cb == "function" ? cb : cb.pre || function() {
-      };
-      var post = cb.post || function() {
-      };
-      _traverse(opts, pre, post, schema, "", schema);
-    };
-    traverse.keywords = {
-      additionalItems: true,
-      items: true,
-      contains: true,
-      additionalProperties: true,
-      propertyNames: true,
-      not: true,
-      if: true,
-      then: true,
-      else: true
-    };
-    traverse.arrayKeywords = {
-      items: true,
-      allOf: true,
-      anyOf: true,
-      oneOf: true
-    };
-    traverse.propsKeywords = {
-      $defs: true,
-      definitions: true,
-      properties: true,
-      patternProperties: true,
-      dependencies: true
-    };
-    traverse.skipKeywords = {
-      default: true,
-      enum: true,
-      const: true,
-      required: true,
-      maximum: true,
-      minimum: true,
-      exclusiveMaximum: true,
-      exclusiveMinimum: true,
-      multipleOf: true,
-      maxLength: true,
-      minLength: true,
-      pattern: true,
-      format: true,
-      maxItems: true,
-      minItems: true,
-      uniqueItems: true,
-      maxProperties: true,
-      minProperties: true
-    };
-    function _traverse(opts, pre, post, schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema, keyIndex) {
-      if (schema && typeof schema == "object" && !Array.isArray(schema)) {
-        pre(schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema, keyIndex);
-        for (var key in schema) {
-          var sch = schema[key];
-          if (Array.isArray(sch)) {
-            if (key in traverse.arrayKeywords) {
-              for (var i = 0; i < sch.length; i++)
-                _traverse(opts, pre, post, sch[i], jsonPtr + "/" + key + "/" + i, rootSchema, jsonPtr, key, schema, i);
-            }
-          } else if (key in traverse.propsKeywords) {
-            if (sch && typeof sch == "object") {
-              for (var prop in sch)
-                _traverse(opts, pre, post, sch[prop], jsonPtr + "/" + key + "/" + escapeJsonPtr(prop), rootSchema, jsonPtr, key, schema, prop);
-            }
-          } else if (key in traverse.keywords || opts.allKeys && !(key in traverse.skipKeywords)) {
-            _traverse(opts, pre, post, sch, jsonPtr + "/" + key, rootSchema, jsonPtr, key, schema);
-          }
-        }
-        post(schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema, keyIndex);
-      }
-    }
-    function escapeJsonPtr(str) {
-      return str.replace(/~/g, "~0").replace(/\//g, "~1");
-    }
-  }
-});
-
-// node_modules/ajv/dist/compile/resolve.js
-var require_resolve = __commonJS({
-  "node_modules/ajv/dist/compile/resolve.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.getSchemaRefs = exports.resolveUrl = exports.normalizeId = exports._getFullPath = exports.getFullPath = exports.inlineRef = void 0;
-    var util_1 = require_util();
-    var equal = require_fast_deep_equal();
-    var traverse = require_json_schema_traverse();
-    var SIMPLE_INLINED = /* @__PURE__ */ new Set([
-      "type",
-      "format",
-      "pattern",
-      "maxLength",
-      "minLength",
-      "maxProperties",
-      "minProperties",
-      "maxItems",
-      "minItems",
-      "maximum",
-      "minimum",
-      "uniqueItems",
-      "multipleOf",
-      "required",
-      "enum",
-      "const"
-    ]);
-    function inlineRef(schema, limit = true) {
-      if (typeof schema == "boolean")
-        return true;
-      if (limit === true)
-        return !hasRef(schema);
-      if (!limit)
-        return false;
-      return countKeys(schema) <= limit;
-    }
-    exports.inlineRef = inlineRef;
-    var REF_KEYWORDS = /* @__PURE__ */ new Set([
-      "$ref",
-      "$recursiveRef",
-      "$recursiveAnchor",
-      "$dynamicRef",
-      "$dynamicAnchor"
-    ]);
-    function hasRef(schema) {
-      for (const key in schema) {
-        if (REF_KEYWORDS.has(key))
-          return true;
-        const sch = schema[key];
-        if (Array.isArray(sch) && sch.some(hasRef))
-          return true;
-        if (typeof sch == "object" && hasRef(sch))
-          return true;
-      }
-      return false;
-    }
-    function countKeys(schema) {
-      let count = 0;
-      for (const key in schema) {
-        if (key === "$ref")
-          return Infinity;
-        count++;
-        if (SIMPLE_INLINED.has(key))
-          continue;
-        if (typeof schema[key] == "object") {
-          (0, util_1.eachItem)(schema[key], (sch) => count += countKeys(sch));
-        }
-        if (count === Infinity)
-          return Infinity;
-      }
-      return count;
-    }
-    function getFullPath(resolver, id4 = "", normalize) {
-      if (normalize !== false)
-        id4 = normalizeId(id4);
-      const p = resolver.parse(id4);
-      return _getFullPath(resolver, p);
-    }
-    exports.getFullPath = getFullPath;
-    function _getFullPath(resolver, p) {
-      const serialized = resolver.serialize(p);
-      return serialized.split("#")[0] + "#";
-    }
-    exports._getFullPath = _getFullPath;
-    var TRAILING_SLASH_HASH = /#\/?$/;
-    function normalizeId(id4) {
-      return id4 ? id4.replace(TRAILING_SLASH_HASH, "") : "";
-    }
-    exports.normalizeId = normalizeId;
-    function resolveUrl(resolver, baseId, id4) {
-      id4 = normalizeId(id4);
-      return resolver.resolve(baseId, id4);
-    }
-    exports.resolveUrl = resolveUrl;
-    var ANCHOR = /^[a-z_][-a-z0-9._]*$/i;
-    function getSchemaRefs(schema, baseId) {
-      if (typeof schema == "boolean")
-        return {};
-      const { schemaId, uriResolver } = this.opts;
-      const schId = normalizeId(schema[schemaId] || baseId);
-      const baseIds = { "": schId };
-      const pathPrefix = getFullPath(uriResolver, schId, false);
-      const localRefs = {};
-      const schemaRefs = /* @__PURE__ */ new Set();
-      traverse(schema, { allKeys: true }, (sch, jsonPtr, _, parentJsonPtr) => {
-        if (parentJsonPtr === void 0)
-          return;
-        const fullPath = pathPrefix + jsonPtr;
-        let innerBaseId = baseIds[parentJsonPtr];
-        if (typeof sch[schemaId] == "string")
-          innerBaseId = addRef.call(this, sch[schemaId]);
-        addAnchor.call(this, sch.$anchor);
-        addAnchor.call(this, sch.$dynamicAnchor);
-        baseIds[jsonPtr] = innerBaseId;
-        function addRef(ref) {
-          const _resolve = this.opts.uriResolver.resolve;
-          ref = normalizeId(innerBaseId ? _resolve(innerBaseId, ref) : ref);
-          if (schemaRefs.has(ref))
-            throw ambiguos(ref);
-          schemaRefs.add(ref);
-          let schOrRef = this.refs[ref];
-          if (typeof schOrRef == "string")
-            schOrRef = this.refs[schOrRef];
-          if (typeof schOrRef == "object") {
-            checkAmbiguosRef(sch, schOrRef.schema, ref);
-          } else if (ref !== normalizeId(fullPath)) {
-            if (ref[0] === "#") {
-              checkAmbiguosRef(sch, localRefs[ref], ref);
-              localRefs[ref] = sch;
-            } else {
-              this.refs[ref] = fullPath;
-            }
-          }
-          return ref;
-        }
-        function addAnchor(anchor) {
-          if (typeof anchor == "string") {
-            if (!ANCHOR.test(anchor))
-              throw new Error(`invalid anchor "${anchor}"`);
-            addRef.call(this, `#${anchor}`);
-          }
-        }
-      });
-      return localRefs;
-      function checkAmbiguosRef(sch1, sch2, ref) {
-        if (sch2 !== void 0 && !equal(sch1, sch2))
-          throw ambiguos(ref);
-      }
-      function ambiguos(ref) {
-        return new Error(`reference "${ref}" resolves to more than one schema`);
-      }
-    }
-    exports.getSchemaRefs = getSchemaRefs;
-  }
-});
-
-// node_modules/ajv/dist/compile/validate/index.js
-var require_validate = __commonJS({
-  "node_modules/ajv/dist/compile/validate/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.getData = exports.KeywordCxt = exports.validateFunctionCode = void 0;
-    var boolSchema_1 = require_boolSchema();
-    var dataType_1 = require_dataType();
-    var applicability_1 = require_applicability();
-    var dataType_2 = require_dataType();
-    var defaults_1 = require_defaults();
-    var keyword_1 = require_keyword();
-    var subschema_1 = require_subschema();
-    var codegen_1 = require_codegen();
-    var names_1 = require_names();
-    var resolve_1 = require_resolve();
-    var util_1 = require_util();
-    var errors_1 = require_errors();
-    function validateFunctionCode(it) {
-      if (isSchemaObj(it)) {
-        checkKeywords(it);
-        if (schemaCxtHasRules(it)) {
-          topSchemaObjCode(it);
-          return;
-        }
-      }
-      validateFunction(it, () => (0, boolSchema_1.topBoolOrEmptySchema)(it));
-    }
-    exports.validateFunctionCode = validateFunctionCode;
-    function validateFunction({ gen, validateName, schema, schemaEnv, opts }, body) {
-      if (opts.code.es5) {
-        gen.func(validateName, (0, codegen_1._)`${names_1.default.data}, ${names_1.default.valCxt}`, schemaEnv.$async, () => {
-          gen.code((0, codegen_1._)`"use strict"; ${funcSourceUrl(schema, opts)}`);
-          destructureValCxtES5(gen, opts);
-          gen.code(body);
-        });
-      } else {
-        gen.func(validateName, (0, codegen_1._)`${names_1.default.data}, ${destructureValCxt(opts)}`, schemaEnv.$async, () => gen.code(funcSourceUrl(schema, opts)).code(body));
-      }
-    }
-    function destructureValCxt(opts) {
-      return (0, codegen_1._)`{${names_1.default.instancePath}="", ${names_1.default.parentData}, ${names_1.default.parentDataProperty}, ${names_1.default.rootData}=${names_1.default.data}${opts.dynamicRef ? (0, codegen_1._)`, ${names_1.default.dynamicAnchors}={}` : codegen_1.nil}}={}`;
-    }
-    function destructureValCxtES5(gen, opts) {
-      gen.if(names_1.default.valCxt, () => {
-        gen.var(names_1.default.instancePath, (0, codegen_1._)`${names_1.default.valCxt}.${names_1.default.instancePath}`);
-        gen.var(names_1.default.parentData, (0, codegen_1._)`${names_1.default.valCxt}.${names_1.default.parentData}`);
-        gen.var(names_1.default.parentDataProperty, (0, codegen_1._)`${names_1.default.valCxt}.${names_1.default.parentDataProperty}`);
-        gen.var(names_1.default.rootData, (0, codegen_1._)`${names_1.default.valCxt}.${names_1.default.rootData}`);
-        if (opts.dynamicRef)
-          gen.var(names_1.default.dynamicAnchors, (0, codegen_1._)`${names_1.default.valCxt}.${names_1.default.dynamicAnchors}`);
-      }, () => {
-        gen.var(names_1.default.instancePath, (0, codegen_1._)`""`);
-        gen.var(names_1.default.parentData, (0, codegen_1._)`undefined`);
-        gen.var(names_1.default.parentDataProperty, (0, codegen_1._)`undefined`);
-        gen.var(names_1.default.rootData, names_1.default.data);
-        if (opts.dynamicRef)
-          gen.var(names_1.default.dynamicAnchors, (0, codegen_1._)`{}`);
-      });
-    }
-    function topSchemaObjCode(it) {
-      const { schema, opts, gen } = it;
-      validateFunction(it, () => {
-        if (opts.$comment && schema.$comment)
-          commentKeyword(it);
-        checkNoDefault(it);
-        gen.let(names_1.default.vErrors, null);
-        gen.let(names_1.default.errors, 0);
-        if (opts.unevaluated)
-          resetEvaluated(it);
-        typeAndKeywords(it);
-        returnResults(it);
-      });
-      return;
-    }
-    function resetEvaluated(it) {
-      const { gen, validateName } = it;
-      it.evaluated = gen.const("evaluated", (0, codegen_1._)`${validateName}.evaluated`);
-      gen.if((0, codegen_1._)`${it.evaluated}.dynamicProps`, () => gen.assign((0, codegen_1._)`${it.evaluated}.props`, (0, codegen_1._)`undefined`));
-      gen.if((0, codegen_1._)`${it.evaluated}.dynamicItems`, () => gen.assign((0, codegen_1._)`${it.evaluated}.items`, (0, codegen_1._)`undefined`));
-    }
-    function funcSourceUrl(schema, opts) {
-      const schId = typeof schema == "object" && schema[opts.schemaId];
-      return schId && (opts.code.source || opts.code.process) ? (0, codegen_1._)`/*# sourceURL=${schId} */` : codegen_1.nil;
-    }
-    function subschemaCode(it, valid) {
-      if (isSchemaObj(it)) {
-        checkKeywords(it);
-        if (schemaCxtHasRules(it)) {
-          subSchemaObjCode(it, valid);
-          return;
-        }
-      }
-      (0, boolSchema_1.boolOrEmptySchema)(it, valid);
-    }
-    function schemaCxtHasRules({ schema, self: self2 }) {
-      if (typeof schema == "boolean")
-        return !schema;
-      for (const key in schema)
-        if (self2.RULES.all[key])
-          return true;
-      return false;
-    }
-    function isSchemaObj(it) {
-      return typeof it.schema != "boolean";
-    }
-    function subSchemaObjCode(it, valid) {
-      const { schema, gen, opts } = it;
-      if (opts.$comment && schema.$comment)
-        commentKeyword(it);
-      updateContext(it);
-      checkAsyncSchema(it);
-      const errsCount = gen.const("_errs", names_1.default.errors);
-      typeAndKeywords(it, errsCount);
-      gen.var(valid, (0, codegen_1._)`${errsCount} === ${names_1.default.errors}`);
-    }
-    function checkKeywords(it) {
-      (0, util_1.checkUnknownRules)(it);
-      checkRefsAndKeywords(it);
-    }
-    function typeAndKeywords(it, errsCount) {
-      if (it.opts.jtd)
-        return schemaKeywords(it, [], false, errsCount);
-      const types = (0, dataType_1.getSchemaTypes)(it.schema);
-      const checkedTypes = (0, dataType_1.coerceAndCheckDataType)(it, types);
-      schemaKeywords(it, types, !checkedTypes, errsCount);
-    }
-    function checkRefsAndKeywords(it) {
-      const { schema, errSchemaPath, opts, self: self2 } = it;
-      if (schema.$ref && opts.ignoreKeywordsWithRef && (0, util_1.schemaHasRulesButRef)(schema, self2.RULES)) {
-        self2.logger.warn(`$ref: keywords ignored in schema at path "${errSchemaPath}"`);
-      }
-    }
-    function checkNoDefault(it) {
-      const { schema, opts } = it;
-      if (schema.default !== void 0 && opts.useDefaults && opts.strictSchema) {
-        (0, util_1.checkStrictMode)(it, "default is ignored in the schema root");
-      }
-    }
-    function updateContext(it) {
-      const schId = it.schema[it.opts.schemaId];
-      if (schId)
-        it.baseId = (0, resolve_1.resolveUrl)(it.opts.uriResolver, it.baseId, schId);
-    }
-    function checkAsyncSchema(it) {
-      if (it.schema.$async && !it.schemaEnv.$async)
-        throw new Error("async schema in sync schema");
-    }
-    function commentKeyword({ gen, schemaEnv, schema, errSchemaPath, opts }) {
-      const msg = schema.$comment;
-      if (opts.$comment === true) {
-        gen.code((0, codegen_1._)`${names_1.default.self}.logger.log(${msg})`);
-      } else if (typeof opts.$comment == "function") {
-        const schemaPath = (0, codegen_1.str)`${errSchemaPath}/$comment`;
-        const rootName = gen.scopeValue("root", { ref: schemaEnv.root });
-        gen.code((0, codegen_1._)`${names_1.default.self}.opts.$comment(${msg}, ${schemaPath}, ${rootName}.schema)`);
-      }
-    }
-    function returnResults(it) {
-      const { gen, schemaEnv, validateName, ValidationError, opts } = it;
-      if (schemaEnv.$async) {
-        gen.if((0, codegen_1._)`${names_1.default.errors} === 0`, () => gen.return(names_1.default.data), () => gen.throw((0, codegen_1._)`new ${ValidationError}(${names_1.default.vErrors})`));
-      } else {
-        gen.assign((0, codegen_1._)`${validateName}.errors`, names_1.default.vErrors);
-        if (opts.unevaluated)
-          assignEvaluated(it);
-        gen.return((0, codegen_1._)`${names_1.default.errors} === 0`);
-      }
-    }
-    function assignEvaluated({ gen, evaluated, props, items }) {
-      if (props instanceof codegen_1.Name)
-        gen.assign((0, codegen_1._)`${evaluated}.props`, props);
-      if (items instanceof codegen_1.Name)
-        gen.assign((0, codegen_1._)`${evaluated}.items`, items);
-    }
-    function schemaKeywords(it, types, typeErrors, errsCount) {
-      const { gen, schema, data, allErrors, opts, self: self2 } = it;
-      const { RULES } = self2;
-      if (schema.$ref && (opts.ignoreKeywordsWithRef || !(0, util_1.schemaHasRulesButRef)(schema, RULES))) {
-        gen.block(() => keywordCode(it, "$ref", RULES.all.$ref.definition));
-        return;
-      }
-      if (!opts.jtd)
-        checkStrictTypes(it, types);
-      gen.block(() => {
-        for (const group of RULES.rules)
-          groupKeywords(group);
-        groupKeywords(RULES.post);
-      });
-      function groupKeywords(group) {
-        if (!(0, applicability_1.shouldUseGroup)(schema, group))
-          return;
-        if (group.type) {
-          gen.if((0, dataType_2.checkDataType)(group.type, data, opts.strictNumbers));
-          iterateKeywords(it, group);
-          if (types.length === 1 && types[0] === group.type && typeErrors) {
-            gen.else();
-            (0, dataType_2.reportTypeError)(it);
-          }
-          gen.endIf();
-        } else {
-          iterateKeywords(it, group);
-        }
-        if (!allErrors)
-          gen.if((0, codegen_1._)`${names_1.default.errors} === ${errsCount || 0}`);
-      }
-    }
-    function iterateKeywords(it, group) {
-      const { gen, schema, opts: { useDefaults } } = it;
-      if (useDefaults)
-        (0, defaults_1.assignDefaults)(it, group.type);
-      gen.block(() => {
-        for (const rule4 of group.rules) {
-          if ((0, applicability_1.shouldUseRule)(schema, rule4)) {
-            keywordCode(it, rule4.keyword, rule4.definition, group.type);
-          }
-        }
-      });
-    }
-    function checkStrictTypes(it, types) {
-      if (it.schemaEnv.meta || !it.opts.strictTypes)
-        return;
-      checkContextTypes(it, types);
-      if (!it.opts.allowUnionTypes)
-        checkMultipleTypes(it, types);
-      checkKeywordTypes(it, it.dataTypes);
-    }
-    function checkContextTypes(it, types) {
-      if (!types.length)
-        return;
-      if (!it.dataTypes.length) {
-        it.dataTypes = types;
-        return;
-      }
-      types.forEach((t) => {
-        if (!includesType(it.dataTypes, t)) {
-          strictTypesError(it, `type "${t}" not allowed by context "${it.dataTypes.join(",")}"`);
-        }
-      });
-      narrowSchemaTypes(it, types);
-    }
-    function checkMultipleTypes(it, ts) {
-      if (ts.length > 1 && !(ts.length === 2 && ts.includes("null"))) {
-        strictTypesError(it, "use allowUnionTypes to allow union type keyword");
-      }
-    }
-    function checkKeywordTypes(it, ts) {
-      const rules2 = it.self.RULES.all;
-      for (const keyword in rules2) {
-        const rule4 = rules2[keyword];
-        if (typeof rule4 == "object" && (0, applicability_1.shouldUseRule)(it.schema, rule4)) {
-          const { type } = rule4.definition;
-          if (type.length && !type.some((t) => hasApplicableType(ts, t))) {
-            strictTypesError(it, `missing type "${type.join(",")}" for keyword "${keyword}"`);
-          }
-        }
-      }
-    }
-    function hasApplicableType(schTs, kwdT) {
-      return schTs.includes(kwdT) || kwdT === "number" && schTs.includes("integer");
-    }
-    function includesType(ts, t) {
-      return ts.includes(t) || t === "integer" && ts.includes("number");
-    }
-    function narrowSchemaTypes(it, withTypes) {
-      const ts = [];
-      for (const t of it.dataTypes) {
-        if (includesType(withTypes, t))
-          ts.push(t);
-        else if (withTypes.includes("integer") && t === "number")
-          ts.push("integer");
-      }
-      it.dataTypes = ts;
-    }
-    function strictTypesError(it, msg) {
-      const schemaPath = it.schemaEnv.baseId + it.errSchemaPath;
-      msg += ` at "${schemaPath}" (strictTypes)`;
-      (0, util_1.checkStrictMode)(it, msg, it.opts.strictTypes);
-    }
-    var KeywordCxt = class {
-      constructor(it, def2, keyword) {
-        (0, keyword_1.validateKeywordUsage)(it, def2, keyword);
-        this.gen = it.gen;
-        this.allErrors = it.allErrors;
-        this.keyword = keyword;
-        this.data = it.data;
-        this.schema = it.schema[keyword];
-        this.$data = def2.$data && it.opts.$data && this.schema && this.schema.$data;
-        this.schemaValue = (0, util_1.schemaRefOrVal)(it, this.schema, keyword, this.$data);
-        this.schemaType = def2.schemaType;
-        this.parentSchema = it.schema;
-        this.params = {};
-        this.it = it;
-        this.def = def2;
-        if (this.$data) {
-          this.schemaCode = it.gen.const("vSchema", getData(this.$data, it));
-        } else {
-          this.schemaCode = this.schemaValue;
-          if (!(0, keyword_1.validSchemaType)(this.schema, def2.schemaType, def2.allowUndefined)) {
-            throw new Error(`${keyword} value must be ${JSON.stringify(def2.schemaType)}`);
-          }
-        }
-        if ("code" in def2 ? def2.trackErrors : def2.errors !== false) {
-          this.errsCount = it.gen.const("_errs", names_1.default.errors);
-        }
-      }
-      result(condition, successAction, failAction) {
-        this.failResult((0, codegen_1.not)(condition), successAction, failAction);
-      }
-      failResult(condition, successAction, failAction) {
-        this.gen.if(condition);
-        if (failAction)
-          failAction();
-        else
-          this.error();
-        if (successAction) {
-          this.gen.else();
-          successAction();
-          if (this.allErrors)
-            this.gen.endIf();
-        } else {
-          if (this.allErrors)
-            this.gen.endIf();
-          else
-            this.gen.else();
-        }
-      }
-      pass(condition, failAction) {
-        this.failResult((0, codegen_1.not)(condition), void 0, failAction);
-      }
-      fail(condition) {
-        if (condition === void 0) {
-          this.error();
-          if (!this.allErrors)
-            this.gen.if(false);
-          return;
-        }
-        this.gen.if(condition);
-        this.error();
-        if (this.allErrors)
-          this.gen.endIf();
-        else
-          this.gen.else();
-      }
-      fail$data(condition) {
-        if (!this.$data)
-          return this.fail(condition);
-        const { schemaCode } = this;
-        this.fail((0, codegen_1._)`${schemaCode} !== undefined && (${(0, codegen_1.or)(this.invalid$data(), condition)})`);
-      }
-      error(append, errorParams, errorPaths) {
-        if (errorParams) {
-          this.setParams(errorParams);
-          this._error(append, errorPaths);
-          this.setParams({});
-          return;
-        }
-        this._error(append, errorPaths);
-      }
-      _error(append, errorPaths) {
-        ;
-        (append ? errors_1.reportExtraError : errors_1.reportError)(this, this.def.error, errorPaths);
-      }
-      $dataError() {
-        (0, errors_1.reportError)(this, this.def.$dataError || errors_1.keyword$DataError);
-      }
-      reset() {
-        if (this.errsCount === void 0)
-          throw new Error('add "trackErrors" to keyword definition');
-        (0, errors_1.resetErrorsCount)(this.gen, this.errsCount);
-      }
-      ok(cond) {
-        if (!this.allErrors)
-          this.gen.if(cond);
-      }
-      setParams(obj, assign) {
-        if (assign)
-          Object.assign(this.params, obj);
-        else
-          this.params = obj;
-      }
-      block$data(valid, codeBlock, $dataValid = codegen_1.nil) {
-        this.gen.block(() => {
-          this.check$data(valid, $dataValid);
-          codeBlock();
-        });
-      }
-      check$data(valid = codegen_1.nil, $dataValid = codegen_1.nil) {
-        if (!this.$data)
-          return;
-        const { gen, schemaCode, schemaType, def: def2 } = this;
-        gen.if((0, codegen_1.or)((0, codegen_1._)`${schemaCode} === undefined`, $dataValid));
-        if (valid !== codegen_1.nil)
-          gen.assign(valid, true);
-        if (schemaType.length || def2.validateSchema) {
-          gen.elseIf(this.invalid$data());
-          this.$dataError();
-          if (valid !== codegen_1.nil)
-            gen.assign(valid, false);
-        }
-        gen.else();
-      }
-      invalid$data() {
-        const { gen, schemaCode, schemaType, def: def2, it } = this;
-        return (0, codegen_1.or)(wrong$DataType(), invalid$DataSchema());
-        function wrong$DataType() {
-          if (schemaType.length) {
-            if (!(schemaCode instanceof codegen_1.Name))
-              throw new Error("ajv implementation error");
-            const st = Array.isArray(schemaType) ? schemaType : [schemaType];
-            return (0, codegen_1._)`${(0, dataType_2.checkDataTypes)(st, schemaCode, it.opts.strictNumbers, dataType_2.DataType.Wrong)}`;
-          }
-          return codegen_1.nil;
-        }
-        function invalid$DataSchema() {
-          if (def2.validateSchema) {
-            const validateSchemaRef = gen.scopeValue("validate$data", { ref: def2.validateSchema });
-            return (0, codegen_1._)`!${validateSchemaRef}(${schemaCode})`;
-          }
-          return codegen_1.nil;
-        }
-      }
-      subschema(appl, valid) {
-        const subschema = (0, subschema_1.getSubschema)(this.it, appl);
-        (0, subschema_1.extendSubschemaData)(subschema, this.it, appl);
-        (0, subschema_1.extendSubschemaMode)(subschema, appl);
-        const nextContext = { ...this.it, ...subschema, items: void 0, props: void 0 };
-        subschemaCode(nextContext, valid);
-        return nextContext;
-      }
-      mergeEvaluated(schemaCxt, toName) {
-        const { it, gen } = this;
-        if (!it.opts.unevaluated)
-          return;
-        if (it.props !== true && schemaCxt.props !== void 0) {
-          it.props = util_1.mergeEvaluated.props(gen, schemaCxt.props, it.props, toName);
-        }
-        if (it.items !== true && schemaCxt.items !== void 0) {
-          it.items = util_1.mergeEvaluated.items(gen, schemaCxt.items, it.items, toName);
-        }
-      }
-      mergeValidEvaluated(schemaCxt, valid) {
-        const { it, gen } = this;
-        if (it.opts.unevaluated && (it.props !== true || it.items !== true)) {
-          gen.if(valid, () => this.mergeEvaluated(schemaCxt, codegen_1.Name));
-          return true;
-        }
-      }
-    };
-    exports.KeywordCxt = KeywordCxt;
-    function keywordCode(it, keyword, def2, ruleType) {
-      const cxt = new KeywordCxt(it, def2, keyword);
-      if ("code" in def2) {
-        def2.code(cxt, ruleType);
-      } else if (cxt.$data && def2.validate) {
-        (0, keyword_1.funcKeywordCode)(cxt, def2);
-      } else if ("macro" in def2) {
-        (0, keyword_1.macroKeywordCode)(cxt, def2);
-      } else if (def2.compile || def2.validate) {
-        (0, keyword_1.funcKeywordCode)(cxt, def2);
-      }
-    }
-    var JSON_POINTER = /^\/(?:[^~]|~0|~1)*$/;
-    var RELATIVE_JSON_POINTER = /^([0-9]+)(#|\/(?:[^~]|~0|~1)*)?$/;
-    function getData($data, { dataLevel, dataNames, dataPathArr }) {
-      let jsonPointer;
-      let data;
-      if ($data === "")
-        return names_1.default.rootData;
-      if ($data[0] === "/") {
-        if (!JSON_POINTER.test($data))
-          throw new Error(`Invalid JSON-pointer: ${$data}`);
-        jsonPointer = $data;
-        data = names_1.default.rootData;
-      } else {
-        const matches = RELATIVE_JSON_POINTER.exec($data);
-        if (!matches)
-          throw new Error(`Invalid JSON-pointer: ${$data}`);
-        const up = +matches[1];
-        jsonPointer = matches[2];
-        if (jsonPointer === "#") {
-          if (up >= dataLevel)
-            throw new Error(errorMsg("property/index", up));
-          return dataPathArr[dataLevel - up];
-        }
-        if (up > dataLevel)
-          throw new Error(errorMsg("data", up));
-        data = dataNames[dataLevel - up];
-        if (!jsonPointer)
-          return data;
-      }
-      let expr = data;
-      const segments = jsonPointer.split("/");
-      for (const segment of segments) {
-        if (segment) {
-          data = (0, codegen_1._)`${data}${(0, codegen_1.getProperty)((0, util_1.unescapeJsonPointer)(segment))}`;
-          expr = (0, codegen_1._)`${expr} && ${data}`;
-        }
-      }
-      return expr;
-      function errorMsg(pointerType, up) {
-        return `Cannot access ${pointerType} ${up} levels up, current level is ${dataLevel}`;
-      }
-    }
-    exports.getData = getData;
-  }
-});
-
-// node_modules/ajv/dist/runtime/validation_error.js
-var require_validation_error = __commonJS({
-  "node_modules/ajv/dist/runtime/validation_error.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var ValidationError = class extends Error {
-      constructor(errors) {
-        super("validation failed");
-        this.errors = errors;
-        this.ajv = this.validation = true;
-      }
-    };
-    exports.default = ValidationError;
-  }
-});
-
-// node_modules/ajv/dist/compile/ref_error.js
-var require_ref_error = __commonJS({
-  "node_modules/ajv/dist/compile/ref_error.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var resolve_1 = require_resolve();
-    var MissingRefError = class extends Error {
-      constructor(resolver, baseId, ref, msg) {
-        super(msg || `can't resolve reference ${ref} from id ${baseId}`);
-        this.missingRef = (0, resolve_1.resolveUrl)(resolver, baseId, ref);
-        this.missingSchema = (0, resolve_1.normalizeId)((0, resolve_1.getFullPath)(resolver, this.missingRef));
-      }
-    };
-    exports.default = MissingRefError;
-  }
-});
-
-// node_modules/ajv/dist/compile/index.js
-var require_compile = __commonJS({
-  "node_modules/ajv/dist/compile/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.resolveSchema = exports.getCompilingSchema = exports.resolveRef = exports.compileSchema = exports.SchemaEnv = void 0;
-    var codegen_1 = require_codegen();
-    var validation_error_1 = require_validation_error();
-    var names_1 = require_names();
-    var resolve_1 = require_resolve();
-    var util_1 = require_util();
-    var validate_1 = require_validate();
-    var SchemaEnv = class {
-      constructor(env) {
-        var _a3;
-        this.refs = {};
-        this.dynamicAnchors = {};
-        let schema;
-        if (typeof env.schema == "object")
-          schema = env.schema;
-        this.schema = env.schema;
-        this.schemaId = env.schemaId;
-        this.root = env.root || this;
-        this.baseId = (_a3 = env.baseId) !== null && _a3 !== void 0 ? _a3 : (0, resolve_1.normalizeId)(schema === null || schema === void 0 ? void 0 : schema[env.schemaId || "$id"]);
-        this.schemaPath = env.schemaPath;
-        this.localRefs = env.localRefs;
-        this.meta = env.meta;
-        this.$async = schema === null || schema === void 0 ? void 0 : schema.$async;
-        this.refs = {};
-      }
-    };
-    exports.SchemaEnv = SchemaEnv;
-    function compileSchema(sch) {
-      const _sch = getCompilingSchema.call(this, sch);
-      if (_sch)
-        return _sch;
-      const rootId = (0, resolve_1.getFullPath)(this.opts.uriResolver, sch.root.baseId);
-      const { es5, lines } = this.opts.code;
-      const { ownProperties } = this.opts;
-      const gen = new codegen_1.CodeGen(this.scope, { es5, lines, ownProperties });
-      let _ValidationError;
-      if (sch.$async) {
-        _ValidationError = gen.scopeValue("Error", {
-          ref: validation_error_1.default,
-          code: (0, codegen_1._)`require("ajv/dist/runtime/validation_error").default`
-        });
-      }
-      const validateName = gen.scopeName("validate");
-      sch.validateName = validateName;
-      const schemaCxt = {
-        gen,
-        allErrors: this.opts.allErrors,
-        data: names_1.default.data,
-        parentData: names_1.default.parentData,
-        parentDataProperty: names_1.default.parentDataProperty,
-        dataNames: [names_1.default.data],
-        dataPathArr: [codegen_1.nil],
-        // TODO can its length be used as dataLevel if nil is removed?
-        dataLevel: 0,
-        dataTypes: [],
-        definedProperties: /* @__PURE__ */ new Set(),
-        topSchemaRef: gen.scopeValue("schema", this.opts.code.source === true ? { ref: sch.schema, code: (0, codegen_1.stringify)(sch.schema) } : { ref: sch.schema }),
-        validateName,
-        ValidationError: _ValidationError,
-        schema: sch.schema,
-        schemaEnv: sch,
-        rootId,
-        baseId: sch.baseId || rootId,
-        schemaPath: codegen_1.nil,
-        errSchemaPath: sch.schemaPath || (this.opts.jtd ? "" : "#"),
-        errorPath: (0, codegen_1._)`""`,
-        opts: this.opts,
-        self: this
-      };
-      let sourceCode;
-      try {
-        this._compilations.add(sch);
-        (0, validate_1.validateFunctionCode)(schemaCxt);
-        gen.optimize(this.opts.code.optimize);
-        const validateCode = gen.toString();
-        sourceCode = `${gen.scopeRefs(names_1.default.scope)}return ${validateCode}`;
-        if (this.opts.code.process)
-          sourceCode = this.opts.code.process(sourceCode, sch);
-        const makeValidate = new Function(`${names_1.default.self}`, `${names_1.default.scope}`, sourceCode);
-        const validate2 = makeValidate(this, this.scope.get());
-        this.scope.value(validateName, { ref: validate2 });
-        validate2.errors = null;
-        validate2.schema = sch.schema;
-        validate2.schemaEnv = sch;
-        if (sch.$async)
-          validate2.$async = true;
-        if (this.opts.code.source === true) {
-          validate2.source = { validateName, validateCode, scopeValues: gen._values };
-        }
-        if (this.opts.unevaluated) {
-          const { props, items } = schemaCxt;
-          validate2.evaluated = {
-            props: props instanceof codegen_1.Name ? void 0 : props,
-            items: items instanceof codegen_1.Name ? void 0 : items,
-            dynamicProps: props instanceof codegen_1.Name,
-            dynamicItems: items instanceof codegen_1.Name
-          };
-          if (validate2.source)
-            validate2.source.evaluated = (0, codegen_1.stringify)(validate2.evaluated);
-        }
-        sch.validate = validate2;
-        return sch;
-      } catch (e) {
-        delete sch.validate;
-        delete sch.validateName;
-        if (sourceCode)
-          this.logger.error("Error compiling schema, function code:", sourceCode);
-        throw e;
-      } finally {
-        this._compilations.delete(sch);
-      }
-    }
-    exports.compileSchema = compileSchema;
-    function resolveRef2(root, baseId, ref) {
-      var _a3;
-      ref = (0, resolve_1.resolveUrl)(this.opts.uriResolver, baseId, ref);
-      const schOrFunc = root.refs[ref];
-      if (schOrFunc)
-        return schOrFunc;
-      let _sch = resolve2.call(this, root, ref);
-      if (_sch === void 0) {
-        const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
-        const { schemaId } = this.opts;
-        if (schema)
-          _sch = new SchemaEnv({ schema, schemaId, root, baseId });
-      }
-      if (_sch === void 0)
-        return;
-      return root.refs[ref] = inlineOrCompile.call(this, _sch);
-    }
-    exports.resolveRef = resolveRef2;
-    function inlineOrCompile(sch) {
-      if ((0, resolve_1.inlineRef)(sch.schema, this.opts.inlineRefs))
-        return sch.schema;
-      return sch.validate ? sch : compileSchema.call(this, sch);
-    }
-    function getCompilingSchema(schEnv) {
-      for (const sch of this._compilations) {
-        if (sameSchemaEnv(sch, schEnv))
-          return sch;
-      }
-    }
-    exports.getCompilingSchema = getCompilingSchema;
-    function sameSchemaEnv(s1, s2) {
-      return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
-    }
-    function resolve2(root, ref) {
-      let sch;
-      while (typeof (sch = this.refs[ref]) == "string")
-        ref = sch;
-      return sch || this.schemas[ref] || resolveSchema.call(this, root, ref);
-    }
-    function resolveSchema(root, ref) {
-      const p = this.opts.uriResolver.parse(ref);
-      const refPath = (0, resolve_1._getFullPath)(this.opts.uriResolver, p);
-      let baseId = (0, resolve_1.getFullPath)(this.opts.uriResolver, root.baseId, void 0);
-      if (Object.keys(root.schema).length > 0 && refPath === baseId) {
-        return getJsonPointer.call(this, p, root);
-      }
-      const id4 = (0, resolve_1.normalizeId)(refPath);
-      const schOrRef = this.refs[id4] || this.schemas[id4];
-      if (typeof schOrRef == "string") {
-        const sch = resolveSchema.call(this, root, schOrRef);
-        if (typeof (sch === null || sch === void 0 ? void 0 : sch.schema) !== "object")
-          return;
-        return getJsonPointer.call(this, p, sch);
-      }
-      if (typeof (schOrRef === null || schOrRef === void 0 ? void 0 : schOrRef.schema) !== "object")
-        return;
-      if (!schOrRef.validate)
-        compileSchema.call(this, schOrRef);
-      if (id4 === (0, resolve_1.normalizeId)(ref)) {
-        const { schema } = schOrRef;
-        const { schemaId } = this.opts;
-        const schId = schema[schemaId];
-        if (schId)
-          baseId = (0, resolve_1.resolveUrl)(this.opts.uriResolver, baseId, schId);
-        return new SchemaEnv({ schema, schemaId, root, baseId });
-      }
-      return getJsonPointer.call(this, p, schOrRef);
-    }
-    exports.resolveSchema = resolveSchema;
-    var PREVENT_SCOPE_CHANGE = /* @__PURE__ */ new Set([
-      "properties",
-      "patternProperties",
-      "enum",
-      "dependencies",
-      "definitions"
-    ]);
-    function getJsonPointer(parsedRef, { baseId, schema, root }) {
-      var _a3;
-      if (((_a3 = parsedRef.fragment) === null || _a3 === void 0 ? void 0 : _a3[0]) !== "/")
-        return;
-      for (const part of parsedRef.fragment.slice(1).split("/")) {
-        if (typeof schema === "boolean")
-          return;
-        const partSchema = schema[(0, util_1.unescapeFragment)(part)];
-        if (partSchema === void 0)
-          return;
-        schema = partSchema;
-        const schId = typeof schema === "object" && schema[this.opts.schemaId];
-        if (!PREVENT_SCOPE_CHANGE.has(part) && schId) {
-          baseId = (0, resolve_1.resolveUrl)(this.opts.uriResolver, baseId, schId);
-        }
-      }
-      let env;
-      if (typeof schema != "boolean" && schema.$ref && !(0, util_1.schemaHasRulesButRef)(schema, this.RULES)) {
-        const $ref = (0, resolve_1.resolveUrl)(this.opts.uriResolver, baseId, schema.$ref);
-        env = resolveSchema.call(this, root, $ref);
-      }
-      const { schemaId } = this.opts;
-      env = env || new SchemaEnv({ schema, schemaId, root, baseId });
-      if (env.schema !== env.root.schema)
-        return env;
-      return void 0;
-    }
-  }
-});
-
-// node_modules/ajv/dist/refs/data.json
-var require_data = __commonJS({
-  "node_modules/ajv/dist/refs/data.json"(exports, module) {
-    module.exports = {
-      $id: "https://raw.githubusercontent.com/ajv-validator/ajv/master/lib/refs/data.json#",
-      description: "Meta-schema for $data reference (JSON AnySchema extension proposal)",
-      type: "object",
-      required: ["$data"],
-      properties: {
-        $data: {
-          type: "string",
-          anyOf: [{ format: "relative-json-pointer" }, { format: "json-pointer" }]
-        }
-      },
-      additionalProperties: false
-    };
-  }
-});
-
-// node_modules/fast-uri/lib/utils.js
-var require_utils = __commonJS({
-  "node_modules/fast-uri/lib/utils.js"(exports, module) {
-    "use strict";
-    var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
-    var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
-    var isHexPair = RegExp.prototype.test.bind(/^[\da-f]{2}$/iu);
-    var isUnreserved = RegExp.prototype.test.bind(/^[\da-z\-._~]$/iu);
-    var isPathCharacter = RegExp.prototype.test.bind(/^[\da-z\-._~!$&'()*+,;=:@/]$/iu);
-    function stringArrayToHexStripped(input) {
-      let acc = "";
-      let code = 0;
-      let i = 0;
-      for (i = 0; i < input.length; i++) {
-        code = input[i].charCodeAt(0);
-        if (code === 48) {
-          continue;
-        }
-        if (!(code >= 48 && code <= 57 || code >= 65 && code <= 70 || code >= 97 && code <= 102)) {
-          return "";
-        }
-        acc += input[i];
-        break;
-      }
-      for (i += 1; i < input.length; i++) {
-        code = input[i].charCodeAt(0);
-        if (!(code >= 48 && code <= 57 || code >= 65 && code <= 70 || code >= 97 && code <= 102)) {
-          return "";
-        }
-        acc += input[i];
-      }
-      return acc;
-    }
-    var nonSimpleDomain = RegExp.prototype.test.bind(/[^!"$&'()*+,\-.;=_`a-z{}~]/u);
-    function consumeIsZone(buffer) {
-      buffer.length = 0;
-      return true;
-    }
-    function consumeHextets(buffer, address, output) {
-      if (buffer.length) {
-        const hex3 = stringArrayToHexStripped(buffer);
-        if (hex3 !== "") {
-          address.push(hex3);
-        } else {
-          output.error = true;
-          return false;
-        }
-        buffer.length = 0;
-      }
-      return true;
-    }
-    function getIPV6(input) {
-      let tokenCount = 0;
-      const output = { error: false, address: "", zone: "" };
-      const address = [];
-      const buffer = [];
-      let endipv6Encountered = false;
-      let endIpv6 = false;
-      let consume = consumeHextets;
-      for (let i = 0; i < input.length; i++) {
-        const cursor = input[i];
-        if (cursor === "[" || cursor === "]") {
-          continue;
-        }
-        if (cursor === ":") {
-          if (endipv6Encountered === true) {
-            endIpv6 = true;
-          }
-          if (!consume(buffer, address, output)) {
-            break;
-          }
-          if (++tokenCount > 7) {
-            output.error = true;
-            break;
-          }
-          if (i > 0 && input[i - 1] === ":") {
-            endipv6Encountered = true;
-          }
-          address.push(":");
-          continue;
-        } else if (cursor === "%") {
-          if (!consume(buffer, address, output)) {
-            break;
-          }
-          consume = consumeIsZone;
-        } else {
-          buffer.push(cursor);
-          continue;
-        }
-      }
-      if (buffer.length) {
-        if (consume === consumeIsZone) {
-          output.zone = buffer.join("");
-        } else if (endIpv6) {
-          address.push(buffer.join(""));
-        } else {
-          address.push(stringArrayToHexStripped(buffer));
-        }
-      }
-      output.address = address.join("");
-      return output;
-    }
-    function normalizeIPv6(host) {
-      if (findToken(host, ":") < 2) {
-        return { host, isIPV6: false };
-      }
-      const ipv63 = getIPV6(host);
-      if (!ipv63.error) {
-        let newHost = ipv63.address;
-        let escapedHost = ipv63.address;
-        if (ipv63.zone) {
-          newHost += "%" + ipv63.zone;
-          escapedHost += "%25" + ipv63.zone;
-        }
-        return { host: newHost, isIPV6: true, escapedHost };
-      } else {
-        return { host, isIPV6: false };
-      }
-    }
-    function findToken(str, token) {
-      let ind = 0;
-      for (let i = 0; i < str.length; i++) {
-        if (str[i] === token) ind++;
-      }
-      return ind;
-    }
-    function removeDotSegments(path2) {
-      let input = path2;
-      const output = [];
-      let nextSlash = -1;
-      let len = 0;
-      while (len = input.length) {
-        if (len === 1) {
-          if (input === ".") {
-            break;
-          } else if (input === "/") {
-            output.push("/");
-            break;
-          } else {
-            output.push(input);
-            break;
-          }
-        } else if (len === 2) {
-          if (input[0] === ".") {
-            if (input[1] === ".") {
-              break;
-            } else if (input[1] === "/") {
-              input = input.slice(2);
-              continue;
-            }
-          } else if (input[0] === "/") {
-            if (input[1] === "." || input[1] === "/") {
-              output.push("/");
-              break;
-            }
-          }
-        } else if (len === 3) {
-          if (input === "/..") {
-            if (output.length !== 0) {
-              output.pop();
-            }
-            output.push("/");
-            break;
-          }
-        }
-        if (input[0] === ".") {
-          if (input[1] === ".") {
-            if (input[2] === "/") {
-              input = input.slice(3);
-              continue;
-            }
-          } else if (input[1] === "/") {
-            input = input.slice(2);
-            continue;
-          }
-        } else if (input[0] === "/") {
-          if (input[1] === ".") {
-            if (input[2] === "/") {
-              input = input.slice(2);
-              continue;
-            } else if (input[2] === ".") {
-              if (input[3] === "/") {
-                input = input.slice(3);
-                if (output.length !== 0) {
-                  output.pop();
-                }
-                continue;
-              }
-            }
-          }
-        }
-        if ((nextSlash = input.indexOf("/", 1)) === -1) {
-          output.push(input);
-          break;
-        } else {
-          output.push(input.slice(0, nextSlash));
-          input = input.slice(nextSlash);
-        }
-      }
-      return output.join("");
-    }
-    var HOST_DELIMS = { "@": "%40", "/": "%2F", "?": "%3F", "#": "%23", ":": "%3A" };
-    var HOST_DELIM_RE = /[@/?#:]/g;
-    var HOST_DELIM_NO_COLON_RE = /[@/?#]/g;
-    function reescapeHostDelimiters(host, isIP) {
-      const re = isIP ? HOST_DELIM_NO_COLON_RE : HOST_DELIM_RE;
-      re.lastIndex = 0;
-      return host.replace(re, (ch) => HOST_DELIMS[ch]);
-    }
-    function normalizePercentEncoding(input, decodeUnreserved = false) {
-      if (input.indexOf("%") === -1) {
-        return input;
-      }
-      let output = "";
-      for (let i = 0; i < input.length; i++) {
-        if (input[i] === "%" && i + 2 < input.length) {
-          const hex3 = input.slice(i + 1, i + 3);
-          if (isHexPair(hex3)) {
-            const normalizedHex = hex3.toUpperCase();
-            const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
-            if (decodeUnreserved && isUnreserved(decoded)) {
-              output += decoded;
-            } else {
-              output += "%" + normalizedHex;
-            }
-            i += 2;
-            continue;
-          }
-        }
-        output += input[i];
-      }
-      return output;
-    }
-    function normalizePathEncoding(input) {
-      let output = "";
-      for (let i = 0; i < input.length; i++) {
-        if (input[i] === "%" && i + 2 < input.length) {
-          const hex3 = input.slice(i + 1, i + 3);
-          if (isHexPair(hex3)) {
-            const normalizedHex = hex3.toUpperCase();
-            const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
-            if (decoded !== "." && isUnreserved(decoded)) {
-              output += decoded;
-            } else {
-              output += "%" + normalizedHex;
-            }
-            i += 2;
-            continue;
-          }
-        }
-        if (isPathCharacter(input[i])) {
-          output += input[i];
-        } else {
-          output += escape(input[i]);
-        }
-      }
-      return output;
-    }
-    function escapePreservingEscapes(input) {
-      let output = "";
-      for (let i = 0; i < input.length; i++) {
-        if (input[i] === "%" && i + 2 < input.length) {
-          const hex3 = input.slice(i + 1, i + 3);
-          if (isHexPair(hex3)) {
-            output += "%" + hex3.toUpperCase();
-            i += 2;
-            continue;
-          }
-        }
-        output += escape(input[i]);
-      }
-      return output;
-    }
-    function recomposeAuthority(component) {
-      const uriTokens = [];
-      if (component.userinfo !== void 0) {
-        uriTokens.push(component.userinfo);
-        uriTokens.push("@");
-      }
-      if (component.host !== void 0) {
-        let host = unescape(component.host);
-        if (!isIPv4(host)) {
-          const ipV6res = normalizeIPv6(host);
-          if (ipV6res.isIPV6 === true) {
-            host = `[${ipV6res.escapedHost}]`;
-          } else {
-            host = reescapeHostDelimiters(host, false);
-          }
-        }
-        uriTokens.push(host);
-      }
-      if (typeof component.port === "number" || typeof component.port === "string") {
-        uriTokens.push(":");
-        uriTokens.push(String(component.port));
-      }
-      return uriTokens.length ? uriTokens.join("") : void 0;
-    }
-    module.exports = {
-      nonSimpleDomain,
-      recomposeAuthority,
-      reescapeHostDelimiters,
-      normalizePercentEncoding,
-      normalizePathEncoding,
-      escapePreservingEscapes,
-      removeDotSegments,
-      isIPv4,
-      isUUID,
-      normalizeIPv6,
-      stringArrayToHexStripped
-    };
-  }
-});
-
-// node_modules/fast-uri/lib/schemes.js
-var require_schemes = __commonJS({
-  "node_modules/fast-uri/lib/schemes.js"(exports, module) {
-    "use strict";
-    var { isUUID } = require_utils();
-    var URN_REG = /([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-.:;=@]|%[\da-f]{2})+)/iu;
-    var supportedSchemeNames = (
-      /** @type {const} */
-      [
-        "http",
-        "https",
-        "ws",
-        "wss",
-        "urn",
-        "urn:uuid"
-      ]
-    );
-    function isValidSchemeName(name) {
-      return supportedSchemeNames.indexOf(
-        /** @type {*} */
-        name
-      ) !== -1;
-    }
-    function wsIsSecure(wsComponent) {
-      if (wsComponent.secure === true) {
-        return true;
-      } else if (wsComponent.secure === false) {
-        return false;
-      } else if (wsComponent.scheme) {
-        return wsComponent.scheme.length === 3 && (wsComponent.scheme[0] === "w" || wsComponent.scheme[0] === "W") && (wsComponent.scheme[1] === "s" || wsComponent.scheme[1] === "S") && (wsComponent.scheme[2] === "s" || wsComponent.scheme[2] === "S");
-      } else {
-        return false;
-      }
-    }
-    function httpParse(component) {
-      if (!component.host) {
-        component.error = component.error || "HTTP URIs must have a host.";
-      }
-      return component;
-    }
-    function httpSerialize(component) {
-      const secure = String(component.scheme).toLowerCase() === "https";
-      if (component.port === (secure ? 443 : 80) || component.port === "") {
-        component.port = void 0;
-      }
-      if (!component.path) {
-        component.path = "/";
-      }
-      return component;
-    }
-    function wsParse(wsComponent) {
-      wsComponent.secure = wsIsSecure(wsComponent);
-      wsComponent.resourceName = (wsComponent.path || "/") + (wsComponent.query ? "?" + wsComponent.query : "");
-      wsComponent.path = void 0;
-      wsComponent.query = void 0;
-      return wsComponent;
-    }
-    function wsSerialize(wsComponent) {
-      if (wsComponent.port === (wsIsSecure(wsComponent) ? 443 : 80) || wsComponent.port === "") {
-        wsComponent.port = void 0;
-      }
-      if (typeof wsComponent.secure === "boolean") {
-        wsComponent.scheme = wsComponent.secure ? "wss" : "ws";
-        wsComponent.secure = void 0;
-      }
-      if (wsComponent.resourceName) {
-        const [path2, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path2 && path2 !== "/" ? path2 : void 0;
-        wsComponent.query = query;
-        wsComponent.resourceName = void 0;
-      }
-      wsComponent.fragment = void 0;
-      return wsComponent;
-    }
-    function urnParse(urnComponent, options) {
-      if (!urnComponent.path) {
-        urnComponent.error = "URN can not be parsed";
-        return urnComponent;
-      }
-      const matches = urnComponent.path.match(URN_REG);
-      if (matches) {
-        const scheme = options.scheme || urnComponent.scheme || "urn";
-        urnComponent.nid = matches[1].toLowerCase();
-        urnComponent.nss = matches[2];
-        const urnScheme = `${scheme}:${options.nid || urnComponent.nid}`;
-        const schemeHandler = getSchemeHandler(urnScheme);
-        urnComponent.path = void 0;
-        if (schemeHandler) {
-          urnComponent = schemeHandler.parse(urnComponent, options);
-        }
-      } else {
-        urnComponent.error = urnComponent.error || "URN can not be parsed.";
-      }
-      return urnComponent;
-    }
-    function urnSerialize(urnComponent, options) {
-      if (urnComponent.nid === void 0) {
-        throw new Error("URN without nid cannot be serialized");
-      }
-      const scheme = options.scheme || urnComponent.scheme || "urn";
-      const nid = urnComponent.nid.toLowerCase();
-      const urnScheme = `${scheme}:${options.nid || nid}`;
-      const schemeHandler = getSchemeHandler(urnScheme);
-      if (schemeHandler) {
-        urnComponent = schemeHandler.serialize(urnComponent, options);
-      }
-      const uriComponent = urnComponent;
-      const nss = urnComponent.nss;
-      uriComponent.path = `${nid || options.nid}:${nss}`;
-      options.skipEscape = true;
-      return uriComponent;
-    }
-    function urnuuidParse(urnComponent, options) {
-      const uuidComponent = urnComponent;
-      uuidComponent.uuid = uuidComponent.nss;
-      uuidComponent.nss = void 0;
-      if (!options.tolerant && (!uuidComponent.uuid || !isUUID(uuidComponent.uuid))) {
-        uuidComponent.error = uuidComponent.error || "UUID is not valid.";
-      }
-      return uuidComponent;
-    }
-    function urnuuidSerialize(uuidComponent) {
-      const urnComponent = uuidComponent;
-      urnComponent.nss = (uuidComponent.uuid || "").toLowerCase();
-      return urnComponent;
-    }
-    var http = (
-      /** @type {SchemeHandler} */
-      {
-        scheme: "http",
-        domainHost: true,
-        parse: httpParse,
-        serialize: httpSerialize
-      }
-    );
-    var https = (
-      /** @type {SchemeHandler} */
-      {
-        scheme: "https",
-        domainHost: http.domainHost,
-        parse: httpParse,
-        serialize: httpSerialize
-      }
-    );
-    var ws = (
-      /** @type {SchemeHandler} */
-      {
-        scheme: "ws",
-        domainHost: true,
-        parse: wsParse,
-        serialize: wsSerialize
-      }
-    );
-    var wss = (
-      /** @type {SchemeHandler} */
-      {
-        scheme: "wss",
-        domainHost: ws.domainHost,
-        parse: ws.parse,
-        serialize: ws.serialize
-      }
-    );
-    var urn = (
-      /** @type {SchemeHandler} */
-      {
-        scheme: "urn",
-        parse: urnParse,
-        serialize: urnSerialize,
-        skipNormalize: true
-      }
-    );
-    var urnuuid = (
-      /** @type {SchemeHandler} */
-      {
-        scheme: "urn:uuid",
-        parse: urnuuidParse,
-        serialize: urnuuidSerialize,
-        skipNormalize: true
-      }
-    );
-    var SCHEMES = (
-      /** @type {Record<SchemeName, SchemeHandler>} */
-      {
-        http,
-        https,
-        ws,
-        wss,
-        urn,
-        "urn:uuid": urnuuid
-      }
-    );
-    Object.setPrototypeOf(SCHEMES, null);
-    function getSchemeHandler(scheme) {
-      return scheme && (SCHEMES[
-        /** @type {SchemeName} */
-        scheme
-      ] || SCHEMES[
-        /** @type {SchemeName} */
-        scheme.toLowerCase()
-      ]) || void 0;
-    }
-    module.exports = {
-      wsIsSecure,
-      SCHEMES,
-      isValidSchemeName,
-      getSchemeHandler
-    };
-  }
-});
-
-// node_modules/fast-uri/index.js
-var require_fast_uri = __commonJS({
-  "node_modules/fast-uri/index.js"(exports, module) {
-    "use strict";
-    var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, escapePreservingEscapes, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
-    var { SCHEMES, getSchemeHandler } = require_schemes();
-    function normalize(uri, options) {
-      if (typeof uri === "string") {
-        uri = /** @type {T} */
-        normalizeString(uri, options);
-      } else if (typeof uri === "object") {
-        uri = /** @type {T} */
-        parse3(serialize(uri, options), options);
-      }
-      return uri;
-    }
-    function resolve2(baseURI, relativeURI, options) {
-      const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
-      const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
-      schemelessOptions.skipEscape = true;
-      return serialize(resolved, schemelessOptions);
-    }
-    function resolveComponent(base2, relative6, options, skipNormalization) {
-      const target = {};
-      if (!skipNormalization) {
-        base2 = parse3(serialize(base2, options), options);
-        relative6 = parse3(serialize(relative6, options), options);
-      }
-      options = options || {};
-      if (!options.tolerant && relative6.scheme) {
-        target.scheme = relative6.scheme;
-        target.userinfo = relative6.userinfo;
-        target.host = relative6.host;
-        target.port = relative6.port;
-        target.path = removeDotSegments(relative6.path || "");
-        target.query = relative6.query;
-      } else {
-        if (relative6.userinfo !== void 0 || relative6.host !== void 0 || relative6.port !== void 0) {
-          target.userinfo = relative6.userinfo;
-          target.host = relative6.host;
-          target.port = relative6.port;
-          target.path = removeDotSegments(relative6.path || "");
-          target.query = relative6.query;
-        } else {
-          if (!relative6.path) {
-            target.path = base2.path;
-            if (relative6.query !== void 0) {
-              target.query = relative6.query;
-            } else {
-              target.query = base2.query;
-            }
-          } else {
-            if (relative6.path[0] === "/") {
-              target.path = removeDotSegments(relative6.path);
-            } else {
-              if ((base2.userinfo !== void 0 || base2.host !== void 0 || base2.port !== void 0) && !base2.path) {
-                target.path = "/" + relative6.path;
-              } else if (!base2.path) {
-                target.path = relative6.path;
-              } else {
-                target.path = base2.path.slice(0, base2.path.lastIndexOf("/") + 1) + relative6.path;
-              }
-              target.path = removeDotSegments(target.path);
-            }
-            target.query = relative6.query;
-          }
-          target.userinfo = base2.userinfo;
-          target.host = base2.host;
-          target.port = base2.port;
-        }
-        target.scheme = base2.scheme;
-      }
-      target.fragment = relative6.fragment;
-      return target;
-    }
-    function equal(uriA, uriB, options) {
-      const normalizedA = normalizeComparableURI(uriA, options);
-      const normalizedB = normalizeComparableURI(uriB, options);
-      return normalizedA !== void 0 && normalizedB !== void 0 && normalizedA.toLowerCase() === normalizedB.toLowerCase();
-    }
-    function serialize(cmpts, opts) {
-      const component = {
-        host: cmpts.host,
-        scheme: cmpts.scheme,
-        userinfo: cmpts.userinfo,
-        port: cmpts.port,
-        path: cmpts.path,
-        query: cmpts.query,
-        nid: cmpts.nid,
-        nss: cmpts.nss,
-        uuid: cmpts.uuid,
-        fragment: cmpts.fragment,
-        reference: cmpts.reference,
-        resourceName: cmpts.resourceName,
-        secure: cmpts.secure,
-        error: ""
-      };
-      const options = Object.assign({}, opts);
-      const uriTokens = [];
-      const schemeHandler = getSchemeHandler(options.scheme || component.scheme);
-      if (schemeHandler && schemeHandler.serialize) schemeHandler.serialize(component, options);
-      if (component.path !== void 0) {
-        if (!options.skipEscape) {
-          component.path = escapePreservingEscapes(component.path);
-          if (component.scheme !== void 0) {
-            component.path = component.path.split("%3A").join(":");
-          }
-        } else {
-          component.path = normalizePercentEncoding(component.path);
-        }
-      }
-      if (options.reference !== "suffix" && component.scheme) {
-        uriTokens.push(component.scheme, ":");
-      }
-      const authority = recomposeAuthority(component);
-      if (authority !== void 0) {
-        if (options.reference !== "suffix") {
-          uriTokens.push("//");
-        }
-        uriTokens.push(authority);
-        if (component.path && component.path[0] !== "/") {
-          uriTokens.push("/");
-        }
-      }
-      if (component.path !== void 0) {
-        let s = component.path;
-        if (!options.absolutePath && (!schemeHandler || !schemeHandler.absolutePath)) {
-          s = removeDotSegments(s);
-        }
-        if (authority === void 0 && s[0] === "/" && s[1] === "/") {
-          s = "/%2F" + s.slice(2);
-        }
-        uriTokens.push(s);
-      }
-      if (component.query !== void 0) {
-        uriTokens.push("?", component.query);
-      }
-      if (component.fragment !== void 0) {
-        uriTokens.push("#", component.fragment);
-      }
-      return uriTokens.join("");
-    }
-    var URI_PARSE = /^(?:([^#/:?]+):)?(?:\/\/((?:([^#/?@]*)@)?(\[[^#/?\]]+\]|[^#/:?]*)(?::(\d*))?))?([^#?]*)(?:\?([^#]*))?(?:#((?:.|[\n\r])*))?/u;
-    var AUTHORITY_PREFIX = /^(?:[^#/:?]+:)?\/\/([^/?#]*)/;
-    function getParseError(parsed, matches) {
-      if (matches[2] !== void 0 && parsed.path && parsed.path[0] !== "/") {
-        return 'URI path must start with "/" when authority is present.';
-      }
-      if (typeof parsed.port === "number" && (parsed.port < 0 || parsed.port > 65535)) {
-        return "URI port is malformed.";
-      }
-      return void 0;
-    }
-    function parseWithStatus(uri, opts) {
-      const options = Object.assign({}, opts);
-      const parsed = {
-        scheme: void 0,
-        userinfo: void 0,
-        host: "",
-        port: void 0,
-        path: "",
-        query: void 0,
-        fragment: void 0
-      };
-      let malformedAuthorityOrPort = false;
-      let isIP = false;
-      if (options.reference === "suffix") {
-        if (options.scheme) {
-          uri = options.scheme + ":" + uri;
-        } else {
-          uri = "//" + uri;
-        }
-      }
-      const authorityMatch = uri.match(AUTHORITY_PREFIX);
-      if (authorityMatch !== null && authorityMatch[1].indexOf("\\") !== -1) {
-        parsed.error = "URI authority must not contain a literal backslash.";
-        malformedAuthorityOrPort = true;
-      }
-      const matches = uri.match(URI_PARSE);
-      if (matches) {
-        parsed.scheme = matches[1];
-        parsed.userinfo = matches[3];
-        parsed.host = matches[4];
-        parsed.port = parseInt(matches[5], 10);
-        parsed.path = matches[6] || "";
-        parsed.query = matches[7];
-        parsed.fragment = matches[8];
-        if (isNaN(parsed.port)) {
-          parsed.port = matches[5];
-        }
-        const parseError = getParseError(parsed, matches);
-        if (parseError !== void 0) {
-          parsed.error = parsed.error || parseError;
-          malformedAuthorityOrPort = true;
-        }
-        if (parsed.host) {
-          const ipv4result = isIPv4(parsed.host);
-          if (ipv4result === false) {
-            const ipv6result = normalizeIPv6(parsed.host);
-            parsed.host = ipv6result.host.toLowerCase();
-            isIP = ipv6result.isIPV6;
-          } else {
-            isIP = true;
-          }
-        }
-        if (parsed.scheme === void 0 && parsed.userinfo === void 0 && parsed.host === void 0 && parsed.port === void 0 && parsed.query === void 0 && !parsed.path) {
-          parsed.reference = "same-document";
-        } else if (parsed.scheme === void 0) {
-          parsed.reference = "relative";
-        } else if (parsed.fragment === void 0) {
-          parsed.reference = "absolute";
-        } else {
-          parsed.reference = "uri";
-        }
-        if (options.reference && options.reference !== "suffix" && options.reference !== parsed.reference) {
-          parsed.error = parsed.error || "URI is not a " + options.reference + " reference.";
-        }
-        const schemeHandler = getSchemeHandler(options.scheme || parsed.scheme);
-        if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport)) {
-          if (parsed.host && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
-            try {
-              parsed.host = new URL("http://" + parsed.host).hostname;
-            } catch (e) {
-              parsed.error = parsed.error || "Host's domain name can not be converted to ASCII: " + e;
-            }
-          }
-        }
-        if (!schemeHandler || schemeHandler && !schemeHandler.skipNormalize) {
-          if (uri.indexOf("%") !== -1) {
-            if (parsed.scheme !== void 0) {
-              parsed.scheme = unescape(parsed.scheme);
-            }
-            if (parsed.host !== void 0) {
-              parsed.host = reescapeHostDelimiters(unescape(parsed.host), isIP);
-            }
-          }
-          if (parsed.path) {
-            parsed.path = normalizePathEncoding(parsed.path);
-          }
-          if (parsed.fragment) {
-            try {
-              parsed.fragment = encodeURI(decodeURIComponent(parsed.fragment));
-            } catch {
-              parsed.error = parsed.error || "URI malformed";
-            }
-          }
-        }
-        if (schemeHandler && schemeHandler.parse) {
-          schemeHandler.parse(parsed, options);
-        }
-      } else {
-        parsed.error = parsed.error || "URI can not be parsed.";
-      }
-      return { parsed, malformedAuthorityOrPort };
-    }
-    function parse3(uri, opts) {
-      return parseWithStatus(uri, opts).parsed;
-    }
-    function normalizeString(uri, opts) {
-      return normalizeStringWithStatus(uri, opts).normalized;
-    }
-    function normalizeStringWithStatus(uri, opts) {
-      const { parsed, malformedAuthorityOrPort } = parseWithStatus(uri, opts);
-      return {
-        normalized: malformedAuthorityOrPort ? uri : serialize(parsed, opts),
-        malformedAuthorityOrPort
-      };
-    }
-    function normalizeComparableURI(uri, opts) {
-      if (typeof uri === "string") {
-        const { normalized, malformedAuthorityOrPort } = normalizeStringWithStatus(uri, opts);
-        return malformedAuthorityOrPort ? void 0 : normalized;
-      }
-      if (typeof uri === "object") {
-        return serialize(uri, opts);
-      }
-    }
-    var fastUri = {
-      SCHEMES,
-      normalize,
-      resolve: resolve2,
-      resolveComponent,
-      equal,
-      serialize,
-      parse: parse3
-    };
-    module.exports = fastUri;
-    module.exports.default = fastUri;
-    module.exports.fastUri = fastUri;
-  }
-});
-
-// node_modules/ajv/dist/runtime/uri.js
-var require_uri = __commonJS({
-  "node_modules/ajv/dist/runtime/uri.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var uri = require_fast_uri();
-    uri.code = 'require("ajv/dist/runtime/uri").default';
-    exports.default = uri;
-  }
-});
-
-// node_modules/ajv/dist/core.js
-var require_core = __commonJS({
-  "node_modules/ajv/dist/core.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.CodeGen = exports.Name = exports.nil = exports.stringify = exports.str = exports._ = exports.KeywordCxt = void 0;
-    var validate_1 = require_validate();
-    Object.defineProperty(exports, "KeywordCxt", { enumerable: true, get: function() {
-      return validate_1.KeywordCxt;
-    } });
-    var codegen_1 = require_codegen();
-    Object.defineProperty(exports, "_", { enumerable: true, get: function() {
-      return codegen_1._;
-    } });
-    Object.defineProperty(exports, "str", { enumerable: true, get: function() {
-      return codegen_1.str;
-    } });
-    Object.defineProperty(exports, "stringify", { enumerable: true, get: function() {
-      return codegen_1.stringify;
-    } });
-    Object.defineProperty(exports, "nil", { enumerable: true, get: function() {
-      return codegen_1.nil;
-    } });
-    Object.defineProperty(exports, "Name", { enumerable: true, get: function() {
-      return codegen_1.Name;
-    } });
-    Object.defineProperty(exports, "CodeGen", { enumerable: true, get: function() {
-      return codegen_1.CodeGen;
-    } });
-    var validation_error_1 = require_validation_error();
-    var ref_error_1 = require_ref_error();
-    var rules_1 = require_rules();
-    var compile_1 = require_compile();
-    var codegen_2 = require_codegen();
-    var resolve_1 = require_resolve();
-    var dataType_1 = require_dataType();
-    var util_1 = require_util();
-    var $dataRefSchema = require_data();
-    var uri_1 = require_uri();
-    var defaultRegExp = (str, flags) => new RegExp(str, flags);
-    defaultRegExp.code = "new RegExp";
-    var META_IGNORE_OPTIONS = ["removeAdditional", "useDefaults", "coerceTypes"];
-    var EXT_SCOPE_NAMES = /* @__PURE__ */ new Set([
-      "validate",
-      "serialize",
-      "parse",
-      "wrapper",
-      "root",
-      "schema",
-      "keyword",
-      "pattern",
-      "formats",
-      "validate$data",
-      "func",
-      "obj",
-      "Error"
-    ]);
-    var removedOptions = {
-      errorDataPath: "",
-      format: "`validateFormats: false` can be used instead.",
-      nullable: '"nullable" keyword is supported by default.',
-      jsonPointers: "Deprecated jsPropertySyntax can be used instead.",
-      extendRefs: "Deprecated ignoreKeywordsWithRef can be used instead.",
-      missingRefs: "Pass empty schema with $id that should be ignored to ajv.addSchema.",
-      processCode: "Use option `code: {process: (code, schemaEnv: object) => string}`",
-      sourceCode: "Use option `code: {source: true}`",
-      strictDefaults: "It is default now, see option `strict`.",
-      strictKeywords: "It is default now, see option `strict`.",
-      uniqueItems: '"uniqueItems" keyword is always validated.',
-      unknownFormats: "Disable strict mode or pass `true` to `ajv.addFormat` (or `formats` option).",
-      cache: "Map is used as cache, schema object as key.",
-      serialize: "Map is used as cache, schema object as key.",
-      ajvErrors: "It is default now."
-    };
-    var deprecatedOptions = {
-      ignoreKeywordsWithRef: "",
-      jsPropertySyntax: "",
-      unicode: '"minLength"/"maxLength" account for unicode characters by default.'
-    };
-    var MAX_EXPRESSION = 200;
-    function requiredOptions(o) {
-      var _a3, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0;
-      const s = o.strict;
-      const _optz = (_a3 = o.code) === null || _a3 === void 0 ? void 0 : _a3.optimize;
-      const optimize = _optz === true || _optz === void 0 ? 1 : _optz || 0;
-      const regExp = (_c = (_b = o.code) === null || _b === void 0 ? void 0 : _b.regExp) !== null && _c !== void 0 ? _c : defaultRegExp;
-      const uriResolver = (_d = o.uriResolver) !== null && _d !== void 0 ? _d : uri_1.default;
-      return {
-        strictSchema: (_f = (_e = o.strictSchema) !== null && _e !== void 0 ? _e : s) !== null && _f !== void 0 ? _f : true,
-        strictNumbers: (_h = (_g = o.strictNumbers) !== null && _g !== void 0 ? _g : s) !== null && _h !== void 0 ? _h : true,
-        strictTypes: (_k = (_j = o.strictTypes) !== null && _j !== void 0 ? _j : s) !== null && _k !== void 0 ? _k : "log",
-        strictTuples: (_m = (_l = o.strictTuples) !== null && _l !== void 0 ? _l : s) !== null && _m !== void 0 ? _m : "log",
-        strictRequired: (_p = (_o = o.strictRequired) !== null && _o !== void 0 ? _o : s) !== null && _p !== void 0 ? _p : false,
-        code: o.code ? { ...o.code, optimize, regExp } : { optimize, regExp },
-        loopRequired: (_q = o.loopRequired) !== null && _q !== void 0 ? _q : MAX_EXPRESSION,
-        loopEnum: (_r = o.loopEnum) !== null && _r !== void 0 ? _r : MAX_EXPRESSION,
-        meta: (_s = o.meta) !== null && _s !== void 0 ? _s : true,
-        messages: (_t = o.messages) !== null && _t !== void 0 ? _t : true,
-        inlineRefs: (_u = o.inlineRefs) !== null && _u !== void 0 ? _u : true,
-        schemaId: (_v = o.schemaId) !== null && _v !== void 0 ? _v : "$id",
-        addUsedSchema: (_w = o.addUsedSchema) !== null && _w !== void 0 ? _w : true,
-        validateSchema: (_x = o.validateSchema) !== null && _x !== void 0 ? _x : true,
-        validateFormats: (_y = o.validateFormats) !== null && _y !== void 0 ? _y : true,
-        unicodeRegExp: (_z = o.unicodeRegExp) !== null && _z !== void 0 ? _z : true,
-        int32range: (_0 = o.int32range) !== null && _0 !== void 0 ? _0 : true,
-        uriResolver
-      };
-    }
-    var Ajv = class {
-      constructor(opts = {}) {
-        this.schemas = {};
-        this.refs = {};
-        this.formats = /* @__PURE__ */ Object.create(null);
-        this._compilations = /* @__PURE__ */ new Set();
-        this._loading = {};
-        this._cache = /* @__PURE__ */ new Map();
-        opts = this.opts = { ...opts, ...requiredOptions(opts) };
-        const { es5, lines } = this.opts.code;
-        this.scope = new codegen_2.ValueScope({ scope: {}, prefixes: EXT_SCOPE_NAMES, es5, lines });
-        this.logger = getLogger(opts.logger);
-        const formatOpt = opts.validateFormats;
-        opts.validateFormats = false;
-        this.RULES = (0, rules_1.getRules)();
-        checkOptions.call(this, removedOptions, opts, "NOT SUPPORTED");
-        checkOptions.call(this, deprecatedOptions, opts, "DEPRECATED", "warn");
-        this._metaOpts = getMetaSchemaOptions.call(this);
-        if (opts.formats)
-          addInitialFormats.call(this);
-        this._addVocabularies();
-        this._addDefaultMetaSchema();
-        if (opts.keywords)
-          addInitialKeywords.call(this, opts.keywords);
-        if (typeof opts.meta == "object")
-          this.addMetaSchema(opts.meta);
-        addInitialSchemas.call(this);
-        opts.validateFormats = formatOpt;
-      }
-      _addVocabularies() {
-        this.addKeyword("$async");
-      }
-      _addDefaultMetaSchema() {
-        const { $data, meta: meta3, schemaId } = this.opts;
-        let _dataRefSchema = $dataRefSchema;
-        if (schemaId === "id") {
-          _dataRefSchema = { ...$dataRefSchema };
-          _dataRefSchema.id = _dataRefSchema.$id;
-          delete _dataRefSchema.$id;
-        }
-        if (meta3 && $data)
-          this.addMetaSchema(_dataRefSchema, _dataRefSchema[schemaId], false);
-      }
-      defaultMeta() {
-        const { meta: meta3, schemaId } = this.opts;
-        return this.opts.defaultMeta = typeof meta3 == "object" ? meta3[schemaId] || meta3 : void 0;
-      }
-      validate(schemaKeyRef, data) {
-        let v;
-        if (typeof schemaKeyRef == "string") {
-          v = this.getSchema(schemaKeyRef);
-          if (!v)
-            throw new Error(`no schema with key or ref "${schemaKeyRef}"`);
-        } else {
-          v = this.compile(schemaKeyRef);
-        }
-        const valid = v(data);
-        if (!("$async" in v))
-          this.errors = v.errors;
-        return valid;
-      }
-      compile(schema, _meta) {
-        const sch = this._addSchema(schema, _meta);
-        return sch.validate || this._compileSchemaEnv(sch);
-      }
-      compileAsync(schema, meta3) {
-        if (typeof this.opts.loadSchema != "function") {
-          throw new Error("options.loadSchema should be a function");
-        }
-        const { loadSchema } = this.opts;
-        return runCompileAsync.call(this, schema, meta3);
-        async function runCompileAsync(_schema, _meta) {
-          await loadMetaSchema.call(this, _schema.$schema);
-          const sch = this._addSchema(_schema, _meta);
-          return sch.validate || _compileAsync.call(this, sch);
-        }
-        async function loadMetaSchema($ref) {
-          if ($ref && !this.getSchema($ref)) {
-            await runCompileAsync.call(this, { $ref }, true);
-          }
-        }
-        async function _compileAsync(sch) {
-          try {
-            return this._compileSchemaEnv(sch);
-          } catch (e) {
-            if (!(e instanceof ref_error_1.default))
-              throw e;
-            checkLoaded.call(this, e);
-            await loadMissingSchema.call(this, e.missingSchema);
-            return _compileAsync.call(this, sch);
-          }
-        }
-        function checkLoaded({ missingSchema: ref, missingRef }) {
-          if (this.refs[ref]) {
-            throw new Error(`AnySchema ${ref} is loaded but ${missingRef} cannot be resolved`);
-          }
-        }
-        async function loadMissingSchema(ref) {
-          const _schema = await _loadSchema.call(this, ref);
-          if (!this.refs[ref])
-            await loadMetaSchema.call(this, _schema.$schema);
-          if (!this.refs[ref])
-            this.addSchema(_schema, ref, meta3);
-        }
-        async function _loadSchema(ref) {
-          const p = this._loading[ref];
-          if (p)
-            return p;
-          try {
-            return await (this._loading[ref] = loadSchema(ref));
-          } finally {
-            delete this._loading[ref];
-          }
-        }
-      }
-      // Adds schema to the instance
-      addSchema(schema, key, _meta, _validateSchema = this.opts.validateSchema) {
-        if (Array.isArray(schema)) {
-          for (const sch of schema)
-            this.addSchema(sch, void 0, _meta, _validateSchema);
-          return this;
-        }
-        let id4;
-        if (typeof schema === "object") {
-          const { schemaId } = this.opts;
-          id4 = schema[schemaId];
-          if (id4 !== void 0 && typeof id4 != "string") {
-            throw new Error(`schema ${schemaId} must be string`);
-          }
-        }
-        key = (0, resolve_1.normalizeId)(key || id4);
-        this._checkUnique(key);
-        this.schemas[key] = this._addSchema(schema, _meta, key, _validateSchema, true);
-        return this;
-      }
-      // Add schema that will be used to validate other schemas
-      // options in META_IGNORE_OPTIONS are alway set to false
-      addMetaSchema(schema, key, _validateSchema = this.opts.validateSchema) {
-        this.addSchema(schema, key, true, _validateSchema);
-        return this;
-      }
-      //  Validate schema against its meta-schema
-      validateSchema(schema, throwOrLogError) {
-        if (typeof schema == "boolean")
-          return true;
-        let $schema;
-        $schema = schema.$schema;
-        if ($schema !== void 0 && typeof $schema != "string") {
-          throw new Error("$schema must be a string");
-        }
-        $schema = $schema || this.opts.defaultMeta || this.defaultMeta();
-        if (!$schema) {
-          this.logger.warn("meta-schema not available");
-          this.errors = null;
-          return true;
-        }
-        const valid = this.validate($schema, schema);
-        if (!valid && throwOrLogError) {
-          const message = "schema is invalid: " + this.errorsText();
-          if (this.opts.validateSchema === "log")
-            this.logger.error(message);
-          else
-            throw new Error(message);
-        }
-        return valid;
-      }
-      // Get compiled schema by `key` or `ref`.
-      // (`key` that was passed to `addSchema` or full schema reference - `schema.$id` or resolved id)
-      getSchema(keyRef) {
-        let sch;
-        while (typeof (sch = getSchEnv.call(this, keyRef)) == "string")
-          keyRef = sch;
-        if (sch === void 0) {
-          const { schemaId } = this.opts;
-          const root = new compile_1.SchemaEnv({ schema: {}, schemaId });
-          sch = compile_1.resolveSchema.call(this, root, keyRef);
-          if (!sch)
-            return;
-          this.refs[keyRef] = sch;
-        }
-        return sch.validate || this._compileSchemaEnv(sch);
-      }
-      // Remove cached schema(s).
-      // If no parameter is passed all schemas but meta-schemas are removed.
-      // If RegExp is passed all schemas with key/id matching pattern but meta-schemas are removed.
-      // Even if schema is referenced by other schemas it still can be removed as other schemas have local references.
-      removeSchema(schemaKeyRef) {
-        if (schemaKeyRef instanceof RegExp) {
-          this._removeAllSchemas(this.schemas, schemaKeyRef);
-          this._removeAllSchemas(this.refs, schemaKeyRef);
-          return this;
-        }
-        switch (typeof schemaKeyRef) {
-          case "undefined":
-            this._removeAllSchemas(this.schemas);
-            this._removeAllSchemas(this.refs);
-            this._cache.clear();
-            return this;
-          case "string": {
-            const sch = getSchEnv.call(this, schemaKeyRef);
-            if (typeof sch == "object")
-              this._cache.delete(sch.schema);
-            delete this.schemas[schemaKeyRef];
-            delete this.refs[schemaKeyRef];
-            return this;
-          }
-          case "object": {
-            const cacheKey = schemaKeyRef;
-            this._cache.delete(cacheKey);
-            let id4 = schemaKeyRef[this.opts.schemaId];
-            if (id4) {
-              id4 = (0, resolve_1.normalizeId)(id4);
-              delete this.schemas[id4];
-              delete this.refs[id4];
-            }
-            return this;
-          }
-          default:
-            throw new Error("ajv.removeSchema: invalid parameter");
-        }
-      }
-      // add "vocabulary" - a collection of keywords
-      addVocabulary(definitions) {
-        for (const def2 of definitions)
-          this.addKeyword(def2);
-        return this;
-      }
-      addKeyword(kwdOrDef, def2) {
-        let keyword;
-        if (typeof kwdOrDef == "string") {
-          keyword = kwdOrDef;
-          if (typeof def2 == "object") {
-            this.logger.warn("these parameters are deprecated, see docs for addKeyword");
-            def2.keyword = keyword;
-          }
-        } else if (typeof kwdOrDef == "object" && def2 === void 0) {
-          def2 = kwdOrDef;
-          keyword = def2.keyword;
-          if (Array.isArray(keyword) && !keyword.length) {
-            throw new Error("addKeywords: keyword must be string or non-empty array");
-          }
-        } else {
-          throw new Error("invalid addKeywords parameters");
-        }
-        checkKeyword.call(this, keyword, def2);
-        if (!def2) {
-          (0, util_1.eachItem)(keyword, (kwd) => addRule.call(this, kwd));
-          return this;
-        }
-        keywordMetaschema.call(this, def2);
-        const definition = {
-          ...def2,
-          type: (0, dataType_1.getJSONTypes)(def2.type),
-          schemaType: (0, dataType_1.getJSONTypes)(def2.schemaType)
-        };
-        (0, util_1.eachItem)(keyword, definition.type.length === 0 ? (k) => addRule.call(this, k, definition) : (k) => definition.type.forEach((t) => addRule.call(this, k, definition, t)));
-        return this;
-      }
-      getKeyword(keyword) {
-        const rule4 = this.RULES.all[keyword];
-        return typeof rule4 == "object" ? rule4.definition : !!rule4;
-      }
-      // Remove keyword
-      removeKeyword(keyword) {
-        const { RULES } = this;
-        delete RULES.keywords[keyword];
-        delete RULES.all[keyword];
-        for (const group of RULES.rules) {
-          const i = group.rules.findIndex((rule4) => rule4.keyword === keyword);
-          if (i >= 0)
-            group.rules.splice(i, 1);
-        }
-        return this;
-      }
-      // Add format
-      addFormat(name, format) {
-        if (typeof format == "string")
-          format = new RegExp(format);
-        this.formats[name] = format;
-        return this;
-      }
-      errorsText(errors = this.errors, { separator = ", ", dataVar = "data" } = {}) {
-        if (!errors || errors.length === 0)
-          return "No errors";
-        return errors.map((e) => `${dataVar}${e.instancePath} ${e.message}`).reduce((text3, msg) => text3 + separator + msg);
-      }
-      $dataMetaSchema(metaSchema, keywordsJsonPointers) {
-        const rules2 = this.RULES.all;
-        metaSchema = JSON.parse(JSON.stringify(metaSchema));
-        for (const jsonPointer of keywordsJsonPointers) {
-          const segments = jsonPointer.split("/").slice(1);
-          let keywords = metaSchema;
-          for (const seg of segments)
-            keywords = keywords[seg];
-          for (const key in rules2) {
-            const rule4 = rules2[key];
-            if (typeof rule4 != "object")
-              continue;
-            const { $data } = rule4.definition;
-            const schema = keywords[key];
-            if ($data && schema)
-              keywords[key] = schemaOrData(schema);
-          }
-        }
-        return metaSchema;
-      }
-      _removeAllSchemas(schemas, regex) {
-        for (const keyRef in schemas) {
-          const sch = schemas[keyRef];
-          if (!regex || regex.test(keyRef)) {
-            if (typeof sch == "string") {
-              delete schemas[keyRef];
-            } else if (sch && !sch.meta) {
-              this._cache.delete(sch.schema);
-              delete schemas[keyRef];
-            }
-          }
-        }
-      }
-      _addSchema(schema, meta3, baseId, validateSchema = this.opts.validateSchema, addSchema = this.opts.addUsedSchema) {
-        let id4;
-        const { schemaId } = this.opts;
-        if (typeof schema == "object") {
-          id4 = schema[schemaId];
-        } else {
-          if (this.opts.jtd)
-            throw new Error("schema must be object");
-          else if (typeof schema != "boolean")
-            throw new Error("schema must be object or boolean");
-        }
-        let sch = this._cache.get(schema);
-        if (sch !== void 0)
-          return sch;
-        baseId = (0, resolve_1.normalizeId)(id4 || baseId);
-        const localRefs = resolve_1.getSchemaRefs.call(this, schema, baseId);
-        sch = new compile_1.SchemaEnv({ schema, schemaId, meta: meta3, baseId, localRefs });
-        this._cache.set(sch.schema, sch);
-        if (addSchema && !baseId.startsWith("#")) {
-          if (baseId)
-            this._checkUnique(baseId);
-          this.refs[baseId] = sch;
-        }
-        if (validateSchema)
-          this.validateSchema(schema, true);
-        return sch;
-      }
-      _checkUnique(id4) {
-        if (this.schemas[id4] || this.refs[id4]) {
-          throw new Error(`schema with key or id "${id4}" already exists`);
-        }
-      }
-      _compileSchemaEnv(sch) {
-        if (sch.meta)
-          this._compileMetaSchema(sch);
-        else
-          compile_1.compileSchema.call(this, sch);
-        if (!sch.validate)
-          throw new Error("ajv implementation error");
-        return sch.validate;
-      }
-      _compileMetaSchema(sch) {
-        const currentOpts = this.opts;
-        this.opts = this._metaOpts;
-        try {
-          compile_1.compileSchema.call(this, sch);
-        } finally {
-          this.opts = currentOpts;
-        }
-      }
-    };
-    Ajv.ValidationError = validation_error_1.default;
-    Ajv.MissingRefError = ref_error_1.default;
-    exports.default = Ajv;
-    function checkOptions(checkOpts, options, msg, log = "error") {
-      for (const key in checkOpts) {
-        const opt = key;
-        if (opt in options)
-          this.logger[log](`${msg}: option ${key}. ${checkOpts[opt]}`);
-      }
-    }
-    function getSchEnv(keyRef) {
-      keyRef = (0, resolve_1.normalizeId)(keyRef);
-      return this.schemas[keyRef] || this.refs[keyRef];
-    }
-    function addInitialSchemas() {
-      const optsSchemas = this.opts.schemas;
-      if (!optsSchemas)
-        return;
-      if (Array.isArray(optsSchemas))
-        this.addSchema(optsSchemas);
-      else
-        for (const key in optsSchemas)
-          this.addSchema(optsSchemas[key], key);
-    }
-    function addInitialFormats() {
-      for (const name in this.opts.formats) {
-        const format = this.opts.formats[name];
-        if (format)
-          this.addFormat(name, format);
-      }
-    }
-    function addInitialKeywords(defs) {
-      if (Array.isArray(defs)) {
-        this.addVocabulary(defs);
-        return;
-      }
-      this.logger.warn("keywords option as map is deprecated, pass array");
-      for (const keyword in defs) {
-        const def2 = defs[keyword];
-        if (!def2.keyword)
-          def2.keyword = keyword;
-        this.addKeyword(def2);
-      }
-    }
-    function getMetaSchemaOptions() {
-      const metaOpts = { ...this.opts };
-      for (const opt of META_IGNORE_OPTIONS)
-        delete metaOpts[opt];
-      return metaOpts;
-    }
-    var noLogs = { log() {
-    }, warn() {
-    }, error() {
-    } };
-    function getLogger(logger) {
-      if (logger === false)
-        return noLogs;
-      if (logger === void 0)
-        return console;
-      if (logger.log && logger.warn && logger.error)
-        return logger;
-      throw new Error("logger must implement log, warn and error methods");
-    }
-    var KEYWORD_NAME = /^[a-z_$][a-z0-9_$:-]*$/i;
-    function checkKeyword(keyword, def2) {
-      const { RULES } = this;
-      (0, util_1.eachItem)(keyword, (kwd) => {
-        if (RULES.keywords[kwd])
-          throw new Error(`Keyword ${kwd} is already defined`);
-        if (!KEYWORD_NAME.test(kwd))
-          throw new Error(`Keyword ${kwd} has invalid name`);
-      });
-      if (!def2)
-        return;
-      if (def2.$data && !("code" in def2 || "validate" in def2)) {
-        throw new Error('$data keyword must have "code" or "validate" function');
-      }
-    }
-    function addRule(keyword, definition, dataType) {
-      var _a3;
-      const post = definition === null || definition === void 0 ? void 0 : definition.post;
-      if (dataType && post)
-        throw new Error('keyword with "post" flag cannot have "type"');
-      const { RULES } = this;
-      let ruleGroup = post ? RULES.post : RULES.rules.find(({ type: t }) => t === dataType);
-      if (!ruleGroup) {
-        ruleGroup = { type: dataType, rules: [] };
-        RULES.rules.push(ruleGroup);
-      }
-      RULES.keywords[keyword] = true;
-      if (!definition)
-        return;
-      const rule4 = {
-        keyword,
-        definition: {
-          ...definition,
-          type: (0, dataType_1.getJSONTypes)(definition.type),
-          schemaType: (0, dataType_1.getJSONTypes)(definition.schemaType)
-        }
-      };
-      if (definition.before)
-        addBeforeRule.call(this, ruleGroup, rule4, definition.before);
-      else
-        ruleGroup.rules.push(rule4);
-      RULES.all[keyword] = rule4;
-      (_a3 = definition.implements) === null || _a3 === void 0 ? void 0 : _a3.forEach((kwd) => this.addKeyword(kwd));
-    }
-    function addBeforeRule(ruleGroup, rule4, before) {
-      const i = ruleGroup.rules.findIndex((_rule) => _rule.keyword === before);
-      if (i >= 0) {
-        ruleGroup.rules.splice(i, 0, rule4);
-      } else {
-        ruleGroup.rules.push(rule4);
-        this.logger.warn(`rule ${before} is not defined`);
-      }
-    }
-    function keywordMetaschema(def2) {
-      let { metaSchema } = def2;
-      if (metaSchema === void 0)
-        return;
-      if (def2.$data && this.opts.$data)
-        metaSchema = schemaOrData(metaSchema);
-      def2.validateSchema = this.compile(metaSchema, true);
-    }
-    var $dataRef = {
-      $ref: "https://raw.githubusercontent.com/ajv-validator/ajv/master/lib/refs/data.json#"
-    };
-    function schemaOrData(schema) {
-      return { anyOf: [schema, $dataRef] };
-    }
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/core/id.js
-var require_id = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/id.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var def2 = {
-      keyword: "id",
-      code() {
-        throw new Error('NOT SUPPORTED: keyword "id", use "$id" for schema ID');
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/core/ref.js
-var require_ref = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/ref.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.callRef = exports.getValidate = void 0;
-    var ref_error_1 = require_ref_error();
-    var code_1 = require_code2();
-    var codegen_1 = require_codegen();
-    var names_1 = require_names();
-    var compile_1 = require_compile();
-    var util_1 = require_util();
-    var def2 = {
-      keyword: "$ref",
-      schemaType: "string",
-      code(cxt) {
-        const { gen, schema: $ref, it } = cxt;
-        const { baseId, schemaEnv: env, validateName, opts, self: self2 } = it;
-        const { root } = env;
-        if (($ref === "#" || $ref === "#/") && baseId === root.baseId)
-          return callRootRef();
-        const schOrEnv = compile_1.resolveRef.call(self2, root, baseId, $ref);
-        if (schOrEnv === void 0)
-          throw new ref_error_1.default(it.opts.uriResolver, baseId, $ref);
-        if (schOrEnv instanceof compile_1.SchemaEnv)
-          return callValidate(schOrEnv);
-        return inlineRefSchema(schOrEnv);
-        function callRootRef() {
-          if (env === root)
-            return callRef(cxt, validateName, env, env.$async);
-          const rootName = gen.scopeValue("root", { ref: root });
-          return callRef(cxt, (0, codegen_1._)`${rootName}.validate`, root, root.$async);
-        }
-        function callValidate(sch) {
-          const v = getValidate(cxt, sch);
-          callRef(cxt, v, sch, sch.$async);
-        }
-        function inlineRefSchema(sch) {
-          const schName = gen.scopeValue("schema", opts.code.source === true ? { ref: sch, code: (0, codegen_1.stringify)(sch) } : { ref: sch });
-          const valid = gen.name("valid");
-          const schCxt = cxt.subschema({
-            schema: sch,
-            dataTypes: [],
-            schemaPath: codegen_1.nil,
-            topSchemaRef: schName,
-            errSchemaPath: $ref
-          }, valid);
-          cxt.mergeEvaluated(schCxt);
-          cxt.ok(valid);
-        }
-      }
-    };
-    function getValidate(cxt, sch) {
-      const { gen } = cxt;
-      return sch.validate ? gen.scopeValue("validate", { ref: sch.validate }) : (0, codegen_1._)`${gen.scopeValue("wrapper", { ref: sch })}.validate`;
-    }
-    exports.getValidate = getValidate;
-    function callRef(cxt, v, sch, $async) {
-      const { gen, it } = cxt;
-      const { allErrors, schemaEnv: env, opts } = it;
-      const passCxt = opts.passContext ? names_1.default.this : codegen_1.nil;
-      if ($async)
-        callAsyncRef();
-      else
-        callSyncRef();
-      function callAsyncRef() {
-        if (!env.$async)
-          throw new Error("async schema referenced by sync schema");
-        const valid = gen.let("valid");
-        gen.try(() => {
-          gen.code((0, codegen_1._)`await ${(0, code_1.callValidateCode)(cxt, v, passCxt)}`);
-          addEvaluatedFrom(v);
-          if (!allErrors)
-            gen.assign(valid, true);
-        }, (e) => {
-          gen.if((0, codegen_1._)`!(${e} instanceof ${it.ValidationError})`, () => gen.throw(e));
-          addErrorsFrom(e);
-          if (!allErrors)
-            gen.assign(valid, false);
-        });
-        cxt.ok(valid);
-      }
-      function callSyncRef() {
-        cxt.result((0, code_1.callValidateCode)(cxt, v, passCxt), () => addEvaluatedFrom(v), () => addErrorsFrom(v));
-      }
-      function addErrorsFrom(source) {
-        const errs = (0, codegen_1._)`${source}.errors`;
-        gen.assign(names_1.default.vErrors, (0, codegen_1._)`${names_1.default.vErrors} === null ? ${errs} : ${names_1.default.vErrors}.concat(${errs})`);
-        gen.assign(names_1.default.errors, (0, codegen_1._)`${names_1.default.vErrors}.length`);
-      }
-      function addEvaluatedFrom(source) {
-        var _a3;
-        if (!it.opts.unevaluated)
-          return;
-        const schEvaluated = (_a3 = sch === null || sch === void 0 ? void 0 : sch.validate) === null || _a3 === void 0 ? void 0 : _a3.evaluated;
-        if (it.props !== true) {
-          if (schEvaluated && !schEvaluated.dynamicProps) {
-            if (schEvaluated.props !== void 0) {
-              it.props = util_1.mergeEvaluated.props(gen, schEvaluated.props, it.props);
-            }
-          } else {
-            const props = gen.var("props", (0, codegen_1._)`${source}.evaluated.props`);
-            it.props = util_1.mergeEvaluated.props(gen, props, it.props, codegen_1.Name);
-          }
-        }
-        if (it.items !== true) {
-          if (schEvaluated && !schEvaluated.dynamicItems) {
-            if (schEvaluated.items !== void 0) {
-              it.items = util_1.mergeEvaluated.items(gen, schEvaluated.items, it.items);
-            }
-          } else {
-            const items = gen.var("items", (0, codegen_1._)`${source}.evaluated.items`);
-            it.items = util_1.mergeEvaluated.items(gen, items, it.items, codegen_1.Name);
-          }
-        }
-      }
-    }
-    exports.callRef = callRef;
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/core/index.js
-var require_core2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var id_1 = require_id();
-    var ref_1 = require_ref();
-    var core = [
-      "$schema",
-      "$id",
-      "$defs",
-      "$vocabulary",
-      { keyword: "$comment" },
-      "definitions",
-      id_1.default,
-      ref_1.default
-    ];
-    exports.default = core;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/validation/limitNumber.js
-var require_limitNumber = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var ops = codegen_1.operators;
-    var KWDs = {
-      maximum: { okStr: "<=", ok: ops.LTE, fail: ops.GT },
-      minimum: { okStr: ">=", ok: ops.GTE, fail: ops.LT },
-      exclusiveMaximum: { okStr: "<", ok: ops.LT, fail: ops.GTE },
-      exclusiveMinimum: { okStr: ">", ok: ops.GT, fail: ops.LTE }
-    };
-    var error51 = {
-      message: ({ keyword, schemaCode }) => (0, codegen_1.str)`must be ${KWDs[keyword].okStr} ${schemaCode}`,
-      params: ({ keyword, schemaCode }) => (0, codegen_1._)`{comparison: ${KWDs[keyword].okStr}, limit: ${schemaCode}}`
-    };
-    var def2 = {
-      keyword: Object.keys(KWDs),
-      type: "number",
-      schemaType: "number",
-      $data: true,
-      error: error51,
-      code(cxt) {
-        const { keyword, data, schemaCode } = cxt;
-        cxt.fail$data((0, codegen_1._)`${data} ${KWDs[keyword].fail} ${schemaCode} || isNaN(${data})`);
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/validation/multipleOf.js
-var require_multipleOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var error51 = {
-      message: ({ schemaCode }) => (0, codegen_1.str)`must be multiple of ${schemaCode}`,
-      params: ({ schemaCode }) => (0, codegen_1._)`{multipleOf: ${schemaCode}}`
-    };
-    var def2 = {
-      keyword: "multipleOf",
-      type: "number",
-      schemaType: "number",
-      $data: true,
-      error: error51,
-      code(cxt) {
-        const { gen, data, schemaCode, it } = cxt;
-        const prec = it.opts.multipleOfPrecision;
-        const res = gen.let("res");
-        const invalid = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
-        cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid}))`);
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/runtime/ucs2length.js
-var require_ucs2length = __commonJS({
-  "node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    function ucs2length(str) {
-      const len = str.length;
-      let length = 0;
-      let pos = 0;
-      let value;
-      while (pos < len) {
-        length++;
-        value = str.charCodeAt(pos++);
-        if (value >= 55296 && value <= 56319 && pos < len) {
-          value = str.charCodeAt(pos);
-          if ((value & 64512) === 56320)
-            pos++;
-        }
-      }
-      return length;
-    }
-    exports.default = ucs2length;
-    ucs2length.code = 'require("ajv/dist/runtime/ucs2length").default';
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/validation/limitLength.js
-var require_limitLength = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var ucs2length_1 = require_ucs2length();
-    var error51 = {
-      message({ keyword, schemaCode }) {
-        const comp = keyword === "maxLength" ? "more" : "fewer";
-        return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} characters`;
-      },
-      params: ({ schemaCode }) => (0, codegen_1._)`{limit: ${schemaCode}}`
-    };
-    var def2 = {
-      keyword: ["maxLength", "minLength"],
-      type: "string",
-      schemaType: "number",
-      $data: true,
-      error: error51,
-      code(cxt) {
-        const { keyword, data, schemaCode, it } = cxt;
-        const op = keyword === "maxLength" ? codegen_1.operators.GT : codegen_1.operators.LT;
-        const len = it.opts.unicode === false ? (0, codegen_1._)`${data}.length` : (0, codegen_1._)`${(0, util_1.useFunc)(cxt.gen, ucs2length_1.default)}(${data})`;
-        cxt.fail$data((0, codegen_1._)`${len} ${op} ${schemaCode}`);
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/validation/pattern.js
-var require_pattern = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var code_1 = require_code2();
-    var util_1 = require_util();
-    var codegen_1 = require_codegen();
-    var error51 = {
-      message: ({ schemaCode }) => (0, codegen_1.str)`must match pattern "${schemaCode}"`,
-      params: ({ schemaCode }) => (0, codegen_1._)`{pattern: ${schemaCode}}`
-    };
-    var def2 = {
-      keyword: "pattern",
-      type: "string",
-      schemaType: "string",
-      $data: true,
-      error: error51,
-      code(cxt) {
-        const { gen, data, $data, schema, schemaCode, it } = cxt;
-        const u = it.opts.unicodeRegExp ? "u" : "";
-        if ($data) {
-          const { regExp } = it.opts.code;
-          const regExpCode = regExp.code === "new RegExp" ? (0, codegen_1._)`new RegExp` : (0, util_1.useFunc)(gen, regExp);
-          const valid = gen.let("valid");
-          gen.try(() => gen.assign(valid, (0, codegen_1._)`${regExpCode}(${schemaCode}, ${u}).test(${data})`), () => gen.assign(valid, false));
-          cxt.fail$data((0, codegen_1._)`!${valid}`);
-        } else {
-          const regExp = (0, code_1.usePattern)(cxt, schema);
-          cxt.fail$data((0, codegen_1._)`!${regExp}.test(${data})`);
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/validation/limitProperties.js
-var require_limitProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var error51 = {
-      message({ keyword, schemaCode }) {
-        const comp = keyword === "maxProperties" ? "more" : "fewer";
-        return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} properties`;
-      },
-      params: ({ schemaCode }) => (0, codegen_1._)`{limit: ${schemaCode}}`
-    };
-    var def2 = {
-      keyword: ["maxProperties", "minProperties"],
-      type: "object",
-      schemaType: "number",
-      $data: true,
-      error: error51,
-      code(cxt) {
-        const { keyword, data, schemaCode } = cxt;
-        const op = keyword === "maxProperties" ? codegen_1.operators.GT : codegen_1.operators.LT;
-        cxt.fail$data((0, codegen_1._)`Object.keys(${data}).length ${op} ${schemaCode}`);
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/validation/required.js
-var require_required = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/required.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var code_1 = require_code2();
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var error51 = {
-      message: ({ params: { missingProperty } }) => (0, codegen_1.str)`must have required property '${missingProperty}'`,
-      params: ({ params: { missingProperty } }) => (0, codegen_1._)`{missingProperty: ${missingProperty}}`
-    };
-    var def2 = {
-      keyword: "required",
-      type: "object",
-      schemaType: "array",
-      $data: true,
-      error: error51,
-      code(cxt) {
-        const { gen, schema, schemaCode, data, $data, it } = cxt;
-        const { opts } = it;
-        if (!$data && schema.length === 0)
-          return;
-        const useLoop = schema.length >= opts.loopRequired;
-        if (it.allErrors)
-          allErrorsMode();
-        else
-          exitOnErrorMode();
-        if (opts.strictRequired) {
-          const props = cxt.parentSchema.properties;
-          const { definedProperties } = cxt.it;
-          for (const requiredKey of schema) {
-            if ((props === null || props === void 0 ? void 0 : props[requiredKey]) === void 0 && !definedProperties.has(requiredKey)) {
-              const schemaPath = it.schemaEnv.baseId + it.errSchemaPath;
-              const msg = `required property "${requiredKey}" is not defined at "${schemaPath}" (strictRequired)`;
-              (0, util_1.checkStrictMode)(it, msg, it.opts.strictRequired);
-            }
-          }
-        }
-        function allErrorsMode() {
-          if (useLoop || $data) {
-            cxt.block$data(codegen_1.nil, loopAllRequired);
-          } else {
-            for (const prop of schema) {
-              (0, code_1.checkReportMissingProp)(cxt, prop);
-            }
-          }
-        }
-        function exitOnErrorMode() {
-          const missing = gen.let("missing");
-          if (useLoop || $data) {
-            const valid = gen.let("valid", true);
-            cxt.block$data(valid, () => loopUntilMissing(missing, valid));
-            cxt.ok(valid);
-          } else {
-            gen.if((0, code_1.checkMissingProp)(cxt, schema, missing));
-            (0, code_1.reportMissingProp)(cxt, missing);
-            gen.else();
-          }
-        }
-        function loopAllRequired() {
-          gen.forOf("prop", schemaCode, (prop) => {
-            cxt.setParams({ missingProperty: prop });
-            gen.if((0, code_1.noPropertyInData)(gen, data, prop, opts.ownProperties), () => cxt.error());
-          });
-        }
-        function loopUntilMissing(missing, valid) {
-          cxt.setParams({ missingProperty: missing });
-          gen.forOf(missing, schemaCode, () => {
-            gen.assign(valid, (0, code_1.propertyInData)(gen, data, missing, opts.ownProperties));
-            gen.if((0, codegen_1.not)(valid), () => {
-              cxt.error();
-              gen.break();
-            });
-          }, codegen_1.nil);
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/validation/limitItems.js
-var require_limitItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var error51 = {
-      message({ keyword, schemaCode }) {
-        const comp = keyword === "maxItems" ? "more" : "fewer";
-        return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} items`;
-      },
-      params: ({ schemaCode }) => (0, codegen_1._)`{limit: ${schemaCode}}`
-    };
-    var def2 = {
-      keyword: ["maxItems", "minItems"],
-      type: "array",
-      schemaType: "number",
-      $data: true,
-      error: error51,
-      code(cxt) {
-        const { keyword, data, schemaCode } = cxt;
-        const op = keyword === "maxItems" ? codegen_1.operators.GT : codegen_1.operators.LT;
-        cxt.fail$data((0, codegen_1._)`${data}.length ${op} ${schemaCode}`);
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/runtime/equal.js
-var require_equal = __commonJS({
-  "node_modules/ajv/dist/runtime/equal.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var equal = require_fast_deep_equal();
-    equal.code = 'require("ajv/dist/runtime/equal").default';
-    exports.default = equal;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/validation/uniqueItems.js
-var require_uniqueItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var dataType_1 = require_dataType();
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var equal_1 = require_equal();
-    var error51 = {
-      message: ({ params: { i, j } }) => (0, codegen_1.str)`must NOT have duplicate items (items ## ${j} and ${i} are identical)`,
-      params: ({ params: { i, j } }) => (0, codegen_1._)`{i: ${i}, j: ${j}}`
-    };
-    var def2 = {
-      keyword: "uniqueItems",
-      type: "array",
-      schemaType: "boolean",
-      $data: true,
-      error: error51,
-      code(cxt) {
-        const { gen, data, $data, schema, parentSchema, schemaCode, it } = cxt;
-        if (!$data && !schema)
-          return;
-        const valid = gen.let("valid");
-        const itemTypes = parentSchema.items ? (0, dataType_1.getSchemaTypes)(parentSchema.items) : [];
-        cxt.block$data(valid, validateUniqueItems, (0, codegen_1._)`${schemaCode} === false`);
-        cxt.ok(valid);
-        function validateUniqueItems() {
-          const i = gen.let("i", (0, codegen_1._)`${data}.length`);
-          const j = gen.let("j");
-          cxt.setParams({ i, j });
-          gen.assign(valid, true);
-          gen.if((0, codegen_1._)`${i} > 1`, () => (canOptimize() ? loopN : loopN2)(i, j));
-        }
-        function canOptimize() {
-          return itemTypes.length > 0 && !itemTypes.some((t) => t === "object" || t === "array");
-        }
-        function loopN(i, j) {
-          const item = gen.name("item");
-          const wrongType = (0, dataType_1.checkDataTypes)(itemTypes, item, it.opts.strictNumbers, dataType_1.DataType.Wrong);
-          const indices = gen.const("indices", (0, codegen_1._)`{}`);
-          gen.for((0, codegen_1._)`;${i}--;`, () => {
-            gen.let(item, (0, codegen_1._)`${data}[${i}]`);
-            gen.if(wrongType, (0, codegen_1._)`continue`);
-            if (itemTypes.length > 1)
-              gen.if((0, codegen_1._)`typeof ${item} == "string"`, (0, codegen_1._)`${item} += "_"`);
-            gen.if((0, codegen_1._)`typeof ${indices}[${item}] == "number"`, () => {
-              gen.assign(j, (0, codegen_1._)`${indices}[${item}]`);
-              cxt.error();
-              gen.assign(valid, false).break();
-            }).code((0, codegen_1._)`${indices}[${item}] = ${i}`);
-          });
-        }
-        function loopN2(i, j) {
-          const eql = (0, util_1.useFunc)(gen, equal_1.default);
-          const outer = gen.name("outer");
-          gen.label(outer).for((0, codegen_1._)`;${i}--;`, () => gen.for((0, codegen_1._)`${j} = ${i}; ${j}--;`, () => gen.if((0, codegen_1._)`${eql}(${data}[${i}], ${data}[${j}])`, () => {
-            cxt.error();
-            gen.assign(valid, false).break(outer);
-          })));
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/validation/const.js
-var require_const = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/const.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var equal_1 = require_equal();
-    var error51 = {
-      message: "must be equal to constant",
-      params: ({ schemaCode }) => (0, codegen_1._)`{allowedValue: ${schemaCode}}`
-    };
-    var def2 = {
-      keyword: "const",
-      $data: true,
-      error: error51,
-      code(cxt) {
-        const { gen, data, $data, schemaCode, schema } = cxt;
-        if ($data || schema && typeof schema == "object") {
-          cxt.fail$data((0, codegen_1._)`!${(0, util_1.useFunc)(gen, equal_1.default)}(${data}, ${schemaCode})`);
-        } else {
-          cxt.fail((0, codegen_1._)`${schema} !== ${data}`);
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/validation/enum.js
-var require_enum = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/enum.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var equal_1 = require_equal();
-    var error51 = {
-      message: "must be equal to one of the allowed values",
-      params: ({ schemaCode }) => (0, codegen_1._)`{allowedValues: ${schemaCode}}`
-    };
-    var def2 = {
-      keyword: "enum",
-      schemaType: "array",
-      $data: true,
-      error: error51,
-      code(cxt) {
-        const { gen, data, $data, schema, schemaCode, it } = cxt;
-        if (!$data && schema.length === 0)
-          throw new Error("enum must have non-empty array");
-        const useLoop = schema.length >= it.opts.loopEnum;
-        let eql;
-        const getEql = () => eql !== null && eql !== void 0 ? eql : eql = (0, util_1.useFunc)(gen, equal_1.default);
-        let valid;
-        if (useLoop || $data) {
-          valid = gen.let("valid");
-          cxt.block$data(valid, loopEnum);
-        } else {
-          if (!Array.isArray(schema))
-            throw new Error("ajv implementation error");
-          const vSchema = gen.const("vSchema", schemaCode);
-          valid = (0, codegen_1.or)(...schema.map((_x, i) => equalCode(vSchema, i)));
-        }
-        cxt.pass(valid);
-        function loopEnum() {
-          gen.assign(valid, false);
-          gen.forOf("v", schemaCode, (v) => gen.if((0, codegen_1._)`${getEql()}(${data}, ${v})`, () => gen.assign(valid, true).break()));
-        }
-        function equalCode(vSchema, i) {
-          const sch = schema[i];
-          return typeof sch === "object" && sch !== null ? (0, codegen_1._)`${getEql()}(${data}, ${vSchema}[${i}])` : (0, codegen_1._)`${data} === ${sch}`;
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/validation/index.js
-var require_validation = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var limitNumber_1 = require_limitNumber();
-    var multipleOf_1 = require_multipleOf();
-    var limitLength_1 = require_limitLength();
-    var pattern_1 = require_pattern();
-    var limitProperties_1 = require_limitProperties();
-    var required_1 = require_required();
-    var limitItems_1 = require_limitItems();
-    var uniqueItems_1 = require_uniqueItems();
-    var const_1 = require_const();
-    var enum_1 = require_enum();
-    var validation = [
-      // number
-      limitNumber_1.default,
-      multipleOf_1.default,
-      // string
-      limitLength_1.default,
-      pattern_1.default,
-      // object
-      limitProperties_1.default,
-      required_1.default,
-      // array
-      limitItems_1.default,
-      uniqueItems_1.default,
-      // any
-      { keyword: "type", schemaType: ["string", "array"] },
-      { keyword: "nullable", schemaType: "boolean" },
-      const_1.default,
-      enum_1.default
-    ];
-    exports.default = validation;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/additionalItems.js
-var require_additionalItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.validateAdditionalItems = void 0;
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var error51 = {
-      message: ({ params: { len } }) => (0, codegen_1.str)`must NOT have more than ${len} items`,
-      params: ({ params: { len } }) => (0, codegen_1._)`{limit: ${len}}`
-    };
-    var def2 = {
-      keyword: "additionalItems",
-      type: "array",
-      schemaType: ["boolean", "object"],
-      before: "uniqueItems",
-      error: error51,
-      code(cxt) {
-        const { parentSchema, it } = cxt;
-        const { items } = parentSchema;
-        if (!Array.isArray(items)) {
-          (0, util_1.checkStrictMode)(it, '"additionalItems" is ignored when "items" is not an array of schemas');
-          return;
-        }
-        validateAdditionalItems(cxt, items);
-      }
-    };
-    function validateAdditionalItems(cxt, items) {
-      const { gen, schema, data, keyword, it } = cxt;
-      it.items = true;
-      const len = gen.const("len", (0, codegen_1._)`${data}.length`);
-      if (schema === false) {
-        cxt.setParams({ len: items.length });
-        cxt.pass((0, codegen_1._)`${len} <= ${items.length}`);
-      } else if (typeof schema == "object" && !(0, util_1.alwaysValidSchema)(it, schema)) {
-        const valid = gen.var("valid", (0, codegen_1._)`${len} <= ${items.length}`);
-        gen.if((0, codegen_1.not)(valid), () => validateItems(valid));
-        cxt.ok(valid);
-      }
-      function validateItems(valid) {
-        gen.forRange("i", items.length, len, (i) => {
-          cxt.subschema({ keyword, dataProp: i, dataPropType: util_1.Type.Num }, valid);
-          if (!it.allErrors)
-            gen.if((0, codegen_1.not)(valid), () => gen.break());
-        });
-      }
-    }
-    exports.validateAdditionalItems = validateAdditionalItems;
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/items.js
-var require_items = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/items.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.validateTuple = void 0;
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var code_1 = require_code2();
-    var def2 = {
-      keyword: "items",
-      type: "array",
-      schemaType: ["object", "array", "boolean"],
-      before: "uniqueItems",
-      code(cxt) {
-        const { schema, it } = cxt;
-        if (Array.isArray(schema))
-          return validateTuple(cxt, "additionalItems", schema);
-        it.items = true;
-        if ((0, util_1.alwaysValidSchema)(it, schema))
-          return;
-        cxt.ok((0, code_1.validateArray)(cxt));
-      }
-    };
-    function validateTuple(cxt, extraItems, schArr = cxt.schema) {
-      const { gen, parentSchema, data, keyword, it } = cxt;
-      checkStrictTuple(parentSchema);
-      if (it.opts.unevaluated && schArr.length && it.items !== true) {
-        it.items = util_1.mergeEvaluated.items(gen, schArr.length, it.items);
-      }
-      const valid = gen.name("valid");
-      const len = gen.const("len", (0, codegen_1._)`${data}.length`);
-      schArr.forEach((sch, i) => {
-        if ((0, util_1.alwaysValidSchema)(it, sch))
-          return;
-        gen.if((0, codegen_1._)`${len} > ${i}`, () => cxt.subschema({
-          keyword,
-          schemaProp: i,
-          dataProp: i
-        }, valid));
-        cxt.ok(valid);
-      });
-      function checkStrictTuple(sch) {
-        const { opts, errSchemaPath } = it;
-        const l = schArr.length;
-        const fullTuple = l === sch.minItems && (l === sch.maxItems || sch[extraItems] === false);
-        if (opts.strictTuples && !fullTuple) {
-          const msg = `"${keyword}" is ${l}-tuple, but minItems or maxItems/${extraItems} are not specified or different at path "${errSchemaPath}"`;
-          (0, util_1.checkStrictMode)(it, msg, opts.strictTuples);
-        }
-      }
-    }
-    exports.validateTuple = validateTuple;
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/prefixItems.js
-var require_prefixItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var items_1 = require_items();
-    var def2 = {
-      keyword: "prefixItems",
-      type: "array",
-      schemaType: ["array"],
-      before: "uniqueItems",
-      code: (cxt) => (0, items_1.validateTuple)(cxt, "items")
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/items2020.js
-var require_items2020 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var code_1 = require_code2();
-    var additionalItems_1 = require_additionalItems();
-    var error51 = {
-      message: ({ params: { len } }) => (0, codegen_1.str)`must NOT have more than ${len} items`,
-      params: ({ params: { len } }) => (0, codegen_1._)`{limit: ${len}}`
-    };
-    var def2 = {
-      keyword: "items",
-      type: "array",
-      schemaType: ["object", "boolean"],
-      before: "uniqueItems",
-      error: error51,
-      code(cxt) {
-        const { schema, parentSchema, it } = cxt;
-        const { prefixItems } = parentSchema;
-        it.items = true;
-        if ((0, util_1.alwaysValidSchema)(it, schema))
-          return;
-        if (prefixItems)
-          (0, additionalItems_1.validateAdditionalItems)(cxt, prefixItems);
-        else
-          cxt.ok((0, code_1.validateArray)(cxt));
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/contains.js
-var require_contains = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var error51 = {
-      message: ({ params: { min, max } }) => max === void 0 ? (0, codegen_1.str)`must contain at least ${min} valid item(s)` : (0, codegen_1.str)`must contain at least ${min} and no more than ${max} valid item(s)`,
-      params: ({ params: { min, max } }) => max === void 0 ? (0, codegen_1._)`{minContains: ${min}}` : (0, codegen_1._)`{minContains: ${min}, maxContains: ${max}}`
-    };
-    var def2 = {
-      keyword: "contains",
-      type: "array",
-      schemaType: ["object", "boolean"],
-      before: "uniqueItems",
-      trackErrors: true,
-      error: error51,
-      code(cxt) {
-        const { gen, schema, parentSchema, data, it } = cxt;
-        let min;
-        let max;
-        const { minContains, maxContains } = parentSchema;
-        if (it.opts.next) {
-          min = minContains === void 0 ? 1 : minContains;
-          max = maxContains;
-        } else {
-          min = 1;
-        }
-        const len = gen.const("len", (0, codegen_1._)`${data}.length`);
-        cxt.setParams({ min, max });
-        if (max === void 0 && min === 0) {
-          (0, util_1.checkStrictMode)(it, `"minContains" == 0 without "maxContains": "contains" keyword ignored`);
-          return;
-        }
-        if (max !== void 0 && min > max) {
-          (0, util_1.checkStrictMode)(it, `"minContains" > "maxContains" is always invalid`);
-          cxt.fail();
-          return;
-        }
-        if ((0, util_1.alwaysValidSchema)(it, schema)) {
-          let cond = (0, codegen_1._)`${len} >= ${min}`;
-          if (max !== void 0)
-            cond = (0, codegen_1._)`${cond} && ${len} <= ${max}`;
-          cxt.pass(cond);
-          return;
-        }
-        it.items = true;
-        const valid = gen.name("valid");
-        if (max === void 0 && min === 1) {
-          validateItems(valid, () => gen.if(valid, () => gen.break()));
-        } else if (min === 0) {
-          gen.let(valid, true);
-          if (max !== void 0)
-            gen.if((0, codegen_1._)`${data}.length > 0`, validateItemsWithCount);
-        } else {
-          gen.let(valid, false);
-          validateItemsWithCount();
-        }
-        cxt.result(valid, () => cxt.reset());
-        function validateItemsWithCount() {
-          const schValid = gen.name("_valid");
-          const count = gen.let("count", 0);
-          validateItems(schValid, () => gen.if(schValid, () => checkLimits(count)));
-        }
-        function validateItems(_valid, block) {
-          gen.forRange("i", 0, len, (i) => {
-            cxt.subschema({
-              keyword: "contains",
-              dataProp: i,
-              dataPropType: util_1.Type.Num,
-              compositeRule: true
-            }, _valid);
-            block();
-          });
-        }
-        function checkLimits(count) {
-          gen.code((0, codegen_1._)`${count}++`);
-          if (max === void 0) {
-            gen.if((0, codegen_1._)`${count} >= ${min}`, () => gen.assign(valid, true).break());
-          } else {
-            gen.if((0, codegen_1._)`${count} > ${max}`, () => gen.assign(valid, false).break());
-            if (min === 1)
-              gen.assign(valid, true);
-            else
-              gen.if((0, codegen_1._)`${count} >= ${min}`, () => gen.assign(valid, true));
-          }
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/dependencies.js
-var require_dependencies = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.validateSchemaDeps = exports.validatePropertyDeps = exports.error = void 0;
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var code_1 = require_code2();
-    exports.error = {
-      message: ({ params: { property, depsCount, deps } }) => {
-        const property_ies = depsCount === 1 ? "property" : "properties";
-        return (0, codegen_1.str)`must have ${property_ies} ${deps} when property ${property} is present`;
-      },
-      params: ({ params: { property, depsCount, deps, missingProperty } }) => (0, codegen_1._)`{property: ${property},
-    missingProperty: ${missingProperty},
-    depsCount: ${depsCount},
-    deps: ${deps}}`
-      // TODO change to reference
-    };
-    var def2 = {
-      keyword: "dependencies",
-      type: "object",
-      schemaType: "object",
-      error: exports.error,
-      code(cxt) {
-        const [propDeps, schDeps] = splitDependencies(cxt);
-        validatePropertyDeps(cxt, propDeps);
-        validateSchemaDeps(cxt, schDeps);
-      }
-    };
-    function splitDependencies({ schema }) {
-      const propertyDeps = {};
-      const schemaDeps = {};
-      for (const key in schema) {
-        if (key === "__proto__")
-          continue;
-        const deps = Array.isArray(schema[key]) ? propertyDeps : schemaDeps;
-        deps[key] = schema[key];
-      }
-      return [propertyDeps, schemaDeps];
-    }
-    function validatePropertyDeps(cxt, propertyDeps = cxt.schema) {
-      const { gen, data, it } = cxt;
-      if (Object.keys(propertyDeps).length === 0)
-        return;
-      const missing = gen.let("missing");
-      for (const prop in propertyDeps) {
-        const deps = propertyDeps[prop];
-        if (deps.length === 0)
-          continue;
-        const hasProperty = (0, code_1.propertyInData)(gen, data, prop, it.opts.ownProperties);
-        cxt.setParams({
-          property: prop,
-          depsCount: deps.length,
-          deps: deps.join(", ")
-        });
-        if (it.allErrors) {
-          gen.if(hasProperty, () => {
-            for (const depProp of deps) {
-              (0, code_1.checkReportMissingProp)(cxt, depProp);
-            }
-          });
-        } else {
-          gen.if((0, codegen_1._)`${hasProperty} && (${(0, code_1.checkMissingProp)(cxt, deps, missing)})`);
-          (0, code_1.reportMissingProp)(cxt, missing);
-          gen.else();
-        }
-      }
-    }
-    exports.validatePropertyDeps = validatePropertyDeps;
-    function validateSchemaDeps(cxt, schemaDeps = cxt.schema) {
-      const { gen, data, keyword, it } = cxt;
-      const valid = gen.name("valid");
-      for (const prop in schemaDeps) {
-        if ((0, util_1.alwaysValidSchema)(it, schemaDeps[prop]))
-          continue;
-        gen.if(
-          (0, code_1.propertyInData)(gen, data, prop, it.opts.ownProperties),
-          () => {
-            const schCxt = cxt.subschema({ keyword, schemaProp: prop }, valid);
-            cxt.mergeValidEvaluated(schCxt, valid);
-          },
-          () => gen.var(valid, true)
-          // TODO var
-        );
-        cxt.ok(valid);
-      }
-    }
-    exports.validateSchemaDeps = validateSchemaDeps;
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/propertyNames.js
-var require_propertyNames = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var error51 = {
-      message: "property name must be valid",
-      params: ({ params }) => (0, codegen_1._)`{propertyName: ${params.propertyName}}`
-    };
-    var def2 = {
-      keyword: "propertyNames",
-      type: "object",
-      schemaType: ["object", "boolean"],
-      error: error51,
-      code(cxt) {
-        const { gen, schema, data, it } = cxt;
-        if ((0, util_1.alwaysValidSchema)(it, schema))
-          return;
-        const valid = gen.name("valid");
-        gen.forIn("key", data, (key) => {
-          cxt.setParams({ propertyName: key });
-          cxt.subschema({
-            keyword: "propertyNames",
-            data: key,
-            dataTypes: ["string"],
-            propertyName: key,
-            compositeRule: true
-          }, valid);
-          gen.if((0, codegen_1.not)(valid), () => {
-            cxt.error(true);
-            if (!it.allErrors)
-              gen.break();
-          });
-        });
-        cxt.ok(valid);
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js
-var require_additionalProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var code_1 = require_code2();
-    var codegen_1 = require_codegen();
-    var names_1 = require_names();
-    var util_1 = require_util();
-    var error51 = {
-      message: "must NOT have additional properties",
-      params: ({ params }) => (0, codegen_1._)`{additionalProperty: ${params.additionalProperty}}`
-    };
-    var def2 = {
-      keyword: "additionalProperties",
-      type: ["object"],
-      schemaType: ["boolean", "object"],
-      allowUndefined: true,
-      trackErrors: true,
-      error: error51,
-      code(cxt) {
-        const { gen, schema, parentSchema, data, errsCount, it } = cxt;
-        if (!errsCount)
-          throw new Error("ajv implementation error");
-        const { allErrors, opts } = it;
-        it.props = true;
-        if (opts.removeAdditional !== "all" && (0, util_1.alwaysValidSchema)(it, schema))
-          return;
-        const props = (0, code_1.allSchemaProperties)(parentSchema.properties);
-        const patProps = (0, code_1.allSchemaProperties)(parentSchema.patternProperties);
-        checkAdditionalProperties();
-        cxt.ok((0, codegen_1._)`${errsCount} === ${names_1.default.errors}`);
-        function checkAdditionalProperties() {
-          gen.forIn("key", data, (key) => {
-            if (!props.length && !patProps.length)
-              additionalPropertyCode(key);
-            else
-              gen.if(isAdditional(key), () => additionalPropertyCode(key));
-          });
-        }
-        function isAdditional(key) {
-          let definedProp;
-          if (props.length > 8) {
-            const propsSchema = (0, util_1.schemaRefOrVal)(it, parentSchema.properties, "properties");
-            definedProp = (0, code_1.isOwnProperty)(gen, propsSchema, key);
-          } else if (props.length) {
-            definedProp = (0, codegen_1.or)(...props.map((p) => (0, codegen_1._)`${key} === ${p}`));
-          } else {
-            definedProp = codegen_1.nil;
-          }
-          if (patProps.length) {
-            definedProp = (0, codegen_1.or)(definedProp, ...patProps.map((p) => (0, codegen_1._)`${(0, code_1.usePattern)(cxt, p)}.test(${key})`));
-          }
-          return (0, codegen_1.not)(definedProp);
-        }
-        function deleteAdditional(key) {
-          gen.code((0, codegen_1._)`delete ${data}[${key}]`);
-        }
-        function additionalPropertyCode(key) {
-          if (opts.removeAdditional === "all" || opts.removeAdditional && schema === false) {
-            deleteAdditional(key);
-            return;
-          }
-          if (schema === false) {
-            cxt.setParams({ additionalProperty: key });
-            cxt.error();
-            if (!allErrors)
-              gen.break();
-            return;
-          }
-          if (typeof schema == "object" && !(0, util_1.alwaysValidSchema)(it, schema)) {
-            const valid = gen.name("valid");
-            if (opts.removeAdditional === "failing") {
-              applyAdditionalSchema(key, valid, false);
-              gen.if((0, codegen_1.not)(valid), () => {
-                cxt.reset();
-                deleteAdditional(key);
-              });
-            } else {
-              applyAdditionalSchema(key, valid);
-              if (!allErrors)
-                gen.if((0, codegen_1.not)(valid), () => gen.break());
-            }
-          }
-        }
-        function applyAdditionalSchema(key, valid, errors) {
-          const subschema = {
-            keyword: "additionalProperties",
-            dataProp: key,
-            dataPropType: util_1.Type.Str
-          };
-          if (errors === false) {
-            Object.assign(subschema, {
-              compositeRule: true,
-              createErrors: false,
-              allErrors: false
-            });
-          }
-          cxt.subschema(subschema, valid);
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/properties.js
-var require_properties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var validate_1 = require_validate();
-    var code_1 = require_code2();
-    var util_1 = require_util();
-    var additionalProperties_1 = require_additionalProperties();
-    var def2 = {
-      keyword: "properties",
-      type: "object",
-      schemaType: "object",
-      code(cxt) {
-        const { gen, schema, parentSchema, data, it } = cxt;
-        if (it.opts.removeAdditional === "all" && parentSchema.additionalProperties === void 0) {
-          additionalProperties_1.default.code(new validate_1.KeywordCxt(it, additionalProperties_1.default, "additionalProperties"));
-        }
-        const allProps = (0, code_1.allSchemaProperties)(schema);
-        for (const prop of allProps) {
-          it.definedProperties.add(prop);
-        }
-        if (it.opts.unevaluated && allProps.length && it.props !== true) {
-          it.props = util_1.mergeEvaluated.props(gen, (0, util_1.toHash)(allProps), it.props);
-        }
-        const properties = allProps.filter((p) => !(0, util_1.alwaysValidSchema)(it, schema[p]));
-        if (properties.length === 0)
-          return;
-        const valid = gen.name("valid");
-        for (const prop of properties) {
-          if (hasDefault(prop)) {
-            applyPropertySchema(prop);
-          } else {
-            gen.if((0, code_1.propertyInData)(gen, data, prop, it.opts.ownProperties));
-            applyPropertySchema(prop);
-            if (!it.allErrors)
-              gen.else().var(valid, true);
-            gen.endIf();
-          }
-          cxt.it.definedProperties.add(prop);
-          cxt.ok(valid);
-        }
-        function hasDefault(prop) {
-          return it.opts.useDefaults && !it.compositeRule && schema[prop].default !== void 0;
-        }
-        function applyPropertySchema(prop) {
-          cxt.subschema({
-            keyword: "properties",
-            schemaProp: prop,
-            dataProp: prop
-          }, valid);
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/patternProperties.js
-var require_patternProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var code_1 = require_code2();
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var util_2 = require_util();
-    var def2 = {
-      keyword: "patternProperties",
-      type: "object",
-      schemaType: "object",
-      code(cxt) {
-        const { gen, schema, data, parentSchema, it } = cxt;
-        const { opts } = it;
-        const patterns = (0, code_1.allSchemaProperties)(schema);
-        const alwaysValidPatterns = patterns.filter((p) => (0, util_1.alwaysValidSchema)(it, schema[p]));
-        if (patterns.length === 0 || alwaysValidPatterns.length === patterns.length && (!it.opts.unevaluated || it.props === true)) {
-          return;
-        }
-        const checkProperties = opts.strictSchema && !opts.allowMatchingProperties && parentSchema.properties;
-        const valid = gen.name("valid");
-        if (it.props !== true && !(it.props instanceof codegen_1.Name)) {
-          it.props = (0, util_2.evaluatedPropsToName)(gen, it.props);
-        }
-        const { props } = it;
-        validatePatternProperties();
-        function validatePatternProperties() {
-          for (const pat of patterns) {
-            if (checkProperties)
-              checkMatchingProperties(pat);
-            if (it.allErrors) {
-              validateProperties(pat);
-            } else {
-              gen.var(valid, true);
-              validateProperties(pat);
-              gen.if(valid);
-            }
-          }
-        }
-        function checkMatchingProperties(pat) {
-          for (const prop in checkProperties) {
-            if (new RegExp(pat).test(prop)) {
-              (0, util_1.checkStrictMode)(it, `property ${prop} matches pattern ${pat} (use allowMatchingProperties)`);
-            }
-          }
-        }
-        function validateProperties(pat) {
-          gen.forIn("key", data, (key) => {
-            gen.if((0, codegen_1._)`${(0, code_1.usePattern)(cxt, pat)}.test(${key})`, () => {
-              const alwaysValid = alwaysValidPatterns.includes(pat);
-              if (!alwaysValid) {
-                cxt.subschema({
-                  keyword: "patternProperties",
-                  schemaProp: pat,
-                  dataProp: key,
-                  dataPropType: util_2.Type.Str
-                }, valid);
-              }
-              if (it.opts.unevaluated && props !== true) {
-                gen.assign((0, codegen_1._)`${props}[${key}]`, true);
-              } else if (!alwaysValid && !it.allErrors) {
-                gen.if((0, codegen_1.not)(valid), () => gen.break());
-              }
-            });
-          });
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/not.js
-var require_not = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/not.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var util_1 = require_util();
-    var def2 = {
-      keyword: "not",
-      schemaType: ["object", "boolean"],
-      trackErrors: true,
-      code(cxt) {
-        const { gen, schema, it } = cxt;
-        if ((0, util_1.alwaysValidSchema)(it, schema)) {
-          cxt.fail();
-          return;
-        }
-        const valid = gen.name("valid");
-        cxt.subschema({
-          keyword: "not",
-          compositeRule: true,
-          createErrors: false,
-          allErrors: false
-        }, valid);
-        cxt.failResult(valid, () => cxt.reset(), () => cxt.error());
-      },
-      error: { message: "must NOT be valid" }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/anyOf.js
-var require_anyOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var code_1 = require_code2();
-    var def2 = {
-      keyword: "anyOf",
-      schemaType: "array",
-      trackErrors: true,
-      code: code_1.validateUnion,
-      error: { message: "must match a schema in anyOf" }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/oneOf.js
-var require_oneOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var error51 = {
-      message: "must match exactly one schema in oneOf",
-      params: ({ params }) => (0, codegen_1._)`{passingSchemas: ${params.passing}}`
-    };
-    var def2 = {
-      keyword: "oneOf",
-      schemaType: "array",
-      trackErrors: true,
-      error: error51,
-      code(cxt) {
-        const { gen, schema, parentSchema, it } = cxt;
-        if (!Array.isArray(schema))
-          throw new Error("ajv implementation error");
-        if (it.opts.discriminator && parentSchema.discriminator)
-          return;
-        const schArr = schema;
-        const valid = gen.let("valid", false);
-        const passing = gen.let("passing", null);
-        const schValid = gen.name("_valid");
-        cxt.setParams({ passing });
-        gen.block(validateOneOf);
-        cxt.result(valid, () => cxt.reset(), () => cxt.error(true));
-        function validateOneOf() {
-          schArr.forEach((sch, i) => {
-            let schCxt;
-            if ((0, util_1.alwaysValidSchema)(it, sch)) {
-              gen.var(schValid, true);
-            } else {
-              schCxt = cxt.subschema({
-                keyword: "oneOf",
-                schemaProp: i,
-                compositeRule: true
-              }, schValid);
-            }
-            if (i > 0) {
-              gen.if((0, codegen_1._)`${schValid} && ${valid}`).assign(valid, false).assign(passing, (0, codegen_1._)`[${passing}, ${i}]`).else();
-            }
-            gen.if(schValid, () => {
-              gen.assign(valid, true);
-              gen.assign(passing, i);
-              if (schCxt)
-                cxt.mergeEvaluated(schCxt, codegen_1.Name);
-            });
-          });
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/allOf.js
-var require_allOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var util_1 = require_util();
-    var def2 = {
-      keyword: "allOf",
-      schemaType: "array",
-      code(cxt) {
-        const { gen, schema, it } = cxt;
-        if (!Array.isArray(schema))
-          throw new Error("ajv implementation error");
-        const valid = gen.name("valid");
-        schema.forEach((sch, i) => {
-          if ((0, util_1.alwaysValidSchema)(it, sch))
-            return;
-          const schCxt = cxt.subschema({ keyword: "allOf", schemaProp: i }, valid);
-          cxt.ok(valid);
-          cxt.mergeEvaluated(schCxt);
-        });
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/if.js
-var require_if = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/if.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var error51 = {
-      message: ({ params }) => (0, codegen_1.str)`must match "${params.ifClause}" schema`,
-      params: ({ params }) => (0, codegen_1._)`{failingKeyword: ${params.ifClause}}`
-    };
-    var def2 = {
-      keyword: "if",
-      schemaType: ["object", "boolean"],
-      trackErrors: true,
-      error: error51,
-      code(cxt) {
-        const { gen, parentSchema, it } = cxt;
-        if (parentSchema.then === void 0 && parentSchema.else === void 0) {
-          (0, util_1.checkStrictMode)(it, '"if" without "then" and "else" is ignored');
-        }
-        const hasThen = hasSchema(it, "then");
-        const hasElse = hasSchema(it, "else");
-        if (!hasThen && !hasElse)
-          return;
-        const valid = gen.let("valid", true);
-        const schValid = gen.name("_valid");
-        validateIf();
-        cxt.reset();
-        if (hasThen && hasElse) {
-          const ifClause = gen.let("ifClause");
-          cxt.setParams({ ifClause });
-          gen.if(schValid, validateClause("then", ifClause), validateClause("else", ifClause));
-        } else if (hasThen) {
-          gen.if(schValid, validateClause("then"));
-        } else {
-          gen.if((0, codegen_1.not)(schValid), validateClause("else"));
-        }
-        cxt.pass(valid, () => cxt.error(true));
-        function validateIf() {
-          const schCxt = cxt.subschema({
-            keyword: "if",
-            compositeRule: true,
-            createErrors: false,
-            allErrors: false
-          }, schValid);
-          cxt.mergeEvaluated(schCxt);
-        }
-        function validateClause(keyword, ifClause) {
-          return () => {
-            const schCxt = cxt.subschema({ keyword }, schValid);
-            gen.assign(valid, schValid);
-            cxt.mergeValidEvaluated(schCxt, valid);
-            if (ifClause)
-              gen.assign(ifClause, (0, codegen_1._)`${keyword}`);
-            else
-              cxt.setParams({ ifClause: keyword });
-          };
-        }
-      }
-    };
-    function hasSchema(it, keyword) {
-      const schema = it.schema[keyword];
-      return schema !== void 0 && !(0, util_1.alwaysValidSchema)(it, schema);
-    }
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/thenElse.js
-var require_thenElse = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var util_1 = require_util();
-    var def2 = {
-      keyword: ["then", "else"],
-      schemaType: ["object", "boolean"],
-      code({ keyword, parentSchema, it }) {
-        if (parentSchema.if === void 0)
-          (0, util_1.checkStrictMode)(it, `"${keyword}" without "if" is ignored`);
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/index.js
-var require_applicator = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var additionalItems_1 = require_additionalItems();
-    var prefixItems_1 = require_prefixItems();
-    var items_1 = require_items();
-    var items2020_1 = require_items2020();
-    var contains_1 = require_contains();
-    var dependencies_1 = require_dependencies();
-    var propertyNames_1 = require_propertyNames();
-    var additionalProperties_1 = require_additionalProperties();
-    var properties_1 = require_properties();
-    var patternProperties_1 = require_patternProperties();
-    var not_1 = require_not();
-    var anyOf_1 = require_anyOf();
-    var oneOf_1 = require_oneOf();
-    var allOf_1 = require_allOf();
-    var if_1 = require_if();
-    var thenElse_1 = require_thenElse();
-    function getApplicator(draft2020 = false) {
-      const applicator = [
-        // any
-        not_1.default,
-        anyOf_1.default,
-        oneOf_1.default,
-        allOf_1.default,
-        if_1.default,
-        thenElse_1.default,
-        // object
-        propertyNames_1.default,
-        additionalProperties_1.default,
-        dependencies_1.default,
-        properties_1.default,
-        patternProperties_1.default
-      ];
-      if (draft2020)
-        applicator.push(prefixItems_1.default, items2020_1.default);
-      else
-        applicator.push(additionalItems_1.default, items_1.default);
-      applicator.push(contains_1.default);
-      return applicator;
-    }
-    exports.default = getApplicator;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js
-var require_dynamicAnchor = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.dynamicAnchor = void 0;
-    var codegen_1 = require_codegen();
-    var names_1 = require_names();
-    var compile_1 = require_compile();
-    var ref_1 = require_ref();
-    var def2 = {
-      keyword: "$dynamicAnchor",
-      schemaType: "string",
-      code: (cxt) => dynamicAnchor(cxt, cxt.schema)
-    };
-    function dynamicAnchor(cxt, anchor) {
-      const { gen, it } = cxt;
-      it.schemaEnv.root.dynamicAnchors[anchor] = true;
-      const v = (0, codegen_1._)`${names_1.default.dynamicAnchors}${(0, codegen_1.getProperty)(anchor)}`;
-      const validate2 = it.errSchemaPath === "#" ? it.validateName : _getValidate(cxt);
-      gen.if((0, codegen_1._)`!${v}`, () => gen.assign(v, validate2));
-    }
-    exports.dynamicAnchor = dynamicAnchor;
-    function _getValidate(cxt) {
-      const { schemaEnv, schema, self: self2 } = cxt.it;
-      const { root, baseId, localRefs, meta: meta3 } = schemaEnv.root;
-      const { schemaId } = self2.opts;
-      const sch = new compile_1.SchemaEnv({ schema, schemaId, root, baseId, localRefs, meta: meta3 });
-      compile_1.compileSchema.call(self2, sch);
-      return (0, ref_1.getValidate)(cxt, sch);
-    }
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js
-var require_dynamicRef = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.dynamicRef = void 0;
-    var codegen_1 = require_codegen();
-    var names_1 = require_names();
-    var ref_1 = require_ref();
-    var def2 = {
-      keyword: "$dynamicRef",
-      schemaType: "string",
-      code: (cxt) => dynamicRef(cxt, cxt.schema)
-    };
-    function dynamicRef(cxt, ref) {
-      const { gen, keyword, it } = cxt;
-      if (ref[0] !== "#")
-        throw new Error(`"${keyword}" only supports hash fragment reference`);
-      const anchor = ref.slice(1);
-      if (it.allErrors) {
-        _dynamicRef();
-      } else {
-        const valid = gen.let("valid", false);
-        _dynamicRef(valid);
-        cxt.ok(valid);
-      }
-      function _dynamicRef(valid) {
-        if (it.schemaEnv.root.dynamicAnchors[anchor]) {
-          const v = gen.let("_v", (0, codegen_1._)`${names_1.default.dynamicAnchors}${(0, codegen_1.getProperty)(anchor)}`);
-          gen.if(v, _callRef(v, valid), _callRef(it.validateName, valid));
-        } else {
-          _callRef(it.validateName, valid)();
-        }
-      }
-      function _callRef(validate2, valid) {
-        return valid ? () => gen.block(() => {
-          (0, ref_1.callRef)(cxt, validate2);
-          gen.let(valid, true);
-        }) : () => (0, ref_1.callRef)(cxt, validate2);
-      }
-    }
-    exports.dynamicRef = dynamicRef;
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js
-var require_recursiveAnchor = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var dynamicAnchor_1 = require_dynamicAnchor();
-    var util_1 = require_util();
-    var def2 = {
-      keyword: "$recursiveAnchor",
-      schemaType: "boolean",
-      code(cxt) {
-        if (cxt.schema)
-          (0, dynamicAnchor_1.dynamicAnchor)(cxt, "");
-        else
-          (0, util_1.checkStrictMode)(cxt.it, "$recursiveAnchor: false is ignored");
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js
-var require_recursiveRef = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var dynamicRef_1 = require_dynamicRef();
-    var def2 = {
-      keyword: "$recursiveRef",
-      schemaType: "string",
-      code: (cxt) => (0, dynamicRef_1.dynamicRef)(cxt, cxt.schema)
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/dynamic/index.js
-var require_dynamic = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var dynamicAnchor_1 = require_dynamicAnchor();
-    var dynamicRef_1 = require_dynamicRef();
-    var recursiveAnchor_1 = require_recursiveAnchor();
-    var recursiveRef_1 = require_recursiveRef();
-    var dynamic = [dynamicAnchor_1.default, dynamicRef_1.default, recursiveAnchor_1.default, recursiveRef_1.default];
-    exports.default = dynamic;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/validation/dependentRequired.js
-var require_dependentRequired = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/dependentRequired.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var dependencies_1 = require_dependencies();
-    var def2 = {
-      keyword: "dependentRequired",
-      type: "object",
-      schemaType: "object",
-      error: dependencies_1.error,
-      code: (cxt) => (0, dependencies_1.validatePropertyDeps)(cxt)
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js
-var require_dependentSchemas = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var dependencies_1 = require_dependencies();
-    var def2 = {
-      keyword: "dependentSchemas",
-      type: "object",
-      schemaType: "object",
-      code: (cxt) => (0, dependencies_1.validateSchemaDeps)(cxt)
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/validation/limitContains.js
-var require_limitContains = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitContains.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var util_1 = require_util();
-    var def2 = {
-      keyword: ["maxContains", "minContains"],
-      type: "array",
-      schemaType: "number",
-      code({ keyword, parentSchema, it }) {
-        if (parentSchema.contains === void 0) {
-          (0, util_1.checkStrictMode)(it, `"${keyword}" without "contains" is ignored`);
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/next.js
-var require_next = __commonJS({
-  "node_modules/ajv/dist/vocabularies/next.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var dependentRequired_1 = require_dependentRequired();
-    var dependentSchemas_1 = require_dependentSchemas();
-    var limitContains_1 = require_limitContains();
-    var next = [dependentRequired_1.default, dependentSchemas_1.default, limitContains_1.default];
-    exports.default = next;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js
-var require_unevaluatedProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var names_1 = require_names();
-    var error51 = {
-      message: "must NOT have unevaluated properties",
-      params: ({ params }) => (0, codegen_1._)`{unevaluatedProperty: ${params.unevaluatedProperty}}`
-    };
-    var def2 = {
-      keyword: "unevaluatedProperties",
-      type: "object",
-      schemaType: ["boolean", "object"],
-      trackErrors: true,
-      error: error51,
-      code(cxt) {
-        const { gen, schema, data, errsCount, it } = cxt;
-        if (!errsCount)
-          throw new Error("ajv implementation error");
-        const { allErrors, props } = it;
-        if (props instanceof codegen_1.Name) {
-          gen.if((0, codegen_1._)`${props} !== true`, () => gen.forIn("key", data, (key) => gen.if(unevaluatedDynamic(props, key), () => unevaluatedPropCode(key))));
-        } else if (props !== true) {
-          gen.forIn("key", data, (key) => props === void 0 ? unevaluatedPropCode(key) : gen.if(unevaluatedStatic(props, key), () => unevaluatedPropCode(key)));
-        }
-        it.props = true;
-        cxt.ok((0, codegen_1._)`${errsCount} === ${names_1.default.errors}`);
-        function unevaluatedPropCode(key) {
-          if (schema === false) {
-            cxt.setParams({ unevaluatedProperty: key });
-            cxt.error();
-            if (!allErrors)
-              gen.break();
-            return;
-          }
-          if (!(0, util_1.alwaysValidSchema)(it, schema)) {
-            const valid = gen.name("valid");
-            cxt.subschema({
-              keyword: "unevaluatedProperties",
-              dataProp: key,
-              dataPropType: util_1.Type.Str
-            }, valid);
-            if (!allErrors)
-              gen.if((0, codegen_1.not)(valid), () => gen.break());
-          }
-        }
-        function unevaluatedDynamic(evaluatedProps, key) {
-          return (0, codegen_1._)`!${evaluatedProps} || !${evaluatedProps}[${key}]`;
-        }
-        function unevaluatedStatic(evaluatedProps, key) {
-          const ps = [];
-          for (const p in evaluatedProps) {
-            if (evaluatedProps[p] === true)
-              ps.push((0, codegen_1._)`${key} !== ${p}`);
-          }
-          return (0, codegen_1.and)(...ps);
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js
-var require_unevaluatedItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var util_1 = require_util();
-    var error51 = {
-      message: ({ params: { len } }) => (0, codegen_1.str)`must NOT have more than ${len} items`,
-      params: ({ params: { len } }) => (0, codegen_1._)`{limit: ${len}}`
-    };
-    var def2 = {
-      keyword: "unevaluatedItems",
-      type: "array",
-      schemaType: ["boolean", "object"],
-      error: error51,
-      code(cxt) {
-        const { gen, schema, data, it } = cxt;
-        const items = it.items || 0;
-        if (items === true)
-          return;
-        const len = gen.const("len", (0, codegen_1._)`${data}.length`);
-        if (schema === false) {
-          cxt.setParams({ len: items });
-          cxt.fail((0, codegen_1._)`${len} > ${items}`);
-        } else if (typeof schema == "object" && !(0, util_1.alwaysValidSchema)(it, schema)) {
-          const valid = gen.var("valid", (0, codegen_1._)`${len} <= ${items}`);
-          gen.if((0, codegen_1.not)(valid), () => validateItems(valid, items));
-          cxt.ok(valid);
-        }
-        it.items = true;
-        function validateItems(valid, from) {
-          gen.forRange("i", from, len, (i) => {
-            cxt.subschema({ keyword: "unevaluatedItems", dataProp: i, dataPropType: util_1.Type.Num }, valid);
-            if (!it.allErrors)
-              gen.if((0, codegen_1.not)(valid), () => gen.break());
-          });
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/unevaluated/index.js
-var require_unevaluated = __commonJS({
-  "node_modules/ajv/dist/vocabularies/unevaluated/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var unevaluatedProperties_1 = require_unevaluatedProperties();
-    var unevaluatedItems_1 = require_unevaluatedItems();
-    var unevaluated = [unevaluatedProperties_1.default, unevaluatedItems_1.default];
-    exports.default = unevaluated;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/format/format.js
-var require_format = __commonJS({
-  "node_modules/ajv/dist/vocabularies/format/format.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var error51 = {
-      message: ({ schemaCode }) => (0, codegen_1.str)`must match format "${schemaCode}"`,
-      params: ({ schemaCode }) => (0, codegen_1._)`{format: ${schemaCode}}`
-    };
-    var def2 = {
-      keyword: "format",
-      type: ["number", "string"],
-      schemaType: "string",
-      $data: true,
-      error: error51,
-      code(cxt, ruleType) {
-        const { gen, data, $data, schema, schemaCode, it } = cxt;
-        const { opts, errSchemaPath, schemaEnv, self: self2 } = it;
-        if (!opts.validateFormats)
-          return;
-        if ($data)
-          validate$DataFormat();
-        else
-          validateFormat();
-        function validate$DataFormat() {
-          const fmts = gen.scopeValue("formats", {
-            ref: self2.formats,
-            code: opts.code.formats
-          });
-          const fDef = gen.const("fDef", (0, codegen_1._)`${fmts}[${schemaCode}]`);
-          const fType = gen.let("fType");
-          const format = gen.let("format");
-          gen.if((0, codegen_1._)`typeof ${fDef} == "object" && !(${fDef} instanceof RegExp)`, () => gen.assign(fType, (0, codegen_1._)`${fDef}.type || "string"`).assign(format, (0, codegen_1._)`${fDef}.validate`), () => gen.assign(fType, (0, codegen_1._)`"string"`).assign(format, fDef));
-          cxt.fail$data((0, codegen_1.or)(unknownFmt(), invalidFmt()));
-          function unknownFmt() {
-            if (opts.strictSchema === false)
-              return codegen_1.nil;
-            return (0, codegen_1._)`${schemaCode} && !${format}`;
-          }
-          function invalidFmt() {
-            const callFormat = schemaEnv.$async ? (0, codegen_1._)`(${fDef}.async ? await ${format}(${data}) : ${format}(${data}))` : (0, codegen_1._)`${format}(${data})`;
-            const validData = (0, codegen_1._)`(typeof ${format} == "function" ? ${callFormat} : ${format}.test(${data}))`;
-            return (0, codegen_1._)`${format} && ${format} !== true && ${fType} === ${ruleType} && !${validData}`;
-          }
-        }
-        function validateFormat() {
-          const formatDef = self2.formats[schema];
-          if (!formatDef) {
-            unknownFormat();
-            return;
-          }
-          if (formatDef === true)
-            return;
-          const [fmtType, format, fmtRef] = getFormat(formatDef);
-          if (fmtType === ruleType)
-            cxt.pass(validCondition());
-          function unknownFormat() {
-            if (opts.strictSchema === false) {
-              self2.logger.warn(unknownMsg());
-              return;
-            }
-            throw new Error(unknownMsg());
-            function unknownMsg() {
-              return `unknown format "${schema}" ignored in schema at path "${errSchemaPath}"`;
-            }
-          }
-          function getFormat(fmtDef) {
-            const code = fmtDef instanceof RegExp ? (0, codegen_1.regexpCode)(fmtDef) : opts.code.formats ? (0, codegen_1._)`${opts.code.formats}${(0, codegen_1.getProperty)(schema)}` : void 0;
-            const fmt = gen.scopeValue("formats", { key: schema, ref: fmtDef, code });
-            if (typeof fmtDef == "object" && !(fmtDef instanceof RegExp)) {
-              return [fmtDef.type || "string", fmtDef.validate, (0, codegen_1._)`${fmt}.validate`];
-            }
-            return ["string", fmtDef, fmt];
-          }
-          function validCondition() {
-            if (typeof formatDef == "object" && !(formatDef instanceof RegExp) && formatDef.async) {
-              if (!schemaEnv.$async)
-                throw new Error("async format in sync schema");
-              return (0, codegen_1._)`await ${fmtRef}(${data})`;
-            }
-            return typeof format == "function" ? (0, codegen_1._)`${fmtRef}(${data})` : (0, codegen_1._)`${fmtRef}.test(${data})`;
-          }
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/format/index.js
-var require_format2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/format/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var format_1 = require_format();
-    var format = [format_1.default];
-    exports.default = format;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/metadata.js
-var require_metadata = __commonJS({
-  "node_modules/ajv/dist/vocabularies/metadata.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.contentVocabulary = exports.metadataVocabulary = void 0;
-    exports.metadataVocabulary = [
-      "title",
-      "description",
-      "default",
-      "deprecated",
-      "readOnly",
-      "writeOnly",
-      "examples"
-    ];
-    exports.contentVocabulary = [
-      "contentMediaType",
-      "contentEncoding",
-      "contentSchema"
-    ];
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/draft2020.js
-var require_draft2020 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/draft2020.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var core_1 = require_core2();
-    var validation_1 = require_validation();
-    var applicator_1 = require_applicator();
-    var dynamic_1 = require_dynamic();
-    var next_1 = require_next();
-    var unevaluated_1 = require_unevaluated();
-    var format_1 = require_format2();
-    var metadata_1 = require_metadata();
-    var draft2020Vocabularies = [
-      dynamic_1.default,
-      core_1.default,
-      validation_1.default,
-      (0, applicator_1.default)(true),
-      format_1.default,
-      metadata_1.metadataVocabulary,
-      metadata_1.contentVocabulary,
-      next_1.default,
-      unevaluated_1.default
-    ];
-    exports.default = draft2020Vocabularies;
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/discriminator/types.js
-var require_types = __commonJS({
-  "node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.DiscrError = void 0;
-    var DiscrError;
-    (function(DiscrError2) {
-      DiscrError2["Tag"] = "tag";
-      DiscrError2["Mapping"] = "mapping";
-    })(DiscrError || (exports.DiscrError = DiscrError = {}));
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/discriminator/index.js
-var require_discriminator = __commonJS({
-  "node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var codegen_1 = require_codegen();
-    var types_1 = require_types();
-    var compile_1 = require_compile();
-    var ref_error_1 = require_ref_error();
-    var util_1 = require_util();
-    var error51 = {
-      message: ({ params: { discrError, tagName } }) => discrError === types_1.DiscrError.Tag ? `tag "${tagName}" must be string` : `value of tag "${tagName}" must be in oneOf`,
-      params: ({ params: { discrError, tag, tagName } }) => (0, codegen_1._)`{error: ${discrError}, tag: ${tagName}, tagValue: ${tag}}`
-    };
-    var def2 = {
-      keyword: "discriminator",
-      type: "object",
-      schemaType: "object",
-      error: error51,
-      code(cxt) {
-        const { gen, data, schema, parentSchema, it } = cxt;
-        const { oneOf } = parentSchema;
-        if (!it.opts.discriminator) {
-          throw new Error("discriminator: requires discriminator option");
-        }
-        const tagName = schema.propertyName;
-        if (typeof tagName != "string")
-          throw new Error("discriminator: requires propertyName");
-        if (schema.mapping)
-          throw new Error("discriminator: mapping is not supported");
-        if (!oneOf)
-          throw new Error("discriminator: requires oneOf keyword");
-        const valid = gen.let("valid", false);
-        const tag = gen.const("tag", (0, codegen_1._)`${data}${(0, codegen_1.getProperty)(tagName)}`);
-        gen.if((0, codegen_1._)`typeof ${tag} == "string"`, () => validateMapping(), () => cxt.error(false, { discrError: types_1.DiscrError.Tag, tag, tagName }));
-        cxt.ok(valid);
-        function validateMapping() {
-          const mapping = getMapping();
-          gen.if(false);
-          for (const tagValue in mapping) {
-            gen.elseIf((0, codegen_1._)`${tag} === ${tagValue}`);
-            gen.assign(valid, applyTagSchema(mapping[tagValue]));
-          }
-          gen.else();
-          cxt.error(false, { discrError: types_1.DiscrError.Mapping, tag, tagName });
-          gen.endIf();
-        }
-        function applyTagSchema(schemaProp) {
-          const _valid = gen.name("valid");
-          const schCxt = cxt.subschema({ keyword: "oneOf", schemaProp }, _valid);
-          cxt.mergeEvaluated(schCxt, codegen_1.Name);
-          return _valid;
-        }
-        function getMapping() {
-          var _a3;
-          const oneOfMapping = {};
-          const topRequired = hasRequired(parentSchema);
-          let tagRequired = true;
-          for (let i = 0; i < oneOf.length; i++) {
-            let sch = oneOf[i];
-            if ((sch === null || sch === void 0 ? void 0 : sch.$ref) && !(0, util_1.schemaHasRulesButRef)(sch, it.self.RULES)) {
-              const ref = sch.$ref;
-              sch = compile_1.resolveRef.call(it.self, it.schemaEnv.root, it.baseId, ref);
-              if (sch instanceof compile_1.SchemaEnv)
-                sch = sch.schema;
-              if (sch === void 0)
-                throw new ref_error_1.default(it.opts.uriResolver, it.baseId, ref);
-            }
-            const propSch = (_a3 = sch === null || sch === void 0 ? void 0 : sch.properties) === null || _a3 === void 0 ? void 0 : _a3[tagName];
-            if (typeof propSch != "object") {
-              throw new Error(`discriminator: oneOf subschemas (or referenced schemas) must have "properties/${tagName}"`);
-            }
-            tagRequired = tagRequired && (topRequired || hasRequired(sch));
-            addMappings(propSch, i);
-          }
-          if (!tagRequired)
-            throw new Error(`discriminator: "${tagName}" must be required`);
-          return oneOfMapping;
-          function hasRequired({ required: required2 }) {
-            return Array.isArray(required2) && required2.includes(tagName);
-          }
-          function addMappings(sch, i) {
-            if (sch.const) {
-              addMapping(sch.const, i);
-            } else if (sch.enum) {
-              for (const tagValue of sch.enum) {
-                addMapping(tagValue, i);
-              }
-            } else {
-              throw new Error(`discriminator: "properties/${tagName}" must have "const" or "enum"`);
-            }
-          }
-          function addMapping(tagValue, i) {
-            if (typeof tagValue != "string" || tagValue in oneOfMapping) {
-              throw new Error(`discriminator: "${tagName}" values must be unique strings`);
-            }
-            oneOfMapping[tagValue] = i;
-          }
-        }
-      }
-    };
-    exports.default = def2;
-  }
-});
-
-// node_modules/ajv/dist/refs/json-schema-2020-12/schema.json
-var require_schema = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/schema.json"(exports, module) {
-    module.exports = {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://json-schema.org/draft/2020-12/schema",
-      $vocabulary: {
-        "https://json-schema.org/draft/2020-12/vocab/core": true,
-        "https://json-schema.org/draft/2020-12/vocab/applicator": true,
-        "https://json-schema.org/draft/2020-12/vocab/unevaluated": true,
-        "https://json-schema.org/draft/2020-12/vocab/validation": true,
-        "https://json-schema.org/draft/2020-12/vocab/meta-data": true,
-        "https://json-schema.org/draft/2020-12/vocab/format-annotation": true,
-        "https://json-schema.org/draft/2020-12/vocab/content": true
-      },
-      $dynamicAnchor: "meta",
-      title: "Core and Validation specifications meta-schema",
-      allOf: [
-        { $ref: "meta/core" },
-        { $ref: "meta/applicator" },
-        { $ref: "meta/unevaluated" },
-        { $ref: "meta/validation" },
-        { $ref: "meta/meta-data" },
-        { $ref: "meta/format-annotation" },
-        { $ref: "meta/content" }
-      ],
-      type: ["object", "boolean"],
-      $comment: "This meta-schema also defines keywords that have appeared in previous drafts in order to prevent incompatible extensions as they remain in common use.",
-      properties: {
-        definitions: {
-          $comment: '"definitions" has been replaced by "$defs".',
-          type: "object",
-          additionalProperties: { $dynamicRef: "#meta" },
-          deprecated: true,
-          default: {}
-        },
-        dependencies: {
-          $comment: '"dependencies" has been split and replaced by "dependentSchemas" and "dependentRequired" in order to serve their differing semantics.',
-          type: "object",
-          additionalProperties: {
-            anyOf: [{ $dynamicRef: "#meta" }, { $ref: "meta/validation#/$defs/stringArray" }]
-          },
-          deprecated: true,
-          default: {}
-        },
-        $recursiveAnchor: {
-          $comment: '"$recursiveAnchor" has been replaced by "$dynamicAnchor".',
-          $ref: "meta/core#/$defs/anchorString",
-          deprecated: true
-        },
-        $recursiveRef: {
-          $comment: '"$recursiveRef" has been replaced by "$dynamicRef".',
-          $ref: "meta/core#/$defs/uriReferenceString",
-          deprecated: true
-        }
-      }
-    };
-  }
-});
-
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json
-var require_applicator2 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json"(exports, module) {
-    module.exports = {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://json-schema.org/draft/2020-12/meta/applicator",
-      $vocabulary: {
-        "https://json-schema.org/draft/2020-12/vocab/applicator": true
-      },
-      $dynamicAnchor: "meta",
-      title: "Applicator vocabulary meta-schema",
-      type: ["object", "boolean"],
-      properties: {
-        prefixItems: { $ref: "#/$defs/schemaArray" },
-        items: { $dynamicRef: "#meta" },
-        contains: { $dynamicRef: "#meta" },
-        additionalProperties: { $dynamicRef: "#meta" },
-        properties: {
-          type: "object",
-          additionalProperties: { $dynamicRef: "#meta" },
-          default: {}
-        },
-        patternProperties: {
-          type: "object",
-          additionalProperties: { $dynamicRef: "#meta" },
-          propertyNames: { format: "regex" },
-          default: {}
-        },
-        dependentSchemas: {
-          type: "object",
-          additionalProperties: { $dynamicRef: "#meta" },
-          default: {}
-        },
-        propertyNames: { $dynamicRef: "#meta" },
-        if: { $dynamicRef: "#meta" },
-        then: { $dynamicRef: "#meta" },
-        else: { $dynamicRef: "#meta" },
-        allOf: { $ref: "#/$defs/schemaArray" },
-        anyOf: { $ref: "#/$defs/schemaArray" },
-        oneOf: { $ref: "#/$defs/schemaArray" },
-        not: { $dynamicRef: "#meta" }
-      },
-      $defs: {
-        schemaArray: {
-          type: "array",
-          minItems: 1,
-          items: { $dynamicRef: "#meta" }
-        }
-      }
-    };
-  }
-});
-
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json
-var require_unevaluated2 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json"(exports, module) {
-    module.exports = {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://json-schema.org/draft/2020-12/meta/unevaluated",
-      $vocabulary: {
-        "https://json-schema.org/draft/2020-12/vocab/unevaluated": true
-      },
-      $dynamicAnchor: "meta",
-      title: "Unevaluated applicator vocabulary meta-schema",
-      type: ["object", "boolean"],
-      properties: {
-        unevaluatedItems: { $dynamicRef: "#meta" },
-        unevaluatedProperties: { $dynamicRef: "#meta" }
-      }
-    };
-  }
-});
-
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json
-var require_content = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json"(exports, module) {
-    module.exports = {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://json-schema.org/draft/2020-12/meta/content",
-      $vocabulary: {
-        "https://json-schema.org/draft/2020-12/vocab/content": true
-      },
-      $dynamicAnchor: "meta",
-      title: "Content vocabulary meta-schema",
-      type: ["object", "boolean"],
-      properties: {
-        contentEncoding: { type: "string" },
-        contentMediaType: { type: "string" },
-        contentSchema: { $dynamicRef: "#meta" }
-      }
-    };
-  }
-});
-
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json
-var require_core3 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json"(exports, module) {
-    module.exports = {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://json-schema.org/draft/2020-12/meta/core",
-      $vocabulary: {
-        "https://json-schema.org/draft/2020-12/vocab/core": true
-      },
-      $dynamicAnchor: "meta",
-      title: "Core vocabulary meta-schema",
-      type: ["object", "boolean"],
-      properties: {
-        $id: {
-          $ref: "#/$defs/uriReferenceString",
-          $comment: "Non-empty fragments not allowed.",
-          pattern: "^[^#]*#?$"
-        },
-        $schema: { $ref: "#/$defs/uriString" },
-        $ref: { $ref: "#/$defs/uriReferenceString" },
-        $anchor: { $ref: "#/$defs/anchorString" },
-        $dynamicRef: { $ref: "#/$defs/uriReferenceString" },
-        $dynamicAnchor: { $ref: "#/$defs/anchorString" },
-        $vocabulary: {
-          type: "object",
-          propertyNames: { $ref: "#/$defs/uriString" },
-          additionalProperties: {
-            type: "boolean"
-          }
-        },
-        $comment: {
-          type: "string"
-        },
-        $defs: {
-          type: "object",
-          additionalProperties: { $dynamicRef: "#meta" }
-        }
-      },
-      $defs: {
-        anchorString: {
-          type: "string",
-          pattern: "^[A-Za-z_][-A-Za-z0-9._]*$"
-        },
-        uriString: {
-          type: "string",
-          format: "uri"
-        },
-        uriReferenceString: {
-          type: "string",
-          format: "uri-reference"
-        }
-      }
-    };
-  }
-});
-
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json
-var require_format_annotation = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json"(exports, module) {
-    module.exports = {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://json-schema.org/draft/2020-12/meta/format-annotation",
-      $vocabulary: {
-        "https://json-schema.org/draft/2020-12/vocab/format-annotation": true
-      },
-      $dynamicAnchor: "meta",
-      title: "Format vocabulary meta-schema for annotation results",
-      type: ["object", "boolean"],
-      properties: {
-        format: { type: "string" }
-      }
-    };
-  }
-});
-
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json
-var require_meta_data = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json"(exports, module) {
-    module.exports = {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://json-schema.org/draft/2020-12/meta/meta-data",
-      $vocabulary: {
-        "https://json-schema.org/draft/2020-12/vocab/meta-data": true
-      },
-      $dynamicAnchor: "meta",
-      title: "Meta-data vocabulary meta-schema",
-      type: ["object", "boolean"],
-      properties: {
-        title: {
-          type: "string"
-        },
-        description: {
-          type: "string"
-        },
-        default: true,
-        deprecated: {
-          type: "boolean",
-          default: false
-        },
-        readOnly: {
-          type: "boolean",
-          default: false
-        },
-        writeOnly: {
-          type: "boolean",
-          default: false
-        },
-        examples: {
-          type: "array",
-          items: true
-        }
-      }
-    };
-  }
-});
-
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json
-var require_validation2 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json"(exports, module) {
-    module.exports = {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://json-schema.org/draft/2020-12/meta/validation",
-      $vocabulary: {
-        "https://json-schema.org/draft/2020-12/vocab/validation": true
-      },
-      $dynamicAnchor: "meta",
-      title: "Validation vocabulary meta-schema",
-      type: ["object", "boolean"],
-      properties: {
-        type: {
-          anyOf: [
-            { $ref: "#/$defs/simpleTypes" },
-            {
-              type: "array",
-              items: { $ref: "#/$defs/simpleTypes" },
-              minItems: 1,
-              uniqueItems: true
-            }
-          ]
-        },
-        const: true,
-        enum: {
-          type: "array",
-          items: true
-        },
-        multipleOf: {
-          type: "number",
-          exclusiveMinimum: 0
-        },
-        maximum: {
-          type: "number"
-        },
-        exclusiveMaximum: {
-          type: "number"
-        },
-        minimum: {
-          type: "number"
-        },
-        exclusiveMinimum: {
-          type: "number"
-        },
-        maxLength: { $ref: "#/$defs/nonNegativeInteger" },
-        minLength: { $ref: "#/$defs/nonNegativeIntegerDefault0" },
-        pattern: {
-          type: "string",
-          format: "regex"
-        },
-        maxItems: { $ref: "#/$defs/nonNegativeInteger" },
-        minItems: { $ref: "#/$defs/nonNegativeIntegerDefault0" },
-        uniqueItems: {
-          type: "boolean",
-          default: false
-        },
-        maxContains: { $ref: "#/$defs/nonNegativeInteger" },
-        minContains: {
-          $ref: "#/$defs/nonNegativeInteger",
-          default: 1
-        },
-        maxProperties: { $ref: "#/$defs/nonNegativeInteger" },
-        minProperties: { $ref: "#/$defs/nonNegativeIntegerDefault0" },
-        required: { $ref: "#/$defs/stringArray" },
-        dependentRequired: {
-          type: "object",
-          additionalProperties: {
-            $ref: "#/$defs/stringArray"
-          }
-        }
-      },
-      $defs: {
-        nonNegativeInteger: {
-          type: "integer",
-          minimum: 0
-        },
-        nonNegativeIntegerDefault0: {
-          $ref: "#/$defs/nonNegativeInteger",
-          default: 0
-        },
-        simpleTypes: {
-          enum: ["array", "boolean", "integer", "null", "number", "object", "string"]
-        },
-        stringArray: {
-          type: "array",
-          items: { type: "string" },
-          uniqueItems: true,
-          default: []
-        }
-      }
-    };
-  }
-});
-
-// node_modules/ajv/dist/refs/json-schema-2020-12/index.js
-var require_json_schema_2020_12 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var metaSchema = require_schema();
-    var applicator = require_applicator2();
-    var unevaluated = require_unevaluated2();
-    var content = require_content();
-    var core = require_core3();
-    var format = require_format_annotation();
-    var metadata2 = require_meta_data();
-    var validation = require_validation2();
-    var META_SUPPORT_DATA = ["/properties"];
-    function addMetaSchema2020($data) {
-      ;
-      [
-        metaSchema,
-        applicator,
-        unevaluated,
-        content,
-        core,
-        with$data(this, format),
-        metadata2,
-        with$data(this, validation)
-      ].forEach((sch) => this.addMetaSchema(sch, void 0, false));
-      return this;
-      function with$data(ajv, sch) {
-        return $data ? ajv.$dataMetaSchema(sch, META_SUPPORT_DATA) : sch;
-      }
-    }
-    exports.default = addMetaSchema2020;
-  }
-});
-
-// node_modules/ajv/dist/2020.js
-var require__ = __commonJS({
-  "node_modules/ajv/dist/2020.js"(exports, module) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.MissingRefError = exports.ValidationError = exports.CodeGen = exports.Name = exports.nil = exports.stringify = exports.str = exports._ = exports.KeywordCxt = exports.Ajv2020 = void 0;
-    var core_1 = require_core();
-    var draft2020_1 = require_draft2020();
-    var discriminator_1 = require_discriminator();
-    var json_schema_2020_12_1 = require_json_schema_2020_12();
-    var META_SCHEMA_ID = "https://json-schema.org/draft/2020-12/schema";
-    var Ajv20202 = class extends core_1.default {
-      constructor(opts = {}) {
-        super({
-          ...opts,
-          dynamicRef: true,
-          next: true,
-          unevaluated: true
-        });
-      }
-      _addVocabularies() {
-        super._addVocabularies();
-        draft2020_1.default.forEach((v) => this.addVocabulary(v));
-        if (this.opts.discriminator)
-          this.addKeyword(discriminator_1.default);
-      }
-      _addDefaultMetaSchema() {
-        super._addDefaultMetaSchema();
-        const { $data, meta: meta3 } = this.opts;
-        if (!meta3)
-          return;
-        json_schema_2020_12_1.default.call(this, $data);
-        this.refs["http://json-schema.org/schema"] = META_SCHEMA_ID;
-      }
-      defaultMeta() {
-        return this.opts.defaultMeta = super.defaultMeta() || (this.getSchema(META_SCHEMA_ID) ? META_SCHEMA_ID : void 0);
-      }
-    };
-    exports.Ajv2020 = Ajv20202;
-    module.exports = exports = Ajv20202;
-    module.exports.Ajv2020 = Ajv20202;
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = Ajv20202;
-    var validate_1 = require_validate();
-    Object.defineProperty(exports, "KeywordCxt", { enumerable: true, get: function() {
-      return validate_1.KeywordCxt;
-    } });
-    var codegen_1 = require_codegen();
-    Object.defineProperty(exports, "_", { enumerable: true, get: function() {
-      return codegen_1._;
-    } });
-    Object.defineProperty(exports, "str", { enumerable: true, get: function() {
-      return codegen_1.str;
-    } });
-    Object.defineProperty(exports, "stringify", { enumerable: true, get: function() {
-      return codegen_1.stringify;
-    } });
-    Object.defineProperty(exports, "nil", { enumerable: true, get: function() {
-      return codegen_1.nil;
-    } });
-    Object.defineProperty(exports, "Name", { enumerable: true, get: function() {
-      return codegen_1.Name;
-    } });
-    Object.defineProperty(exports, "CodeGen", { enumerable: true, get: function() {
-      return codegen_1.CodeGen;
-    } });
-    var validation_error_1 = require_validation_error();
-    Object.defineProperty(exports, "ValidationError", { enumerable: true, get: function() {
-      return validation_error_1.default;
-    } });
-    var ref_error_1 = require_ref_error();
-    Object.defineProperty(exports, "MissingRefError", { enumerable: true, get: function() {
-      return ref_error_1.default;
-    } });
-  }
-});
-
-// node_modules/ajv-formats/dist/formats.js
-var require_formats = __commonJS({
-  "node_modules/ajv-formats/dist/formats.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.formatNames = exports.fastFormats = exports.fullFormats = void 0;
-    function fmtDef(validate2, compare) {
-      return { validate: validate2, compare };
-    }
-    exports.fullFormats = {
-      // date: http://tools.ietf.org/html/rfc3339#section-5.6
-      date: fmtDef(date5, compareDate),
-      // date-time: http://tools.ietf.org/html/rfc3339#section-5.6
-      time: fmtDef(getTime(true), compareTime),
-      "date-time": fmtDef(getDateTime(true), compareDateTime),
-      "iso-time": fmtDef(getTime(), compareIsoTime),
-      "iso-date-time": fmtDef(getDateTime(), compareIsoDateTime),
-      // duration: https://tools.ietf.org/html/rfc3339#appendix-A
-      duration: /^P(?!$)((\d+Y)?(\d+M)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+S)?)?|(\d+W)?)$/,
-      uri,
-      "uri-reference": /^(?:[a-z][a-z0-9+\-.]*:)?(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'"()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*)?(?:\?(?:[a-z0-9\-._~!$&'"()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'"()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i,
-      // uri-template: https://tools.ietf.org/html/rfc6570
-      "uri-template": /^(?:(?:[^\x00-\x20"'<>%\\^`{|}]|%[0-9a-f]{2})|\{[+#./;?&=,!@|]?(?:[a-z0-9_]|%[0-9a-f]{2})+(?::[1-9][0-9]{0,3}|\*)?(?:,(?:[a-z0-9_]|%[0-9a-f]{2})+(?::[1-9][0-9]{0,3}|\*)?)*\})*$/i,
-      // For the source: https://gist.github.com/dperini/729294
-      // For test cases: https://mathiasbynens.be/demo/url-regex
-      url: /^(?:https?|ftp):\/\/(?:\S+(?::\S*)?@)?(?:(?!(?:10|127)(?:\.\d{1,3}){3})(?!(?:169\.254|192\.168)(?:\.\d{1,3}){2})(?!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z0-9\u{00a1}-\u{ffff}]+-)*[a-z0-9\u{00a1}-\u{ffff}]+)(?:\.(?:[a-z0-9\u{00a1}-\u{ffff}]+-)*[a-z0-9\u{00a1}-\u{ffff}]+)*(?:\.(?:[a-z\u{00a1}-\u{ffff}]{2,})))(?::\d{2,5})?(?:\/[^\s]*)?$/iu,
-      email: /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i,
-      hostname: /^(?=.{1,253}\.?$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[-0-9a-z]{0,61}[0-9a-z])?)*\.?$/i,
-      // optimized https://www.safaribooksonline.com/library/view/regular-expressions-cookbook/9780596802837/ch07s16.html
-      ipv4: /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/,
-      ipv6: /^((([0-9a-f]{1,4}:){7}([0-9a-f]{1,4}|:))|(([0-9a-f]{1,4}:){6}(:[0-9a-f]{1,4}|((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9a-f]{1,4}:){5}(((:[0-9a-f]{1,4}){1,2})|:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9a-f]{1,4}:){4}(((:[0-9a-f]{1,4}){1,3})|((:[0-9a-f]{1,4})?:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9a-f]{1,4}:){3}(((:[0-9a-f]{1,4}){1,4})|((:[0-9a-f]{1,4}){0,2}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9a-f]{1,4}:){2}(((:[0-9a-f]{1,4}){1,5})|((:[0-9a-f]{1,4}){0,3}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9a-f]{1,4}:){1}(((:[0-9a-f]{1,4}){1,6})|((:[0-9a-f]{1,4}){0,4}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(:(((:[0-9a-f]{1,4}){1,7})|((:[0-9a-f]{1,4}){0,5}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:)))$/i,
-      regex,
-      // uuid: http://tools.ietf.org/html/rfc4122
-      uuid: /^(?:urn:uuid:)?[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i,
-      // JSON-pointer: https://tools.ietf.org/html/rfc6901
-      // uri fragment: https://tools.ietf.org/html/rfc3986#appendix-A
-      "json-pointer": /^(?:\/(?:[^~/]|~0|~1)*)*$/,
-      "json-pointer-uri-fragment": /^#(?:\/(?:[a-z0-9_\-.!$&'()*+,;:=@]|%[0-9a-f]{2}|~0|~1)*)*$/i,
-      // relative JSON-pointer: http://tools.ietf.org/html/draft-luff-relative-json-pointer-00
-      "relative-json-pointer": /^(?:0|[1-9][0-9]*)(?:#|(?:\/(?:[^~/]|~0|~1)*)*)$/,
-      // the following formats are used by the openapi specification: https://spec.openapis.org/oas/v3.0.0#data-types
-      // byte: https://github.com/miguelmota/is-base64
-      byte,
-      // signed 32 bit integer
-      int32: { type: "number", validate: validateInt32 },
-      // signed 64 bit integer
-      int64: { type: "number", validate: validateInt64 },
-      // C-type float
-      float: { type: "number", validate: validateNumber },
-      // C-type double
-      double: { type: "number", validate: validateNumber },
-      // hint to the UI to hide input strings
-      password: true,
-      // unchecked string payload
-      binary: true
-    };
-    exports.fastFormats = {
-      ...exports.fullFormats,
-      date: fmtDef(/^\d\d\d\d-[0-1]\d-[0-3]\d$/, compareDate),
-      time: fmtDef(/^(?:[0-2]\d:[0-5]\d:[0-5]\d|23:59:60)(?:\.\d+)?(?:z|[+-]\d\d(?::?\d\d)?)$/i, compareTime),
-      "date-time": fmtDef(/^\d\d\d\d-[0-1]\d-[0-3]\dt(?:[0-2]\d:[0-5]\d:[0-5]\d|23:59:60)(?:\.\d+)?(?:z|[+-]\d\d(?::?\d\d)?)$/i, compareDateTime),
-      "iso-time": fmtDef(/^(?:[0-2]\d:[0-5]\d:[0-5]\d|23:59:60)(?:\.\d+)?(?:z|[+-]\d\d(?::?\d\d)?)?$/i, compareIsoTime),
-      "iso-date-time": fmtDef(/^\d\d\d\d-[0-1]\d-[0-3]\d[t\s](?:[0-2]\d:[0-5]\d:[0-5]\d|23:59:60)(?:\.\d+)?(?:z|[+-]\d\d(?::?\d\d)?)?$/i, compareIsoDateTime),
-      // uri: https://github.com/mafintosh/is-my-json-valid/blob/master/formats.js
-      uri: /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/)?[^\s]*$/i,
-      "uri-reference": /^(?:(?:[a-z][a-z0-9+\-.]*:)?\/?\/)?(?:[^\\\s#][^\s#]*)?(?:#[^\\\s]*)?$/i,
-      // email (sources from jsen validator):
-      // http://stackoverflow.com/questions/201323/using-a-regular-expression-to-validate-an-email-address#answer-8829363
-      // http://www.w3.org/TR/html5/forms.html#valid-e-mail-address (search for 'wilful violation')
-      email: /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/i
-    };
-    exports.formatNames = Object.keys(exports.fullFormats);
-    function isLeapYear(year) {
-      return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-    }
-    var DATE = /^(\d\d\d\d)-(\d\d)-(\d\d)$/;
-    var DAYS = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    function date5(str) {
-      const matches = DATE.exec(str);
-      if (!matches)
-        return false;
-      const year = +matches[1];
-      const month = +matches[2];
-      const day = +matches[3];
-      return month >= 1 && month <= 12 && day >= 1 && day <= (month === 2 && isLeapYear(year) ? 29 : DAYS[month]);
-    }
-    function compareDate(d1, d2) {
-      if (!(d1 && d2))
-        return void 0;
-      if (d1 > d2)
-        return 1;
-      if (d1 < d2)
-        return -1;
-      return 0;
-    }
-    var TIME = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)(z|([+-])(\d\d)(?::?(\d\d))?)?$/i;
-    function getTime(strictTimeZone) {
-      return function time3(str) {
-        const matches = TIME.exec(str);
-        if (!matches)
-          return false;
-        const hr = +matches[1];
-        const min = +matches[2];
-        const sec = +matches[3];
-        const tz = matches[4];
-        const tzSign = matches[5] === "-" ? -1 : 1;
-        const tzH = +(matches[6] || 0);
-        const tzM = +(matches[7] || 0);
-        if (tzH > 23 || tzM > 59 || strictTimeZone && !tz)
-          return false;
-        if (hr <= 23 && min <= 59 && sec < 60)
-          return true;
-        const utcMin = min - tzM * tzSign;
-        const utcHr = hr - tzH * tzSign - (utcMin < 0 ? 1 : 0);
-        return (utcHr === 23 || utcHr === -1) && (utcMin === 59 || utcMin === -1) && sec < 61;
-      };
-    }
-    function compareTime(s1, s2) {
-      if (!(s1 && s2))
-        return void 0;
-      const t1 = (/* @__PURE__ */ new Date("2020-01-01T" + s1)).valueOf();
-      const t2 = (/* @__PURE__ */ new Date("2020-01-01T" + s2)).valueOf();
-      if (!(t1 && t2))
-        return void 0;
-      return t1 - t2;
-    }
-    function compareIsoTime(t1, t2) {
-      if (!(t1 && t2))
-        return void 0;
-      const a1 = TIME.exec(t1);
-      const a2 = TIME.exec(t2);
-      if (!(a1 && a2))
-        return void 0;
-      t1 = a1[1] + a1[2] + a1[3];
-      t2 = a2[1] + a2[2] + a2[3];
-      if (t1 > t2)
-        return 1;
-      if (t1 < t2)
-        return -1;
-      return 0;
-    }
-    var DATE_TIME_SEPARATOR = /t|\s/i;
-    function getDateTime(strictTimeZone) {
-      const time3 = getTime(strictTimeZone);
-      return function date_time(str) {
-        const dateTime = str.split(DATE_TIME_SEPARATOR);
-        return dateTime.length === 2 && date5(dateTime[0]) && time3(dateTime[1]);
-      };
-    }
-    function compareDateTime(dt1, dt2) {
-      if (!(dt1 && dt2))
-        return void 0;
-      const d1 = new Date(dt1).valueOf();
-      const d2 = new Date(dt2).valueOf();
-      if (!(d1 && d2))
-        return void 0;
-      return d1 - d2;
-    }
-    function compareIsoDateTime(dt1, dt2) {
-      if (!(dt1 && dt2))
-        return void 0;
-      const [d1, t1] = dt1.split(DATE_TIME_SEPARATOR);
-      const [d2, t2] = dt2.split(DATE_TIME_SEPARATOR);
-      const res = compareDate(d1, d2);
-      if (res === void 0)
-        return void 0;
-      return res || compareTime(t1, t2);
-    }
-    var NOT_URI_FRAGMENT = /\/|:/;
-    var URI = /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
-    function uri(str) {
-      return NOT_URI_FRAGMENT.test(str) && URI.test(str);
-    }
-    var BYTE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/gm;
-    function byte(str) {
-      BYTE.lastIndex = 0;
-      return BYTE.test(str);
-    }
-    var MIN_INT32 = -(2 ** 31);
-    var MAX_INT32 = 2 ** 31 - 1;
-    function validateInt32(value) {
-      return Number.isInteger(value) && value <= MAX_INT32 && value >= MIN_INT32;
-    }
-    function validateInt64(value) {
-      return Number.isInteger(value);
-    }
-    function validateNumber() {
-      return true;
-    }
-    var Z_ANCHOR = /[^\\]\\Z/;
-    function regex(str) {
-      if (Z_ANCHOR.test(str))
-        return false;
-      try {
-        new RegExp(str);
-        return true;
-      } catch (e) {
-        return false;
-      }
-    }
-  }
-});
-
-// node_modules/ajv/dist/vocabularies/draft7.js
-var require_draft7 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/draft7.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var core_1 = require_core2();
-    var validation_1 = require_validation();
-    var applicator_1 = require_applicator();
-    var format_1 = require_format2();
-    var metadata_1 = require_metadata();
-    var draft7Vocabularies = [
-      core_1.default,
-      validation_1.default,
-      (0, applicator_1.default)(),
-      format_1.default,
-      metadata_1.metadataVocabulary,
-      metadata_1.contentVocabulary
-    ];
-    exports.default = draft7Vocabularies;
-  }
-});
-
-// node_modules/ajv/dist/refs/json-schema-draft-07.json
-var require_json_schema_draft_07 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports, module) {
-    module.exports = {
-      $schema: "http://json-schema.org/draft-07/schema#",
-      $id: "http://json-schema.org/draft-07/schema#",
-      title: "Core schema meta-schema",
-      definitions: {
-        schemaArray: {
-          type: "array",
-          minItems: 1,
-          items: { $ref: "#" }
-        },
-        nonNegativeInteger: {
-          type: "integer",
-          minimum: 0
-        },
-        nonNegativeIntegerDefault0: {
-          allOf: [{ $ref: "#/definitions/nonNegativeInteger" }, { default: 0 }]
-        },
-        simpleTypes: {
-          enum: ["array", "boolean", "integer", "null", "number", "object", "string"]
-        },
-        stringArray: {
-          type: "array",
-          items: { type: "string" },
-          uniqueItems: true,
-          default: []
-        }
-      },
-      type: ["object", "boolean"],
-      properties: {
-        $id: {
-          type: "string",
-          format: "uri-reference"
-        },
-        $schema: {
-          type: "string",
-          format: "uri"
-        },
-        $ref: {
-          type: "string",
-          format: "uri-reference"
-        },
-        $comment: {
-          type: "string"
-        },
-        title: {
-          type: "string"
-        },
-        description: {
-          type: "string"
-        },
-        default: true,
-        readOnly: {
-          type: "boolean",
-          default: false
-        },
-        examples: {
-          type: "array",
-          items: true
-        },
-        multipleOf: {
-          type: "number",
-          exclusiveMinimum: 0
-        },
-        maximum: {
-          type: "number"
-        },
-        exclusiveMaximum: {
-          type: "number"
-        },
-        minimum: {
-          type: "number"
-        },
-        exclusiveMinimum: {
-          type: "number"
-        },
-        maxLength: { $ref: "#/definitions/nonNegativeInteger" },
-        minLength: { $ref: "#/definitions/nonNegativeIntegerDefault0" },
-        pattern: {
-          type: "string",
-          format: "regex"
-        },
-        additionalItems: { $ref: "#" },
-        items: {
-          anyOf: [{ $ref: "#" }, { $ref: "#/definitions/schemaArray" }],
-          default: true
-        },
-        maxItems: { $ref: "#/definitions/nonNegativeInteger" },
-        minItems: { $ref: "#/definitions/nonNegativeIntegerDefault0" },
-        uniqueItems: {
-          type: "boolean",
-          default: false
-        },
-        contains: { $ref: "#" },
-        maxProperties: { $ref: "#/definitions/nonNegativeInteger" },
-        minProperties: { $ref: "#/definitions/nonNegativeIntegerDefault0" },
-        required: { $ref: "#/definitions/stringArray" },
-        additionalProperties: { $ref: "#" },
-        definitions: {
-          type: "object",
-          additionalProperties: { $ref: "#" },
-          default: {}
-        },
-        properties: {
-          type: "object",
-          additionalProperties: { $ref: "#" },
-          default: {}
-        },
-        patternProperties: {
-          type: "object",
-          additionalProperties: { $ref: "#" },
-          propertyNames: { format: "regex" },
-          default: {}
-        },
-        dependencies: {
-          type: "object",
-          additionalProperties: {
-            anyOf: [{ $ref: "#" }, { $ref: "#/definitions/stringArray" }]
-          }
-        },
-        propertyNames: { $ref: "#" },
-        const: true,
-        enum: {
-          type: "array",
-          items: true,
-          minItems: 1,
-          uniqueItems: true
-        },
-        type: {
-          anyOf: [
-            { $ref: "#/definitions/simpleTypes" },
-            {
-              type: "array",
-              items: { $ref: "#/definitions/simpleTypes" },
-              minItems: 1,
-              uniqueItems: true
-            }
-          ]
-        },
-        format: { type: "string" },
-        contentMediaType: { type: "string" },
-        contentEncoding: { type: "string" },
-        if: { $ref: "#" },
-        then: { $ref: "#" },
-        else: { $ref: "#" },
-        allOf: { $ref: "#/definitions/schemaArray" },
-        anyOf: { $ref: "#/definitions/schemaArray" },
-        oneOf: { $ref: "#/definitions/schemaArray" },
-        not: { $ref: "#" }
-      },
-      default: true
-    };
-  }
-});
-
-// node_modules/ajv/dist/ajv.js
-var require_ajv = __commonJS({
-  "node_modules/ajv/dist/ajv.js"(exports, module) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.MissingRefError = exports.ValidationError = exports.CodeGen = exports.Name = exports.nil = exports.stringify = exports.str = exports._ = exports.KeywordCxt = exports.Ajv = void 0;
-    var core_1 = require_core();
-    var draft7_1 = require_draft7();
-    var discriminator_1 = require_discriminator();
-    var draft7MetaSchema = require_json_schema_draft_07();
-    var META_SUPPORT_DATA = ["/properties"];
-    var META_SCHEMA_ID = "http://json-schema.org/draft-07/schema";
-    var Ajv = class extends core_1.default {
-      _addVocabularies() {
-        super._addVocabularies();
-        draft7_1.default.forEach((v) => this.addVocabulary(v));
-        if (this.opts.discriminator)
-          this.addKeyword(discriminator_1.default);
-      }
-      _addDefaultMetaSchema() {
-        super._addDefaultMetaSchema();
-        if (!this.opts.meta)
-          return;
-        const metaSchema = this.opts.$data ? this.$dataMetaSchema(draft7MetaSchema, META_SUPPORT_DATA) : draft7MetaSchema;
-        this.addMetaSchema(metaSchema, META_SCHEMA_ID, false);
-        this.refs["http://json-schema.org/schema"] = META_SCHEMA_ID;
-      }
-      defaultMeta() {
-        return this.opts.defaultMeta = super.defaultMeta() || (this.getSchema(META_SCHEMA_ID) ? META_SCHEMA_ID : void 0);
-      }
-    };
-    exports.Ajv = Ajv;
-    module.exports = exports = Ajv;
-    module.exports.Ajv = Ajv;
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = Ajv;
-    var validate_1 = require_validate();
-    Object.defineProperty(exports, "KeywordCxt", { enumerable: true, get: function() {
-      return validate_1.KeywordCxt;
-    } });
-    var codegen_1 = require_codegen();
-    Object.defineProperty(exports, "_", { enumerable: true, get: function() {
-      return codegen_1._;
-    } });
-    Object.defineProperty(exports, "str", { enumerable: true, get: function() {
-      return codegen_1.str;
-    } });
-    Object.defineProperty(exports, "stringify", { enumerable: true, get: function() {
-      return codegen_1.stringify;
-    } });
-    Object.defineProperty(exports, "nil", { enumerable: true, get: function() {
-      return codegen_1.nil;
-    } });
-    Object.defineProperty(exports, "Name", { enumerable: true, get: function() {
-      return codegen_1.Name;
-    } });
-    Object.defineProperty(exports, "CodeGen", { enumerable: true, get: function() {
-      return codegen_1.CodeGen;
-    } });
-    var validation_error_1 = require_validation_error();
-    Object.defineProperty(exports, "ValidationError", { enumerable: true, get: function() {
-      return validation_error_1.default;
-    } });
-    var ref_error_1 = require_ref_error();
-    Object.defineProperty(exports, "MissingRefError", { enumerable: true, get: function() {
-      return ref_error_1.default;
-    } });
-  }
-});
-
-// node_modules/ajv-formats/dist/limit.js
-var require_limit = __commonJS({
-  "node_modules/ajv-formats/dist/limit.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.formatLimitDefinition = void 0;
-    var ajv_1 = require_ajv();
-    var codegen_1 = require_codegen();
-    var ops = codegen_1.operators;
-    var KWDs = {
-      formatMaximum: { okStr: "<=", ok: ops.LTE, fail: ops.GT },
-      formatMinimum: { okStr: ">=", ok: ops.GTE, fail: ops.LT },
-      formatExclusiveMaximum: { okStr: "<", ok: ops.LT, fail: ops.GTE },
-      formatExclusiveMinimum: { okStr: ">", ok: ops.GT, fail: ops.LTE }
-    };
-    var error51 = {
-      message: ({ keyword, schemaCode }) => (0, codegen_1.str)`should be ${KWDs[keyword].okStr} ${schemaCode}`,
-      params: ({ keyword, schemaCode }) => (0, codegen_1._)`{comparison: ${KWDs[keyword].okStr}, limit: ${schemaCode}}`
-    };
-    exports.formatLimitDefinition = {
-      keyword: Object.keys(KWDs),
-      type: "string",
-      schemaType: "string",
-      $data: true,
-      error: error51,
-      code(cxt) {
-        const { gen, data, schemaCode, keyword, it } = cxt;
-        const { opts, self: self2 } = it;
-        if (!opts.validateFormats)
-          return;
-        const fCxt = new ajv_1.KeywordCxt(it, self2.RULES.all.format.definition, "format");
-        if (fCxt.$data)
-          validate$DataFormat();
-        else
-          validateFormat();
-        function validate$DataFormat() {
-          const fmts = gen.scopeValue("formats", {
-            ref: self2.formats,
-            code: opts.code.formats
-          });
-          const fmt = gen.const("fmt", (0, codegen_1._)`${fmts}[${fCxt.schemaCode}]`);
-          cxt.fail$data((0, codegen_1.or)((0, codegen_1._)`typeof ${fmt} != "object"`, (0, codegen_1._)`${fmt} instanceof RegExp`, (0, codegen_1._)`typeof ${fmt}.compare != "function"`, compareCode(fmt)));
-        }
-        function validateFormat() {
-          const format = fCxt.schema;
-          const fmtDef = self2.formats[format];
-          if (!fmtDef || fmtDef === true)
-            return;
-          if (typeof fmtDef != "object" || fmtDef instanceof RegExp || typeof fmtDef.compare != "function") {
-            throw new Error(`"${keyword}": format "${format}" does not define "compare" function`);
-          }
-          const fmt = gen.scopeValue("formats", {
-            key: format,
-            ref: fmtDef,
-            code: opts.code.formats ? (0, codegen_1._)`${opts.code.formats}${(0, codegen_1.getProperty)(format)}` : void 0
-          });
-          cxt.fail$data(compareCode(fmt));
-        }
-        function compareCode(fmt) {
-          return (0, codegen_1._)`${fmt}.compare(${data}, ${schemaCode}) ${KWDs[keyword].fail} 0`;
-        }
-      },
-      dependencies: ["format"]
-    };
-    var formatLimitPlugin = (ajv) => {
-      ajv.addKeyword(exports.formatLimitDefinition);
-      return ajv;
-    };
-    exports.default = formatLimitPlugin;
-  }
-});
-
-// node_modules/ajv-formats/dist/index.js
-var require_dist = __commonJS({
-  "node_modules/ajv-formats/dist/index.js"(exports, module) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var formats_1 = require_formats();
-    var limit_1 = require_limit();
-    var codegen_1 = require_codegen();
-    var fullName = new codegen_1.Name("fullFormats");
-    var fastName = new codegen_1.Name("fastFormats");
-    var formatsPlugin = (ajv, opts = { keywords: true }) => {
-      if (Array.isArray(opts)) {
-        addFormats(ajv, opts, formats_1.fullFormats, fullName);
-        return ajv;
-      }
-      const [formats, exportName] = opts.mode === "fast" ? [formats_1.fastFormats, fastName] : [formats_1.fullFormats, fullName];
-      const list = opts.formats || formats_1.formatNames;
-      addFormats(ajv, list, formats, exportName);
-      if (opts.keywords)
-        (0, limit_1.default)(ajv);
-      return ajv;
-    };
-    formatsPlugin.get = (name, mode = "full") => {
-      const formats = mode === "fast" ? formats_1.fastFormats : formats_1.fullFormats;
-      const f = formats[name];
-      if (!f)
-        throw new Error(`Unknown format "${name}"`);
-      return f;
-    };
-    function addFormats(ajv, list, fs, exportName) {
-      var _a3;
-      var _b;
-      (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
-      for (const f of list)
-        ajv.addFormat(f, fs[f]);
-    }
-    module.exports = exports = formatsPlugin;
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = formatsPlugin;
-  }
-});
-
 // src/contracts/internal/trust-brands.ts
 function observationCapabilityBinding(value, kind) {
   const binding = observationCapabilities.get(value);
@@ -8070,13 +384,13 @@ var require_directives = __commonJS({
               onError(0, "%YAML directive should contain exactly one part");
               return false;
             }
-            const [version2] = parts;
-            if (version2 === "1.1" || version2 === "1.2") {
-              this.yaml.version = version2;
+            const [version3] = parts;
+            if (version3 === "1.1" || version3 === "1.2") {
+              this.yaml.version = version3;
               return true;
             } else {
-              const isValid = /^\d+\.\d+$/.test(version2);
-              onError(6, `Unsupported YAML version ${version2}`, isValid);
+              const isValid = /^\d+\.\d+$/.test(version3);
+              onError(6, `Unsupported YAML version ${version3}`, isValid);
               return false;
             }
           }
@@ -8923,8 +1237,8 @@ var require_stringifyString = __commonJS({
             case "u":
               {
                 str += json2.slice(start, i);
-                const code = json2.substr(i + 2, 4);
-                switch (code) {
+                const code2 = json2.substr(i + 2, 4);
+                switch (code2) {
                   case "0000":
                     str += "\\0";
                     break;
@@ -8950,8 +1264,8 @@ var require_stringifyString = __commonJS({
                     str += "\\P";
                     break;
                   default:
-                    if (code.substr(0, 2) === "00")
-                      str += "\\x" + code.substr(2);
+                    if (code2.substr(0, 2) === "00")
+                      str += "\\x" + code2.substr(2);
                     else
                       str += json2.substr(i, 6);
                 }
@@ -10233,7 +2547,7 @@ var require_int = __commonJS({
 });
 
 // node_modules/yaml/dist/schema/core/schema.js
-var require_schema2 = __commonJS({
+var require_schema = __commonJS({
   "node_modules/yaml/dist/schema/core/schema.js"(exports) {
     "use strict";
     var map2 = require_map();
@@ -10261,7 +2575,7 @@ var require_schema2 = __commonJS({
 });
 
 // node_modules/yaml/dist/schema/json/schema.js
-var require_schema3 = __commonJS({
+var require_schema2 = __commonJS({
   "node_modules/yaml/dist/schema/json/schema.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
@@ -10887,7 +3201,7 @@ var require_timestamp = __commonJS({
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/schema.js
-var require_schema4 = __commonJS({
+var require_schema3 = __commonJS({
   "node_modules/yaml/dist/schema/yaml-1.1/schema.js"(exports) {
     "use strict";
     var map2 = require_map();
@@ -10941,13 +3255,13 @@ var require_tags = __commonJS({
     var bool = require_bool();
     var float = require_float();
     var int2 = require_int();
-    var schema = require_schema2();
-    var schema$1 = require_schema3();
+    var schema = require_schema();
+    var schema$1 = require_schema2();
     var binary = require_binary();
     var merge2 = require_merge();
     var omap = require_omap();
     var pairs = require_pairs();
-    var schema$2 = require_schema4();
+    var schema$2 = require_schema3();
     var set2 = require_set();
     var timestamp = require_timestamp();
     var schemas = /* @__PURE__ */ new Map([
@@ -11176,14 +3490,14 @@ var require_Document = __commonJS({
           version: "1.2"
         }, options);
         this.options = opt;
-        let { version: version2 } = opt;
+        let { version: version3 } = opt;
         if (options?._directives) {
           this.directives = options._directives.atDocument();
           if (this.directives.yaml.explicit)
-            version2 = this.directives.yaml.version;
+            version3 = this.directives.yaml.version;
         } else
-          this.directives = new directives.Directives({ version: version2 });
-        this.setSchema(version2, options);
+          this.directives = new directives.Directives({ version: version3 });
+        this.setSchema(version3, options);
         this.contents = value === void 0 ? null : this.createNode(value, _replacer, options);
       }
       /**
@@ -11363,11 +3677,11 @@ var require_Document = __commonJS({
        *
        * Overrides all previously set schema options.
        */
-      setSchema(version2, options = {}) {
-        if (typeof version2 === "number")
-          version2 = String(version2);
+      setSchema(version3, options = {}) {
+        if (typeof version3 === "number")
+          version3 = String(version3);
         let opt;
-        switch (version2) {
+        switch (version3) {
           case "1.1":
             if (this.directives)
               this.directives.yaml.version = "1.1";
@@ -11378,9 +3692,9 @@ var require_Document = __commonJS({
           case "1.2":
           case "next":
             if (this.directives)
-              this.directives.yaml.version = version2;
+              this.directives.yaml.version = version3;
             else
-              this.directives = new directives.Directives({ version: version2 });
+              this.directives = new directives.Directives({ version: version3 });
             opt = { resolveKnownTags: true, schema: "core" };
             break;
           case null:
@@ -11389,7 +3703,7 @@ var require_Document = __commonJS({
             opt = null;
             break;
           default: {
-            const sv = JSON.stringify(version2);
+            const sv = JSON.stringify(version3);
             throw new Error(`Expected '1.1', '1.2' or null as first argument, but found: ${sv}`);
           }
         }
@@ -11446,26 +3760,26 @@ var require_Document = __commonJS({
 });
 
 // node_modules/yaml/dist/errors.js
-var require_errors2 = __commonJS({
+var require_errors = __commonJS({
   "node_modules/yaml/dist/errors.js"(exports) {
     "use strict";
     var YAMLError = class extends Error {
-      constructor(name, pos, code, message) {
+      constructor(name, pos, code2, message) {
         super();
         this.name = name;
-        this.code = code;
+        this.code = code2;
         this.message = message;
         this.pos = pos;
       }
     };
     var YAMLParseError = class extends YAMLError {
-      constructor(pos, code, message) {
-        super("YAMLParseError", pos, code, message);
+      constructor(pos, code2, message) {
+        super("YAMLParseError", pos, code2, message);
       }
     };
     var YAMLWarning = class extends YAMLError {
-      constructor(pos, code, message) {
-        super("YAMLWarning", pos, code, message);
+      constructor(pos, code2, message) {
+        super("YAMLWarning", pos, code2, message);
       }
     };
     var prettifyError2 = (src, lc) => (error51) => {
@@ -12374,7 +4688,7 @@ var require_resolve_flow_scalar = __commonJS({
       const { offset, type, source, end } = scalar;
       let _type;
       let value;
-      const _onError = (rel, code, msg) => onError(offset + rel, code, msg);
+      const _onError = (rel, code2, msg) => onError(offset + rel, code2, msg);
       switch (type) {
         case "scalar":
           _type = Scalar.Scalar.PLAIN;
@@ -12571,9 +4885,9 @@ var require_resolve_flow_scalar = __commonJS({
     function parseCharCode(source, offset, length, onError) {
       const cc = source.substr(offset, length);
       const ok24 = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
-      const code = ok24 ? parseInt(cc, 16) : NaN;
+      const code2 = ok24 ? parseInt(cc, 16) : NaN;
       try {
-        return String.fromCodePoint(code);
+        return String.fromCodePoint(code2);
       } catch {
         const raw = source.substr(offset - 2, length + 2);
         onError(offset - 2, "BAD_DQ_ESCAPE", `Invalid escape sequence ${raw}`);
@@ -12851,7 +5165,7 @@ var require_composer = __commonJS({
     var node_process = __require("process");
     var directives = require_directives();
     var Document = require_Document();
-    var errors = require_errors2();
+    var errors = require_errors();
     var identity = require_identity();
     var composeDoc = require_compose_doc();
     var resolveEnd = require_resolve_end();
@@ -12895,12 +5209,12 @@ var require_composer = __commonJS({
         this.prelude = [];
         this.errors = [];
         this.warnings = [];
-        this.onError = (source, code, message, warning) => {
+        this.onError = (source, code2, message, warning) => {
           const pos = getErrorPos(source);
           if (warning)
-            this.warnings.push(new errors.YAMLWarning(pos, code, message));
+            this.warnings.push(new errors.YAMLWarning(pos, code2, message));
           else
-            this.errors.push(new errors.YAMLParseError(pos, code, message));
+            this.errors.push(new errors.YAMLParseError(pos, code2, message));
         };
         this.directives = new directives.Directives({ version: options.version || "1.2" });
         this.options = options;
@@ -13058,16 +5372,16 @@ var require_cst_scalar = __commonJS({
     "use strict";
     var resolveBlockScalar = require_resolve_block_scalar();
     var resolveFlowScalar = require_resolve_flow_scalar();
-    var errors = require_errors2();
+    var errors = require_errors();
     var stringifyString = require_stringifyString();
     function resolveAsScalar(token, strict = true, onError) {
       if (token) {
-        const _onError = (pos, code, message) => {
+        const _onError = (pos, code2, message) => {
           const offset = typeof pos === "number" ? pos : Array.isArray(pos) ? pos[0] : pos.offset;
           if (onError)
-            onError(offset, code, message);
+            onError(offset, code2, message);
           else
-            throw new errors.YAMLParseError([offset, offset + 1], code, message);
+            throw new errors.YAMLParseError([offset, offset + 1], code2, message);
         };
         switch (token.type) {
           case "scalar":
@@ -14962,7 +7276,7 @@ var require_public_api = __commonJS({
     "use strict";
     var composer = require_composer();
     var Document = require_Document();
-    var errors = require_errors2();
+    var errors = require_errors();
     var log = require_log();
     var identity = require_identity();
     var lineCounter = require_line_counter();
@@ -15054,13 +7368,13 @@ var require_public_api = __commonJS({
 });
 
 // node_modules/yaml/dist/index.js
-var require_dist2 = __commonJS({
+var require_dist = __commonJS({
   "node_modules/yaml/dist/index.js"(exports) {
     "use strict";
     var composer = require_composer();
     var Document = require_Document();
     var Schema = require_Schema();
-    var errors = require_errors2();
+    var errors = require_errors();
     var Alias = require_Alias();
     var identity = require_identity();
     var Pair = require_Pair();
@@ -17600,10 +9914,10 @@ var nanoid = /^[a-zA-Z0-9_-]{21}$/;
 var duration = /^P(?:(\d+W)|(?!.*W)(?=\d|T\d)(\d+Y)?(\d+M)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+([.,]\d+)?S)?)?)$/;
 var extendedDuration = /^[-+]?P(?!$)(?:(?:[-+]?\d+Y)|(?:[-+]?\d+[.,]\d+Y$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:(?:[-+]?\d+W)|(?:[-+]?\d+[.,]\d+W$))?(?:(?:[-+]?\d+D)|(?:[-+]?\d+[.,]\d+D$))?(?:T(?=[\d+-])(?:(?:[-+]?\d+H)|(?:[-+]?\d+[.,]\d+H$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:[-+]?\d+(?:[.,]\d+)?S)?)??$/;
 var guid = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/;
-var uuid = (version2) => {
-  if (!version2)
+var uuid = (version3) => {
+  if (!version3)
     return /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/;
-  return new RegExp(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-${version2}[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$`);
+  return new RegExp(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-${version3}[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$`);
 };
 var uuid4 = /* @__PURE__ */ uuid(4);
 var uuid6 = /* @__PURE__ */ uuid(6);
@@ -19098,42 +11412,42 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def2) =
     }
     doc.write(`const newResult = {};`);
     for (const key of normalized.keys) {
-      const id4 = ids[key];
+      const id5 = ids[key];
       const k = esc(key);
       const schema = shape[key];
       const isOptionalIn = schema?._zod?.optin === "optional";
       const isOptionalOut = schema?._zod?.optout === "optional";
-      doc.write(`const ${id4} = ${parseStr(key)};`);
+      doc.write(`const ${id5} = ${parseStr(key)};`);
       if (isOptionalIn && isOptionalOut) {
         doc.write(`
-        if (${id4}.issues.length) {
+        if (${id5}.issues.length) {
           if (${k} in input) {
-            payload.issues = payload.issues.concat(${id4}.issues.map(iss => ({
+            payload.issues = payload.issues.concat(${id5}.issues.map(iss => ({
               ...iss,
               path: iss.path ? [${k}, ...iss.path] : [${k}]
             })));
           }
         }
         
-        if (${id4}.value === undefined) {
+        if (${id5}.value === undefined) {
           if (${k} in input) {
             newResult[${k}] = undefined;
           }
         } else {
-          newResult[${k}] = ${id4}.value;
+          newResult[${k}] = ${id5}.value;
         }
         
       `);
       } else if (!isOptionalIn) {
         doc.write(`
-        const ${id4}_present = ${k} in input;
-        if (${id4}.issues.length) {
-          payload.issues = payload.issues.concat(${id4}.issues.map(iss => ({
+        const ${id5}_present = ${k} in input;
+        if (${id5}.issues.length) {
+          payload.issues = payload.issues.concat(${id5}.issues.map(iss => ({
             ...iss,
             path: iss.path ? [${k}, ...iss.path] : [${k}]
           })));
         }
-        if (!${id4}_present && !${id4}.issues.length) {
+        if (!${id5}_present && !${id5}.issues.length) {
           payload.issues.push({
             code: "invalid_type",
             expected: "nonoptional",
@@ -19142,30 +11456,30 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def2) =
           });
         }
 
-        if (${id4}_present) {
-          if (${id4}.value === undefined) {
+        if (${id5}_present) {
+          if (${id5}.value === undefined) {
             newResult[${k}] = undefined;
           } else {
-            newResult[${k}] = ${id4}.value;
+            newResult[${k}] = ${id5}.value;
           }
         }
 
       `);
       } else {
         doc.write(`
-        if (${id4}.issues.length) {
-          payload.issues = payload.issues.concat(${id4}.issues.map(iss => ({
+        if (${id5}.issues.length) {
+          payload.issues = payload.issues.concat(${id5}.issues.map(iss => ({
             ...iss,
             path: iss.path ? [${k}, ...iss.path] : [${k}]
           })));
         }
         
-        if (${id4}.value === undefined) {
+        if (${id5}.value === undefined) {
           if (${k} in input) {
             newResult[${k}] = undefined;
           }
         } else {
-          newResult[${k}] = ${id4}.value;
+          newResult[${k}] = ${id5}.value;
         }
         
       `);
@@ -27497,26 +19811,26 @@ function extractDefs(ctx, schema) {
     throw new Error("Unprocessed schema. This is a bug in Zod.");
   const idToSchema = /* @__PURE__ */ new Map();
   for (const entry of ctx.seen.entries()) {
-    const id4 = ctx.metadataRegistry.get(entry[0])?.id;
-    if (id4) {
-      const existing = idToSchema.get(id4);
+    const id5 = ctx.metadataRegistry.get(entry[0])?.id;
+    if (id5) {
+      const existing = idToSchema.get(id5);
       if (existing && existing !== entry[0]) {
-        throw new Error(`Duplicate schema id "${id4}" detected during JSON Schema conversion. Two different schemas cannot share the same id when converted together.`);
+        throw new Error(`Duplicate schema id "${id5}" detected during JSON Schema conversion. Two different schemas cannot share the same id when converted together.`);
       }
-      idToSchema.set(id4, entry[0]);
+      idToSchema.set(id5, entry[0]);
     }
   }
   const makeURI = (entry) => {
     const defsSegment = ctx.target === "draft-2020-12" ? "$defs" : "definitions";
     if (ctx.external) {
       const externalId = ctx.external.registry.get(entry[0])?.id;
-      const uriGenerator = ctx.external.uri ?? ((id5) => id5);
+      const uriGenerator = ctx.external.uri ?? ((id6) => id6);
       if (externalId) {
         return { ref: uriGenerator(externalId) };
       }
-      const id4 = entry[1].defId ?? entry[1].schema.id ?? `schema${ctx.counter++}`;
-      entry[1].defId = id4;
-      return { defId: id4, ref: `${uriGenerator("__shared")}#/${defsSegment}/${id4}` };
+      const id5 = entry[1].defId ?? entry[1].schema.id ?? `schema${ctx.counter++}`;
+      entry[1].defId = id5;
+      return { defId: id5, ref: `${uriGenerator("__shared")}#/${defsSegment}/${id5}` };
     }
     if (entry[1] === root) {
       return { ref: "#" };
@@ -27564,8 +19878,8 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         continue;
       }
     }
-    const id4 = ctx.metadataRegistry.get(entry[0])?.id;
-    if (id4) {
+    const id5 = ctx.metadataRegistry.get(entry[0])?.id;
+    if (id5) {
       extractToDef(entry);
       continue;
     }
@@ -27661,10 +19975,10 @@ function finalize(ctx, schema) {
   } else {
   }
   if (ctx.external?.uri) {
-    const id4 = ctx.external.registry.get(schema)?.id;
-    if (!id4)
+    const id5 = ctx.external.registry.get(schema)?.id;
+    if (!id5)
       throw new Error("Schema is missing an `id` property");
-    result.$id = ctx.external.uri(id4);
+    result.$id = ctx.external.uri(id5);
   }
   Object.assign(result, root.def ?? root.schema);
   const rootMetaId = ctx.metadataRegistry.get(schema)?.id;
@@ -30479,10 +22793,10 @@ function fromJSONSchema(schema, params) {
   } catch {
     throw new Error("fromJSONSchema input is not valid JSON (possibly cyclic); use $defs/$ref for recursive schemas");
   }
-  const version2 = detectVersion(normalized, params?.defaultTarget);
+  const version3 = detectVersion(normalized, params?.defaultTarget);
   const defs = normalized.$defs || normalized.definitions || {};
   const ctx = {
-    version: version2,
+    version: version3,
     defs,
     refs: /* @__PURE__ */ new Map(),
     processing: /* @__PURE__ */ new Set(),
@@ -30619,9 +22933,9 @@ function ordinal(a, b) {
 function sortCanonical(value) {
   if (Array.isArray(value)) return value.map(sortCanonical);
   if (value !== null && typeof value === "object") {
-    const record4 = value;
+    const record3 = value;
     return Object.fromEntries(
-      Object.keys(record4).sort(ordinal).map((key) => [key, sortCanonical(record4[key])])
+      Object.keys(record3).sort(ordinal).map((key) => [key, sortCanonical(record3[key])])
     );
   }
   if (value === void 0) throw new TypeError("canonical JSON cannot contain undefined");
@@ -30677,9 +22991,6 @@ function parseCanonicalDocument(bytes, label = "JSON document") {
 import { mkdir as mkdir8 } from "node:fs/promises";
 import { join as join15 } from "node:path";
 
-// src/contracts/gates.ts
-import { isDeepStrictEqual } from "node:util";
-
 // src/contracts/evidence.ts
 var RESERVED_DEVICE_NAME = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.[^/]*)?$/iu;
 var isReservedDeviceName = (component) => RESERVED_DEVICE_NAME.test(component);
@@ -30687,8 +22998,9 @@ var endsWithDotOrSpace = (component) => /[. ]$/u.test(component);
 var pathSegmentSafe = (schema) => schema.refine((value) => !isReservedDeviceName(value), "must not be a reserved Windows device name").refine((value) => !endsWithDotOrSpace(value), "must not end with a dot or a space");
 var sha256DigestV1Schema = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var safeIdV1Schema = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
-var pathSafeIdV1Schema = pathSegmentSafe(external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u));
-var taskSlugV1Schema = pathSegmentSafe(external_exports.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/u));
+var pathSafeIdV1Schema = pathSegmentSafe(external_exports.string().regex(/^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?$)(?!.*[. ]$)[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u));
+var createTaskSlugV1Schema = () => pathSegmentSafe(external_exports.string().regex(/^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$/u));
+var taskSlugV1Schema = createTaskSlugV1Schema();
 var safeCodeV1Schema = external_exports.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/u);
 var safeVersionV1Schema = external_exports.string().regex(/^[A-Za-z0-9.-]{1,64}$/u);
 var safeIntegerV1Schema = external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
@@ -30717,47 +23029,6 @@ function parseSafeInteger(value) {
   return safeIntegerV1Schema.parse(value);
 }
 
-// src/contracts/phase-instance.ts
-function parsePositiveSafePhaseNumber(value) {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
-    throw new TypeError("phase number must be a positive safe integer");
-  }
-  return value;
-}
-function encodePhaseInstance(value) {
-  switch (value.kind) {
-    case "prd":
-    case "design":
-      return value.kind;
-    case "phase-design":
-    case "phase-impl": {
-      const phase4 = parsePositiveSafePhaseNumber(value.phase);
-      return `${value.kind}-${phase4}`;
-    }
-  }
-}
-var ITERATED_PHASE = /^(phase-design|phase-impl)-([1-9][0-9]*)$/u;
-function decodePhaseInstance(value) {
-  if (value === "prd" || value === "design") return { kind: value };
-  if (typeof value !== "string") throw new TypeError("phase instance must be a canonical string");
-  const match = ITERATED_PHASE.exec(value);
-  if (match === null) throw new TypeError("phase instance must use a canonical phase encoding");
-  const phase4 = parsePositiveSafePhaseNumber(Number(match[2]));
-  return match[1] === "phase-design" ? { kind: "phase-design", phase: phase4 } : { kind: "phase-impl", phase: phase4 };
-}
-var phaseInstanceIdV1Schema = external_exports.string().refine((value) => {
-  try {
-    decodePhaseInstance(value);
-    return true;
-  } catch {
-    return false;
-  }
-});
-function parsePhaseInstanceId(value) {
-  assertPlainJson(value, "phase instance id");
-  return phaseInstanceIdV1Schema.parse(value);
-}
-
 // src/contracts/path-claims.ts
 var utf8Length = (value) => Buffer.byteLength(value, "utf8");
 var containsControl = (value) => /[\u0000-\u001f\u007f-\u009f]/u.test(value);
@@ -30766,9 +23037,14 @@ var hasInvalidComponent = (value) => value.split("/").some((component) => compon
 var forbiddenCharacter = /[:*?[\]<>|]/u;
 var hasReservedComponent = (value) => value.split("/").some(isReservedDeviceName);
 var hasTrailingDotOrSpace = (value) => value.split("/").some(endsWithDotOrSpace);
-var pathClaimLexicalSchema = external_exports.string().min(1).refine((value) => utf8Length(value) <= 1024, "path claim must be at most 1024 UTF-8 bytes").refine((value) => !value.startsWith("/"), "path claim must be relative").refine((value) => !hasDriveOrUncPrefix(value), "path claim must not use a drive or UNC prefix").refine((value) => !value.includes("\\"), "path claim must use forward slashes").refine((value) => !containsControl(value), "path claim must not contain control characters").refine((value) => !forbiddenCharacter.test(value), "path claim must not contain : * ? [ ] < > or |").refine((value) => !hasInvalidComponent(value), "path claim components must be non-empty and may not be . or ..").refine((value) => !hasReservedComponent(value), "path claim components must not be reserved device names").refine((value) => !hasTrailingDotOrSpace(value), "path claim components must not end with a dot or a space").refine((value) => value.normalize("NFC") === value, "path claim components must already be NFC");
-var taskPathClaimV1Schema = pathClaimLexicalSchema;
-var repositoryPathClaimV1Schema = pathClaimLexicalSchema;
+var PATH_CLAIM_PATTERN = new RegExp(
+  String.raw`^(?!/)(?![A-Za-z]:)(?!//)(?!.*\\)(?!.*[\u0000-\u001F\u007F-\u009F])(?!\.\.?(?:/|$))(?!.*\/\.\.?(?:/|$))(?!.*//)(?!.*[:*?\[\]<>|])(?!.*[. ](?:/|$))(?!(?:.*/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?(?:/|$)).+$`,
+  "u"
+);
+var pathClaimLexical = () => external_exports.string().min(1).regex(PATH_CLAIM_PATTERN, "path claim violates the lexical path pattern").refine((value) => utf8Length(value) <= 1024, "path claim must be at most 1024 UTF-8 bytes").refine((value) => !value.startsWith("/"), "path claim must be relative").refine((value) => !hasDriveOrUncPrefix(value), "path claim must not use a drive or UNC prefix").refine((value) => !value.includes("\\"), "path claim must use forward slashes").refine((value) => !containsControl(value), "path claim must not contain control characters").refine((value) => !forbiddenCharacter.test(value), "path claim must not contain : * ? [ ] < > or |").refine((value) => !hasInvalidComponent(value), "path claim components must be non-empty and may not be . or ..").refine((value) => !hasReservedComponent(value), "path claim components must not be reserved device names").refine((value) => !hasTrailingDotOrSpace(value), "path claim components must not end with a dot or a space").refine((value) => value.normalize("NFC") === value, "path claim components must already be NFC");
+var pathClaimLexicalV1Schema = pathClaimLexical();
+var taskPathClaimV1Schema = pathClaimLexical();
+var repositoryPathClaimV1Schema = pathClaimLexical();
 function parseTaskPathClaim(value) {
   assertPlainJson(value, "task path claim");
   return taskPathClaimV1Schema.parse(value);
@@ -30813,6 +23089,103 @@ var REPOSITORY_PATH_CLASSES = [
 var PATH_CLASSES = [...TASK_PATH_CLASSES, ...REPOSITORY_PATH_CLASSES];
 var pathClassSchema = external_exports.enum(PATH_CLASSES);
 
+// src/contracts/validators.ts
+function isSortedUniqueBy(items, key = String) {
+  return Array.isArray(items) && items.every((value, index) => index === 0 || key(items[index - 1]) < key(value));
+}
+function tupleKey(properties) {
+  const propertyNames = typeof properties === "string" ? [properties] : properties;
+  return (value) => {
+    if (typeof value !== "object" || value === null) return String(value);
+    return propertyNames.map((property) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, property);
+      return String(descriptor !== void 0 && "value" in descriptor ? descriptor.value : void 0);
+    }).join("\0");
+  };
+}
+
+// src/contracts/durable-maintenance.ts
+var MAINTENANCE_DELETION_CATEGORIES = [
+  "unreferenced-attempt",
+  "superseded-payload",
+  "retired-intent",
+  "retired-staged-request"
+];
+var safeInteger = safeIntegerV1Schema;
+var sha256Digest = sha256DigestV1Schema;
+var HUMAN_REASON_MAX_UTF8_BYTES = 4096;
+var maintenanceDeletionV1Schema = external_exports.object({
+  digest: sha256Digest,
+  path: repositoryPathClaimV1Schema,
+  byte_count: safeInteger,
+  category: external_exports.enum(MAINTENANCE_DELETION_CATEGORIES)
+}).strict();
+var maintenanceRecordV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  maintenance_id: pathSafeIdV1Schema,
+  task_id: taskSlugV1Schema,
+  performed_at_revision: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  human_reason: external_exports.string().min(1).refine((value) => Buffer.byteLength(value, "utf8") <= HUMAN_REASON_MAX_UTF8_BYTES, "human_reason must be at most 4096 UTF-8 bytes"),
+  reachability_proof_digest: sha256Digest,
+  deletions: external_exports.array(maintenanceDeletionV1Schema).min(1).refine((items) => isSortedUniqueBy(items, tupleKey("digest")), "deletions must be sorted by digest with no duplicates"),
+  total_bytes_deleted: safeInteger
+}).strict();
+function parseMaintenanceRecord(value) {
+  assertPlainJson(value, "maintenance record");
+  return maintenanceRecordV1Schema.parse(value);
+}
+
+// src/contracts/gates.ts
+import { isDeepStrictEqual } from "node:util";
+
+// src/contracts/phase-instance.ts
+var positiveSafePhaseNumberV1Schema = external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+var phaseInstanceV1Schema = external_exports.discriminatedUnion("kind", [
+  external_exports.object({ kind: external_exports.literal("prd") }).strict(),
+  external_exports.object({ kind: external_exports.literal("design") }).strict(),
+  external_exports.object({ kind: external_exports.literal("phase-design"), phase: positiveSafePhaseNumberV1Schema }).strict(),
+  external_exports.object({ kind: external_exports.literal("phase-impl"), phase: positiveSafePhaseNumberV1Schema }).strict()
+]);
+function parsePositiveSafePhaseNumber(value) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError("phase number must be a positive safe integer");
+  }
+  return value;
+}
+function encodePhaseInstance(value) {
+  switch (value.kind) {
+    case "prd":
+    case "design":
+      return value.kind;
+    case "phase-design":
+    case "phase-impl": {
+      const phase4 = parsePositiveSafePhaseNumber(value.phase);
+      return `${value.kind}-${phase4}`;
+    }
+  }
+}
+var ITERATED_PHASE = /^(phase-design|phase-impl)-([1-9][0-9]*)$/u;
+function decodePhaseInstance(value) {
+  if (value === "prd" || value === "design") return { kind: value };
+  if (typeof value !== "string") throw new TypeError("phase instance must be a canonical string");
+  const match = ITERATED_PHASE.exec(value);
+  if (match === null) throw new TypeError("phase instance must use a canonical phase encoding");
+  const phase4 = parsePositiveSafePhaseNumber(Number(match[2]));
+  return match[1] === "phase-design" ? { kind: "phase-design", phase: phase4 } : { kind: "phase-impl", phase: phase4 };
+}
+var phaseInstanceIdV1Schema = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((value) => {
+  try {
+    decodePhaseInstance(value);
+    return true;
+  } catch {
+    return false;
+  }
+});
+function parsePhaseInstanceId(value) {
+  assertPlainJson(value, "phase instance id");
+  return phaseInstanceIdV1Schema.parse(value);
+}
+
 // src/contracts/vocabulary.ts
 var PHASE_IDS = ["explore", "prd", "design", "phase-design", "phase-impl"];
 var PIPELINE_STEPS = ["produce", "counter_review", "triage", "adjudicate"];
@@ -30824,7 +23197,7 @@ var GATE_KINDS = ["artifact-approval", "review-trigger", "material-drift", "adju
 var safeId = safeIdV1Schema;
 var boundedText = external_exports.string().min(1).max(4096).regex(/\S/u);
 var digest = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var safeInteger = external_exports.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+var safeInteger2 = external_exports.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 var rule = external_exports.object({ rule_id: safeId, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict();
 var ruleResolution = external_exports.object({ rule, resolution: boundedText }).strict();
 var waiverScope = external_exports.object({ operation: external_exports.enum(["review-trigger", "adjudication-failure"]), boundary: external_exports.enum(["subject", "phase", "task"]) }).strict();
@@ -30856,7 +23229,7 @@ var contexts = {
     for (const item of value.eligible_waiver_rules) if (!available.has(ruleKey(item))) context2.addIssue({ code: "custom", message: "eligible waiver rule must be failed or uncertain" });
     if (available.size === 0) context2.addIssue({ code: "custom", message: "adjudication failure must identify a rule" });
   }),
-  "attempts-exhausted": external_exports.object({ step: external_exports.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger }).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts"),
+  "attempts-exhausted": external_exports.object({ step: external_exports.enum(PIPELINE_STEPS), attempts: safeInteger2, maximum_attempts: safeInteger2 }).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts"),
   "constitution-edit": external_exports.object({ pinned_constitution_digest: digest, current_constitution_digest: digest, changed_path_class: external_exports.literal("task-branch-constitution") }).strict(),
   "commit-authorization": external_exports.object({ target_ref: boundedText, diff_digest: digest, current_artifact_digests: canonicalDigests.min(1), parent_document_digests: canonicalDigests.min(1) }).strict(),
   "restore-collision": external_exports.object({ path: taskPathClaimV1Schema, recorded_generation_digest: digest, current_generation_digest: digest, adoption_candidate: authorityLink.optional() }).strict(),
@@ -30893,7 +23266,11 @@ var GATE_CONTRACTS = Object.freeze(Object.fromEntries(GATE_KINDS.map((kind) => [
 var connectedProvenance = external_exports.object({ schema_version: external_exports.literal("1"), actor_class: external_exports.enum(["human", "archforge"]), assurance: external_exports.literal("declared-local-trace"), channel: external_exports.literal("connected-host"), decision_event_id: safeId, connection_id: safeId, request_id_digest: digest, recorded_at: external_exports.string().datetime({ offset: false, local: false, precision: 3 }) }).strict();
 var localProvenance = external_exports.object({ schema_version: external_exports.literal("1"), actor_class: external_exports.enum(["human", "archforge"]), assurance: external_exports.literal("declared-local-trace"), channel: external_exports.literal("archflow-local"), decision_event_id: safeId, helper_invocation_id: safeId, recorded_at: external_exports.string().datetime({ offset: false, local: false, precision: 3 }) }).strict();
 var humanDecisionProvenanceV1Schema = external_exports.union([connectedProvenance, localProvenance]);
-var envelopeBase = { schema_version: external_exports.literal("1"), gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, phase_instance: external_exports.string().refine((value) => {
+var gateDecisionSchemaDefs = Object.freeze({
+  connected: connectedProvenance,
+  local: localProvenance
+});
+var envelopeBase = { schema_version: external_exports.literal("1"), gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((value) => {
   try {
     decodePhaseInstance(value);
     return true;
@@ -30901,17 +23278,51 @@ var envelopeBase = { schema_version: external_exports.literal("1"), gate_id: pat
     return false;
   }
 }), subject_digest: digest, context_digest: digest, human_provenance: external_exports.union([connectedProvenance, localProvenance]) };
-var gateContractV1Schema = external_exports.discriminatedUnion("kind", [
-  external_exports.object({ kind: external_exports.literal("artifact-approval"), context: contexts["artifact-approval"], payload: decisions["artifact-approval"] }).strict(),
-  external_exports.object({ kind: external_exports.literal("review-trigger"), context: contexts["review-trigger"], payload: decisions["review-trigger"] }).strict(),
-  external_exports.object({ kind: external_exports.literal("material-drift"), context: contexts["material-drift"], payload: decisions["material-drift"] }).strict(),
-  external_exports.object({ kind: external_exports.literal("adjudication-failure"), context: contexts["adjudication-failure"], payload: decisions["adjudication-failure"] }).strict(),
-  external_exports.object({ kind: external_exports.literal("attempts-exhausted"), context: contexts["attempts-exhausted"], payload: decisions["attempts-exhausted"] }).strict(),
-  external_exports.object({ kind: external_exports.literal("constitution-edit"), context: contexts["constitution-edit"], payload: decisions["constitution-edit"] }).strict(),
-  external_exports.object({ kind: external_exports.literal("commit-authorization"), context: contexts["commit-authorization"], payload: decisions["commit-authorization"] }).strict(),
-  external_exports.object({ kind: external_exports.literal("restore-collision"), context: contexts["restore-collision"], payload: decisions["restore-collision"] }).strict(),
-  external_exports.object({ kind: external_exports.literal("migration-audit"), context: contexts["migration-audit"], payload: decisions["migration-audit"] }).strict()
-]);
+var contractArms = Object.fromEntries(GATE_KINDS.map((kind) => [
+  kind,
+  external_exports.object({ kind: external_exports.literal(kind), context: contexts[kind], payload: decisions[kind] }).strict()
+]));
+var gateContractV1Schema = external_exports.discriminatedUnion("kind", GATE_KINDS.map((kind) => contractArms[kind]));
+var gateContractSchemaDefs = Object.freeze({
+  // `canonicalDigests` stays unregistered: both uses derive `.min(1)` from it, and a derivation of
+  // a registered def emits as a bare `$ref` plus `minItems`, which Ajv strict mode rejects.
+  digest,
+  text: boundedText,
+  safeInteger: safeInteger2,
+  rule,
+  rules: canonicalRules,
+  waiverScope,
+  authorityLink,
+  artifactApprovalContext: contexts["artifact-approval"],
+  reviewTriggerContext: contexts["review-trigger"],
+  materialDriftContext: contexts["material-drift"],
+  adjudicationFailureContext: contexts["adjudication-failure"],
+  attemptsExhaustedContext: contexts["attempts-exhausted"],
+  constitutionEditContext: contexts["constitution-edit"],
+  commitAuthorizationContext: contexts["commit-authorization"],
+  restoreCollisionContext: contexts["restore-collision"],
+  migrationAuditContext: contexts["migration-audit"],
+  artifactApprovalDecision: decisions["artifact-approval"],
+  reviewTriggerDecision: decisions["review-trigger"],
+  materialDriftDecision: decisions["material-drift"],
+  adjudicationFailureDecision: decisions["adjudication-failure"],
+  attemptsExhaustedDecision: decisions["attempts-exhausted"],
+  constitutionEditDecision: decisions["constitution-edit"],
+  commitAuthorizationDecision: decisions["commit-authorization"],
+  restoreCollisionDecision: decisions["restore-collision"],
+  migrationAuditDecision: decisions["migration-audit"],
+  artifactApproval: contractArms["artifact-approval"],
+  reviewTrigger: contractArms["review-trigger"],
+  materialDrift: contractArms["material-drift"],
+  adjudicationFailure: contractArms["adjudication-failure"],
+  attemptsExhausted: contractArms["attempts-exhausted"],
+  constitutionEdit: contractArms["constitution-edit"],
+  commitAuthorization: contractArms["commit-authorization"],
+  restoreCollision: contractArms["restore-collision"],
+  migrationAudit: contractArms["migration-audit"]
+});
+var gateRuleVersionRefSchema = rule;
+var gateWaiverScopeSchema = waiverScope;
 var gateDecisionEnvelopeV1Schema = external_exports.discriminatedUnion("kind", [
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("artifact-approval"), payload: decisions["artifact-approval"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("review-trigger"), payload: decisions["review-trigger"] }).strict(),
@@ -30966,23 +23377,400 @@ function gateDecisionEffect(payload) {
   return effects[payload.decision];
 }
 
-// src/contracts/supplemental.ts
+// src/contracts/trust.ts
+import { createHash as createHash2 } from "node:crypto";
+
+// src/contracts/review.ts
+var REVIEW_VERDICTS = ["pass", "advisory", "fail"];
+var REVIEW_ROLES = ["counter-review", "gate-counter-review"];
+var REVIEW_FINDING_SEVERITIES = ["blocker", "major", "minor"];
+var MODEL_FAMILIES = ["claude", "codex"];
+var ADAPTER_IDS = ["claude-cli", "codex-cli"];
+var EFFORT_VALUES = ["low", "medium", "high", "xhigh", "max", "ultra"];
+var nonBlank = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
+var id = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 var digest2 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var nonBlank = external_exports.string().min(1).refine((value) => value.trim().length > 0, "must contain a non-whitespace character");
+var taskSlug = createTaskSlugV1Schema();
+var phaseInstance = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
+var safePositive = external_exports.number().int().positive().safe();
+var ruleVersionRefSchema = external_exports.object({ rule_id: id, rule_version: safePositive }).strict();
+var reviewFindingSchema = external_exports.object({
+  finding_id: id,
+  severity: external_exports.enum(REVIEW_FINDING_SEVERITIES),
+  blocking: external_exports.boolean(),
+  summary: nonBlank,
+  evidence: nonBlank,
+  suggested_resolution: nonBlank
+}).strict().superRefine((finding, context2) => {
+  if (finding.blocking !== (finding.severity === "blocker")) {
+    context2.addIssue({ code: "custom", path: ["blocking"], message: "only blocker findings are blocking" });
+  }
+});
+var rawReviewSchema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  task_id: taskSlug,
+  phase_instance: phaseInstance,
+  step: external_exports.literal("counter_review"),
+  role: external_exports.enum(REVIEW_ROLES),
+  subject_digest: digest2,
+  input_fingerprint: digest2,
+  rubric_digest: digest2,
+  producer_family: external_exports.enum(MODEL_FAMILIES),
+  findings: external_exports.array(reviewFindingSchema),
+  matched_rule_versions: external_exports.array(ruleVersionRefSchema),
+  verdict: external_exports.enum(REVIEW_VERDICTS),
+  blocking_count: external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+}).strict().superRefine((review, context2) => {
+  const findingIds = /* @__PURE__ */ new Set();
+  review.findings.forEach((finding, index) => {
+    if (findingIds.has(finding.finding_id)) context2.addIssue({ code: "custom", path: ["findings", index, "finding_id"], message: "duplicate finding_id" });
+    findingIds.add(finding.finding_id);
+  });
+  const rules2 = /* @__PURE__ */ new Set();
+  review.matched_rule_versions.forEach((rule4, index) => {
+    const key = `${rule4.rule_id}:${rule4.rule_version}`;
+    if (rules2.has(key)) context2.addIssue({ code: "custom", path: ["matched_rule_versions", index], message: "duplicate rule version" });
+    rules2.add(key);
+  });
+  const expected = expectedReviewSummary(review.findings);
+  if (review.blocking_count !== expected.blocking_count) context2.addIssue({ code: "custom", path: ["blocking_count"], message: `review blocking_count must be ${expected.blocking_count}` });
+  if (review.verdict !== expected.verdict) context2.addIssue({ code: "custom", path: ["verdict"], message: `review verdict must be ${expected.verdict}` });
+});
+function expectedReviewSummary(findings) {
+  const blocking_count = findings.filter((finding) => finding.blocking).length;
+  return { blocking_count, verdict: blocking_count > 0 ? "fail" : findings.length > 0 ? "advisory" : "pass" };
+}
+function validateReviewClaims(parsed) {
+  const expected = expectedReviewSummary(parsed.findings);
+  if (parsed.blocking_count !== expected.blocking_count) throw new TypeError(`review blocking_count must be ${expected.blocking_count}`);
+  if (parsed.verdict !== expected.verdict) throw new TypeError(`review verdict must be ${expected.verdict}`);
+}
+function parseAndDeriveReview(value) {
+  assertPlainJson(value, "review");
+  const parsed = rawReviewSchema.parse(value);
+  validateReviewClaims(parsed);
+  return parsed;
+}
+var provenanceBase = rawReviewSchema.safeExtend({
+  model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]),
+  model: nonBlank,
+  effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")])
+});
+var serverAttestedReviewSchema = provenanceBase.safeExtend({
+  assurance: external_exports.literal("server-attested"),
+  adapter: external_exports.enum(ADAPTER_IDS),
+  cli_version: nonBlank,
+  model_family: external_exports.enum(MODEL_FAMILIES),
+  effort: external_exports.enum(EFFORT_VALUES),
+  invocation_id: id,
+  envelope_input_digest: digest2,
+  observed_output_digest: digest2,
+  result_id: id
+}).strict().superRefine((review, context2) => {
+  const expectedReviewer = review.producer_family === "claude" ? "codex" : "claude";
+  if (review.model_family !== expectedReviewer) context2.addIssue({ code: "custom", path: ["model_family"], message: "server-attested review must be opposite-family" });
+});
+var degradedReviewSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank }).strict();
+var reviewEvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);
+function parseReviewEvidence(value) {
+  assertPlainJson(value, "review evidence");
+  const parsed = reviewEvidenceSchema.parse(value);
+  validateReviewClaims(parsed);
+  return parsed;
+}
+
+// src/contracts/adjudication.ts
+var CONSTITUTION_RESULTS = ["pass", "fail", "uncertain"];
+var DRIFT_RESULTS = ["aligned", "incidental", "material"];
+var COMPLIANCE_RESULTS = ["pass", "fail", "uncertain"];
+var TRIGGER_RESULTS = ["not-matched", "matched", "uncertain"];
+var MECHANICAL_EVIDENCE_STATES = ["current", "missing", "stale", "unknown", "failed", "digest-mismatch"];
+var nonBlank2 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
+var id2 = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
+var digest3 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var taskSlug2 = createTaskSlugV1Schema();
+var ruleVersionSchema = external_exports.object({ rule_id: id2, rule_version: external_exports.number().int().positive().safe() }).strict();
+var mechanicalEvidenceSchema = external_exports.object({
+  mechanism: nonBlank2,
+  state: external_exports.enum(MECHANICAL_EVIDENCE_STATES),
+  subject_digest: digest3.optional(),
+  evidence_digest: digest3.optional(),
+  details: nonBlank2
+}).strict().superRefine((evidence, context2) => {
+  const hasBindings = evidence.subject_digest !== void 0 && evidence.evidence_digest !== void 0;
+  if ((evidence.state === "current" || evidence.state === "stale") && !hasBindings) context2.addIssue({ code: "custom", message: `${evidence.state} evidence requires subject and evidence digests` });
+  if ((evidence.state === "missing" || evidence.state === "unknown") && (evidence.subject_digest !== void 0 || evidence.evidence_digest !== void 0)) context2.addIssue({ code: "custom", message: `${evidence.state} evidence cannot claim digests` });
+});
+var constitutionRuleFindingSchema = ruleVersionSchema.extend({
+  compliance: external_exports.enum(COMPLIANCE_RESULTS),
+  rationale: nonBlank2,
+  trigger: external_exports.enum(TRIGGER_RESULTS),
+  trigger_evidence: nonBlank2,
+  enforced_by: external_exports.array(mechanicalEvidenceSchema)
+}).strict();
+var driftFindingSchema = external_exports.object({
+  upstream_digest: digest3,
+  drift: external_exports.enum(DRIFT_RESULTS),
+  affected_claim_ids: external_exports.array(id2),
+  rationale: nonBlank2
+}).strict().superRefine((finding, context2) => {
+  if (finding.drift === "aligned" !== (finding.affected_claim_ids.length === 0)) context2.addIssue({ code: "custom", path: ["affected_claim_ids"], message: "aligned drift has no affected claims; other drift must identify claims" });
+  if (new Set(finding.affected_claim_ids).size !== finding.affected_claim_ids.length) context2.addIssue({ code: "custom", path: ["affected_claim_ids"], message: "duplicate affected claim" });
+});
+var rawAdjudicationSchema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  task_id: taskSlug2,
+  phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
+  step: external_exports.literal("adjudicate"),
+  subject_digest: digest3,
+  input_fingerprint: digest3,
+  pinned_constitution_digest: digest3,
+  approved_upstream_digests: external_exports.array(digest3),
+  source_evidence_set_digest: digest3,
+  rule_findings: external_exports.array(constitutionRuleFindingSchema),
+  drift_findings: external_exports.array(driftFindingSchema),
+  constitution: external_exports.enum(CONSTITUTION_RESULTS),
+  drift: external_exports.enum(DRIFT_RESULTS),
+  matched_rule_versions: external_exports.array(ruleVersionSchema),
+  uncertain_rule_versions: external_exports.array(ruleVersionSchema)
+}).strict().superRefine((adjudication, context2) => {
+  try {
+    validateAdjudicationClaims(adjudication);
+  } catch (error51) {
+    context2.addIssue({ code: "custom", message: error51 instanceof Error ? error51.message : "invalid adjudication semantics" });
+  }
+});
+var ruleKey2 = (rule4) => `${rule4.rule_id}:${rule4.rule_version}`;
+function assertSortedUnique(values, label) {
+  if (new Set(values).size !== values.length || values.some((value, index) => index > 0 && values[index - 1] >= value)) throw new TypeError(`${label} must be sorted and unique`);
+}
+function sameRuleSet(actual, expected) {
+  return actual.length === expected.length && actual.every((rule4, index) => ruleKey2(rule4) === ruleKey2(expected[index]));
+}
+function validateAdjudicationClaims(parsed) {
+  assertSortedUnique(parsed.approved_upstream_digests, "approved_upstream_digests");
+  assertSortedUnique(parsed.rule_findings.map(ruleKey2), "rule_findings");
+  assertSortedUnique(parsed.drift_findings.map((finding) => finding.upstream_digest), "drift_findings");
+  if (parsed.drift_findings.length !== parsed.approved_upstream_digests.length || parsed.drift_findings.some((finding, index) => finding.upstream_digest !== parsed.approved_upstream_digests[index])) throw new TypeError("drift_findings must exactly cover approved_upstream_digests");
+  for (const finding of parsed.rule_findings) {
+    for (const evidence of finding.enforced_by) {
+      if (evidence.state === "current" && evidence.subject_digest !== parsed.subject_digest) throw new TypeError(`current mechanical evidence for ${ruleKey2(finding)} binds the wrong subject`);
+      if (evidence.state !== "current" && finding.compliance === "pass") throw new TypeError(`suspect mechanical evidence cannot establish compliance for ${ruleKey2(finding)}`);
+    }
+  }
+  const expectedConstitution = parsed.rule_findings.some((finding) => finding.compliance === "fail") ? "fail" : parsed.rule_findings.some((finding) => finding.compliance === "uncertain") ? "uncertain" : "pass";
+  if (parsed.constitution !== expectedConstitution) throw new TypeError(`constitution must be ${expectedConstitution}`);
+  const expectedDrift = parsed.drift_findings.some((finding) => finding.drift === "material") ? "material" : parsed.drift_findings.some((finding) => finding.drift === "incidental") ? "incidental" : "aligned";
+  if (parsed.drift !== expectedDrift) throw new TypeError(`drift must be ${expectedDrift}`);
+  const matched = parsed.rule_findings.filter((finding) => finding.trigger === "matched").map(({ rule_id, rule_version }) => ({ rule_id, rule_version }));
+  const uncertain = parsed.rule_findings.filter((finding) => finding.trigger === "uncertain").map(({ rule_id, rule_version }) => ({ rule_id, rule_version }));
+  if (!sameRuleSet(parsed.matched_rule_versions, matched)) throw new TypeError("matched_rule_versions contradict rule findings");
+  if (!sameRuleSet(parsed.uncertain_rule_versions, uncertain)) throw new TypeError("uncertain_rule_versions contradict rule findings");
+}
+function parseAndDeriveAdjudication(value) {
+  assertPlainJson(value, "adjudication");
+  const parsed = rawAdjudicationSchema.parse(value);
+  validateAdjudicationClaims(parsed);
+  return parsed;
+}
+var provenanceBase2 = rawAdjudicationSchema.safeExtend({ model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]), model: nonBlank2, effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")]) });
+var agentSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("agent-declared") }).strict();
+var serverSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("server-attested"), adapter: external_exports.enum(ADAPTER_IDS), cli_version: nonBlank2, model_family: external_exports.enum(MODEL_FAMILIES), effort: external_exports.enum(EFFORT_VALUES), invocation_id: id2, envelope_input_digest: digest3, observed_output_digest: digest3, result_id: id2 }).strict();
+var degradedSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank2 }).strict();
+var adjudicationEvidenceSchema = external_exports.discriminatedUnion("assurance", [agentSchema, serverSchema, degradedSchema]);
+function parseAdjudicationEvidence(value) {
+  assertPlainJson(value, "adjudication evidence");
+  const parsed = adjudicationEvidenceSchema.parse(value);
+  validateAdjudicationClaims(parsed);
+  return parsed;
+}
+
+// src/contracts/trust.ts
+init_trust_brands();
+var sameArray = (left, right) => left.length === right.length && left.every((value, index) => value === right[index]);
+var assertEqual2 = (actual, expected, name) => {
+  if (actual !== expected) throw new TypeError(`${name} does not match observation capability`);
+};
+function deepFreezeJson(value) {
+  if (value !== null && typeof value === "object") {
+    for (const nested of Object.values(value)) deepFreezeJson(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
+var copyFreezeJson = (value) => deepFreezeJson(structuredClone(value));
+function decodeJson(bytes) {
+  const text3 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  return JSON.parse(text3);
+}
+var digestBytes = (bytes) => parseSha256Digest(createHash2("sha256").update(bytes).digest("hex"));
+var copiedBytes = (bytes) => Uint8Array.from(bytes);
+function assertAdapterFamily(adapter2, family3) {
+  const expected = adapter2 === "claude-cli" ? "claude" : "codex";
+  if (family3 !== expected) throw new TypeError("adapter and model family do not match");
+}
+function createObservation(binding, bytes, rawOutputDigest) {
+  const storedBytes = copiedBytes(bytes);
+  const observation = { ...binding, raw_output_digest: rawOutputDigest };
+  Object.defineProperty(observation, "raw_output_bytes", { enumerable: true, configurable: false, get: () => copiedBytes(storedBytes) });
+  return Object.freeze(observation);
+}
+var observationSource = Object.freeze({
+  observeReview(capability, observedOutputBytes) {
+    const binding = observationCapabilityBinding(capability, "review");
+    if (binding === void 0 || capability.kind !== "review") throw new TypeError("invalid review observation capability");
+    assertAdapterFamily(binding.adapter, binding.family);
+    const bytes = copiedBytes(observedOutputBytes);
+    const derived = parseAndDeriveReview(decodeJson(bytes));
+    for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]]) assertEqual2(derived[key], expected, key);
+    if (binding.family === binding.producer_family) throw new TypeError("review observation must be opposite-family");
+    const raw_output_digest = digestBytes(bytes);
+    const observation = createObservation(binding, bytes, raw_output_digest);
+    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id });
+    return Object.freeze({ observation, evidence });
+  },
+  observeAdjudication(capability, observedOutputBytes) {
+    const binding = observationCapabilityBinding(capability, "adjudication");
+    if (binding === void 0 || capability.kind !== "adjudication") throw new TypeError("invalid adjudication observation capability");
+    assertAdapterFamily(binding.adapter, binding.family);
+    const bytes = copiedBytes(observedOutputBytes);
+    const derived = parseAndDeriveAdjudication(decodeJson(bytes));
+    for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["pinned_constitution_digest", binding.pinned_constitution_digest], ["source_evidence_set_digest", binding.source_evidence_set_digest]]) assertEqual2(derived[key], expected, key);
+    if (!sameArray(derived.approved_upstream_digests, binding.approved_upstream_digests)) throw new TypeError("approved_upstream_digests do not match observation capability");
+    const raw_output_digest = digestBytes(bytes);
+    const observation = createObservation(binding, bytes, raw_output_digest);
+    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id });
+    return Object.freeze({ observation, evidence });
+  }
+});
+var idSchema = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
+var digestSchema = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var phaseSchema = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
+var familySchema = external_exports.enum(["claude", "codex"]);
+var safeInteger3 = external_exports.number().int().nonnegative().safe();
+var agentAuthoritySchema = external_exports.object({ kind: external_exports.literal("agent-declared"), result_id: idSchema, result_digest: digestSchema, state_revision: safeInteger3 }).strict();
+var serverAuthoritySchema = external_exports.object({ kind: external_exports.literal("server"), invocation_id: idSchema, result_id: idSchema, receipt_id: idSchema, state_revision: safeInteger3, envelope_input_digest: digestSchema, observed_output_digest: digestSchema, result_digest: digestSchema }).strict();
+var degradedAuthoritySchema = external_exports.object({ kind: external_exports.literal("degraded"), checkpoint_digest: digestSchema, checkpoint_revision: safeInteger3 }).strict();
+var authorityReferencesSchema = external_exports.discriminatedUnion("kind", [agentAuthoritySchema, serverAuthoritySchema, degradedAuthoritySchema]);
+var authorityLinkDataSchema = external_exports.object({ schema_version: external_exports.literal("1"), evidence_kind: external_exports.enum(["review", "adjudication"]), assurance: external_exports.enum(["agent-declared", "server-attested", "degraded"]), role: external_exports.enum(["counter-review", "gate-counter-review", "adjudication"]), task_id: taskSlugV1Schema, phase_instance: phaseSchema, subject_digest: digestSchema, input_fingerprint: digestSchema, evidence_digest: digestSchema, gate_id: pathSafeIdV1Schema.optional(), authority: authorityReferencesSchema }).strict().superRefine((link2, context2) => {
+  if (link2.evidence_kind === "adjudication" !== (link2.role === "adjudication")) context2.addIssue({ code: "custom", path: ["role"], message: "role must match evidence kind" });
+  const expectedAuthorityKind = link2.assurance === "server-attested" ? "server" : link2.assurance;
+  if (link2.authority.kind !== expectedAuthorityKind) context2.addIssue({ code: "custom", path: ["authority", "kind"], message: "authority references must match assurance" });
+  if (link2.role === "gate-counter-review" !== (link2.gate_id !== void 0)) context2.addIssue({ code: "custom", path: ["gate_id"], message: "gate_id is required only for gate-counter-review authority" });
+});
+var slotBase = { evidence_digest: digestSchema, producer_family: familySchema, reviewer_family: familySchema };
+var counterSlotSchema = external_exports.object({ ...slotBase, role: external_exports.literal("counter-review"), assurance: external_exports.enum(["server-attested", "degraded"]), independence: external_exports.literal("opposite-family") }).strict().superRefine((slot, context2) => {
+  if (slot.producer_family === slot.reviewer_family) context2.addIssue({ code: "custom", message: "counter-review families must differ" });
+});
+var gateCounterSlotSchema = external_exports.object({ ...slotBase, role: external_exports.literal("gate-counter-review"), assurance: external_exports.enum(["server-attested", "degraded"]), independence: external_exports.literal("opposite-family"), gate_id: pathSafeIdV1Schema }).strict().superRefine((slot, context2) => {
+  if (slot.producer_family === slot.reviewer_family) context2.addIssue({ code: "custom", message: "gate-counter-review families must differ" });
+});
+var counterOnlySlotsSchema = external_exports.tuple([counterSlotSchema]);
+var counterWithGateCounterSlotsSchema = external_exports.tuple([counterSlotSchema, gateCounterSlotSchema]);
+var requiredReviewSlotsSchema = external_exports.union([counterOnlySlotsSchema, counterWithGateCounterSlotsSchema]).superRefine((slots, context2) => {
+  try {
+    validateSlots(slots);
+  } catch (error51) {
+    context2.addIssue({ code: "custom", message: error51 instanceof Error ? error51.message : "invalid review slots" });
+  }
+});
+var currentEvidenceSetRefSchema = external_exports.object({ set_digest: digestSchema, slots: requiredReviewSlotsSchema }).strict();
+var referencedEvidenceSchema = external_exports.union([
+  external_exports.object({ evidence_digest: digestSchema, evidence: reviewEvidenceSchema }).strict(),
+  external_exports.object({ evidence_digest: digestSchema, evidence: adjudicationEvidenceSchema }).strict()
+]);
+function parseRequiredReviewSlots(value) {
+  assertPlainJson(value, "required review slots");
+  const slots = requiredReviewSlotsSchema.parse(value);
+  validateSlots(slots);
+  return slots;
+}
+function parseCurrentEvidenceSetRef(value) {
+  assertPlainJson(value, "current evidence set reference");
+  const parsed = currentEvidenceSetRefSchema.parse(value);
+  validateSlots(parsed.slots);
+  return parsed;
+}
+function assertLinkMatches(kind, link2, value) {
+  const authenticatedAssurance = ["agent-declared", "server-attested", "degraded"].find(
+    (assurance) => authenticAuthorityLink(link2, { kind, assurance }) && authenticVerifiedEvidence(value, { kind, assurance })
+  );
+  if (authenticatedAssurance === void 0) throw new TypeError("untrusted authority link or verified evidence");
+  const evidence = value.evidence;
+  if (evidence.assurance !== authenticatedAssurance || link2.assurance !== authenticatedAssurance) throw new TypeError("authority assurance does not match authenticated identity");
+  const expectedAuthorityKind = evidence.assurance === "server-attested" ? "server" : evidence.assurance;
+  if (link2.authority.kind !== expectedAuthorityKind) throw new TypeError("authority references do not match assurance");
+  const phaseInstance4 = encodePhaseInstance(decodePhaseInstance(evidence.phase_instance));
+  if (link2.evidence_kind !== kind || link2.assurance !== evidence.assurance || link2.evidence_digest !== value.evidence_digest || link2.task_id !== evidence.task_id || link2.phase_instance !== phaseInstance4 || link2.subject_digest !== evidence.subject_digest || link2.input_fingerprint !== evidence.input_fingerprint) throw new TypeError("authority link does not match verified evidence");
+  if (link2.role !== (kind === "review" ? evidence.role : "adjudication")) throw new TypeError("authority role does not match evidence");
+  if (link2.role === "gate-counter-review" !== (link2.gate_id !== void 0)) throw new TypeError("authority gate binding does not match role");
+  if (evidence.assurance === "server-attested") {
+    if (link2.authority.kind !== "server" || link2.authority.invocation_id !== evidence.invocation_id || link2.authority.result_id !== evidence.result_id || link2.authority.envelope_input_digest !== evidence.envelope_input_digest || link2.authority.observed_output_digest !== evidence.observed_output_digest) {
+      throw new TypeError("server authority provenance does not match evidence");
+    }
+  }
+}
+function validateSlots(slots) {
+  if (slots.length !== 1 && slots.length !== 2 || slots[0]?.role !== "counter-review" || slots.length === 2 && slots[1]?.role !== "gate-counter-review") throw new TypeError("review slots must use canonical role order");
+  for (const slot of slots) {
+    if (slot.independence !== "opposite-family" || slot.producer_family === slot.reviewer_family) throw new TypeError("invalid opposite-family review slot");
+  }
+  if (new Set(slots.map((slot) => slot.evidence_digest)).size !== slots.length) throw new TypeError("review slot evidence digests must be unique");
+}
+function currentEvidenceSetRef(slots) {
+  validateSlots(slots);
+  const copied = copyFreezeJson(slots);
+  return Object.freeze({
+    set_digest: parseSha256Digest(
+      createHash2("sha256").update(JSON.stringify(copied)).digest("hex")
+    ),
+    slots: copied
+  });
+}
+var authorityQualifier = Object.freeze({
+  qualifyReview(link2, value) {
+    assertLinkMatches("review", link2, value);
+    const qualified = Object.freeze({ ...value, authority: link2 });
+    registerQualifiedEvidence(qualified, { kind: "review", assurance: link2.assurance });
+    return qualified;
+  },
+  qualifyAdjudication(link2, value) {
+    assertLinkMatches("adjudication", link2, value);
+    const qualified = Object.freeze({ ...value, authority: link2 });
+    registerQualifiedEvidence(qualified, { kind: "adjudication", assurance: link2.assurance });
+    return qualified;
+  },
+  currentReviews(authority, reviews) {
+    if (!authenticCurrentReviewSetAuthority(authority)) throw new TypeError("invalid current review set authority");
+    validateSlots(authority.slots);
+    if (reviews.length !== authority.slots.length) throw new TypeError("reviews must exactly cover required slots");
+    authority.slots.forEach((slot, index) => {
+      const review = reviews[index];
+      if (review === void 0 || !authenticQualifiedEvidence(review, "review") || !authenticQualifiedEvidence(review, "review", review.evidence.assurance) || review.evidence_digest !== slot.evidence_digest || review.evidence.role !== slot.role || review.evidence.assurance !== slot.assurance || review.evidence.producer_family !== slot.producer_family || review.evidence.model_family !== slot.reviewer_family || review.authority.task_id !== authority.task_id || review.authority.phase_instance !== authority.phase_instance || review.authority.subject_digest !== authority.subject_digest || review.authority.input_fingerprint !== authority.input_fingerprint || slot.role === "gate-counter-review" && review.authority.gate_id !== slot.gate_id) throw new TypeError(`review does not match slot ${index}`);
+    });
+    const current = Object.freeze({ task_id: authority.task_id, phase_instance: authority.phase_instance, subject_digest: authority.subject_digest, input_fingerprint: authority.input_fingerprint, current_evidence_set: currentEvidenceSetRef(authority.slots), reviews: Object.freeze([...reviews]) });
+    registerCurrentReviewSet(current);
+    return current;
+  }
+});
+
+// src/contracts/supplemental.ts
+var digest4 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var nonBlank3 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
 var family = external_exports.enum(["claude", "codex"]);
 var phase = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
-var gateShape = { prior_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, phase_instance: phase, subject_digest: digest2, input_fingerprint: digest2 };
+var gateShape = { prior_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, phase_instance: phase, subject_digest: digest4, input_fingerprint: digest4 };
 var supplementalGateRefSchema = external_exports.object(gateShape).strict();
-var gateCounterSlotSchema = external_exports.object({ role: external_exports.literal("gate-counter-review"), evidence_digest: digest2, assurance: external_exports.enum(["server-attested", "degraded"]), producer_family: family, reviewer_family: family, independence: external_exports.literal("opposite-family"), gate_id: pathSafeIdV1Schema }).strict().superRefine((slot, context2) => {
+var gateCounterSlotSchema2 = external_exports.object({ role: external_exports.literal("gate-counter-review"), evidence_digest: digest4, assurance: external_exports.enum(["server-attested", "degraded"]), producer_family: family, reviewer_family: family, independence: external_exports.literal("opposite-family"), gate_id: pathSafeIdV1Schema }).strict().superRefine((slot, context2) => {
   if (slot.producer_family === slot.reviewer_family) context2.addIssue({ code: "custom", message: "gate counter-review must be opposite-family" });
 });
-var supplementalReviewRefSchema = external_exports.object({ ...gateShape, evidence_slot: gateCounterSlotSchema }).strict().superRefine((review, context2) => {
+var supplementalReviewRefSchema = external_exports.object({ ...gateShape, evidence_slot: gateCounterSlotSchema2 }).strict().superRefine((review, context2) => {
   if (review.evidence_slot.gate_id !== review.prior_gate_id) context2.addIssue({ code: "custom", path: ["evidence_slot", "gate_id"], message: "gate-counter slot must bind prior_gate_id" });
 });
-var decline = external_exports.object({ action: external_exports.literal("decline"), gate: supplementalGateRefSchema, reason: nonBlank }).strict();
-var ingest = external_exports.object({ action: external_exports.literal("ingest"), review: supplementalReviewRefSchema, reason: nonBlank }).strict();
-var noChange = external_exports.object({ action: external_exports.literal("triage-no-change"), review: supplementalReviewRefSchema, triage_digest: digest2, reason: nonBlank }).strict();
-var supersede = external_exports.object({ action: external_exports.literal("supersede"), review: supplementalReviewRefSchema, accepted_triage_digest: digest2, old_subject_digest: digest2, new_subject_digest: digest2, reason: nonBlank }).strict().superRefine((outcome, context2) => {
+var decline = external_exports.object({ action: external_exports.literal("decline"), gate: supplementalGateRefSchema, reason: nonBlank3 }).strict();
+var ingest = external_exports.object({ action: external_exports.literal("ingest"), review: supplementalReviewRefSchema, reason: nonBlank3 }).strict();
+var noChange = external_exports.object({ action: external_exports.literal("triage-no-change"), review: supplementalReviewRefSchema, triage_digest: digest4, reason: nonBlank3 }).strict();
+var supersede = external_exports.object({ action: external_exports.literal("supersede"), review: supplementalReviewRefSchema, accepted_triage_digest: digest4, old_subject_digest: digest4, new_subject_digest: digest4, reason: nonBlank3 }).strict().superRefine((outcome, context2) => {
   if (outcome.old_subject_digest !== outcome.review.subject_digest) context2.addIssue({ code: "custom", path: ["old_subject_digest"], message: "old subject must match supplemental review subject" });
   if (outcome.new_subject_digest === outcome.old_subject_digest) context2.addIssue({ code: "custom", path: ["new_subject_digest"], message: "new subject must differ" });
 });
@@ -30992,2890 +23780,163 @@ function parseSupplementalReviewOutcome(value) {
   return supplementalReviewOutcomeSchema.parse(value);
 }
 
-// src/contracts/validators.ts
-var import__ = __toESM(require__(), 1);
-var formatsModule = __toESM(require_dist(), 1);
-import { isDeepStrictEqual as isDeepStrictEqual2 } from "node:util";
-
-// src/contracts/schemas/v1/intent-receipt.schema.json
-var intent_receipt_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:intent-receipt",
-  title: "ArchFlow Intent Receipt v1",
-  $comment: "One immutable successful preparation. This is the sole shape authority for IntentReceiptV1; it deliberately has no Zod mirror. State, not receipt presence, is commit authority.",
-  type: "object",
-  additionalProperties: false,
-  required: [
-    "schema_version",
-    "intent_id",
-    "task_id",
-    "repository_identity_digest",
-    "tool",
-    "operation",
-    "request_digest",
-    "input_fingerprint",
-    "prior_revision",
-    "resulting_revision",
-    "result_id",
-    "outcome_digest",
-    "outcome",
-    "prepared_state_digest",
-    "prepared_state"
-  ],
-  properties: {
-    schema_version: { const: "1" },
-    intent_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-    task_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-    repository_identity_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    tool: { enum: ["archflow_state", "archflow_counter_review", "archflow_gate", "archflow_waiver"] },
-    operation: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeCode" },
-    request_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    input_fingerprint: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    prior_revision: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" },
-    resulting_revision: { type: "integer", minimum: 1, maximum: 9007199254740991 },
-    result_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId" },
-    outcome_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    outcome: { $ref: "#/$defs/plainJson" },
-    prepared_state_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    prepared_state: { $ref: "urn:archflow:schema:v1:task-state" }
-  },
-  $defs: {
-    plainJson: {
-      anyOf: [
-        { type: "null" },
-        { type: "boolean" },
-        { type: "number" },
-        { type: "string" },
-        { type: "array", items: { $ref: "#/$defs/plainJson" } },
-        { type: "object", additionalProperties: { $ref: "#/$defs/plainJson" } }
-      ]
-    }
-  }
-};
-
-// src/contracts/schemas/v1/result-manifest.schema.json
-var result_manifest_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:result-manifest",
-  title: "ArchFlow Result Manifest v1",
-  $comment: "The sole normative structural authority for the server-internal retained result root. The exact source artifact is embedded; review and triage are also admitted by archflow_state, while adjudication evidence arrives only through the constitution review archflow_counter_review runs. Cross-field digest and source-artifact correlations are enforced by validateDurableSemantics.",
-  type: "object",
-  additionalProperties: false,
-  required: [
-    "schema_version",
-    "task_id",
-    "repository_identity_digest",
-    "result_id",
-    "phase_instance",
-    "step",
-    "artifact_digest",
-    "source_artifact",
-    "input_fingerprint",
-    "snapshot_digest",
-    "outputs",
-    "projections",
-    "accounting",
-    "secret_scan"
-  ],
-  properties: {
-    schema_version: { const: "1" },
-    task_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-    repository_identity_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    result_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId" },
-    phase_instance: { $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-    step: { enum: ["produce", "counter_review", "triage", "adjudicate"] },
-    artifact_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    source_artifact: {
-      oneOf: [
-        { $ref: "urn:archflow:schema:v1:document-artifact" },
-        { $ref: "urn:archflow:schema:v1:implementation-output" },
-        { $ref: "#/$defs/reviewEvidenceArtifact" },
-        { $ref: "#/$defs/triageArtifact" },
-        { $ref: "#/$defs/adjudicationEvidenceArtifact" }
-      ]
-    },
-    input_fingerprint: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    snapshot_digest: {
-      $comment: "Domain-separated declared-output snapshot; the canonical digest of this whole manifest is the result address.",
-      $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-    },
-    outputs: {
-      type: "array",
-      items: { $ref: "urn:archflow:schema:v1:durable-primitives#/$defs/outputEntry" },
-      "x-archflow-sorted-unique-by": "path"
-    },
-    projections: {
-      type: "array",
-      items: { $ref: "#/$defs/projectionDigestRef" },
-      "x-archflow-sorted-unique-by": "path"
-    },
-    accounting: { $ref: "urn:archflow:schema:v1:durable-primitives#/$defs/snapshotAccounting" },
-    secret_scan: { $ref: "urn:archflow:schema:v1:secret-scan-result" }
-  },
-  $defs: {
-    reviewEvidenceArtifact: {
-      type: "object",
-      additionalProperties: false,
-      required: ["schema_version", "artifact_kind", "evidence"],
-      properties: {
-        schema_version: { const: "1" },
-        artifact_kind: { const: "review-evidence" },
-        evidence: { $ref: "urn:archflow:schema:v1:review-evidence" }
-      }
-    },
-    triageArtifact: {
-      type: "object",
-      additionalProperties: false,
-      required: ["schema_version", "artifact_kind", "evidence"],
-      properties: {
-        schema_version: { const: "1" },
-        artifact_kind: { const: "triage" },
-        evidence: { $ref: "urn:archflow:schema:v1:triage" }
-      }
-    },
-    adjudicationEvidenceArtifact: {
-      type: "object",
-      additionalProperties: false,
-      required: ["schema_version", "artifact_kind", "evidence"],
-      properties: {
-        schema_version: { const: "1" },
-        artifact_kind: { const: "adjudication-evidence" },
-        evidence: { $ref: "urn:archflow:schema:v1:adjudication-evidence" }
-      }
-    },
-    projectionDigestRef: {
-      type: "object",
-      additionalProperties: false,
-      required: ["path", "content_digest"],
-      properties: {
-        path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-        content_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" }
-      }
-    }
-  }
-};
-
-// src/contracts/schemas/v1/document-artifact.schema.json
-var document_artifact_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:document-artifact",
-  title: "ArchFlow Document Artifact v1",
-  $comment: "The normative structural authority for a projected agent document. D3 \u2014 `document_path` is the TASK-relative frame and `projection_target` is the REPOSITORY frame; the two $defs are the same underlying claim validator, so the frame is named at the reference site and is not runtime-checkable. D19 \u2014 `step` is required here as well as in the type alias and the Zod mirror; the fingerprint correlation keys on (phase_instance, step).",
-  type: "object",
-  additionalProperties: false,
-  required: [
-    "schema_version",
-    "artifact_kind",
-    "task_id",
-    "phase_instance",
-    "step",
-    "document_path",
-    "path_class",
-    "byte_count",
-    "content_digest",
-    "declared_inputs",
-    "input_fingerprint",
-    "snapshot_digest",
-    "projection_target"
-  ],
-  properties: {
-    schema_version: { const: "1" },
-    artifact_kind: { const: "document" },
-    task_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-    phase_instance: { $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-    step: {
-      $comment: "D19 \u2014 exactly PIPELINE_STEPS (`vocabulary.ts:2`).",
-      enum: ["produce", "counter_review", "triage", "adjudicate"]
-    },
-    document_path: {
-      $comment: "TASK-relative frame (D3).",
-      $ref: "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
-    },
-    path_class: {
-      $comment: "A const, not the 17-member path class vocabulary.",
-      const: "document"
-    },
-    byte_count: {
-      $comment: "D8 declares no own minimum: a zero-byte document is legal, so `safeInteger` is the right $ref.",
-      $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
-    },
-    content_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    declared_inputs: {
-      $comment: 'SET \u2014 sorted by `input_id`, duplicates rejected. The keyword and the Zod mirror both call `isSortedUniqueBy` with `tupleKey("input_id")`, so the two authorities are one predicate.',
-      type: "array",
-      items: { $ref: "urn:archflow:schema:v1:durable-primitives#/$defs/declaredInputRef" },
-      "x-archflow-sorted-unique-by": "input_id"
-    },
-    input_fingerprint: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    snapshot_digest: {
-      $comment: "Domain-separated canonical declared-output snapshot; never the retained result address.",
-      $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-    },
-    projection_target: {
-      $comment: "REPOSITORY frame (D3).",
-      $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
-    },
-    editorial_predecessor: {
-      $comment: "Optional editorial-revision link: the predecessor produce artifact digest, its input fingerprint, and the retained result digest of the authorizing accepted-editorial triage. Record-time semantics are enforced by the state handler, not here.",
-      type: "object",
-      additionalProperties: false,
-      required: ["subject_digest", "input_fingerprint", "triage_result_digest"],
-      properties: {
-        subject_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        input_fingerprint: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        triage_result_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" }
-      }
-    }
-  }
-};
-
-// src/contracts/schemas/v1/durable-primitives.schema.json
-var durable_primitives_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:durable-primitives",
-  title: "ArchFlow Durable Primitives v1",
-  $comment: "Shapes shared by more than one durable root. This file declares no root document of its own; every $def is reached by $ref. Of the $defs below, `blobTreeMode`, `blobIdentity`, `outputEntry`, `declaredInputRef`, `canonicalTaskPaths`, and `snapshotAccounting` are the pinned cross-chunk names; `claimableOutputPathClass`, `regularBlobIdentity`, `symlinkBlobIdentity`, and `snapshotAccountingEntry` are local helpers and are not $ref'd from outside this file.",
-  $defs: {
-    blobTreeMode: {
-      $comment: "D9: narrows `GitTreeMode`, which also admits `040000` (a tree) and `160000` (a gitlink); neither can be a declared output blob. Both `blobIdentity` variants pin their own mode subset, so nothing $refs this \u2014 it is the vocabulary's single declaration.",
-      enum: ["100644", "100755", "120000"]
-    },
-    regularBlobIdentity: {
-      type: "object",
-      additionalProperties: false,
-      required: ["oid", "mode", "size_bytes"],
-      properties: {
-        oid: { $ref: "urn:archflow:schema:v1:primitives#/$defs/gitOid" },
-        mode: { enum: ["100644", "100755"] },
-        size_bytes: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" }
-      }
-    },
-    symlinkBlobIdentity: {
-      type: "object",
-      additionalProperties: false,
-      required: ["oid", "mode", "size_bytes"],
-      properties: {
-        oid: { $ref: "urn:archflow:schema:v1:primitives#/$defs/gitOid" },
-        mode: { const: "120000" },
-        size_bytes: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" }
-      }
-    },
-    blobIdentity: {
-      $comment: "Either variant. `size_bytes` $refs `safeInteger` deliberately (D8): a zero-byte blob is legal, so this is not a `>= 1` field.",
-      oneOf: [
-        { $ref: "#/$defs/regularBlobIdentity" },
-        { $ref: "#/$defs/symlinkBlobIdentity" }
-      ]
-    },
-    claimableOutputPathClass: {
-      $comment: "The 7 classes an implementation output may claim. The 12 server-owned classes are unrepresentable here rather than rejected by a rule.",
-      enum: [
-        "document",
-        "import",
-        "repository-source",
-        "result-payload",
-        "review",
-        "task-branch-constitution",
-        "verification-transcript"
-      ]
-    },
-    declaredInputRef: {
-      $comment: "The mirror target for `DeclaredInputRef` (`fingerprints.ts:11`). Deliberately carries no ordering rule: every `declared_inputs` field that holds a set of these declares the sort itself, on `input_id`.",
-      type: "object",
-      additionalProperties: false,
-      required: ["input_id", "digest"],
-      properties: {
-        input_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId" },
-        digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" }
-      }
-    },
-    canonicalTaskPaths: {
-      $comment: "The five canonical locations a task's durable state occupies, all in the worktree frame: `task_root` is `.archflow/tasks/<task_id>`, `workflow` is `.archflow/workflow.yaml` and `constitution_root` is `.archflow/constitution` \u2014 the latter two shared rather than task-scoped. Carried verbatim by both initialization artifacts so a reader never re-derives them from `task_id`.",
-      type: "object",
-      additionalProperties: false,
-      required: ["task_root", "config", "state", "workflow", "constitution_root"],
-      properties: {
-        task_root: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-        config: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-        state: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-        workflow: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-        constitution_root: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" }
-      }
-    },
-    snapshotAccountingEntry: {
-      $comment: "D16 \u2014 `git-object` implies `stored_bytes === 0`, expressed as one if/then over `storage` rather than as a rule inside `validateDurableSemantics`: a git-object entry stores no bytes of its own. The remaining half, `stored_bytes === payload_bytes` for a `raw-payload` entry, needs the matching `outputEntry` and stays semantic.",
-      type: "object",
-      additionalProperties: false,
-      required: ["path", "storage", "stored_bytes"],
-      properties: {
-        path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-        storage: { enum: ["git-object", "raw-payload"] },
-        stored_bytes: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" }
-      },
-      if: { required: ["storage"], properties: { storage: { const: "git-object" } } },
-      then: { properties: { stored_bytes: { const: 0 } } }
-    },
-    snapshotAccounting: {
-      $comment: "A $def rather than its own registry file: this is never a standalone document \u2014 it exists only inside `implementation-output.accounting`, which $refs this root, not the entry. The two caps are structural `maximum`s. `measured_at_revision` pins its own `minimum: 1` and does NOT $ref `safeInteger` (D8), which admits 0; `result_bytes`, `task_bytes`, and an entry's `stored_bytes` genuinely admit 0 and do $ref it.",
-      type: "object",
-      additionalProperties: false,
-      required: ["schema_version", "result_bytes", "task_bytes", "result_byte_cap", "task_byte_cap", "counted_entries", "measured_at_revision"],
-      properties: {
-        schema_version: { const: "1" },
-        result_bytes: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger", type: "integer", maximum: 26214400 },
-        task_bytes: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger", type: "integer", maximum: 262144e3 },
-        result_byte_cap: { const: 26214400 },
-        task_byte_cap: { const: 262144e3 },
-        counted_entries: {
-          $comment: 'SET \u2014 sorted by `path`, duplicates rejected. The keyword and the Zod mirror both call `isSortedUniqueBy` with `tupleKey("path")`, so the two authorities are one predicate.',
-          type: "array",
-          items: { $ref: "#/$defs/snapshotAccountingEntry" },
-          "x-archflow-sorted-unique-by": "path"
-        },
-        measured_at_revision: { type: "integer", minimum: 1, maximum: 9007199254740991 }
-      }
-    },
-    outputEntry: {
-      $comment: "D10 \u2014 the operation x storage x file_type table across its 14 pinned leaves, enforced structurally as an if/then/else ladder over `operation`, then `storage`, then `file_type`. Every leaf sets `additionalProperties: false` and lists exactly its required properties, so the branch table's `Forbidden` column is enforced by the leaf rather than by a separate rule. `before` and `after` are deliberately asymmetric: on `modify`/`rename` `before` is an unconstrained `blobIdentity` because `file_type` describes the post-state, while on `delete` `before` IS the surviving blob and is mode-locked instead. `delete` forces `git-object`: there is no post-state content to store. `payload_bytes`, `payload_digest`, and `after.oid` are assertions here, not verified facts \u2014 Phase 11 verifies them against retained bytes.",
-      type: "object",
-      required: ["path", "path_class", "operation", "storage", "file_type"],
-      properties: {
-        operation: { enum: ["add", "modify", "delete", "rename"] },
-        storage: { enum: ["git-object", "raw-payload"] },
-        file_type: { enum: ["regular", "symlink"] }
-      },
-      dependentRequired: {
-        payload_bytes: ["payload_digest"],
-        payload_digest: ["payload_bytes"]
-      },
-      if: { required: ["operation"], properties: { operation: { const: "add" } } },
-      then: {
-        if: { required: ["storage"], properties: { storage: { const: "git-object" } } },
-        then: {
-          if: { required: ["file_type"], properties: { file_type: { const: "regular" } } },
-          then: {
-            $comment: "leaf 1 \u2014 AddGitRegular",
-            type: "object",
-            additionalProperties: false,
-            required: ["path", "path_class", "operation", "storage", "file_type", "after"],
-            properties: {
-              path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-              path_class: { $ref: "#/$defs/claimableOutputPathClass" },
-              operation: { const: "add" },
-              storage: { const: "git-object" },
-              file_type: { const: "regular" },
-              after: { $ref: "#/$defs/regularBlobIdentity" }
-            }
-          },
-          else: {
-            $comment: "leaf 2 \u2014 AddGitSymlink",
-            type: "object",
-            additionalProperties: false,
-            required: ["path", "path_class", "operation", "storage", "file_type", "after"],
-            properties: {
-              path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-              path_class: { $ref: "#/$defs/claimableOutputPathClass" },
-              operation: { const: "add" },
-              storage: { const: "git-object" },
-              file_type: { const: "symlink" },
-              after: { $ref: "#/$defs/symlinkBlobIdentity" }
-            }
-          }
-        },
-        else: {
-          if: { required: ["file_type"], properties: { file_type: { const: "regular" } } },
-          then: {
-            $comment: "leaf 3 \u2014 AddRawRegular",
-            type: "object",
-            additionalProperties: false,
-            required: ["path", "path_class", "operation", "storage", "payload_bytes", "payload_digest", "file_type", "after"],
-            properties: {
-              path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-              path_class: { $ref: "#/$defs/claimableOutputPathClass" },
-              operation: { const: "add" },
-              storage: { const: "raw-payload" },
-              payload_bytes: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" },
-              payload_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-              file_type: { const: "regular" },
-              after: { $ref: "#/$defs/regularBlobIdentity" }
-            }
-          },
-          else: {
-            $comment: "leaf 4 \u2014 AddRawSymlink",
-            type: "object",
-            additionalProperties: false,
-            required: ["path", "path_class", "operation", "storage", "payload_bytes", "payload_digest", "file_type", "after"],
-            properties: {
-              path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-              path_class: { $ref: "#/$defs/claimableOutputPathClass" },
-              operation: { const: "add" },
-              storage: { const: "raw-payload" },
-              payload_bytes: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" },
-              payload_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-              file_type: { const: "symlink" },
-              after: { $ref: "#/$defs/symlinkBlobIdentity" }
-            }
-          }
-        }
-      },
-      else: {
-        if: { required: ["operation"], properties: { operation: { const: "modify" } } },
-        then: {
-          if: { required: ["storage"], properties: { storage: { const: "git-object" } } },
-          then: {
-            if: { required: ["file_type"], properties: { file_type: { const: "regular" } } },
-            then: {
-              $comment: "leaf 5 \u2014 ModifyGitRegular",
-              type: "object",
-              additionalProperties: false,
-              required: ["path", "path_class", "operation", "storage", "file_type", "before", "after"],
-              properties: {
-                path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-                path_class: { $ref: "#/$defs/claimableOutputPathClass" },
-                operation: { const: "modify" },
-                storage: { const: "git-object" },
-                file_type: { const: "regular" },
-                before: { $ref: "#/$defs/blobIdentity" },
-                after: { $ref: "#/$defs/regularBlobIdentity" }
-              }
-            },
-            else: {
-              $comment: "leaf 6 \u2014 ModifyGitSymlink",
-              type: "object",
-              additionalProperties: false,
-              required: ["path", "path_class", "operation", "storage", "file_type", "before", "after"],
-              properties: {
-                path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-                path_class: { $ref: "#/$defs/claimableOutputPathClass" },
-                operation: { const: "modify" },
-                storage: { const: "git-object" },
-                file_type: { const: "symlink" },
-                before: { $ref: "#/$defs/blobIdentity" },
-                after: { $ref: "#/$defs/symlinkBlobIdentity" }
-              }
-            }
-          },
-          else: {
-            if: { required: ["file_type"], properties: { file_type: { const: "regular" } } },
-            then: {
-              $comment: "leaf 7 \u2014 ModifyRawRegular",
-              type: "object",
-              additionalProperties: false,
-              required: ["path", "path_class", "operation", "storage", "payload_bytes", "payload_digest", "file_type", "before", "after"],
-              properties: {
-                path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-                path_class: { $ref: "#/$defs/claimableOutputPathClass" },
-                operation: { const: "modify" },
-                storage: { const: "raw-payload" },
-                payload_bytes: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" },
-                payload_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-                file_type: { const: "regular" },
-                before: { $ref: "#/$defs/blobIdentity" },
-                after: { $ref: "#/$defs/regularBlobIdentity" }
-              }
-            },
-            else: {
-              $comment: "leaf 8 \u2014 ModifyRawSymlink",
-              type: "object",
-              additionalProperties: false,
-              required: ["path", "path_class", "operation", "storage", "payload_bytes", "payload_digest", "file_type", "before", "after"],
-              properties: {
-                path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-                path_class: { $ref: "#/$defs/claimableOutputPathClass" },
-                operation: { const: "modify" },
-                storage: { const: "raw-payload" },
-                payload_bytes: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" },
-                payload_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-                file_type: { const: "symlink" },
-                before: { $ref: "#/$defs/blobIdentity" },
-                after: { $ref: "#/$defs/symlinkBlobIdentity" }
-              }
-            }
-          }
-        },
-        else: {
-          if: { required: ["operation"], properties: { operation: { const: "rename" } } },
-          then: {
-            if: { required: ["storage"], properties: { storage: { const: "git-object" } } },
-            then: {
-              if: { required: ["file_type"], properties: { file_type: { const: "regular" } } },
-              then: {
-                $comment: "leaf 9 \u2014 RenameGitRegular",
-                type: "object",
-                additionalProperties: false,
-                required: ["path", "path_class", "operation", "storage", "file_type", "before", "after", "previous_path"],
-                properties: {
-                  path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-                  path_class: { $ref: "#/$defs/claimableOutputPathClass" },
-                  operation: { const: "rename" },
-                  storage: { const: "git-object" },
-                  file_type: { const: "regular" },
-                  before: { $ref: "#/$defs/blobIdentity" },
-                  after: { $ref: "#/$defs/regularBlobIdentity" },
-                  previous_path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" }
-                }
-              },
-              else: {
-                $comment: "leaf 10 \u2014 RenameGitSymlink",
-                type: "object",
-                additionalProperties: false,
-                required: ["path", "path_class", "operation", "storage", "file_type", "before", "after", "previous_path"],
-                properties: {
-                  path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-                  path_class: { $ref: "#/$defs/claimableOutputPathClass" },
-                  operation: { const: "rename" },
-                  storage: { const: "git-object" },
-                  file_type: { const: "symlink" },
-                  before: { $ref: "#/$defs/blobIdentity" },
-                  after: { $ref: "#/$defs/symlinkBlobIdentity" },
-                  previous_path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" }
-                }
-              }
-            },
-            else: {
-              if: { required: ["file_type"], properties: { file_type: { const: "regular" } } },
-              then: {
-                $comment: "leaf 11 \u2014 RenameRawRegular",
-                type: "object",
-                additionalProperties: false,
-                required: ["path", "path_class", "operation", "storage", "payload_bytes", "payload_digest", "file_type", "before", "after", "previous_path"],
-                properties: {
-                  path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-                  path_class: { $ref: "#/$defs/claimableOutputPathClass" },
-                  operation: { const: "rename" },
-                  storage: { const: "raw-payload" },
-                  payload_bytes: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" },
-                  payload_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-                  file_type: { const: "regular" },
-                  before: { $ref: "#/$defs/blobIdentity" },
-                  after: { $ref: "#/$defs/regularBlobIdentity" },
-                  previous_path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" }
-                }
-              },
-              else: {
-                $comment: "leaf 12 \u2014 RenameRawSymlink",
-                type: "object",
-                additionalProperties: false,
-                required: ["path", "path_class", "operation", "storage", "payload_bytes", "payload_digest", "file_type", "before", "after", "previous_path"],
-                properties: {
-                  path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-                  path_class: { $ref: "#/$defs/claimableOutputPathClass" },
-                  operation: { const: "rename" },
-                  storage: { const: "raw-payload" },
-                  payload_bytes: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" },
-                  payload_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-                  file_type: { const: "symlink" },
-                  before: { $ref: "#/$defs/blobIdentity" },
-                  after: { $ref: "#/$defs/symlinkBlobIdentity" },
-                  previous_path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" }
-                }
-              }
-            }
-          },
-          else: {
-            if: { required: ["file_type"], properties: { file_type: { const: "regular" } } },
-            then: {
-              $comment: "leaf 13 \u2014 DeleteGitRegular. `storage` is pinned to `git-object`: a raw-payload delete would demand bytes for a file that no longer exists.",
-              type: "object",
-              additionalProperties: false,
-              required: ["path", "path_class", "operation", "storage", "file_type", "before"],
-              properties: {
-                path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-                path_class: { $ref: "#/$defs/claimableOutputPathClass" },
-                operation: { const: "delete" },
-                storage: { const: "git-object" },
-                file_type: { const: "regular" },
-                before: { $ref: "#/$defs/regularBlobIdentity" }
-              }
-            },
-            else: {
-              $comment: "leaf 14 \u2014 DeleteGitSymlink",
-              type: "object",
-              additionalProperties: false,
-              required: ["path", "path_class", "operation", "storage", "file_type", "before"],
-              properties: {
-                path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-                path_class: { $ref: "#/$defs/claimableOutputPathClass" },
-                operation: { const: "delete" },
-                storage: { const: "git-object" },
-                file_type: { const: "symlink" },
-                before: { $ref: "#/$defs/symlinkBlobIdentity" }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-};
-
-// src/contracts/schemas/v1/implementation-output.schema.json
-var implementation_output_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:implementation-output",
-  title: "ArchFlow Implementation Output v1",
-  $comment: "The manifest an implementation step produces. `artifact_kind` is the discriminant of the durable artifact union. Built entirely by $ref against the pinned $def inventory (D7): `outputEntry`, `declaredInputRef`, and the `snapshotAccounting` ROOT come from `durable-primitives`; `taskSlug`, `phaseInstanceId`, `gitOid`, `sha256Digest`, `safeInteger`, `pathSafeId`, `repositoryPathClaim`, and `taskPathClaim` come from `primitives`; `secret_scan` $refs the whole `secret-scan-result` root, which carries its own nested `schema_version` \u2014 that nesting is expected. Nothing here is re-declared locally. STRUCTURALLY TOTAL BUT NOT INTEGRITY-TOTAL: `payload_bytes`, `payload_digest`, and `after.oid` are assertions in Phase 7; Phase 11 verifies them against retained bytes at materialization time, so a passing validation here is not evidence that the bytes exist. `restore_targets` subset-of-outputs, the accounting sums and correspondence, `previous_path !== path`, and `phase_instance` decoding to `phase-impl` are all `validateDurableSemantics`'s (chunk 10) and are deliberately NOT duplicated here.",
-  type: "object",
-  additionalProperties: false,
-  required: [
-    "schema_version",
-    "artifact_kind",
-    "task_id",
-    "phase_instance",
-    "step",
-    "base_commit",
-    "index_identity_digest",
-    "worktree_identity_digest",
-    "outputs",
-    "parent_documents",
-    "diff_digest",
-    "snapshot_digest",
-    "restore_targets",
-    "accounting",
-    "secret_scan",
-    "undeclared_changes",
-    "declared_inputs",
-    "input_fingerprint"
-  ],
-  properties: {
-    schema_version: { const: "1" },
-    artifact_kind: { const: "implementation-output" },
-    task_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-    phase_instance: {
-      $comment: "Chunk 10's rank 4b restricts this to `phase-impl-<n>`; the $def can only be a pattern, so the narrowing stays semantic.",
-      $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
-    },
-    step: {
-      $comment: "D19 \u2014 required in all three authorities, with members exactly `PIPELINE_STEPS` (`vocabulary.ts:2`). Chunk 10's rank-8 fingerprint correlation keys on (phase_instance, step) and had nothing to compare against before this field existed.",
-      enum: ["produce", "counter_review", "triage", "adjudicate"]
-    },
-    base_commit: {
-      $comment: "Immutable: the tree the diff is taken against.",
-      $ref: "urn:archflow:schema:v1:primitives#/$defs/gitOid"
-    },
-    index_identity_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    worktree_identity_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    outputs: {
-      $comment: 'SET \u2014 sorted by `path`, duplicates rejected, and NON-EMPTY. The keyword and the Zod mirror both call `isSortedUniqueBy` with `tupleKey("path")`, so the two authorities are one predicate.',
-      type: "array",
-      minItems: 1,
-      items: { $ref: "urn:archflow:schema:v1:durable-primitives#/$defs/outputEntry" },
-      "x-archflow-sorted-unique-by": "path"
-    },
-    parent_documents: {
-      $comment: "SET \u2014 sorted by `document_path`, duplicates rejected.",
-      type: "array",
-      items: { $ref: "#/$defs/parentDocumentRef" },
-      "x-archflow-sorted-unique-by": "document_path"
-    },
-    diff_digest: {
-      $comment: "The exact review and commit-authorization subject.",
-      $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-    },
-    snapshot_digest: {
-      $comment: "Domain-separated canonical declared-output snapshot; never the retained result address.",
-      $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-    },
-    restore_targets: {
-      $comment: "SET \u2014 sorted, duplicates rejected. Bare strings, so the string-array keyword applies. A subset of `outputs[].path`; that containment is chunk 10's rank 5b and is deliberately not checked here. D3 \u2014 `repositoryPathClaim`, the worktree frame, the same frame as `outputEntry.path`.",
-      type: "array",
-      items: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-      "x-archflow-sorted-unique": true
-    },
-    accounting: {
-      $comment: "$refs the snapshotAccounting ROOT, not the entry.",
-      $ref: "urn:archflow:schema:v1:durable-primitives#/$defs/snapshotAccounting"
-    },
-    secret_scan: {
-      $comment: 'The whole `secret-scan-result` root. All three of its variants carry their own `schema_version: "1"`, so this manifest carries a nested one \u2014 expected, not a duplication defect.',
-      $ref: "urn:archflow:schema:v1:secret-scan-result"
-    },
-    undeclared_changes: { $ref: "#/$defs/undeclaredChangeReport" },
-    declared_inputs: {
-      $comment: "SET \u2014 sorted by `input_id`, duplicates rejected.",
-      type: "array",
-      items: { $ref: "urn:archflow:schema:v1:durable-primitives#/$defs/declaredInputRef" },
-      "x-archflow-sorted-unique-by": "input_id"
-    },
-    input_fingerprint: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    constitution_edit_gate_id: {
-      $comment: "D14 \u2014 a structural hook and NOTHING more. An earlier draft made a `task-branch-constitution` output claimable only when this field was present; that is constitution-edit gate policy, which is REQ-16 and Phase 12's. There is deliberately no conditional-requirement rule tying this field to `path_class`. Absence is omission from `required`, never `null`.",
-      $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-    }
-  },
-  $defs: {
-    parentDocumentRef: {
-      $comment: "D3 \u2014 `document_path` is a `taskPathClaim`: task-relative, rooted at `.archflow/tasks/<task_id>/`, a different frame from `outputs[].path` and `restore_targets`, which are `repositoryPathClaim` and rooted at the worktree. Both brands are one runtime validator cast twice, so the $ref name here is what states the frame; there is no runtime frame check.",
-      type: "object",
-      additionalProperties: false,
-      required: ["document_path", "content_digest", "role"],
-      properties: {
-        document_path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim" },
-        content_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        role: { enum: ["prd", "design", "phase-design", "impl-notes"] }
-      }
-    },
-    undeclaredChangeReport: {
-      $comment: '`undeclared_paths` is RAW Git output, not a path claim, and its mirror is deliberately a bare `{"type": "string"}` declared inline rather than a $def: a valid repository may contain a dirty file whose name carries a colon, a trailing dot, non-NFC text, or a newline, and reporting an undeclared change must not throw when it meets one. `RawGitPath` (`path-claims.ts:15`, `:72`) is a total constructor with no lexical rule and has no $def in `primitives.schema.json`. `unrepresentable_count` counts the names that could not be represented at all, and genuinely admits 0, so it $refs `safeInteger` (D8).',
-      type: "object",
-      additionalProperties: false,
-      required: ["scanned", "undeclared_paths", "unrepresentable_count"],
-      properties: {
-        scanned: { type: "boolean" },
-        undeclared_paths: {
-          type: "array",
-          items: { type: "string" },
-          "x-archflow-sorted-unique": true
-        },
-        unrepresentable_count: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" }
-      }
-    }
-  }
-};
-
-// src/contracts/schemas/v1/path-claim.schema.json
-var path_claim_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:path-claim",
-  type: "string",
-  minLength: 1,
-  "x-archflow-max-utf8-bytes": 1024,
-  "x-archflow-nfc": true,
-  pattern: "^(?!/)(?![A-Za-z]:)(?!//)(?!.*\\\\)(?!.*[\\u0000-\\u001F\\u007F-\\u009F])(?!\\.\\.?(?:/|$))(?!.*\\/\\.\\.?(?:/|$))(?!.*//)(?!.*[:*?\\[\\]<>|])(?!.*[. ](?:/|$))(?!(?:.*/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?(?:/|$)).+$"
-};
-
-// src/contracts/schemas/v1/primitives.schema.json
-var primitives_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:primitives",
-  $defs: {
-    positiveSafePhaseNumber: {
-      type: "integer",
-      minimum: 1,
-      maximum: 9007199254740991
-    },
-    phaseInstanceId: {
-      $comment: "Weaker than `phaseInstanceIdV1Schema`, which delegates to `decodePhaseInstance`. A `pattern` cannot bound the phase number, so this $def admits values above Number.MAX_SAFE_INTEGER (for example `phase-impl-99999999999999999999`) that the decoder rejects. Recorded here the way `src/repository/paths.ts:62-63` records that its `REVISION` fragment permits `0`.",
-      type: "string",
-      pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
-    },
-    safeInteger: {
-      type: "integer",
-      minimum: 0,
-      maximum: 9007199254740991
-    },
-    sha256Digest: {
-      type: "string",
-      pattern: "^[0-9a-f]{64}$"
-    },
-    gitOid: {
-      type: "string",
-      pattern: "^[0-9a-f]{40}$"
-    },
-    safeId: {
-      type: "string",
-      pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
-    },
-    pathSafeId: {
-      type: "string",
-      pattern: "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-    },
-    taskSlug: {
-      type: "string",
-      pattern: "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
-    },
-    repositoryPathClaim: { $ref: "urn:archflow:schema:v1:path-claim" },
-    taskPathClaim: { $ref: "urn:archflow:schema:v1:path-claim" },
-    safeCode: {
-      type: "string",
-      pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"
-    },
-    safeVersion: {
-      type: "string",
-      pattern: "^[A-Za-z0-9.-]{1,64}$"
-    }
-  }
-};
-
-// src/contracts/schemas/v1/task-state.schema.json
-var task_state_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:task-state",
-  title: "ArchFlow Task State v1",
-  $comment: "`state.json` \u2014 the durable state of truth for one task. This schema is the SOLE shape authority for `TaskStateV1` (D2): `src/contracts/durable-state.ts` declares the TypeScript aliases and NO Zod mirror. The complete committed intent binding authenticates one immutable receipt and outcome. Absence is omission from `required`, never `null`.",
-  type: "object",
-  additionalProperties: false,
-  required: [
-    "schema_version",
-    "task_id",
-    "repository_identity_digest",
-    "revision",
-    "phase_instance",
-    "step",
-    "status",
-    "attempt",
-    "input_fingerprint",
-    "initialization_digest",
-    "config_digest",
-    "workflow_digest",
-    "constitution_digest",
-    "policy_base_commit",
-    "authoritative_results",
-    "approvals",
-    "waivers"
-  ],
-  properties: {
-    schema_version: { const: "1" },
-    task_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-    repository_identity_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    revision: {
-      $comment: "D8 \u2014 pins its own minimum and does NOT $ref `safeInteger`, which admits 0. There is no revision 0. Strict monotonicity across writes is Phase 9's, not a shape rule.",
-      type: "integer",
-      minimum: 1,
-      maximum: 9007199254740991
-    },
-    phase_instance: { $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-    step: {
-      $comment: "`PIPELINE_STEPS` (`vocabulary.ts:2`), re-exported by `workflow.ts:7-8`.",
-      enum: ["produce", "counter_review", "triage", "adjudicate"]
-    },
-    status: { $ref: "#/$defs/stepStatus" },
-    attempt: { type: "integer", minimum: 1, maximum: 9007199254740991 },
-    input_fingerprint: {
-      $comment: "D13 \u2014 the IN-FLIGHT step's declared-input fingerprint, so Phase 9 can raise INPUT_FINGERPRINT_MISMATCH before a transition. Per-result fingerprints live in `authoritative_results[*].input_fingerprint`.",
-      $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-    },
-    initialization_digest: {
-      $comment: "The adopted task-initialization or legacy-import-initialization document. A reference, not authority: this schema never resolves it.",
-      $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-    },
-    config_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    workflow_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    constitution_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    policy_base_commit: { $ref: "urn:archflow:schema:v1:primitives#/$defs/gitOid" },
-    authoritative_results: {
-      $comment: "SET \u2014 sorted by the TUPLE (phase_instance, step), duplicates rejected. The keyword joins components with U+0000, which every ID primitive rejects, so the joined comparison is exactly componentwise ordinal comparison.",
-      type: "array",
-      items: { $ref: "#/$defs/authoritativeResultRef" },
-      "x-archflow-sorted-unique-by": ["phase_instance", "step"]
-    },
-    approvals: {
-      $comment: "SET \u2014 sorted by `gate_id`, duplicates rejected.",
-      type: "array",
-      items: { $ref: "#/$defs/approvalRef" },
-      "x-archflow-sorted-unique-by": "gate_id"
-    },
-    waivers: {
-      $comment: "SET \u2014 sorted by `gate_id`, duplicates rejected.",
-      type: "array",
-      items: { $ref: "#/$defs/waiverRef" },
-      "x-archflow-sorted-unique-by": "gate_id"
-    },
-    planned_final_phase: {
-      $comment: "The positive final implementation phase recorded from consecutive exact `### Phase N: Name` headings in the human-approved design. Absence is valid only when that design carries the explicit `<!-- archflow:phase-plan:open-ended -->` marker.",
-      type: "integer",
-      minimum: 1,
-      maximum: 9007199254740991
-    },
-    open_gate: {
-      $comment: "A single optional object, NEVER an array: a nested or concurrent gate is unrepresentable rather than merely rejected. Phase 12 owns the one-active-gate lifecycle \u2014 when this may be set, cleared, or superseded.",
-      $ref: "#/$defs/openGateRef"
-    },
-    committed_intent: { $ref: "#/$defs/committedIntentRef" },
-    adopted_checkpoint: { $ref: "#/$defs/adoptedCheckpointRef" },
-    terminal: {
-      $comment: "`TERMINAL_STATES`. Declared inline rather than as a $def because copying its two enum members is cheaper than promoting another shared reference shape.",
-      enum: ["complete", "abandoned"]
-    }
-  },
-  $defs: {
-    stepStatus: {
-      $comment: "`STEP_STATUSES` (`durable-state.ts`).",
-      enum: ["running", "succeeded", "failed"]
-    },
-    gateKind: {
-      $comment: "`GATE_KINDS` (`gates.ts:41`) \u2014 the nine kinds. No `gateKind` $def shipped anywhere in schemas/v1/ before this one; it is declared once here rather than inlined twice inside `approvalRef` and `openGateRef`.",
-      enum: [
-        "artifact-approval",
-        "review-trigger",
-        "material-drift",
-        "adjudication-failure",
-        "attempts-exhausted",
-        "constitution-edit",
-        "commit-authorization",
-        "restore-collision",
-        "migration-audit"
-      ]
-    },
-    authoritativeResultRef: {
-      $comment: "D21. `result_digest` names a result manifest and `manifest_path` names where it lives; neither is resolved here or by `validateDurableSemantics`, whose subject has no slot that could carry the target. Phase 10 materializes them.",
-      type: "object",
-      additionalProperties: false,
-      required: ["phase_instance", "step", "result_digest", "result_id", "input_fingerprint", "manifest_path"],
-      properties: {
-        phase_instance: { $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-        step: { enum: ["produce", "counter_review", "triage", "adjudicate"] },
-        result_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        result_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId" },
-        input_fingerprint: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        manifest_path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" }
-      }
-    },
-    approvalRef: {
-      $comment: "D21. `resolved_at_revision` pins its own minimum (D8).",
-      type: "object",
-      additionalProperties: false,
-      required: ["gate_id", "gate_kind", "subject_digest", "decision_digest", "resolved_at_revision"],
-      properties: {
-        gate_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        gate_kind: { $ref: "#/$defs/gateKind" },
-        subject_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        decision_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        resolved_at_revision: { type: "integer", minimum: 1, maximum: 9007199254740991 }
-      }
-    },
-    waiverRef: {
-      $comment: "D21. `expires` is the const `task-complete` \u2014 the narrowest representation of the only expiry this project has. Phase 12 records waiver scope; Phase 14 owns expiry policy enforcement. `rule_version` and `granted_at_revision` pin their own minimums (D8).",
-      type: "object",
-      additionalProperties: false,
-      required: ["gate_id", "rule_id", "rule_version", "subject_digest", "scope", "granted", "expires", "granted_at_revision"],
-      properties: {
-        gate_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        rule_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId" },
-        rule_version: { type: "integer", minimum: 1, maximum: 9007199254740991 },
-        subject_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        scope: {
-          type: "object",
-          additionalProperties: false,
-          required: ["operation", "boundary"],
-          properties: {
-            operation: { enum: ["review-trigger", "adjudication-failure"] },
-            boundary: { enum: ["subject", "phase", "task"] }
-          }
-        },
-        granted: { type: "boolean" },
-        expires: { const: "task-complete" },
-        granted_at_revision: { type: "integer", minimum: 1, maximum: 9007199254740991 }
-      }
-    },
-    openGateRef: {
-      $comment: "D21. `opened_at_revision` pins its own minimum (D8).",
-      type: "object",
-      additionalProperties: false,
-      required: ["gate_id", "gate_kind", "subject_digest", "context_digest", "frozen_state_digest", "opened_at_revision"],
-      properties: {
-        gate_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        gate_kind: { $ref: "#/$defs/gateKind" },
-        subject_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        context_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        frozen_state_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        waiver_origin_gate_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        opened_at_revision: { type: "integer", minimum: 1, maximum: 9007199254740991 }
-      }
-    },
-    committedIntentRef: {
-      $comment: "The complete state authority for one committed immutable receipt. `prior_revision` admits 0 for initialization; `resulting_revision` is at least 1.",
-      type: "object",
-      additionalProperties: false,
-      required: ["intent_id", "request_digest", "receipt_digest", "outcome_digest", "prior_revision", "resulting_revision", "result_id"],
-      properties: {
-        intent_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        request_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        receipt_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        outcome_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        prior_revision: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" },
-        resulting_revision: { type: "integer", minimum: 1, maximum: 9007199254740991 },
-        result_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId" }
-      }
-    },
-    adoptedCheckpointRef: {
-      $comment: "Legacy: written only by the retired checkpoint import flow. Tolerated so pre-retirement task states still validate; nothing writes it anymore, and a state carrying it is preserved verbatim.",
-      type: "object",
-      additionalProperties: false,
-      required: ["revision", "checkpoint_digest"],
-      properties: {
-        revision: { type: "integer", minimum: 1, maximum: 9007199254740991 },
-        checkpoint_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" }
-      }
-    }
-  }
-};
-
-// src/contracts/schemas/v1/active-gate.schema.json
-var active_gate_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:active-gate",
-  title: "ArchFlow Active Gate Interface v1",
-  type: "object",
-  additionalProperties: false,
-  required: ["schema_version", "gate_id", "intent_id", "request_digest", "task_id", "phase_instance", "summary", "subject_digest", "context_digest", "current_evidence", "kind", "context", "allowed_decisions", "opened_at_revision", "status", "decision_template", "supplemental"],
-  properties: {
-    schema_version: { $ref: "urn:archflow:schema:v1:gate-request#/properties/schema_version" },
-    gate_id: { $ref: "urn:archflow:schema:v1:gate-request#/properties/gate_id" },
-    intent_id: { $ref: "urn:archflow:schema:v1:gate-request#/properties/intent_id" },
-    request_digest: { $ref: "urn:archflow:schema:v1:gate-request#/properties/request_digest" },
-    task_id: { $ref: "urn:archflow:schema:v1:gate-request#/properties/task_id" },
-    phase_instance: { $ref: "urn:archflow:schema:v1:gate-request#/properties/phase_instance" },
-    summary: { $ref: "urn:archflow:schema:v1:gate-request#/properties/summary" },
-    subject_digest: { $ref: "urn:archflow:schema:v1:gate-request#/properties/subject_digest" },
-    context_digest: { $ref: "urn:archflow:schema:v1:gate-request#/properties/context_digest" },
-    current_evidence: { $ref: "urn:archflow:schema:v1:gate-request#/properties/current_evidence" },
-    supersedes: { $ref: "urn:archflow:schema:v1:gate-request#/$defs/supersession" },
-    kind: { $ref: "urn:archflow:schema:v1:gate-request#/properties/kind" },
-    context: { type: "object" },
-    allowed_decisions: { $ref: "urn:archflow:schema:v1:gate-request#/properties/allowed_decisions" },
-    opened_at_revision: { $ref: "urn:archflow:schema:v1:gate-request#/properties/opened_at_revision" },
-    status: { const: "awaiting-human" },
-    decision_template: { $ref: "#/$defs/decisionTemplate" },
-    supplemental: { $ref: "urn:archflow:schema:v1:gate-decision-record#/$defs/supplemental" }
-  },
-  oneOf: [
-    { $ref: "urn:archflow:schema:v1:gate-request#/$defs/artifactApproval" },
-    { $ref: "urn:archflow:schema:v1:gate-request#/$defs/reviewTrigger" },
-    { $ref: "urn:archflow:schema:v1:gate-request#/$defs/materialDrift" },
-    { $ref: "urn:archflow:schema:v1:gate-request#/$defs/adjudicationFailure" },
-    { $ref: "urn:archflow:schema:v1:gate-request#/$defs/attemptsExhausted" },
-    { $ref: "urn:archflow:schema:v1:gate-request#/$defs/constitutionEdit" },
-    { $ref: "urn:archflow:schema:v1:gate-request#/$defs/commitAuthorization" },
-    { $ref: "urn:archflow:schema:v1:gate-request#/$defs/restoreCollision" },
-    { $ref: "urn:archflow:schema:v1:gate-request#/$defs/migrationAudit" },
-    { $ref: "urn:archflow:schema:v1:gate-request#/$defs/reviewWaiver" },
-    { $ref: "urn:archflow:schema:v1:gate-request#/$defs/adjudicationWaiver" }
-  ],
-  $defs: {
-    decisionTemplate: {
-      type: "object",
-      additionalProperties: false,
-      required: ["schema_version", "gate_id", "task_id", "phase_instance", "kind", "subject_digest", "context_digest", "required_fields", "cancellation_fields"],
-      properties: {
-        schema_version: { const: "1" },
-        gate_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        task_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-        phase_instance: { $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-        kind: { $ref: "urn:archflow:schema:v1:gate-request#/properties/kind" },
-        subject_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        context_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        required_fields: {
-          oneOf: [
-            { type: "array", prefixItems: [{ const: "payload" }, { const: "human_provenance" }], items: false, minItems: 2, maxItems: 2 },
-            { type: "array", prefixItems: [{ const: "granted" }, { const: "scope" }, { const: "origin" }, { const: "notes" }, { const: "human_provenance" }], items: false, minItems: 5, maxItems: 5 }
-          ]
-        },
-        cancellation_fields: { type: "array", prefixItems: [{ const: "cancelled" }, { const: "reason" }, { const: "human_provenance" }], items: false, minItems: 3, maxItems: 3 }
-      }
-    }
-  }
-};
-
-// src/contracts/schemas/v1/gate-contract.schema.json
-var gate_contract_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:gate-contract",
-  type: "object",
-  "x-archflow-gate-semantics": true,
-  $defs: {
-    digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
-    safeId: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId" },
-    text: {
-      type: "string",
-      minLength: 1,
-      maxLength: 4096,
-      pattern: "\\S"
-    },
-    safeInteger: {
-      type: "integer",
-      minimum: 0,
-      maximum: 9007199254740991
-    },
-    rule: {
-      type: "object",
-      additionalProperties: false,
-      required: ["rule_id", "rule_version"],
-      properties: {
-        rule_id: { $ref: "#/$defs/safeId" },
-        rule_version: {
-          type: "integer",
-          minimum: 1,
-          maximum: 9007199254740991
-        }
-      }
-    },
-    rules: {
-      type: "array",
-      uniqueItems: true,
-      items: { $ref: "#/$defs/rule" }
-    },
-    digests: {
-      type: "array",
-      uniqueItems: true,
-      items: { $ref: "#/$defs/digest" }
-    },
-    waiverScope: {
-      type: "object",
-      additionalProperties: false,
-      required: ["operation", "boundary"],
-      properties: {
-        operation: { enum: ["review-trigger", "adjudication-failure"] },
-        boundary: { enum: ["subject", "phase", "task"] }
-      }
-    },
-    authorityLink: {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "link_digest",
-        "purpose",
-        "proposed_generation_digest",
-        "changed_input_fingerprint"
-      ],
-      properties: {
-        link_digest: { $ref: "#/$defs/digest" },
-        purpose: { const: "restore-adoption" },
-        proposed_generation_digest: { $ref: "#/$defs/digest" },
-        changed_input_fingerprint: { $ref: "#/$defs/digest" }
-      }
-    },
-    artifactApproval: {
-      type: "object",
-      additionalProperties: false,
-      required: ["kind", "context", "payload"],
-      properties: {
-        kind: { const: "artifact-approval" },
-        context: {
-          type: "object",
-          additionalProperties: false,
-          required: ["artifact_kind"],
-          properties: {
-            artifact_kind: {
-              enum: ["prd", "design", "phase-design", "phase-implementation"]
-            }
-          }
-        },
-        payload: {
-          oneOf: [
-            { $ref: "#/$defs/approve" },
-            { $ref: "#/$defs/revise" },
-            { $ref: "#/$defs/reject" }
-          ]
-        }
-      }
-    },
-    reviewTrigger: {
-      type: "object",
-      additionalProperties: false,
-      required: ["kind", "context", "payload"],
-      properties: {
-        kind: { const: "review-trigger" },
-        context: {
-          type: "object",
-          additionalProperties: false,
-          required: [
-            "matched_rules",
-            "uncertain_rules",
-            "eligible_waiver_rules",
-            "waiver_scope"
-          ],
-          properties: {
-            matched_rules: { $ref: "#/$defs/rules" },
-            uncertain_rules: { $ref: "#/$defs/rules" },
-            eligible_waiver_rules: { $ref: "#/$defs/rules" },
-            waiver_scope: { $ref: "#/$defs/waiverScope" }
-          }
-        },
-        payload: {
-          oneOf: [
-            { $ref: "#/$defs/approve" },
-            { $ref: "#/$defs/revise" },
-            { $ref: "#/$defs/reject" },
-            { $ref: "#/$defs/waiverRequested" }
-          ]
-        }
-      }
-    },
-    materialDrift: {
-      type: "object",
-      additionalProperties: false,
-      required: ["kind", "context", "payload"],
-      properties: {
-        kind: { const: "material-drift" },
-        context: {
-          type: "object",
-          additionalProperties: false,
-          required: ["affected_upstream", "drift", "affected_claim_ids"],
-          properties: {
-            affected_upstream: {
-              type: "object",
-              additionalProperties: false,
-              required: ["kind", "digest"],
-              properties: {
-                kind: {
-                  enum: [
-                    "prd",
-                    "architecture",
-                    "phase-design",
-                    "implementation-result",
-                    "review",
-                    "adjudication",
-                    "constitution",
-                    "workflow",
-                    "import"
-                  ]
-                },
-                digest: { $ref: "#/$defs/digest" }
-              }
-            },
-            drift: { const: "material" },
-            affected_claim_ids: {
-              type: "array",
-              minItems: 1,
-              uniqueItems: true,
-              items: { $ref: "#/$defs/safeId" }
-            }
-          }
-        },
-        payload: {
-          oneOf: [
-            { $ref: "#/$defs/amendUpstream" },
-            { $ref: "#/$defs/reviseCurrent" },
-            { $ref: "#/$defs/reject" }
-          ]
-        }
-      }
-    },
-    adjudicationFailure: {
-      type: "object",
-      additionalProperties: false,
-      required: ["kind", "context", "payload"],
-      properties: {
-        kind: { const: "adjudication-failure" },
-        context: {
-          type: "object",
-          additionalProperties: false,
-          required: [
-            "constitution",
-            "failed_rules",
-            "uncertain_rules",
-            "eligible_waiver_rules",
-            "waiver_scope"
-          ],
-          properties: {
-            constitution: { enum: ["fail", "uncertain"] },
-            failed_rules: { $ref: "#/$defs/rules" },
-            uncertain_rules: { $ref: "#/$defs/rules" },
-            eligible_waiver_rules: { $ref: "#/$defs/rules" },
-            waiver_scope: { $ref: "#/$defs/waiverScope" }
-          }
-        },
-        payload: {
-          oneOf: [
-            { $ref: "#/$defs/adjudicationApprove" },
-            { $ref: "#/$defs/revise" },
-            { $ref: "#/$defs/reject" },
-            { $ref: "#/$defs/waiverRequested" }
-          ]
-        }
-      }
-    },
-    attemptsExhausted: {
-      type: "object",
-      additionalProperties: false,
-      required: ["kind", "context", "payload"],
-      properties: {
-        kind: { const: "attempts-exhausted" },
-        context: {
-          type: "object",
-          additionalProperties: false,
-          required: ["step", "attempts", "maximum_attempts"],
-          properties: {
-            step: {
-              enum: [
-                "produce",
-                "counter_review",
-                "triage",
-                "adjudicate"
-              ]
-            },
-            attempts: { $ref: "#/$defs/safeInteger" },
-            maximum_attempts: { $ref: "#/$defs/safeInteger" }
-          }
-        },
-        payload: {
-          oneOf: [
-            { $ref: "#/$defs/retryOnce" },
-            { $ref: "#/$defs/revise" },
-            { $ref: "#/$defs/abort" }
-          ]
-        }
-      }
-    },
-    constitutionEdit: {
-      type: "object",
-      additionalProperties: false,
-      required: ["kind", "context", "payload"],
-      properties: {
-        kind: { const: "constitution-edit" },
-        context: {
-          type: "object",
-          additionalProperties: false,
-          required: [
-            "pinned_constitution_digest",
-            "current_constitution_digest",
-            "changed_path_class"
-          ],
-          properties: {
-            pinned_constitution_digest: { $ref: "#/$defs/digest" },
-            current_constitution_digest: { $ref: "#/$defs/digest" },
-            changed_path_class: { const: "task-branch-constitution" }
-          }
-        },
-        payload: {
-          oneOf: [
-            { $ref: "#/$defs/revertEdit" },
-            { $ref: "#/$defs/startBaseAmendment" },
-            { $ref: "#/$defs/abort" }
-          ]
-        }
-      }
-    },
-    commitAuthorization: {
-      type: "object",
-      additionalProperties: false,
-      required: ["kind", "context", "payload"],
-      properties: {
-        kind: { const: "commit-authorization" },
-        context: {
-          type: "object",
-          additionalProperties: false,
-          required: [
-            "target_ref",
-            "diff_digest",
-            "current_artifact_digests",
-            "parent_document_digests"
-          ],
-          properties: {
-            target_ref: { $ref: "#/$defs/text" },
-            diff_digest: { $ref: "#/$defs/digest" },
-            current_artifact_digests: { $ref: "#/$defs/digests" },
-            parent_document_digests: { $ref: "#/$defs/digests" }
-          }
-        },
-        payload: {
-          oneOf: [
-            { $ref: "#/$defs/authorizeCommit" },
-            { $ref: "#/$defs/revise" },
-            { $ref: "#/$defs/abort" }
-          ]
-        }
-      }
-    },
-    restoreCollision: {
-      type: "object",
-      additionalProperties: false,
-      required: ["kind", "context", "payload"],
-      properties: {
-        kind: { const: "restore-collision" },
-        context: {
-          type: "object",
-          additionalProperties: false,
-          required: [
-            "path",
-            "recorded_generation_digest",
-            "current_generation_digest"
-          ],
-          properties: {
-            path: { $ref: "urn:archflow:schema:v1:path-claim" },
-            recorded_generation_digest: { $ref: "#/$defs/digest" },
-            current_generation_digest: { $ref: "#/$defs/digest" },
-            adoption_candidate: { $ref: "#/$defs/authorityLink" }
-          }
-        },
-        payload: {
-          oneOf: [
-            { $ref: "#/$defs/discardAndRestore" },
-            { $ref: "#/$defs/adoptGeneration" },
-            { $ref: "#/$defs/abort" }
-          ]
-        }
-      }
-    },
-    migrationAudit: {
-      type: "object",
-      additionalProperties: false,
-      required: ["kind", "context", "payload"],
-      properties: {
-        kind: { const: "migration-audit" },
-        context: {
-          type: "object",
-          additionalProperties: false,
-          required: [
-            "source_identity_digest",
-            "destination_identity_digest",
-            "import_digest",
-            "code_baseline_digest",
-            "policy_baseline_digest"
-          ],
-          properties: {
-            source_identity_digest: { $ref: "#/$defs/digest" },
-            destination_identity_digest: { $ref: "#/$defs/digest" },
-            import_digest: { $ref: "#/$defs/digest" },
-            code_baseline_digest: { $ref: "#/$defs/digest" },
-            policy_baseline_digest: { $ref: "#/$defs/digest" }
-          }
-        },
-        payload: {
-          oneOf: [
-            { $ref: "#/$defs/acceptImportAudit" },
-            { $ref: "#/$defs/revise" },
-            { $ref: "#/$defs/abort" }
-          ]
-        }
-      }
-    },
-    approve: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason"],
-      properties: {
-        decision: { const: "approve" },
-        reason: { $ref: "#/$defs/text" }
-      },
-      "x-archflow-effect": "advance"
-    },
-    revise: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason"],
-      properties: {
-        decision: { const: "revise" },
-        reason: { $ref: "#/$defs/text" }
-      },
-      "x-archflow-effect": "retry"
-    },
-    reject: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason"],
-      properties: {
-        decision: { const: "reject" },
-        reason: { $ref: "#/$defs/text" }
-      },
-      "x-archflow-effect": "non-advancing"
-    },
-    abort: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason"],
-      properties: {
-        decision: { const: "abort" },
-        reason: { $ref: "#/$defs/text" }
-      },
-      "x-archflow-effect": "non-advancing"
-    },
-    waiverRequested: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason", "rule", "rationale"],
-      properties: {
-        decision: { const: "waiver-requested" },
-        reason: { $ref: "#/$defs/text" },
-        rule: { $ref: "#/$defs/rule" },
-        rationale: { $ref: "#/$defs/text" }
-      },
-      "x-archflow-effect": "redirect-waiver"
-    },
-    adjudicationApprove: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason", "resolutions"],
-      properties: {
-        decision: { const: "approve" },
-        reason: { $ref: "#/$defs/text" },
-        resolutions: {
-          type: "array",
-          uniqueItems: true,
-          items: {
-            type: "object",
-            additionalProperties: false,
-            required: ["rule", "resolution"],
-            properties: {
-              rule: { $ref: "#/$defs/rule" },
-              resolution: { $ref: "#/$defs/text" }
-            }
-          }
-        }
-      },
-      "x-archflow-effect": "advance"
-    },
-    amendUpstream: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason"],
-      properties: {
-        decision: { const: "amend-upstream" },
-        reason: { $ref: "#/$defs/text" }
-      },
-      "x-archflow-effect": "redirect-upstream"
-    },
-    reviseCurrent: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason"],
-      properties: {
-        decision: { const: "revise-current" },
-        reason: { $ref: "#/$defs/text" }
-      },
-      "x-archflow-effect": "retry"
-    },
-    retryOnce: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason"],
-      properties: {
-        decision: { const: "retry-once" },
-        reason: { $ref: "#/$defs/text" }
-      },
-      "x-archflow-effect": "retry"
-    },
-    revertEdit: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason"],
-      properties: {
-        decision: { const: "revert-edit" },
-        reason: { $ref: "#/$defs/text" }
-      },
-      "x-archflow-effect": "retry"
-    },
-    startBaseAmendment: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason"],
-      properties: {
-        decision: { const: "start-base-amendment" },
-        reason: { $ref: "#/$defs/text" }
-      },
-      "x-archflow-effect": "redirect-upstream"
-    },
-    authorizeCommit: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason"],
-      properties: {
-        decision: { const: "authorize-commit" },
-        reason: { $ref: "#/$defs/text" }
-      },
-      "x-archflow-effect": "advance"
-    },
-    discardAndRestore: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason"],
-      properties: {
-        decision: { const: "discard-and-restore" },
-        reason: { $ref: "#/$defs/text" }
-      },
-      "x-archflow-effect": "advance"
-    },
-    adoptGeneration: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason", "adoption_authority", "rationale"],
-      properties: {
-        decision: { const: "adopt-as-new-generation" },
-        reason: { $ref: "#/$defs/text" },
-        adoption_authority: { $ref: "#/$defs/authorityLink" },
-        rationale: { $ref: "#/$defs/text" }
-      },
-      "x-archflow-effect": "advance"
-    },
-    acceptImportAudit: {
-      type: "object",
-      additionalProperties: false,
-      required: ["decision", "reason"],
-      properties: {
-        decision: { const: "accept-import-audit" },
-        reason: { $ref: "#/$defs/text" }
-      },
-      "x-archflow-effect": "advance"
-    }
-  },
-  oneOf: [
-    { $ref: "#/$defs/artifactApproval" },
-    { $ref: "#/$defs/reviewTrigger" },
-    { $ref: "#/$defs/materialDrift" },
-    { $ref: "#/$defs/adjudicationFailure" },
-    { $ref: "#/$defs/attemptsExhausted" },
-    { $ref: "#/$defs/constitutionEdit" },
-    { $ref: "#/$defs/commitAuthorization" },
-    { $ref: "#/$defs/restoreCollision" },
-    { $ref: "#/$defs/migrationAudit" }
-  ]
-};
-
-// src/contracts/schemas/v1/gate-decision.schema.json
-var gate_decision_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:gate-decision",
-  type: "object",
-  $defs: {
-    digest: {
-      type: "string",
-      pattern: "^[0-9a-f]{64}$"
-    },
-    safeId: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId" },
-    taskSlug: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-    pathSafeId: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-    recordedAt: {
-      type: "string",
-      format: "date-time",
-      pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
-    },
-    connected: {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "schema_version",
-        "actor_class",
-        "assurance",
-        "channel",
-        "decision_event_id",
-        "connection_id",
-        "request_id_digest",
-        "recorded_at"
-      ],
-      properties: {
-        schema_version: {
-          const: "1"
-        },
-        actor_class: {
-          enum: ["human", "archforge"]
-        },
-        assurance: {
-          const: "declared-local-trace"
-        },
-        channel: {
-          const: "connected-host"
-        },
-        decision_event_id: {
-          $ref: "#/$defs/safeId"
-        },
-        connection_id: {
-          $ref: "#/$defs/safeId"
-        },
-        request_id_digest: {
-          $ref: "#/$defs/digest"
-        },
-        recorded_at: {
-          $ref: "#/$defs/recordedAt"
-        }
-      }
-    },
-    local: {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "schema_version",
-        "actor_class",
-        "assurance",
-        "channel",
-        "decision_event_id",
-        "helper_invocation_id",
-        "recorded_at"
-      ],
-      properties: {
-        schema_version: {
-          const: "1"
-        },
-        actor_class: {
-          enum: ["human", "archforge"]
-        },
-        assurance: {
-          const: "declared-local-trace"
-        },
-        channel: {
-          const: "archflow-local"
-        },
-        decision_event_id: {
-          $ref: "#/$defs/safeId"
-        },
-        helper_invocation_id: {
-          $ref: "#/$defs/safeId"
-        },
-        recorded_at: {
-          $ref: "#/$defs/recordedAt"
-        }
-      }
-    },
-    base: {
-      type: "object",
-      required: [
-        "schema_version",
-        "gate_id",
-        "task_id",
-        "phase_instance",
-        "subject_digest",
-        "context_digest",
-        "human_provenance"
-      ],
-      properties: {
-        schema_version: {
-          const: "1"
-        },
-        gate_id: {
-          $ref: "#/$defs/pathSafeId"
-        },
-        task_id: {
-          $ref: "#/$defs/taskSlug"
-        },
-        phase_instance: {
-          type: "string",
-          pattern: "^(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)$"
-        },
-        subject_digest: {
-          $ref: "#/$defs/digest"
-        },
-        context_digest: {
-          $ref: "#/$defs/digest"
-        },
-        human_provenance: {
-          oneOf: [
-            {
-              $ref: "#/$defs/connected"
-            },
-            {
-              $ref: "#/$defs/local"
-            }
-          ]
-        }
-      }
-    }
-  },
-  allOf: [
-    {
-      $ref: "#/$defs/base"
-    },
-    {
-      oneOf: [
-        {
-          type: "object",
-          required: ["kind", "payload"],
-          properties: {
-            kind: {
-              const: "artifact-approval"
-            },
-            payload: {
-              oneOf: [
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/approve"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/revise"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/reject"
-                }
-              ]
-            }
-          }
-        },
-        {
-          type: "object",
-          required: ["kind", "payload"],
-          properties: {
-            kind: {
-              const: "review-trigger"
-            },
-            payload: {
-              oneOf: [
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/approve"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/revise"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/reject"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/waiverRequested"
-                }
-              ]
-            }
-          }
-        },
-        {
-          type: "object",
-          required: ["kind", "payload"],
-          properties: {
-            kind: {
-              const: "material-drift"
-            },
-            payload: {
-              oneOf: [
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/amendUpstream"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/reviseCurrent"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/reject"
-                }
-              ]
-            }
-          }
-        },
-        {
-          type: "object",
-          required: ["kind", "payload"],
-          properties: {
-            kind: {
-              const: "adjudication-failure"
-            },
-            payload: {
-              oneOf: [
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/adjudicationApprove"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/revise"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/reject"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/waiverRequested"
-                }
-              ]
-            }
-          }
-        },
-        {
-          type: "object",
-          required: ["kind", "payload"],
-          properties: {
-            kind: {
-              const: "attempts-exhausted"
-            },
-            payload: {
-              oneOf: [
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/retryOnce"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/revise"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/abort"
-                }
-              ]
-            }
-          }
-        },
-        {
-          type: "object",
-          required: ["kind", "payload"],
-          properties: {
-            kind: {
-              const: "constitution-edit"
-            },
-            payload: {
-              oneOf: [
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/revertEdit"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/startBaseAmendment"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/abort"
-                }
-              ]
-            }
-          }
-        },
-        {
-          type: "object",
-          required: ["kind", "payload"],
-          properties: {
-            kind: {
-              const: "commit-authorization"
-            },
-            payload: {
-              oneOf: [
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/authorizeCommit"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/revise"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/abort"
-                }
-              ]
-            }
-          }
-        },
-        {
-          type: "object",
-          required: ["kind", "payload"],
-          properties: {
-            kind: {
-              const: "restore-collision"
-            },
-            payload: {
-              oneOf: [
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/discardAndRestore"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/adoptGeneration"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/abort"
-                }
-              ]
-            }
-          }
-        },
-        {
-          type: "object",
-          required: ["kind", "payload"],
-          properties: {
-            kind: {
-              const: "migration-audit"
-            },
-            payload: {
-              oneOf: [
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/acceptImportAudit"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/revise"
-                },
-                {
-                  $ref: "urn:archflow:schema:v1:gate-contract#/$defs/abort"
-                }
-              ]
-            }
-          }
-        }
-      ]
-    }
-  ],
-  unevaluatedProperties: false
-};
-
-// src/contracts/schemas/v1/gate-decision-record.schema.json
-var gate_decision_record_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:gate-decision-record",
-  title: "ArchFlow Gate Decision Record v1",
-  type: "object",
-  oneOf: [
-    { $ref: "#/$defs/decided" },
-    { $ref: "#/$defs/waiverDecided" },
-    { $ref: "#/$defs/cancelled" },
-    { $ref: "#/$defs/superseded" }
-  ],
-  $defs: {
-    baseProperties: {
-      $comment: "Documentation-only list; each closed arm below spells out the same common properties."
-    },
-    supplemental: {
-      type: "array",
-      items: {
-        allOf: [
-          { $ref: "urn:archflow:schema:v1:supplemental-review" },
-          { not: { type: "object", required: ["action"], properties: { action: { const: "supersede" } } } }
-        ]
-      }
-    },
-    origin: { $ref: "urn:archflow:schema:v1:gate-request#/$defs/origin" },
-    scope: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/waiverScope" },
-    provenance: { oneOf: [{ $ref: "urn:archflow:schema:v1:gate-decision#/$defs/connected" }, { $ref: "urn:archflow:schema:v1:gate-decision#/$defs/local" }] },
-    supersession: { $ref: "urn:archflow:schema:v1:gate-request#/$defs/supersession" },
-    decided: {
-      type: "object",
-      additionalProperties: false,
-      required: ["schema_version", "gate_id", "task_id", "phase_instance", "kind", "subject_digest", "context_digest", "supplemental", "outcome", "envelope"],
-      properties: {
-        schema_version: { const: "1" },
-        gate_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        task_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-        phase_instance: { $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-        kind: { enum: ["artifact-approval", "review-trigger", "material-drift", "adjudication-failure", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"] },
-        subject_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        context_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        supplemental: { $ref: "#/$defs/supplemental" },
-        outcome: { const: "decided" },
-        envelope: { $ref: "urn:archflow:schema:v1:gate-decision" }
-      }
-    },
-    waiverDecided: {
-      type: "object",
-      additionalProperties: false,
-      required: ["schema_version", "gate_id", "task_id", "phase_instance", "kind", "subject_digest", "context_digest", "supplemental", "outcome", "granted", "scope", "origin", "notes", "human_provenance"],
-      properties: {
-        schema_version: { const: "1" },
-        gate_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        task_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-        phase_instance: { $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-        kind: { enum: ["review-trigger", "adjudication-failure"] },
-        subject_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        context_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        supplemental: { $ref: "#/$defs/supplemental" },
-        outcome: { const: "waiver-decided" },
-        granted: { type: "boolean" },
-        scope: { $ref: "#/$defs/scope" },
-        origin: { $ref: "#/$defs/origin" },
-        notes: { type: "string", minLength: 1, maxLength: 4096, pattern: "\\S" },
-        human_provenance: { $ref: "#/$defs/provenance" }
-      }
-    },
-    cancelled: {
-      type: "object",
-      additionalProperties: false,
-      required: ["schema_version", "gate_id", "task_id", "phase_instance", "kind", "subject_digest", "context_digest", "supplemental", "outcome", "reason", "human_provenance"],
-      properties: {
-        schema_version: { const: "1" },
-        gate_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        task_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-        phase_instance: { $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-        kind: { enum: ["artifact-approval", "review-trigger", "material-drift", "adjudication-failure", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"] },
-        subject_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        context_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        supplemental: { $ref: "#/$defs/supplemental" },
-        outcome: { const: "cancelled" },
-        reason: { type: "string", minLength: 1, maxLength: 4096, pattern: "\\S" },
-        human_provenance: { $ref: "#/$defs/provenance" }
-      }
-    },
-    superseded: {
-      type: "object",
-      additionalProperties: false,
-      required: ["schema_version", "gate_id", "task_id", "phase_instance", "kind", "subject_digest", "context_digest", "supplemental", "outcome", "supersession"],
-      properties: {
-        schema_version: { const: "1" },
-        gate_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        task_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-        phase_instance: { $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-        kind: { enum: ["artifact-approval", "review-trigger", "material-drift", "adjudication-failure", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"] },
-        subject_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        context_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        supplemental: { $ref: "#/$defs/supplemental" },
-        outcome: { const: "superseded" },
-        supersession: { $ref: "#/$defs/supersession" }
-      }
-    }
-  }
-};
-
-// src/contracts/schemas/v1/gate-request.schema.json
-var gate_request_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:gate-request",
-  title: "ArchFlow Archived Gate Request v1",
-  type: "object",
-  additionalProperties: false,
-  required: ["schema_version", "gate_id", "intent_id", "request_digest", "task_id", "phase_instance", "summary", "subject_digest", "context_digest", "current_evidence", "kind", "context", "allowed_decisions", "opened_at_revision"],
-  properties: {
-    schema_version: { const: "1" },
-    gate_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-    intent_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-    request_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    task_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-    phase_instance: { $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-    summary: { type: "string", minLength: 1, maxLength: 4096, pattern: "\\S" },
-    subject_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    context_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-    current_evidence: { $ref: "#/$defs/currentEvidence" },
-    supersedes: { $ref: "#/$defs/supersession" },
-    kind: { enum: ["artifact-approval", "review-trigger", "material-drift", "adjudication-failure", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"] },
-    context: { type: "object" },
-    allowed_decisions: {
-      type: "array",
-      minItems: 1,
-      uniqueItems: true,
-      items: { enum: ["approve", "revise", "reject", "waiver-requested", "amend-upstream", "revise-current", "retry-once", "abort", "revert-edit", "start-base-amendment", "authorize-commit", "discard-and-restore", "adopt-as-new-generation", "accept-import-audit", "grant", "deny", "cancel"] }
-    },
-    opened_at_revision: { type: "integer", minimum: 1, maximum: 9007199254740991 }
-  },
-  oneOf: [
-    { $ref: "#/$defs/artifactApproval" },
-    { $ref: "#/$defs/reviewTrigger" },
-    { $ref: "#/$defs/materialDrift" },
-    { $ref: "#/$defs/adjudicationFailure" },
-    { $ref: "#/$defs/attemptsExhausted" },
-    { $ref: "#/$defs/constitutionEdit" },
-    { $ref: "#/$defs/commitAuthorization" },
-    { $ref: "#/$defs/restoreCollision" },
-    { $ref: "#/$defs/migrationAudit" },
-    { $ref: "#/$defs/reviewWaiver" },
-    { $ref: "#/$defs/adjudicationWaiver" }
-  ],
-  $defs: {
-    currentEvidence: {
-      type: "object",
-      additionalProperties: false,
-      required: ["set_digest", "slots"],
-      properties: {
-        set_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        slots: { $ref: "urn:archflow:schema:v1:evidence-slots" }
-      }
-    },
-    supersession: {
-      type: "object",
-      additionalProperties: false,
-      required: ["superseded_gate_id", "accepted_triage_digest", "old_subject_digest"],
-      properties: {
-        superseded_gate_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        accepted_triage_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        old_subject_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" }
-      }
-    },
-    origin: {
-      type: "object",
-      additionalProperties: false,
-      required: ["origin_gate_id", "origin_decision_digest", "origin_context_digest", "task_id", "phase_instance", "subject_digest", "current_evidence_set_digest", "rule", "scope"],
-      properties: {
-        origin_gate_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-        origin_decision_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        origin_context_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        task_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-        phase_instance: { $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId" },
-        subject_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        current_evidence_set_digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        rule: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/rule" },
-        scope: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/waiverScope" }
-      }
-    },
-    waiverContext: {
-      type: "object",
-      additionalProperties: false,
-      required: ["origin", "rationale"],
-      properties: { origin: { $ref: "#/$defs/origin" }, rationale: { type: "string", minLength: 1, maxLength: 4096, pattern: "\\S" } }
-    },
-    artifactApproval: { type: "object", properties: { kind: { const: "artifact-approval" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/artifactApproval/properties/context" }, allowed_decisions: { const: ["approve", "revise", "reject", "cancel"] } }, required: ["kind", "context", "allowed_decisions"] },
-    reviewTrigger: { type: "object", properties: { kind: { const: "review-trigger" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/reviewTrigger/properties/context" }, allowed_decisions: { const: ["approve", "revise", "reject", "waiver-requested", "cancel"] } }, required: ["kind", "context", "allowed_decisions"] },
-    materialDrift: { type: "object", properties: { kind: { const: "material-drift" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/materialDrift/properties/context" }, allowed_decisions: { const: ["amend-upstream", "revise-current", "reject", "cancel"] } }, required: ["kind", "context", "allowed_decisions"] },
-    adjudicationFailure: { type: "object", properties: { kind: { const: "adjudication-failure" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/adjudicationFailure/properties/context" }, allowed_decisions: { const: ["approve", "revise", "reject", "waiver-requested", "cancel"] } }, required: ["kind", "context", "allowed_decisions"] },
-    attemptsExhausted: { type: "object", properties: { kind: { const: "attempts-exhausted" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/attemptsExhausted/properties/context" }, allowed_decisions: { const: ["retry-once", "revise", "abort", "cancel"] } }, required: ["kind", "context", "allowed_decisions"] },
-    constitutionEdit: { type: "object", properties: { kind: { const: "constitution-edit" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/constitutionEdit/properties/context" }, allowed_decisions: { const: ["revert-edit", "start-base-amendment", "abort", "cancel"] } }, required: ["kind", "context", "allowed_decisions"] },
-    commitAuthorization: { type: "object", properties: { kind: { const: "commit-authorization" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/commitAuthorization/properties/context" }, allowed_decisions: { const: ["authorize-commit", "revise", "abort", "cancel"] } }, required: ["kind", "context", "allowed_decisions"] },
-    restoreCollision: { type: "object", properties: { kind: { const: "restore-collision" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/restoreCollision/properties/context" }, allowed_decisions: { const: ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"] } }, required: ["kind", "context", "allowed_decisions"] },
-    migrationAudit: { type: "object", properties: { kind: { const: "migration-audit" }, context: { $ref: "urn:archflow:schema:v1:gate-contract#/$defs/migrationAudit/properties/context" }, allowed_decisions: { const: ["accept-import-audit", "revise", "abort", "cancel"] } }, required: ["kind", "context", "allowed_decisions"] },
-    reviewWaiver: { type: "object", properties: { kind: { const: "review-trigger" }, context: { $ref: "#/$defs/waiverContext" }, allowed_decisions: { const: ["grant", "deny", "cancel"] } }, required: ["kind", "context", "allowed_decisions"] },
-    adjudicationWaiver: { type: "object", properties: { kind: { const: "adjudication-failure" }, context: { $ref: "#/$defs/waiverContext" }, allowed_decisions: { const: ["grant", "deny", "cancel"] } }, required: ["kind", "context", "allowed_decisions"] }
-  }
-};
-
-// src/contracts/schemas/v1/supplemental-review.schema.json
-var supplemental_review_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:supplemental-review",
-  type: "object",
-  "x-archflow-supplemental-semantics": true,
-  oneOf: [
-    { $ref: "#/$defs/decline" },
-    { $ref: "#/$defs/ingest" },
-    { $ref: "#/$defs/noChange" },
-    { $ref: "#/$defs/supersede" }
-  ],
-  $defs: {
-    taskSlug: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-    pathSafeId: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-    digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
-    phase: {
-      type: "string",
-      pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
-    },
-    family: { enum: ["claude", "codex"] },
-    nonBlank: { type: "string", minLength: 1, pattern: "\\S" },
-    gate: {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "prior_gate_id",
-        "task_id",
-        "phase_instance",
-        "subject_digest",
-        "input_fingerprint"
-      ],
-      properties: {
-        prior_gate_id: { $ref: "#/$defs/pathSafeId" },
-        task_id: { $ref: "#/$defs/taskSlug" },
-        phase_instance: { $ref: "#/$defs/phase" },
-        subject_digest: { $ref: "#/$defs/digest" },
-        input_fingerprint: { $ref: "#/$defs/digest" }
-      }
-    },
-    slot: {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "role",
-        "evidence_digest",
-        "assurance",
-        "producer_family",
-        "reviewer_family",
-        "independence",
-        "gate_id"
-      ],
-      properties: {
-        role: { const: "gate-counter-review" },
-        evidence_digest: { $ref: "#/$defs/digest" },
-        assurance: { enum: ["server-attested", "degraded"] },
-        producer_family: { $ref: "#/$defs/family" },
-        reviewer_family: { $ref: "#/$defs/family" },
-        independence: { const: "opposite-family" },
-        gate_id: { $ref: "#/$defs/pathSafeId" }
-      },
-      oneOf: [
-        {
-          properties: {
-            producer_family: { const: "claude" },
-            reviewer_family: { const: "codex" }
-          }
-        },
-        {
-          properties: {
-            producer_family: { const: "codex" },
-            reviewer_family: { const: "claude" }
-          }
-        }
-      ]
-    },
-    review: {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "prior_gate_id",
-        "task_id",
-        "phase_instance",
-        "subject_digest",
-        "input_fingerprint",
-        "evidence_slot"
-      ],
-      properties: {
-        prior_gate_id: { $ref: "#/$defs/pathSafeId" },
-        task_id: { $ref: "#/$defs/taskSlug" },
-        phase_instance: { $ref: "#/$defs/phase" },
-        subject_digest: { $ref: "#/$defs/digest" },
-        input_fingerprint: { $ref: "#/$defs/digest" },
-        evidence_slot: { $ref: "#/$defs/slot" }
-      }
-    },
-    decline: {
-      type: "object",
-      additionalProperties: false,
-      required: ["action", "gate", "reason"],
-      properties: {
-        action: { const: "decline" },
-        gate: { $ref: "#/$defs/gate" },
-        reason: { $ref: "#/$defs/nonBlank" }
-      }
-    },
-    ingest: {
-      type: "object",
-      additionalProperties: false,
-      required: ["action", "review", "reason"],
-      properties: {
-        action: { const: "ingest" },
-        review: { $ref: "#/$defs/review" },
-        reason: { $ref: "#/$defs/nonBlank" }
-      }
-    },
-    noChange: {
-      type: "object",
-      additionalProperties: false,
-      required: ["action", "review", "triage_digest", "reason"],
-      properties: {
-        action: { const: "triage-no-change" },
-        review: { $ref: "#/$defs/review" },
-        triage_digest: { $ref: "#/$defs/digest" },
-        reason: { $ref: "#/$defs/nonBlank" }
-      }
-    },
-    supersede: {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "action",
-        "review",
-        "accepted_triage_digest",
-        "old_subject_digest",
-        "new_subject_digest",
-        "reason"
-      ],
-      properties: {
-        action: { const: "supersede" },
-        review: { $ref: "#/$defs/review" },
-        accepted_triage_digest: { $ref: "#/$defs/digest" },
-        old_subject_digest: { $ref: "#/$defs/digest" },
-        new_subject_digest: { $ref: "#/$defs/digest" },
-        reason: { $ref: "#/$defs/nonBlank" }
-      }
-    }
-  }
-};
-
-// src/contracts/schemas/v1/evidence-slots.schema.json
-var evidence_slots_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:evidence-slots",
-  oneOf: [
-    { type: "array", prefixItems: [{ $ref: "#/$defs/counter" }], minItems: 1, maxItems: 1 },
-    { type: "array", prefixItems: [{ $ref: "#/$defs/counter" }, { $ref: "#/$defs/gateCounter" }], minItems: 2, maxItems: 2 }
-  ],
-  $defs: {
-    pathSafeId: { type: "string", pattern: "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
-    digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
-    family: { enum: ["claude", "codex"] },
-    counter: { type: "object", additionalProperties: false, required: ["role", "evidence_digest", "assurance", "producer_family", "reviewer_family", "independence"], properties: { role: { const: "counter-review" }, evidence_digest: { $ref: "#/$defs/digest" }, assurance: { enum: ["server-attested", "degraded"] }, producer_family: { $ref: "#/$defs/family" }, reviewer_family: { $ref: "#/$defs/family" }, independence: { const: "opposite-family" } }, oneOf: [{ properties: { producer_family: { const: "claude" }, reviewer_family: { const: "codex" } } }, { properties: { producer_family: { const: "codex" }, reviewer_family: { const: "claude" } } }] },
-    gateCounter: { type: "object", additionalProperties: false, required: ["role", "evidence_digest", "assurance", "producer_family", "reviewer_family", "independence", "gate_id"], properties: { role: { const: "gate-counter-review" }, evidence_digest: { $ref: "#/$defs/digest" }, assurance: { enum: ["server-attested", "degraded"] }, producer_family: { $ref: "#/$defs/family" }, reviewer_family: { $ref: "#/$defs/family" }, independence: { const: "opposite-family" }, gate_id: { $ref: "#/$defs/pathSafeId" } }, oneOf: [{ properties: { producer_family: { const: "claude" }, reviewer_family: { const: "codex" } } }, { properties: { producer_family: { const: "codex" }, reviewer_family: { const: "claude" } } }] }
-  }
-};
-
-// src/contracts/schemas/v1/secret-scan-result.schema.json
-var secret_scan_result_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:secret-scan-result",
-  title: "ArchFlow Secret Scan Result v1",
-  oneOf: [
-    { $ref: "#/$defs/clean" },
-    { $ref: "#/$defs/detected" },
-    { $ref: "#/$defs/unavailable" }
-  ],
-  $defs: {
-    detectorId: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId" },
-    virtualPath: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-    pathClass: {
-      enum: [
-        "task-config",
-        "task-state",
-        "task-ask",
-        "gate-interface",
-        "document",
-        "verification-transcript",
-        "review",
-        "decision",
-        "result-manifest",
-        "result-payload",
-        "intent",
-        "staged-request",
-        "attempt",
-        "maintenance-record",
-        "import",
-        "shared-workflow",
-        "shared-constitution",
-        "task-branch-constitution",
-        "repository-source"
-      ]
-    },
-    position: {
-      type: "integer",
-      minimum: 1,
-      maximum: 9007199254740991
-    },
-    finding: {
-      type: "object",
-      additionalProperties: false,
-      required: ["detector_id", "path_class", "virtual_path", "line", "column"],
-      properties: {
-        detector_id: { $ref: "#/$defs/detectorId" },
-        path_class: { $ref: "#/$defs/pathClass" },
-        virtual_path: { $ref: "#/$defs/virtualPath" },
-        line: { $ref: "#/$defs/position" },
-        column: { $ref: "#/$defs/position" }
-      }
-    },
-    clean: {
-      type: "object",
-      additionalProperties: false,
-      required: ["schema_version", "outcome", "detector_set_id", "scanned_paths"],
-      properties: {
-        schema_version: { const: "1" },
-        outcome: { const: "clean" },
-        detector_set_id: { $ref: "#/$defs/detectorId" },
-        scanned_paths: { type: "array", items: { $ref: "#/$defs/virtualPath" } }
-      }
-    },
-    detected: {
-      type: "object",
-      additionalProperties: false,
-      required: ["schema_version", "outcome", "detector_set_id", "findings"],
-      properties: {
-        schema_version: { const: "1" },
-        outcome: { const: "detected" },
-        detector_set_id: { $ref: "#/$defs/detectorId" },
-        findings: { type: "array", items: { $ref: "#/$defs/finding" } }
-      }
-    },
-    unavailable: {
-      type: "object",
-      additionalProperties: false,
-      required: ["schema_version", "outcome", "reason"],
-      properties: {
-        schema_version: { const: "1" },
-        outcome: { const: "unavailable" },
-        reason: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeCode" }
-      }
-    }
-  }
-};
-
-// src/contracts/schemas/v1/review-evidence.schema.json
-var review_evidence_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:review-evidence",
-  oneOf: [
-    { $ref: "#/$defs/serverAttested" },
-    { $ref: "#/$defs/degraded" }
-  ],
-  $defs: {
-    digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
-    id: { type: "string", pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
-    taskSlug: { type: "string", pattern: "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$" },
-    nonBlank: { type: "string", minLength: 1, pattern: "\\S" },
-    familyOrUnknown: { enum: ["claude", "codex", "unknown"] },
-    effortOrUnknown: { enum: ["low", "medium", "high", "xhigh", "max", "ultra", "unknown"] },
-    reviewProperties: {
-      type: "object",
-      "x-archflow-review-summary": true,
-      required: ["schema_version", "task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family", "findings", "matched_rule_versions", "verdict", "blocking_count", "model_family", "model", "effort"],
-      properties: {
-        schema_version: { const: "1" },
-        task_id: { $ref: "#/$defs/taskSlug" },
-        phase_instance: { type: "string", pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" },
-        step: { const: "counter_review" },
-        role: { enum: ["counter-review", "gate-counter-review"] },
-        subject_digest: { $ref: "#/$defs/digest" },
-        input_fingerprint: { $ref: "#/$defs/digest" },
-        rubric_digest: { $ref: "#/$defs/digest" },
-        producer_family: { enum: ["claude", "codex"] },
-        findings: { type: "array", "x-archflow-unique-by": "finding_id", items: { type: "object", additionalProperties: false, required: ["finding_id", "severity", "blocking", "summary", "evidence", "suggested_resolution"], properties: { finding_id: { $ref: "#/$defs/id" }, severity: { enum: ["blocker", "major", "minor"] }, blocking: { type: "boolean" }, summary: { $ref: "#/$defs/nonBlank" }, evidence: { $ref: "#/$defs/nonBlank" }, suggested_resolution: { $ref: "#/$defs/nonBlank" } }, allOf: [{ if: { properties: { severity: { const: "blocker" } }, required: ["severity"] }, then: { properties: { blocking: { const: true } } }, else: { properties: { blocking: { const: false } } } }] } },
-        matched_rule_versions: { type: "array", uniqueItems: true, items: { type: "object", additionalProperties: false, required: ["rule_id", "rule_version"], properties: { rule_id: { $ref: "#/$defs/id" }, rule_version: { type: "integer", minimum: 1, maximum: 9007199254740991 } } } },
-        verdict: { enum: ["pass", "advisory", "fail"] },
-        blocking_count: { type: "integer", minimum: 0, maximum: 9007199254740991 },
-        model_family: { $ref: "#/$defs/familyOrUnknown" },
-        model: { $ref: "#/$defs/nonBlank" },
-        effort: { $ref: "#/$defs/effortOrUnknown" }
-      }
-    },
-    degraded: { type: "object", unevaluatedProperties: false, allOf: [{ $ref: "#/$defs/reviewProperties" }, { type: "object", required: ["assurance", "reason"], properties: { assurance: { const: "degraded" }, reason: { $ref: "#/$defs/nonBlank" } } }] },
-    serverAttested: { type: "object", unevaluatedProperties: false, allOf: [{ $ref: "#/$defs/reviewProperties" }, { type: "object", required: ["assurance", "adapter", "cli_version", "invocation_id", "envelope_input_digest", "observed_output_digest", "result_id"], properties: { assurance: { const: "server-attested" }, adapter: { enum: ["claude-cli", "codex-cli"] }, cli_version: { $ref: "#/$defs/nonBlank" }, model_family: { enum: ["claude", "codex"] }, effort: { enum: ["low", "medium", "high", "xhigh", "max", "ultra"] }, invocation_id: { $ref: "#/$defs/id" }, envelope_input_digest: { $ref: "#/$defs/digest" }, observed_output_digest: { $ref: "#/$defs/digest" }, result_id: { $ref: "#/$defs/id" } }, allOf: [{ if: { properties: { producer_family: { const: "claude" } }, required: ["producer_family"] }, then: { properties: { model_family: { const: "codex" } } }, else: { properties: { model_family: { const: "claude" } } } }] }] }
-  }
-};
-
-// src/contracts/schemas/v1/triage.schema.json
-var triage_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:triage",
-  type: "object",
-  additionalProperties: false,
-  required: ["schema_version", "task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "current_evidence_set_digest", "source_evidence_digests", "dispositions", "accepted_count", "rejected_count"],
-  properties: {
-    schema_version: { const: "1" },
-    task_id: { $ref: "#/$defs/taskSlug" },
-    phase_instance: { type: "string", pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" },
-    step: { const: "triage" },
-    subject_digest: { $ref: "#/$defs/digest" },
-    input_fingerprint: { $ref: "#/$defs/digest" },
-    current_evidence_set_digest: { $ref: "#/$defs/digest" },
-    source_evidence_digests: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/digest" } },
-    dispositions: { type: "array", "x-archflow-unique-by": ["review_evidence_digest", "finding_id"], items: { oneOf: [{ $ref: "#/$defs/accepted" }, { $ref: "#/$defs/acceptedEditorial" }, { $ref: "#/$defs/rejected" }] } },
-    accepted_count: { $ref: "#/$defs/safe" },
-    rejected_count: { $ref: "#/$defs/safe" },
-    accepted_editorial_count: { $comment: "Required in new artifacts by validateTriage; structurally optional so retained pre-editorial triage results keep parsing.", $ref: "#/$defs/safe" }
-  },
-  $defs: {
-    id: { type: "string", pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
-    taskSlug: { type: "string", pattern: "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$" },
-    digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
-    safe: { type: "integer", minimum: 0, maximum: 9007199254740991 },
-    nonBlank: { type: "string", minLength: 1, pattern: "\\S" },
-    accepted: { type: "object", additionalProperties: false, required: ["review_evidence_digest", "finding_id", "disposition", "rationale", "revision_intent"], properties: { review_evidence_digest: { $ref: "#/$defs/digest" }, finding_id: { $ref: "#/$defs/id" }, disposition: { const: "accepted" }, rationale: { $ref: "#/$defs/nonBlank" }, revision_intent: { $ref: "#/$defs/nonBlank" } } },
-    acceptedEditorial: { type: "object", additionalProperties: false, required: ["review_evidence_digest", "finding_id", "disposition", "rationale", "revision_intent"], properties: { review_evidence_digest: { $ref: "#/$defs/digest" }, finding_id: { $ref: "#/$defs/id" }, disposition: { const: "accepted-editorial" }, rationale: { $ref: "#/$defs/nonBlank" }, revision_intent: { $ref: "#/$defs/nonBlank" } } },
-    rejected: { type: "object", additionalProperties: false, required: ["review_evidence_digest", "finding_id", "disposition", "rationale", "evidence"], properties: { review_evidence_digest: { $ref: "#/$defs/digest" }, finding_id: { $ref: "#/$defs/id" }, disposition: { const: "rejected" }, rationale: { $ref: "#/$defs/nonBlank" }, evidence: { $ref: "#/$defs/nonBlank" } } }
-  }
-};
-
-// src/contracts/schemas/v1/adjudication-evidence.schema.json
-var adjudication_evidence_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:adjudication-evidence",
-  oneOf: [
-    { $ref: "#/$defs/agentDeclared" },
-    { $ref: "#/$defs/serverAttested" },
-    { $ref: "#/$defs/degraded" }
-  ],
-  $defs: {
-    digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
-    id: { type: "string", pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
-    taskSlug: { type: "string", pattern: "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$" },
-    nonBlank: { type: "string", minLength: 1, pattern: "\\S" },
-    ruleVersion: { type: "object", additionalProperties: false, required: ["rule_id", "rule_version"], properties: { rule_id: { $ref: "#/$defs/id" }, rule_version: { type: "integer", minimum: 1, maximum: 9007199254740991 } } },
-    mechanical: { type: "object", additionalProperties: false, required: ["mechanism", "state", "details"], properties: { mechanism: { $ref: "#/$defs/nonBlank" }, state: { enum: ["current", "missing", "stale", "unknown", "failed", "digest-mismatch"] }, subject_digest: { $ref: "#/$defs/digest" }, evidence_digest: { $ref: "#/$defs/digest" }, details: { $ref: "#/$defs/nonBlank" } }, allOf: [{ if: { properties: { state: { enum: ["current", "stale"] } }, required: ["state"] }, then: { properties: { subject_digest: true, evidence_digest: true }, required: ["subject_digest", "evidence_digest"] } }, { if: { properties: { state: { enum: ["missing", "unknown"] } }, required: ["state"] }, then: { not: { anyOf: [{ required: ["subject_digest"] }, { required: ["evidence_digest"] }] } } }] },
-    ruleFinding: { type: "object", additionalProperties: false, required: ["rule_id", "rule_version", "compliance", "rationale", "trigger", "trigger_evidence", "enforced_by"], properties: { rule_id: { $ref: "#/$defs/id" }, rule_version: { type: "integer", minimum: 1, maximum: 9007199254740991 }, compliance: { enum: ["pass", "fail", "uncertain"] }, rationale: { $ref: "#/$defs/nonBlank" }, trigger: { enum: ["not-matched", "matched", "uncertain"] }, trigger_evidence: { $ref: "#/$defs/nonBlank" }, enforced_by: { type: "array", items: { $ref: "#/$defs/mechanical" } } }, allOf: [{ if: { properties: { compliance: { const: "pass" } }, required: ["compliance"] }, then: { properties: { enforced_by: { type: "array", items: { allOf: [{ $ref: "#/$defs/mechanical" }, { type: "object", properties: { state: { const: "current" } } }] } } } } }] },
-    driftFinding: { type: "object", additionalProperties: false, required: ["upstream_digest", "drift", "affected_claim_ids", "rationale"], properties: { upstream_digest: { $ref: "#/$defs/digest" }, drift: { enum: ["aligned", "incidental", "material"] }, affected_claim_ids: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/id" } }, rationale: { $ref: "#/$defs/nonBlank" } }, allOf: [{ if: { properties: { drift: { const: "aligned" } }, required: ["drift"] }, then: { properties: { affected_claim_ids: { type: "array", maxItems: 0 } } }, else: { properties: { affected_claim_ids: { type: "array", minItems: 1 } } } }] },
-    base: { type: "object", "x-archflow-adjudication-semantics": true, required: ["schema_version", "task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_evidence_set_digest", "rule_findings", "drift_findings", "constitution", "drift", "matched_rule_versions", "uncertain_rule_versions", "model_family", "model", "effort"], properties: { schema_version: { const: "1" }, task_id: { $ref: "#/$defs/taskSlug" }, phase_instance: { type: "string", pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" }, step: { const: "adjudicate" }, subject_digest: { $ref: "#/$defs/digest" }, input_fingerprint: { $ref: "#/$defs/digest" }, pinned_constitution_digest: { $ref: "#/$defs/digest" }, approved_upstream_digests: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/digest" } }, source_evidence_set_digest: { $ref: "#/$defs/digest" }, rule_findings: { type: "array", items: { $ref: "#/$defs/ruleFinding" } }, drift_findings: { type: "array", "x-archflow-unique-by": "upstream_digest", items: { $ref: "#/$defs/driftFinding" } }, constitution: { enum: ["pass", "fail", "uncertain"] }, drift: { enum: ["aligned", "incidental", "material"] }, matched_rule_versions: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/ruleVersion" } }, uncertain_rule_versions: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/ruleVersion" } }, model_family: { enum: ["claude", "codex", "unknown"] }, model: { $ref: "#/$defs/nonBlank" }, effort: { enum: ["low", "medium", "high", "xhigh", "max", "ultra", "unknown"] } } },
-    agentDeclared: { type: "object", unevaluatedProperties: false, allOf: [{ $ref: "#/$defs/base" }, { $ref: "#/$defs/closedCommon" }, { type: "object", properties: { assurance: { const: "agent-declared" } } }] },
-    degraded: { type: "object", unevaluatedProperties: false, allOf: [{ $ref: "#/$defs/base" }, { $ref: "#/$defs/closedDegraded" }, { type: "object", properties: { assurance: { const: "degraded" } } }] },
-    serverAttested: { type: "object", unevaluatedProperties: false, allOf: [{ $ref: "#/$defs/base" }, { $ref: "#/$defs/closedServer" }, { type: "object", properties: { assurance: { const: "server-attested" } } }] },
-    closedCommon: { type: "object", required: ["assurance"], properties: { assurance: true } },
-    closedDegraded: { type: "object", required: ["assurance", "reason"], properties: { assurance: true, reason: { $ref: "#/$defs/nonBlank" } } },
-    closedServer: { type: "object", required: ["assurance", "adapter", "cli_version", "invocation_id", "envelope_input_digest", "observed_output_digest", "result_id"], properties: { assurance: true, adapter: { enum: ["claude-cli", "codex-cli"] }, cli_version: { $ref: "#/$defs/nonBlank" }, model_family: { enum: ["claude", "codex"] }, effort: { enum: ["low", "medium", "high", "xhigh", "max", "ultra"] }, invocation_id: { $ref: "#/$defs/id" }, envelope_input_digest: { $ref: "#/$defs/digest" }, observed_output_digest: { $ref: "#/$defs/digest" }, result_id: { $ref: "#/$defs/id" } } }
-  }
-};
-
-// src/contracts/validators.ts
-var ContractValidationError = class extends TypeError {
-  constructor(message, details) {
-    super(message);
-    this.details = details;
-    this.name = "ContractValidationError";
-  }
-  details;
-};
-function formatAjvErrors(errors) {
-  if (errors === void 0 || errors === null || errors.length === 0) return "schema validation failed";
-  return errors.map((error51) => `${error51.instancePath || "/"} ${error51.message ?? error51.keyword}`).join("; ");
-}
-function hasUniqueObjectPropertyValues(properties, data) {
-  const propertyNames = typeof properties === "string" ? [properties] : properties;
-  const seen = [];
-  for (const item of data) {
-    if (typeof item !== "object" || item === null) continue;
-    const values = [];
-    for (const property of propertyNames) {
-      const descriptor = Object.getOwnPropertyDescriptor(item, property);
-      if (descriptor === void 0) {
-        values.push(void 0);
-        continue;
-      }
-      if (!descriptor.enumerable || !("value" in descriptor)) return false;
-      values.push(descriptor.value);
-    }
-    if (seen.some((candidate) => isDeepStrictEqual2(candidate, values))) return false;
-    seen.push(values);
-  }
-  return true;
-}
-function hasBoundedUtf8Length(maximumBytes, data) {
-  return Buffer.byteLength(data, "utf8") <= maximumBytes;
-}
-function isUnicodeNormalized(_enabled, data) {
-  return data.normalize("NFC") === data;
-}
-function isSortedUniqueBy(items, key = String) {
-  return Array.isArray(items) && items.every((value, index) => index === 0 || key(items[index - 1]) < key(value));
-}
-function tupleKey(properties) {
-  const propertyNames = typeof properties === "string" ? [properties] : properties;
-  return (value) => {
-    if (typeof value !== "object" || value === null) return String(value);
-    return propertyNames.map((property) => {
-      const descriptor = Object.getOwnPropertyDescriptor(value, property);
-      return String(descriptor !== void 0 && "value" in descriptor ? descriptor.value : void 0);
-    }).join("\0");
-  };
-}
-function hasConsistentReviewSummary(_enabled, data) {
-  if (!Array.isArray(data.findings)) return true;
-  const blockingCount = data.findings.filter((finding) => typeof finding === "object" && finding !== null && finding.blocking === true).length;
-  const verdict = blockingCount > 0 ? "fail" : data.findings.length > 0 ? "advisory" : "pass";
-  return data.blocking_count === blockingCount && data.verdict === verdict;
-}
-function hasConsistentAdjudicationSemantics(_enabled, data) {
-  if (!Array.isArray(data.rule_findings) || !Array.isArray(data.drift_findings) || !Array.isArray(data.approved_upstream_digests)) return true;
-  const ruleKey4 = (rule4) => `${String(rule4.rule_id)}:${String(rule4.rule_version)}`;
-  const ruleFindings = data.rule_findings;
-  const driftFindings = data.drift_findings;
-  const upstream = data.approved_upstream_digests;
-  if (!isSortedUniqueBy(upstream) || !isSortedUniqueBy(ruleFindings.map(ruleKey4)) || !isSortedUniqueBy(driftFindings.map((finding) => String(finding.upstream_digest)))) return false;
-  if (driftFindings.length !== upstream.length || driftFindings.some((finding, index) => finding.upstream_digest !== upstream[index])) return false;
-  for (const finding of ruleFindings) {
-    if (!Array.isArray(finding.enforced_by)) return false;
-    for (const evidence of finding.enforced_by) {
-      if (evidence.state === "current" && evidence.subject_digest !== data.subject_digest) return false;
-      if (evidence.state !== "current" && finding.compliance === "pass") return false;
-    }
-  }
-  const constitution = ruleFindings.some((finding) => finding.compliance === "fail") ? "fail" : ruleFindings.some((finding) => finding.compliance === "uncertain") ? "uncertain" : "pass";
-  if (data.constitution !== constitution) return false;
-  const drift = driftFindings.some((finding) => finding.drift === "material") ? "material" : driftFindings.some((finding) => finding.drift === "incidental") ? "incidental" : "aligned";
-  if (data.drift !== drift) return false;
-  const matched = ruleFindings.filter((finding) => finding.trigger === "matched").map(ruleKey4);
-  const uncertain = ruleFindings.filter((finding) => finding.trigger === "uncertain").map(ruleKey4);
-  const actualMatched = Array.isArray(data.matched_rule_versions) ? data.matched_rule_versions.map(ruleKey4) : [];
-  const actualUncertain = Array.isArray(data.uncertain_rule_versions) ? data.uncertain_rule_versions.map(ruleKey4) : [];
-  return isDeepStrictEqual2(actualMatched, matched) && isDeepStrictEqual2(actualUncertain, uncertain);
-}
-var record2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
-var ruleKey2 = (value) => {
-  const item = record2(value);
-  return `${String(item?.rule_id)}:${String(item?.rule_version)}`;
-};
-function hasGateContextSemantics(kind, contextValue) {
-  const context2 = record2(contextValue);
-  if (context2 === void 0) return true;
-  if (kind === "review-trigger" || kind === "adjudication-failure") {
-    const primary = kind === "review-trigger" ? context2.matched_rules : context2.failed_rules;
-    if (!isSortedUniqueBy(primary, ruleKey2) || !isSortedUniqueBy(context2.uncertain_rules, ruleKey2) || !isSortedUniqueBy(context2.eligible_waiver_rules, ruleKey2)) return false;
-    const available = new Set([...primary, ...context2.uncertain_rules].map(ruleKey2));
-    if (context2.eligible_waiver_rules.some((item) => !available.has(ruleKey2(item)))) return false;
-    if (kind === "adjudication-failure" && available.size === 0) return false;
-    return record2(context2.waiver_scope)?.operation === kind;
-  }
-  if (kind === "attempts-exhausted") return typeof context2.attempts === "number" && typeof context2.maximum_attempts === "number" && context2.attempts >= context2.maximum_attempts;
-  if (kind === "material-drift") return isSortedUniqueBy(context2.affected_claim_ids);
-  if (kind === "commit-authorization") return isSortedUniqueBy(context2.current_artifact_digests) && isSortedUniqueBy(context2.parent_document_digests);
-  return true;
-}
-function hasGateSemantics(_enabled, data) {
-  if (!hasGateContextSemantics(data.kind, data.context)) return false;
-  const context2 = record2(data.context);
-  const payload = record2(data.payload);
-  if (context2 === void 0 || payload === void 0) return true;
-  if ((data.kind === "review-trigger" || data.kind === "adjudication-failure") && payload.decision === "waiver-requested") {
-    return Array.isArray(context2.eligible_waiver_rules) && context2.eligible_waiver_rules.some((item) => ruleKey2(item) === ruleKey2(payload.rule));
-  }
-  if (data.kind === "adjudication-failure" && payload.decision === "approve") {
-    const eligible = new Set(context2.eligible_waiver_rules.map(ruleKey2));
-    const required2 = new Set([...context2.failed_rules, ...context2.uncertain_rules].map(ruleKey2).filter((key) => !eligible.has(key)));
-    if (!isSortedUniqueBy(payload.resolutions, (item) => ruleKey2(record2(item)?.rule))) return false;
-    const actual = payload.resolutions.map((item) => ruleKey2(record2(item)?.rule));
-    return actual.length === required2.size && actual.every((key) => required2.has(key));
-  }
-  if (data.kind === "restore-collision" && payload.decision === "adopt-as-new-generation") return isDeepStrictEqual2(payload.adoption_authority, context2.adoption_candidate);
-  return true;
-}
-function hasSupplementalSemantics(_enabled, data) {
-  const review = record2(data.review);
-  if (review === void 0) return true;
-  const slot = record2(review.evidence_slot);
-  if (slot === void 0 || slot.gate_id !== review.prior_gate_id || slot.producer_family === slot.reviewer_family) return false;
-  return data.action !== "supersede" || data.old_subject_digest === review.subject_digest && data.new_subject_digest !== data.old_subject_digest;
-}
-function hasExactCurrentEvidence(value) {
-  const current = record2(value);
-  if (current === void 0 || !Array.isArray(current.slots)) return false;
-  const slots = current.slots.map(record2);
-  if (slots.some((slot) => slot === void 0) || slots.length !== 1 && slots.length !== 2) return false;
-  if (slots[0].role !== "counter-review" || slots.length === 2 && slots[1].role !== "gate-counter-review") return false;
-  if (slots.some((slot) => slot.producer_family === slot.reviewer_family)) return false;
-  return new Set(slots.map((slot) => slot.evidence_digest)).size === slots.length;
-}
-function hasMcpSemantics(_enabled, data) {
-  if ("kind" in data && "current_evidence" in data) return hasExactCurrentEvidence(data.current_evidence) && hasGateContextSemantics(data.kind, data.context);
-  if ("origin" in data) return record2(data.origin)?.task_id === data.task_id;
-  return true;
-}
-function hasResultExpectationSemantics(_enabled, data) {
-  return record2(data.success)?.revision === data.resulting_revision;
-}
-function createJsonSchemaValidator(schema, referencedSchemas = []) {
-  const ajv = new import__.Ajv2020({
-    strict: true,
-    allErrors: true,
-    allowUnionTypes: false,
-    coerceTypes: false,
-    removeAdditional: false,
-    useDefaults: false,
-    validateFormats: true
-  });
-  const addFormats = formatsModule.default;
-  addFormats(ajv);
-  ajv.addKeyword({
-    keyword: "x-archflow-unique-by",
-    schemaType: ["string", "array"],
-    metaSchema: {
-      oneOf: [
-        { type: "string", minLength: 1 },
-        { type: "array", minItems: 1, uniqueItems: true, items: { type: "string", minLength: 1 } }
-      ]
-    },
-    type: "array",
-    errors: false,
-    validate: hasUniqueObjectPropertyValues
-  });
-  ajv.addKeyword({
-    keyword: "x-archflow-max-utf8-bytes",
-    schemaType: "number",
-    metaSchema: { type: "integer", minimum: 0 },
-    type: "string",
-    errors: false,
-    validate: hasBoundedUtf8Length
-  });
-  ajv.addKeyword({
-    keyword: "x-archflow-nfc",
-    schemaType: "boolean",
-    metaSchema: { const: true },
-    type: "string",
-    errors: false,
-    validate: isUnicodeNormalized
-  });
-  ajv.addKeyword({
-    keyword: "x-archflow-effect",
-    schemaType: "string",
-    metaSchema: {
-      type: "string",
-      enum: ["advance", "retry", "redirect-waiver", "redirect-upstream", "non-advancing"]
-    },
-    errors: false,
-    valid: true
-  });
-  ajv.addKeyword({
-    keyword: "x-archflow-sorted-unique",
-    schemaType: "boolean",
-    metaSchema: { const: true },
-    type: "array",
-    errors: false,
-    validate: (_enabled, data) => isSortedUniqueBy(data)
-  });
-  ajv.addKeyword({
-    keyword: "x-archflow-sorted-unique-by",
-    schemaType: ["string", "array"],
-    metaSchema: {
-      oneOf: [
-        { type: "string", minLength: 1 },
-        { type: "array", minItems: 1, uniqueItems: true, items: { type: "string", minLength: 1 } }
-      ]
-    },
-    type: "array",
-    errors: false,
-    validate: (properties, data) => isSortedUniqueBy(data, tupleKey(properties))
-  });
-  ajv.addKeyword({
-    keyword: "x-archflow-review-summary",
-    schemaType: "boolean",
-    metaSchema: { const: true },
-    type: "object",
-    errors: false,
-    validate: hasConsistentReviewSummary
-  });
-  ajv.addKeyword({
-    keyword: "x-archflow-adjudication-semantics",
-    schemaType: "boolean",
-    metaSchema: { const: true },
-    type: "object",
-    errors: false,
-    validate: hasConsistentAdjudicationSemantics
-  });
-  for (const [keyword, validate3] of [
-    ["x-archflow-gate-semantics", hasGateSemantics],
-    ["x-archflow-supplemental-semantics", hasSupplementalSemantics],
-    ["x-archflow-mcp-semantics", hasMcpSemantics],
-    ["x-archflow-result-expectation-semantics", hasResultExpectationSemantics]
-  ]) ajv.addKeyword({ keyword, schemaType: "boolean", metaSchema: { const: true }, type: "object", errors: false, validate: validate3 });
-  for (const referencedSchema of referencedSchemas) ajv.addSchema(referencedSchema);
-  const validate2 = ajv.compile(schema);
-  const assert2 = (value, label = "value") => {
-    assertPlainJson(value, label);
-    if (!validate2(value)) throw new ContractValidationError(`${label}: ${formatAjvErrors(validate2.errors)}`, validate2.errors);
-    return value;
-  };
-  return { validate: validate2, assert: assert2 };
-}
-var intentReceiptV1Validator = createJsonSchemaValidator(intent_receipt_schema_default, [
-  primitives_schema_default,
-  path_claim_schema_default,
-  task_state_schema_default
-]);
-var resultManifestV1Validator = createJsonSchemaValidator(result_manifest_schema_default, [
-  primitives_schema_default,
-  path_claim_schema_default,
-  durable_primitives_schema_default,
-  secret_scan_result_schema_default,
-  document_artifact_schema_default,
-  implementation_output_schema_default,
-  review_evidence_schema_default,
-  triage_schema_default,
-  adjudication_evidence_schema_default
-]);
-var gateSchemaReferences = [
-  primitives_schema_default,
-  path_claim_schema_default,
-  gate_contract_schema_default,
-  gate_decision_schema_default,
-  evidence_slots_schema_default,
-  supplemental_review_schema_default,
-  gate_request_schema_default,
-  gate_decision_record_schema_default
-];
-var gateRequestV1Validator = createJsonSchemaValidator(gate_request_schema_default, gateSchemaReferences.filter((schema) => schema !== gate_request_schema_default));
-var gateDecisionRecordV1Validator = createJsonSchemaValidator(gate_decision_record_schema_default, gateSchemaReferences.filter((schema) => schema !== gate_decision_record_schema_default));
-var activeGateV1Validator = createJsonSchemaValidator(active_gate_schema_default, [...gateSchemaReferences, active_gate_schema_default].filter((schema) => schema !== active_gate_schema_default));
-function assertZodAgreement(value, jsonValidator, zodSchema, label = "value") {
-  assertPlainJson(value, label);
-  const before = structuredClone(value);
-  const ajvValidate = "validate" in jsonValidator ? jsonValidator.validate : jsonValidator;
-  const jsonAccepted = ajvValidate(value);
-  const zodResult = zodSchema.safeParse(value);
-  if (!isDeepStrictEqual2(value, before)) throw new ContractValidationError(`${label}: a validator mutated its input`);
-  if (jsonAccepted !== zodResult.success) {
-    throw new ContractValidationError(`${label}: JSON Schema and Zod validators disagree`, {
-      jsonSchemaErrors: ajvValidate.errors,
-      zodError: zodResult.success ? void 0 : zodResult.error
-    });
-  }
-  if (!jsonAccepted || !zodResult.success) {
-    throw new ContractValidationError(`${label}: schema validation failed: ${formatAjvErrors(ajvValidate.errors)}`, {
-      jsonSchemaErrors: ajvValidate.errors,
-      zodError: zodResult.success ? void 0 : zodResult.error
-    });
-  }
-  if (!isDeepStrictEqual2(zodResult.data, value)) {
-    throw new ContractValidationError(`${label}: Zod mirrors must not transform validated values`);
-  }
-  return value;
-}
-
 // src/contracts/durable-gate.ts
-var digest3 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var safeId2 = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
-var pathSafeId = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u);
-var taskSlug = external_exports.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u);
+var digest5 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var pathSafeId = pathSafeIdV1Schema;
+var taskSlug3 = taskSlugV1Schema;
 var phase2 = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
 var text = external_exports.string().min(1).max(4096).regex(/\S/u);
-var rule2 = external_exports.object({ rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict();
-var scope = external_exports.object({ operation: external_exports.enum(["review-trigger", "adjudication-failure"]), boundary: external_exports.enum(["subject", "phase", "task"]) }).strict();
-var origin = external_exports.object({ origin_gate_id: pathSafeId, origin_decision_digest: digest3, origin_context_digest: digest3, task_id: taskSlug, phase_instance: phase2, subject_digest: digest3, current_evidence_set_digest: digest3, rule: rule2, scope }).strict();
-var supersession = external_exports.object({ superseded_gate_id: pathSafeId, accepted_triage_digest: digest3, old_subject_digest: digest3 }).strict();
+var rule2 = gateRuleVersionRefSchema;
+var scope = gateWaiverScopeSchema;
+var origin = external_exports.object({ origin_gate_id: pathSafeId, origin_decision_digest: digest5, origin_context_digest: digest5, task_id: taskSlug3, phase_instance: phase2, subject_digest: digest5, current_evidence_set_digest: digest5, rule: rule2, scope }).strict();
+var supersession = external_exports.object({ superseded_gate_id: pathSafeId, accepted_triage_digest: digest5, old_subject_digest: digest5 }).strict();
 var supplemental = external_exports.array(supplementalReviewOutcomeSchema).superRefine((entries, context2) => {
   if (entries.some((entry) => entry.action === "supersede")) context2.addIssue({ code: "custom", message: "supplemental ledger cannot contain supersession" });
 });
-var base = { schema_version: external_exports.literal("1"), gate_id: pathSafeId, task_id: taskSlug, phase_instance: phase2, kind: external_exports.enum(GATE_KINDS), subject_digest: digest3, context_digest: digest3, supplemental };
+var base = { schema_version: external_exports.literal("1"), gate_id: pathSafeId, task_id: taskSlug3, phase_instance: phase2, kind: external_exports.enum(GATE_KINDS), subject_digest: digest5, context_digest: digest5, supplemental };
+var decisionRecordArms = {
+  decided: external_exports.object({ ...base, outcome: external_exports.literal("decided"), envelope: gateDecisionEnvelopeV1Schema }).strict(),
+  waiverDecided: external_exports.object({ ...base, outcome: external_exports.literal("waiver-decided"), granted: external_exports.boolean(), scope, origin, notes: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
+  cancelled: external_exports.object({ ...base, outcome: external_exports.literal("cancelled"), reason: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
+  superseded: external_exports.object({ ...base, outcome: external_exports.literal("superseded"), supersession }).strict()
+};
 var gateDecisionRecordV1Schema = external_exports.discriminatedUnion("outcome", [
-  external_exports.object({ ...base, outcome: external_exports.literal("decided"), envelope: gateDecisionEnvelopeV1Schema }).strict(),
-  external_exports.object({ ...base, outcome: external_exports.literal("waiver-decided"), granted: external_exports.boolean(), scope, origin, notes: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
-  external_exports.object({ ...base, outcome: external_exports.literal("cancelled"), reason: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
-  external_exports.object({ ...base, outcome: external_exports.literal("superseded"), supersession }).strict()
+  decisionRecordArms.decided,
+  decisionRecordArms.waiverDecided,
+  decisionRecordArms.cancelled,
+  decisionRecordArms.superseded
 ]);
+var GATE_REQUEST_DECISIONS = {
+  "artifact-approval": ["approve", "revise", "reject", "cancel"],
+  "review-trigger": ["approve", "revise", "reject", "waiver-requested", "cancel"],
+  "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
+  "adjudication-failure": ["approve", "revise", "reject", "waiver-requested", "cancel"],
+  "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
+  "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
+  "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
+  "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
+  "migration-audit": ["accept-import-audit", "revise", "abort", "cancel"]
+};
+var WAIVER_DECISIONS = ["grant", "deny", "cancel"];
+var literalTuple = (values) => external_exports.tuple(values.map((value) => external_exports.literal(value)));
+var allowedDecisionTuples = Object.fromEntries(
+  GATE_KINDS.map((kind) => [kind, literalTuple(GATE_REQUEST_DECISIONS[kind])])
+);
+var waiverDecisionsTuple = literalTuple(WAIVER_DECISIONS);
+var waiverGateContextSchema = external_exports.object({ origin, rationale: text }).strict();
+var gateRequestCommon = {
+  schema_version: external_exports.literal("1"),
+  gate_id: pathSafeId,
+  intent_id: pathSafeId,
+  request_digest: digest5,
+  task_id: taskSlug3,
+  phase_instance: phase2,
+  summary: text,
+  subject_digest: digest5,
+  context_digest: digest5,
+  current_evidence: currentEvidenceSetRefSchema,
+  supersedes: supersession.optional(),
+  opened_at_revision: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
+};
+var gateArm = (kind, context2, decisions2, extra) => external_exports.object({ ...gateRequestCommon, ...extra, kind: external_exports.literal(kind), context: context2, allowed_decisions: decisions2 }).strict();
+var gateArms = (extra) => ({
+  artifactApproval: gateArm("artifact-approval", GATE_CONTRACTS["artifact-approval"].context, allowedDecisionTuples["artifact-approval"], extra),
+  reviewTrigger: gateArm("review-trigger", GATE_CONTRACTS["review-trigger"].context, allowedDecisionTuples["review-trigger"], extra),
+  materialDrift: gateArm("material-drift", GATE_CONTRACTS["material-drift"].context, allowedDecisionTuples["material-drift"], extra),
+  adjudicationFailure: gateArm("adjudication-failure", GATE_CONTRACTS["adjudication-failure"].context, allowedDecisionTuples["adjudication-failure"], extra),
+  attemptsExhausted: gateArm("attempts-exhausted", GATE_CONTRACTS["attempts-exhausted"].context, allowedDecisionTuples["attempts-exhausted"], extra),
+  constitutionEdit: gateArm("constitution-edit", GATE_CONTRACTS["constitution-edit"].context, allowedDecisionTuples["constitution-edit"], extra),
+  commitAuthorization: gateArm("commit-authorization", GATE_CONTRACTS["commit-authorization"].context, allowedDecisionTuples["commit-authorization"], extra),
+  restoreCollision: gateArm("restore-collision", GATE_CONTRACTS["restore-collision"].context, allowedDecisionTuples["restore-collision"], extra),
+  migrationAudit: gateArm("migration-audit", GATE_CONTRACTS["migration-audit"].context, allowedDecisionTuples["migration-audit"], extra),
+  reviewWaiver: gateArm("review-trigger", waiverGateContextSchema, waiverDecisionsTuple, extra),
+  adjudicationWaiver: gateArm("adjudication-failure", waiverGateContextSchema, waiverDecisionsTuple, extra)
+});
+var armUnion = (arms) => external_exports.union(Object.values(arms));
+var gateRequestArms = gateArms({});
+var gateRequestV1Schema = armUnion(gateRequestArms);
+var PAYLOAD_REQUIRED_FIELDS = ["payload", "human_provenance"];
+var WAIVER_REQUIRED_FIELDS = ["granted", "scope", "origin", "notes", "human_provenance"];
+var CANCELLATION_FIELDS = ["cancelled", "reason", "human_provenance"];
+var payloadRequiredFieldsTuple = literalTuple(PAYLOAD_REQUIRED_FIELDS);
+var waiverRequiredFieldsTuple = literalTuple(WAIVER_REQUIRED_FIELDS);
+var cancellationFieldsTuple = literalTuple(CANCELLATION_FIELDS);
+var gateDecisionTemplateV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  gate_id: pathSafeId,
+  task_id: taskSlug3,
+  phase_instance: phase2,
+  kind: external_exports.enum(GATE_KINDS),
+  subject_digest: digest5,
+  context_digest: digest5,
+  required_fields: external_exports.union([payloadRequiredFieldsTuple, waiverRequiredFieldsTuple]),
+  cancellation_fields: cancellationFieldsTuple
+}).strict();
+var activeGateV1Schema = armUnion(gateArms({
+  status: external_exports.literal("awaiting-human"),
+  decision_template: gateDecisionTemplateV1Schema,
+  supplemental
+}));
+var gateRequestSchemaDefs = Object.freeze({
+  currentEvidence: currentEvidenceSetRefSchema,
+  supersession,
+  origin,
+  waiverContext: waiverGateContextSchema,
+  artifactApprovalDecisions: allowedDecisionTuples["artifact-approval"],
+  reviewTriggerDecisions: allowedDecisionTuples["review-trigger"],
+  materialDriftDecisions: allowedDecisionTuples["material-drift"],
+  adjudicationFailureDecisions: allowedDecisionTuples["adjudication-failure"],
+  attemptsExhaustedDecisions: allowedDecisionTuples["attempts-exhausted"],
+  constitutionEditDecisions: allowedDecisionTuples["constitution-edit"],
+  commitAuthorizationDecisions: allowedDecisionTuples["commit-authorization"],
+  restoreCollisionDecisions: allowedDecisionTuples["restore-collision"],
+  migrationAuditDecisions: allowedDecisionTuples["migration-audit"],
+  waiverDecisions: waiverDecisionsTuple,
+  ...gateRequestArms
+});
+var gateRequestSchemaDefOverrides = Object.freeze({
+  artifactApprovalDecisions: { const: GATE_REQUEST_DECISIONS["artifact-approval"] },
+  reviewTriggerDecisions: { const: GATE_REQUEST_DECISIONS["review-trigger"] },
+  materialDriftDecisions: { const: GATE_REQUEST_DECISIONS["material-drift"] },
+  adjudicationFailureDecisions: { const: GATE_REQUEST_DECISIONS["adjudication-failure"] },
+  attemptsExhaustedDecisions: { const: GATE_REQUEST_DECISIONS["attempts-exhausted"] },
+  constitutionEditDecisions: { const: GATE_REQUEST_DECISIONS["constitution-edit"] },
+  commitAuthorizationDecisions: { const: GATE_REQUEST_DECISIONS["commit-authorization"] },
+  restoreCollisionDecisions: { const: GATE_REQUEST_DECISIONS["restore-collision"] },
+  migrationAuditDecisions: { const: GATE_REQUEST_DECISIONS["migration-audit"] },
+  waiverDecisions: { const: WAIVER_DECISIONS }
+});
+var gateDecisionRecordSchemaDefs = Object.freeze({
+  supplemental,
+  provenance: humanDecisionProvenanceV1Schema,
+  ...decisionRecordArms
+});
+var activeGateSchemaDefs = Object.freeze({
+  payloadRequiredFields: payloadRequiredFieldsTuple,
+  waiverRequiredFields: waiverRequiredFieldsTuple,
+  cancellationFields: cancellationFieldsTuple,
+  decisionTemplate: gateDecisionTemplateV1Schema
+});
+var activeGateSchemaDefOverrides = Object.freeze({
+  payloadRequiredFields: { const: PAYLOAD_REQUIRED_FIELDS },
+  waiverRequiredFields: { const: WAIVER_REQUIRED_FIELDS },
+  cancellationFields: { const: CANCELLATION_FIELDS }
+});
 function parseGateRequest(value) {
   assertPlainJson(value, "gate request");
-  const parsed = gateRequestV1Validator.assert(value, "gate request");
-  const context2 = parsed.context;
-  if (!("origin" in context2)) parseGateContext(parsed.kind, context2);
-  return parsed;
+  return gateRequestV1Schema.parse(value);
 }
 function parseGateDecisionRecord(value) {
   assertPlainJson(value, "gate decision record");
-  return assertZodAgreement(value, gateDecisionRecordV1Validator, gateDecisionRecordV1Schema, "gate decision record");
+  return gateDecisionRecordV1Schema.parse(value);
 }
 function parseActiveGate(value) {
   assertPlainJson(value, "active gate");
-  return activeGateV1Validator.assert(value, "active gate");
-}
-
-// src/contracts/durable-result-manifest.ts
-function parseResultManifest(value) {
-  assertPlainJson(value, "result manifest");
-  return resultManifestV1Validator.assert(value, "result manifest");
+  return activeGateV1Schema.parse(value);
 }
 
 // src/contracts/durable-primitives.ts
+var BLOB_TREE_MODES = ["100644", "100755", "120000"];
 var CLAIMABLE_OUTPUT_PATH_CLASSES = [
   "document",
   "import",
@@ -33886,28 +23947,30 @@ var CLAIMABLE_OUTPUT_PATH_CLASSES = [
   "verification-transcript"
 ];
 var gitOid = gitOidV1Schema;
-var safeInteger2 = safeIntegerV1Schema;
-var sha256Digest = sha256DigestV1Schema;
+var safeInteger4 = safeIntegerV1Schema;
+var sha256Digest2 = sha256DigestV1Schema;
+var blobTreeModeV1Schema = external_exports.enum(BLOB_TREE_MODES);
+var claimableOutputPathClassV1Schema = external_exports.enum(CLAIMABLE_OUTPUT_PATH_CLASSES);
 var regularBlobIdentityV1Schema = external_exports.object({
   oid: gitOid,
   mode: external_exports.enum(["100644", "100755"]),
-  size_bytes: safeInteger2
+  size_bytes: safeInteger4
 }).strict();
 var symlinkBlobIdentityV1Schema = external_exports.object({
   oid: gitOid,
   mode: external_exports.literal("120000"),
-  size_bytes: safeInteger2
+  size_bytes: safeInteger4
 }).strict();
 var blobIdentityV1Schema = external_exports.union([regularBlobIdentityV1Schema, symlinkBlobIdentityV1Schema]);
 var common = {
   path: repositoryPathClaimV1Schema,
-  path_class: external_exports.enum(CLAIMABLE_OUTPUT_PATH_CLASSES)
+  path_class: claimableOutputPathClassV1Schema
 };
 var gitStorage = { storage: external_exports.literal("git-object") };
 var rawStorage = {
   storage: external_exports.literal("raw-payload"),
-  payload_bytes: safeInteger2,
-  payload_digest: sha256Digest
+  payload_bytes: safeInteger4,
+  payload_digest: sha256Digest2
 };
 var addGitRegular = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("add"), file_type: external_exports.literal("regular"), after: regularBlobIdentityV1Schema }).strict();
 var addGitSymlink = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("add"), file_type: external_exports.literal("symlink"), after: symlinkBlobIdentityV1Schema }).strict();
@@ -33953,18 +24016,18 @@ var declaredInputRefV1Schema = external_exports.object({
 }).strict();
 var projectionDigestRefV1Schema = external_exports.object({
   path: repositoryPathClaimV1Schema,
-  content_digest: sha256Digest
+  content_digest: sha256Digest2
 }).strict();
 var RESULT_BYTE_CAP = 26214400;
 var TASK_BYTE_CAP = 262144e3;
 var snapshotAccountingEntryV1Schema = external_exports.discriminatedUnion("storage", [
   external_exports.object({ path: repositoryPathClaimV1Schema, storage: external_exports.literal("git-object"), stored_bytes: external_exports.literal(0) }).strict(),
-  external_exports.object({ path: repositoryPathClaimV1Schema, storage: external_exports.literal("raw-payload"), stored_bytes: safeInteger2 }).strict()
+  external_exports.object({ path: repositoryPathClaimV1Schema, storage: external_exports.literal("raw-payload"), stored_bytes: safeInteger4 }).strict()
 ]);
 var snapshotAccountingV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
-  result_bytes: safeIntegerV1Schema.max(RESULT_BYTE_CAP),
-  task_bytes: safeIntegerV1Schema.max(TASK_BYTE_CAP),
+  result_bytes: external_exports.number().int().min(0).max(RESULT_BYTE_CAP),
+  task_bytes: external_exports.number().int().min(0).max(TASK_BYTE_CAP),
   result_byte_cap: external_exports.literal(RESULT_BYTE_CAP),
   task_byte_cap: external_exports.literal(TASK_BYTE_CAP),
   counted_entries: external_exports.array(snapshotAccountingEntryV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "counted_entries must be sorted by path with no duplicates"),
@@ -34030,18 +24093,18 @@ var secretScanResultV1Schema = external_exports.discriminatedUnion("outcome", [
 ]);
 
 // src/contracts/durable-implementation-output.ts
-var sha256Digest2 = sha256DigestV1Schema;
-var safeInteger3 = safeIntegerV1Schema;
+var sha256Digest3 = sha256DigestV1Schema;
+var safeInteger5 = safeIntegerV1Schema;
 var parentDocumentRefV1Schema = external_exports.object({
   document_path: taskPathClaimV1Schema,
-  content_digest: sha256Digest2,
+  content_digest: sha256Digest3,
   role: external_exports.enum(["prd", "design", "phase-design", "impl-notes"])
 }).strict();
 var rawGitPathMirror = external_exports.string();
 var undeclaredChangeReportV1Schema = external_exports.object({
   scanned: external_exports.boolean(),
   undeclared_paths: external_exports.array(rawGitPathMirror).refine((items) => isSortedUniqueBy(items), "undeclared_paths must be sorted with no duplicates"),
-  unrepresentable_count: safeInteger3
+  unrepresentable_count: safeInteger5
 }).strict();
 var implementationOutputV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
@@ -34050,18 +24113,18 @@ var implementationOutputV1Schema = external_exports.object({
   phase_instance: phaseInstanceIdV1Schema,
   step: external_exports.enum(PIPELINE_STEPS),
   base_commit: gitOidV1Schema,
-  index_identity_digest: sha256Digest2,
-  worktree_identity_digest: sha256Digest2,
+  index_identity_digest: sha256Digest3,
+  worktree_identity_digest: sha256Digest3,
   outputs: external_exports.array(outputEntryV1Schema).min(1).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "outputs must be sorted by path with no duplicates"),
   parent_documents: external_exports.array(parentDocumentRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("document_path")), "parent_documents must be sorted by document_path with no duplicates"),
-  diff_digest: sha256Digest2,
-  snapshot_digest: sha256Digest2,
+  diff_digest: sha256Digest3,
+  snapshot_digest: sha256Digest3,
   restore_targets: external_exports.array(repositoryPathClaimV1Schema).refine((items) => isSortedUniqueBy(items), "restore_targets must be sorted with no duplicates"),
   accounting: snapshotAccountingV1Schema,
   secret_scan: secretScanResultV1Schema,
   undeclared_changes: undeclaredChangeReportV1Schema,
   declared_inputs: external_exports.array(declaredInputRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
-  input_fingerprint: sha256Digest2,
+  input_fingerprint: sha256Digest3,
   constitution_edit_gate_id: pathSafeIdV1Schema.optional()
 }).strict();
 function parseImplementationOutput(value) {
@@ -34069,209 +24132,92 @@ function parseImplementationOutput(value) {
   return implementationOutputV1Schema.parse(value);
 }
 
-// src/contracts/review.ts
-var REVIEW_VERDICTS = ["pass", "advisory", "fail"];
-var REVIEW_ROLES = ["counter-review", "gate-counter-review"];
-var REVIEW_FINDING_SEVERITIES = ["blocker", "major", "minor"];
-var MODEL_FAMILIES = ["claude", "codex"];
-var ADAPTER_IDS = ["claude-cli", "codex-cli"];
-var EFFORT_VALUES = ["low", "medium", "high", "xhigh", "max", "ultra"];
-var nonBlank2 = external_exports.string().min(1).refine((value) => value.trim().length > 0, "must contain a non-whitespace character");
-var id = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
-var digest4 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var safePositive = external_exports.number().int().positive().safe();
-var ruleVersionRefSchema = external_exports.object({ rule_id: id, rule_version: safePositive }).strict();
-var reviewFindingSchema = external_exports.object({
-  finding_id: id,
-  severity: external_exports.enum(REVIEW_FINDING_SEVERITIES),
-  blocking: external_exports.boolean(),
-  summary: nonBlank2,
-  evidence: nonBlank2,
-  suggested_resolution: nonBlank2
-}).strict().superRefine((finding, context2) => {
-  if (finding.blocking !== (finding.severity === "blocker")) {
-    context2.addIssue({ code: "custom", path: ["blocking"], message: "only blocker findings are blocking" });
-  }
-});
-var rawReviewSchema = external_exports.object({
+// src/contracts/triage.ts
+init_trust_brands();
+var id3 = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
+var digest6 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var nonBlank4 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
+var findingRefShape = { review_evidence_digest: digest6, finding_id: id3 };
+var acceptedDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("accepted"), rationale: nonBlank4, revision_intent: nonBlank4 }).strict();
+var acceptedEditorialDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("accepted-editorial"), rationale: nonBlank4, revision_intent: nonBlank4 }).strict();
+var rejectedDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("rejected"), rationale: nonBlank4, evidence: nonBlank4 }).strict();
+var triageDispositionSchema = external_exports.discriminatedUnion("disposition", [acceptedDispositionSchema, acceptedEditorialDispositionSchema, rejectedDispositionSchema]);
+var triageCandidateSchema = external_exports.object({
   schema_version: external_exports.literal("1"),
   task_id: taskSlugV1Schema,
   phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
-  step: external_exports.literal("counter_review"),
-  role: external_exports.enum(REVIEW_ROLES),
-  subject_digest: digest4,
-  input_fingerprint: digest4,
-  rubric_digest: digest4,
-  producer_family: external_exports.enum(MODEL_FAMILIES),
-  findings: external_exports.array(reviewFindingSchema),
-  matched_rule_versions: external_exports.array(ruleVersionRefSchema),
-  verdict: external_exports.enum(REVIEW_VERDICTS),
-  blocking_count: external_exports.number().int().nonnegative().safe()
-}).strict().superRefine((review, context2) => {
-  const findingIds = /* @__PURE__ */ new Set();
-  review.findings.forEach((finding, index) => {
-    if (findingIds.has(finding.finding_id)) context2.addIssue({ code: "custom", path: ["findings", index, "finding_id"], message: "duplicate finding_id" });
-    findingIds.add(finding.finding_id);
+  step: external_exports.literal("triage"),
+  subject_digest: digest6,
+  input_fingerprint: digest6,
+  current_evidence_set_digest: digest6,
+  source_evidence_digests: external_exports.array(digest6),
+  dispositions: external_exports.array(triageDispositionSchema),
+  accepted_count: external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  rejected_count: external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  accepted_editorial_count: external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional()
+}).strict().superRefine((triage, context2) => {
+  if (new Set(triage.source_evidence_digests).size !== triage.source_evidence_digests.length) {
+    context2.addIssue({ code: "custom", path: ["source_evidence_digests"], message: "source evidence digests must be unique" });
+  }
+  const seen = /* @__PURE__ */ new Set();
+  triage.dispositions.forEach((disposition, index) => {
+    const key = `${disposition.review_evidence_digest}:${disposition.finding_id}`;
+    if (seen.has(key)) context2.addIssue({ code: "custom", path: ["dispositions", index], message: "duplicate disposition for a finding" });
+    seen.add(key);
   });
-  const rules2 = /* @__PURE__ */ new Set();
-  review.matched_rule_versions.forEach((rule4, index) => {
-    const key = `${rule4.rule_id}:${rule4.rule_version}`;
-    if (rules2.has(key)) context2.addIssue({ code: "custom", path: ["matched_rule_versions", index], message: "duplicate rule version" });
-    rules2.add(key);
-  });
-  const expected = expectedReviewSummary(review.findings);
-  if (review.blocking_count !== expected.blocking_count) context2.addIssue({ code: "custom", path: ["blocking_count"], message: `review blocking_count must be ${expected.blocking_count}` });
-  if (review.verdict !== expected.verdict) context2.addIssue({ code: "custom", path: ["verdict"], message: `review verdict must be ${expected.verdict}` });
 });
-function expectedReviewSummary(findings) {
-  const blocking_count = findings.filter((finding) => finding.blocking).length;
-  return { blocking_count, verdict: blocking_count > 0 ? "fail" : findings.length > 0 ? "advisory" : "pass" };
-}
-function validateReviewClaims(parsed) {
-  const expected = expectedReviewSummary(parsed.findings);
-  if (parsed.blocking_count !== expected.blocking_count) throw new TypeError(`review blocking_count must be ${expected.blocking_count}`);
-  if (parsed.verdict !== expected.verdict) throw new TypeError(`review verdict must be ${expected.verdict}`);
-}
-function parseAndDeriveReview(value) {
-  assertPlainJson(value, "review");
-  const parsed = rawReviewSchema.parse(value);
-  validateReviewClaims(parsed);
-  return parsed;
-}
-var provenanceBase = rawReviewSchema.safeExtend({
-  model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]),
-  model: nonBlank2,
-  effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")])
-});
-var serverAttestedReviewSchema = provenanceBase.safeExtend({
-  assurance: external_exports.literal("server-attested"),
-  adapter: external_exports.enum(ADAPTER_IDS),
-  cli_version: nonBlank2,
-  model_family: external_exports.enum(MODEL_FAMILIES),
-  effort: external_exports.enum(EFFORT_VALUES),
-  invocation_id: id,
-  envelope_input_digest: digest4,
-  observed_output_digest: digest4,
-  result_id: id
-}).strict().superRefine((review, context2) => {
-  const expectedReviewer = review.producer_family === "claude" ? "codex" : "claude";
-  if (review.model_family !== expectedReviewer) context2.addIssue({ code: "custom", path: ["model_family"], message: "server-attested review must be opposite-family" });
-});
-var degradedReviewSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank2 }).strict();
-var reviewEvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);
-function parseReviewEvidence(value) {
-  assertPlainJson(value, "review evidence");
-  const parsed = reviewEvidenceSchema.parse(value);
-  validateReviewClaims(parsed);
-  return parsed;
+function parseTriageCandidate(value) {
+  assertPlainJson(value, "review triage candidate");
+  const { accepted_editorial_count, ...rest } = triageCandidateSchema.parse(value);
+  return accepted_editorial_count === void 0 ? rest : { ...rest, accepted_editorial_count };
 }
 
-// src/contracts/adjudication.ts
-var CONSTITUTION_RESULTS = ["pass", "fail", "uncertain"];
-var DRIFT_RESULTS = ["aligned", "incidental", "material"];
-var COMPLIANCE_RESULTS = ["pass", "fail", "uncertain"];
-var TRIGGER_RESULTS = ["not-matched", "matched", "uncertain"];
-var MECHANICAL_EVIDENCE_STATES = ["current", "missing", "stale", "unknown", "failed", "digest-mismatch"];
-var nonBlank3 = external_exports.string().min(1).refine((value) => value.trim().length > 0, "must contain a non-whitespace character");
-var id2 = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
-var digest5 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var mechanicalEvidenceSchema = external_exports.object({
-  mechanism: nonBlank3,
-  state: external_exports.enum(MECHANICAL_EVIDENCE_STATES),
-  subject_digest: digest5.optional(),
-  evidence_digest: digest5.optional(),
-  details: nonBlank3
-}).strict().superRefine((evidence, context2) => {
-  const hasBindings = evidence.subject_digest !== void 0 && evidence.evidence_digest !== void 0;
-  if ((evidence.state === "current" || evidence.state === "stale") && !hasBindings) context2.addIssue({ code: "custom", message: `${evidence.state} evidence requires subject and evidence digests` });
-  if ((evidence.state === "missing" || evidence.state === "unknown") && (evidence.subject_digest !== void 0 || evidence.evidence_digest !== void 0)) context2.addIssue({ code: "custom", message: `${evidence.state} evidence cannot claim digests` });
-});
-var constitutionRuleFindingSchema = ruleVersionRefSchema.extend({
-  compliance: external_exports.enum(COMPLIANCE_RESULTS),
-  rationale: nonBlank3,
-  trigger: external_exports.enum(TRIGGER_RESULTS),
-  trigger_evidence: nonBlank3,
-  enforced_by: external_exports.array(mechanicalEvidenceSchema)
+// src/contracts/durable-result-manifest.ts
+var reviewEvidenceArtifactV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  artifact_kind: external_exports.literal("review-evidence"),
+  evidence: reviewEvidenceSchema
 }).strict();
-var driftFindingSchema = external_exports.object({
-  upstream_digest: digest5,
-  drift: external_exports.enum(DRIFT_RESULTS),
-  affected_claim_ids: external_exports.array(id2),
-  rationale: nonBlank3
-}).strict().superRefine((finding, context2) => {
-  if (finding.drift === "aligned" !== (finding.affected_claim_ids.length === 0)) context2.addIssue({ code: "custom", path: ["affected_claim_ids"], message: "aligned drift has no affected claims; other drift must identify claims" });
-  if (new Set(finding.affected_claim_ids).size !== finding.affected_claim_ids.length) context2.addIssue({ code: "custom", path: ["affected_claim_ids"], message: "duplicate affected claim" });
-});
-var rawAdjudicationSchema = external_exports.object({
+var triageArtifactV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  artifact_kind: external_exports.literal("triage"),
+  evidence: triageCandidateSchema
+}).strict();
+var adjudicationEvidenceArtifactV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  artifact_kind: external_exports.literal("adjudication-evidence"),
+  evidence: adjudicationEvidenceSchema
+}).strict();
+var resultSourceArtifactV1Schema = external_exports.union([
+  documentArtifactV1Schema,
+  implementationOutputV1Schema,
+  reviewEvidenceArtifactV1Schema,
+  triageArtifactV1Schema,
+  adjudicationEvidenceArtifactV1Schema
+]);
+var resultManifestV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   task_id: taskSlugV1Schema,
-  phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
-  step: external_exports.literal("adjudicate"),
-  subject_digest: digest5,
-  input_fingerprint: digest5,
-  pinned_constitution_digest: digest5,
-  approved_upstream_digests: external_exports.array(digest5),
-  source_evidence_set_digest: digest5,
-  rule_findings: external_exports.array(constitutionRuleFindingSchema),
-  drift_findings: external_exports.array(driftFindingSchema),
-  constitution: external_exports.enum(CONSTITUTION_RESULTS),
-  drift: external_exports.enum(DRIFT_RESULTS),
-  matched_rule_versions: external_exports.array(ruleVersionRefSchema),
-  uncertain_rule_versions: external_exports.array(ruleVersionRefSchema)
-}).strict().superRefine((adjudication, context2) => {
-  try {
-    validateAdjudicationClaims(adjudication);
-  } catch (error51) {
-    context2.addIssue({ code: "custom", message: error51 instanceof Error ? error51.message : "invalid adjudication semantics" });
-  }
-});
-var ruleKey3 = (rule4) => `${rule4.rule_id}:${rule4.rule_version}`;
-function assertSortedUnique(values, label) {
-  if (new Set(values).size !== values.length || values.some((value, index) => index > 0 && values[index - 1] >= value)) throw new TypeError(`${label} must be sorted and unique`);
-}
-function sameRuleSet(actual, expected) {
-  return actual.length === expected.length && actual.every((rule4, index) => ruleKey3(rule4) === ruleKey3(expected[index]));
-}
-function validateAdjudicationClaims(parsed) {
-  assertSortedUnique(parsed.approved_upstream_digests, "approved_upstream_digests");
-  assertSortedUnique(parsed.rule_findings.map(ruleKey3), "rule_findings");
-  assertSortedUnique(parsed.drift_findings.map((finding) => finding.upstream_digest), "drift_findings");
-  if (parsed.drift_findings.length !== parsed.approved_upstream_digests.length || parsed.drift_findings.some((finding, index) => finding.upstream_digest !== parsed.approved_upstream_digests[index])) throw new TypeError("drift_findings must exactly cover approved_upstream_digests");
-  for (const finding of parsed.rule_findings) {
-    for (const evidence of finding.enforced_by) {
-      if (evidence.state === "current" && evidence.subject_digest !== parsed.subject_digest) throw new TypeError(`current mechanical evidence for ${ruleKey3(finding)} binds the wrong subject`);
-      if (evidence.state !== "current" && finding.compliance === "pass") throw new TypeError(`suspect mechanical evidence cannot establish compliance for ${ruleKey3(finding)}`);
-    }
-  }
-  const expectedConstitution = parsed.rule_findings.some((finding) => finding.compliance === "fail") ? "fail" : parsed.rule_findings.some((finding) => finding.compliance === "uncertain") ? "uncertain" : "pass";
-  if (parsed.constitution !== expectedConstitution) throw new TypeError(`constitution must be ${expectedConstitution}`);
-  const expectedDrift = parsed.drift_findings.some((finding) => finding.drift === "material") ? "material" : parsed.drift_findings.some((finding) => finding.drift === "incidental") ? "incidental" : "aligned";
-  if (parsed.drift !== expectedDrift) throw new TypeError(`drift must be ${expectedDrift}`);
-  const matched = parsed.rule_findings.filter((finding) => finding.trigger === "matched").map(({ rule_id, rule_version }) => ({ rule_id, rule_version }));
-  const uncertain = parsed.rule_findings.filter((finding) => finding.trigger === "uncertain").map(({ rule_id, rule_version }) => ({ rule_id, rule_version }));
-  if (!sameRuleSet(parsed.matched_rule_versions, matched)) throw new TypeError("matched_rule_versions contradict rule findings");
-  if (!sameRuleSet(parsed.uncertain_rule_versions, uncertain)) throw new TypeError("uncertain_rule_versions contradict rule findings");
-}
-function parseAndDeriveAdjudication(value) {
-  assertPlainJson(value, "adjudication");
-  const parsed = rawAdjudicationSchema.parse(value);
-  validateAdjudicationClaims(parsed);
-  return parsed;
-}
-var provenanceBase2 = rawAdjudicationSchema.safeExtend({ model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]), model: nonBlank3, effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")]) });
-var agentSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("agent-declared") }).strict();
-var serverSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("server-attested"), adapter: external_exports.enum(ADAPTER_IDS), cli_version: nonBlank3, model_family: external_exports.enum(MODEL_FAMILIES), effort: external_exports.enum(EFFORT_VALUES), invocation_id: id2, envelope_input_digest: digest5, observed_output_digest: digest5, result_id: id2 }).strict();
-var degradedSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank3 }).strict();
-var adjudicationEvidenceSchema = external_exports.discriminatedUnion("assurance", [agentSchema, serverSchema, degradedSchema]);
-function parseAdjudicationEvidence(value) {
-  assertPlainJson(value, "adjudication evidence");
-  const parsed = adjudicationEvidenceSchema.parse(value);
-  validateAdjudicationClaims(parsed);
-  return parsed;
+  repository_identity_digest: sha256DigestV1Schema,
+  result_id: safeIdV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  artifact_digest: sha256DigestV1Schema,
+  source_artifact: resultSourceArtifactV1Schema,
+  input_fingerprint: sha256DigestV1Schema,
+  snapshot_digest: sha256DigestV1Schema,
+  outputs: external_exports.array(outputEntryV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "outputs must be sorted by path with no duplicates"),
+  projections: external_exports.array(projectionDigestRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "projections must be sorted by path with no duplicates"),
+  accounting: snapshotAccountingV1Schema,
+  secret_scan: secretScanResultV1Schema
+}).strict();
+function parseResultManifest(value) {
+  assertPlainJson(value, "result manifest");
+  return resultManifestV1Schema.parse(value);
 }
 
 // src/contracts/durable.ts
-import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual2 } from "node:util";
 
 // src/contracts/tool-names.ts
 var TOOL_NAMES = Object.freeze([
@@ -34285,11 +24231,20 @@ function isToolName(value) {
 }
 
 // src/contracts/errors.ts
+var documentScoped = (schema) => schema.clone(schema.def);
+var digest7 = documentScoped(sha256DigestV1Schema);
+var id4 = documentScoped(safeIdV1Schema);
+var taskSlug4 = documentScoped(taskSlugV1Schema);
+var pathSafeId2 = documentScoped(pathSafeIdV1Schema);
+var code = documentScoped(safeCodeV1Schema);
+var version2 = documentScoped(safeVersionV1Schema);
+var integer2 = documentScoped(safeIntegerV1Schema);
+var repositoryPathClaim = documentScoped(repositoryPathClaimV1Schema);
 var tool = external_exports.enum(TOOL_NAMES);
 var adapter = external_exports.enum(["claude-cli", "codex-cli"]);
 var family2 = external_exports.enum(["claude", "codex"]);
 var gateKind = external_exports.enum(GATE_KINDS);
-var phaseInstance = external_exports.string().refine((value) => {
+var phaseInstance2 = external_exports.string().regex(/^(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)$/u).refine((value) => {
   try {
     decodePhaseInstance(value);
     return true;
@@ -34298,78 +24253,89 @@ var phaseInstance = external_exports.string().refine((value) => {
   }
 });
 var object2 = (shape) => external_exports.object(shape).strict();
-var digestPair = { expected_digest: sha256DigestV1Schema, observed_digest: sha256DigestV1Schema };
+var digestPair = { expected_digest: digest7, observed_digest: digest7 };
 var pathClass2 = external_exports.enum(PATH_CLASSES);
-var taskPathClass = { task_id: taskSlugV1Schema, path_class: pathClass2 };
-var adapterAttempt = { adapter, attempt: safeIntegerV1Schema };
-var sortedPaths = external_exports.array(repositoryPathClaimV1Schema).min(1).superRefine((items, context2) => {
+var taskPathClass = { task_id: taskSlug4, path_class: pathClass2 };
+var adapterAttempt = { adapter, attempt: integer2 };
+var sortedPaths = external_exports.array(repositoryPathClaim).min(1).superRefine((items, context2) => {
   for (let index = 1; index < items.length; index += 1) if (items[index - 1].localeCompare(items[index]) >= 0) context2.addIssue({ code: "custom", message: "offending_paths must be sorted and unique" });
-});
+}).meta({ uniqueItems: true, "x-archflow-sorted-unique": true });
 var validationIssues = external_exports.array(external_exports.string().min(1).max(256)).min(1).max(5);
+var issueParams = object2({ issue_code: code });
+var digestsParams = object2(digestPair);
+var taskPathParams = object2(taskPathClass);
+var gateParams = object2({ gate_id: pathSafeId2, gate_kind: gateKind });
+var adapterOnlyParams = object2({ adapter });
+var adapterAttemptParams = object2(adapterAttempt);
 var PROJECT_PARAMETER_SCHEMAS = {
-  CONTRACT_INVALID: object2({ tool: tool.optional(), issue_code: safeCodeV1Schema, schema_version: safeVersionV1Schema.optional(), issues: validationIssues.optional() }),
-  RESULT_INVALID: object2({ tool, result_id: safeIdV1Schema, expected_digest: sha256DigestV1Schema.optional(), observed_digest: sha256DigestV1Schema.optional() }),
-  CONTRACT_VERSION_UNSUPPORTED: object2({ schema_version: safeVersionV1Schema, supported_version: safeVersionV1Schema }),
-  ENVELOPE_OVERFLOW: object2({ offending_paths: sortedPaths, current_bytes: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }),
-  WORKFLOW_INVALID: object2({ issue_code: safeCodeV1Schema }),
-  CONFIG_INVALID: object2({ issue_code: safeCodeV1Schema }),
-  CONFIG_MODEL_UNSUPPORTED: object2({ model: safeIdV1Schema }),
-  CONFIG_FAMILY_UNSUPPORTED: object2({ family: safeIdV1Schema }),
-  RUNTIME_VERSION_UNSUPPORTED: object2({ component: safeIdV1Schema, version: safeVersionV1Schema }),
-  REPOSITORY_NOT_FOUND: object2({ repository_candidate_digest: sha256DigestV1Schema }),
-  REPOSITORY_MISMATCH: object2(digestPair),
-  TASK_INVALID: object2({ task_id: taskSlugV1Schema, issue_code: safeCodeV1Schema }),
-  PATH_INVALID: object2(taskPathClass),
-  PATH_ESCAPE: object2(taskPathClass),
-  TASK_SCOPE_VIOLATION: object2(taskPathClass),
-  GIT_CONFLICT: object2({ operation: safeCodeV1Schema }),
-  GIT_DIVERGED: object2(digestPair),
-  HANDOFF_REQUIRED: object2({ phase_instance: phaseInstance }),
-  POLICY_BASE_INVALID: object2({ expected_digest: sha256DigestV1Schema, observed_digest: sha256DigestV1Schema.optional() }),
-  WORKFLOW_MISMATCH: object2(digestPair),
-  PINNED_CONFIG_MISMATCH: object2(digestPair),
-  STALE_SKILLS: object2(digestPair),
-  STATE_MISSING: object2({ phase_instance: phaseInstance }),
-  STATE_INVALID: object2({ phase_instance: phaseInstance, issue_code: safeCodeV1Schema }),
-  TRANSITION_INVALID: object2({ phase_instance: phaseInstance, from: safeCodeV1Schema, to: safeCodeV1Schema }),
-  INPUT_FINGERPRINT_MISMATCH: object2(digestPair),
-  STATE_CONFLICT: object2({ expected_revision: safeIntegerV1Schema, observed_revision: safeIntegerV1Schema }),
-  SUPPLEMENTAL_REVIEW_REQUIRED: object2({ gate_id: pathSafeIdV1Schema, evidence_digest: sha256DigestV1Schema }),
-  INTENT_MISMATCH: object2(digestPair),
-  INTENT_NOT_CURRENT: object2({ intent_id: pathSafeIdV1Schema, receipt_revision: safeIntegerV1Schema, current_revision: safeIntegerV1Schema }),
-  STAGED_REQUEST_NOT_FOUND: object2({ task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema }),
-  STAGED_REQUEST_MISMATCH: object2({ intent_id: pathSafeIdV1Schema, issue_code: safeCodeV1Schema, expected_digest: sha256DigestV1Schema.optional(), observed_digest: sha256DigestV1Schema.optional(), issues: validationIssues.optional() }),
-  SNAPSHOT_LIMIT: object2({ limit_scope: external_exports.enum(["result", "task"]), offending_paths: sortedPaths, current_bytes: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }),
-  SNAPSHOT_INVALID: object2({ snapshot_digest: sha256DigestV1Schema, issue_code: safeCodeV1Schema }),
-  RESTORE_COLLISION: object2({ gate_id: pathSafeIdV1Schema, path_class: pathClass2 }),
-  RECONCILIATION_REQUIRED: object2({ recorded_digest: sha256DigestV1Schema, observed_digest: sha256DigestV1Schema }),
-  SECRET_DETECTED: object2({ path_class: pathClass2, detector_id: safeIdV1Schema }),
-  GATE_ACTIVE: object2({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind }),
-  GATE_DECISION_INVALID: object2({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind, issue_code: safeCodeV1Schema }),
-  GATE_CANCELLED: object2({ gate_id: pathSafeIdV1Schema, gate_kind: gateKind }),
-  GATE_SUPERSEDED: object2({ gate_id: pathSafeIdV1Schema, old_subject_digest: sha256DigestV1Schema, new_subject_digest: sha256DigestV1Schema }),
-  UNSUPPORTED_HOST: object2({ host: safeIdV1Schema }),
-  UNSUPPORTED_MODEL: object2({ model: safeIdV1Schema }),
+  CONTRACT_INVALID: object2({ tool: tool.optional(), issue_code: code, schema_version: version2.optional(), issues: validationIssues.optional() }),
+  RESULT_INVALID: object2({ tool, result_id: id4, expected_digest: digest7.optional(), observed_digest: digest7.optional() }),
+  CONTRACT_VERSION_UNSUPPORTED: object2({ schema_version: version2, supported_version: version2 }),
+  ENVELOPE_OVERFLOW: object2({ offending_paths: sortedPaths, current_bytes: integer2, byte_cap: integer2 }),
+  WORKFLOW_INVALID: issueParams,
+  CONFIG_INVALID: issueParams,
+  CONFIG_MODEL_UNSUPPORTED: object2({ model: id4 }),
+  CONFIG_FAMILY_UNSUPPORTED: object2({ family: id4 }),
+  RUNTIME_VERSION_UNSUPPORTED: object2({ component: id4, version: version2 }),
+  REPOSITORY_NOT_FOUND: object2({ repository_candidate_digest: digest7 }),
+  REPOSITORY_MISMATCH: digestsParams,
+  TASK_INVALID: object2({ task_id: taskSlug4, issue_code: code }),
+  PATH_INVALID: taskPathParams,
+  PATH_ESCAPE: taskPathParams,
+  TASK_SCOPE_VIOLATION: taskPathParams,
+  GIT_CONFLICT: object2({ operation: code }),
+  GIT_DIVERGED: digestsParams,
+  HANDOFF_REQUIRED: object2({ phase_instance: phaseInstance2 }),
+  POLICY_BASE_INVALID: object2({ expected_digest: digest7, observed_digest: digest7.optional() }),
+  WORKFLOW_MISMATCH: digestsParams,
+  PINNED_CONFIG_MISMATCH: digestsParams,
+  STALE_SKILLS: digestsParams,
+  STATE_MISSING: object2({ phase_instance: phaseInstance2 }),
+  STATE_INVALID: object2({ phase_instance: phaseInstance2, issue_code: code }),
+  TRANSITION_INVALID: object2({ phase_instance: phaseInstance2, from: code, to: code }),
+  INPUT_FINGERPRINT_MISMATCH: digestsParams,
+  STATE_CONFLICT: object2({ expected_revision: integer2, observed_revision: integer2 }),
+  SUPPLEMENTAL_REVIEW_REQUIRED: object2({ gate_id: pathSafeId2, evidence_digest: digest7 }),
+  INTENT_MISMATCH: digestsParams,
+  INTENT_NOT_CURRENT: object2({ intent_id: pathSafeId2, receipt_revision: integer2, current_revision: integer2 }),
+  STAGED_REQUEST_NOT_FOUND: object2({ task_id: taskSlug4, intent_id: pathSafeId2 }),
+  STAGED_REQUEST_MISMATCH: object2({ intent_id: pathSafeId2, issue_code: code, expected_digest: digest7.optional(), observed_digest: digest7.optional(), issues: validationIssues.optional() }),
+  SNAPSHOT_LIMIT: object2({ limit_scope: external_exports.enum(["result", "task"]), offending_paths: sortedPaths, current_bytes: integer2, byte_cap: integer2 }),
+  SNAPSHOT_INVALID: object2({ snapshot_digest: digest7, issue_code: code }),
+  RESTORE_COLLISION: object2({ gate_id: pathSafeId2, path_class: pathClass2 }),
+  RECONCILIATION_REQUIRED: object2({ recorded_digest: digest7, observed_digest: digest7 }),
+  SECRET_DETECTED: object2({ path_class: pathClass2, detector_id: id4 }),
+  GATE_ACTIVE: gateParams,
+  GATE_DECISION_INVALID: object2({ gate_id: pathSafeId2, gate_kind: gateKind, issue_code: code }),
+  GATE_CANCELLED: gateParams,
+  GATE_SUPERSEDED: object2({ gate_id: pathSafeId2, old_subject_digest: digest7, new_subject_digest: digest7 }),
+  UNSUPPORTED_HOST: object2({ host: id4 }),
+  UNSUPPORTED_MODEL: object2({ model: id4 }),
   FAMILY_MISMATCH: object2({ expected_family: family2, observed_family: family2 }),
-  CLI_VERSION_UNSUPPORTED: object2({ adapter, version: safeVersionV1Schema }),
-  AUTH_UNAVAILABLE: object2({ adapter }),
-  CLI_MISSING: object2({ adapter }),
-  SANDBOX_UNAVAILABLE: object2({ capability: safeIdV1Schema }),
-  SANDBOX_PROBE_FAILED: object2({ capability: safeIdV1Schema, failure_class: safeCodeV1Schema }),
-  RATE_LIMITED: object2(adapterAttempt),
-  TIMEOUT: object2({ ...adapterAttempt, limit_ms: safeIntegerV1Schema }),
-  CANCELLED: object2({ source: external_exports.enum(["client", "transport"]), attempt: safeIntegerV1Schema }),
-  MODEL_OUTPUT_INVALID: object2({ ...adapterAttempt, issue_code: safeCodeV1Schema }),
-  IO_ERROR: object2({ operation: safeCodeV1Schema, attempt: safeIntegerV1Schema }),
-  OUTPUT_OVERFLOW: object2({ adapter, byte_count: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }),
-  PROCESS_FAILED: object2({ adapter, exit_class: safeCodeV1Schema }),
-  INTERNAL_ERROR: object2({ correlation_id: safeIdV1Schema })
+  CLI_VERSION_UNSUPPORTED: object2({ adapter, version: version2 }),
+  AUTH_UNAVAILABLE: adapterOnlyParams,
+  CLI_MISSING: adapterOnlyParams,
+  SANDBOX_UNAVAILABLE: object2({ capability: id4 }),
+  SANDBOX_PROBE_FAILED: object2({ capability: id4, failure_class: code }),
+  RATE_LIMITED: adapterAttemptParams,
+  TIMEOUT: object2({ ...adapterAttempt, limit_ms: integer2 }),
+  CANCELLED: object2({ source: external_exports.enum(["client", "transport"]), attempt: integer2 }),
+  MODEL_OUTPUT_INVALID: object2({ ...adapterAttempt, issue_code: code }),
+  IO_ERROR: object2({ operation: code, attempt: integer2 }),
+  OUTPUT_OVERFLOW: object2({ adapter, byte_count: integer2, byte_cap: integer2 }),
+  PROCESS_FAILED: object2({ adapter, exit_class: code }),
+  INTERNAL_ERROR: object2({ correlation_id: id4 })
 };
+var protocolDigest = documentScoped(sha256DigestV1Schema);
+var protocolId = documentScoped(safeIdV1Schema);
+var protocolCode = documentScoped(safeCodeV1Schema);
+var protocolVersion = documentScoped(safeVersionV1Schema);
+var protocolTool = documentScoped(tool);
 var PROTOCOL_PARAMETER_SCHEMAS = {
-  TOOL_NOT_FOUND: object2({ tool_name_digest: sha256DigestV1Schema }),
-  TOOL_DISABLED: object2({ tool, lifecycle_state: safeCodeV1Schema }),
-  UNSUPPORTED_PROTOCOL: object2({ offered_version: safeVersionV1Schema, supported_version: safeVersionV1Schema }),
-  INITIALIZATION_REPEATED: object2({ connection_id: safeIdV1Schema })
+  TOOL_NOT_FOUND: object2({ tool_name_digest: protocolDigest }),
+  TOOL_DISABLED: object2({ tool: protocolTool, lifecycle_state: protocolCode }),
+  UNSUPPORTED_PROTOCOL: object2({ offered_version: protocolVersion, supported_version: protocolVersion }),
+  INITIALIZATION_REPEATED: object2({ connection_id: protocolId })
 };
 function parser(schema) {
   return Object.freeze({ parse(value) {
@@ -34445,14 +24411,25 @@ var PROTOCOL_ERROR_DEFINITIONS = Object.freeze({
   UNSUPPORTED_PROTOCOL: defineError("protocol", false, PROTOCOL_PARAMETER_SCHEMAS.UNSUPPORTED_PROTOCOL, "negotiate-supported-protocol", "protocol"),
   INITIALIZATION_REPEATED: defineError("protocol", false, PROTOCOL_PARAMETER_SCHEMAS.INITIALIZATION_REPEATED, "open-new-connection", "protocol")
 });
-function constructError(registry2, code, parameters) {
-  const definition = registry2[code];
+function constructError(registry2, code2, parameters) {
+  const definition = registry2[code2];
   const parsed = definition.parameter_parser.parse(parameters);
-  return Object.freeze({ schema_version: "1", code, owner: definition.owner, retryable: definition.retryable, diagnostic: Object.freeze({ template_id: code, parameters: parsed }), next_action: definition.action });
+  return Object.freeze({ schema_version: "1", code: code2, owner: definition.owner, retryable: definition.retryable, diagnostic: Object.freeze({ template_id: code2, parameters: parsed }), next_action: definition.action });
 }
-function createProjectError(code, parameters) {
-  return constructError(PROJECT_ERROR_DEFINITIONS, code, parameters);
+function createProjectError(code2, parameters) {
+  return constructError(PROJECT_ERROR_DEFINITIONS, code2, parameters);
 }
+var internalErrorSchemaTables = Object.freeze({
+  project: Object.freeze({
+    parameters: PROJECT_PARAMETER_SCHEMAS,
+    primitives: Object.freeze({ digest: digest7, id: id4, taskSlug: taskSlug4, pathSafeId: pathSafeId2, pathClass: pathClass2, code, version: version2, integer: integer2, tool, adapter, family: family2, gate: gateKind, phase: phaseInstance2, repositoryPathClaim }),
+    shared: Object.freeze({ issue: issueParams, validationIssues, digests: digestsParams, taskPath: taskPathParams, gateParams, adapterOnly: adapterOnlyParams, adapterAttempt: adapterAttemptParams })
+  }),
+  protocol: Object.freeze({
+    parameters: PROTOCOL_PARAMETER_SCHEMAS,
+    primitives: Object.freeze({ digest: protocolDigest, id: protocolId, code: protocolCode, version: protocolVersion, tool: protocolTool })
+  })
+});
 
 // src/contracts/durable.ts
 function createPreparedIntentSubject(predecessor, receipt) {
@@ -34625,9 +24602,9 @@ function ownEnumerableDataField(document2, field, label) {
 }
 function materialize(document2, label) {
   const value = ownDataField(document2, "value", label);
-  const digest11 = ownDataField(document2, "digest", label);
+  const digest12 = ownDataField(document2, "digest", label);
   assertPlainJson(value, `${label} value`);
-  return { value: structuredClone(value), digest: digest11 };
+  return { value: structuredClone(value), digest: digest12 };
 }
 function stateInvalid(state, issue_code) {
   return createProjectError("STATE_INVALID", { phase_instance: state.phase_instance, issue_code });
@@ -34692,7 +24669,7 @@ function validateDurableSemantics(subject) {
     const mode = ownEnumerableDataField(relationValue, "mode", "durable intent relation");
     if (mode !== "prepared" && mode !== "committed") throw new TypeError("durable intent relation: invalid mode");
     const expectedKeys = mode === "prepared" ? ["mode", "predecessor", "receipt"] : ["mode", "state", "receipt"];
-    if (!isDeepStrictEqual3(Object.keys(relationValue).sort(), [...expectedKeys].sort())) {
+    if (!isDeepStrictEqual2(Object.keys(relationValue).sort(), [...expectedKeys].sort())) {
       throw new TypeError("durable intent relation: unexpected or missing slots");
     }
     const stateDocumentForRelation = ownEnumerableDataField(
@@ -34768,7 +24745,7 @@ function validateDurableSemantics(subject) {
       }
     } else if (gateDecision.outcome === "waiver-decided") {
       const waiverContext2 = gateRequest.context;
-      if (!("origin" in waiverContext2) || !isDeepStrictEqual3(gateDecision.origin, waiverContext2.origin) || !isDeepStrictEqual3(gateDecision.scope, waiverContext2.origin.scope) || gateDecision.kind !== waiverContext2.origin.scope.operation) {
+      if (!("origin" in waiverContext2) || !isDeepStrictEqual2(gateDecision.origin, waiverContext2.origin) || !isDeepStrictEqual2(gateDecision.scope, waiverContext2.origin.scope) || gateDecision.kind !== waiverContext2.origin.scope.operation) {
         return fail2(contractInvalid(DURABLE_ISSUE_CODES.waiverDecisionOriginMismatch));
       }
     }
@@ -34824,17 +24801,17 @@ function validateDurableSemantics(subject) {
       return fail2(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestSnapshotMismatch));
     }
     if (source.artifact_kind === "implementation-output") {
-      if (!isDeepStrictEqual3(resultManifest.outputs, source.outputs)) {
+      if (!isDeepStrictEqual2(resultManifest.outputs, source.outputs)) {
         return fail2(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestOutputsMismatch));
       }
-      if (!isDeepStrictEqual3(resultManifest.accounting, source.accounting)) {
+      if (!isDeepStrictEqual2(resultManifest.accounting, source.accounting)) {
         return fail2(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestAccountingMismatch));
       }
-      if (!isDeepStrictEqual3(resultManifest.secret_scan, source.secret_scan)) {
+      if (!isDeepStrictEqual2(resultManifest.secret_scan, source.secret_scan)) {
         return fail2(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestSecretScanMismatch));
       }
       const expectedProjectionPaths = source.outputs.filter((output) => output.operation !== "delete").map((output) => output.path);
-      if (!isDeepStrictEqual3(resultManifest.projections.map((projection) => projection.path), expectedProjectionPaths)) {
+      if (!isDeepStrictEqual2(resultManifest.projections.map((projection) => projection.path), expectedProjectionPaths)) {
         return fail2(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
       }
       for (const [index, output] of source.outputs.filter((entry) => entry.operation !== "delete").entries()) {
@@ -35034,7 +25011,7 @@ function validateDurableSemantics(subject) {
       return fail2(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptReferenceResultMismatch));
     }
     const expectedState = { ...receipt.prepared_state, committed_intent: reference };
-    if (!isDeepStrictEqual3(intentState, expectedState)) {
+    if (!isDeepStrictEqual2(intentState, expectedState)) {
       return fail2(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptFinalStateMismatch));
     }
   }
@@ -35055,8 +25032,8 @@ function validateDurableSemantics(subject) {
 init_trust_brands();
 
 // src/contracts/durable-legacy-import.ts
-var sha256Digest3 = sha256DigestV1Schema;
-var safeInteger4 = safeIntegerV1Schema;
+var sha256Digest4 = sha256DigestV1Schema;
+var safeInteger6 = safeIntegerV1Schema;
 var legacyMappingEntryV1Schema = external_exports.object({
   legacy_path: repositoryPathClaimV1Schema,
   destination_path: repositoryPathClaimV1Schema,
@@ -35065,39 +25042,39 @@ var legacyMappingEntryV1Schema = external_exports.object({
 }).strict();
 var stagedPayloadRefV1Schema = external_exports.object({
   legacy_path: repositoryPathClaimV1Schema,
-  digest: sha256Digest3,
-  byte_count: safeInteger4
+  digest: sha256Digest4,
+  byte_count: safeInteger6
 }).strict();
 var legacyImportInitializationV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   artifact_kind: external_exports.literal("legacy-import-initialization"),
   task_id: taskSlugV1Schema,
-  repository_identity_digest: sha256Digest3,
-  source_identity_digest: sha256Digest3,
-  import_digest: sha256Digest3,
+  repository_identity_digest: sha256Digest4,
+  source_identity_digest: sha256Digest4,
+  import_digest: sha256Digest4,
   import_baseline_commit: gitOidV1Schema,
   code_baseline_commit: gitOidV1Schema,
   policy_base_commit: gitOidV1Schema,
-  constitution_digest: sha256Digest3,
-  workflow_digest: sha256Digest3,
-  config_digest: sha256Digest3,
+  constitution_digest: sha256Digest4,
+  workflow_digest: sha256Digest4,
+  config_digest: sha256Digest4,
   canonical_paths: canonicalTaskPathsV1Schema,
   mapping: external_exports.array(legacyMappingEntryV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("destination_path")), "mapping must be sorted by destination_path with no duplicates"),
   staged_payload_refs: external_exports.array(stagedPayloadRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("legacy_path")), "staged_payload_refs must be sorted by legacy_path with no duplicates")
 }).strict();
 
 // src/contracts/durable-task-initialization.ts
-var sha256Digest4 = sha256DigestV1Schema;
+var sha256Digest5 = sha256DigestV1Schema;
 var taskInitializationV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   artifact_kind: external_exports.literal("task-initialization"),
   task_id: taskSlugV1Schema,
-  repository_identity_digest: sha256Digest4,
+  repository_identity_digest: sha256Digest5,
   code_baseline_commit: gitOidV1Schema,
   policy_base_commit: gitOidV1Schema,
-  constitution_digest: sha256Digest4,
-  workflow_digest: sha256Digest4,
-  config_digest: sha256Digest4,
+  constitution_digest: sha256Digest5,
+  workflow_digest: sha256Digest5,
+  config_digest: sha256Digest5,
   canonical_paths: canonicalTaskPathsV1Schema
 }).strict();
 
@@ -35108,7 +25085,7 @@ var rubricV1Schema = external_exports.object({
   mode: external_exports.enum(["adversarial"]),
   criteria: external_exports.array(external_exports.object({
     id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
-    text: external_exports.string().min(1).refine((value) => value.trim().length > 0, "criterion text must contain a non-whitespace character"),
+    text: external_exports.string().min(1).regex(/\S/, "criterion text must contain a non-whitespace character"),
     blocking: external_exports.boolean()
   }).strict()).min(1)
 }).strict().superRefine((rubric, context2) => {
@@ -35125,207 +25102,15 @@ function parseRubricV1(value) {
   return rubricV1Schema.parse(value);
 }
 
-// src/contracts/trust.ts
-import { createHash as createHash2 } from "node:crypto";
-init_trust_brands();
-var sameArray = (left, right) => left.length === right.length && left.every((value, index) => value === right[index]);
-var assertEqual2 = (actual, expected, name) => {
-  if (actual !== expected) throw new TypeError(`${name} does not match observation capability`);
-};
-function deepFreezeJson(value) {
-  if (value !== null && typeof value === "object") {
-    for (const nested of Object.values(value)) deepFreezeJson(nested);
-    Object.freeze(value);
-  }
-  return value;
-}
-var copyFreezeJson = (value) => deepFreezeJson(structuredClone(value));
-function decodeJson(bytes) {
-  const text3 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  return JSON.parse(text3);
-}
-var digestBytes = (bytes) => parseSha256Digest(createHash2("sha256").update(bytes).digest("hex"));
-var copiedBytes = (bytes) => Uint8Array.from(bytes);
-function assertAdapterFamily(adapter2, family3) {
-  const expected = adapter2 === "claude-cli" ? "claude" : "codex";
-  if (family3 !== expected) throw new TypeError("adapter and model family do not match");
-}
-function createObservation(binding, bytes, rawOutputDigest) {
-  const storedBytes = copiedBytes(bytes);
-  const observation = { ...binding, raw_output_digest: rawOutputDigest };
-  Object.defineProperty(observation, "raw_output_bytes", { enumerable: true, configurable: false, get: () => copiedBytes(storedBytes) });
-  return Object.freeze(observation);
-}
-var observationSource = Object.freeze({
-  observeReview(capability, observedOutputBytes) {
-    const binding = observationCapabilityBinding(capability, "review");
-    if (binding === void 0 || capability.kind !== "review") throw new TypeError("invalid review observation capability");
-    assertAdapterFamily(binding.adapter, binding.family);
-    const bytes = copiedBytes(observedOutputBytes);
-    const derived = parseAndDeriveReview(decodeJson(bytes));
-    for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]]) assertEqual2(derived[key], expected, key);
-    if (binding.family === binding.producer_family) throw new TypeError("review observation must be opposite-family");
-    const raw_output_digest = digestBytes(bytes);
-    const observation = createObservation(binding, bytes, raw_output_digest);
-    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id });
-    return Object.freeze({ observation, evidence });
-  },
-  observeAdjudication(capability, observedOutputBytes) {
-    const binding = observationCapabilityBinding(capability, "adjudication");
-    if (binding === void 0 || capability.kind !== "adjudication") throw new TypeError("invalid adjudication observation capability");
-    assertAdapterFamily(binding.adapter, binding.family);
-    const bytes = copiedBytes(observedOutputBytes);
-    const derived = parseAndDeriveAdjudication(decodeJson(bytes));
-    for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["pinned_constitution_digest", binding.pinned_constitution_digest], ["source_evidence_set_digest", binding.source_evidence_set_digest]]) assertEqual2(derived[key], expected, key);
-    if (!sameArray(derived.approved_upstream_digests, binding.approved_upstream_digests)) throw new TypeError("approved_upstream_digests do not match observation capability");
-    const raw_output_digest = digestBytes(bytes);
-    const observation = createObservation(binding, bytes, raw_output_digest);
-    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id });
-    return Object.freeze({ observation, evidence });
-  }
-});
-var idSchema = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
-var digestSchema = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var phaseSchema = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
-var familySchema = external_exports.enum(["claude", "codex"]);
-var safeInteger5 = external_exports.number().int().nonnegative().safe();
-var agentAuthoritySchema = external_exports.object({ kind: external_exports.literal("agent-declared"), result_id: idSchema, result_digest: digestSchema, state_revision: safeInteger5 }).strict();
-var serverAuthoritySchema = external_exports.object({ kind: external_exports.literal("server"), invocation_id: idSchema, result_id: idSchema, receipt_id: idSchema, state_revision: safeInteger5, envelope_input_digest: digestSchema, observed_output_digest: digestSchema, result_digest: digestSchema }).strict();
-var degradedAuthoritySchema = external_exports.object({ kind: external_exports.literal("degraded"), checkpoint_digest: digestSchema, checkpoint_revision: safeInteger5 }).strict();
-var authorityReferencesSchema = external_exports.discriminatedUnion("kind", [agentAuthoritySchema, serverAuthoritySchema, degradedAuthoritySchema]);
-var authorityLinkDataSchema = external_exports.object({ schema_version: external_exports.literal("1"), evidence_kind: external_exports.enum(["review", "adjudication"]), assurance: external_exports.enum(["agent-declared", "server-attested", "degraded"]), role: external_exports.enum(["counter-review", "gate-counter-review", "adjudication"]), task_id: taskSlugV1Schema, phase_instance: phaseSchema, subject_digest: digestSchema, input_fingerprint: digestSchema, evidence_digest: digestSchema, gate_id: pathSafeIdV1Schema.optional(), authority: authorityReferencesSchema }).strict().superRefine((link2, context2) => {
-  if (link2.evidence_kind === "adjudication" !== (link2.role === "adjudication")) context2.addIssue({ code: "custom", path: ["role"], message: "role must match evidence kind" });
-  const expectedAuthorityKind = link2.assurance === "server-attested" ? "server" : link2.assurance;
-  if (link2.authority.kind !== expectedAuthorityKind) context2.addIssue({ code: "custom", path: ["authority", "kind"], message: "authority references must match assurance" });
-  if (link2.role === "gate-counter-review" !== (link2.gate_id !== void 0)) context2.addIssue({ code: "custom", path: ["gate_id"], message: "gate_id is required only for gate-counter-review authority" });
-});
-var slotBase = { evidence_digest: digestSchema, producer_family: familySchema, reviewer_family: familySchema };
-var counterSlotSchema = external_exports.object({ ...slotBase, role: external_exports.literal("counter-review"), assurance: external_exports.enum(["server-attested", "degraded"]), independence: external_exports.literal("opposite-family") }).strict().superRefine((slot, context2) => {
-  if (slot.producer_family === slot.reviewer_family) context2.addIssue({ code: "custom", message: "counter-review families must differ" });
-});
-var gateCounterSlotSchema2 = external_exports.object({ ...slotBase, role: external_exports.literal("gate-counter-review"), assurance: external_exports.enum(["server-attested", "degraded"]), independence: external_exports.literal("opposite-family"), gate_id: pathSafeIdV1Schema }).strict().superRefine((slot, context2) => {
-  if (slot.producer_family === slot.reviewer_family) context2.addIssue({ code: "custom", message: "gate-counter-review families must differ" });
-});
-var requiredReviewSlotsSchema = external_exports.union([external_exports.tuple([counterSlotSchema]), external_exports.tuple([counterSlotSchema, gateCounterSlotSchema2])]);
-var currentEvidenceSetRefSchema = external_exports.object({ set_digest: digestSchema, slots: requiredReviewSlotsSchema }).strict();
-var referencedEvidenceSchema = external_exports.union([
-  external_exports.object({ evidence_digest: digestSchema, evidence: reviewEvidenceSchema }).strict(),
-  external_exports.object({ evidence_digest: digestSchema, evidence: adjudicationEvidenceSchema }).strict()
-]);
-function parseRequiredReviewSlots(value) {
-  assertPlainJson(value, "required review slots");
-  const slots = requiredReviewSlotsSchema.parse(value);
-  validateSlots(slots);
-  return slots;
-}
-function parseCurrentEvidenceSetRef(value) {
-  assertPlainJson(value, "current evidence set reference");
-  const parsed = currentEvidenceSetRefSchema.parse(value);
-  validateSlots(parsed.slots);
-  return parsed;
-}
-function assertLinkMatches(kind, link2, value) {
-  const authenticatedAssurance = ["agent-declared", "server-attested", "degraded"].find(
-    (assurance) => authenticAuthorityLink(link2, { kind, assurance }) && authenticVerifiedEvidence(value, { kind, assurance })
-  );
-  if (authenticatedAssurance === void 0) throw new TypeError("untrusted authority link or verified evidence");
-  const evidence = value.evidence;
-  if (evidence.assurance !== authenticatedAssurance || link2.assurance !== authenticatedAssurance) throw new TypeError("authority assurance does not match authenticated identity");
-  const expectedAuthorityKind = evidence.assurance === "server-attested" ? "server" : evidence.assurance;
-  if (link2.authority.kind !== expectedAuthorityKind) throw new TypeError("authority references do not match assurance");
-  const phaseInstance3 = encodePhaseInstance(decodePhaseInstance(evidence.phase_instance));
-  if (link2.evidence_kind !== kind || link2.assurance !== evidence.assurance || link2.evidence_digest !== value.evidence_digest || link2.task_id !== evidence.task_id || link2.phase_instance !== phaseInstance3 || link2.subject_digest !== evidence.subject_digest || link2.input_fingerprint !== evidence.input_fingerprint) throw new TypeError("authority link does not match verified evidence");
-  if (link2.role !== (kind === "review" ? evidence.role : "adjudication")) throw new TypeError("authority role does not match evidence");
-  if (link2.role === "gate-counter-review" !== (link2.gate_id !== void 0)) throw new TypeError("authority gate binding does not match role");
-  if (evidence.assurance === "server-attested") {
-    if (link2.authority.kind !== "server" || link2.authority.invocation_id !== evidence.invocation_id || link2.authority.result_id !== evidence.result_id || link2.authority.envelope_input_digest !== evidence.envelope_input_digest || link2.authority.observed_output_digest !== evidence.observed_output_digest) {
-      throw new TypeError("server authority provenance does not match evidence");
-    }
-  }
-}
-function validateSlots(slots) {
-  if (slots.length !== 1 && slots.length !== 2 || slots[0]?.role !== "counter-review" || slots.length === 2 && slots[1]?.role !== "gate-counter-review") throw new TypeError("review slots must use canonical role order");
-  for (const slot of slots) {
-    if (slot.independence !== "opposite-family" || slot.producer_family === slot.reviewer_family) throw new TypeError("invalid opposite-family review slot");
-  }
-  if (new Set(slots.map((slot) => slot.evidence_digest)).size !== slots.length) throw new TypeError("review slot evidence digests must be unique");
-}
-function currentEvidenceSetRef(slots) {
-  validateSlots(slots);
-  const copied = copyFreezeJson(slots);
-  return Object.freeze({
-    set_digest: parseSha256Digest(
-      createHash2("sha256").update(JSON.stringify(copied)).digest("hex")
-    ),
-    slots: copied
-  });
-}
-var authorityQualifier = Object.freeze({
-  qualifyReview(link2, value) {
-    assertLinkMatches("review", link2, value);
-    const qualified = Object.freeze({ ...value, authority: link2 });
-    registerQualifiedEvidence(qualified, { kind: "review", assurance: link2.assurance });
-    return qualified;
-  },
-  qualifyAdjudication(link2, value) {
-    assertLinkMatches("adjudication", link2, value);
-    const qualified = Object.freeze({ ...value, authority: link2 });
-    registerQualifiedEvidence(qualified, { kind: "adjudication", assurance: link2.assurance });
-    return qualified;
-  },
-  currentReviews(authority, reviews) {
-    if (!authenticCurrentReviewSetAuthority(authority)) throw new TypeError("invalid current review set authority");
-    validateSlots(authority.slots);
-    if (reviews.length !== authority.slots.length) throw new TypeError("reviews must exactly cover required slots");
-    authority.slots.forEach((slot, index) => {
-      const review = reviews[index];
-      if (review === void 0 || !authenticQualifiedEvidence(review, "review") || !authenticQualifiedEvidence(review, "review", review.evidence.assurance) || review.evidence_digest !== slot.evidence_digest || review.evidence.role !== slot.role || review.evidence.assurance !== slot.assurance || review.evidence.producer_family !== slot.producer_family || review.evidence.model_family !== slot.reviewer_family || review.authority.task_id !== authority.task_id || review.authority.phase_instance !== authority.phase_instance || review.authority.subject_digest !== authority.subject_digest || review.authority.input_fingerprint !== authority.input_fingerprint || slot.role === "gate-counter-review" && review.authority.gate_id !== slot.gate_id) throw new TypeError(`review does not match slot ${index}`);
-    });
-    const current = Object.freeze({ task_id: authority.task_id, phase_instance: authority.phase_instance, subject_digest: authority.subject_digest, input_fingerprint: authority.input_fingerprint, current_evidence_set: currentEvidenceSetRef(authority.slots), reviews: Object.freeze([...reviews]) });
-    registerCurrentReviewSet(current);
-    return current;
-  }
-});
-
-// src/contracts/triage.ts
-init_trust_brands();
-var id3 = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
-var digest6 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var nonBlank4 = external_exports.string().min(1).refine((value) => value.trim().length > 0, "must contain a non-whitespace character");
-var findingRefShape = { review_evidence_digest: digest6, finding_id: id3 };
-var acceptedDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("accepted"), rationale: nonBlank4, revision_intent: nonBlank4 }).strict();
-var acceptedEditorialDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("accepted-editorial"), rationale: nonBlank4, revision_intent: nonBlank4 }).strict();
-var rejectedDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("rejected"), rationale: nonBlank4, evidence: nonBlank4 }).strict();
-var triageDispositionSchema = external_exports.discriminatedUnion("disposition", [acceptedDispositionSchema, acceptedEditorialDispositionSchema, rejectedDispositionSchema]);
-var triageCandidateSchema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  task_id: taskSlugV1Schema,
-  phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
-  step: external_exports.literal("triage"),
-  subject_digest: digest6,
-  input_fingerprint: digest6,
-  current_evidence_set_digest: digest6,
-  source_evidence_digests: external_exports.array(digest6),
-  dispositions: external_exports.array(triageDispositionSchema),
-  accepted_count: external_exports.number().int().nonnegative().safe(),
-  rejected_count: external_exports.number().int().nonnegative().safe(),
-  accepted_editorial_count: external_exports.number().int().nonnegative().safe().optional()
-}).strict();
-function parseTriageCandidate(value) {
-  assertPlainJson(value, "review triage candidate");
-  const { accepted_editorial_count, ...rest } = triageCandidateSchema.parse(value);
-  return accepted_editorial_count === void 0 ? rest : { ...rest, accepted_editorial_count };
-}
-
 // src/contracts/mcp-tools.ts
 var parsedToolInputBrand = /* @__PURE__ */ Symbol("ParsedToolInput");
 var parsedCalls = /* @__PURE__ */ new WeakSet();
 var requestDigests = /* @__PURE__ */ new WeakMap();
-var digest7 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var safeId3 = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
+var digest8 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var safeId2 = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
 var text2 = external_exports.string().min(1).max(4096).regex(/\S/u);
-var safeInteger6 = external_exports.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-var phase3 = external_exports.string().refine((v) => {
+var safeInteger7 = external_exports.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+var phase3 = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((v) => {
   try {
     decodePhaseInstance(v);
     return true;
@@ -35333,10 +25118,10 @@ var phase3 = external_exports.string().refine((v) => {
     return false;
   }
 });
-var rule3 = external_exports.object({ rule_id: safeId3, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict();
+var rule3 = external_exports.object({ rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict();
 var scope2 = external_exports.object({ operation: external_exports.enum(["review-trigger", "adjudication-failure"]), boundary: external_exports.enum(["subject", "phase", "task"]) }).strict();
-var provenance = humanDecisionProvenanceV1Schema;
-var common2 = { schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger6, input_fingerprint: digest7 };
+var provenance = humanDecisionProvenanceV1Schema.clone(humanDecisionProvenanceV1Schema.def);
+var common2 = { schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger7, input_fingerprint: digest8 };
 var def = (name) => Object.freeze({ name, input_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/input`, result_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/result` });
 var TOOL_DEFINITIONS = Object.freeze({ archflow_state: def("archflow_state"), archflow_counter_review: def("archflow_counter_review"), archflow_gate: def("archflow_gate"), archflow_waiver: def("archflow_waiver") });
 var durableArtifact = external_exports.union([
@@ -35350,23 +25135,34 @@ var durableArtifact = external_exports.union([
     evidence: triageCandidateSchema
   }).strict()
 ]);
-var stateInput = external_exports.object({ ...common2, phase_instance: phase3, step: external_exports.enum(["produce", "counter_review", "triage"]), status: external_exports.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
-var stagedReferenceInput = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest7 }).strict();
-var counterInput = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema, rubric: rubricV1Schema }).strict();
-var supersedes = external_exports.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest7, old_subject_digest: digest7 }).strict();
-var gateInput = external_exports.object({ ...common2, phase_instance: phase3, summary: text2, subject_digest: digest7, current_evidence: external_exports.unknown(), supersedes: supersedes.optional(), supplemental_outcome: external_exports.unknown().optional(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown() }).strict();
-var waiverOrigin = external_exports.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest7, origin_context_digest: digest7, task_id: taskSlugV1Schema, phase_instance: phase3, subject_digest: digest7, current_evidence_set_digest: digest7, rule: rule3, scope: scope2 }).strict();
-var waiverInput = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text2, supplemental_outcome: external_exports.unknown().optional() }).strict();
+var stateInputSchema = external_exports.object({ ...common2, phase_instance: phase3, step: external_exports.enum(["produce", "counter_review", "triage"]), status: external_exports.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
+var stagedReferenceInput = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest8 }).strict();
+var counterReviewInputSchema = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema, rubric: rubricV1Schema }).strict();
+var supersedes = external_exports.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest8, old_subject_digest: digest8 }).strict();
+var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase3, summary: text2, subject_digest: digest8, current_evidence: external_exports.unknown(), supersedes: supersedes.optional(), supplemental_outcome: supplementalReviewOutcomeSchema.optional(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown() }).strict().superRefine((input, context2) => {
+  try {
+    parseGateContext(input.kind, input.context);
+  } catch (error51) {
+    context2.addIssue({ code: "custom", path: ["context"], message: error51 instanceof Error ? error51.message : "invalid gate context" });
+  }
+  try {
+    parseCurrentEvidenceSetRef(input.current_evidence);
+  } catch (error51) {
+    context2.addIssue({ code: "custom", path: ["current_evidence"], message: error51 instanceof Error ? error51.message : "invalid current evidence" });
+  }
+});
+var waiverOrigin = external_exports.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest8, origin_context_digest: digest8, task_id: taskSlugV1Schema, phase_instance: phase3, subject_digest: digest8, current_evidence_set_digest: digest8, rule: rule3, scope: scope2 }).strict();
+var waiverInputSchema = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text2, supplemental_outcome: supplementalReviewOutcomeSchema.optional() }).strict().superRefine((input, context2) => {
+  if (input.task_id !== input.origin.task_id) context2.addIssue({ code: "custom", path: ["task_id"], message: "waiver task_id must match origin task_id" });
+});
 function inputFor(name, value) {
-  const parsed = name === "archflow_state" ? stateInput.parse(value) : name === "archflow_counter_review" ? counterInput.parse(value) : name === "archflow_waiver" ? waiverInput.parse(value) : gateInput.parse(value);
+  const parsed = name === "archflow_state" ? stateInputSchema.parse(value) : name === "archflow_counter_review" ? counterReviewInputSchema.parse(value) : name === "archflow_waiver" ? waiverInputSchema.parse(value) : gateInputSchema.parse(value);
   if (name === "archflow_gate") {
     const v = parsed;
-    parseGateContext(v.kind, v.context);
     return { ...v, current_evidence: parseCurrentEvidenceSetRef(v.current_evidence), ...v.supplemental_outcome === void 0 ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) } };
   }
   if (name === "archflow_waiver") {
     const v = parsed;
-    if (v.task_id !== v.origin.task_id) throw new TypeError("waiver task_id must match origin task_id");
     return { ...v, ...v.supplemental_outcome === void 0 ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) } };
   }
   return parsed;
@@ -35398,31 +25194,151 @@ function parseToolCall(name, value) {
 }
 function bindParsedToolCallRequest(call, requestDigest) {
   if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required");
-  digest7.parse(requestDigest);
+  digest8.parse(requestDigest);
   requestDigests.set(call, requestDigest);
   return call;
 }
-var successSchemas = {
-  archflow_state: external_exports.object({ path: taskPathClaimV1Schema, revision: safeInteger6, status: external_exports.enum(["running", "succeeded", "failed"]), request_digest: digest7.optional() }).strict(),
+var toolSuccessSchemas = {
+  archflow_state: external_exports.object({ path: taskPathClaimV1Schema, revision: safeInteger7, status: external_exports.enum(["running", "succeeded", "failed"]), request_digest: digest8.optional() }).strict(),
   archflow_counter_review: external_exports.object({
     path: taskPathClaimV1Schema,
     verdict: external_exports.enum(["pass", "advisory", "fail"]),
-    blocking_count: safeInteger6,
+    blocking_count: safeInteger7,
     constitution: external_exports.union([
       external_exports.object({ status: external_exports.literal("evaluated"), path: taskPathClaimV1Schema, constitution: external_exports.enum(CONSTITUTION_RESULTS), drift: external_exports.enum(DRIFT_RESULTS), triggers: external_exports.array(rule3) }).strict(),
       external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict()
     ]),
-    revision: safeInteger6,
-    request_digest: digest7.optional()
+    revision: safeInteger7,
+    request_digest: digest8.optional()
   }).strict(),
-  archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: external_exports.unknown(), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict(),
-  archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId3, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope: scope2, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId3, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope: scope2, human_provenance: provenance, granted: external_exports.literal(false), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict()])
+  archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: gateDecisionEnvelopeV1Schema, notes: text2, revision: safeInteger7, request_digest: digest8.optional() }).strict(),
+  archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest8, current_evidence_set_digest: digest8, scope: scope2, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text2, revision: safeInteger7, request_digest: digest8.optional() }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest8, current_evidence_set_digest: digest8, scope: scope2, human_provenance: provenance, granted: external_exports.literal(false), notes: text2, revision: safeInteger7, request_digest: digest8.optional() }).strict()])
 };
+var mcpToolsSchemaDefs = Object.freeze({
+  digest: digest8,
+  id: safeId2,
+  text: text2,
+  integer: safeInteger7,
+  phase: phase3,
+  durableArtifact,
+  rule: rule3,
+  scope: scope2,
+  stagedReference: stagedReferenceInput
+});
+var resultExpectationDataSchema = external_exports.object({ schema_version: external_exports.literal("1"), tool: external_exports.enum(TOOL_NAMES), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, input_fingerprint: digest8, request_digest: digest8, result_id: safeId2, resulting_revision: safeInteger7, success: external_exports.unknown() }).strict().superRefine((expectation, context2) => {
+  const success2 = toolSuccessSchemas[expectation.tool].safeParse(expectation.success);
+  if (!success2.success) {
+    context2.addIssue({ code: "custom", path: ["success"], message: `invalid ${expectation.tool} success value` });
+    return;
+  }
+  if (expectation.resulting_revision !== success2.data.revision) context2.addIssue({ code: "custom", path: ["resulting_revision"], message: "expectation resulting revision must equal success revision" });
+});
+
+// src/contracts/durable-state.ts
+var STEP_STATUSES = ["running", "succeeded", "failed"];
+var TERMINAL_STATES = ["complete", "abandoned"];
+var sha256Digest6 = sha256DigestV1Schema;
+var stepStatusV1Schema = external_exports.enum(STEP_STATUSES);
+var gateKindV1Schema = external_exports.enum(GATE_KINDS);
+var positiveSafeInteger = external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+var authoritativeResultRefV1Schema = external_exports.object({
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  result_digest: sha256Digest6,
+  result_id: safeIdV1Schema,
+  input_fingerprint: sha256Digest6,
+  manifest_path: repositoryPathClaimV1Schema
+}).strict();
+var approvalRefV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: gateKindV1Schema,
+  subject_digest: sha256Digest6,
+  decision_digest: sha256Digest6,
+  resolved_at_revision: positiveSafeInteger
+}).strict();
+var waiverRefV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  rule_id: safeIdV1Schema,
+  rule_version: positiveSafeInteger,
+  subject_digest: sha256Digest6,
+  scope: external_exports.object({
+    operation: external_exports.enum(["review-trigger", "adjudication-failure"]),
+    boundary: external_exports.enum(["subject", "phase", "task"])
+  }).strict(),
+  granted: external_exports.boolean(),
+  expires: external_exports.literal("task-complete"),
+  granted_at_revision: positiveSafeInteger
+}).strict();
+var openGateRefV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: gateKindV1Schema,
+  subject_digest: sha256Digest6,
+  context_digest: sha256Digest6,
+  frozen_state_digest: sha256Digest6,
+  waiver_origin_gate_id: pathSafeIdV1Schema.optional(),
+  opened_at_revision: positiveSafeInteger
+}).strict();
+var committedIntentRefV1Schema = external_exports.object({
+  intent_id: pathSafeIdV1Schema,
+  request_digest: sha256Digest6,
+  receipt_digest: sha256Digest6,
+  outcome_digest: sha256Digest6,
+  prior_revision: safeIntegerV1Schema,
+  resulting_revision: positiveSafeInteger,
+  result_id: safeIdV1Schema
+}).strict();
+var adoptedCheckpointRefV1Schema = external_exports.object({
+  revision: positiveSafeInteger,
+  checkpoint_digest: sha256Digest6
+}).strict();
+var taskStateV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  task_id: taskSlugV1Schema,
+  repository_identity_digest: sha256Digest6,
+  revision: positiveSafeInteger,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  status: stepStatusV1Schema,
+  attempt: positiveSafeInteger,
+  input_fingerprint: sha256Digest6,
+  initialization_digest: sha256Digest6,
+  config_digest: sha256Digest6,
+  workflow_digest: sha256Digest6,
+  constitution_digest: sha256Digest6,
+  policy_base_commit: gitOidV1Schema,
+  authoritative_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "authoritative_results must be sorted by (phase_instance, step) with no duplicates"),
+  approvals: external_exports.array(approvalRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "approvals must be sorted by gate_id with no duplicates"),
+  waivers: external_exports.array(waiverRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "waivers must be sorted by gate_id with no duplicates"),
+  planned_final_phase: positiveSafeInteger.optional(),
+  open_gate: openGateRefV1Schema.optional(),
+  committed_intent: committedIntentRefV1Schema.optional(),
+  adopted_checkpoint: adoptedCheckpointRefV1Schema.optional(),
+  terminal: external_exports.enum(TERMINAL_STATES).optional()
+}).strict();
 
 // src/contracts/durable-intent.ts
+var sha256Digest7 = sha256DigestV1Schema;
+var plainJsonV1Schema = external_exports.json();
+var intentReceiptV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  intent_id: pathSafeIdV1Schema,
+  task_id: taskSlugV1Schema,
+  repository_identity_digest: sha256Digest7,
+  tool: external_exports.enum(TOOL_NAMES),
+  operation: safeCodeV1Schema,
+  request_digest: sha256Digest7,
+  input_fingerprint: sha256Digest7,
+  prior_revision: safeIntegerV1Schema,
+  resulting_revision: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  result_id: safeIdV1Schema,
+  outcome_digest: sha256Digest7,
+  outcome: plainJsonV1Schema,
+  prepared_state_digest: sha256Digest7,
+  prepared_state: taskStateV1Schema
+}).strict();
 function parseIntentReceipt(value) {
   assertPlainJson(value, "intent receipt");
-  return intentReceiptV1Validator.assert(value, "intent receipt");
+  return intentReceiptV1Schema.parse(value);
 }
 function intentReceiptDigest(receipt) {
   return canonicalJsonDigest(receipt);
@@ -35649,10 +25565,10 @@ function execGit(gitPath, spec, options) {
   });
 }
 function classifySpawnFailure(failure2) {
-  const code = failure2.code;
-  if (code === "ENOENT") return "not-installed";
-  if (code === "EACCES" || code === "EPERM") return "not-executable";
-  if (code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" || failure2.message.includes("maxBuffer")) {
+  const code2 = failure2.code;
+  if (code2 === "ENOENT") return "not-installed";
+  if (code2 === "EACCES" || code2 === "EPERM") return "not-executable";
+  if (code2 === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" || failure2.message.includes("maxBuffer")) {
     return "output-overflow";
   }
   if (failure2.killed === true) return "timeout";
@@ -35935,8 +25851,8 @@ var SAFE_VERSION = /^[A-Za-z0-9.-]{1,64}$/u;
 function safeVersionOf(value) {
   return SAFE_VERSION.test(value) ? value : "unknown";
 }
-function unsupportedRuntime(component, version2) {
-  return createProjectError("RUNTIME_VERSION_UNSUPPORTED", { component, version: version2 });
+function unsupportedRuntime(component, version3) {
+  return createProjectError("RUNTIME_VERSION_UNSUPPORTED", { component, version: version3 });
 }
 var VERSION_OPERATION = "git-version";
 var OBJECT_FORMAT_OPERATION = "git-object-format";
@@ -35952,11 +25868,11 @@ async function preflightGit(runner, context2) {
   }
   const reported = /(?<major>\d+)\.(?<minor>\d+)(?:\.[^\s]*)?/u.exec(versionOutput);
   const token = /^git version (?<token>\S+)/u.exec(versionOutput)?.groups?.["token"] ?? versionOutput.trim();
-  const version2 = safeVersionOf(token);
+  const version3 = safeVersionOf(token);
   const major = Number(reported?.groups?.["major"] ?? Number.NaN);
   const minor = Number(reported?.groups?.["minor"] ?? Number.NaN);
   if (!Number.isInteger(major) || !Number.isInteger(minor) || major < GIT_MAJOR_FLOOR || major === GIT_MAJOR_FLOOR && minor < GIT_MINOR_FLOOR) {
-    return fail3(unsupportedRuntime("git", version2));
+    return fail3(unsupportedRuntime("git", version3));
   }
   let objectFormat;
   try {
@@ -35973,7 +25889,7 @@ async function preflightGit(runner, context2) {
   if (objectFormat !== "sha1") {
     return fail3(unsupportedRuntime("git-object-format", safeVersionOf(objectFormat.trim())));
   }
-  return ok(Object.freeze({ version: version2, object_format: "sha1" }));
+  return ok(Object.freeze({ version: version3, object_format: "sha1" }));
 }
 
 // src/repository/identity.ts
@@ -36093,7 +26009,7 @@ async function resolveRepositoryIdentity(runner, environment, context2) {
     });
     const rootCommits = output.split("\n").filter((line) => line !== "").map((line) => parseGitOid(line)).sort(ordinal3);
     if (rootCommits.length === 0) return fail4(repositoryNotFound(runner));
-    const digest11 = sha256Bytes(
+    const digest12 = sha256Bytes(
       canonicalJsonBytes({
         object_format: environment.object_format,
         root_commits: rootCommits.map((oid) => oid)
@@ -36104,7 +26020,7 @@ async function resolveRepositoryIdentity(runner, environment, context2) {
         schema_version: "1",
         object_format: environment.object_format,
         root_commits: Object.freeze(rootCommits),
-        digest: digest11
+        digest: digest12
       })
     );
   } catch (error51) {
@@ -36165,8 +26081,8 @@ function gateDecisionClaim(gateId) {
 function gateSupplementalReviewClaim(gateId) {
   return parseTaskPathClaim(`decisions/${gateId}/supplemental-review.json`);
 }
-function gateCounterReviewClaim(phaseInstance3, gateId) {
-  return parseTaskPathClaim(`reviews/${phaseInstance3}.gate-counter.${gateId}.md`);
+function gateCounterReviewClaim(phaseInstance4, gateId) {
+  return parseTaskPathClaim(`reviews/${phaseInstance4}.gate-counter.${gateId}.md`);
 }
 var PATH_SAFE_ID = "[A-Za-z0-9][A-Za-z0-9._-]{0,127}";
 var SHA256 = "[0-9a-f]{64}";
@@ -36247,8 +26163,8 @@ function ioError2(context2) {
   });
 }
 function errnoOf(error51) {
-  const code = error51?.code;
-  return typeof code === "string" ? code : void 0;
+  const code2 = error51?.code;
+  return typeof code2 === "string" ? code2 : void 0;
 }
 function classifyIn(rules2, claim) {
   for (const rule4 of rules2) if (rule4.pattern.test(claim)) return rule4.path_class;
@@ -36673,83 +26589,6 @@ import { constants as fsConstants3 } from "node:fs";
 import { mkdir, readdir } from "node:fs/promises";
 import { join as join3, relative as relative2, sep as sep2 } from "node:path";
 
-// src/contracts/durable-maintenance.ts
-var MAINTENANCE_DELETION_CATEGORIES = [
-  "unreferenced-attempt",
-  "superseded-payload",
-  "retired-intent",
-  "retired-staged-request"
-];
-
-// src/contracts/schemas/v1/maintenance-record.schema.json
-var maintenance_record_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:maintenance-record",
-  title: "ArchFlow Maintenance Record v1",
-  $comment: "The record of one human-authorized maintenance deletion pass. This schema is the SOLE shape authority for `MaintenanceRecordV1` (D2): `src/contracts/durable-maintenance.ts` declares the TypeScript aliases and NO Zod mirror, because no agent supplies a maintenance record across the MCP tool boundary. `total_bytes_deleted === sum(deletions[*].byte_count)` is not expressible here and stays with `validateDurableSemantics`.",
-  type: "object",
-  additionalProperties: false,
-  required: [
-    "schema_version",
-    "maintenance_id",
-    "task_id",
-    "performed_at_revision",
-    "human_reason",
-    "reachability_proof_digest",
-    "deletions",
-    "total_bytes_deleted"
-  ],
-  properties: {
-    schema_version: { const: "1" },
-    maintenance_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-    task_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug" },
-    performed_at_revision: {
-      $comment: "D8 \u2014 pins its own minimum and does NOT $ref `safeInteger`, which admits 0. There is no revision 0.",
-      type: "integer",
-      minimum: 1,
-      maximum: 9007199254740991
-    },
-    human_reason: {
-      $comment: "The human's own words, so a plain bounded string rather than an ID primitive.",
-      type: "string",
-      minLength: 1,
-      "x-archflow-max-utf8-bytes": 4096
-    },
-    reachability_proof_digest: {
-      $comment: "A reference, not authority: this schema never resolves the proof it names.",
-      $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-    },
-    deletions: {
-      $comment: "SET \u2014 sorted by `digest`, duplicates rejected, and non-empty: a maintenance record that deleted nothing is not a record worth writing.",
-      type: "array",
-      minItems: 1,
-      items: { $ref: "#/$defs/maintenanceDeletion" },
-      "x-archflow-sorted-unique-by": "digest"
-    },
-    total_bytes_deleted: {
-      $comment: "Genuinely admits 0 \u2014 every deletion may have been zero-byte \u2014 so it DOES $ref `safeInteger` (D8). The equality with the sum of `byte_count` is semantic.",
-      $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
-    }
-  },
-  $defs: {
-    maintenanceDeletion: {
-      $comment: "Root-internal; nothing outside this file $refs it. `byte_count` genuinely admits 0 \u2014 a zero-byte payload is deletable \u2014 so it DOES $ref `safeInteger` (D8).",
-      type: "object",
-      additionalProperties: false,
-      required: ["digest", "path", "byte_count", "category"],
-      properties: {
-        digest: { $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest" },
-        path: { $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim" },
-        byte_count: { $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger" },
-        category: {
-          $comment: "`MAINTENANCE_DELETION_CATEGORIES` (`durable-maintenance.ts`).",
-          enum: ["unreferenced-attempt", "superseded-payload", "retired-intent", "retired-staged-request"]
-        }
-      }
-    }
-  }
-};
-
 // src/state/maintenance.ts
 import { rmdir, unlink as unlink2 } from "node:fs/promises";
 import { dirname as dirname3 } from "node:path";
@@ -36871,8 +26710,8 @@ async function removeEmptyParents(candidate) {
     try {
       await rmdir(directory);
     } catch (error51) {
-      const code = error51.code;
-      if (code === "ENOTEMPTY" || code === "ENOENT" || code === "EEXIST") return;
+      const code2 = error51.code;
+      if (code2 === "ENOTEMPTY" || code2 === "ENOENT" || code2 === "EEXIST") return;
       throw error51;
     }
     directory = dirname3(directory);
@@ -36884,15 +26723,15 @@ function sameDeletion(left, right) {
 async function performMaintenance(input) {
   if (input.record_target.path_class !== "maintenance-record") throw new TypeError("maintenance record target has wrong class");
   assertPlainJson(input.record, "maintenance record");
-  const record4 = structuredClone(input.record);
-  input.validate_record(record4);
-  if (record4.task_id !== input.proof.task_id || record4.reachability_proof_digest !== input.proof.digest) {
+  const record3 = structuredClone(input.record);
+  input.validate_record(record3);
+  if (record3.task_id !== input.proof.task_id || record3.reachability_proof_digest !== input.proof.digest) {
     throw new TypeError("maintenance record does not bind the supplied reachability proof");
   }
-  if (record4.deletions.length !== input.proof.permitted_deletions.length || record4.deletions.some((deletion, index) => !sameDeletion(deletion, input.proof.permitted_deletions[index]))) {
+  if (record3.deletions.length !== input.proof.permitted_deletions.length || record3.deletions.some((deletion, index) => !sameDeletion(deletion, input.proof.permitted_deletions[index]))) {
     throw new TypeError("maintenance record deletion set is not exactly the permitted set");
   }
-  const document2 = canonicalDocument(record4);
+  const document2 = canonicalDocument(record3);
   let installation = await input.atomic.createExclusive(input.record_target, document2.bytes);
   if (installation === "exists") {
     const existing = await readResolved(input.record_target);
@@ -36919,7 +26758,7 @@ async function performMaintenance(input) {
 import { constants as fsConstants2 } from "node:fs";
 
 // src/contracts/yaml.ts
-var import_yaml = __toESM(require_dist2(), 1);
+var import_yaml = __toESM(require_dist(), 1);
 function locatedMessage(label, error51) {
   const position2 = error51.linePos?.[0];
   return position2 === void 0 ? `${label}: ${error51.message}` : `${label}:${position2.line}:${position2.col}: ${error51.message}`;
@@ -36960,26 +26799,26 @@ function parseSingleYamlDocument(source, label) {
 
 // src/contracts/config.ts
 var REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"];
-var routeSchema = external_exports.object({
-  model: external_exports.string().min(1).refine((value) => value.trim().length > 0, "model must contain a non-whitespace character"),
+var configRouteSchema = external_exports.object({
+  model: external_exports.string().min(1).regex(/\S/, "model must contain a non-whitespace character"),
   effort: external_exports.enum(REASONING_EFFORTS)
 }).strict();
-var rolesSchema = external_exports.object({
-  producer: routeSchema.optional(),
-  "counter-reviewer": routeSchema.optional(),
-  adjudicator: routeSchema.optional()
+var configRolesSchema = external_exports.object({
+  producer: configRouteSchema.optional(),
+  "counter-reviewer": configRouteSchema.optional(),
+  adjudicator: configRouteSchema.optional()
 }).strict();
-var overridesSchema = external_exports.object({
-  explore: rolesSchema.optional(),
-  prd: rolesSchema.optional(),
-  design: rolesSchema.optional(),
-  "phase-design": rolesSchema.optional(),
-  "phase-impl": rolesSchema.optional()
+var configOverridesSchema = external_exports.object({
+  explore: configRolesSchema.optional(),
+  prd: configRolesSchema.optional(),
+  design: configRolesSchema.optional(),
+  "phase-design": configRolesSchema.optional(),
+  "phase-impl": configRolesSchema.optional()
 }).strict();
 var configV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
-  roles: rolesSchema,
-  overrides: overridesSchema.optional(),
+  roles: configRolesSchema,
+  overrides: configOverridesSchema.optional(),
   max_attempts: external_exports.number().int().positive().safe().optional()
 }).strict();
 function parseConfigV1(value) {
@@ -36991,11 +26830,14 @@ function parseConfigYaml(source, label = "config.yaml") {
 }
 
 // src/state/read.ts
-var stateValidator = createJsonSchemaValidator(task_state_schema_default, [
-  primitives_schema_default,
-  path_claim_schema_default
-]);
 var decoder2 = new TextDecoder("utf-8", { fatal: true });
+function deepFreeze2(value) {
+  if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze2(child);
+  }
+  return value;
+}
 function errnoOf3(error51) {
   return error51 !== null && typeof error51 === "object" && "code" in error51 ? String(error51.code) : void 0;
 }
@@ -37016,7 +26858,8 @@ async function readTaskState(path2) {
   if (read.kind !== "bytes") return read;
   try {
     const document2 = parseCanonicalDocument(read.bytes, "task state");
-    stateValidator.assert(document2.value, "task state");
+    taskStateV1Schema.parse(document2.value);
+    deepFreeze2(document2.value);
     return Object.freeze({ kind: "canonical", document: document2 });
   } catch {
     return Object.freeze({ kind: "noncanonical" });
@@ -37239,10 +27082,6 @@ async function enumerateMaintenanceCandidates(dependencies, authority, roots, ca
     return fail6(authority, "enumerate-maintenance-candidates");
   }
 }
-var maintenanceRecordValidator = createJsonSchemaValidator(
-  maintenance_record_schema_default,
-  [primitives_schema_default, path_claim_schema_default]
-);
 
 // src/state/request.ts
 function subjectFor(call, authority, inputFingerprint) {
@@ -37412,20 +27251,20 @@ async function ensureRealDirectory(path2) {
     await handle?.close().catch(() => void 0);
   }
 }
-async function ensureResultDirectory(authority, digest11) {
+async function ensureResultDirectory(authority, digest12) {
   assertInternalTransactionAuthority(authority);
-  if (!/^[0-9a-f]{64}$/u.test(digest11)) throw new TypeError("result digest must be lowercase SHA-256");
-  const parts = ["results", "sha256", digest11, "payload"];
+  if (!/^[0-9a-f]{64}$/u.test(digest12)) throw new TypeError("result digest must be lowercase SHA-256");
+  const parts = ["results", "sha256", digest12, "payload"];
   let current = authority.task_root;
   for (const part of parts) {
     current = join4(current, part);
     await ensureRealDirectory(current);
   }
 }
-async function ensurePayloadParent(authority, digest11, target) {
+async function ensurePayloadParent(authority, digest12, target) {
   assertInternalTransactionAuthority(authority);
-  if (!/^[0-9a-f]{64}$/u.test(digest11)) throw new TypeError("result digest must be lowercase SHA-256");
-  const root = join4(authority.task_root, "results", "sha256", digest11, "payload");
+  if (!/^[0-9a-f]{64}$/u.test(digest12)) throw new TypeError("result digest must be lowercase SHA-256");
+  const root = join4(authority.task_root, "results", "sha256", digest12, "payload");
   const parent = join4(target, "..");
   const rel = relative3(root, parent);
   if (rel === ".." || rel.startsWith(`..${sep3}`) || isAbsolute2(rel)) throw new TypeError("payload parent escaped result directory");
@@ -37511,12 +27350,12 @@ function createTaskLock() {
 // src/state/snapshots.ts
 import { chmod, lstat as lstat4, readlink as readlink2 } from "node:fs/promises";
 import { resolve as resolvePath5 } from "node:path";
-import { isDeepStrictEqual as isDeepStrictEqual5 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual4 } from "node:util";
 
 // src/state/implementation-manifest.ts
 import { lstat as lstat3, readFile, readlink } from "node:fs/promises";
 import { resolve as resolvePath4 } from "node:path";
-import { isDeepStrictEqual as isDeepStrictEqual4 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
 
 // src/repository/index-entries.ts
 var LS_FILES_OPERATION = "git-ls-files";
@@ -40258,11 +30097,11 @@ var MAX_MAC_ITERATIONS = 1e6;
 function parsePkcs12(buf) {
   const pfx = readTlv(buf, 0);
   expectTag(pfx, TAG_SEQUENCE, "PFX SEQUENCE");
-  const version2 = readTlv(pfx.content, 0);
-  if (readInteger(version2) !== 3) {
+  const version3 = readTlv(pfx.content, 0);
+  if (readInteger(version3) !== 3) {
     throw new Error("PKCS12: unsupported version");
   }
-  const authSafeInfo = readTlv(pfx.content, version2.end);
+  const authSafeInfo = readTlv(pfx.content, version3.end);
   expectTag(authSafeInfo, TAG_SEQUENCE, "ContentInfo SEQUENCE");
   const contentType = readTlv(authSafeInfo.content, 0);
   expectTag(contentType, TAG_OID, "contentType OID");
@@ -40291,8 +30130,8 @@ function parsePkcs12(buf) {
       throw new Error("PKCS12: unexpected MAC algorithm parameters");
     }
   }
-  const digest11 = readTlv(digestInfo.content, alg.end);
-  expectTag(digest11, TAG_OCTET_STRING, "digest OCTET STRING");
+  const digest12 = readTlv(digestInfo.content, alg.end);
+  expectTag(digest12, TAG_OCTET_STRING, "digest OCTET STRING");
   const salt = readTlv(macData.content, digestInfo.end);
   expectTag(salt, TAG_OCTET_STRING, "macSalt OCTET STRING");
   let iterations = 1;
@@ -40307,7 +30146,7 @@ function parsePkcs12(buf) {
     authSafe: authSafeOctet.content,
     macHash,
     macSalt: salt.content,
-    macDigest: digest11.content,
+    macDigest: digest12.content,
     iterations
   };
 }
@@ -40316,7 +30155,7 @@ function toBufferSource(data) {
   copy.set(data);
   return copy;
 }
-async function digest8(hash3, data) {
+async function digest9(hash3, data) {
   return new Uint8Array(await globalThis.crypto.subtle.digest(hash3.name, toBufferSource(data)));
 }
 function padToMultipleOf(src, blockSize) {
@@ -40333,9 +30172,9 @@ function encodePasswordAsBmpString(password) {
     return new Uint8Array(0);
   const bytes = new Uint8Array(password.length * 2 + 2);
   for (let i = 0; i < password.length; i++) {
-    const code = password.charCodeAt(i);
-    bytes[i * 2] = code >> 8 & 255;
-    bytes[i * 2 + 1] = code & 255;
+    const code2 = password.charCodeAt(i);
+    bytes[i * 2] = code2 >> 8 & 255;
+    bytes[i * 2 + 1] = code2 & 255;
   }
   return bytes;
 }
@@ -40350,9 +30189,9 @@ async function deriveMacKey(hash3, password, salt, iterations) {
   DI.set(D, 0);
   DI.set(S, D.length);
   DI.set(P, D.length + S.length);
-  let A = await digest8(hash3, DI);
+  let A = await digest9(hash3, DI);
   for (let i = 1; i < iterations; i++) {
-    A = await digest8(hash3, A);
+    A = await digest9(hash3, A);
   }
   return A.subarray(0, u);
 }
@@ -42272,7 +32111,7 @@ var utf8 = new TextDecoder("utf-8", { fatal: true });
 var ordinal5 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 var enabledCreators = rules.filter((creator) => creator.meta.id !== FILTER_RULE);
 var enabledRuleIds = Object.freeze(enabledCreators.map((creator) => creator.meta.id).sort());
-if (new Set(enabledRuleIds).size !== enabledRuleIds.length || enabledRuleIds.some((id4) => !RULE_ID.test(id4))) {
+if (new Set(enabledRuleIds).size !== enabledRuleIds.length || enabledRuleIds.some((id5) => !RULE_ID.test(id5))) {
   throw new TypeError("Secretlint preset exported duplicate or unsupported public rule identifiers");
 }
 var SECRETLINT_DETECTOR_SET_ID = parseSafeId(`secretlint:v1:${canonicalJsonDigest({
@@ -42675,7 +32514,7 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
       const candidates = [];
       for (const deletedPath of renameChanges.deleted) {
         const deletedIdentity = await baseIdentity(dependencies.runner, input.base_commit, deletedPath);
-        if (deletedIdentity !== void 0 && isDeepStrictEqual4(deletedIdentity, afterIdentity)) {
+        if (deletedIdentity !== void 0 && isDeepStrictEqual3(deletedIdentity, afterIdentity)) {
           candidates.push(deletedPath);
         }
       }
@@ -42692,7 +32531,7 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
         throw new TypeError("rename does not match base/worktree state");
       }
       const afterIdentity = identityOf(after.observation);
-      const retainedByGit = isDeepStrictEqual4(previousIdentity, afterIdentity) && await isCommitAncestorOfHead(dependencies.runner, input.base_commit);
+      const retainedByGit = isDeepStrictEqual3(previousIdentity, afterIdentity) && await isCommitAncestorOfHead(dependencies.runner, input.base_commit);
       outputs.push(Object.freeze(retainedByGit ? {
         path: path2,
         path_class: pathClass3,
@@ -42904,7 +32743,7 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
     undeclared_paths: changed.paths.filter((path2) => !scopeSet.has(path2)).map(rawGitPath),
     unrepresentable_count: parseSafeInteger(changed.unrepresentable_count)
   };
-  if (!isDeepStrictEqual4(undeclaredChanges, output.undeclared_changes)) {
+  if (!isDeepStrictEqual3(undeclaredChanges, output.undeclared_changes)) {
     throw new TypeError("undeclared change report does not match the live Git working set");
   }
   const resolved = await resolveAll(runner, output, context2);
@@ -43025,8 +32864,8 @@ function deriveDeclaredSnapshotDigest(outputs, projections) {
   }
   return deriveSnapshotDigest([...entries.values()]);
 }
-function snapshotInvalid(digest11, issue_code) {
-  return fail8(createProjectError("SNAPSHOT_INVALID", { snapshot_digest: digest11, issue_code }));
+function snapshotInvalid(digest12, issue_code) {
+  return fail8(createProjectError("SNAPSHOT_INVALID", { snapshot_digest: digest12, issue_code }));
 }
 function ownEnumerableData3(value, key) {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
@@ -43365,14 +33204,14 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
   for (const source of materialized) {
     const observed = await observe(source.target);
     if (source.authenticated_before.state === "present") {
-      if (source.rollback === void 0 || !isDeepStrictEqual5(desiredObservation(source.rollback), source.authenticated_before)) {
+      if (source.rollback === void 0 || !isDeepStrictEqual4(desiredObservation(source.rollback), source.authenticated_before)) {
         throw new TypeError("present authenticated before-image requires matching rollback bytes");
       }
     } else if (source.rollback !== void 0 && source.rollback.state !== "absent") {
       throw new TypeError("absent authenticated before-image cannot carry present rollback bytes");
     }
-    const exact = isDeepStrictEqual5(observed, desiredObservation(source.desired));
-    const before = isDeepStrictEqual5(observed, source.authenticated_before);
+    const exact = isDeepStrictEqual4(observed, desiredObservation(source.desired));
+    const before = isDeepStrictEqual4(observed, source.authenticated_before);
     const renameDestinationBlocked = source.rename_pair?.role === "destination" && observed.state !== "absent" && !exact;
     entries.push(Object.freeze({
       path: source.path,
@@ -43406,7 +33245,7 @@ var PERMANENT_PROJECTION_ISSUES = Object.freeze({
 function createVerifiedEvidenceReference(evidence) {
   const parsed = evidence.step === "adjudicate" ? parseAdjudicationEvidence(evidence) : parseReviewEvidence(evidence);
   const evidenceDigest = canonicalJsonDigest(parsed);
-  const verified = deepFreeze2({
+  const verified = deepFreeze3({
     evidence_digest: evidenceDigest,
     evidence: parsed
   });
@@ -43414,9 +33253,9 @@ function createVerifiedEvidenceReference(evidence) {
   registerVerifiedEvidence(verified, { kind, assurance: parsed.assurance });
   return verified;
 }
-function deepFreeze2(value) {
+function deepFreeze3(value) {
   if (value !== null && typeof value === "object") {
-    for (const nested of Object.values(value)) deepFreeze2(nested);
+    for (const nested of Object.values(value)) deepFreeze3(nested);
     Object.freeze(value);
   }
   return value;
@@ -43425,71 +33264,36 @@ function deepFreeze2(value) {
 // src/local/commands.ts
 init_renderers();
 
-// src/contracts/schemas/v1/supplemental-review-record.schema.json
-var supplemental_review_record_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:supplemental-review-record",
-  title: "ArchFlow Supplemental Review Record v1",
-  type: "object",
-  additionalProperties: false,
-  required: ["schema_version", "gate_id", "request_digest", "task_id", "phase_instance", "kind", "subject_digest", "context_digest", "input_fingerprint", "current_evidence_set_digest", "evidence_digest", "projection_digest", "review", "triage_digest", "triage", "outcome"],
-  properties: {
-    schema_version: { const: "1" },
-    gate_id: { $ref: "#/$defs/pathSafeId" },
-    request_digest: { $ref: "#/$defs/digest" },
-    task_id: { $ref: "#/$defs/taskSlug" },
-    phase_instance: { type: "string", pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" },
-    kind: { enum: ["artifact-approval", "review-trigger", "material-drift", "adjudication-failure", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"] },
-    subject_digest: { $ref: "#/$defs/digest" },
-    context_digest: { $ref: "#/$defs/digest" },
-    input_fingerprint: { $ref: "#/$defs/digest" },
-    current_evidence_set_digest: { $ref: "#/$defs/digest" },
-    evidence_digest: { $ref: "#/$defs/digest" },
-    projection_digest: { $ref: "#/$defs/digest" },
-    review: { $ref: "urn:archflow:schema:v1:review-evidence" },
-    triage_digest: { $ref: "#/$defs/digest" },
-    triage: { $ref: "urn:archflow:schema:v1:triage" },
-    outcome: { enum: ["no-change", "accepted-change"] }
-  },
-  $defs: {
-    digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
-    pathSafeId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
-    taskSlug: { type: "string", pattern: "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$" }
-  }
-};
-
 // src/contracts/supplemental-record.ts
-var digest9 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var digest10 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var supplementalReviewRecordV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   gate_id: pathSafeIdV1Schema,
-  request_digest: digest9,
+  request_digest: digest10,
   task_id: taskSlugV1Schema,
   phase_instance: phaseInstanceIdV1Schema,
   kind: external_exports.enum(GATE_KINDS),
-  subject_digest: digest9,
-  context_digest: digest9,
-  input_fingerprint: digest9,
-  current_evidence_set_digest: digest9,
-  evidence_digest: digest9,
-  projection_digest: digest9,
+  subject_digest: digest10,
+  context_digest: digest10,
+  input_fingerprint: digest10,
+  current_evidence_set_digest: digest10,
+  evidence_digest: digest10,
+  projection_digest: digest10,
   review: reviewEvidenceSchema,
-  triage_digest: digest9,
+  triage_digest: digest10,
   triage: triageCandidateSchema,
   outcome: external_exports.enum(["no-change", "accepted-change"])
 }).strict();
-var validator = createJsonSchemaValidator(supplemental_review_record_schema_default, [
-  review_evidence_schema_default,
-  triage_schema_default
-]);
+function deepFreezeJson2(value) {
+  if (value !== null && typeof value === "object") {
+    for (const nested of Object.values(value)) deepFreezeJson2(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
 function parseSupplementalReviewRecord(value) {
   assertPlainJson(value, "supplemental review record");
-  const parsed = assertZodAgreement(
-    value,
-    validator,
-    supplementalReviewRecordV1Schema,
-    "supplemental review record"
-  );
+  const parsed = deepFreezeJson2(supplementalReviewRecordV1Schema.parse(value));
   if (parsed.review.assurance !== "degraded" || parsed.review.role !== "gate-counter-review" || parsed.review.step !== "counter_review" || parsed.review.producer_family === parsed.review.model_family) throw new TypeError("supplemental review must be degraded opposite-family gate evidence");
   if (canonicalJsonDigest(parsed.review) !== parsed.evidence_digest) {
     throw new TypeError("supplemental evidence digest does not match review");
@@ -43512,7 +33316,7 @@ function parseSupplementalReviewRecord(value) {
 
 // src/state/gate-core.ts
 import { constants as fsConstants5 } from "node:fs";
-import { isDeepStrictEqual as isDeepStrictEqual6 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual5 } from "node:util";
 var DECISIONS = Object.freeze({
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
   "review-trigger": ["approve", "revise", "reject", "waiver-requested", "cancel"],
@@ -43533,7 +33337,7 @@ function deepFreezeGateJson(value) {
 }
 var ok7 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail9 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-var issue2 = (code, state, issueCode) => fail9(code === "STATE_INVALID" ? createProjectError(code, { phase_instance: state.phase_instance, issue_code: issueCode }) : createProjectError(code, { issue_code: issueCode }));
+var issue2 = (code2, state, issueCode) => fail9(code2 === "STATE_INVALID" ? createProjectError(code2, { phase_instance: state.phase_instance, issue_code: issueCode }) : createProjectError(code2, { issue_code: issueCode }));
 var io = (authority, operation) => fail9(createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt }));
 async function resolvePath6(dependencies, authority, claim, expectedClass) {
   const resolved = await resolveTaskPath({
@@ -43553,8 +33357,8 @@ async function readCanonical(path2, label, parse3) {
     parse3(document2.value);
     return document2;
   } catch (error51) {
-    const code = error51?.code;
-    return code === "ENOENT" ? "missing" : "invalid";
+    const code2 = error51?.code;
+    return code2 === "ENOENT" ? "missing" : "invalid";
   } finally {
     await handle?.close().catch(() => void 0);
   }
@@ -43579,7 +33383,7 @@ function parseInterface(value, request2, supplemental2 = []) {
   if (request2.context !== null && typeof request2.context === "object" && "origin" in request2.context) {
     const candidate = value;
     const context2 = request2.context;
-    if (candidate.gate_id !== request2.gate_id || candidate.task_id !== request2.task_id || candidate.phase_instance !== request2.phase_instance || candidate.subject_digest !== request2.subject_digest || candidate.context_digest !== request2.context_digest || !isDeepStrictEqual6(candidate.origin, context2.origin) || !isDeepStrictEqual6(candidate.scope, context2.origin.scope)) throw new TypeError("waiver decision does not bind origin");
+    if (candidate.gate_id !== request2.gate_id || candidate.task_id !== request2.task_id || candidate.phase_instance !== request2.phase_instance || candidate.subject_digest !== request2.subject_digest || candidate.context_digest !== request2.context_digest || !isDeepStrictEqual5(candidate.origin, context2.origin) || !isDeepStrictEqual5(candidate.scope, context2.origin.scope)) throw new TypeError("waiver decision does not bind origin");
     return parseGateDecisionRecord({ schema_version: "1", gate_id: request2.gate_id, task_id: request2.task_id, phase_instance: request2.phase_instance, kind: request2.kind, subject_digest: request2.subject_digest, context_digest: request2.context_digest, supplemental: supplemental2, outcome: "waiver-decided", granted: candidate.granted, scope: candidate.scope, origin: candidate.origin, notes: candidate.notes, human_provenance: candidate.human_provenance });
   }
   const envelope2 = parseGateDecisionEnvelope(value);
@@ -43601,7 +33405,8 @@ var phaseSchema2 = external_exports.object({
   gate: external_exports.enum(GATE_POLICIES),
   optional: external_exports.boolean().optional()
 }).strict();
-var workflowV1Schema = external_exports.object({ phases: external_exports.array(phaseSchema2) }).strict().superRefine((workflow, context2) => {
+var workflowPhasesV1Schema = external_exports.array(phaseSchema2);
+var workflowV1Schema = external_exports.object({ phases: workflowPhasesV1Schema }).strict().superRefine((workflow, context2) => {
   if (!sameJson(workflow, WORKFLOW_V1)) context2.addIssue({ code: "custom", message: "Workflow must match the fixed ArchFlow v1 graph exactly" });
 });
 var WORKFLOW_V1 = {
@@ -43625,7 +33430,7 @@ function parseWorkflowYaml(source, label = "workflow.yaml") {
 }
 
 // src/state/gate-approvals.ts
-import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual6 } from "node:util";
 var authenticatedGateApprovals = /* @__PURE__ */ new WeakSet();
 var authenticatedGateApprovalBrand = /* @__PURE__ */ Symbol("AuthenticatedGateApproval");
 function assertAuthenticatedGateApproval(value) {
@@ -43647,7 +33452,7 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
     authority.repository_identity
   ).ok) return issue2("STATE_INVALID", current.value.value, "gate-approval-state-authority-mismatch");
   const durable = current.value.value.approvals.find((entry) => entry.gate_id === claimed.gate_id);
-  if (durable === void 0 || !isDeepStrictEqual7(durable, claimed)) {
+  if (durable === void 0 || !isDeepStrictEqual6(durable, claimed)) {
     return issue2("STATE_INVALID", current.value.value, "gate-approval-not-current");
   }
   const requestPath = await resolvePath6(
@@ -43885,7 +33690,7 @@ var failure = (state, issueCode) => Object.freeze({
     issue_code: issueCode
   })
 });
-function phaseInstance2(call, context2) {
+function phaseInstance3(call, context2) {
   switch (call.name) {
     case "archflow_state":
     case "archflow_gate":
@@ -43936,7 +33741,7 @@ function createInternalInputFingerprintResolver(input) {
       artifact_identities: structuredClone(artifacts.value),
       upstream_identities: structuredClone(upstream.value),
       rubric_digest: rubricDigest(context2.call),
-      phase_instance: phaseInstance2(context2.call, context2.context),
+      phase_instance: phaseInstance3(context2.call, context2.context),
       declared_inputs: structuredClone(declared.value)
     };
     return Object.freeze({ schema_version: "1", ok: true, value: subject });
@@ -43948,10 +33753,10 @@ var frontmatterSchema = external_exports.object({
   id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
   version: external_exports.number().int().positive().safe(),
   status: external_exports.enum(["active", "deprecated"]),
-  review_trigger: external_exports.string().min(1).refine((value) => value.trim().length > 0, "review_trigger must contain a non-whitespace character").optional(),
-  enforced_by: external_exports.array(external_exports.string().min(1).refine((value) => value.trim().length > 0, "enforced_by entries must contain a non-whitespace character")).min(1).optional()
+  review_trigger: external_exports.string().min(1).regex(/\S/, "review_trigger must contain a non-whitespace character").optional(),
+  enforced_by: external_exports.array(external_exports.string().min(1).regex(/\S/, "enforced_by entries must contain a non-whitespace character")).min(1).optional()
 }).strict();
-var constitutionRuleV1Schema = frontmatterSchema.extend({ text: external_exports.string().min(1).refine((value) => value.trim().length > 0, "text must contain a non-whitespace character") }).strict();
+var constitutionRuleV1Schema = frontmatterSchema.extend({ text: external_exports.string().min(1).regex(/\S/, "text must contain a non-whitespace character") }).strict();
 function parseConstitutionRuleV1(value) {
   assertPlainJson(value, "constitution rule");
   const parsed = constitutionRuleV1Schema.parse(value);
@@ -43997,12 +33802,12 @@ function assertResolvedConstitution(value) {
   }
 }
 function immutableRegistry(rules2) {
-  const entries = [...rules2].map(([id4, rule4]) => {
+  const entries = [...rules2].map(([id5, rule4]) => {
     const frozenRule = Object.freeze({
       ...rule4,
       ...rule4.enforced_by === void 0 ? {} : { enforced_by: Object.freeze([...rule4.enforced_by]) }
     });
-    return Object.freeze([id4, frozenRule]);
+    return Object.freeze([id5, frozenRule]);
   });
   const backing = new Map(entries);
   let registry2;
@@ -44450,14 +34255,14 @@ async function createProductionServices(input) {
           new Uint8Array(await handle.readFile()),
           "supplemental review record"
         );
-        const record4 = parseSupplementalReviewRecord(document2.value);
+        const record3 = parseSupplementalReviewRecord(document2.value);
         const producerFamilies = new Set(request2.current_evidence.slots.map((slot) => slot.producer_family));
-        if (record4.gate_id !== request2.gate_id || record4.request_digest !== request2.request_digest || record4.task_id !== request2.task_id || record4.phase_instance !== request2.phase_instance || record4.kind !== request2.kind || record4.subject_digest !== request2.subject_digest || record4.context_digest !== request2.context_digest || record4.current_evidence_set_digest !== request2.current_evidence.set_digest || producerFamilies.size !== 1 || !producerFamilies.has(record4.review.producer_family) || record4.review.model_family === record4.review.producer_family || canonicalJsonDigest(record4.review) !== record4.evidence_digest) return stateFailure(authority.context.phase_instance, "supplemental-review-authority-invalid");
+        if (record3.gate_id !== request2.gate_id || record3.request_digest !== request2.request_digest || record3.task_id !== request2.task_id || record3.phase_instance !== request2.phase_instance || record3.kind !== request2.kind || record3.subject_digest !== request2.subject_digest || record3.context_digest !== request2.context_digest || record3.current_evidence_set_digest !== request2.current_evidence.set_digest || producerFamilies.size !== 1 || !producerFamilies.has(record3.review.producer_family) || record3.review.model_family === record3.review.producer_family || canonicalJsonDigest(record3.review) !== record3.evidence_digest) return stateFailure(authority.context.phase_instance, "supplemental-review-authority-invalid");
         return ok10(Object.freeze({
-          evidence: record4.review,
-          gate_id: record4.gate_id,
-          triage_digest: record4.triage_digest,
-          triage_outcome: record4.outcome
+          evidence: record3.review,
+          gate_id: record3.gate_id,
+          triage_digest: record3.triage_digest,
+          triage_outcome: record3.outcome
         }));
       } catch {
         return stateFailure(authority.context.phase_instance, "supplemental-review-authority-invalid");
@@ -44702,9 +34507,9 @@ async function identifyStateInitialization(dependencies, request2) {
 // src/local/envelope.ts
 var ok12 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail15 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-function deepFreeze3(value) {
+function deepFreeze4(value) {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const nested of Object.values(value)) deepFreeze3(nested);
+    for (const nested of Object.values(value)) deepFreeze4(nested);
     Object.freeze(value);
   }
   return value;
@@ -44849,7 +34654,7 @@ async function computeCallEnvelope(services2, value) {
   const draft = parseToolCall(tool2, Reflect.get(snapshot2, "input"));
   const fingerprint = await fingerprintFor(services2, draft);
   if (!fingerprint.ok) return fingerprint;
-  const resolvedInput = deepFreeze3(resolveCallInput(draft, fingerprint.value));
+  const resolvedInput = deepFreeze4(resolveCallInput(draft, fingerprint.value));
   const call = parseToolCall(tool2, resolvedInput);
   const identified = identifyTransactionRequest(call, services2.authority, fingerprint.value);
   const envelope2 = {
@@ -44865,13 +34670,13 @@ async function computeCallEnvelope(services2, value) {
     intent_id: call.input.intent_id,
     request_digest: identified.request_digest
   });
-  let phaseInstance3;
+  let phaseInstance4;
   let kind;
   let subjectDigest;
   let contextDigest;
   let currentEvidence;
   if (call.name === "archflow_gate") {
-    phaseInstance3 = call.input.phase_instance;
+    phaseInstance4 = call.input.phase_instance;
     kind = call.input.kind;
     subjectDigest = call.input.subject_digest;
     contextDigest = computeGateContextDigest(call.input.kind, call.input.context);
@@ -44880,7 +34685,7 @@ async function computeCallEnvelope(services2, value) {
     const origin2 = await archivedWaiverRequest(services2, call);
     if (!origin2.ok) return origin2;
     const waiverContext2 = { origin: call.input.origin, rationale: call.input.rationale };
-    phaseInstance3 = call.input.origin.phase_instance;
+    phaseInstance4 = call.input.origin.phase_instance;
     kind = call.input.origin.scope.operation;
     subjectDigest = call.input.origin.subject_digest;
     contextDigest = computeGateContextDigest("waiver", waiverContext2);
@@ -44891,7 +34696,7 @@ async function computeCallEnvelope(services2, value) {
     gate_id: gateId,
     request_digest: identified.request_digest,
     task_id: services2.authority.task_id,
-    phase_instance: phaseInstance3,
+    phase_instance: phaseInstance4,
     kind,
     subject_digest: subjectDigest,
     context_digest: contextDigest,
@@ -44905,7 +34710,7 @@ async function computeCallEnvelope(services2, value) {
       decision_path: parseTaskPathClaim("gate.decision"),
       archive_decision_path: gateDecisionClaim(gateId),
       request_path: gateRequestClaim(gateId),
-      gate_counter_review_path: gateCounterReviewClaim(phaseInstance3, gateId),
+      gate_counter_review_path: gateCounterReviewClaim(phaseInstance4, gateId),
       counter_review_prompt: renderGateCounterPrompt(promptInput)
     })
   }));
@@ -45169,7 +34974,7 @@ function retainedEditorialTriage(retained) {
   } catch {
     return void 0;
   }
-  if (triage.subject_digest !== derived.subject_digest || triage.input_fingerprint !== derived.input_fingerprint || triage.current_evidence_set_digest !== derived.current_evidence_set.set_digest || triage.source_evidence_digests.length !== derived.current_evidence_set.slots.length || triage.source_evidence_digests.some((digest11, index) => digest11 !== derived.current_evidence_set.slots[index].evidence_digest)) return void 0;
+  if (triage.subject_digest !== derived.subject_digest || triage.input_fingerprint !== derived.input_fingerprint || triage.current_evidence_set_digest !== derived.current_evidence_set.set_digest || triage.source_evidence_digests.length !== derived.current_evidence_set.slots.length || triage.source_evidence_digests.some((digest12, index) => digest12 !== derived.current_evidence_set.slots[index].evidence_digest)) return void 0;
   return Object.freeze({ triage, triage_result_digest: entry.reference.result_digest });
 }
 async function derivePendingEditorialPredecessor(dependencies, state) {
@@ -45225,11 +35030,11 @@ function currentFor(retained, step, subject, reviews) {
   if (!subjectCurrent(evidence, subject, true) || reviews === void 0) return false;
   if (step === "triage") {
     const triage = evidence;
-    return triage.current_evidence_set_digest === reviews.current_evidence_set.set_digest && triage.source_evidence_digests.length === reviews.current_evidence_set.slots.length && triage.source_evidence_digests.every((digest11, index) => digest11 === reviews.current_evidence_set.slots[index].evidence_digest);
+    return triage.current_evidence_set_digest === reviews.current_evidence_set.set_digest && triage.source_evidence_digests.length === reviews.current_evidence_set.slots.length && triage.source_evidence_digests.every((digest12, index) => digest12 === reviews.current_evidence_set.slots[index].evidence_digest);
   }
   if (step === "adjudicate") {
     const adjudication = evidence;
-    return adjudication.source_evidence_set_digest === reviews.current_evidence_set.set_digest && adjudication.approved_upstream_digests.length === (subject.approved_upstream_digests ?? []).length && adjudication.approved_upstream_digests.every((digest11, index) => digest11 === (subject.approved_upstream_digests ?? [])[index]);
+    return adjudication.source_evidence_set_digest === reviews.current_evidence_set.set_digest && adjudication.approved_upstream_digests.length === (subject.approved_upstream_digests ?? []).length && adjudication.approved_upstream_digests.every((digest12, index) => digest12 === (subject.approved_upstream_digests ?? [])[index]);
   }
   return false;
 }
@@ -45365,12 +35170,12 @@ function waiverInForce(state, rule4, subjectDigest, scope3) {
 }
 
 // src/state/next-action.ts
-function action(code, detail, humanRequired, state, extra = {}) {
-  if (state === void 0) return Object.freeze({ code, detail, human_required: humanRequired, ...extra });
+function action(code2, detail, humanRequired, state, extra = {}) {
+  if (state === void 0) return Object.freeze({ code: code2, detail, human_required: humanRequired, ...extra });
   const kind = decodePhaseInstance(state.phase_instance).kind;
   const skill = WORKFLOW_V1.phases.find((phase4) => phase4.id === kind)?.skill;
   return Object.freeze({
-    code,
+    code: code2,
     detail,
     human_required: humanRequired,
     phase_instance: state.phase_instance,
@@ -45478,8 +35283,8 @@ function deriveNextAction(input) {
 }
 
 // src/state/phase-documents.ts
-function phaseReviewPaths(phaseInstance3) {
-  const phase4 = decodePhaseInstance(phaseInstance3);
+function phaseReviewPaths(phaseInstance4) {
+  const phase4 = decodePhaseInstance(phaseInstance4);
   switch (phase4.kind) {
     case "prd":
       return { artifact_path: "prd.md", upstream_paths: [] };
@@ -45497,8 +35302,8 @@ function phaseReviewPaths(phaseInstance3) {
       };
   }
 }
-function phaseDocumentDefaults(taskId, phaseInstance3) {
-  const phase4 = decodePhaseInstance(phaseInstance3);
+function phaseDocumentDefaults(taskId, phaseInstance4) {
+  const phase4 = decodePhaseInstance(phaseInstance4);
   const task = (path2) => `.archflow/tasks/${taskId}/${path2}`;
   switch (phase4.kind) {
     case "prd":
@@ -45523,8 +35328,8 @@ function phaseDocumentDefaults(taskId, phaseInstance3) {
       return void 0;
   }
 }
-function phaseImplParentDocumentDefaults(phaseInstance3) {
-  const phase4 = decodePhaseInstance(phaseInstance3);
+function phaseImplParentDocumentDefaults(phaseInstance4) {
+  const phase4 = decodePhaseInstance(phaseInstance4);
   if (phase4.kind !== "phase-impl") return void 0;
   return [
     { document_path: `phases/${phase4.phase}/design.md`, role: "phase-design" },
@@ -45544,15 +35349,15 @@ var TERMINAL_ARTIFACT_PLACEHOLDERS = {
   produce: "Replace with the complete document or implementation-output artifact; archflow-local build-request emits this entire request already completed and fingerprint-resolved.",
   triage: 'Replace with the complete triage artifact; archflow-local build-request (kind "triage") composes this entire request from the dispositions alone.'
 };
-function deepFreeze4(value) {
+function deepFreeze5(value) {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const nested of Object.values(value)) deepFreeze4(nested);
+    for (const nested of Object.values(value)) deepFreeze5(nested);
     Object.freeze(value);
   }
   return value;
 }
 function request(tool2, input, guidance) {
-  return deepFreeze4({ request: { tool: tool2, input }, guidance });
+  return deepFreeze5({ request: { tool: tool2, input }, guidance });
 }
 function envelopeGuidance(taskId, tool2, detail) {
   return `${detail} Fill every placeholder field, then pipe the completed request as {"tool":"${tool2}","input":<request>} to archflow-local envelope --task ${taskId}; it resolves the fingerprint internally, so call ${tool2} with the returned request.input verbatim \u2014 the envelope output, not this template, is the fingerprint authority.`;
@@ -45760,13 +35565,13 @@ function reconcileCurrentAuthority(value) {
   const findings = [];
   const observed = new Map(input.current_projections.map((projection) => [projection.path, projection.content_digest]));
   for (const recorded of input.recorded_projections) {
-    const digest11 = observed.get(recorded.path);
-    if (digest11 !== recorded.content_digest) {
+    const digest12 = observed.get(recorded.path);
+    if (digest12 !== recorded.content_digest) {
       findings.push(Object.freeze({
         kind: "projection-mismatch",
         path: recorded.path,
         recorded_digest: recorded.content_digest,
-        ...digest11 === void 0 ? {} : { observed_digest: digest11 },
+        ...digest12 === void 0 ? {} : { observed_digest: digest12 },
         next_action: "restore-or-record-new-transition"
       }));
     }
@@ -45903,9 +35708,9 @@ async function discoverProjections(dependencies, authority, state) {
     const current = [];
     for (const candidate of [...newest.values()].sort((left, right) => left.projection.path.localeCompare(right.projection.path))) {
       recorded.push(candidate.projection);
-      const digest11 = await currentProjectionDigest(candidate.target);
-      if (digest11 !== "missing") {
-        current.push(Object.freeze({ path: candidate.projection.path, content_digest: digest11 }));
+      const digest12 = await currentProjectionDigest(candidate.target);
+      if (digest12 !== "missing") {
+        current.push(Object.freeze({ path: candidate.projection.path, content_digest: digest12 }));
       }
     }
     return ok14(Object.freeze({ recorded: Object.freeze(recorded), current: Object.freeze(current) }));
@@ -46598,10 +36403,10 @@ async function computeTaskStatus(dependencies, authority) {
     commit_observed: commitObserved,
     ...adjudicationGateKind === void 0 ? {} : { adjudication_gate_kind: adjudicationGateKind }
   });
-  let gateInput2;
+  let gateInput;
   if (nextAction.code === "open-gate" && nextAction.gate_kind === "commit-authorization" && produceSubject?.artifact.artifact_kind === "implementation-output" && evidence.available) {
     const target = await currentTargetRef(dependencies);
-    gateInput2 = buildCommitAuthorizationInput(produceSubject, evidence.current_evidence, target);
+    gateInput = buildCommitAuthorizationInput(produceSubject, evidence.current_evidence, target);
   }
   const nextActionWithRequest = attachNextActionRequest(nextAction, {
     task_id: authority.task_id,
@@ -46613,7 +36418,7 @@ async function computeTaskStatus(dependencies, authority) {
       subject_digest: subjectDigest ?? evidence.subject_digest,
       current_evidence: evidence.current_evidence
     } : {},
-    ...gateInput2 === void 0 ? {} : { commit_authorization: gateInput2 },
+    ...gateInput === void 0 ? {} : { commit_authorization: gateInput },
     ...adjudicationGate === void 0 ? {} : { adjudication_gate: adjudicationGate },
     maximum_attempts: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS
   });
@@ -46635,7 +36440,7 @@ async function computeTaskStatus(dependencies, authority) {
     ...statusReconciliation === void 0 ? {} : { reconciliation: statusReconciliation },
     evidence,
     ...editorialRevision === void 0 ? {} : { editorial_revision: editorialRevision },
-    ...gateInput2 === void 0 ? {} : { gate_input: gateInput2 },
+    ...gateInput === void 0 ? {} : { gate_input: gateInput },
     blocking_reasons: Object.freeze([...new Set(blockers)]),
     next_action: nextActionWithRequest
   }));
@@ -46726,8 +36531,8 @@ var ASSETS = Object.freeze([
 ]);
 var ok16 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail17 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-function errno(error51, code) {
-  return error51 instanceof Error && error51.code === code;
+function errno(error51, code2) {
+  return error51 instanceof Error && error51.code === code2;
 }
 function ioFailure2() {
   return fail17(createProjectError("IO_ERROR", {
@@ -46993,7 +36798,7 @@ async function runDispatchChild(spec) {
   });
   child.stdin.end(spec.stdin === void 0 ? void 0 : Buffer.from(spec.stdin));
   const closed = await new Promise((resolve2) => {
-    child.once("close", (code, signal) => resolve2({ code, signal }));
+    child.once("close", (code2, signal) => resolve2({ code: code2, signal }));
   });
   clearTimeout(timeout);
   if (escalation !== void 0) clearTimeout(escalation);
@@ -47298,9 +37103,9 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
     signal,
     cancellationSource
   );
-  const version2 = exactVersion(adapter2, versionResult.stdout);
-  if (versionResult.exit_code !== 0 || version2 === "unrecognized" || compareVersions(version2, minimumVersion) < 0) {
-    return fail19(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version2 }));
+  const version3 = exactVersion(adapter2, versionResult.stdout);
+  if (versionResult.exit_code !== 0 || version3 === "unrecognized" || compareVersions(version3, minimumVersion) < 0) {
+    return fail19(createProjectError("CLI_VERSION_UNSUPPORTED", { adapter: adapter2, version: version3 }));
   }
   const authResult = await runPreflightCommand(
     adapter2,
@@ -47322,10 +37127,10 @@ async function preflight(adapter2, command, versionArgv, authArgv, minimumVersio
     const successLines = [authResult.stdout, authResult.stderr].flatMap((channel) => channel.toString("utf8").split(/\r?\n/u)).filter((line) => /^Logged in(?:\s|$)/u.test(line.trim()));
     loggedIn = successLines.length >= 1;
   }
-  if (!loggedIn) return fail19(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version2);
+  if (!loggedIn) return fail19(createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 }), version3);
   const managedPolicyPaths = await detectManagedPolicyPaths(policyPaths);
   return Object.freeze({
-    cli_version: version2,
+    cli_version: version3,
     managed_policy_present: managedPolicyPaths.length > 0,
     managed_policy_paths: managedPolicyPaths
   });
@@ -47370,9 +37175,9 @@ function claudeFailureMessage(result) {
   try {
     const value = JSON.parse(result.stdout.toString("utf8"));
     if (value === null || typeof value !== "object") return void 0;
-    const record4 = value;
-    if (record4.is_error !== true && record4.type !== "error") return void 0;
-    return typeof record4.result === "string" ? record4.result : typeof record4.error === "string" ? record4.error : void 0;
+    const record3 = value;
+    if (record3.is_error !== true && record3.type !== "error") return void 0;
+    return typeof record3.result === "string" ? record3.result : typeof record3.error === "string" ? record3.error : void 0;
   } catch {
     return void 0;
   }
@@ -47697,8 +37502,8 @@ function runCommand(command, argv, cwd, environment) {
     child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
     child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
     child.once("error", reject);
-    child.once("close", (code) => resolve2({
-      exit_code: code ?? 1,
+    child.once("close", (code2) => resolve2({
+      exit_code: code2 ?? 1,
       stdout: Buffer.concat(stdout).toString("utf8"),
       stderr: Buffer.concat(stderr).toString("utf8")
     }));
@@ -47738,11 +37543,11 @@ function parseMcpJson(source) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return fail20("mcp-json-foreign-keys");
   }
-  const record4 = value;
-  if (Object.keys(record4).some((key) => key !== "mcpServers")) {
+  const record3 = value;
+  if (Object.keys(record3).some((key) => key !== "mcpServers")) {
     return fail20("mcp-json-foreign-keys");
   }
-  const servers = record4.mcpServers;
+  const servers = record3.mcpServers;
   if (servers === void 0) return ok17({ mcpServers: {} });
   if (servers === null || typeof servers !== "object" || Array.isArray(servers)) {
     return fail20("mcp-json-foreign-keys");
@@ -47862,15 +37667,15 @@ function codexGetDiagnostic(output) {
   try {
     const value = JSON.parse(output);
     if (value === null || typeof value !== "object" || Array.isArray(value)) return void 0;
-    const record4 = value;
-    let command = typeof record4.command === "string" ? record4.command : void 0;
-    const transport = record4.transport;
+    const record3 = value;
+    let command = typeof record3.command === "string" ? record3.command : void 0;
+    const transport = record3.transport;
     if (transport !== null && typeof transport === "object" && !Array.isArray(transport)) {
       const transportCommand = transport.command;
       if (typeof transportCommand === "string") command = transportCommand;
     }
-    const startupTimeout = record4.startup_timeout_sec;
-    const toolTimeout = record4.tool_timeout_sec;
+    const startupTimeout = record3.startup_timeout_sec;
+    const toolTimeout = record3.tool_timeout_sec;
     return {
       command,
       startup_timeout_sec: typeof startupTimeout === "number" || startupTimeout === null ? startupTimeout : void 0,
@@ -47964,10 +37769,10 @@ async function diagnoseAdapter(adapter2, repository) {
   } catch (caught) {
     const error51 = preflightError(caught);
     const paths = await pathsPromise;
-    const version2 = caught instanceof CliAdapterError ? caught.cli_version ?? unsupportedVersion(caught.project_error) : null;
+    const version3 = caught instanceof CliAdapterError ? caught.cli_version ?? unsupportedVersion(caught.project_error) : null;
     return Object.freeze({
       adapter: adapter2,
-      version: version2,
+      version: version3,
       authenticated: error51?.code === "AUTH_UNAVAILABLE" ? false : null,
       managed_policy_present: paths.length > 0,
       managed_policy_paths: paths,
@@ -48097,8 +37902,8 @@ import { dirname as dirname6, join as join13 } from "node:path";
 var decoder4 = new TextDecoder("utf-8", { fatal: true });
 var ok18 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail21 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-function errno2(error51, code) {
-  return error51 instanceof Error && error51.code === code;
+function errno2(error51, code2) {
+  return error51 instanceof Error && error51.code === code2;
 }
 function commitDigest(commit, digest_kind) {
   return canonicalJsonDigest({ schema_version: "1", digest_kind, commit });
@@ -48628,11 +38433,11 @@ async function buildDocumentArtifact(runner, authority, input) {
 }
 
 // src/state/staged-requests.ts
-var digest10 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var digest11 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var stagedRecordSchema = external_exports.object({
   schema_version: external_exports.literal("1"),
   request: external_exports.object({ tool: external_exports.enum(TOOL_NAMES), input: external_exports.unknown() }).strict(),
-  request_digest: digest10
+  request_digest: digest11
 }).strict();
 var ok21 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 async function writeStagedRequest(input) {
@@ -48646,12 +38451,12 @@ async function writeStagedRequest(input) {
     context: services2.authority.context
   });
   if (!target.ok) return target;
-  const record4 = {
+  const record3 = {
     schema_version: "1",
     request: { tool: input.tool, input: input.request_input },
     request_digest: input.request_digest
   };
-  await services2.dependencies.atomic.replace(target.value, canonicalJsonBytes(record4));
+  await services2.dependencies.atomic.replace(target.value, canonicalJsonBytes(record3));
   return ok21(Object.freeze({
     path: target.value.repositoryRelative,
     reference: Object.freeze({
@@ -48675,7 +38480,7 @@ var BUILD_REQUEST_KINDS = Object.freeze([
   "gate"
 ]);
 var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"rubric"?:<rubric object for kind counter-review>,"summary"?:<gate summary text>}`;
-function record3(value, name) {
+function record2(value, name) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${name} must be an object; expected ${PAYLOAD_SHAPE}`);
   }
@@ -48735,7 +38540,7 @@ async function composeProduce(services2, state, intentId, snapshot2) {
     if (snapshot2.document !== void 0) {
       throw new TypeError("phase-impl produces an implementation output; supply implementation facts, not document facts");
     }
-    const implementation = record3(
+    const implementation = record2(
       snapshot2.implementation,
       "build-request implementation facts (required for phase-impl)"
     );
@@ -48760,7 +38565,7 @@ async function composeProduce(services2, state, intentId, snapshot2) {
     }
     const defaults = phaseDocumentDefaults(services2.authority.task_id, state.phase_instance);
     if (defaults === void 0) throw new TypeError(`${phaseKind2} has no canonical document defaults`);
-    const document2 = snapshot2.document === void 0 ? {} : record3(snapshot2.document, "build-request document facts");
+    const document2 = snapshot2.document === void 0 ? {} : record2(snapshot2.document, "build-request document facts");
     const built = await buildDocumentArtifact(services2.runner, services2.authority, {
       phase_instance: state.phase_instance,
       step: "produce",
@@ -48834,7 +38639,7 @@ async function composeTriage(services2, state, intentId, snapshot2) {
     }
   }
   const dispositions = snapshot2.dispositions.map((entry, index) => {
-    const item = record3(entry, `triage disposition ${index}`);
+    const item = record2(entry, `triage disposition ${index}`);
     const findingId = String(item.finding_id ?? "");
     const candidates = digestsByFindingId.get(findingId);
     if (candidates === void 0) {
@@ -49020,7 +38825,7 @@ async function withStagedRequest(services2, intentId, result) {
 }
 async function runBuildRequest(services2, value) {
   assertPlainJson(value, "build-request input");
-  const snapshot2 = record3(structuredClone(value), "build-request input");
+  const snapshot2 = record2(structuredClone(value), "build-request input");
   const kind = snapshot2.kind === void 0 ? "produce" : String(snapshot2.kind);
   const intentId = snapshot2.intent_id === void 0 ? generateIntentId(kind) : parsePathSafeId(String(snapshot2.intent_id));
   if (kind === "initialize") {
@@ -49050,8 +38855,8 @@ async function runBuildRequest(services2, value) {
 
 // src/local/status-classification.ts
 var ok23 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-function action2(code, detail, human, command, input) {
-  return Object.freeze({ code, detail, human_required: human, command, ...input === void 0 ? {} : { input } });
+function action2(code2, detail, human, command, input) {
+  return Object.freeze({ code: code2, detail, human_required: human, command, ...input === void 0 ? {} : { input } });
 }
 async function classifyWorkflowStatus(input) {
   const readability = await classifyDurableStateReadability({
@@ -49139,7 +38944,6 @@ var LOCAL_COMMAND_CONTRACTS = Object.freeze({
   upgrade: { payload: "<legacy staging descriptor>", task: "optional" }
 });
 var INPUT_FREE_COMMANDS = new Set(LOCAL_COMMANDS.filter((command) => LOCAL_COMMAND_CONTRACTS[command].payload === null));
-var maintenanceRecordV1Validator = createJsonSchemaValidator(maintenance_record_schema_default, [primitives_schema_default, path_claim_schema_default]);
 function requireValue(input) {
   assertPlainJson(input.value, `${input.command} input payload`);
   return structuredClone(input.value);
@@ -49174,9 +38978,9 @@ function validateArtifact(value) {
       throw new TypeError("validate input.kind is not supported");
   }
 }
-function assertGateCounterRequestBinding(record4, request2, currentInputFingerprint) {
+function assertGateCounterRequestBinding(record3, request2, currentInputFingerprint) {
   const producerFamilies = new Set(request2.current_evidence.slots.map((slot) => slot.producer_family));
-  if (record4.review.assurance !== "degraded" || record4.request_digest !== request2.request_digest || record4.task_id !== request2.task_id || record4.phase_instance !== request2.phase_instance || record4.kind !== request2.kind || record4.subject_digest !== request2.subject_digest || record4.context_digest !== request2.context_digest || record4.current_evidence_set_digest !== request2.current_evidence.set_digest || record4.input_fingerprint !== currentInputFingerprint || producerFamilies.size !== 1 || !producerFamilies.has(record4.review.producer_family)) throw new TypeError("gate-counter record does not bind the archived request");
+  if (record3.review.assurance !== "degraded" || record3.request_digest !== request2.request_digest || record3.task_id !== request2.task_id || record3.phase_instance !== request2.phase_instance || record3.kind !== request2.kind || record3.subject_digest !== request2.subject_digest || record3.context_digest !== request2.context_digest || record3.current_evidence_set_digest !== request2.current_evidence.set_digest || record3.input_fingerprint !== currentInputFingerprint || producerFamilies.size !== 1 || !producerFamilies.has(record3.review.producer_family)) throw new TypeError("gate-counter record does not bind the archived request");
 }
 async function services(input) {
   const taskId = parseTaskSlug(input.task_id);
@@ -49217,12 +39021,12 @@ async function render(input) {
   return { markdown: new TextDecoder().decode(bytes), digest: sha256Bytes(bytes) };
 }
 async function gateCounter(input) {
-  const record4 = parseSupplementalReviewRecord(requireValue(input));
-  if (input.task_id !== record4.task_id) throw new TypeError("gate-counter task does not match --task");
+  const record3 = parseSupplementalReviewRecord(requireValue(input));
+  if (input.task_id !== record3.task_id) throw new TypeError("gate-counter task does not match --task");
   const created = await services(input);
   if (!created.ok) return created;
   const { authority, dependencies, runner } = created.value;
-  const requestTarget = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateRequestClaim(record4.gate_id), expectedClass: "decision", context: authority.context });
+  const requestTarget = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateRequestClaim(record3.gate_id), expectedClass: "decision", context: authority.context });
   if (!requestTarget.ok) return requestTarget;
   const requestHandle = await openResolved(requestTarget.value.absolute, 0);
   let request2;
@@ -49231,13 +39035,13 @@ async function gateCounter(input) {
   } finally {
     await requestHandle.close();
   }
-  assertGateCounterRequestBinding(record4, request2, created.value.state?.value.input_fingerprint);
-  await ensureDecisionDirectory(authority, record4.gate_id);
-  const reviewProjection = renderReviewEvidence(createVerifiedEvidenceReference(record4.review));
-  if (sha256Bytes(reviewProjection) !== record4.projection_digest) throw new TypeError("gate-counter projection digest differs");
-  const retained = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateSupplementalReviewClaim(record4.gate_id), expectedClass: "decision", context: authority.context });
+  assertGateCounterRequestBinding(record3, request2, created.value.state?.value.input_fingerprint);
+  await ensureDecisionDirectory(authority, record3.gate_id);
+  const reviewProjection = renderReviewEvidence(createVerifiedEvidenceReference(record3.review));
+  if (sha256Bytes(reviewProjection) !== record3.projection_digest) throw new TypeError("gate-counter projection digest differs");
+  const retained = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateSupplementalReviewClaim(record3.gate_id), expectedClass: "decision", context: authority.context });
   if (!retained.ok) return retained;
-  const document2 = canonicalDocument(record4);
+  const document2 = canonicalDocument(record3);
   const installation = await dependencies.atomic.createExclusive(retained.value, document2.bytes);
   if (installation === "exists") {
     const handle = await openResolved(retained.value.absolute, 0);
@@ -49247,12 +39051,12 @@ async function gateCounter(input) {
       await handle.close();
     }
   }
-  const projection = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateCounterReviewClaim(record4.phase_instance, record4.gate_id), expectedClass: "review", context: authority.context });
+  const projection = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateCounterReviewClaim(record3.phase_instance, record3.gate_id), expectedClass: "review", context: authority.context });
   if (!projection.ok) return projection;
   if (dependencies.projection_writer === void 0) throw new TypeError("projection writer is unavailable");
   await ensureTaskProjectionParent(authority, projection.value.absolute);
   await dependencies.projection_writer.replaceRegular(projection.value, reviewProjection, false);
-  return { record_digest: document2.digest, projection_digest: record4.projection_digest, installation };
+  return { record_digest: document2.digest, projection_digest: record3.projection_digest, installation };
 }
 async function maintain(input) {
   const value = requireValue(input);
@@ -49275,7 +39079,7 @@ async function maintain(input) {
   const target = await resolveTaskPath({ runner, taskId: authority.task_id, claim: parseTaskPathClaim(`maintenance/${maintenanceId}.json`), expectedClass: "maintenance-record", context: authority.context });
   if (!target.ok) return target;
   const deletions = proof.permitted_deletions.map(({ target: _target, ...deletion }) => deletion);
-  const record4 = {
+  const record3 = {
     schema_version: "1",
     maintenance_id: maintenanceId,
     task_id: authority.task_id,
@@ -49285,7 +39089,7 @@ async function maintain(input) {
     deletions,
     total_bytes_deleted: parseSafeInteger(deletions.reduce((total, deletion) => total + deletion.byte_count, 0))
   };
-  return performMaintenance({ atomic: dependencies.atomic, record_target: target.value, record: record4, proof, validate_record: (candidate) => maintenanceRecordV1Validator.assert(candidate, "maintenance record") });
+  return performMaintenance({ atomic: dependencies.atomic, record_target: target.value, record: record3, proof, validate_record: parseMaintenanceRecord });
 }
 async function manualStatus(input) {
   return classifyWorkflowStatus({

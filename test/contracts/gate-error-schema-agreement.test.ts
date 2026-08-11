@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 import gateContractSchema from "../../src/contracts/schemas/v1/gate-contract.schema.json" with { type: "json" };
 import gateDecisionSchema from "../../src/contracts/schemas/v1/gate-decision.schema.json" with { type: "json" };
 import projectErrorSchema from "../../src/contracts/schemas/v1/project-error.schema.json" with { type: "json" };

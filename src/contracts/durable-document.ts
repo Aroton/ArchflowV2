@@ -24,9 +24,9 @@ import { isSortedUniqueBy, tupleKey } from "./validators.js";
  * through the whole reachable graph, so an `interface` anywhere inside fails with `TS2344`.
  *
  * D2 — Zod-mirrored, because an agent supplies it across the MCP tool boundary through
- * `archflow_state.artifact` and it must therefore be validated from untrusted input. The mirror is a
- * mirror and never a second model: `assertZodAgreement` proves both authorities accept and reject
- * exactly the same values.
+ * `archflow_state.artifact` and it must therefore be validated from untrusted input. This Zod
+ * source is the shape authority: the committed `document-artifact.schema.json` is generated from
+ * it, so the published document cannot drift.
  *
  * D3 — the two path frames, and they are runtime-**indistinguishable**. `document_path` is a
  * `TaskPathClaim` (relative to the task root) and `projection_target` is a `RepositoryPathClaim`
@@ -93,9 +93,8 @@ export const editorialPredecessorRefV1Schema = z.object({
 }).strict() as unknown as z.ZodType<EditorialPredecessorRef>;
 
 /**
- * The mirror. `declared_inputs` calls `isSortedUniqueBy` with `tupleKey("input_id")` — the same two
- * exported functions the `x-archflow-sorted-unique-by` Ajv keyword calls — so the ordering rule is
- * literally one predicate across both authorities and cannot drift (D11).
+ * The authority. `declared_inputs` calls `isSortedUniqueBy` with `tupleKey("input_id")` — the
+ * shared exported ordering predicates — so every shape enforces literally the same rule (D11).
  */
 export const documentArtifactV1Schema = z.object({
   schema_version: z.literal("1"),

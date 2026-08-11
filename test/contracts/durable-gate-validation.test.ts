@@ -4,35 +4,51 @@ import { describe, expect, it } from "vitest";
 
 import { activeGateV1Schema, gateRequestV1Schema, parseGateRequest } from "../../src/contracts/durable-gate.js";
 import { parseGateContext } from "../../src/contracts/gates.js";
-import {
-  activeGateV1Validator,
-  assertZodAgreement,
-  gateRequestV1Validator,
-  type JsonSchemaValidator,
-  type ZodLikeSchema,
-} from "../../src/contracts/validators.js";
+import { createJsonSchemaValidator, type JsonSchemaValidator, type ZodLikeSchema } from "../helpers/json-schema.js";
 
 /**
- * Agreement suite for the two gate mirrors in `durable-gate.ts`. The mirrors are now the runtime
- * authority — `parseGateRequest` and `parseActiveGate` parse through them — and the committed
- * schemas are generated from them; this file proves the generated documents and their Zod sources
- * accept and reject the same values across every arm, and that the gate-semantics logic from
- * `gates.ts` is wired into the mirrors.
- *
- * One asymmetry is pinned deliberately: the compiled Ajv validators are purely structural — the
- * generated documents carry neither `x-archflow-gate-semantics` nor the retired byte/NFC/ledger
- * keywords — so every semantic rejection below belongs to the mirrors alone, and the
+ * Validation of the two gate roots under the Zod authority. `parseGateRequest` and
+ * `parseActiveGate` parse through `gateRequestV1Schema` and `activeGateV1Schema`, and the
+ * committed schemas are generated from them, with `check:schemas` fencing the bytes. The compiled
+ * documents appear only as third-party consumers: they must accept every arm, and they are purely
+ * structural — the generated documents carry neither gate-semantics nor the retired byte/NFC/
+ * ledger keywords — so every semantic rejection below belongs to the Zod authority alone, and the
  * `validate(...)).toBe(true)` assertions pin that gap.
  */
 
+const SCHEMA_DIR = new URL("../../src/contracts/schemas/v1/", import.meta.url);
 const FIXTURE_DIR = new URL("../fixtures/contracts/durable/", import.meta.url);
 
 type JsonObject = Record<string, unknown>;
 
 const clone = <T>(value: T): T => structuredClone(value);
 
+const schema = (stem: string): JsonObject =>
+  JSON.parse(readFileSync(new URL(`${stem}.schema.json`, SCHEMA_DIR), "utf8")) as JsonObject;
+
 const fixture = (name: string): JsonObject =>
   JSON.parse(readFileSync(new URL(`${name}.json`, FIXTURE_DIR), "utf8")) as JsonObject;
+
+const GATE_REFERENCE_STEMS = [
+  "primitives",
+  "path-claim",
+  "gate-contract",
+  "gate-decision",
+  "evidence-slots",
+  "supplemental-review",
+  "gate-request",
+  "gate-decision-record",
+] as const;
+
+const gateRequestValidator: JsonSchemaValidator<unknown> = createJsonSchemaValidator<unknown>(
+  schema("gate-request"),
+  GATE_REFERENCE_STEMS.filter((stem) => stem !== "gate-request").map(schema)
+);
+
+const activeGateValidator: JsonSchemaValidator<unknown> = createJsonSchemaValidator<unknown>(
+  schema("active-gate"),
+  GATE_REFERENCE_STEMS.map(schema)
+);
 
 const d = (character: string): string => character.repeat(64);
 const rule = (id: string, version: number): JsonObject => ({ rule_id: id, rule_version: version });
@@ -88,49 +104,49 @@ const armActiveGate = (arm: (typeof ARM_SAMPLES)[number]): JsonObject => ({
   supplemental: [],
 });
 
-type Mirrored = {
+type GateRoot = {
   readonly name: string;
   readonly json: JsonSchemaValidator<unknown>;
   readonly zod: ZodLikeSchema<unknown>;
   readonly sample: JsonObject;
 };
 
-const MIRRORED: readonly Mirrored[] = [
-  { name: "gate-request", json: gateRequestV1Validator as JsonSchemaValidator<unknown>, zod: gateRequestV1Schema, sample: fixture("gate-request.valid") },
-  { name: "active-gate", json: activeGateV1Validator as JsonSchemaValidator<unknown>, zod: activeGateV1Schema, sample: fixture("active-gate.valid") },
+const ROOTS: readonly GateRoot[] = [
+  { name: "gate-request", json: gateRequestValidator, zod: gateRequestV1Schema, sample: fixture("gate-request.valid") },
+  { name: "active-gate", json: activeGateValidator, zod: activeGateV1Schema, sample: fixture("active-gate.valid") },
 ];
 
-describe("the gate mirrors agree with their JSON Schema authorities", () => {
-  for (const entry of MIRRORED) {
-    it(`agrees for the ${entry.name} fixture`, () => {
-      expect(assertZodAgreement(entry.sample, entry.json, entry.zod, entry.name)).toEqual(entry.sample);
+const accepts = (target: GateRoot, value: unknown, label: string): void => {
+  const result = target.zod.safeParse(value);
+  expect(result.success, `${label}: Zod rejected`).toBe(true);
+  if (result.success) expect(result.data, `${label}: Zod transformed the value`).toEqual(value);
+  expect(target.json.validate(value), `${label}: published schema rejected`).toBe(true);
+};
+
+describe("the gate roots validate under the Zod authority", () => {
+  for (const entry of ROOTS) {
+    it(`accepts the ${entry.name} fixture, and the published schema accepts it too`, () => {
+      accepts(entry, entry.sample, entry.name);
     });
 
-    it(`agrees for ${entry.name} when an unknown property is added`, () => {
+    it(`rejects ${entry.name} with an unknown property`, () => {
       const mutated = { ...clone(entry.sample), archflow_unknown_property: "x" };
-      expect(entry.json.validate(mutated)).toBe(false);
       expect(entry.zod.safeParse(mutated).success).toBe(false);
-      expect(() => assertZodAgreement(mutated, entry.json, entry.zod, entry.name)).toThrowError(
-        /schema validation failed/
-      );
     });
   }
 
   for (const arm of ARM_SAMPLES) {
-    it(`agrees for the ${arm.name} gate-request arm`, () => {
-      const sample = armRequest(arm);
-      expect(assertZodAgreement(sample, gateRequestV1Validator, gateRequestV1Schema, arm.name)).toEqual(sample);
+    it(`accepts the ${arm.name} gate-request arm`, () => {
+      accepts(ROOTS[0]!, armRequest(arm), arm.name);
     });
 
-    it(`agrees for the ${arm.name} active-gate arm`, () => {
-      const sample = armActiveGate(arm);
-      expect(assertZodAgreement(sample, activeGateV1Validator, activeGateV1Schema, arm.name)).toEqual(sample);
+    it(`accepts the ${arm.name} active-gate arm`, () => {
+      accepts(ROOTS[1]!, armActiveGate(arm), arm.name);
     });
   }
 
-  it("rejects a kind whose allowed_decisions vocabulary belongs to another arm, in both authorities", () => {
+  it("rejects a kind whose allowed_decisions vocabulary belongs to another arm", () => {
     const mutated = { ...clone(fixture("gate-request.valid")), allowed_decisions: ["authorize-commit", "revise", "abort", "cancel"] };
-    expect(gateRequestV1Validator.validate(mutated)).toBe(false);
     expect(gateRequestV1Schema.safeParse(mutated).success).toBe(false);
   });
 });
@@ -138,26 +154,26 @@ describe("the gate mirrors agree with their JSON Schema authorities", () => {
 /**
  * Generation retired `x-archflow-nfc` and `x-archflow-max-utf8-bytes` from `path-claim`, the
  * supplemental-semantics keyword from `supplemental-review`, and the ledger's structural
- * supersession exclusion, so the compiled validators now accept all four; the mirrors behind
+ * supersession exclusion, so the compiled validators now accept all four; the Zod schemas behind
  * `parseGateRequest` and `parseActiveGate` are the surviving authority.
  */
 describe("negatives under retired keyword-backed rules are rejected by the Zod authority", () => {
   it("rejects a restore-collision path that is not NFC", () => {
     const sample = fixture("gate-request.invalid-nfd-path");
-    expect(gateRequestV1Validator.validate(sample)).toBe(true);
+    expect(gateRequestValidator.validate(sample)).toBe(true);
     expect(gateRequestV1Schema.safeParse(sample).success).toBe(false);
   });
 
   it("rejects a restore-collision path above 1024 UTF-8 bytes", () => {
     const sample = fixture("gate-request.invalid-nfd-path");
     (sample.context as JsonObject).path = `docs/${"a".repeat(1100)}.md`;
-    expect(gateRequestV1Validator.validate(sample)).toBe(true);
+    expect(gateRequestValidator.validate(sample)).toBe(true);
     expect(gateRequestV1Schema.safeParse(sample).success).toBe(false);
   });
 
   it("rejects a supplemental slot bound to a different gate", () => {
     const sample = fixture("active-gate.invalid-supplemental-slot-binding");
-    expect(activeGateV1Validator.validate(sample)).toBe(true);
+    expect(activeGateValidator.validate(sample)).toBe(true);
     expect(activeGateV1Schema.safeParse(sample).success).toBe(false);
   });
 
@@ -172,37 +188,37 @@ describe("negatives under retired keyword-backed rules are rejected by the Zod a
       new_subject_digest: d("9"),
       reason: "Triage accepted a superseding subject",
     }];
-    expect(activeGateV1Validator.validate(sample)).toBe(true);
+    expect(activeGateValidator.validate(sample)).toBe(true);
     expect(activeGateV1Schema.safeParse(sample).success).toBe(false);
   });
 });
 
 /**
- * The gate-semantics violations. The structural Ajv validators accept these — the two schema roots
- * do not carry `x-archflow-gate-semantics` — so the old rejection authority for a request is
- * `parseGateRequest` (Ajv plus `parseGateContext`), and the mirror must reject on its own. The
- * `validate(...)).toBe(true)` assertions pin that gap: if a later change adds the keyword to the
- * schemas, they should flip to `false` and the mirror agreement can tighten.
+ * The gate-semantics violations. The structural compiled validators accept these — the two schema
+ * roots do not carry `x-archflow-gate-semantics` — so the rejection authority is `parseGateRequest`
+ * (with `parseGateContext`) and the Zod roots reject on their own. The `validate(...)).toBe(true)`
+ * assertions pin that gap: if a later change adds the keyword back to the schemas, they should flip
+ * to `false` and this suite can tighten.
  */
-describe("gate-semantics negatives are rejected by the mirror and the effective authority", () => {
+describe("gate-semantics negatives are rejected by the Zod authority", () => {
   it("rejects an eligible waiver rule that neither matched nor is uncertain", () => {
     const sample = fixture("gate-request.invalid-ineligible-waiver-rule");
     expect(gateRequestV1Schema.safeParse(sample).success).toBe(false);
     expect(() => parseGateRequest(clone(sample))).toThrowError(/eligible waiver rule/);
-    expect(gateRequestV1Validator.validate(clone(sample))).toBe(true);
+    expect(gateRequestValidator.validate(clone(sample))).toBe(true);
   });
 
   it("rejects matched rules that are unique but not sorted", () => {
     const sample = fixture("gate-request.invalid-unsorted-matched-rules");
     expect(gateRequestV1Schema.safeParse(sample).success).toBe(false);
     expect(() => parseGateRequest(clone(sample))).toThrowError(/sorted and unique/);
-    expect(gateRequestV1Validator.validate(clone(sample))).toBe(true);
+    expect(gateRequestValidator.validate(clone(sample))).toBe(true);
   });
 
   it("rejects an active adjudication-failure gate whose waiver scope names the wrong operation", () => {
     const sample = fixture("active-gate.invalid-waiver-scope-operation");
     expect(activeGateV1Schema.safeParse(sample).success).toBe(false);
     expect(() => parseGateContext("adjudication-failure", sample.context)).toThrowError(/waiver operation/);
-    expect(activeGateV1Validator.validate(clone(sample))).toBe(true);
+    expect(activeGateValidator.validate(clone(sample))).toBe(true);
   });
 });

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { configV1Schema } from "../../src/contracts/config.js";
 import { constitutionRuleV1Schema } from "../../src/contracts/constitution.js";
 import { rubricV1Schema } from "../../src/contracts/rubric.js";
-import { assertZodAgreement, createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { assertZodAgreement, createJsonSchemaValidator } from "../helpers/json-schema.js";
 import { workflowV1Schema } from "../../src/contracts/workflow.js";
 
 const schema = async (name: string) => JSON.parse(await readFile(new URL(`../../src/contracts/schemas/v1/${name}.schema.json`, import.meta.url), "utf8")) as object;

@@ -171,7 +171,8 @@ const fail = (error: ProjectError): ProjectResult<void> => ({ schema_version: "1
 /* ------------------------------------------------------------------ input discipline (rank 1) */
 
 /**
- * The shipped own-data-descriptor idiom (`validators.ts:33-36`), reused rather than reinvented. A
+ * The shipped own-data-descriptor idiom (`hasUniqueObjectPropertyValues` in `validators.ts`),
+ * reused rather than reinvented. A
  * getter-backed slot or shell field is a defect in the *calling server code*, not agent-supplied
  * data, so the repository convention is a throw. Reading alone does not reject a getter — the
  * descriptor check is what does.

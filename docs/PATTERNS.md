@@ -1,6 +1,6 @@
 # PATTERNS
 
-**Explored:** 2026-08-10 · **Commit:** `28c1021` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
+**Explored:** 2026-08-11 · **Commit:** `4bc1c81` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
 
 This is a strict TypeScript/Node package whose conventions are enforced primarily by the type checker, runtime validators, and tests. There is no configured linter or formatter. Match the surrounding file: contract registries intentionally use dense declarations, while state, repository, and MCP algorithms favor expanded control flow and rationale-heavy comments.
 
@@ -105,8 +105,8 @@ This boundary is security-relevant: an enumerable getter can otherwise return on
 
 ### Multiple authorities
 
-- JSON Schema is the serialized contract authority. Runtime schemas live under `src/contracts/schemas/v1/`.
-- Agent-supplied MCP shapes commonly also have strict Zod mirrors, and contract tests prove agreement through `assertZodAgreement` (`src/contracts/validators.ts`, `test/contracts/`).
+- Zod is the runtime shape authority. The published JSON Schemas under `src/contracts/schemas/v1/` are generated from it (`npm run generate:schemas`; `check:schemas` fences the committed bytes), except the two hand-written release schemas.
+- Contract tests compile the generated documents with a dev-only strict Ajv (`test/helpers/json-schema.ts`) to prove they stay valid draft-2020-12 for third-party consumers; production never compiles a schema.
 - Durable semantic checks that cross document boundaries are centralized in `validateDurableSemantics` (`src/contracts/durable.ts`) rather than duplicated in individual schemas.
 - A caller-supplied digest or fingerprint is an assertion, never authority. The server re-derives canonical digests and input fingerprints before comparison.
 

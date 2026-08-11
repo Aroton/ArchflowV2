@@ -61,9 +61,9 @@ export type UndeclaredChangeReport = {
  * through the whole reachable graph; an `interface` anywhere inside fails with `TS2344`.
  *
  * D2 — Zod-mirrored, because an agent supplies this across the MCP tool boundary through
- * `archflow_state.artifact` and it must therefore be validated from untrusted input. The mirror
- * below is a mirror and never a second model; `assertZodAgreement` proves both authorities accept
- * and reject exactly the same values over a shared corpus.
+ * `archflow_state.artifact` and it must therefore be validated from untrusted input. This Zod
+ * source is the shape authority: the committed `implementation-output.schema.json` is generated
+ * from it, so the published document cannot drift.
  *
  * D14 — `constitution_edit_gate_id` is a **structural hook and nothing more**. An earlier draft made
  * a `task-branch-constitution` output claimable only when this field was present; that is
@@ -142,9 +142,8 @@ export const undeclaredChangeReportV1Schema = z.object({
 /**
  * `.strict()` mirrors `additionalProperties: false`; absence is `.optional()` plus omission from
  * `required`, never `null`. Every set rule calls the same exported `isSortedUniqueBy` — with
- * `tupleKey(...)` for the keyed sets — that the `x-archflow-sorted-unique` and
- * `x-archflow-sorted-unique-by` Ajv keywords call, so the two authorities are literally one
- * predicate and `assertZodAgreement` cannot pass over a divergence.
+ * `tupleKey(...)` for the keyed sets — so every shape enforces literally the same ordering
+ * predicate.
  */
 export const implementationOutputV1Schema = z.object({
   schema_version: z.literal("1"),

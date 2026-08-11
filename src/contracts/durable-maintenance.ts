@@ -78,10 +78,9 @@ export const maintenanceDeletionV1Schema = z.object({
 /**
  * The mirror. `performed_at_revision` pins its own `.min(1)` rather than reusing
  * `safeIntegerV1Schema` (D8): `SafeInteger` admits `0`, and there is no revision `0`. The
- * `deletions` ordering rule calls `isSortedUniqueBy` with `tupleKey("digest")` — the same two
- * exported functions the `x-archflow-sorted-unique-by` Ajv keyword calls — so the two authorities
- * are literally one predicate and cannot drift. `human_reason` bounds UTF-8 *bytes*, not code
- * units, exactly as the Ajv `x-archflow-max-utf8-bytes` keyword does.
+ * `deletions` ordering rule calls `isSortedUniqueBy` with `tupleKey("digest")` — the shared
+ * exported ordering predicates — so every shape enforces literally the same rule. `human_reason`
+ * bounds UTF-8 *bytes*, not code units.
  */
 export const maintenanceRecordV1Schema = z.object({
   schema_version: z.literal("1"),

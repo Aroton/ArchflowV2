@@ -46,9 +46,10 @@ const inputContracts = {
 /**
  * The document root: any tool input. The `x-archflow-mcp-semantics` keyword rides on `.meta` so
  * the committed document keeps declaring the cross-field input semantics (current-evidence
- * exactness, gate context/kind agreement, waiver origin-task agreement) that Ajv consumers can
- * still enforce through `createJsonSchemaValidator`; the Zod parsers remain the runtime
- * authority for the same rules.
+ * exactness, gate context/kind agreement, waiver origin-task agreement) that a strict Ajv
+ * consumer can still enforce by registering the keyword (the test compiler in
+ * `test/helpers/json-schema.ts` does); the Zod parsers remain the runtime authority for the
+ * same rules.
  */
 const mcpToolsDocumentRoot = z.union([
   inputContracts.archflow_state,

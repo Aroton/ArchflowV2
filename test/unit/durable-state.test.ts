@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { canonicalDocument, parseCanonicalDocument } from "../../src/contracts/canonical.js";
 import { STEP_STATUSES, TERMINAL_STATES, taskStateV1Schema, type TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { GATE_KINDS } from "../../src/contracts/gates.js";
-import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 import { PIPELINE_STEPS } from "../../src/contracts/vocabulary.js";
 
 /**

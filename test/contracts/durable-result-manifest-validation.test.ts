@@ -3,14 +3,15 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { resultManifestV1Schema } from "../../src/contracts/durable-result-manifest.js";
-import { assertZodAgreement, resultManifestV1Validator } from "../../src/contracts/validators.js";
+import { createJsonSchemaValidator, type JsonSchemaValidator } from "../helpers/json-schema.js";
 
 /**
- * The result-manifest half of the D2 agreement suite. `resultManifestV1Schema` is now the runtime
- * authority behind `parseResultManifest`, and `result-manifest.schema.json` is generated from it.
- * The compiled validator is still exercised so the generated document and its Zod source cannot
- * drift structurally across every `source_artifact` arm; the two set-ordering rules are Zod-only
- * since generation retired the `x-archflow-sorted-unique-by` keyword.
+ * `result-manifest` validation under the Zod authority. `resultManifestV1Schema` is the runtime
+ * authority behind `parseResultManifest`, and `result-manifest.schema.json` is generated from it,
+ * with `check:schemas` fencing the committed bytes. The compiled schema appears only as a
+ * third-party consumer: it must accept every `source_artifact` arm, and it deliberately accepts
+ * the set-ordering violations below because generation retired the ordering keywords — those
+ * rejections belong to the Zod authority alone.
  *
  * Cross-field digest and source-artifact correlations are `validateDurableSemantics` territory
  * (`result-manifest.test.ts`), so the digests here only need to be structurally valid.
@@ -18,14 +19,35 @@ import { assertZodAgreement, resultManifestV1Validator } from "../../src/contrac
 
 type JsonObject = Record<string, unknown>;
 
+const SCHEMA_DIR = new URL("../../src/contracts/schemas/v1/", import.meta.url);
 const FIXTURE_DIR = new URL("../fixtures/contracts/", import.meta.url);
 
 const clone = <T>(value: T): T => structuredClone(value);
+
+const schema = (stem: string): JsonObject =>
+  JSON.parse(readFileSync(new URL(`${stem}.schema.json`, SCHEMA_DIR), "utf8")) as JsonObject;
 
 const fixture = (name: string): JsonObject =>
   JSON.parse(readFileSync(new URL(name, FIXTURE_DIR), "utf8")) as JsonObject;
 
 const digest = (character: string): string => character.repeat(64);
+
+const resultManifestValidator: JsonSchemaValidator<unknown> = createJsonSchemaValidator<unknown>(
+  schema("result-manifest"),
+  [
+    "primitives",
+    "path-claim",
+    "durable-primitives",
+    "secret-scan-result",
+    "document-artifact",
+    "implementation-output",
+    "review",
+    "review-evidence",
+    "triage",
+    "adjudication",
+    "adjudication-evidence",
+  ].map(schema)
+);
 
 const implementationSource = fixture("durable/implementation-output.valid.json");
 const documentSource = fixture("durable/document-artifact.valid.json");
@@ -129,15 +151,17 @@ const SAMPLES: ReadonlyArray<readonly [string, JsonObject]> = [
   ["adjudication-evidence", manifest({ source_artifact: adjudicationArtifact(), step: "adjudicate", result_id: "adjudication-result-1" })],
 ];
 
-const rejectedByBoth = (mutated: JsonObject, label: string): void => {
-  expect(resultManifestV1Validator.validate(mutated), `${label}: JSON Schema accepted`).toBe(false);
-  expect(resultManifestV1Schema.safeParse(mutated).success, `${label}: Zod accepted`).toBe(false);
-  expect(() => assertZodAgreement(mutated, resultManifestV1Validator, resultManifestV1Schema, label)).toThrowError(
-    /schema validation failed/
-  );
+const accepts = (value: unknown, label: string): void => {
+  const result = resultManifestV1Schema.safeParse(value);
+  expect(result.success, `${label}: Zod rejected`).toBe(true);
+  if (result.success) expect(result.data, `${label}: Zod transformed the value`).toEqual(value);
 };
 
-describe("the result-manifest Zod mirror agrees with its JSON Schema authority", () => {
+const rejects = (value: unknown, label: string): void => {
+  expect(resultManifestV1Schema.safeParse(value).success, `${label}: Zod accepted`).toBe(false);
+};
+
+describe("result-manifest validation under the Zod authority", () => {
   it("covers exactly the five source_artifact arms", () => {
     expect(SAMPLES.map(([name]) => name)).toEqual([
       "document-artifact",
@@ -149,30 +173,30 @@ describe("the result-manifest Zod mirror agrees with its JSON Schema authority",
   });
 
   for (const [name, sample] of SAMPLES) {
-    it(`agrees for a ${name}-sourced manifest`, () => {
-      expect(assertZodAgreement(sample, resultManifestV1Validator, resultManifestV1Schema, name)).toEqual(sample);
+    it(`accepts a ${name}-sourced manifest, and the published schema accepts it too`, () => {
+      accepts(sample, name);
+      expect(resultManifestValidator.validate(sample), name).toBe(true);
     });
 
-    it(`agrees for a ${name}-sourced manifest when an unknown property is added`, () => {
-      rejectedByBoth({ ...clone(sample), archflow_unknown_property: "x" }, name);
+    it(`rejects a ${name}-sourced manifest carrying an unknown property`, () => {
+      rejects({ ...clone(sample), archflow_unknown_property: "x" }, name);
     });
   }
 
-  it("rejects an unknown property inside an evidence wrapper in both authorities", () => {
+  it("rejects an unknown property inside an evidence wrapper", () => {
     const artifact = { ...reviewEvidenceArtifact(), archflow_unknown_property: "x" };
-    rejectedByBoth(manifest({ source_artifact: artifact, step: "counter_review" }), "wrapper-unknown-property");
+    rejects(manifest({ source_artifact: artifact, step: "counter_review" }), "wrapper-unknown-property");
   });
 });
 
 /**
- * Generation retired the `x-archflow-sorted-unique-by` keyword from the committed schema, so the
- * compiled document now accepts these; the Zod authority behind `parseResultManifest` must keep
- * rejecting them.
+ * Generation retired the set-ordering keywords from the committed schema, so the compiled document
+ * accepts these; the Zod authority behind `parseResultManifest` must keep rejecting them.
  */
 describe("both set-ordering sites reject in the Zod authority", () => {
   const rejectedByZodAuthority = (mutated: JsonObject, label: string): void => {
-    expect(resultManifestV1Validator.validate(mutated), `${label}: generated schema kept a retired keyword`).toBe(true);
-    expect(resultManifestV1Schema.safeParse(mutated).success, `${label}: Zod accepted`).toBe(false);
+    expect(resultManifestValidator.validate(mutated), `${label}: generated schema kept a retired keyword`).toBe(true);
+    rejects(mutated, label);
   };
 
   it("rejects outputs out of path order", () => {

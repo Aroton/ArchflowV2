@@ -12,7 +12,7 @@ import {
   taskSlugV1Schema
 } from "../../src/contracts/evidence.js";
 import { taskPathClaimV1Schema } from "../../src/contracts/path-claims.js";
-import { assertZodAgreement, createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { assertZodAgreement, createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 const schema = async (name: string) => JSON.parse(await readFile(new URL(`../../src/contracts/schemas/v1/${name}.schema.json`, import.meta.url), "utf8")) as object;
 

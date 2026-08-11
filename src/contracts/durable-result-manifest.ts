@@ -110,9 +110,9 @@ export const resultSourceArtifactV1Schema = z.union([
 ]) as unknown as z.ZodType<ResultSourceArtifactV1>;
 
 /**
- * The mirror. Both `x-archflow-sorted-unique-by` sites call `isSortedUniqueBy` with
- * `tupleKey("path")` — the same two exported functions the Ajv keyword calls — so each ordering
- * rule is literally one predicate across both authorities and cannot drift.
+ * The authority. Both set-ordering sites call `isSortedUniqueBy` with `tupleKey("path")` — the
+ * shared exported ordering predicates — so each ordering rule is literally one predicate across
+ * every shape.
  */
 export const resultManifestV1Schema = z.object({
   schema_version: z.literal("1"),

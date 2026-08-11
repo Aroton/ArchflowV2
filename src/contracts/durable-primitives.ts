@@ -361,9 +361,8 @@ export const snapshotAccountingEntryV1Schema = z.discriminatedUnion("storage", [
  * themselves — a capped derivation of the registered `safeInteger` would emit as a bare `$ref`
  * plus `maximum`, which Ajv strict mode rejects when it compiles the generated document.
  *
- * The `counted_entries` ordering rule calls `isSortedUniqueBy` with `tupleKey("path")` — the same
- * two exported functions the `x-archflow-sorted-unique-by` Ajv keyword calls — so the two
- * authorities are literally one predicate and cannot drift.
+ * The `counted_entries` ordering rule calls `isSortedUniqueBy` with `tupleKey("path")` — the
+ * shared exported ordering predicates — so every shape enforces literally the same rule.
  */
 export const snapshotAccountingV1Schema = z.object({
   schema_version: z.literal("1"),

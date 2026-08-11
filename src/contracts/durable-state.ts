@@ -261,10 +261,9 @@ export const adoptedCheckpointRefV1Schema = z.object({
 }).strict();
 
 /**
- * The mirror. Each of the three set fields calls `isSortedUniqueBy` with `tupleKey` over the same
- * property list its `x-archflow-sorted-unique-by` keyword names — the same two exported functions
- * the Ajv keyword registration calls — so each ordering rule is literally one predicate across both
- * authorities and cannot drift. `.strict()` matches `additionalProperties: false`; absence is
+ * The authority. Each of the three set fields calls `isSortedUniqueBy` with `tupleKey` over its
+ * pinned property list — the shared exported ordering predicates — so each ordering rule is
+ * literally one predicate across every shape. `.strict()` matches `additionalProperties: false`; absence is
  * `.optional()` plus omission from `required`, never `null`.
  */
 export const taskStateV1Schema = z.object({

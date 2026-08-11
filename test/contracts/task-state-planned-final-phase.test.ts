@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import pathClaimSchema from "../../src/contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
 import primitivesSchema from "../../src/contracts/schemas/v1/primitives.schema.json" with { type: "json" };
 import taskStateSchema from "../../src/contracts/schemas/v1/task-state.schema.json" with { type: "json" };
-import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 const validator = createJsonSchemaValidator<Record<string, unknown>>(
   structuredClone(taskStateSchema),

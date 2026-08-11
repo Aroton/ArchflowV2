@@ -7,7 +7,7 @@ import {
   parseLegacyImportInitialization,
   type LegacyImportInitializationV1,
 } from "../../src/contracts/durable-legacy-import.js";
-import { assertZodAgreement, createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { assertZodAgreement, createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 const schema = async (name: string): Promise<object> =>
   JSON.parse(await readFile(new URL(`../../src/contracts/schemas/v1/${name}.schema.json`, import.meta.url), "utf8")) as object;

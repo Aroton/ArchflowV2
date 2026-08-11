@@ -4,8 +4,6 @@ const expectedRuntime = Object.freeze({
   "@modelcontextprotocol/server": "2.0.0",
   "@secretlint/core": "13.0.4",
   "@secretlint/secretlint-rule-preset-recommend": "13.0.4",
-  ajv: "8.20.0",
-  "ajv-formats": "3.0.1",
   "write-file-atomic": "8.0.0",
   yaml: "2.9.0",
   zod: "4.4.3"
@@ -13,6 +11,8 @@ const expectedRuntime = Object.freeze({
 const expectedDevelopment = Object.freeze({
   "@secretlint/secretlint-rule-aws": "13.0.4",
   "@types/node": "24.13.3",
+  ajv: "8.20.0",
+  "ajv-formats": "3.0.1",
   esbuild: "0.28.1",
   typescript: "7.0.2",
   vite: "7.3.6",

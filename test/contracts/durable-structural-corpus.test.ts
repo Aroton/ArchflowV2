@@ -20,22 +20,23 @@ import secretScanResultSchema from "../../src/contracts/schemas/v1/secret-scan-r
 import taskInitializationSchema from "../../src/contracts/schemas/v1/task-initialization.schema.json" with { type: "json" };
 import taskStateSchema from "../../src/contracts/schemas/v1/task-state.schema.json" with { type: "json" };
 import {
-  assertZodAgreement,
-  createJsonSchemaValidator,
   hasUniqueObjectPropertyValues,
   isSortedUniqueBy,
   tupleKey,
+} from "../../src/contracts/validators.js";
+import {
+  createJsonSchemaValidator,
   type JsonSchemaValidator,
   type ZodLikeSchema,
-} from "../../src/contracts/validators.js";
+} from "../helpers/json-schema.js";
 import { PIPELINE_STEPS } from "../../src/contracts/workflow.js";
 
 /**
  * Chunk 11 — the STRUCTURAL half of the phase's adversarial corpus.
  *
- * The authority line: this file exercises only what the *schemas* reject at the parse boundary.
- * Every rejection below is produced by an Ajv validator or a Zod mirror on its own, so nothing here
- * imports `durable.ts` and nothing here calls `validateDurableSemantics`. What the *validator* must
+ * The authority line: this file exercises only what is rejected at the parse boundary. Every
+ * rejection below is produced by the Zod shape authority on its own, so nothing here imports
+ * `durable.ts` and nothing here calls `validateDurableSemantics`. What the *validator* must
  * reject — the invariant table, the total-order discriminators, the descriptor/throw matrix — is
  * chunk 12's, in `durable-semantics-corpus.test.ts`.
  *
@@ -62,7 +63,12 @@ const fixture = (name: string): JsonObject =>
     readFileSync(new URL(`../fixtures/contracts/durable/${name}.valid.json`, import.meta.url), "utf8")
   ) as JsonObject;
 
-/** A shape's two authorities plus its canonical sample. The Zod side is the runtime authority. */
+/**
+ * A shape's Zod authority and its committed generated document, plus its canonical sample. The
+ * compiled document is exercised only as a third-party consumer: it must accept what the authority
+ * accepts, and the `rejectsInZodAuthority` pins record where the published document is
+ * deliberately weaker because generation retired a keyword.
+ */
 type Shape = {
   readonly name: string;
   readonly json: JsonSchemaValidator<unknown>;
@@ -156,25 +162,17 @@ const shape = (name: string): Shape => {
   return found;
 };
 
-/**
- * Rejection means *both* authorities reject. The check runs through `assertZodAgreement`: a
- * one-sided rejection throws "…validators disagree" instead of "…schema validation failed", and
- * the regex below distinguishes the two.
- */
+/** Rejection by the Zod shape authority — the only validator production code runs. */
 const rejects = (target: Shape, value: unknown, label = "value"): void => {
-  expect(target.json.validate(value), `${target.name}/${label}: JSON Schema accepted`).toBe(false);
   expect(target.zod.safeParse(value).success, `${target.name}/${label}: Zod accepted`).toBe(false);
-  expect(() => assertZodAgreement(value, target.json, target.zod, `${target.name}/${label}`)).toThrowError(
-    /schema validation failed/
-  );
 };
 
 /**
- * Rejection by the Zod authority alone. Generation retired the `x-archflow-sorted-unique`,
+ * Rejection the published document cannot see. Generation retired the `x-archflow-sorted-unique`,
  * `x-archflow-sorted-unique-by`, and `x-archflow-max-utf8-bytes` keywords from the committed
  * schemas, so the compiled document deliberately accepts these values; the Zod refinements — the
- * same `isSortedUniqueBy` / `tupleKey` predicates the keywords used to call — are the surviving
- * runtime authority and must keep rejecting them.
+ * shared `isSortedUniqueBy` / `tupleKey` predicates — are the surviving runtime authority and must
+ * keep rejecting them.
  */
 const rejectsInZodAuthority = (target: Shape, value: unknown, label = "value"): void => {
   expect(target.json.validate(value), `${target.name}/${label}: generated schema kept a retired keyword`).toBe(true);
@@ -182,8 +180,10 @@ const rejectsInZodAuthority = (target: Shape, value: unknown, label = "value"): 
 };
 
 const accepts = (target: Shape, value: unknown, label = "value"): void => {
-  expect(target.json.validate(value), `${target.name}/${label}: JSON Schema rejected`).toBe(true);
-  assertZodAgreement(value, target.json, target.zod, `${target.name}/${label}`);
+  const result = target.zod.safeParse(value);
+  expect(result.success, `${target.name}/${label}: Zod rejected`).toBe(true);
+  if (result.success) expect(result.data, `${target.name}/${label}: Zod transformed the value`).toEqual(value);
+  expect(target.json.validate(value), `${target.name}/${label}: published schema rejected`).toBe(true);
 };
 
 /** Replace the value at a dotted path (array indices are numeric segments) on a deep clone. */

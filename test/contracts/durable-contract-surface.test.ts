@@ -17,24 +17,21 @@ import { taskInitializationV1Schema } from "../../src/contracts/durable-task-ini
 import { PATH_CLASSES } from "../../src/contracts/path-claims.js";
 import { SCHEMA_GENERATION_GROUPS } from "../../src/contracts/internal/schema-generation.js";
 import {
-  assertZodAgreement,
   createJsonSchemaValidator,
   type JsonSchemaValidator,
   type ZodLikeSchema,
-} from "../../src/contracts/validators.js";
+} from "../helpers/json-schema.js";
 import { SCHEMA_IDS } from "../../src/contracts/versions.js";
 
 /**
- * Chunk 13 — the registry, the barrel, and cross-shape agreement.
+ * The durable contract surface: the registry, the barrel, and the cross-shape properties no single
+ * leaf module's tests can see — the claimable/server-owned class partition against `PATH_CLASSES`,
+ * the pinned `$def` inventory and its generation-manifest fence, and the negative criteria (D15
+ * and the exclusions). The Zod sources are the shape authority and the committed schemas are
+ * generated from them (`check:schemas` fences the bytes), so no mirror-agreement loop runs here;
+ * the compiled documents are exercised only as third-party consumers.
  *
- * Chunks 1–12 authored their own modules, schemas, fixtures, and tests and deliberately registered
- * nothing. This file is the other half of that split: it proves the three files chunk 13 owns
- * (`versions.ts`, `schema-registry.test.ts`, `index.ts`) agree with what the leaf chunks actually
- * shipped, and it asserts the cross-shape properties no single leaf chunk could see — the D2 mirror
- * partition in both directions, the claimable/server-owned class partition against `PATH_CLASSES`,
- * the pinned `$def` inventory, and the phase's negative criteria (D15 and the exclusions).
- *
- * Nothing here edits or restates a leaf chunk's shape. Every sample is that chunk's own fixture.
+ * Nothing here edits or restates a leaf module's shape. Every sample is that module's own fixture.
  */
 
 const SRC = new URL("../../src/contracts/", import.meta.url);
@@ -113,9 +110,10 @@ const BASE = ["primitives", "path-claim"] as const;
 const WITH_PRIMITIVES = [...BASE, "durable-primitives"] as const;
 
 /**
- * D2 — the mirrored half. Five shapes reachable from the architecture's `archflow_state.artifact`
- * union, plus the three shared `$defs` a mirrored root embeds. Each is anchored on its pinned export
- * name: the import above is the anchor, so a rename in a leaf chunk fails the build here.
+ * D2 — the agent-supplied half. Five shapes reachable from the architecture's
+ * `archflow_state.artifact` union, plus the three shared `$defs` such a root embeds. Each is
+ * anchored on its pinned export name: the import above is the anchor, so a rename in a leaf module
+ * fails the build here.
  */
 type Mirrored = {
   readonly name: string;
@@ -177,8 +175,8 @@ const MIRRORED: readonly Mirrored[] = [
   },
 ];
 
-describe("D2 — the Zod-mirror half agrees with its JSON Schema authority", () => {
-  it("mirrors exactly the eight pinned roots and $defs", () => {
+describe("D2 — the agent-supplied roots validate under the Zod authority", () => {
+  it("pins exactly the eight roots and $defs", () => {
     expect(MIRRORED.map((entry) => entry.name)).toEqual([
       "task-initialization",
       "legacy-import-initialization",
@@ -192,17 +190,16 @@ describe("D2 — the Zod-mirror half agrees with its JSON Schema authority", () 
   });
 
   for (const entry of MIRRORED) {
-    it(`agrees for ${entry.name}`, () => {
-      expect(assertZodAgreement(entry.sample, entry.json, entry.zod, entry.name)).toEqual(entry.sample);
+    it(`accepts the ${entry.name} sample, and the published schema accepts it too`, () => {
+      const result = entry.zod.safeParse(entry.sample);
+      expect(result.success, `${entry.name}: Zod rejected`).toBe(true);
+      if (result.success) expect(result.data, `${entry.name}: Zod transformed the value`).toEqual(entry.sample);
+      expect(entry.json.validate(entry.sample), `${entry.name}: published schema rejected`).toBe(true);
     });
 
-    it(`agrees for ${entry.name} when an unknown property is added`, () => {
+    it(`rejects ${entry.name} with an unknown property`, () => {
       const mutated = { ...(entry.sample as JsonObject), archflow_unknown_property: "x" };
-      expect(entry.json.validate(mutated)).toBe(false);
       expect(entry.zod.safeParse(mutated).success).toBe(false);
-      expect(() => assertZodAgreement(mutated, entry.json, entry.zod, entry.name)).toThrowError(
-        /schema validation failed/
-      );
     });
   }
 });

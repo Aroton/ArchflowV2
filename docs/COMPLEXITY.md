@@ -1,6 +1,6 @@
 # COMPLEXITY
 
-**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** the whole repository
+**Explored:** 2026-08-11 · **Commit:** `4bc1c81` · **Covers:** the whole repository
 
 A per-subsystem audit of where the machinery is heaviest, what it buys, and what could be simplified. Written to support iterating on the workflow — each item states the concrete problem the complexity solves so a simplification can be judged against it, per the engineering priorities in CLAUDE.md.
 
@@ -26,9 +26,9 @@ The audit asked directly: how often is the MCP server actually down, and could d
 
 The audit asked for an explicit decision about how much SDK distrust the prototype needs, and the decision was made: the pinned, behaviorally-probed SDK is the JSON-RPC authority, and ArchFlow's authority begins at the tool boundary. `session.ts` (554 lines) is deleted; the flow is now framer → SDK dispatch → send-queue inside a ~385-line adapter. Every defense the session re-implemented — shape triage, ID normalization and duplicate-ID tombstones, per-method key allowlists, the external↔internal ID rewrite, cancellation and response arbitration, the eager spec-schema pre-pass — is replaced by a behavioral pin in `probe-mcp-sdk-compatibility.mjs`, so drift fails the gate rather than shipping. The tool result's projection is computed once. What the trade gives up — adversarial-stdio-peer defenses, prose-free wire errors — is a documented limitation in `LIMITATIONS.md`; the tool boundary's validation and trust brands are unchanged.
 
-### 4. Dual shape authorities in `contracts/` — duplication by design, expensive in practice
+### 4. Dual shape authorities in `contracts/` — resolved 2026-08-11
 
-Agent-facing shapes exist as JSON Schema *and* a Zod mirror, with `assertZodAgreement` proving they match — three artifacts per shape. The error taxonomy exists in full twice (a 2,835-line schema and `errors.ts`). Four custom Ajv keywords carry business logic that also partly exists in `durable.ts` — meaning some rules live in *three* places, and external schema consumers can't evaluate the custom keywords anyway, which undercuts the "schemas are the published authority" motivation. Zod can emit JSON Schema; one generated authority would collapse the whole class.
+Agent-facing shapes existed as JSON Schema *and* a Zod mirror, with `assertZodAgreement` proving they matched — three artifacts per shape, with some rules living in a *third* place (custom Ajv keywords). Zod is now the single runtime authority: 34 of the 36 committed schemas are generated from it (`generate:schemas` / `check:schemas`), the two release schemas stay hand-written, keyword logic became Zod refines, and Ajv left production entirely — it is a dev dependency compiled only by `test/helpers/json-schema.ts` and the release scripts.
 
 ### 5. Four CLI commands overlap `build-request` — resolved 2026-08-11
 
@@ -74,6 +74,6 @@ For balance — machinery that directly implements the trust boundaries and shou
 
 1. ~~Decide the degraded-mode question (#1)~~ — decided and done: degraded mode is read-only status only.
 2. Split `gates.ts` (#2) and name the predicates in `fixed-point.ts` (#6) — pure readability, no behavior change.
-3. Pick one shape authority (#4) — mechanical, high leverage.
+3. ~~Pick one shape authority (#4)~~ — done: Zod generates the schemas; Ajv is dev-only.
 4. Sweep the small items (#7, #9) opportunistically as touched code (#5 is done).
 5. ~~Revisit SDK distrust (#3)~~ — decided and done: the pinned, probed SDK is the JSON-RPC authority; the session layer is retired.

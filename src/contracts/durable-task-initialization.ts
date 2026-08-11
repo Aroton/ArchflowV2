@@ -17,9 +17,9 @@ import { assertPlainJson } from "./plain-json.js";
  * in chunk 10, and `T extends PlainJsonValue` is checked through the whole reachable graph.
  *
  * D2 — this shape is Zod-mirrored because an agent supplies it across the MCP tool boundary through
- * `archflow_state.artifact`, so it must be validated from untrusted input. The mirror below is a
- * mirror and never a second model: `assertZodAgreement` proves the two authorities accept and reject
- * exactly the same values.
+ * `archflow_state.artifact`, so it must be validated from untrusted input. This Zod source is the
+ * shape authority: the committed `task-initialization.schema.json` is generated from it, so the
+ * published document cannot drift.
  *
  * D15 — there is deliberately **no** re-pin field, no amendment field, no upgrade field, and no
  * second config digest, here or in any schema, `SCHEMA_IDS` key, or module this phase adds. The

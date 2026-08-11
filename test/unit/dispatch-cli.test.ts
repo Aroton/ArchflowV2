@@ -10,7 +10,7 @@ import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { parseAndDeriveReview } from "../../src/contracts/review.js";
 import adjudicationSchema from "../../src/contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
 import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
-import { createJsonSchemaValidator } from "../../src/contracts/validators.js";
+import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 import type { HostIdentity } from "../../src/contracts/hosts.js";
 import type { DispatchChildResult } from "../../src/dispatch/process.js";
 import {

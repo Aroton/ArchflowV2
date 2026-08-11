@@ -1,6 +1,6 @@
 # TESTING
 
-**Explored:** 2026-08-10 · **Commit:** `28c1021` · **Covers:** `test/`, `vitest.config.ts`, `.github/workflows/`
+**Explored:** 2026-08-11 · **Commit:** `4bc1c81` · **Covers:** `test/`, `vitest.config.ts`, `.github/workflows/`
 
 ## Test runner and configuration
 
@@ -26,12 +26,12 @@ The unit layer is broad and normally imports production modules directly.
 
 Success cases are paired with representative boundary failures: malformed/non-plain inputs and split-observation getters; digest, revision, task, and phase mismatches; stale or contradictory evidence; traversal/symlink/class-confusion paths; lock and snapshot limits; secret-bearing output; process cancellation/overflow; and unsupported or unauthenticated host classifications.
 
-### Contract: `test/contracts/` (21 files)
+### Contract: `test/contracts/` (27 files)
 
-This layer pins agreement among TypeScript/Zod models, JSON Schemas, durable semantics, MCP-advertised schemas, skills, and release metadata.
+This layer pins the published contract surface: the Zod shape authority's acceptance/rejection behavior, the generated JSON Schemas (strict-compiled as a third-party consumer would), durable semantics, MCP-advertised schemas, skills, and release metadata. Since the 2026-08-11 generation flip, the committed-bytes fence is `npm run check:schemas`; the former Zod↔schema agreement loops are gone, and per-shape suites assert validation under the Zod authority while pinning where the generated documents are deliberately weaker (retired `x-archflow-*` keywords).
 
-- Schema registry and foundational/shared primitive agreement: `schema-registry.test.ts`, `foundational-schema-agreement.test.ts`, `shared-primitives-schema-agreement.test.ts`.
-- Durable structural and semantic corpora, mirror parity, gate/error/supplemental exhaustiveness, and result manifests: `durable-agreement.test.ts`, `durable-structural-corpus.test.ts`, `durable-semantics-corpus.test.ts`, `durable-gate.test.ts`, `gate-error-supplemental-exhaustive.test.ts`.
+- Schema registry, generation-manifest fence, and foundational/shared primitive coverage: `schema-registry.test.ts`, `foundational-schema-agreement.test.ts`, `shared-primitives-schema-agreement.test.ts`, `semantic-keyword-parity.test.ts`.
+- Durable structural and semantic corpora, per-shape validation, gate/error/supplemental exhaustiveness, and result manifests: `durable-contract-surface.test.ts`, `durable-structural-corpus.test.ts`, `durable-semantics-corpus.test.ts`, `durable-gate.test.ts`, `durable-gate-validation.test.ts`, `durable-intent-validation.test.ts`, `durable-maintenance-validation.test.ts`, `durable-state-validation.test.ts`, `durable-result-manifest-validation.test.ts`, `gate-error-supplemental-exhaustive.test.ts`.
 - MCP catalogue/schema/runtime agreement: `mcp-advertised-schema.test.ts`, `mcp-contract-agreement.test.ts`.
 - Skill text and workflow trust boundaries: `skill-contract-canonical.test.ts`, `skill-contract-upgrade.test.ts`.
 - Repository/package and release boundaries: `repository-boundary.test.ts`, `release-contracts.test.ts`, `canonical-parity.test.ts`.
@@ -70,6 +70,7 @@ Real hosts are hermetic by default. `ARCHFLOW_REAL_HOSTS=1 npm run test:real-hos
 - `test/helpers/temp-repository.ts` creates isolated Git repositories with global/system Git config disabled, deterministic author identity, `.gitattributes`, linked-worktree, relocation, object, and conflict helpers.
 - `test/helpers/task-workspace.ts` creates a committed policy base, stages revision-1 task initialization, and returns real production services for focused tests.
 - `test/helpers/resolved-constitution.ts` and `test/helpers/real-host.ts` supply constitution and host-specific seams.
+- `test/helpers/json-schema.ts` is the dev-only strict Ajv compiler for the committed JSON Schemas: it registers exactly the surviving `x-archflow-*` keywords and carries `assertZodAgreement`. Production code never compiles a schema; Ajv is a devDependency.
 - `test/fixtures/dispatch/` contains deterministic fake Claude/Codex processes, protocol handshakes, plumbing children, and a grandchild-process fixture.
 - `test/fixtures/mcp/runtime/` contains initialize/call transcripts and adversarial bytes used by stdio and release smoke tests.
 - `test/fixtures/corpus/` contains seeded-defect/control artifacts plus constitution-review (`adjudication-scenarios.json`) and review scenarios; `test/integration/review-corpus.test.ts` and the real benchmark consume them.
