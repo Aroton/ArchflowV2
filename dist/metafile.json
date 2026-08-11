@@ -5724,7 +5724,7 @@
       ]
     },
     "src/contracts/errors.ts": {
-      "bytes": 21689,
+      "bytes": 22711,
       "format": "esm",
       "imports": [
         {
@@ -6265,7 +6265,7 @@
       }
     },
     "src/contracts/schemas/v1/project-error.schema.json": {
-      "bytes": 74120,
+      "bytes": 74542,
       "format": "esm",
       "imports": [],
       "with": {
@@ -8537,7 +8537,7 @@
       "imports": []
     },
     "src/mcp/server.ts": {
-      "bytes": 11047,
+      "bytes": 11178,
       "format": "esm",
       "imports": [
         {
@@ -8619,7 +8619,7 @@
       ]
     },
     "src/mcp/tools.ts": {
-      "bytes": 12347,
+      "bytes": 17600,
       "format": "esm",
       "imports": [
         {
@@ -10733,7 +10733,7 @@
       ]
     },
     "src/state/request-templates.ts": {
-      "bytes": 9935,
+      "bytes": 10183,
       "format": "esm",
       "imports": [
         {
@@ -10877,7 +10877,7 @@
       ]
     },
     "src/state/staged-requests.ts": {
-      "bytes": 7741,
+      "bytes": 7887,
       "format": "esm",
       "imports": [
         {
@@ -11238,7 +11238,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2185152,
+      "bytes": 2185587,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -12576,7 +12576,7 @@
           "bytesInOutput": 41107
         },
         "src/contracts/errors.ts": {
-          "bytesInOutput": 15233
+          "bytesInOutput": 15411
         },
         "src/contracts/evidence.ts": {
           "bytesInOutput": 1826
@@ -12858,7 +12858,7 @@
           "bytesInOutput": 5880
         },
         "src/state/request-templates.ts": {
-          "bytesInOutput": 6864
+          "bytesInOutput": 7121
         },
         "src/state/request.ts": {
           "bytesInOutput": 3121
@@ -12884,7 +12884,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2866734,
+      "bytes": 2871610,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -14208,7 +14208,7 @@
           "bytesInOutput": 41120
         },
         "src/contracts/errors.ts": {
-          "bytesInOutput": 16467
+          "bytesInOutput": 17118
         },
         "src/contracts/evidence.ts": {
           "bytesInOutput": 1826
@@ -14310,7 +14310,7 @@
           "bytesInOutput": 1857
         },
         "src/contracts/schemas/v1/project-error.schema.json": {
-          "bytesInOutput": 70944
+          "bytesInOutput": 71342
         },
         "src/contracts/schemas/v1/result-manifest.schema.json": {
           "bytesInOutput": 3996
@@ -14436,13 +14436,13 @@
           "bytesInOutput": 4970
         },
         "src/mcp/server.ts": {
-          "bytesInOutput": 7245
+          "bytesInOutput": 7338
         },
         "src/mcp/session.ts": {
           "bytesInOutput": 15516
         },
         "src/mcp/tools.ts": {
-          "bytesInOutput": 8225
+          "bytesInOutput": 11856
         },
         "src/repository/attributes.ts": {
           "bytesInOutput": 2364
@@ -14550,7 +14550,7 @@
           "bytesInOutput": 25712
         },
         "src/state/staged-requests.ts": {
-          "bytesInOutput": 3456
+          "bytesInOutput": 3559
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 39540

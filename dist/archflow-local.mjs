@@ -34890,8 +34890,9 @@ var adapterAttempt = { adapter, attempt: safeIntegerV1Schema };
 var sortedPaths = external_exports.array(repositoryPathClaimV1Schema).min(1).superRefine((items, context2) => {
   for (let index = 1; index < items.length; index += 1) if (items[index - 1].localeCompare(items[index]) >= 0) context2.addIssue({ code: "custom", message: "offending_paths must be sorted and unique" });
 });
+var validationIssues = external_exports.array(external_exports.string().min(1).max(256)).min(1).max(5);
 var PROJECT_PARAMETER_SCHEMAS = {
-  CONTRACT_INVALID: object2({ tool: tool.optional(), issue_code: safeCodeV1Schema, schema_version: safeVersionV1Schema.optional() }),
+  CONTRACT_INVALID: object2({ tool: tool.optional(), issue_code: safeCodeV1Schema, schema_version: safeVersionV1Schema.optional(), issues: validationIssues.optional() }),
   RESULT_INVALID: object2({ tool, result_id: safeIdV1Schema, expected_digest: sha256DigestV1Schema.optional(), observed_digest: sha256DigestV1Schema.optional() }),
   CONTRACT_VERSION_UNSUPPORTED: object2({ schema_version: safeVersionV1Schema, supported_version: safeVersionV1Schema }),
   ENVELOPE_OVERFLOW: object2({ offending_paths: sortedPaths, current_bytes: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }),
@@ -34922,7 +34923,7 @@ var PROJECT_PARAMETER_SCHEMAS = {
   INTENT_MISMATCH: object2(digestPair),
   INTENT_NOT_CURRENT: object2({ intent_id: pathSafeIdV1Schema, receipt_revision: safeIntegerV1Schema, current_revision: safeIntegerV1Schema }),
   STAGED_REQUEST_NOT_FOUND: object2({ task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema }),
-  STAGED_REQUEST_MISMATCH: object2({ intent_id: pathSafeIdV1Schema, issue_code: safeCodeV1Schema, expected_digest: sha256DigestV1Schema.optional(), observed_digest: sha256DigestV1Schema.optional() }),
+  STAGED_REQUEST_MISMATCH: object2({ intent_id: pathSafeIdV1Schema, issue_code: safeCodeV1Schema, expected_digest: sha256DigestV1Schema.optional(), observed_digest: sha256DigestV1Schema.optional(), issues: validationIssues.optional() }),
   SNAPSHOT_LIMIT: object2({ limit_scope: external_exports.enum(["result", "task"]), offending_paths: sortedPaths, current_bytes: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }),
   SNAPSHOT_INVALID: object2({ snapshot_digest: sha256DigestV1Schema, issue_code: safeCodeV1Schema }),
   RESTORE_COLLISION: object2({ gate_id: pathSafeIdV1Schema, path_class: pathClass2 }),
@@ -48287,7 +48288,7 @@ function phaseImplParentDocumentDefaults(phaseInstance3) {
 
 // src/state/request-templates.ts
 var TEMPLATE_INTENT_ID = "Choose a fresh intent id for this request.";
-var TEMPLATE_INITIALIZATION_ARTIFACT = 'Replace with the task-initialization artifact; archflow-local build-request (kind "initialize") stages it and composes this entire request already completed and fingerprint-resolved.';
+var TEMPLATE_INITIALIZATION_ARTIFACT = 'Replace with the task-initialization artifact; archflow-local build-request (kind "initialize") composes this entire request already completed and fingerprint-resolved \u2014 pass its request.input verbatim.';
 var TEMPLATE_RUBRIC = "Supply the skill's stable rubric verbatim.";
 var TEMPLATE_SUMMARY = "Summarize the gate subject for the human reviewer.";
 var TEMPLATE_FINGERPRINT_SENTINEL = "0".repeat(64);
@@ -48338,11 +48339,7 @@ function buildNextActionRequest(next, facts) {
       step: "produce",
       status: "running",
       artifact: TEMPLATE_INITIALIZATION_ARTIFACT
-    }, envelopeGuidance(
-      facts.task_id,
-      "archflow_state",
-      'archflow-local build-request (kind "initialize") stages the initialization artifact and composes this entire request already resolved; the server accepts no entry point other than prd/produce/running at expected_revision 0.'
-    ));
+    }, `Pipe {"intent_id":"initialize-task","kind":"initialize"} to archflow-local build-request --task ${facts.task_id}; it returns this entire request already completed and fingerprint-resolved. Call archflow_state with the returned request.input verbatim as typed JSON \u2014 artifact is a JSON object and expected_revision is the number 0, never strings. Initialize is the one request kind whose build-request output carries no staged reference; the server accepts no entry point other than prd/produce/running at expected_revision 0.`);
   }
   const state = facts.state;
   if (state === void 0) return void 0;

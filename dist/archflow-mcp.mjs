@@ -44031,8 +44031,19 @@ var adapterAttempt = { adapter, attempt: safeIntegerV1Schema };
 var sortedPaths = external_exports.array(repositoryPathClaimV1Schema).min(1).superRefine((items, context2) => {
   for (let index = 1; index < items.length; index += 1) if (items[index - 1].localeCompare(items[index]) >= 0) context2.addIssue({ code: "custom", message: "offending_paths must be sorted and unique" });
 });
+var validationIssues = external_exports.array(external_exports.string().min(1).max(256)).min(1).max(5);
+function describeValidationIssues(error51) {
+  if (error51 instanceof external_exports.ZodError) {
+    const issues = error51.issues.slice(0, 5).map((issue4) => {
+      const path2 = issue4.path.length === 0 ? "input" : issue4.path.map(String).join(".");
+      return `${path2}: ${issue4.message}`.slice(0, 256);
+    });
+    if (issues.length > 0) return issues;
+  }
+  return error51 instanceof Error && error51.message !== "" ? [error51.message.slice(0, 256)] : void 0;
+}
 var PROJECT_PARAMETER_SCHEMAS = {
-  CONTRACT_INVALID: object2({ tool: tool.optional(), issue_code: safeCodeV1Schema, schema_version: safeVersionV1Schema.optional() }),
+  CONTRACT_INVALID: object2({ tool: tool.optional(), issue_code: safeCodeV1Schema, schema_version: safeVersionV1Schema.optional(), issues: validationIssues.optional() }),
   RESULT_INVALID: object2({ tool, result_id: safeIdV1Schema, expected_digest: sha256DigestV1Schema.optional(), observed_digest: sha256DigestV1Schema.optional() }),
   CONTRACT_VERSION_UNSUPPORTED: object2({ schema_version: safeVersionV1Schema, supported_version: safeVersionV1Schema }),
   ENVELOPE_OVERFLOW: object2({ offending_paths: sortedPaths, current_bytes: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }),
@@ -44063,7 +44074,7 @@ var PROJECT_PARAMETER_SCHEMAS = {
   INTENT_MISMATCH: object2(digestPair),
   INTENT_NOT_CURRENT: object2({ intent_id: pathSafeIdV1Schema, receipt_revision: safeIntegerV1Schema, current_revision: safeIntegerV1Schema }),
   STAGED_REQUEST_NOT_FOUND: object2({ task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema }),
-  STAGED_REQUEST_MISMATCH: object2({ intent_id: pathSafeIdV1Schema, issue_code: safeCodeV1Schema, expected_digest: sha256DigestV1Schema.optional(), observed_digest: sha256DigestV1Schema.optional() }),
+  STAGED_REQUEST_MISMATCH: object2({ intent_id: pathSafeIdV1Schema, issue_code: safeCodeV1Schema, expected_digest: sha256DigestV1Schema.optional(), observed_digest: sha256DigestV1Schema.optional(), issues: validationIssues.optional() }),
   SNAPSHOT_LIMIT: object2({ limit_scope: external_exports.enum(["result", "task"]), offending_paths: sortedPaths, current_bytes: safeIntegerV1Schema, byte_cap: safeIntegerV1Schema }),
   SNAPSHOT_INVALID: object2({ snapshot_digest: sha256DigestV1Schema, issue_code: safeCodeV1Schema }),
   RESTORE_COLLISION: object2({ gate_id: pathSafeIdV1Schema, path_class: pathClass }),
@@ -64058,10 +64069,11 @@ var stagedRecordSchema = external_exports.object({
 }).strict();
 var ok20 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail20 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-var mismatch2 = (intentId, issue4, digests) => fail20(createProjectError("STAGED_REQUEST_MISMATCH", {
+var mismatch2 = (intentId, issue4, digests, issues) => fail20(createProjectError("STAGED_REQUEST_MISMATCH", {
   intent_id: intentId,
   issue_code: issue4,
-  ...digests === void 0 ? {} : { expected_digest: digests.expected, observed_digest: digests.observed }
+  ...digests === void 0 ? {} : { expected_digest: digests.expected, observed_digest: digests.observed },
+  ...issues === void 0 ? {} : { issues }
 }));
 async function rehydrateStagedToolCall(name, reference, workingDirectory) {
   const services = await createProductionServices({
@@ -64110,8 +64122,8 @@ async function rehydrateStagedToolCall(name, reference, workingDirectory) {
   let call;
   try {
     call = parseToolCall(name, record3.request.input);
-  } catch {
-    return mismatch2(reference.intent_id, "staged-input-invalid");
+  } catch (error51) {
+    return mismatch2(reference.intent_id, "staged-input-invalid", void 0, describeValidationIssues(error51));
   }
   if (call.input.intent_id !== reference.intent_id) {
     return mismatch2(reference.intent_id, "staged-intent-mismatch");
@@ -64188,8 +64200,8 @@ function projectFailure(tool2, code, parameters) {
   const result = validateProjectFailureStructure(tool2, { schema_version: "1", ok: false, error: error51 });
   return projectOutcome(tool2, result);
 }
-function invalidInput(tool2, issueCode) {
-  return projectFailure(tool2, "CONTRACT_INVALID", { tool: tool2, issue_code: issueCode });
+function invalidInput(tool2, issueCode, issues) {
+  return projectFailure(tool2, "CONTRACT_INVALID", { tool: tool2, issue_code: issueCode, ...issues === void 0 ? {} : { issues } });
 }
 function internalFailure(tool2, context2, error51) {
   reportInternalError(context2.invocation_id, error51);
@@ -64251,8 +64263,8 @@ function classifyVersionedArgs(tool2, args2) {
   try {
     const classified = classifyToolCallInput(tool2, args2);
     return classified.kind === "staged-reference" ? { reference: classified.reference } : { call: classified.call };
-  } catch {
-    return { outcome: invalidInput(tool2, "input-invalid") };
+  } catch (error51) {
+    return { outcome: invalidInput(tool2, "input-invalid", describeValidationIssues(error51)) };
   }
 }
 function createToolBoundary(handlers) {
@@ -66180,6 +66192,16 @@ var project_error_schema_default = {
         }
       }
     },
+    validationIssues: {
+      type: "array",
+      minItems: 1,
+      maxItems: 5,
+      items: {
+        type: "string",
+        minLength: 1,
+        maxLength: 256
+      }
+    },
     digests: {
       type: "object",
       additionalProperties: false,
@@ -66248,6 +66270,9 @@ var project_error_schema_default = {
                     },
                     schema_version: {
                       $ref: "#/$defs/version"
+                    },
+                    issues: {
+                      $ref: "#/$defs/validationIssues"
                     }
                   }
                 }
@@ -67585,6 +67610,9 @@ var project_error_schema_default = {
                     },
                     observed_digest: {
                       $ref: "#/$defs/digest"
+                    },
+                    issues: {
+                      $ref: "#/$defs/validationIssues"
                     }
                   }
                 }
@@ -69195,6 +69223,66 @@ var ADVERTISED_ERROR_SUMMARY = {
   },
   additionalProperties: true
 };
+function resolveFragmentReference(reference, projected) {
+  const { key, tokens } = parseLocalReference(reference);
+  const document2 = projected.get(key);
+  if (document2 === void 0) throw new TypeError(`unknown advertised schema document: ${reference}`);
+  return resolvePointer(document2, tokens, reference);
+}
+var CONTEXT_PLACEHOLDER = JSON.stringify({ type: "object" });
+function branchShape(branch, projected) {
+  const properties = {};
+  const required2 = /* @__PURE__ */ new Set();
+  const addProperty = (field, schema) => {
+    const existing = properties[field];
+    if (existing === void 0 || JSON.stringify(existing) === CONTEXT_PLACEHOLDER) properties[field] = schema;
+  };
+  const absorbVariants = (variants) => {
+    const schemasByField = /* @__PURE__ */ new Map();
+    for (const variant of variants) {
+      if (!isObject2(variant) || !isObject2(variant.properties)) continue;
+      for (const [field, schema] of Object.entries(variant.properties)) {
+        const collected = schemasByField.get(field) ?? [];
+        if (!collected.some((entry) => JSON.stringify(entry) === JSON.stringify(schema))) collected.push(schema);
+        schemasByField.set(field, collected);
+      }
+    }
+    for (const [field, schemas] of schemasByField) addProperty(field, schemas.length === 1 ? schemas[0] : { oneOf: schemas });
+  };
+  const absorb = (part) => {
+    if (!isObject2(part)) return;
+    if (typeof part.$ref === "string") {
+      absorb(resolveFragmentReference(part.$ref, projected));
+      return;
+    }
+    if (isObject2(part.properties)) for (const [field, schema] of Object.entries(part.properties)) addProperty(field, schema);
+    if (Array.isArray(part.required)) {
+      for (const field of part.required) if (typeof field === "string") required2.add(field);
+    }
+    if (Array.isArray(part.allOf)) {
+      for (const entry of part.allOf) {
+        if (isObject2(entry) && Array.isArray(entry.oneOf)) absorbVariants(entry.oneOf);
+        else absorb(entry);
+      }
+    }
+  };
+  absorb(branch);
+  return { properties, required: required2 };
+}
+function mergedInputFragment(name, fragment, projected) {
+  const branches = fragment.oneOf;
+  if (!Array.isArray(branches) || branches.length !== 2) throw new TypeError(`expected a two-branch oneOf input fragment for ${name}`);
+  const [full, staged] = branches.map((branch) => branchShape(branch, projected));
+  if (!staged.required.has("request_digest")) throw new TypeError(`expected the staged-reference branch second in the ${name} input fragment`);
+  const properties = {};
+  for (const shape of [full, staged]) {
+    for (const [field, schema] of Object.entries(shape.properties)) if (!(field in properties)) properties[field] = schema;
+  }
+  const required2 = [...full.required].filter((field) => staged.required.has(field));
+  const fullOptional = Object.keys(full.properties).filter((field) => !full.required.has(field));
+  const description = `Exactly one parameter group is accepted (enforced server-side, not by this schema). Full payload \u2014 required: ${[...full.required].join(", ")}` + (fullOptional.length > 0 ? `; optional: ${fullOptional.join(", ")}. ` : ". ") + `Staged reference \u2014 required: ${[...staged.required].join(", ")}; pass the staged.reference object returned by archflow-local build-request verbatim. Values must match the property schemas exactly: JSON numbers and objects are passed as numbers and objects, never stringified.`;
+  return { description, additionalProperties: false, required: required2, properties };
+}
 function standaloneSchema(name, member) {
   const projected = new Map(
     schemaDocuments.map(({ key, schema }) => [
@@ -69203,11 +69291,12 @@ function standaloneSchema(name, member) {
     ])
   );
   const fragment = project(schemaFragment(name, member), "mcp-tools");
+  const advertised = member === "input" ? mergedInputFragment(name, fragment, projected) : fragment;
   return deepFreeze6({
     $schema: JSON_SCHEMA_2020_12,
-    ...fragment,
+    ...advertised,
     type: "object",
-    $defs: reachableDefinitions(fragment, projected)
+    $defs: reachableDefinitions(advertised, projected)
   });
 }
 function deepFreeze6(value) {

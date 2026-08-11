@@ -711,8 +711,8 @@
         "digest": "6282adc7c1d1304f245ff5877a2824b05b53f9842dc658282610c981505f0caf",
         "path": "release/evidence/advisory-snapshot.json"
       },
-      "bundle_digest": "8ba143b04d8d8fa0cef4fa8f5c799c2e8e0d47645d6d2a23b2134ca89674f6ff",
-      "decision_digest": "5ab760335a44252d0539c145ea144608187cf5be12a5098833452de91211b12b",
+      "bundle_digest": "7448c735e5da3916be8b59f83f472807e2ba00896eb04adea9cc84572ea62a10",
+      "decision_digest": "e629994ccd69c581aa4e42ed8e4f82f6960ee77d439e2b3046b025c95285f364",
       "dependency_inventory_digest": "e9282f477793b5999b2c34b1a754269d9e1685e8139a23214fb1b7cddd42d9f5",
       "entry_bindings": [
         {
@@ -734,7 +734,7 @@
         "path": "release/evidence/patched-artifact-availability.json"
       },
       "reachability_evidence": {
-        "digest": "996572adb718e7d86c8487f7567b4f91b858ff3b63d9e8c25cc75d01f5198cb6",
+        "digest": "285cf0b806b464b9ae484a867514b1fa697752a2cbca13fc04db4c2d34a3d131",
         "path": "release/evidence/focused-inert-reachability.json"
       },
       "scope": {
