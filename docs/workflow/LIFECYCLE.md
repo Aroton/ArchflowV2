@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-08-12 · **Commit:** `72457b8` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `skills/`
+**Explored:** 2026-08-12 · **Commit:** `e7a63c0` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -28,7 +28,7 @@ The workflow file's bytes are digest-pinned into each task at creation, so chang
 |---|---|---|---|
 | explore | `archflow-explore` | the maintained `docs/` set (`OVERVIEW.md`, `section/FILE.md`, stamped with commit + coverage) | review + commit confirmation (not a server gate) |
 | task creation | any phase skill | `config.yaml` (byte-pinned), `state.json` | — |
-| prd | `archflow-prd` | `ask.md` (the user's request, verbatim), `prd.md` | `artifact-approval`, always |
+| prd | `archflow-prd` | `ask.md` (verbatim request plus clarification Q&A), `prd.md` | `artifact-approval`, always |
 | design | `archflow-design` | `design.md` with a machine-readable `### Phase N:` plan | `artifact-approval`, always |
 | phase-design | `archflow-phase-design` | `phases/<n>/design.md` | `artifact-approval` + any triggered gate |
 | phase-impl | `archflow-phase-impl` | code, `phases/<n>/verification.txt`, `phases/<n>/impl-notes.md` | `commit-authorization`, **then** a second explicit confirm-to-commit |

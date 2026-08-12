@@ -145,6 +145,21 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("Do not spawn an additional generative reviewer");
   });
 
+  it("persists PRD clarification dialogue in the pinned ask record", () => {
+    const source = skill("archflow-prd");
+    expect(source).toContain("## Clarifications");
+    expect(source).toContain("### Question 1");
+    expect(source).toContain("### Answer 1");
+    expect(source).toContain("before presenting it to the user");
+    expect(source).toContain("An unanswered question remains in the file");
+    expect(source).toContain("re-enter `produce` before appending");
+
+    const block = /```json\n([^\n]+)\n```/u.exec(source);
+    const rubric = parseRubricV1(JSON.parse(block![1]!));
+    expect(rubric.criteria.find((criterion) => criterion.id === "ask-fidelity")?.text)
+      .toContain("every recorded clarification question and answer");
+  });
+
   it("keeps the architecture rubric shared and its envelope re-projection digest-stable", () => {
     const literal = (name: typeof productionRubricSkills[number]): PlainJsonValue => {
       const block = /```json\n([^\n]+)\n```/u.exec(skill(name));

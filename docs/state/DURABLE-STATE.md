@@ -1,6 +1,6 @@
 # state/DURABLE-STATE
 
-**Explored:** 2026-08-11 · **Commit:** `56f4d2c` · **Covers:** `src/state/`, `src/repository/`
+**Explored:** 2026-08-12 · **Commit:** `e7a63c0` · **Covers:** `src/state/`, `src/repository/`, `skills/archflow-prd/`
 
 Durable state is ArchFlow's memory and its authority. Every server answer — "what phase am I in?", "what do I do next?" — is recomputed from bytes on disk under `.archflow/`, never from session memory. This page covers where those bytes live, how writes stay safe, the state machine, and how drift is detected and repaired.
 
@@ -12,7 +12,8 @@ Task root: `.archflow/tasks/<task-id>/`. The important entries:
 |---|---|---|
 | `state.json` | **The** durable state document | replaced atomically |
 | `config.yaml` | digest-pinned task config (dispatch routes, models) | pinned |
-| `ask.md`, `prd.md`, `design.md`, `phases/<n>/…` | human-readable projections of retained results | derived, replaceable |
+| `ask.md` | verbatim request plus append-only clarification Q&A; its complete bytes are digest-pinned as the PRD's declared input | authored durable input |
+| `prd.md`, `design.md`, `phases/<n>/…` | human-readable projections of retained results | derived, replaceable |
 | `gate.json` / `gate.decision` | the mutable *interface* a human answers a gate through | transient |
 | `decisions/<gate-id>/` | gate request + decision archive | **immutable** |
 | `results/sha256/<digest>/` | content-addressed store — the after-image of every step | manifest **immutable & permanent**; superseded `payload/` bytes reclaimed |

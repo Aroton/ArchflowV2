@@ -84,7 +84,7 @@ export function toRepositoryPathClaim(taskId: TaskSlug, claim: TaskPathClaim): R
   return parseRepositoryPathClaim(`.archflow/tasks/${taskId}/${claim}`);
 }
 
-/** The verbatim user ask captured before PRD produce and pinned into PRD review envelopes. */
+/** The verbatim request and clarification record pinned into PRD review envelopes. */
 export function userAskClaim(): TaskPathClaim {
   return parseTaskPathClaim("ask.md");
 }

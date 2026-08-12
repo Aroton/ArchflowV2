@@ -1,6 +1,6 @@
 # workflow/SKILLS
 
-**Explored:** 2026-08-12 · **Commit:** `72457b8` · **Covers:** `skills/`, `src/init/`, `assets/`
+**Explored:** 2026-08-12 · **Commit:** `e7a63c0` · **Covers:** `skills/`, `src/init/`, `assets/`
 
 The eight skills are the human-facing entry points. They are prose playbooks — they enforce nothing themselves; every rule they state is backed (where mechanically possible) by the server. In Codex the same skills are invoked with `$` instead of `/`.
 
@@ -31,7 +31,7 @@ Produces or refreshes the repository's maintained documentation set: caps-named 
 
 ## archflow-prd
 
-Turns a request into `prd.md` through the full evidence pipeline. Before clarifying conversation, the request is written verbatim to `ask.md`, so ask fidelity is judged against exact bytes. Before durable review the producer performs one bounded author checklist, not another generative review loop. The initial counter-review reports only material defects; later rounds verify accepted revision intents first and may raise a new issue only when it carries a material downstream consequence. Ends at a mandatory `artifact-approval` gate where the user sees `ask.md` alongside the PRD, without a backlog of rejected polish.
+Turns a request into `prd.md` through the full evidence pipeline. Before clarifying conversation, the request is written verbatim to `ask.md`. Each clarification question is appended there verbatim before it is presented, and the user's verbatim answer follows when received, so an interrupted exchange is resumable and ask fidelity is judged against the complete digest-pinned record. Before durable review the producer performs one bounded author checklist, not another generative review loop. The initial counter-review reports only material defects; later rounds verify accepted revision intents first and may raise a new issue only when it carries a material downstream consequence. Ends at a mandatory `artifact-approval` gate where the user sees `ask.md` alongside the PRD, without a backlog of rejected polish.
 
 ## archflow-design
 

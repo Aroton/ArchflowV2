@@ -156,8 +156,9 @@ const fail = <T>(phase: PhaseInstanceId, issue_code: string): ProjectResult<T> =
 /**
  * Assembles the pinned context for a counter-review of the current produce subject.
  *
- * PRD reviews pin the verbatim user ask: a PRD that declared a `user-ask` input gets `ask.md`
- * pinned after its bytes are authenticated against the declared digest, and a PRD that declared
+ * PRD reviews pin the complete user ask record: the verbatim original request plus any verbatim
+ * clarification exchanges appended to `ask.md`. A PRD that declared a `user-ask` input gets those
+ * bytes pinned after they are authenticated against the declared digest, and a PRD that declared
  * none stays reviewable with a named `unavailable` entry, so the rubric's `ask-fidelity` criterion
  * routes to `unverifiable-claims` instead of guessing. A declared-but-drifted or unreadable
  * `ask.md` fails closed: the declaration is durable authority the worktree no longer satisfies.
