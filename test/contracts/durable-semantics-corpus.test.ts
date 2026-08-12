@@ -16,7 +16,6 @@ import {
   type DurableArtifact,
   type DurableSemanticSubject,
 } from "../../src/contracts/durable.js";
-import type { MaintenanceRecordV1 } from "../../src/contracts/durable-maintenance.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { createProjectError } from "../../src/contracts/errors.js";
 import type { Sha256Digest } from "../../src/contracts/evidence.js";
@@ -60,7 +59,6 @@ const TASK_INIT = load("task-initialization");
 const LEGACY_INIT = load("legacy-import-initialization");
 const DOCUMENT = load("document-artifact");
 const OUTPUT = load("implementation-output");
-const MAINTENANCE = load("maintenance-record");
 
 /** Matches `primitives#/$defs/phaseInstanceId` and is rejected by `decodePhaseInstance` (D6). */
 const UNDECODABLE = "phase-impl-99999999999999999999";
@@ -78,8 +76,6 @@ const withValidOpenGateDigest = (value: Json): TaskStateV1 => {
 const stateDoc = (value: Json): CanonicalDocument<TaskStateV1> => canonicalDocument(withValidOpenGateDigest(value));
 const artifactDoc = (value: Json): CanonicalDocument<DurableArtifact> =>
   canonicalDocument(value as unknown as DurableArtifact);
-const maintenanceDoc = (value: Json): CanonicalDocument<MaintenanceRecordV1> =>
-  canonicalDocument(value as unknown as MaintenanceRecordV1);
 
 /**
  * A `CanonicalDocument` whose `digest` disagrees with `canonicalJsonDigest(value)`. `bytes` is
@@ -149,7 +145,7 @@ describe("input discipline throws rather than returning (D12 rank 1)", () => {
    * A getter-backed slot or shell field is a defect in the calling server code, not agent-supplied
    * data, so the repository convention is a throw (Phase 6 decision 5).
    */
-  const accessorSlot = (slot: "state" | "artifact" | "maintenance", value: unknown): DurableSemanticSubject => {
+  const accessorSlot = (slot: "state" | "artifact", value: unknown): DurableSemanticSubject => {
     const subject: Json = {};
     Object.defineProperty(subject, slot, { get: () => value, enumerable: true, configurable: true });
     return subject as DurableSemanticSubject;
@@ -161,10 +157,6 @@ describe("input discipline throws rather than returning (D12 rank 1)", () => {
 
   it("throws when the artifact slot is an accessor property", () => {
     expect(() => validateDurableSemantics(accessorSlot("artifact", artifactDoc(DOCUMENT)))).toThrow(TypeError);
-  });
-
-  it("throws when the maintenance slot is an accessor property", () => {
-    expect(() => validateDurableSemantics(accessorSlot("maintenance", maintenanceDoc(MAINTENANCE)))).toThrow(TypeError);
   });
 
   it("throws when a document's value is an accessor property", () => {
@@ -200,17 +192,16 @@ describe("input discipline throws rather than returning (D12 rank 1)", () => {
    * value" (`plain-json.ts:85`). Without these cases the shell check would be weaker than the check
    * applied to the shell's own contents. Added at implementation counter-review, finding 1.
    */
-  const nonEnumerableSlot = (slot: "state" | "artifact" | "maintenance", value: unknown): DurableSemanticSubject => {
+  const nonEnumerableSlot = (slot: "state" | "artifact", value: unknown): DurableSemanticSubject => {
     const subject: Json = {};
     Object.defineProperty(subject, slot, { value, enumerable: false, configurable: true, writable: true });
     return subject as DurableSemanticSubject;
   };
 
-  it.each(["state", "artifact", "maintenance"] as const)(
+  it.each(["state", "artifact"] as const)(
     "throws when the %s slot is a non-enumerable data property",
     (slot) => {
-      const document =
-        slot === "state" ? stateDoc(STATE) : slot === "artifact" ? artifactDoc(DOCUMENT) : maintenanceDoc(MAINTENANCE);
+      const document = slot === "state" ? stateDoc(STATE) : artifactDoc(DOCUMENT);
       expect(() => validateDurableSemantics(nonEnumerableSlot(slot, document))).toThrow(TypeError);
     }
   );
@@ -283,19 +274,23 @@ describe("rank 2 — state.phase_instance carriability precedes every rank that 
 });
 
 describe("rank 3 — an open gate freezes its state shell", () => {
-  it("accepts the bound shell and rejects a committed-intent injection", () => {
+  it("accepts the bound shell and rejects a last-transition injection", () => {
     const valid = withValidOpenGateDigest(OPEN_GATE_STATE);
     expectAccept({ state: canonicalDocument(valid) });
     const injected = {
       ...valid,
-      committed_intent: {
+      last_transition: {
+        schema_version: "1",
+        tool: "archflow_state",
+        operation: "record-state-boundary",
         intent_id: "injected-intent",
         request_digest: FORGED_DIGEST,
-        receipt_digest: "1".repeat(64),
+        input_fingerprint: "1".repeat(64),
+        result_id: "injected-result",
+        outcome: { revision: 2 },
         outcome_digest: "2".repeat(64),
         prior_revision: 1,
         resulting_revision: 2,
-        result_id: "injected-result",
       },
     } as unknown as TaskStateV1;
     expectReject(
@@ -344,12 +339,6 @@ describe("rank 3 — document-digest-mismatch, under the pinned code for each su
     });
   });
 
-  it("reports TASK_INVALID for the maintenance slot", () => {
-    expectReject({ maintenance: forged<MaintenanceRecordV1>(MAINTENANCE) }, "TASK_INVALID", {
-      task_id: MAINTENANCE.task_id,
-      issue_code: DURABLE_ISSUE_CODES.documentDigestMismatch,
-    });
-  });
 });
 
 /* ------------------------------------------------------------- rank 4 — the phase-instance residue */
@@ -606,17 +595,6 @@ describe("rank 7 — the state cannot contradict the initialization it adopts", 
     });
   });
 
-  it("7c: the maintenance record's task_id disagrees with the state's", () => {
-    expectReject(
-      {
-        state: stateDoc(STATE),
-        maintenance: maintenanceDoc(patch(MAINTENANCE, { task_id: "other-task" })),
-      },
-      "STATE_INVALID",
-      { phase_instance: STATE.phase_instance, issue_code: DURABLE_ISSUE_CODES.maintenanceTaskIdMismatch }
-    );
-  });
-
   it("7d-7h do not run when no initialization artifact is supplied", () => {
     // A document artifact carries none of the pinned inputs; the clauses simply do not apply.
     expectAccept({ state: stateDoc(patch(STATE, { task_id: DOCUMENT.task_id })), artifact: artifactDoc(DOCUMENT) });
@@ -700,42 +678,6 @@ describe("rank 8 — the in-flight fingerprint, its guard, and its pinned orient
   });
 });
 
-/* ------------------------------------------------------------------- rank 9 — the maintenance record */
-
-describe("rank 9 — the maintenance record", () => {
-  it("9a: total_bytes_deleted disagrees with the sum of deletions[].byte_count", () => {
-    expectReject(
-      { maintenance: maintenanceDoc(patch(MAINTENANCE, { total_bytes_deleted: 1 })) },
-      "TASK_INVALID",
-      { task_id: MAINTENANCE.task_id, issue_code: DURABLE_ISSUE_CODES.maintenanceTotalBytesMismatch }
-    );
-  });
-
-  it("9b: performed_at_revision is after the state's revision", () => {
-    // The fixtures already disagree: state.revision is 7, performed_at_revision is 9.
-    expectReject({ state: stateDoc(STATE), maintenance: maintenanceDoc(MAINTENANCE) }, "TASK_INVALID", {
-      task_id: MAINTENANCE.task_id,
-      issue_code: DURABLE_ISSUE_CODES.maintenanceRevisionAfterState,
-    });
-  });
-
-  it("9b accepts equality, and does not run when no state is supplied", () => {
-    expectAccept({
-      state: stateDoc(STATE),
-      maintenance: maintenanceDoc(patch(MAINTENANCE, { performed_at_revision: 7 })),
-    });
-    expectAccept({ maintenance: maintenanceDoc(MAINTENANCE) });
-  });
-
-  it("9a precedes 9b", () => {
-    expectReject(
-      { state: stateDoc(STATE), maintenance: maintenanceDoc(patch(MAINTENANCE, { total_bytes_deleted: 1 })) },
-      "TASK_INVALID",
-      { task_id: MAINTENANCE.task_id, issue_code: DURABLE_ISSUE_CODES.maintenanceTotalBytesMismatch }
-    );
-  });
-});
-
 /* ---------------------------------------------- the reported error is a total function of the subject */
 
 describe("the reported error is a total function of the subject", () => {
@@ -768,14 +710,6 @@ describe("the reported error is a total function of the subject", () => {
       { state: forged<TaskStateV1>(STATE), artifact: forged<DurableArtifact>(OUTPUT) },
       "STATE_INVALID",
       { phase_instance: STATE.phase_instance, issue_code: DURABLE_ISSUE_CODES.documentDigestMismatch }
-    );
-  });
-
-  it("(b') the same rank in the artifact (1) and maintenance (2) slots: artifact wins", () => {
-    expectReject(
-      { artifact: forged<DurableArtifact>(OUTPUT), maintenance: forged<MaintenanceRecordV1>(MAINTENANCE) },
-      "SNAPSHOT_INVALID",
-      { snapshot_digest: OUTPUT.snapshot_digest, issue_code: DURABLE_ISSUE_CODES.documentDigestMismatch }
     );
   });
 
@@ -886,7 +820,6 @@ describe("the reported error is a total function of the subject", () => {
     const build = (): DurableSemanticSubject => ({
       state: forged<TaskStateV1>(copy(STATE)),
       artifact: forged<DurableArtifact>(copy(OUTPUT)),
-      maintenance: forged<MaintenanceRecordV1>(copy(MAINTENANCE)),
     });
     expect(reject(build())).toEqual(reject(build()));
   });
@@ -905,7 +838,6 @@ describe("the validator claims nothing its durable subject cannot receive", () =
     const state = copy(STATE);
     for (const result of list(state, "authoritative_results")) {
       result.result_digest = FORGED_DIGEST;
-      result.manifest_path = ".archflow/tasks/mcp-integration/results/nowhere/manifest.json";
     }
     expectAccept({ state: stateDoc(state) });
   });
@@ -950,13 +882,6 @@ describe("the validator claims nothing its durable subject cannot receive", () =
     });
   });
 
-  it("resolves no maintenance reachability proof or deletion target", () => {
-    const maintenance = copy(MAINTENANCE);
-    maintenance.reachability_proof_digest = FORGED_DIGEST;
-    for (const deletion of list(maintenance, "deletions")) deletion.digest = FORGED_DIGEST;
-    expectAccept({ maintenance: maintenanceDoc(maintenance) });
-  });
-
   it("accepts the empty subject", () => {
     expectAccept({});
   });
@@ -984,7 +909,8 @@ describe("the pinned issue_code literals", () => {
       accountingStoredBytesMismatch: "accounting-stored-bytes-mismatch",
       initializationDigestMismatch: "initialization-digest-mismatch",
       artifactTaskIdMismatch: "artifact-task-id-mismatch",
-      maintenanceTaskIdMismatch: "maintenance-task-id-mismatch",
+      lastTransitionOutcomeDigestMismatch: "last-transition-outcome-digest-mismatch",
+      lastTransitionRevisionMismatch: "last-transition-revision-mismatch",
       repositoryIdentityDigestMismatch: "repository-identity-digest-mismatch",
       configDigestMismatch: "config-digest-mismatch",
       workflowDigestMismatch: "workflow-digest-mismatch",
@@ -996,7 +922,7 @@ describe("the pinned issue_code literals", () => {
       intentReceiptRevisionNotSuccessor: "intent-receipt-revision-not-successor",
       intentReceiptFutureRevision: "intent-receipt-future-revision",
       intentReceiptPreparedStateRevisionMismatch: "intent-receipt-prepared-state-revision-mismatch",
-      intentReceiptPreparedStateCommittedIntentPresent: "intent-receipt-prepared-state-committed-intent-present",
+      intentReceiptPreparedStateLastTransitionPresent: "intent-receipt-prepared-state-last-transition-present",
       intentReceiptTaskMismatch: "intent-receipt-task-mismatch",
       intentReceiptRepositoryMismatch: "intent-receipt-repository-mismatch",
       intentReceiptInitializationMismatch: "intent-receipt-initialization-mismatch",
@@ -1007,13 +933,10 @@ describe("the pinned issue_code literals", () => {
       intentReceiptIntentMismatch: "intent-receipt-intent-mismatch",
       intentReceiptRequestMismatch: "intent-receipt-request-mismatch",
       intentReceiptInputFingerprintMismatch: "intent-receipt-input-fingerprint-mismatch",
-      intentReceiptReferenceDigestMismatch: "intent-receipt-reference-digest-mismatch",
       intentReceiptReferenceOutcomeMismatch: "intent-receipt-reference-outcome-mismatch",
       intentReceiptReferenceRevisionMismatch: "intent-receipt-reference-revision-mismatch",
       intentReceiptReferenceResultMismatch: "intent-receipt-reference-result-mismatch",
       intentReceiptFinalStateMismatch: "intent-receipt-final-state-mismatch",
-      maintenanceTotalBytesMismatch: "maintenance-total-bytes-mismatch",
-      maintenanceRevisionAfterState: "maintenance-revision-after-state",
       resultManifestArtifactDigestMismatch: "result-manifest-artifact-digest-mismatch",
       resultManifestTaskMismatch: "result-manifest-task-mismatch",
       resultManifestPhaseMismatch: "result-manifest-phase-mismatch",
@@ -1038,7 +961,7 @@ describe("the pinned issue_code literals", () => {
 
   it("are all SafeCode, and rank 8 has none", () => {
     for (const code of Object.values(DURABLE_ISSUE_CODES)) expect(code).toMatch(SAFE_CODE);
-    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(64);
+    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(62);
     expect(Object.values(DURABLE_ISSUE_CODES)).not.toContain("input-fingerprint-mismatch");
   });
 });

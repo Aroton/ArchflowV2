@@ -32,7 +32,7 @@ const detected = {
   outcome: "detected",
   detector_set_id: "preset-recommend",
   findings: [
-    { detector_id: "github-token", path_class: "result-payload", virtual_path: ".archflow/tasks/demo/state.json", line: 1, column: 1 },
+    { detector_id: "github-token", path_class: "document", virtual_path: ".archflow/tasks/demo/prd.md", line: 1, column: 1 },
     { detector_id: "aws-key", path_class: "repository-source", virtual_path: "src/index.ts", line: 42, column: 7 },
   ],
 };

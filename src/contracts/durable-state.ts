@@ -2,17 +2,18 @@ import { z } from "zod";
 
 import type { GitOid } from "./canonical.js";
 import { gitOidV1Schema } from "./canonical.js";
-import type { PathSafeId, SafeId, SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
-import { pathSafeIdV1Schema, safeIdV1Schema, safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
+import type { PathSafeId, SafeCode, SafeId, SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
+import { pathSafeIdV1Schema, safeCodeV1Schema, safeIdV1Schema, safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
 import type { GateKind, WaiverScope } from "./gates.js";
 import { GATE_KINDS } from "./gates.js";
-import type { RepositoryPathClaim } from "./path-claims.js";
-import { repositoryPathClaimV1Schema } from "./path-claims.js";
+import type { PlainJsonValue } from "./plain-json.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { phaseInstanceIdV1Schema } from "./phase-instance.js";
 import { isSortedUniqueBy, tupleKey } from "./validators.js";
 import type { PipelineStep } from "./vocabulary.js";
 import { PIPELINE_STEPS } from "./vocabulary.js";
+import type { ToolName } from "./tool-names.js";
+import { TOOL_NAMES } from "./tool-names.js";
 
 /**
  * `state.json` — the durable state of truth for one task.
@@ -40,8 +41,7 @@ export type TerminalState = (typeof TERMINAL_STATES)[number];
  * `task-state.schema.json` owns each `$def`. They were briefly moved into `durable-primitives`
  * when a *mirrored* `ManualCheckpointV1` also consumed them and needed a pinned Zod name to
  * compose. The Phase 8 split removed that second consumer, so each is now consumed by exactly one
- * unmirrored root — the same condition under which `CommittedIntentRef` and `MaintenanceDeletion`
- * already stay where they are. Phase 8 reaches them by `$ref` and authors its own mirrors then.
+ * unmirrored root. Phase 8 reaches them by `$ref` and authors its own mirrors then.
  * The reason is recorded so they are not moved back on the strength of the retired rationale.
  *
  * Every digest field here is a *reference*, not authority: a digest-shaped string never establishes
@@ -55,7 +55,6 @@ export type AuthoritativeResultRef = {
   readonly result_digest: Sha256Digest;
   readonly result_id: SafeId;
   readonly input_fingerprint: Sha256Digest;
-  readonly manifest_path: RepositoryPathClaim;
 };
 
 export type ApprovalRef = {
@@ -72,7 +71,7 @@ export type OpenGateRef = {
   readonly gate_kind: GateKind;
   readonly subject_digest: Sha256Digest;
   readonly context_digest: Sha256Digest;
-  /** Domain-separated digest of this open revision excluding `open_gate` and `committed_intent`. */
+  /** Domain-separated digest of this open revision excluding `open_gate`. */
   readonly frozen_state_digest: Sha256Digest;
   /** Present only for a waiver gate and names the gate whose decision requested the waiver. */
   readonly waiver_origin_gate_id?: PathSafeId;
@@ -98,26 +97,24 @@ export type WaiverRef = {
   readonly granted_at_revision: SafeInteger;
 };
 
-export type CommittedIntentRef = {
+/**
+ * A self-contained record of the most recently committed mutation. Unlike the retired receipt
+ * pointer, this remains exactly replayable after transaction recovery files are removed.
+ */
+export type LastTransition = {
+  readonly schema_version: "1";
+  readonly tool: ToolName;
+  readonly operation: SafeCode;
   readonly intent_id: PathSafeId;
   readonly request_digest: Sha256Digest;
-  readonly receipt_digest: Sha256Digest;
+  readonly input_fingerprint: Sha256Digest;
+  readonly result_id: SafeId;
+  readonly outcome: PlainJsonValue;
   readonly outcome_digest: Sha256Digest;
   /** `>= 0`; initialization may commit from the synthetic predecessor revision 0. */
   readonly prior_revision: SafeInteger;
   /** `>= 1`. */
   readonly resulting_revision: SafeInteger;
-  readonly result_id: SafeId;
-};
-
-/**
- * Legacy: written only by the retired manual checkpoint import flow. Tolerated so pre-retirement
- * task states still parse; nothing writes it anymore, and a state carrying it is preserved verbatim.
- */
-export type AdoptedCheckpointRef = {
-  /** `>= 1` (D8). */
-  readonly revision: SafeInteger;
-  readonly checkpoint_digest: Sha256Digest;
 };
 
 /**
@@ -175,9 +172,7 @@ export type TaskStateV1 = {
    * when this may be set, cleared, or superseded. Phase 7 owns only the shape.
    */
   readonly open_gate?: OpenGateRef;
-  readonly committed_intent?: CommittedIntentRef;
-  /** Legacy — tolerated for pre-retirement task states; never written, preserved verbatim. */
-  readonly adopted_checkpoint?: AdoptedCheckpointRef;
+  readonly last_transition?: LastTransition;
   readonly terminal?: TerminalState;
 };
 
@@ -210,7 +205,6 @@ export const authoritativeResultRefV1Schema = z.object({
   result_digest: sha256Digest,
   result_id: safeIdV1Schema,
   input_fingerprint: sha256Digest,
-  manifest_path: repositoryPathClaimV1Schema,
 }).strict();
 
 export const approvalRefV1Schema = z.object({
@@ -245,20 +239,22 @@ export const openGateRefV1Schema = z.object({
   opened_at_revision: positiveSafeInteger,
 }).strict();
 
-export const committedIntentRefV1Schema = z.object({
+/** Recursive JSON value used by `lastTransitionV1Schema`; overridden during JSON Schema emission. */
+export const lastTransitionOutcomeV1Schema = z.json();
+
+export const lastTransitionV1Schema = z.object({
+  schema_version: z.literal("1"),
+  tool: z.enum(TOOL_NAMES),
+  operation: safeCodeV1Schema,
   intent_id: pathSafeIdV1Schema,
   request_digest: sha256Digest,
-  receipt_digest: sha256Digest,
+  input_fingerprint: sha256Digest,
+  result_id: safeIdV1Schema,
+  outcome: lastTransitionOutcomeV1Schema,
   outcome_digest: sha256Digest,
   prior_revision: safeIntegerV1Schema,
   resulting_revision: positiveSafeInteger,
-  result_id: safeIdV1Schema,
-}).strict();
-
-export const adoptedCheckpointRefV1Schema = z.object({
-  revision: positiveSafeInteger,
-  checkpoint_digest: sha256Digest,
-}).strict();
+}).strict() as unknown as z.ZodType<LastTransition>;
 
 /**
  * The authority. Each of the three set fields calls `isSortedUniqueBy` with `tupleKey` over its
@@ -289,7 +285,6 @@ export const taskStateV1Schema = z.object({
     .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "waivers must be sorted by gate_id with no duplicates"),
   planned_final_phase: positiveSafeInteger.optional(),
   open_gate: openGateRefV1Schema.optional(),
-  committed_intent: committedIntentRefV1Schema.optional(),
-  adopted_checkpoint: adoptedCheckpointRefV1Schema.optional(),
+  last_transition: lastTransitionV1Schema.optional(),
   terminal: z.enum(TERMINAL_STATES).optional(),
 }).strict() as unknown as z.ZodType<TaskStateV1>;

@@ -33,6 +33,14 @@ import {
 const roots: string[] = [];
 afterAll(() => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));
 
+function verificationEvidence(root: string, taskId: string): ImplementationOutputV1["verification_evidence"] {
+  const bytes = new TextEncoder().encode("$ npm test\nall tests passed\n");
+  const directory = join(root, ".archflow", "work", "tasks", taskId, "cache", "phases", "11");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, "verification.txt"), bytes);
+  return { transcript_digest: sha256Bytes(bytes), byte_count: parseSafeInteger(bytes.byteLength) };
+}
+
 describe("Git object proofs", () => {
   it("uses path conversion for regular bytes and no conversion for symlink target bytes", async () => {
     const root = mkdtempSync(join(tmpdir(), "archflow-git-proofs-"));
@@ -79,18 +87,17 @@ describe("Git object proofs", () => {
     if (!runnerResult.ok) throw new Error("worktree discovery failed");
     const runner = runnerResult.value;
     const baseCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim() as ImplementationOutputV1["base_commit"];
-    const path = parseRepositoryPathClaim(`.archflow/tasks/${taskId}/reviews/phase-impl-11.counter.md`);
+    const path = parseRepositoryPathClaim("new-output.txt");
     const bytes = new TextEncoder().encode("new output\n");
-    mkdirSync(join(root, ".archflow", "tasks", taskId, "reviews"), { recursive: true });
     writeFileSync(join(root, path), bytes);
     chmodSync(join(root, path), 0o755);
     const oid = await hashGitBlob(runner, bytes, path) as never;
     const size = parseSafeInteger(bytes.byteLength);
     const contentDigest = sha256Bytes(bytes);
-    const output = { path, path_class: "review" as const, operation: "add" as const,
+    const output = { path, path_class: "repository-source" as const, operation: "add" as const,
       storage: "raw-payload" as const, payload_bytes: size, payload_digest: contentDigest,
       file_type: "regular" as const, after: { oid, mode: "100755" as const, size_bytes: size } };
-    const observation: SnapshotObservation = { path, path_class: "review", state: "present",
+    const observation: SnapshotObservation = { path, path_class: "repository-source", state: "present",
       file_type: "regular", mode: "100755", size_bytes: size, oid, content_digest: contentDigest };
     const undeclared = { scanned: true, undeclared_paths: [], unrepresentable_count: parseSafeInteger(0) };
     const artifact = { schema_version: "1", artifact_kind: "implementation-output", task_id: taskId,
@@ -102,7 +109,8 @@ describe("Git object proofs", () => {
       accounting: { schema_version: "1", result_bytes: size, task_bytes: size, result_byte_cap: 26214400,
         task_byte_cap: 262144000, counted_entries: [{ path, storage: "raw-payload", stored_bytes: size }], measured_at_revision: parseSafeInteger(1) },
       secret_scan: { schema_version: "1", outcome: "clean", detector_set_id: parseSafeId("test"), scanned_paths: [path] },
-      undeclared_changes: undeclared, declared_inputs: [], input_fingerprint: parseSha256Digest("1".repeat(64)) } as const satisfies ImplementationOutputV1;
+      undeclared_changes: undeclared, verification_evidence: verificationEvidence(root, taskId),
+      declared_inputs: [], input_fingerprint: parseSha256Digest("1".repeat(64)) } as const satisfies ImplementationOutputV1;
     await expect(verifyImplementationManifest(runner, artifact, context)).resolves.toMatchObject({ raw_payloads: expect.any(Map) });
     await expect(verifyImplementationManifest(runner, { ...artifact, diff_digest: parseSha256Digest("2".repeat(64)) }, context)).rejects.toThrow(/digest/u);
     writeFileSync(join(root, "unrelated.txt"), "dirty\n");
@@ -162,7 +170,8 @@ describe("Git object proofs", () => {
       accounting: { schema_version: "1", result_bytes: parseSafeInteger(0), task_bytes: parseSafeInteger(0),
         result_byte_cap: 26214400, task_byte_cap: 262144000, counted_entries: [], measured_at_revision: parseSafeInteger(1) },
       secret_scan: { schema_version: "1", outcome: "clean", detector_set_id: parseSafeId("test"), scanned_paths: [path] },
-      undeclared_changes: undeclared, declared_inputs: [], input_fingerprint: parseSha256Digest("1".repeat(64)) } as const satisfies ImplementationOutputV1;
+      undeclared_changes: undeclared, verification_evidence: verificationEvidence(root, taskId),
+      declared_inputs: [], input_fingerprint: parseSha256Digest("1".repeat(64)) } as const satisfies ImplementationOutputV1;
 
     const facts = await verifyImplementationManifest(runner, artifact, context);
     expect(facts.snapshot_entries).toEqual([after, absent]);
@@ -248,7 +257,8 @@ describe("Git object proofs", () => {
           { path: linkPath, storage: "raw-payload", stored_bytes: parseSafeInteger(linkBytes.byteLength) },
         ], measured_at_revision: parseSafeInteger(1) },
       secret_scan: { schema_version: "1", outcome: "clean", detector_set_id: parseSafeId("test"),
-        scanned_paths: [modifyPath, linkPath] }, undeclared_changes: undeclared, declared_inputs: [],
+        scanned_paths: [modifyPath, linkPath] }, undeclared_changes: undeclared,
+      verification_evidence: verificationEvidence(root, taskId), declared_inputs: [],
       input_fingerprint: parseSha256Digest("1".repeat(64)) } as const satisfies ImplementationOutputV1;
 
     execFileSync("git", ["prune", "--expire=now"], { cwd: root });

@@ -39,7 +39,6 @@ describe("planStateTransition", () => {
       result_digest: D("9"),
       result_id: parseSafeId("counter-review-result"),
       input_fingerprint: D("8"),
-      manifest_path: parseRepositoryPathClaim(".archflow/tasks/task-1/results/sha256/" + "9".repeat(64) + "/manifest.json"),
     };
     const result = planStateTransition({
       current,
@@ -76,7 +75,6 @@ describe("planStateTransition", () => {
       result_digest: D("9"),
       result_id: parseSafeId("result-1"),
       input_fingerprint: D("8"),
-      manifest_path: parseRepositoryPathClaim(".archflow/tasks/task-1/results/sha256/" + "9".repeat(64) + "/manifest.json"),
     };
     const result = planStateTransition({
       current,
@@ -229,7 +227,6 @@ describe("planStateTransition", () => {
       result_digest: D("9"),
       result_id: parseSafeId("counter-review-result"),
       input_fingerprint: D("8"),
-      manifest_path: parseRepositoryPathClaim(".archflow/tasks/task-1/results/sha256/" + "9".repeat(64) + "/manifest.json"),
     };
     const constitutionReference = {
       phase_instance: current.phase_instance,
@@ -237,7 +234,6 @@ describe("planStateTransition", () => {
       result_digest: D("a"),
       result_id: parseSafeId("adjudication-result"),
       input_fingerprint: D("8"),
-      manifest_path: parseRepositoryPathClaim(".archflow/tasks/task-1/results/sha256/" + "a".repeat(64) + "/manifest.json"),
     };
     const both = planStateTransition({
       current,

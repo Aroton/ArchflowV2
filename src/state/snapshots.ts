@@ -17,10 +17,10 @@ import type { AuthoritativeResultRef } from "../contracts/durable-state.js";
 import { validateDurableSemantics } from "../contracts/durable.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import type { SafeInteger, Sha256Digest } from "../contracts/evidence.js";
-import type { RepositoryPathClaim } from "../contracts/path-claims.js";
+import type { PathClass, RepositoryPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson } from "../contracts/plain-json.js";
 import type { SecretScanResult, SecretScanner } from "../contracts/secret-scan.js";
-import { openResolved, type ResolvedPath, type ResolvedTaskPath } from "../repository/paths.js";
+import { openResolved, type ResolvedPath, type ResolvedTaskPath, type ResolvedWorkspacePath } from "../repository/paths.js";
 import {
   isCommitAncestorOfHead,
   hashGitBlobIdentity,
@@ -37,17 +37,18 @@ export const RESULT_BYTE_CAP = 25 * 1024 * 1024;
 export const TASK_BYTE_CAP = 250 * 1024 * 1024;
 
 export type SnapshotManifest = ResultManifestV1;
+export type SnapshotStoragePath = ResolvedPath | ResolvedWorkspacePath;
 
 export type SnapshotPayloadInput = Readonly<{
   path: RepositoryPathClaim;
   bytes: Uint8Array;
-  target: ResolvedPath;
+  target: SnapshotStoragePath;
 }>;
 
 export type PreparedSnapshot<M extends SnapshotManifest = SnapshotManifest> = Readonly<{
   manifest: CanonicalDocument<M>;
   result_digest: Sha256Digest;
-  payloads: readonly Readonly<{ path: RepositoryPathClaim; bytes: Uint8Array; target: ResolvedPath }>[];
+  payloads: readonly Readonly<{ path: RepositoryPathClaim; bytes: Uint8Array; target: SnapshotStoragePath }>[];
 }>;
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
@@ -99,9 +100,11 @@ function cloneBytes(value: unknown, label: string): Uint8Array {
   return new Uint8Array(value);
 }
 
-function atLexicalLeaf(path: ResolvedPath, worktreeRoot: ResolvedTaskPath): ResolvedPath {
-  return Object.freeze({ ...path,
-    absolute: resolvePath(worktreeRoot, path.repositoryRelative) as ResolvedTaskPath });
+function atLexicalLeaf(path: SnapshotStoragePath, worktreeRoot: ResolvedTaskPath): SnapshotStoragePath {
+  const absolute = resolvePath(worktreeRoot, path.repositoryRelative);
+  return "workspaceRelative" in path
+    ? Object.freeze({ ...path, absolute: absolute as ResolvedWorkspacePath["absolute"] })
+    : Object.freeze({ ...path, absolute: absolute as ResolvedTaskPath });
 }
 
 /** Validates/materializes caller-owned inputs once and preflights both storage caps. */
@@ -130,7 +133,7 @@ export function prepareSnapshot<M extends SnapshotManifest>(input: Readonly<{
     if (typeof path !== "string" || target === null || typeof target !== "object") {
       throw new TypeError(`payloads[${index}] has invalid path or target`);
     }
-    return Object.freeze({ path: path as RepositoryPathClaim, target: target as ResolvedPath, bytes });
+    return Object.freeze({ path: path as RepositoryPathClaim, target: target as SnapshotStoragePath, bytes });
   });
 
   const byPath = new Map(payloads.map((payload) => [payload.path, payload]));
@@ -139,7 +142,7 @@ export function prepareSnapshot<M extends SnapshotManifest>(input: Readonly<{
   for (const output of manifest.outputs) {
     if (output.storage === "raw-payload") {
       const payload = byPath.get(output.path);
-      if (payload === undefined || payload.target.path_class !== "result-payload") {
+      if (payload === undefined || payload.target.path_class !== "workspace-result-payload") {
         return snapshotInvalid(manifest.snapshot_digest, "missing-payload");
       }
       if (payload.bytes.byteLength !== output.payload_bytes || sha256Bytes(payload.bytes) !== output.payload_digest) {
@@ -200,7 +203,7 @@ export async function prepareDocumentSnapshot(input: Readonly<{
   return prepared;
 }
 
-async function installOne(atomic: AtomicWriter, target: ResolvedPath, bytes: Uint8Array): Promise<"created" | "reused"> {
+async function installOne(atomic: AtomicWriter, target: SnapshotStoragePath, bytes: Uint8Array): Promise<"created" | "reused"> {
   const created = await atomic.createExclusive(target, bytes);
   if (created === "created") return "created";
   let existing: Uint8Array;
@@ -221,7 +224,7 @@ export async function installSnapshot<M extends SnapshotManifest>(
   manifestTarget: ResolvedPath,
   worktreeRoot: ResolvedTaskPath,
 ): Promise<ProjectResult<Readonly<{ manifest: "created" | "reused"; payloads_created: number }>>> {
-  if (manifestTarget.path_class !== "result-manifest") throw new TypeError("manifest target has wrong class");
+  if (manifestTarget.path_class !== "authority-result") throw new TypeError("manifest target has wrong class");
   try {
     let payloadsCreated = 0;
     for (const payload of prepared.payloads) {
@@ -240,7 +243,7 @@ export async function readSnapshot(input: Readonly<{
   runner: GitRunner;
   worktree_root: ResolvedTaskPath;
 }>): Promise<ProjectResult<CanonicalDocument<ResultManifestV1>>> {
-  if (input.target.path_class !== "result-manifest") throw new TypeError("manifest target has wrong class");
+  if (input.target.path_class !== "authority-result") throw new TypeError("manifest target has wrong class");
   let document: CanonicalDocument<ResultManifestV1>;
   try {
     const handle = await openResolved(atLexicalLeaf(input.target, input.worktree_root).absolute, 0);
@@ -302,7 +305,7 @@ export async function restoreSnapshotOutput(input: Readonly<{
   runner: GitRunner;
   worktree_root: ResolvedTaskPath;
   output_path: RepositoryPathClaim;
-  payload_target?: ResolvedPath;
+  payload_target?: SnapshotStoragePath;
 }>): Promise<ProjectResult<ProjectionDesired>> {
   const read = await readSnapshot({
     target: input.target,
@@ -323,8 +326,12 @@ export async function restoreSnapshotOutput(input: Readonly<{
     }
     catch { return snapshotInvalid(read.value.value.snapshot_digest, "git-object-proof-unavailable"); }
   } else {
-    const manifestDirectory = input.target.repositoryRelative.slice(0, -"/manifest.json".length);
-    const expectedPayloadPath = `${manifestDirectory}/payload/${output.path}`;
+    const manifestMatch = /^\.archflow\/tasks\/([^/]+)\/authority\/results\/([0-9a-f]{64})\.json$/u
+      .exec(input.target.repositoryRelative);
+    if (manifestMatch === null) {
+      return snapshotInvalid(read.value.value.snapshot_digest, "manifest-path-mismatch");
+    }
+    const expectedPayloadPath = `.archflow/work/tasks/${manifestMatch[1]}/cache/results/${manifestMatch[2]}/payload/${output.path}`;
     if (input.payload_target === undefined || input.payload_target.repositoryRelative !== expectedPayloadPath) {
       return snapshotInvalid(read.value.value.snapshot_digest, "payload-path-mismatch");
     }
@@ -370,9 +377,7 @@ export async function resolveExistingSnapshot(input: Readonly<{
   if (targetValue === null || typeof targetValue !== "object") throw new TypeError("snapshot target must be resolved");
   assertPlainJson(targetValue, "resolved snapshot target");
   const target = structuredClone(targetValue) as unknown as ResolvedPath;
-  if (target.repositoryRelative !== reference.manifest_path) {
-    return snapshotInvalid(reference.result_digest, "manifest-path-mismatch");
-  }
+  if (target.path_class !== "authority-result") return snapshotInvalid(reference.result_digest, "manifest-path-mismatch");
   const read = await readSnapshot({ target, expected_result_digest: reference.result_digest, runner: input.runner, worktree_root: input.worktree_root });
   if (!read.ok) return read;
   const manifest = read.value.value;
@@ -385,13 +390,13 @@ export async function resolveExistingSnapshot(input: Readonly<{
 
 /** Reads one manifest-named raw payload and re-establishes its exact byte identity. */
 export async function readSnapshotPayload(input: Readonly<{
-  target: ResolvedPath;
+  target: SnapshotStoragePath;
   expected_digest: Sha256Digest;
   expected_bytes: SafeInteger;
   snapshot_digest: Sha256Digest;
   worktree_root: ResolvedTaskPath;
 }>): Promise<ProjectResult<Uint8Array>> {
-  if (input.target.path_class !== "result-payload") throw new TypeError("payload target has wrong class");
+  if (input.target.path_class !== "workspace-result-payload") throw new TypeError("payload target has wrong class");
   try {
     const handle = await openResolved(atLexicalLeaf(input.target, input.worktree_root).absolute, 0);
     const bytes = new Uint8Array(await handle.readFile().finally(() => handle.close()));
@@ -415,7 +420,7 @@ export type ProjectionDesired =
 
 export type ProjectionSource = Readonly<{
   path: RepositoryPathClaim;
-  target: ResolvedPath;
+  target: SnapshotStoragePath;
   desired: ProjectionDesired;
   authenticated_before: ProjectionObservation;
   /** Required when a present before-image may need rollback; bytes are authenticated below. */
@@ -426,7 +431,7 @@ export type ProjectionSource = Readonly<{
 
 export type ProjectionPlanEntry = Readonly<{
   path: RepositoryPathClaim;
-  target: ResolvedPath;
+  target: SnapshotStoragePath;
   observed_before: ProjectionObservation;
   desired: ProjectionDesired;
   rollback?: ProjectionDesired;
@@ -438,7 +443,7 @@ export type ProjectionPlanEntry = Readonly<{
 
 export type ProjectionPlan = Readonly<{
   entries: readonly ProjectionPlanEntry[];
-  collisions: readonly Readonly<{ path: RepositoryPathClaim; path_class: ResolvedPath["path_class"] }>[];
+  collisions: readonly Readonly<{ path: RepositoryPathClaim; path_class: SnapshotStoragePath["path_class"] }>[];
   collision_choices: readonly ["discard-and-restore", "adopt-as-new-generation", "abort"];
 }>;
 
@@ -448,7 +453,7 @@ export type CapturedProjectionTarget = Readonly<{
 }>;
 
 /** Captures one target generation once, retaining the exact bytes needed for safe rollback. */
-export async function captureProjectionTarget(path: ResolvedPath): Promise<CapturedProjectionTarget> {
+export async function captureProjectionTarget(path: SnapshotStoragePath): Promise<CapturedProjectionTarget> {
   try {
     const stat = await lstat(path.absolute);
     if (stat.isSymbolicLink()) {
@@ -480,7 +485,7 @@ export function projectionGenerationDigest(observation: ProjectionObservation): 
   return canonicalJsonDigest({ schema_version: "1", digest_kind: "projection-generation", observation });
 }
 
-async function observe(path: ResolvedPath): Promise<ProjectionObservation> {
+async function observe(path: SnapshotStoragePath): Promise<ProjectionObservation> {
   return (await captureProjectionTarget(path)).observation;
 }
 
@@ -509,7 +514,7 @@ export async function prepareProjectionPlan(
       throw new TypeError(`projection source ${index} has invalid fields`);
     }
     assertPlainJson(targetValue, `projection source ${index} target`);
-    const suppliedTarget = structuredClone(targetValue) as unknown as ResolvedPath;
+    const suppliedTarget = structuredClone(targetValue) as unknown as SnapshotStoragePath;
     if (suppliedTarget.repositoryRelative !== path) throw new TypeError(`projection source ${index} target path disagrees`);
     // ResolvedPath.absolute is containment-normalized and therefore names a symlink's referent.
     // Mutation and leaf observation use the already-validated lexical worktree location instead.
@@ -555,7 +560,7 @@ export async function prepareProjectionPlan(
       renamePair = Object.freeze({ role, peer_path: peerPath as RepositoryPathClaim });
     }
     return Object.freeze({
-      path: path as RepositoryPathClaim, target: target as ResolvedPath, desired,
+      path: path as RepositoryPathClaim, target: target as SnapshotStoragePath, desired,
       authenticated_before: structuredClone(beforeValue) as ProjectionObservation, git_tracked: tracked,
       ...(rollback === undefined ? {} : { rollback }),
       ...(renamePair === undefined ? {} : { rename_pair: renamePair }),
@@ -575,7 +580,7 @@ export async function prepareProjectionPlan(
   }
   const scan = await scanner.scan(materialized.flatMap((source) =>
     source.git_tracked && source.desired.state === "present"
-      ? [secretScanCandidateFromBytes({ virtual_path: source.path, path_class: source.target.path_class, bytes: source.desired.bytes })]
+      ? [secretScanCandidateFromBytes({ virtual_path: source.path, path_class: source.target.path_class as PathClass, bytes: source.desired.bytes })]
       : []));
   if (scan.outcome === "detected") {
     const finding = scan.findings[0];
@@ -584,7 +589,7 @@ export async function prepareProjectionPlan(
   }
   if (scan.outcome === "unavailable") {
     const first = materialized.find((source) => source.git_tracked);
-    return fail(createProjectError("SECRET_DETECTED", { path_class: first?.target.path_class ?? "repository-source", detector_id: "scanner-unavailable" }));
+    return fail(createProjectError("SECRET_DETECTED", { path_class: (first?.target.path_class as PathClass | undefined) ?? "repository-source", detector_id: "scanner-unavailable" }));
   }
   const entries: ProjectionPlanEntry[] = [];
   for (const source of materialized) {

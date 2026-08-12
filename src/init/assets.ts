@@ -11,6 +11,7 @@ import {
 
 const ARCHFLOW_GITATTRIBUTES_LINE = ".archflow/** -text merge=binary";
 const ASSETS = Object.freeze([
+  ["archflow.gitignore", ".archflow/.gitignore"],
   ["workflow.yaml", ".archflow/workflow.yaml"],
   ["constitution/README.md", ".archflow/constitution/README.md"],
   ["constitution/00-process.md", ".archflow/constitution/00-process.md"],
@@ -25,6 +26,7 @@ export type AssetScaffoldReport = {
   readonly created: readonly string[];
   readonly unchanged: readonly string[];
   readonly gitattributes_updated: boolean;
+  readonly work_gitignore: "created" | "already-present";
 };
 
 export type ScaffoldRepositoryAssetsInput = {
@@ -141,6 +143,7 @@ export async function scaffoldRepositoryAssets(
       created: Object.freeze(created),
       unchanged: Object.freeze(unchanged),
       gitattributes_updated: gitattributesUpdated,
+      work_gitignore: created.includes(".archflow/.gitignore") ? "created" : "already-present",
     }));
   } catch {
     return ioFailure();

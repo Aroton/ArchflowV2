@@ -138,7 +138,7 @@ Preserve explicit human review gates.
     if (!prepared.ok) throw new Error(prepared.error.code);
     await ensureResultDirectory(authority.value, prepared.value.reference.result_digest);
     for (const payload of prepared.value.prepared.payloads) {
-      await ensurePayloadParent(authority.value, prepared.value.reference.result_digest, payload.target.absolute);
+      await ensurePayloadParent(authority.value, prepared.value.reference.result_digest, payload.target.absolute as never);
     }
     const installed = await installSnapshot(
       createAtomicWriter(), prepared.value.prepared, prepared.value.manifest_target,
@@ -190,7 +190,7 @@ Preserve explicit human review gates.
     waivers: [],
   };
   writeFileSync(authority.value.state.absolute, canonicalDocument(state).bytes);
-  mkdirSync(join(authority.value.task_root, "reviews"), { recursive: true });
+  mkdirSync(join(authority.value.workspace_root, "cache", "reviews"), { recursive: true });
 
   const bin = join(repository.root, "bin");
   const sourceHome = join(repository.root, "source-home");

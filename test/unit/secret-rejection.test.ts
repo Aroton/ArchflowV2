@@ -13,7 +13,7 @@ import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import { stageLegacyUpgrade } from "../../src/init/legacy-upgrade.js";
 import { computeCallEnvelope } from "../../src/local/call-envelope.js";
 import { prepareDocumentResult, prepareImplementationResult } from "../../src/mcp/handlers/state-results.js";
-import { resolveTaskPath, type ResolvedTaskPath } from "../../src/repository/paths.js";
+import { resolveTaskPath, type ResolvedTaskPath, type ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
 import { buildDocumentArtifact } from "../../src/state/document-artifact.js";
 import { prepareEvidenceResult } from "../../src/state/evidence-results.js";
 import { buildImplementationOutput } from "../../src/state/implementation-manifest.js";
@@ -34,6 +34,7 @@ import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspa
 const SECRET = "ghp_" + "0123456789abcdefghijklmnopqrstuvwxyz";
 const D = (character: string) => parseSha256Digest(character.repeat(64));
 const PRD = parsePhaseInstanceId("prd");
+const IMPLEMENTATION = parsePhaseInstanceId("phase-impl-1");
 const workspaces: TaskWorkspace[] = [];
 
 afterEach(() => {
@@ -132,7 +133,7 @@ describe("secret rejection propagation", () => {
     expect(durableShape(h)).toEqual(before);
   });
 
-  it("propagates rejection through evidence-result preparation", async () => {
+  it("keeps structured review evidence out of durable output payload scanning", async () => {
     const h = await workspace("evidence");
     const review: DegradedReview = {
       schema_version: "1", task_id: h.taskId, phase_instance: "prd", step: "counter_review", role: "counter-review",
@@ -144,9 +145,13 @@ describe("secret rejection propagation", () => {
     const result = await prepareEvidenceResult({
       authority: h.services.authority, runner: h.services.runner, result_id: parseSafeId("evidence-result"),
       retained_task_bytes: parseSafeInteger(0), measured_at_revision: h.services.state!.value.revision,
-      scanner: detectedScanner(), value: { kind: "review", evidence: review },
+      scanner: cleanScanner, value: { kind: "review", evidence: review },
     });
-    expectSecret(result);
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) throw new Error(result.error.code);
+    expect(result.value.prepared.manifest.value.outputs).toEqual([]);
+    expect(result.value.prepared.manifest.value.projections).toEqual([]);
+    expect(result.value.prepared.payloads).toEqual([]);
     expect(durableShape(h)).toEqual(before);
   });
 
@@ -166,9 +171,12 @@ describe("secret rejection propagation", () => {
 
     const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: h.root, encoding: "utf8" }).trim() as never;
     writeFileSync(join(h.root, "README.md"), "implementation\n");
+    const verificationDirectory = join(h.services.authority.workspace_root, "cache", "phases", "1");
+    mkdirSync(verificationDirectory, { recursive: true });
+    writeFileSync(join(verificationDirectory, "verification.txt"), "npm test\nall tests passed\n");
     const implementation = await buildImplementationOutput(
       h.services.dependencies, h.services.authority, h.services.state!, {
-        phase_instance: PRD, step: "produce", base_commit: base,
+        phase_instance: IMPLEMENTATION, step: "produce", base_commit: base,
         outputs: [parseRepositoryPathClaim("README.md")],
         restore_targets: [parseRepositoryPathClaim("README.md")],
         parent_documents: [{ document_path: parseTaskPathClaim("prd.md"), role: "prd" }],
@@ -251,7 +259,7 @@ describe("secret rejection propagation", () => {
     if (!prepared.ok) throw new Error(prepared.error.code);
     await ensureResultDirectory(h.services.authority, prepared.value.reference.result_digest);
     for (const payload of prepared.value.prepared.payloads) {
-      await ensurePayloadParent(h.services.authority, prepared.value.reference.result_digest, payload.target.absolute);
+      await ensurePayloadParent(h.services.authority, prepared.value.reference.result_digest, payload.target.absolute as ResolvedTaskWorkspacePath);
     }
     const installed = await installSnapshot(createAtomicWriter(), prepared.value.prepared, prepared.value.manifest_target, h.root as ResolvedTaskPath);
     if (!installed.ok) throw new Error(installed.error.code);

@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
-import { canonicalDocument, parseCanonicalDocument } from "../../src/contracts/canonical.js";
 import { STEP_STATUSES, TERMINAL_STATES, taskStateV1Schema, type TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { GATE_KINDS } from "../../src/contracts/gates.js";
 import { createJsonSchemaValidator } from "../helpers/json-schema.js";
@@ -86,11 +85,7 @@ describe("task state contract", () => {
     }));
     await rejects((state) => ({
       ...state,
-      committed_intent: { ...(state.committed_intent as Record<string, unknown>), resulting_revision: 0 },
-    }));
-    await rejects((state) => ({
-      ...state,
-      adopted_checkpoint: { ...(state.adopted_checkpoint as Record<string, unknown>), revision: 0 },
+      last_transition: { ...(state.last_transition as Record<string, unknown>), resulting_revision: 0 },
     }));
   });
 
@@ -116,21 +111,11 @@ describe("task state contract", () => {
     await rejects((state) => ({ ...state, open_gate: [state.open_gate] }));
   });
 
-  it("tolerates the legacy adopted_checkpoint field: it parses, validates, and round-trips verbatim", async () => {
-    // The manual checkpoint import flow that wrote adopted_checkpoint is retired; the field stays
-    // in the schema so pre-retirement task states remain readable. Nothing writes it anymore, and a
-    // state that carries it must survive a read/re-serialize cycle byte-identically.
+  it("rejects retired compatibility fields", async () => {
     const validator = await taskStateValidator();
     const state = await validState();
-    expect(state.adopted_checkpoint).toBeDefined();
-    expect(validator.validate(state), JSON.stringify(validator.validate.errors)).toBe(true);
-
-    const written = canonicalDocument(state as never);
-    const reread = parseCanonicalDocument<TaskStateV1>(written.bytes, "task state");
-    expect(reread.value).toEqual(state);
-    expect(reread.value.adopted_checkpoint).toEqual(state.adopted_checkpoint);
-    expect(canonicalDocument(reread.value).bytes).toEqual(written.bytes);
-    expect(validator.validate(reread.value)).toBe(true);
+    expect(validator.validate({ ...state, adopted_checkpoint: {} })).toBe(false);
+    expect(validator.validate({ ...state, committed_intent: {} })).toBe(false);
   });
 
   it("requires waiver scope and accepts the optional waiver-origin gate marker", async () => {

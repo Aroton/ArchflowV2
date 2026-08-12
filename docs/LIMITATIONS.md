@@ -1,6 +1,6 @@
 # LIMITATIONS
 
-**Explored:** 2026-08-12 · **Commit:** `72457b8` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`
+**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`
 
 ArchFlow is a local developer-workflow prototype, not a security sandbox. The controls below reduce accidental context leakage and constrain ordinary operation, but the listed cases are unsupported because the current implementation cannot prove the claimed boundary. A planted canary not appearing in output is evidence about that run; it is not proof that the child could not read the canary.
 
@@ -42,7 +42,7 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 **Not protected:** ArchFlow cannot suppress or fully enumerate every system-managed or server-delivered context layer. Managed settings, managed hooks, an `apiKeyHelper`, or an enterprise-managed Codex bundle may affect a child even when repository and user configuration are suppressed. In particular, Claude managed hooks can execute independently of model tools.
 
-**Existing mitigation:** Preflight records discoverable managed-policy paths; when a dispatch fails, that observation is persisted in the failure's forensic `attempts/` record (successful dispatches persist no attempt telemetry — their evidence is the retained result). Explicit CLI flags suppress the ordinary project, user, MCP, session, rule, and skill sources that the supported versions expose. Initialization reports the best-effort isolation limitation rather than treating a clean preflight as proof.
+**Existing mitigation:** Preflight records discoverable managed-policy paths; when a dispatch fails, that observation is persisted in ignored, current-phase `.archflow/work/tasks/<task>/diagnostics/attempts/` (successful dispatches persist no attempt telemetry — their evidence is the authoritative result). Explicit CLI flags suppress the ordinary project, user, MCP, session, rule, and skill sources that the supported versions expose. Initialization reports the best-effort isolation limitation rather than treating a clean preflight as proof.
 
 **Why accepted:** Managed configuration is part of the developer's administratively controlled machine, not an untrusted multi-tenant boundary in the prototype's operating envelope. Its presence remains visible for diagnosis, while validated outputs and durable workflow gates prevent managed context alone from becoming approval authority.
 
@@ -69,14 +69,6 @@ These limitations assume a trusted developer account and a filesystem not being 
 **Existing mitigation:** Inputs reject absolute, drive/UNC, traversal, cross-task, and symlink-escape paths; containment is checked on normalized real paths and every sanctioned open adds `O_NOFOLLOW` where the platform provides it. Tests preserve the window as an explicit limitation and verify that the final-leaf symlink defense works on the supported Linux test environment.
 
 **Why accepted:** The prototype assumes its task filesystem is not being adversarially rewritten by another same-user process during an operation. The checks reliably reject ordinary malformed and pre-existing escape paths. Closing the race would require a different native/runtime filesystem capability and is outside the current local-developer scope.
-
-## Stranded pre-retirement manual checkpoint chains
-
-**Not recoverable:** Earlier versions recorded offline progress in a manual checkpoint chain under `.archflow/tasks/<task>/manual/checkpoints/` when the MCP server was unavailable. That recording path is retired and no import or recovery path exists: a chain written before retirement can no longer be folded back into workflow state, and work represented only there must be redone through the normal workflow.
-
-**Existing mitigation:** The chain files remain on disk untouched, so a human can still read what was recorded. Payload reclamation still conservatively treats digests those files reference as roots, so retained bytes a stranded chain points at are never pruned. Task state may also carry a legacy `adopted_checkpoint` field from a pre-retirement import; it is accepted when present, preserved verbatim by transactions, and never written by current code.
-
-**Why accepted:** Degraded mode is now read-only — the server records all progress, so no new chains can be created — and the retired machinery was the codebase's largest structural duplication. A stranded chain represents unapproved offline progress from a prototype-stage feature; redoing that work through the gated workflow is the honest recovery.
 
 ## Descendants that escape the process group
 

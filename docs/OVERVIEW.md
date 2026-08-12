@@ -1,6 +1,6 @@
 # OVERVIEW
 
-**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** the whole repository
+**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** the whole repository
 
 ArchFlow is a governed development workflow for AI coding agents. A *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, survive an adversarial review by a **different model family**, and then stop and ask a human. The system's core belief, stated plainly:
 
@@ -28,14 +28,16 @@ flowchart TB
     Agent["Agent session<br/>(Claude Code or Codex)<br/>following a skill"]
     Local["archflow-local CLI<br/>composes requests, reads status"]
     MCP["archflow-mcp server<br/>4 MCP tools — the authority"]
-    State[(".archflow/ durable state<br/>state.json, gates, results,<br/>canonical documents")]
+    State[("tracked .archflow authority<br/>state, decisions, manifests,<br/>canonical documents")]
+    Work[("ignored .archflow/work<br/>requests, cache, diagnostics")]
     Child["Opposite-family reviewer<br/>claude or codex child process,<br/>sealed envelope + read-only checkout"]
 
     Human <-->|"gates: approve, waive,<br/>authorize commit"| Agent
     Agent -->|"status / build-request"| Local
     Local -->|"reads"| State
-    Agent -->|"MCP tool calls<br/>(request.input verbatim)"| MCP
+    Agent -->|"MCP tool calls<br/>(staged reference; full input fallback)"| MCP
     MCP -->|"writes & verifies"| State
+    MCP -->|"stages & reconstructs"| Work
     MCP -->|"dispatches counter-review<br/>and constitution review"| Child
     Child -->|"verdict + findings"| MCP
 ```
@@ -83,3 +85,11 @@ Editing the artifact changes its digest, which automatically invalidates every d
 - **Constitution** — versioned repository policy rules (`.archflow/constitution/`) that the constitution review — run inside `archflow_counter_review` when active rules exist — judges every artifact against, pinned per task at an approved commit.
 - **Waiver** — a human-granted exemption from one rule version, for one subject digest, for one task. Evaporates if the artifact or the rule changes.
 - **Degraded mode** — the read-only stance when the MCP server is unavailable: `manual-status` reports where the task stands and the answer is to wait; no offline recording exists, and it is never a shortcut around gates.
+
+## Durable authority versus local work
+
+Git sees only the durable side of `.archflow/`: task documents, `state.json`, adopted initialization, current result manifests under `authority/results/`, and state-referenced gate decisions under `authority/decisions/`. The shipped `.archflow/.gitignore` contains only `/work/`; staged requests, payload duplicates, rendered reviews and gate UI, verification transcripts, import staging, locks, receipts, and attempts all live below that ignored root.
+
+Repeated review rounds replace the current authority for a `(phase, step)` instead of accumulating tracked files. Automatic cleanup runs after successful writes and phase boundaries; `archflow-local clean --task <id>` retries it manually. Cleanup failure is non-blocking and appears as `workspace.cleanup_pending` in full status (and in brief status only while pending).
+
+This split defines recovery honestly. A fresh clone reconstructs status, current result validation, and gate UI from tracked authority, verified projections, and recorded Git blobs. It recovers the last checked-in durable boundary, not uncommitted implementation or cache bytes. Durable `.archflow` files exist only on the working branch for resumability and are removed before the final product PR.

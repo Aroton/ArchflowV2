@@ -82,7 +82,7 @@ async function repository() {
   git(root, "commit", "-q", "-m", "root");
   const scaffolded = await scaffoldRepositoryAssets({ working_directory: root });
   if (!scaffolded.ok) throw new Error(scaffolded.error.code);
-  git(root, "add", "--", ".gitattributes", ".archflow/workflow.yaml", ".archflow/constitution", ".archflow/config.yaml");
+  git(root, "add", "--", ".gitattributes", ".archflow/.gitignore", ".archflow/workflow.yaml", ".archflow/constitution", ".archflow/config.yaml");
   git(root, "commit", "-q", "-m", "policy");
   const staged = await stageTaskInitialization({ working_directory: root, task_id: task });
   if (!staged.ok) throw new Error(staged.error.code);
@@ -118,7 +118,7 @@ describe("bundled local CLI", () => {
     });
     expect(initialized.ok).toBe(true);
     if (!initialized.ok) return;
-    expect(initialized.value.state.value.committed_intent?.request_digest).toBe(first.value.value.request_digest);
+    expect(initialized.value.state.value.last_transition?.request_digest).toBe(first.value.value.request_digest);
 
     writeFileSync(join(bootstrap.value.authority.task_root, "prd.md"), "# PRD\n");
 
@@ -153,10 +153,14 @@ describe("bundled local CLI", () => {
     writeFileSync(join(fixture.root, "README.md"), "repository changed\n");
     const statePath = join(bootstrap.value.authority.task_root, "state.json");
     const stateBytesBefore = readFileSync(statePath);
+    const { last_transition: _transition, ...stateWithoutTransition } = JSON.parse(stateBytesBefore.toString("utf8"));
     writeFileSync(statePath, canonicalDocument({
-      ...JSON.parse(stateBytesBefore.toString("utf8")),
+      ...stateWithoutTransition,
       phase_instance: "phase-impl-1", step: "produce", status: "running",
     }).bytes);
+    const verificationPath = join(fixture.root, ".archflow", "work", "tasks", task, "cache", "phases", "1", "verification.txt");
+    mkdirSync(dirname(verificationPath), { recursive: true });
+    writeFileSync(verificationPath, "npm test: passed\n");
     const implementation = cli(fixture.root, "build-request", {
       intent_id: "produce-impl", kind: "produce",
       implementation: {
@@ -230,7 +234,9 @@ describe("bundled local CLI", () => {
       },
     };
     const gate = cli(fixture.root, "envelope", { tool: "archflow_gate", input: gateInput });
-    expect(gate).toMatchObject({ status: 0, value: { ok: true, value: { gate: { decision_path: "gate.decision" } } } });
+    expect(gate).toMatchObject({ status: 0, value: { ok: true, value: { gate: {
+      decision_path: `.archflow/work/tasks/${task}/cache/gates/gate.decision`,
+    } } } });
     // Resolution rewrites only the request's own fingerprint: the historical fingerprint a
     // supplemental outcome pins must pass through byte-identical.
     expect(gate.value.value.request.input.input_fingerprint).toBe(gate.value.value.input_fingerprint);
@@ -252,15 +258,18 @@ describe("bundled local CLI", () => {
       current_evidence: evidence, kind: "constitution-review", context: originContext,
       allowed_decisions: ["approve", "revise", "reject", "waiver-requested", "cancel"], opened_at_revision: parseSafeInteger(state.revision),
     });
-    mkdirSync(join(production.value.authority.task_root, "decisions", originGateId), { recursive: true });
-    writeFileSync(join(production.value.authority.task_root, "decisions", originGateId, "request.json"), canonicalDocument(request).bytes);
+    const originAuthority = join(production.value.authority.task_root, "authority", "decisions", originGateId);
+    mkdirSync(originAuthority, { recursive: true });
+    writeFileSync(join(originAuthority, "request.json"), canonicalDocument(request).bytes);
     const waiver = cli(fixture.root, "envelope", { tool: "archflow_waiver", input: {
       ...common, intent_id: "waiver-cli", rationale: "Rule does not apply.",
       origin: { origin_gate_id: originGateId, origin_decision_digest: digest("1"), origin_context_digest: originContextDigest,
         task_id: task, phase_instance: "prd", subject_digest: request.subject_digest,
         current_evidence_set_digest: evidence.set_digest, rule, scope },
     } });
-    expect(waiver).toMatchObject({ status: 0, value: { ok: true, value: { tool: "archflow_waiver", gate: { decision_path: "gate.decision" } } } });
+    expect(waiver).toMatchObject({ status: 0, value: { ok: true, value: { tool: "archflow_waiver", gate: {
+      decision_path: `.archflow/work/tasks/${task}/cache/gates/gate.decision`,
+    } } } });
 
     const status = cli(fixture.root, "status");
     expect(status).toMatchObject({ status: 0, value: { ok: true, value: {

@@ -66,7 +66,6 @@ const NEW_SCHEMA_STEMS = [
   "durable-primitives",
   "task-state",
   "intent-receipt",
-  "maintenance-record",
   "task-initialization",
   "legacy-import-initialization",
   "document-artifact",
@@ -78,7 +77,6 @@ const NEW_MODULES = [
   "durable-primitives.ts",
   "durable-state.ts",
   "durable-intent.ts",
-  "durable-maintenance.ts",
   "durable-task-initialization.ts",
   "durable-legacy-import.ts",
   "durable-document.ts",
@@ -210,20 +208,20 @@ describe("D2 — the agent-supplied roots validate under the Zod authority", () 
  * unprotected, and no leaf chunk's test can see it.
  */
 describe("the claimable and server-owned class sets partition PATH_CLASSES", () => {
-  it("is a partition: 7 + 12 = 19, disjoint, union exact", () => {
+  it("is a partition: 3 + 8 = 11, disjoint, union exact", () => {
     const claimable = new Set<string>(CLAIMABLE_OUTPUT_PATH_CLASSES);
     const serverOwned = new Set<string>(SERVER_OWNED_PATH_CLASSES);
     const all = new Set<string>(PATH_CLASSES);
 
-    expect(claimable.size).toBe(7);
-    expect(serverOwned.size).toBe(12);
-    expect(all.size).toBe(19);
+    expect(claimable.size).toBe(3);
+    expect(serverOwned.size).toBe(8);
+    expect(all.size).toBe(11);
 
     expect([...claimable].filter((entry) => serverOwned.has(entry))).toEqual([]);
     expect([...claimable, ...serverOwned].sort()).toEqual([...all].sort());
   });
 
-  it("rejects an implementation output claiming each of the twelve server-owned classes, structurally", () => {
+  it("rejects an implementation output claiming each server-owned class, structurally", () => {
     const target = MIRRORED.find((entry) => entry.name === "implementation-output") as Mirrored;
     for (const pathClass of SERVER_OWNED_PATH_CLASSES) {
       const mutated = clone(target.sample) as JsonObject;
@@ -284,11 +282,10 @@ const DEF_INVENTORY: ReadonlyArray<readonly [string, readonly string[]]> = [
       "approvalRef",
       "waiverRef",
       "openGateRef",
-      "committedIntentRef",
-      "adoptedCheckpointRef",
+      "lastTransition",
+      "plainJson",
     ],
   ],
-  ["maintenance-record", ["maintenanceDeletion"]],
 ];
 
 /** Recursively collect every `$ref` string in a schema document. */
@@ -362,10 +359,10 @@ describe("the pinned $def inventory resolves", () => {
 });
 
 describe("registry invariants after supplemental review registration", () => {
-  it("SCHEMA_IDS holds 35 entries in exact bijection with the schema directory", () => {
-    expect(Object.keys(SCHEMA_IDS)).toHaveLength(35);
-    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(35);
-    expect(schemaFileNames()).toHaveLength(35);
+  it("SCHEMA_IDS holds 34 entries in exact bijection with the schema directory", () => {
+    expect(Object.keys(SCHEMA_IDS)).toHaveLength(34);
+    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(34);
+    expect(schemaFileNames()).toHaveLength(34);
 
     const idsInFiles = [...ALL_SCHEMAS.values()].map((document) => document.$id as string).sort();
     expect(idsInFiles).toEqual([...Object.values(SCHEMA_IDS)].sort());
@@ -376,7 +373,6 @@ describe("registry invariants after supplemental review registration", () => {
       durablePrimitives: "durable-primitives",
       taskState: "task-state",
       intentReceipt: "intent-receipt",
-      maintenanceRecord: "maintenance-record",
       taskInitialization: "task-initialization",
       legacyImportInitialization: "legacy-import-initialization",
       documentArtifact: "document-artifact",
@@ -403,7 +399,7 @@ describe("registry invariants after supplemental review registration", () => {
     expect(errorsAt).toBeGreaterThanOrEqual(0);
     const expectedModules = NEW_MODULES
       .map((module) => module.replace(/\.ts$/u, ".js"))
-      .toSpliced(8, 0, "durable-result-manifest.js", "durable-gate.js");
+      .toSpliced(7, 0, "durable-result-manifest.js", "durable-gate.js");
     expect(starExports.slice(errorsAt + 1, errorsAt + 1 + expectedModules.length)).toEqual(expectedModules);
 
     // `durable.ts` carries no schema; the two spliced modules carry their own registry rows.
@@ -491,9 +487,11 @@ describe("the phase's exclusions hold", () => {
       }
     };
     for (const [stem, document] of ALL_SCHEMAS) walk(document, stem);
-    // Optional durable fields still use omission. The receipt's generic PlainJson outcome is the
-    // one value position where JSON null is data rather than an absence marker.
-    expect(nullNodes).toEqual(["intent-receipt/$defs/plainJson/anyOf/0/type"]);
+    // Optional durable fields still use omission. Generic PlainJson outcomes allow null as data.
+    expect(nullNodes).toEqual([
+      "intent-receipt/$defs/plainJson/anyOf/0/type",
+      "task-state/$defs/plainJson/anyOf/0/type",
+    ]);
   });
 
   it("no new module uses .nullable() or z.null", () => {

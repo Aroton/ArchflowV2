@@ -6,7 +6,6 @@ import { canonicalDocument, canonicalJsonDigest } from "../../src/contracts/cano
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { ImplementationOutputV1 } from "../../src/contracts/durable-implementation-output.js";
 import type { LegacyImportInitializationV1 } from "../../src/contracts/durable-legacy-import.js";
-import type { MaintenanceRecordV1 } from "../../src/contracts/durable-maintenance.js";
 import type { IntentReceiptV1 } from "../../src/contracts/durable-intent.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parseSafeInteger } from "../../src/contracts/evidence.js";
@@ -43,8 +42,6 @@ const legacyImport = async (): Promise<LegacyImportInitializationV1> =>
 const documentArtifact = async (): Promise<DocumentArtifactV1> => fixture<DocumentArtifactV1>("document-artifact");
 const implementationOutput = async (): Promise<ImplementationOutputV1> =>
   fixture<ImplementationOutputV1>("implementation-output");
-const maintenanceRecord = async (): Promise<MaintenanceRecordV1> =>
-  fixture<MaintenanceRecordV1>("maintenance-record");
 
 const accept = (subject: DurableSemanticSubject): void => {
   const result = validateDurableSemantics(subject);
@@ -52,8 +49,8 @@ const accept = (subject: DurableSemanticSubject): void => {
   expect(result.ok).toBe(true);
 };
 
-const withoutCommittedIntent = (value: TaskStateV1): TaskStateV1 => {
-  const { committed_intent: _committedIntent, ...rest } = value;
+const withoutLastTransition = (value: TaskStateV1): TaskStateV1 => {
+  const { last_transition: _lastTransition, ...rest } = value;
   return rest;
 };
 
@@ -62,7 +59,7 @@ const intentPair = async (): Promise<{
   readonly prepared: TaskStateV1;
   readonly receipt: IntentReceiptV1;
 }> => {
-  const prepared = withoutCommittedIntent(await state());
+  const prepared = withoutLastTransition(await state());
   const predecessor: TaskStateV1 = { ...prepared, revision: parseSafeInteger(prepared.revision - 1) };
   const outcome = { result_id: "phase-impl-1:counter_review:2", revision: prepared.revision };
   const receipt = {
@@ -101,14 +98,18 @@ const receiptWithPrepared = (
 
 const committedState = (receipt: IntentReceiptV1): TaskStateV1 => ({
   ...receipt.prepared_state,
-  committed_intent: {
+  last_transition: {
+    schema_version: "1",
+    tool: receipt.tool,
+    operation: receipt.operation,
     intent_id: receipt.intent_id,
     request_digest: receipt.request_digest,
-    receipt_digest: canonicalJsonDigest(receipt),
+    input_fingerprint: receipt.input_fingerprint,
+    result_id: receipt.result_id,
+    outcome: receipt.outcome,
     outcome_digest: receipt.outcome_digest,
     prior_revision: receipt.prior_revision,
     resulting_revision: receipt.resulting_revision,
-    result_id: receipt.result_id,
   },
 });
 
@@ -159,10 +160,6 @@ describe("validateDurableSemantics — positive path", () => {
 
   it("accepts an implementation-output artifact supplied alone", async () => {
     accept({ artifact: canonicalDocument(await implementationOutput()) });
-  });
-
-  it("accepts a maintenance record supplied alone", async () => {
-    accept({ maintenance: canonicalDocument(await maintenanceRecord()) });
   });
 
   it("accepts a state that adopts the supplied task-initialization (rank 7a-7h)", async () => {
@@ -226,21 +223,6 @@ describe("validateDurableSemantics — positive path", () => {
     });
   });
 
-  it("accepts all three slots supplied together", async () => {
-    const initialization = await taskInitialization();
-    const base = adopting(await state(), initialization);
-    const maintenance = await maintenanceRecord();
-    accept({
-      state: canonicalDocument(base),
-      artifact: canonicalDocument(initialization),
-      maintenance: canonicalDocument({
-        ...maintenance,
-        task_id: base.task_id,
-        performed_at_revision: base.revision,
-      }),
-    });
-  });
-
   it("accepts an empty subject", () => {
     accept({});
   });
@@ -249,16 +231,20 @@ describe("validateDurableSemantics — positive path", () => {
     const { predecessor, prepared, receipt } = await intentPair();
     accept(createPreparedIntentSubject(canonicalDocument(predecessor), canonicalDocument(receipt)));
 
-    const committed = {
+    const committed: TaskStateV1 = {
       ...prepared,
-      committed_intent: {
+      last_transition: {
+        schema_version: "1",
+        tool: receipt.tool,
+        operation: receipt.operation,
         intent_id: receipt.intent_id,
         request_digest: receipt.request_digest,
-        receipt_digest: canonicalJsonDigest(receipt),
+        input_fingerprint: receipt.input_fingerprint,
+        result_id: receipt.result_id,
+        outcome: receipt.outcome,
         outcome_digest: receipt.outcome_digest,
         prior_revision: receipt.prior_revision,
         resulting_revision: receipt.resulting_revision,
-        result_id: receipt.result_id,
       },
     };
     accept(createCommittedIntentSubject(canonicalDocument(committed), canonicalDocument(receipt)));
@@ -299,17 +285,21 @@ describe("validateDurableSemantics — positive path", () => {
       issue_code: DURABLE_ISSUE_CODES.intentReceiptConfigMismatch,
     });
 
-    const committed = {
+    const committed: TaskStateV1 = {
       ...prepared,
       status: "failed" as const,
-      committed_intent: {
+      last_transition: {
+        schema_version: "1",
+        tool: receipt.tool,
+        operation: receipt.operation,
         intent_id: receipt.intent_id,
         request_digest: receipt.request_digest,
-        receipt_digest: canonicalJsonDigest(receipt),
+        input_fingerprint: receipt.input_fingerprint,
+        result_id: receipt.result_id,
+        outcome: receipt.outcome,
         outcome_digest: receipt.outcome_digest,
         prior_revision: receipt.prior_revision,
         resulting_revision: receipt.resulting_revision,
-        result_id: receipt.result_id,
       },
     };
     const rank8b = validateDurableSemantics(
@@ -339,8 +329,8 @@ describe("validateDurableSemantics — positive path", () => {
       "TASK_INVALID",
       taskParameters(DURABLE_ISSUE_CODES.intentReceiptSelfDigestMismatch),
     );
-    const committedIntent = committedState(receipt).committed_intent;
-    if (committedIntent === undefined) throw new TypeError("expected committed intent reference");
+    const lastTransition = committedState(receipt).last_transition;
+    if (lastTransition === undefined) throw new TypeError("expected last transition");
 
     const localCases: ReadonlyArray<readonly [IntentReceiptV1, string]> = [
       [
@@ -364,8 +354,8 @@ describe("validateDurableSemantics — positive path", () => {
         DURABLE_ISSUE_CODES.intentReceiptPreparedStateRevisionMismatch,
       ],
       [
-        receiptWithPrepared(receipt, { committed_intent: committedIntent }),
-        DURABLE_ISSUE_CODES.intentReceiptPreparedStateCommittedIntentPresent,
+        receiptWithPrepared(receipt, { last_transition: lastTransition }),
+        DURABLE_ISSUE_CODES.intentReceiptPreparedStateLastTransitionPresent,
       ],
     ];
 
@@ -451,8 +441,8 @@ describe("validateDurableSemantics — positive path", () => {
   it("reports every committed reference issue at rank 8b with the final STATE_INVALID carrier", async () => {
     const { receipt } = await intentPair();
     const exactState = committedState(receipt);
-    const exactReference = exactState.committed_intent;
-    if (exactReference === undefined) throw new TypeError("expected committed intent reference");
+    const exactReference = exactState.last_transition;
+    if (exactReference === undefined) throw new TypeError("expected last transition");
     const stateParameters = (issue_code: string): Readonly<Record<string, unknown>> => ({
       phase_instance: exactState.phase_instance,
       issue_code,
@@ -461,16 +451,12 @@ describe("validateDurableSemantics — positive path", () => {
       createCommittedIntentSubject(canonicalDocument(candidate), canonicalDocument(receipt));
     const withReference = (changes: Partial<typeof exactReference>): TaskStateV1 => ({
       ...exactState,
-      committed_intent: { ...exactReference, ...changes },
+      last_transition: { ...exactReference, ...changes },
     });
 
     const committedCases: ReadonlyArray<readonly [TaskStateV1, string]> = [
       [withReference({ intent_id: "intent-foreign" as never }), DURABLE_ISSUE_CODES.intentReceiptIntentMismatch],
       [withReference({ request_digest: "9".repeat(64) as never }), DURABLE_ISSUE_CODES.intentReceiptRequestMismatch],
-      [
-        withReference({ receipt_digest: "8".repeat(64) as never }),
-        DURABLE_ISSUE_CODES.intentReceiptReferenceDigestMismatch,
-      ],
       [
         withReference({ outcome_digest: "7".repeat(64) as never }),
         DURABLE_ISSUE_CODES.intentReceiptReferenceOutcomeMismatch,

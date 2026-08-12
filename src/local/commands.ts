@@ -1,27 +1,31 @@
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
-
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../contracts/canonical.js";
-import { parseMaintenanceRecord, type MaintenanceRecordV1 } from "../contracts/durable-maintenance.js";
 import { parseGateDecisionRecord, parseGateRequest } from "../contracts/durable-gate.js";
 import { parseResultManifest } from "../contracts/durable-result-manifest.js";
 import { parseDocumentArtifact } from "../contracts/durable-document.js";
 import { parseImplementationOutput } from "../contracts/durable-implementation-output.js";
-import { parsePathSafeId, parseSafeInteger, parseTaskSlug, type SafeCode } from "../contracts/evidence.js";
+import { parseSafeInteger, parseSha256Digest, parseTaskSlug, type SafeCode } from "../contracts/evidence.js";
 import { createVerifiedEvidenceReference } from "../contracts/internal/trust-mints.js";
-import { parseTaskPathClaim } from "../contracts/path-claims.js";
+import { parseRepositoryPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { renderReviewEvidence } from "../contracts/renderers.js";
 import { parseReviewEvidence } from "../contracts/review.js";
 import { parseAdjudicationEvidence } from "../contracts/adjudication.js";
 import { parseTriageCandidate } from "../contracts/triage.js";
 import { parseSupplementalReviewRecord } from "../contracts/supplemental-record.js";
-import { gateCounterReviewClaim, gateRequestClaim, gateSupplementalReviewClaim, openResolved, resolveTaskPath, type ResolvedTaskPath } from "../repository/paths.js";
+import {
+  gateCounterReviewClaim,
+  gateRequestClaim,
+  gateSupplementalReviewClaim,
+  openResolved,
+  parseWorkspacePathClaim,
+  resolveTaskPath,
+  resolveTaskWorkspacePath,
+  resultAuthorityClaim,
+  type ResolvedTaskPath,
+} from "../repository/paths.js";
 import { writeGateDecisionInterface } from "../state/gates.js";
-import { ensureDecisionDirectory, ensureTaskProjectionParent } from "../state/layout.js";
+import { ensureDecisionDirectory, ensureWorkspaceProjectionParent } from "../state/layout.js";
 import { ensurePayloadParent, ensureResultDirectory } from "../state/layout.js";
-import { computeMaintenanceProof, performMaintenance } from "../state/maintenance.js";
-import { enumerateMaintenanceCandidates, enumerateMaintenanceManifests, enumerateMaintenanceRoots } from "../state/maintenance-roots.js";
 import { createProductionServices } from "../state/production.js";
 import { computeTaskStatus, projectBriefStatus } from "../state/status.js";
 import { installSnapshot, prepareSnapshot, restoreSnapshotOutput } from "../state/snapshots.js";
@@ -34,9 +38,10 @@ import { stageLegacyUpgrade } from "../init/legacy-upgrade.js";
 import { BUILD_REQUEST_KINDS, runBuildRequest } from "./build-request.js";
 import { computeCallEnvelope } from "./call-envelope.js";
 import { classifyWorkflowStatus } from "./status-classification.js";
+import { cleanTaskWorkspace, cleanTerminalTaskWorkspace } from "../state/workspace-cleanup.js";
 
 export const LOCAL_COMMANDS = Object.freeze([
-  "validate", "hash", "render", "snapshot", "restore", "maintain", "decide",
+  "validate", "hash", "render", "snapshot", "restore", "clean", "decide",
   "gate-counter", "status", "reconcile", "init", "envelope", "build-request",
   "manual-status", "upgrade",
 ] as const);
@@ -53,7 +58,7 @@ export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommand
   render: { payload: '{"kind":"review"|"adjudication","value":<review or adjudication artifact>}', task: "ignored" },
   snapshot: { payload: '{"manifest":<result manifest>,"payloads":[...],"retained_task_bytes":<n>}', task: "required" },
   restore: { payload: '{"result_digest":<sha256>,"output_path":<path>}', task: "required" },
-  maintain: { payload: '{"maintenance_id":<id>,"human_reason":<text>}', task: "required" },
+  clean: { payload: null, task: "required" },
   decide: { payload: '{"kind":"interface","value":<chosen decision template>}', task: "required" },
   "gate-counter": { payload: "<supplemental review record from the counter-review recipe>", task: "required" },
   status: { payload: null, task: "required" },
@@ -175,7 +180,7 @@ async function gateCounter(input: CommandInput): Promise<PlainJsonValue | Projec
   const created = await services(input);
   if (!created.ok) return created;
   const { authority, dependencies, runner } = created.value;
-  const requestTarget = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateRequestClaim(record.gate_id), expectedClass: "decision", context: authority.context });
+  const requestTarget = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateRequestClaim(record.gate_id), expectedClass: "authority-decision", context: authority.context });
   if (!requestTarget.ok) return requestTarget;
   const requestHandle = await openResolved(requestTarget.value.absolute, 0);
   let request;
@@ -186,7 +191,7 @@ async function gateCounter(input: CommandInput): Promise<PlainJsonValue | Projec
   await ensureDecisionDirectory(authority, record.gate_id);
   const reviewProjection = renderReviewEvidence(createVerifiedEvidenceReference(record.review));
   if (sha256Bytes(reviewProjection) !== record.projection_digest) throw new TypeError("gate-counter projection digest differs");
-  const retained = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateSupplementalReviewClaim(record.gate_id), expectedClass: "decision", context: authority.context });
+  const retained = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateSupplementalReviewClaim(record.gate_id), expectedClass: "authority-decision", context: authority.context });
   if (!retained.ok) return retained;
   const document = canonicalDocument(record);
   const installation = await dependencies.atomic.createExclusive(retained.value, document.bytes);
@@ -196,40 +201,40 @@ async function gateCounter(input: CommandInput): Promise<PlainJsonValue | Projec
       if (!Buffer.from(await handle.readFile()).equals(Buffer.from(document.bytes))) throw new TypeError("gate-counter retained record disagrees");
     } finally { await handle.close(); }
   }
-  const projection = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateCounterReviewClaim(record.phase_instance, record.gate_id), expectedClass: "review", context: authority.context });
+  const projection = await resolveTaskWorkspacePath({ runner, taskId: authority.task_id, claim: gateCounterReviewClaim(record.phase_instance, record.gate_id), expectedClass: "workspace-review", context: authority.context });
   if (!projection.ok) return projection;
   if (dependencies.projection_writer === undefined) throw new TypeError("projection writer is unavailable");
-  await ensureTaskProjectionParent(authority, projection.value.absolute as ResolvedTaskPath);
+  await ensureWorkspaceProjectionParent(authority, projection.value.absolute);
   await dependencies.projection_writer.replaceRegular(projection.value, reviewProjection, false);
   return { record_digest: document.digest, projection_digest: record.projection_digest, installation };
 }
 
-async function maintain(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
-  const value = requireValue(input) as Record<string, PlainJsonValue>;
+async function clean(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
   const created = await services(input);
   if (!created.ok) return created;
-  const { authority, dependencies, runner } = created.value;
-  const roots = await enumerateMaintenanceRoots(dependencies, authority);
-  if (!roots.ok) return roots;
-  const manifests = await enumerateMaintenanceManifests(dependencies, authority, roots.value);
-  if (!manifests.ok) return manifests;
-  const candidates = await enumerateMaintenanceCandidates(dependencies, authority, roots.value);
-  if (!candidates.ok) return candidates;
-  const proof = computeMaintenanceProof({ roots: roots.value, manifests: manifests.value, candidates: candidates.value });
-  if (proof.permitted_deletions.length === 0) return { deleted: 0, reachability_proof_digest: proof.digest };
-  const maintenanceId = parsePathSafeId(value.maintenance_id);
-  const reason = String(value.human_reason ?? "");
-  await mkdir(join(authority.task_root, "maintenance"), { recursive: false }).catch((error: { code?: string }) => { if (error.code !== "EEXIST") throw error; });
-  const target = await resolveTaskPath({ runner, taskId: authority.task_id, claim: parseTaskPathClaim(`maintenance/${maintenanceId}.json`), expectedClass: "maintenance-record", context: authority.context });
-  if (!target.ok) return target;
-  const deletions = proof.permitted_deletions.map(({ target: _target, ...deletion }) => deletion);
-  const record: MaintenanceRecordV1 = {
-    schema_version: "1", maintenance_id: maintenanceId, task_id: authority.task_id,
-    performed_at_revision: roots.value.current_state.revision, human_reason: reason,
-    reachability_proof_digest: proof.digest, deletions,
-    total_bytes_deleted: parseSafeInteger(deletions.reduce((total, deletion) => total + deletion.byte_count, 0)),
-  };
-  return performMaintenance({ atomic: dependencies.atomic, record_target: target.value, record, proof, validate_record: parseMaintenanceRecord });
+  const { authority, dependencies, state } = created.value;
+  if (state === undefined) throw new TypeError("clean requires current task state");
+  let terminal = false;
+  const cleaned = await dependencies.lock.runExclusive(authority.workspace_root, async () => {
+    const current = await dependencies.read_state(authority.state);
+    if (current.kind !== "canonical") throw new TypeError("clean requires canonical current task state");
+    terminal = current.document.value.terminal !== undefined;
+    return cleanTaskWorkspace(dependencies, authority, current.document.value);
+  });
+  if (!cleaned.ok || !terminal) return cleaned;
+  const terminalCleanup = await cleanTerminalTaskWorkspace(dependencies, authority);
+  if (!terminalCleanup.ok) return terminalCleanup;
+  return Object.freeze({
+    schema_version: "1",
+    ok: true,
+    value: Object.freeze({
+      removed_files: parseSafeInteger(cleaned.value.removed_files + terminalCleanup.value.removed_files),
+      removed_bytes: parseSafeInteger(cleaned.value.removed_bytes + terminalCleanup.value.removed_bytes),
+      retained_files: parseSafeInteger(cleaned.value.retained_files + terminalCleanup.value.retained_files),
+      retained_bytes: parseSafeInteger(cleaned.value.retained_bytes + terminalCleanup.value.retained_bytes),
+      cleanup_pending: terminalCleanup.value.cleanup_pending,
+    }),
+  });
 }
 
 async function manualStatus(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
@@ -270,17 +275,17 @@ async function snapshot(input: CommandInput): Promise<PlainJsonValue | ProjectRe
   const payloads = [];
   for (const item of payloadValues) {
     if (item === null || Array.isArray(item) || typeof item !== "object") throw new TypeError("snapshot payload must be an object");
-    const path = String((item as Record<string, PlainJsonValue>).path);
+    const path = parseRepositoryPathClaim((item as Record<string, PlainJsonValue>).path);
     const bytes = Buffer.from(String((item as Record<string, PlainJsonValue>).bytes_base64), "base64");
-    const claim = parseTaskPathClaim(`results/sha256/${resultDigest}/payload/${path}`);
-    const target = await resolveTaskPath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim, expectedClass: "result-payload", context: created.value.authority.context });
+    const claim = parseWorkspacePathClaim(`cache/results/${resultDigest}/payload/${path}`);
+    const target = await resolveTaskWorkspacePath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim, expectedClass: "workspace-result-payload", context: created.value.authority.context });
     if (!target.ok) return target;
     await ensurePayloadParent(created.value.authority, resultDigest, target.value.absolute);
-    payloads.push({ path: path as never, target: target.value, bytes: new Uint8Array(bytes) });
+    payloads.push({ path, target: target.value, bytes: new Uint8Array(bytes) });
   }
   const prepared = prepareSnapshot({ manifest, payloads, retained_task_bytes: parseSafeInteger(value.retained_task_bytes), validate_manifest: parseResultManifest });
   if (!prepared.ok) return prepared;
-  const manifestTarget = await resolveTaskPath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim: parseTaskPathClaim(`results/sha256/${resultDigest}/manifest.json`), expectedClass: "result-manifest", context: created.value.authority.context });
+  const manifestTarget = await resolveTaskPath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim: resultAuthorityClaim(resultDigest), expectedClass: "authority-result", context: created.value.authority.context });
   if (!manifestTarget.ok) return manifestTarget;
   return installSnapshot(created.value.dependencies.atomic, prepared.value, manifestTarget.value, created.value.runner.location.worktreeRoot as never);
 }
@@ -289,13 +294,13 @@ async function restore(input: CommandInput): Promise<PlainJsonValue | ProjectRes
   const created = await services(input);
   if (!created.ok) return created;
   const value = recordValue(input);
-  const resultDigest = String(value.result_digest);
-  const outputPath = String(value.output_path);
-  const manifestTarget = await resolveTaskPath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim: parseTaskPathClaim(`results/sha256/${resultDigest}/manifest.json`), expectedClass: "result-manifest", context: created.value.authority.context });
+  const resultDigest = parseSha256Digest(value.result_digest);
+  const outputPath = parseRepositoryPathClaim(value.output_path);
+  const manifestTarget = await resolveTaskPath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim: resultAuthorityClaim(resultDigest), expectedClass: "authority-result", context: created.value.authority.context });
   if (!manifestTarget.ok) return manifestTarget;
-  const payloadTarget = await resolveTaskPath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim: parseTaskPathClaim(`results/sha256/${resultDigest}/payload/${outputPath}`), expectedClass: "result-payload", context: created.value.authority.context });
+  const payloadTarget = await resolveTaskWorkspacePath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim: parseWorkspacePathClaim(`cache/results/${resultDigest}/payload/${outputPath}`), expectedClass: "workspace-result-payload", context: created.value.authority.context });
   if (!payloadTarget.ok) return payloadTarget;
-  const restored = await restoreSnapshotOutput({ target: manifestTarget.value, expected_result_digest: resultDigest as never, runner: created.value.runner, worktree_root: created.value.runner.location.worktreeRoot as never, output_path: outputPath as never, payload_target: payloadTarget.value });
+  const restored = await restoreSnapshotOutput({ target: manifestTarget.value, expected_result_digest: resultDigest, runner: created.value.runner, worktree_root: created.value.runner.location.worktreeRoot as never, output_path: outputPath, payload_target: payloadTarget.value });
   if (!restored.ok || restored.value.state === "absent") return restored;
   return { schema_version: "1", ok: true, value: { ...restored.value, bytes: Buffer.from(restored.value.bytes).toString("base64") } };
 }
@@ -325,7 +330,7 @@ async function reconcile(input: CommandInput): Promise<PlainJsonValue | ProjectR
 }
 
 const LOCAL_COMMAND_HANDLERS: Readonly<Record<LocalCommand, (input: CommandInput) => Promise<PlainJsonValue | ProjectResult<unknown>>>> = Object.freeze({
-  validate, hash, render, snapshot, restore, maintain, decide,
+  validate, hash, render, snapshot, restore, clean, decide,
   "gate-counter": gateCounter, status, reconcile, init, envelope,
   "build-request": buildRequest, "manual-status": manualStatus, upgrade,
 });

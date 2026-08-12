@@ -176,7 +176,7 @@ try {
             await mkdir(dirname(path.absolute), { recursive: true });
             const temporary = join(dirname(path.absolute), `.${basename(path.absolute)}.${process.pid}.crash.tmp`);
             await writeTemporary(temporary, bytes);
-            if (cutPoint === "receipt-temp" && path.path_class === "intent") await killAtCut(cutPoint, temporary);
+            if (cutPoint === "receipt-temp" && path.path_class === "workspace-intent") await killAtCut(cutPoint, temporary);
             try {
               await link(temporary, path.absolute);
             } catch (error) {
@@ -184,9 +184,9 @@ try {
               throw error;
             }
             if (
-              (cutPoint === "receipt-link" && path.path_class === "intent") ||
-              (cutPoint === "result-payload-link" && path.path_class === "result-payload") ||
-              (cutPoint === "result-manifest-link" && path.path_class === "result-manifest")
+              (cutPoint === "receipt-link" && path.path_class === "workspace-intent") ||
+              (cutPoint === "result-payload-link" && path.path_class === "workspace-result-payload") ||
+              (cutPoint === "result-manifest-link" && path.path_class === "authority-result")
             ) await killAtCut(cutPoint, path.absolute);
             await unlink(temporary);
             return "created";
@@ -200,10 +200,14 @@ try {
           },
         }
       : atomic.createAtomicWriter();
-    const manifestClaim = `.archflow/tasks/${taskId}/results/sha256/${resultManifest.digest}/manifest.json`;
-    const payloadClaim = `.archflow/tasks/${taskId}/results/sha256/${resultManifest.digest}/payload/${outputPath}`;
-    const manifestTarget = { absolute: join(repository, manifestClaim), repositoryRelative: manifestClaim, path_class: "result-manifest" };
-    const payloadTarget = { absolute: join(repository, payloadClaim), repositoryRelative: payloadClaim, path_class: "result-payload" };
+    const manifestClaim = `.archflow/tasks/${taskId}/authority/results/${resultManifest.digest}.json`;
+    const payloadWorkspaceClaim = `cache/results/${resultManifest.digest}/payload/${outputPath}`;
+    const payloadClaim = `.archflow/work/tasks/${taskId}/${payloadWorkspaceClaim}`;
+    const manifestTarget = { absolute: join(repository, manifestClaim), repositoryRelative: manifestClaim, path_class: "authority-result" };
+    const payloadTarget = {
+      absolute: join(repository, payloadClaim), repositoryRelative: payloadClaim,
+      workspaceRelative: payloadWorkspaceClaim, path_class: "workspace-result-payload",
+    };
     const projectionTarget = { absolute: join(repository, outputPath), repositoryRelative: outputPath, path_class: "document" };
     if (resultMode) await mkdir(dirname(projectionTarget.absolute), { recursive: true });
     const capturedProjection = await snapshots.captureProjectionTarget(projectionTarget);
@@ -257,12 +261,12 @@ try {
       },
     }, { call, authority: authority.value }, async (current) => {
       prepareCalls += 1;
-      const { revision: _revision, committed_intent: _committedIntent, ...nextState } = current.value;
+      const { revision: _revision, last_transition: _lastTransition, ...nextState } = current.value;
       const success = { path: "state.json", revision: current.value.revision + 1, status: "succeeded" };
       const reference = {
         phase_instance: current.value.phase_instance, step: current.value.step,
         result_digest: resultManifest.digest, result_id: resultId,
-        input_fingerprint: inputFingerprint, manifest_path: manifestClaim,
+        input_fingerprint: inputFingerprint,
       };
       return {
         schema_version: "1",

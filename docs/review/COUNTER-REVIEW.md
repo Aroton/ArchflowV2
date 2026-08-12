@@ -1,6 +1,6 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-08-12 · **Commit:** `72457b8` · **Covers:** `src/review/`, `src/state/produce-subject.ts`
+**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** `src/review/`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
 
 Counter-review is the system's adversarial check: every artifact is reviewed by the *opposite model family* (Claude ⇄ Codex), dispatched by the server itself so the evidence is something the producer cannot author. One `archflow_counter_review` call covers up to two dispatches: the rubric counter-review, and — only when the pinned constitution has active rules, a decision the server makes alone — the constitution review (see below). This page covers the review envelope, the review flow, the constitution review, and waivers.
 
@@ -38,7 +38,7 @@ The production rubrics use one consequence-based standard across initial and rem
 - **A finding needs a material consequence.** Leaving the artifact unchanged must be reasonably likely to change a downstream decision, behavior, verification result, delivery outcome, or important risk. A preference, possible enhancement, or residual imperfection is not a finding.
 - **Ambiguity is material only when reasonable readers diverge materially.** More specific prose is not automatically better. Wording blocks when it permits materially different reasonable implementations or acceptance outcomes.
 - **Remediation review has a primary and secondary task.** First verify every accepted revision intent. Second, catch a newly introduced or previously undiscovered defect only when it clears the same materiality bar. This escape hatch keeps a terrible new issue actionable without turning every fix into another general search for improvements.
-- **Non-material output is suppressed, not deferred to the human.** Optional polish, harmless wording refinements, stylistic preferences, and completeness suggestions do not become a gate backlog. The durable raw review and triage remain auditable.
+- **Non-material output is suppressed, not deferred to the human.** Optional polish, harmless wording refinements, stylistic preferences, and completeness suggestions do not become a gate backlog. Structured review and triage evidence remains embedded in the current durable result manifest; Markdown renderings are disposable cache, not permanent outputs.
 - **Evidence gaps are proportional.** `unverifiable-claims` reports a gap only when missing evidence prevents a material judgment; explicit assumptions remain under `stated-assumptions`.
 
 The honest limit remains: `prior-triage` reaches back exactly one round. The protocol reduces serial rediscovery by narrowing later work to remediation and material regressions; it does not make generative judgment deterministic.
@@ -55,6 +55,8 @@ The honest limit remains: `prior-triage` reaches back exactly one round. The pro
 The policy split is the key idea: absence that **contradicts durable authority** (the PRD's declared ask drifted; an upstream lost its approval; bytes don't match the retained projection) **fails closed** — no review happens. Every other gap becomes a named `unavailable` entry, which the rubric's non-blocking `unverifiable-claims` criterion turns into a finding. Findings prefixed `unverifiable-` mean "the reviewer lacked evidence," and triage must *reject* them with an `envelope-gap:` rationale — the fix for recurring gaps is better envelope assembly (or the reviewer's repo access), never pinning more bytes in.
 
 When the cap is hit, droppable context is replaced lowest-priority-first (`repo-map`, then `conventions`, then `interface-excerpt`, then `prior-triage`). The user ask, approved upstreams, and verification transcript are never droppable — if they don't fit, the review fails closed.
+
+For implementation subjects, the raw transcript lives only at ignored `.archflow/work/tasks/<task>/cache/phases/<n>/verification.txt`. `ImplementationOutputV1.verification_evidence` binds its SHA-256 digest and byte count into durable authority. Envelope assembly verifies those bytes before review; after phase advancement the raw transcript may be removed without weakening already-approved authority. If it disappears during an uncommitted active step, status asks for a rerun rather than invalidating an earlier phase.
 
 ## The tiered change-set rendering
 
@@ -134,7 +136,7 @@ Waivers are requested from an existing gate, never conjured: the origin gate mus
 
 ### Durable decisions
 
-Both gates and waivers funnel into the same machinery (`src/state/gates.ts`): each gate writes an immutable request and decision record under `decisions/<gate-id>/`, bound to the gate ID, context digest, subject digest, phase, and the current evidence set, with human provenance on the decision. Task state holds only *references* to approvals and waivers — any later code that wants to rely on one re-reads and re-validates the underlying documents, and the resulting authenticated object can only be minted by that verification (it cannot be hand-constructed). Supersession is honest: if the subject changed under an open gate, the resolver returns `GATE_SUPERSEDED` and the work re-enters the pipeline.
+Both gates and waivers funnel into the same machinery (`src/state/gates.ts`): each gate writes an immutable request and decision record under `authority/decisions/<gate-id>/`, bound to the gate ID, context digest, subject digest, phase, and the current evidence set, with human provenance on the decision. Task state holds only *references* to approvals and waivers — any later code that wants to rely on one re-reads and re-validates the underlying documents, and the resulting authenticated object can only be minted by that verification (it cannot be hand-constructed). Supersession is honest: if the subject changed under an open gate, the resolver returns `GATE_SUPERSEDED` and the work re-enters the pipeline. The human-facing gate UI is reconstructed under ignored work from that durable request and deleted only after the selected decision has been archived.
 
 ## Gate counter-reviews
 

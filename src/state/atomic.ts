@@ -2,21 +2,23 @@ import { randomUUID } from "node:crypto";
 import { link, open, rename, symlink, unlink, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
-import type { ResolvedPath } from "../repository/paths.js";
+import type { ResolvedPath, ResolvedWorkspacePath } from "../repository/paths.js";
+
+type WritableResolvedPath = ResolvedPath | ResolvedWorkspacePath;
 
 export type ExclusiveCreateResult = "created" | "exists";
 
 export type AtomicWriter = Readonly<{
-  createExclusive(path: ResolvedPath, bytes: Uint8Array): Promise<ExclusiveCreateResult>;
-  replace(path: ResolvedPath, bytes: Uint8Array): Promise<void>;
-  removeGateInterface(path: ResolvedPath): Promise<void>;
+  createExclusive(path: WritableResolvedPath, bytes: Uint8Array): Promise<ExclusiveCreateResult>;
+  replace(path: WritableResolvedPath, bytes: Uint8Array): Promise<void>;
+  removeGateInterface(path: ResolvedWorkspacePath): Promise<void>;
 }>;
 
 /** Narrow mutable-file primitives used by snapshot projection after collision checks. */
 export type ProjectionWriter = Readonly<{
-  replaceRegular(path: ResolvedPath, bytes: Uint8Array, executable: boolean): Promise<void>;
-  replaceSymlink(path: ResolvedPath, target: string): Promise<void>;
-  remove(path: ResolvedPath): Promise<void>;
+  replaceRegular(path: WritableResolvedPath, bytes: Uint8Array, executable: boolean): Promise<void>;
+  replaceSymlink(path: WritableResolvedPath, target: string): Promise<void>;
+  remove(path: WritableResolvedPath): Promise<void>;
 }>;
 
 export class AtomicReplaceError extends Error {
@@ -55,11 +57,11 @@ async function writeAll(handle: FileHandle, bytes: Uint8Array): Promise<void> {
   }
 }
 
-async function createExclusive(path: ResolvedPath, bytes: Uint8Array): Promise<ExclusiveCreateResult> {
+async function createExclusive(path: WritableResolvedPath, bytes: Uint8Array): Promise<ExclusiveCreateResult> {
   if (
-    path.path_class !== "intent" && path.path_class !== "maintenance-record" &&
-    path.path_class !== "result-manifest" && path.path_class !== "result-payload" &&
-    path.path_class !== "decision"
+    path.path_class !== "workspace-intent" && path.path_class !== "workspace-result-payload" &&
+    path.path_class !== "authority-result" && path.path_class !== "authority-decision" &&
+    path.path_class !== "authority-initialization"
   ) {
     throw new TypeError("createExclusive requires an immutable resolved path");
   }
@@ -103,18 +105,18 @@ async function createExclusive(path: ResolvedPath, bytes: Uint8Array): Promise<E
   }
 }
 
-async function replace(path: ResolvedPath, bytes: Uint8Array): Promise<void> {
+async function replace(path: WritableResolvedPath, bytes: Uint8Array): Promise<void> {
   // `staged-request` is deliberately replaceable: recomposing an intent before the call
   // overwrites its staged file, and the request digest — not file identity — guards use.
-  if (path.path_class !== "task-state" && path.path_class !== "gate-interface" && path.path_class !== "staged-request") {
+  if (path.path_class !== "task-state" && path.path_class !== "workspace-gate-interface" && path.path_class !== "workspace-staged-request") {
     throw new TypeError("replace requires a task-state, gate-interface, or staged-request resolved path");
   }
 
   await replaceRegularBytes(path.absolute, bytes, 0o644);
 }
 
-async function removeGateInterface(path: ResolvedPath): Promise<void> {
-  if (path.path_class !== "gate-interface") {
+async function removeGateInterface(path: ResolvedWorkspacePath): Promise<void> {
+  if (path.path_class !== "workspace-gate-interface") {
     throw new TypeError("removeGateInterface requires a gate-interface resolved path");
   }
   try {
@@ -136,11 +138,12 @@ export function createAtomicWriter(): AtomicWriter {
 }
 
 const PROJECTABLE = new Set([
-  "attempt", "document", "import", "repository-source", "result-payload", "review",
-  "task-branch-constitution", "verification-transcript",
+  "document", "repository-source", "task-branch-constitution",
+  "workspace-attempt", "workspace-gate-interface", "workspace-import", "workspace-result-payload",
+  "workspace-review", "workspace-scratch", "workspace-verification-transcript",
 ]);
 
-function requireProjectable(path: ResolvedPath): void {
+function requireProjectable(path: WritableResolvedPath): void {
   if (!PROJECTABLE.has(path.path_class)) throw new TypeError("projection requires a declared output path");
 }
 
@@ -169,12 +172,12 @@ async function replaceRegularBytes(target: string, bytes: Uint8Array, mode: numb
   }
 }
 
-async function replaceRegular(path: ResolvedPath, bytes: Uint8Array, executable: boolean): Promise<void> {
+async function replaceRegular(path: WritableResolvedPath, bytes: Uint8Array, executable: boolean): Promise<void> {
   requireProjectable(path);
   await replaceRegularBytes(path.absolute, bytes, executable ? 0o755 : 0o644);
 }
 
-async function replaceSymlink(path: ResolvedPath, target: string): Promise<void> {
+async function replaceSymlink(path: WritableResolvedPath, target: string): Promise<void> {
   requireProjectable(path);
   const temporary = join(dirname(path.absolute), `.${basename(path.absolute)}.${process.pid}.${randomUUID()}.tmp`);
   let created = false;
@@ -195,7 +198,7 @@ async function replaceSymlink(path: ResolvedPath, target: string): Promise<void>
   }
 }
 
-async function remove(path: ResolvedPath): Promise<void> {
+async function remove(path: WritableResolvedPath): Promise<void> {
   requireProjectable(path);
   try {
     await unlink(path.absolute);

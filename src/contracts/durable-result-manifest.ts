@@ -25,7 +25,7 @@ import type { PipelineStep } from "./vocabulary.js";
 import { PIPELINE_STEPS } from "./vocabulary.js";
 
 /**
- * Immutable authority stored at `results/sha256/<result-digest>/manifest.json`.
+ * Immutable authority stored at `authority/results/<result-digest>.json`.
  *
  * This is a server-internal persisted root. `resultManifestV1Schema` below is the runtime shape
  * authority — `parseResultManifest` validates through it — and `result-manifest.schema.json` is

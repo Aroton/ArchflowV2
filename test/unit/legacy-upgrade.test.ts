@@ -128,11 +128,8 @@ describe("legacy upgrade", () => {
     expect(staged.ok).toBe(true);
     if (!staged.ok) return;
     expect(parseLegacyImportInitialization(staged.value.initialization)).toEqual(staged.value.initialization);
-    expect(staged.value.resume_phase).toBe("phase-design-4");
-    expect(staged.value.initialization.mapping).toContainEqual(expect.objectContaining({
-      legacy_path: "reviews/phase-3-impl-counter-review.md",
-      phase_instance: "phase-impl-3",
-    }));
+    expect(staged.value.resume_phase).toBe("phase-design-2");
+    expect(staged.value.unmapped).toContain("reviews/phase-3-impl-counter-review.md");
     expect(staged.value.initialization.mapping).toEqual(expect.arrayContaining([
       expect.objectContaining({ legacy_path: "prd.md", destination_path: ".archflow/tasks/destination/prd.md", disposition: "draft" }),
       expect.objectContaining({ legacy_path: "architecture.md", destination_path: ".archflow/tasks/destination/design.md", disposition: "draft" }),

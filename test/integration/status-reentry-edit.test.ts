@@ -274,22 +274,19 @@ describe("post-triage re-entry edits are expected", () => {
       expect(afterEdit.reconciliation?.expected_reentry_edits).toEqual([prdClaim]);
       expect(afterEdit.blocking_reasons).not.toContain("projection-mismatch");
 
-      // A DIFFERENT drifted projection during the same re-entry stays blocking: only the
-      // produce manifest's own projections are edit-tolerated.
-      const counterReviewPath = join(fixture.root, ".archflow", "tasks", task, "reviews", "prd.counter.md");
+      // Rendered reviews are disposable cache. Editing one never creates durable reconciliation
+      // drift; it can be regenerated from the structured result authority.
+      const counterReviewPath = join(fixture.root, ".archflow", "work", "tasks", task, "cache", "reviews", "prd.counter.md");
       const recordedCounterReview = readFileSync(counterReviewPath);
       writeFileSync(counterReviewPath, "tampered rendered review\n");
       const foreignDrift = await h.status();
       expect(foreignDrift.next_action).toMatchObject({
-        code: "restore-or-record-new-transition",
-        human_required: true,
+        code: "run-step", step: "produce", human_required: false,
       });
-      expect(foreignDrift.reconciliation?.classification).toBe("reconciliation-required");
-      expect(foreignDrift.reconciliation?.findings).toMatchObject([
-        { kind: "projection-mismatch", path: `.archflow/tasks/${task}/reviews/prd.counter.md` },
-      ]);
+      expect(foreignDrift.reconciliation?.classification).toBe("consistent");
+      expect(foreignDrift.reconciliation?.findings).toEqual([]);
       expect(foreignDrift.reconciliation?.expected_reentry_edits).toEqual([prdClaim]);
-      expect(foreignDrift.blocking_reasons).toContain("projection-mismatch");
+      expect(foreignDrift.blocking_reasons).not.toContain("projection-mismatch");
       writeFileSync(counterReviewPath, recordedCounterReview);
 
       // The prefilled request executes: the produce running entry succeeds against the drifted

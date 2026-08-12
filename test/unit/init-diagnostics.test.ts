@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,7 +25,12 @@ vi.mock("../../src/dispatch/process.js", async (importOriginal) => ({
   runDispatchChild,
 }));
 
-import { claudeTimeoutFinding, codexTimeoutFinding, collectInitDiagnostics } from "../../src/init/diagnostics.js";
+import {
+  claudeTimeoutFinding,
+  codexTimeoutFinding,
+  collectInitDiagnostics,
+  diagnoseWorkDirectory,
+} from "../../src/init/diagnostics.js";
 import {
   CLAUDE_MCP_TIMEOUT_MS,
   CODEX_MANAGED_BLOCK,
@@ -48,6 +54,27 @@ const workspace = Object.freeze({
 });
 
 describe("init diagnostics", () => {
+  it("verifies that work is ignored and reports any already tracked work paths", async () => {
+    const repository = await mkdtemp(join(tmpdir(), "archflow-init-work-diagnostic-"));
+    try {
+      execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: repository });
+      await mkdir(join(repository, ".archflow", "work", "tasks", "demo"), { recursive: true });
+      await writeFile(join(repository, ".archflow", ".gitignore"), "/work/\n", "utf8");
+      await writeFile(join(repository, ".archflow", "work", "tasks", "demo", "cached.json"), "{}\n", "utf8");
+
+      const clean = await diagnoseWorkDirectory(repository);
+      expect(clean).toEqual({ ignored: true, tracked_paths: [], error: null });
+
+      execFileSync("git", ["add", "-f", ".archflow/work/tasks/demo/cached.json"], { cwd: repository });
+      const contaminated = await diagnoseWorkDirectory(repository);
+      expect(contaminated.ignored).toBe(true);
+      expect(contaminated.tracked_paths).toEqual([".archflow/work/tasks/demo/cached.json"]);
+      expect(contaminated.error).toBeNull();
+    } finally {
+      await rm(repository, { recursive: true, force: true });
+    }
+  });
+
   it("retains an observed CLI version when authentication fails", async () => {
     stat.mockRejectedValue(Object.assign(new Error("missing"), { code: "ENOENT" }));
     createDispatchWorkspace.mockResolvedValue(workspace);

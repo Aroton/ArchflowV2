@@ -25,7 +25,7 @@ import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { ProjectResult } from "../contracts/errors.js";
 import type { DeclaredInputRef } from "../contracts/fingerprints.js";
 import { parseSafeInteger, type PathSafeId, type SafeCode, type SafeId, type Sha256Digest } from "../contracts/evidence.js";
-import type { PhaseInstanceId } from "../contracts/phase-instance.js";
+import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim, rawGitPath, type PathClass, type RepositoryPathClaim, type TaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson } from "../contracts/plain-json.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
@@ -50,8 +50,11 @@ import {
   resolveDeclaredRename,
   resolveRepositoryPath,
   resolveTaskPath,
+  resolveTaskWorkspacePath,
+  verificationTranscriptClaim,
   openResolved,
   type ResolvedPath,
+  type ResolvedWorkspacePath,
 } from "../repository/paths.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
 import type { GateLifecycleDependencies } from "./gates.js";
@@ -333,8 +336,7 @@ async function baseIdentity(
 }
 
 const claimableOutputClasses: ReadonlySet<PathClass> = new Set([
-  "document", "import", "repository-source", "result-payload", "review",
-  "task-branch-constitution", "verification-transcript",
+  "document", "repository-source", "task-branch-constitution",
 ]);
 
 function classifyOutputPath(
@@ -378,7 +380,7 @@ async function resolveReadablePath(
   });
 }
 
-async function readRegularBytes(path: ResolvedPath, label: string): Promise<Uint8Array> {
+async function readRegularBytes(path: ResolvedPath | ResolvedWorkspacePath, label: string): Promise<Uint8Array> {
   const stat = await lstat(path.absolute);
   if (!stat.isFile()) throw new TypeError(`${label} is not a regular file`);
   return new Uint8Array(await readFile(path.absolute));
@@ -546,9 +548,10 @@ export async function buildImplementationOutput(
     : [output.path]))].sort(ordinal) as RepositoryPathClaim[];
   const changed = await readChangedGitPaths(dependencies.runner);
   const scopeSet = new Set<string>(scope);
+  const callerChanges = changed.paths.filter((path) => !path.startsWith(".archflow/work/"));
   const undeclaredChanges: UndeclaredChangeReport = Object.freeze({
     scanned: true,
-    undeclared_paths: Object.freeze(changed.paths.filter((path) => !scopeSet.has(path)).map(rawGitPath)),
+    undeclared_paths: Object.freeze(callerChanges.filter((path) => !scopeSet.has(path)).map(rawGitPath)),
     unrepresentable_count: parseSafeInteger(changed.unrepresentable_count),
   });
   const snapshotEntries = Object.freeze(scope.map((path) => observations.get(path)!.observation));
@@ -608,6 +611,17 @@ export async function buildImplementationOutput(
     })];
   });
   const secretScan = await createSecretlintScanner().scan(scanCandidates);
+  const decodedPhase = decodePhaseInstance(input.phase_instance);
+  if (decodedPhase.kind !== "phase-impl") throw new TypeError("implementation output phase must be phase-impl");
+  const transcript = await resolveTaskWorkspacePath({
+    runner: dependencies.runner,
+    taskId: authority.task_id,
+    claim: verificationTranscriptClaim(decodedPhase.phase),
+    expectedClass: "workspace-verification-transcript",
+    context: authority.context,
+  });
+  if (!transcript.ok) return transcript;
+  const transcriptBytes = await readRegularBytes(transcript.value, "verification transcript");
   const countedEntries: SnapshotAccountingEntry[] = outputs.map((output) => Object.freeze(output.storage === "raw-payload"
     ? { path: output.path, storage: "raw-payload", stored_bytes: output.payload_bytes }
     : { path: output.path, storage: "git-object", stored_bytes: 0 }));
@@ -638,6 +652,10 @@ export async function buildImplementationOutput(
     }),
     secret_scan: secretScan,
     undeclared_changes: undeclaredChanges,
+    verification_evidence: Object.freeze({
+      transcript_digest: sha256Bytes(transcriptBytes),
+      byte_count: parseSafeInteger(transcriptBytes.byteLength),
+    }),
     declared_inputs: Object.freeze(declaredInputs),
     input_fingerprint: input.input_fingerprint,
     ...(input.constitution_edit_gate_id === undefined ? {} : {
@@ -660,6 +678,21 @@ export async function verifyImplementationManifest(
 ): Promise<ImplementationManifestFacts> {
   assertPlainJson(supplied, "implementation output");
   const output = structuredClone(supplied);
+  const decodedPhase = decodePhaseInstance(output.phase_instance);
+  if (decodedPhase.kind !== "phase-impl") throw new TypeError("implementation output phase must be phase-impl");
+  const transcript = await resolveTaskWorkspacePath({
+    runner,
+    taskId: output.task_id,
+    claim: verificationTranscriptClaim(decodedPhase.phase),
+    expectedClass: "workspace-verification-transcript",
+    context,
+  });
+  if (!transcript.ok) throw transcript.error;
+  const transcriptBytes = await readRegularBytes(transcript.value, "verification transcript");
+  if (sha256Bytes(transcriptBytes) !== output.verification_evidence.transcript_digest ||
+      transcriptBytes.byteLength !== output.verification_evidence.byte_count) {
+    throw new TypeError("verification transcript disagrees with durable verification evidence");
+  }
   const currentSources = new Map<RepositoryPathClaim, CurrentAuthoritativeOutputSource>();
   for (const suppliedSource of suppliedCurrentSources) {
     if (suppliedSource === null || typeof suppliedSource !== "object") {
@@ -700,9 +733,10 @@ export async function verifyImplementationManifest(
   const scope = sortedUniquePaths(output);
   const changed = await readChangedGitPaths(runner);
   const scopeSet = new Set<string>(scope);
+  const callerChanges = changed.paths.filter((path) => !path.startsWith(".archflow/work/"));
   const undeclaredChanges: UndeclaredChangeReport = {
     scanned: true,
-    undeclared_paths: changed.paths.filter((path) => !scopeSet.has(path)).map(rawGitPath),
+    undeclared_paths: callerChanges.filter((path) => !scopeSet.has(path)).map(rawGitPath),
     unrepresentable_count: parseSafeInteger(changed.unrepresentable_count),
   };
   if (!isDeepStrictEqual(undeclaredChanges, output.undeclared_changes)) {

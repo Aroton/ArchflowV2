@@ -47,8 +47,8 @@ const addGitRegular = {
 };
 
 const modifyRawSymlink = {
-  path: ".archflow/tasks/demo/reviews/link.md",
-  path_class: "review",
+  path: "docs/link.md",
+  path_class: "document",
   operation: "modify",
   storage: "raw-payload",
   payload_bytes: 0,
@@ -134,7 +134,7 @@ const accounting = {
   result_byte_cap: 26214400,
   task_byte_cap: 262144000,
   counted_entries: [
-    { path: ".archflow/tasks/demo/reviews/a.md", storage: "raw-payload", stored_bytes: 4096 },
+    { path: "docs/a.md", storage: "raw-payload", stored_bytes: 4096 },
     { path: "src/index.ts", storage: "git-object", stored_bytes: 0 },
   ],
   measured_at_revision: 1,
@@ -187,7 +187,7 @@ describe("durable shared primitives contract", () => {
     await rejectedBoth("snapshotAccounting", snapshotAccountingV1Schema, {
       ...accounting,
       counted_entries: [
-        { path: ".archflow/tasks/demo/reviews/a.md", storage: "raw-payload", stored_bytes: 4096 },
+        { path: "docs/a.md", storage: "raw-payload", stored_bytes: 4096 },
         { path: "src/index.ts", storage: "git-object", stored_bytes: 12 },
       ],
     });

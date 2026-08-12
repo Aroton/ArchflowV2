@@ -84,6 +84,7 @@ async function fixture(): Promise<Fixture> {
   const taskId = "crash-task" as RepositoryOperationContext["task_id"];
   const taskRoot = join(repository, ".archflow", "tasks", taskId);
   await mkdir(taskRoot, { recursive: true });
+  await mkdir(join(repository, ".archflow", "work", "tasks", taskId, "transient"), { recursive: true });
   const context: RepositoryOperationContext = {
     task_id: taskId,
     phase_instance: "phase-impl-9" as RepositoryOperationContext["phase_instance"],
@@ -171,7 +172,7 @@ async function fixture(): Promise<Fixture> {
     let calls = 0;
     const callback: Parameters<typeof runStateTransaction<"archflow_state">>[2] = async (current) => {
       calls += 1;
-      const { revision: _revision, committed_intent: _committedIntent, ...nextState } = current.value;
+      const { revision: _revision, last_transition: _lastTransition, ...nextState } = current.value;
       const success = {
         path: parseTaskPathClaim("state.json"),
         revision: (current.value.revision + 1) as TaskStateV1["revision"],
@@ -259,8 +260,8 @@ async function killAtRealCut(input: Fixture, cutPoint: CrashCutPoint): Promise<R
 }
 
 async function clearAbandonedLock(input: Fixture): Promise<void> {
-  const lockPath = join(input.taskRoot, ".transaction-lock");
-  expect(await readdir(input.taskRoot)).toContain(".transaction-lock");
+  const lockPath = join(input.authority.workspace_root, "transient", ".transaction-lock");
+  expect(await readdir(join(input.authority.workspace_root, "transient"))).toContain(".transaction-lock");
   await rmdir(lockPath);
 }
 
@@ -270,10 +271,10 @@ async function expectAuthorityAtPriorOrNext(input: Fixture, resultExpected: bool
   if (observed.kind !== "canonical") throw new Error("state authority is unavailable");
   expect([1, 2]).toContain(observed.document.value.revision);
   if (observed.document.value.revision === 1) {
-    expect(observed.document.value.committed_intent).toBeUndefined();
+    expect(observed.document.value.last_transition).toBeUndefined();
     expect(observed.document.value.authoritative_results).toEqual([]);
   } else {
-    expect(observed.document.value.committed_intent?.intent_id).toBe("crash-intent");
+    expect(observed.document.value.last_transition?.intent_id).toBe("crash-intent");
     expect(observed.document.value.authoritative_results).toHaveLength(resultExpected ? 1 : 0);
   }
   return observed.document.value.revision;
@@ -362,14 +363,14 @@ describe("state transaction crash boundaries", () => {
     const cut = await killAtRealCut(input, "receipt-temp");
     const abandoned = String(cut.path);
     expect(await readFile(abandoned)).not.toHaveLength(0);
-    expect(await readdir(join(input.taskRoot, "intents"))).not.toContain("crash-intent.json");
+    expect(await readdir(join(input.authority.workspace_root, "transient", "intents"))).not.toContain("crash-intent.json");
     expect(await expectAuthorityAtPriorOrNext(input, false)).toBe(1);
     await clearAbandonedLock(input);
 
     const attempt = await run(input, createAtomicWriter());
     expect(attempt.result).toMatchObject({ ok: true, value: { replayed: false } });
     expect(attempt.prepare.calls()).toBe(1);
-    expect(await readFile(abandoned)).not.toHaveLength(0);
+    expect(existsSync(abandoned)).toBe(false);
     expect(await expectAuthorityAtPriorOrNext(input, false)).toBe(2);
   });
 
@@ -377,7 +378,7 @@ describe("state transaction crash boundaries", () => {
     const input = await fixture();
     const cut = await killAtRealCut(input, "receipt-link");
     expect(await readFile(String(cut.path))).not.toHaveLength(0);
-    expect(await readFile(join(input.taskRoot, "intents", "crash-intent.json"))).not.toHaveLength(0);
+    expect(await readFile(join(input.authority.workspace_root, "transient", "intents", "crash-intent.json"))).not.toHaveLength(0);
     expect(await expectAuthorityAtPriorOrNext(input, false)).toBe(1);
     await clearAbandonedLock(input);
 
@@ -391,7 +392,7 @@ describe("state transaction crash boundaries", () => {
     const input = await fixture();
     const cut = await killAtRealCut(input, "state-replace-before");
     expect(await readFile(String(cut.path))).not.toHaveLength(0);
-    expect(await readFile(join(input.taskRoot, "intents", "crash-intent.json"))).not.toHaveLength(0);
+    expect(await readFile(join(input.authority.workspace_root, "transient", "intents", "crash-intent.json"))).not.toHaveLength(0);
     expect(await expectAuthorityAtPriorOrNext(input, false)).toBe(1);
     await clearAbandonedLock(input);
 
@@ -404,7 +405,7 @@ describe("state transaction crash boundaries", () => {
   it("survives SIGKILL after state replacement and authenticates exact replay", async () => {
     const input = await fixture();
     await killAtRealCut(input, "state-replace-after");
-    expect(await readFile(join(input.taskRoot, "intents", "crash-intent.json"))).not.toHaveLength(0);
+    expect(await readFile(join(input.authority.workspace_root, "transient", "intents", "crash-intent.json"))).not.toHaveLength(0);
     expect(await expectAuthorityAtPriorOrNext(input, false)).toBe(2);
     await clearAbandonedLock(input);
 
@@ -419,18 +420,18 @@ describe("state transaction crash boundaries", () => {
 
   it("leaves a SIGKILL-abandoned lock blocking until exact explicit confirmed repair", async () => {
     const input = await fixture();
-    const killed = startLockChild(input.taskRoot);
+    const killed = startLockChild(input.authority.workspace_root);
     await childEvent(killed, "entered");
     expect(killed.kill("SIGKILL")).toBe(true);
     await new Promise<void>((resolve) => killed.once("exit", () => resolve()));
-    expect(await readdir(input.taskRoot)).toContain(".transaction-lock");
+    expect(await readdir(join(input.authority.workspace_root, "transient"))).toContain(".transaction-lock");
 
-    const blocked = startLockChild(input.taskRoot);
+    const blocked = startLockChild(input.authority.workspace_root);
     expect(await childEvent(blocked, "failed")).toMatchObject({ name: "TaskLockError", stage: "acquire" });
     const repair = await planAbandonedLockRepair(input.authority);
     await repairAbandonedLock(input.authority, repair, true);
 
-    const repaired = startLockChild(input.taskRoot);
+    const repaired = startLockChild(input.authority.workspace_root);
     await childEvent(repaired, "entered");
     repaired.send?.({ type: "release" });
   });

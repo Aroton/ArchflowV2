@@ -14,7 +14,7 @@ import { computeInputFingerprint, type InputFingerprintSubject } from "../../src
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { createGitRunner, preflightGit, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
-import type { ResolvedTaskPath } from "../../src/repository/paths.js";
+import type { ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
 import type { AtomicWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import { runStateInitialization } from "../../src/state/initialization.js";
@@ -100,7 +100,12 @@ describe("revision-0 state initialization", () => {
     let receipt: CanonicalDocument<IntentReceiptV1> | undefined;
     const events: string[] = [];
     const atomic: AtomicWriter = {
-      createExclusive: async (_path, bytes) => {
+      createExclusive: async (path, bytes) => {
+        if (path.path_class === "authority-initialization") {
+          events.push("initialization");
+          writeFileSync(path.absolute, bytes);
+          return "created";
+        }
         events.push("receipt");
         if (receipt !== undefined) return "exists";
         receipt = parseCanonicalDocument<IntentReceiptV1>(bytes);
@@ -116,7 +121,7 @@ describe("revision-0 state initialization", () => {
       runner: discovered.value,
       environment: preflight.value,
       atomic,
-      lock: { runExclusive: async <T>(_root: ResolvedTaskPath, work: () => Promise<T>) => work() },
+      lock: { runExclusive: async <T>(_root: ResolvedTaskWorkspacePath, work: () => Promise<T>) => work() },
       resolve_input_fingerprint: async () => ({ schema_version: "1", ok: true, value: subject }),
       read_state: async () => state === undefined ? { kind: "missing" } : { kind: "canonical", document: state },
       read_config: async () => ({ kind: "valid", snapshot: { bytes: configBytes, digest: subject.config_digest } }),
@@ -128,12 +133,12 @@ describe("revision-0 state initialization", () => {
     if (!first.ok) return;
     expect(first.value.state.value.revision).toBe(1);
     expect(first.value.replayed).toBe(false);
-    expect(events).toEqual(["receipt", "state"]);
+    expect(events).toEqual(["initialization", "receipt", "state"]);
 
     const replayed = await runStateInitialization(dependencies, { authority, call });
     expect(replayed.ok).toBe(true);
     if (replayed.ok) expect(replayed.value.replayed).toBe(true);
-    expect(events).toEqual(["receipt", "state"]);
+    expect(events).toEqual(["initialization", "receipt", "state"]);
     state = undefined;
     receipt = undefined;
     events.length = 0;

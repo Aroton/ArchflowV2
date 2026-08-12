@@ -14,6 +14,7 @@ import { createToolHandlers } from "../../src/mcp/handlers/index.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
+import type { ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import { resolvePinnedConstitution } from "../../src/state/constitution.js";
 import { buildDocumentArtifact } from "../../src/state/document-artifact.js";
@@ -118,7 +119,7 @@ Preserve explicit human review gates.
   if (!preparedProduce.ok) throw new Error(preparedProduce.error.code);
   await ensureResultDirectory(authority.value, preparedProduce.value.reference.result_digest);
   for (const payload of preparedProduce.value.prepared.payloads) {
-    await ensurePayloadParent(authority.value, preparedProduce.value.reference.result_digest, payload.target.absolute);
+    await ensurePayloadParent(authority.value, preparedProduce.value.reference.result_digest, payload.target.absolute as ResolvedTaskWorkspacePath);
   }
   const installedProduce = await installSnapshot(
     createAtomicWriter(), preparedProduce.value.prepared, preparedProduce.value.manifest_target,
@@ -145,8 +146,9 @@ Preserve explicit human review gates.
     waivers: [],
   };
   const initialState = canonicalDocument(state).bytes;
+  mkdirSync(join(authority.value.workspace_root, "transient"), { recursive: true });
   writeFileSync(authority.value.state.absolute, initialState);
-  mkdirSync(join(authority.value.task_root, "reviews"), { recursive: true });
+  mkdirSync(join(authority.value.workspace_root, "cache", "reviews"), { recursive: true });
 
   const bin = join(repository.root, "bin");
   const sourceHome = join(repository.root, "source-home");
@@ -225,7 +227,7 @@ function callCount(path: string): number {
 }
 
 describe("counter-review handler replay integration", () => {
-  it("does not launch a second child for exact replay or receipt-only recovery", async () => {
+  it("does not launch a second child for exact last-transition replay", async () => {
     const h = await fixture();
     const saved = { PATH: process.env.PATH, HOME: process.env.HOME };
     process.env.PATH = `${h.bin}${delimiter}${saved.PATH ?? dirname(process.execPath)}`;
@@ -270,24 +272,6 @@ describe("counter-review handler replay integration", () => {
       expect(replay).toEqual(first);
       expect(callCount(h.countPath)).toBe(2);
 
-      // Model the receipt-created/state-not-replaced crash cut. The retained results and receipt
-      // remain authoritative; recovery must reinstall BOTH prepared results — the review and the
-      // constitution evidence — without redispatching either child.
-      writeFileSync(h.authority.state.absolute, h.initialState);
-      const recovered = await boundary.invoke(
-        "archflow_counter_review",
-        h.args,
-        h.invocation("counter-receipt-only"),
-      );
-      expect(recovered).toEqual(first);
-      expect(callCount(h.countPath)).toBe(2);
-      const recoveredState = JSON.parse(readFileSync(h.authority.state.absolute, "utf8")) as {
-        revision: number;
-        authoritative_results: readonly { step: string }[];
-      };
-      expect(recoveredState.revision).toBe(8);
-      expect(recoveredState.authoritative_results.map((reference) => reference.step).sort())
-        .toEqual(["adjudicate", "counter_review", "produce"]);
     } finally {
       if (saved.PATH === undefined) delete process.env.PATH; else process.env.PATH = saved.PATH;
       if (saved.HOME === undefined) delete process.env.HOME; else process.env.HOME = saved.HOME;

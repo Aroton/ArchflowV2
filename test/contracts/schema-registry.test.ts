@@ -49,7 +49,6 @@ const SCHEMA_FILES = {
   durablePrimitives: "durable-primitives",
   taskState: "task-state",
   intentReceipt: "intent-receipt",
-  maintenanceRecord: "maintenance-record",
   taskInitialization: "task-initialization",
   legacyImportInitialization: "legacy-import-initialization",
   documentArtifact: "document-artifact",
@@ -63,11 +62,11 @@ const loadSchema = async (name: string): Promise<Record<string, unknown>> =>
   JSON.parse(await readFile(new URL(`${name}.schema.json`, SCHEMA_DIR), "utf8")) as Record<string, unknown>;
 
 describe("SCHEMA_IDS registry", () => {
-  it("is a bijection with the schema directory at 35 ids", async () => {
+  it("is a bijection with the schema directory at 34 ids", async () => {
     const files = (await readdir(SCHEMA_DIR)).filter((name) => name.endsWith(".schema.json")).sort();
-    expect(Object.keys(SCHEMA_IDS)).toHaveLength(35);
-    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(35);
-    expect(files).toHaveLength(35);
+    expect(Object.keys(SCHEMA_IDS)).toHaveLength(34);
+    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(34);
+    expect(files).toHaveLength(34);
     expect(files).toEqual(Object.values(SCHEMA_FILES).map((stem) => `${stem}.schema.json`).sort());
     expect(Object.keys(SCHEMA_IDS).sort()).toEqual(Object.keys(SCHEMA_FILES).sort());
   });
@@ -100,7 +99,7 @@ describe("SCHEMA_IDS registry", () => {
 
     const allStems = Object.values(SCHEMA_FILES).sort();
     expect([...generated, ...HAND_WRITTEN_SCHEMA_FILES].sort()).toEqual(allStems);
-    expect(generated).toHaveLength(34);
+    expect(generated).toHaveLength(33);
   });
 
   it("enforces composite disposition identities through the Zod triage authority", async () => {

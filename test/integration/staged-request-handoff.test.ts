@@ -15,7 +15,6 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import { parseSafeCode, parseTaskSlug } from "../../src/contracts/evidence.js";
-import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { runBuildRequest } from "../../src/local/build-request.js";
@@ -23,10 +22,10 @@ import { runLocalCommand } from "../../src/local/commands.js";
 import type { CallEnvelope } from "../../src/local/call-envelope.js";
 import { createToolHandlers } from "../../src/mcp/handlers/index.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
-import { resolveTaskPath } from "../../src/repository/paths.js";
-import { enumerateMaintenanceRoots, pruneSupersededResultPayloads } from "../../src/state/maintenance-roots.js";
+import { parseWorkspacePathClaim, resolveTaskWorkspacePath } from "../../src/repository/paths.js";
 import { createProductionServices } from "../../src/state/production.js";
 import { computeTaskStatus, type TaskStatusV1 } from "../../src/state/status.js";
+import { cleanTaskWorkspace, inspectWorkspaceCleanup } from "../../src/state/workspace-cleanup.js";
 
 const TIMEOUT = 120_000;
 const task = parseTaskSlug("staged-task");
@@ -70,8 +69,9 @@ review_trigger: A task reads or mutates another task's files.
 ---
 Tasks are isolated from one another.
 `);
-  git(root, "add", "--", ".gitattributes", ".archflow/workflow.yaml", ".archflow/constitution", ".archflow/config.yaml");
+  git(root, "add", "--", ".gitattributes", ".archflow/.gitignore", ".archflow/workflow.yaml", ".archflow/constitution", ".archflow/config.yaml");
   git(root, "commit", "-q", "-m", "policy");
+  mkdirSync(join(root, ".archflow", "work", "tasks", task, "transient"), { recursive: true });
   return root;
 }
 
@@ -173,7 +173,7 @@ describe("staged-request handoff", () => {
   it("stages, rehydrates, refuses mismatches closed, replays, and keeps maintenance sound", async () => {
     const root = await repository();
     const h = harness(root);
-    const intentsDir = join(root, ".archflow", "tasks", task, "intents");
+    const intentsDir = join(root, ".archflow", "work", "tasks", task, "transient", "intents");
 
     // Initialize keeps its full-payload flow: no staged field, request.input passed verbatim.
     const initComposed = await h.buildRequest({ kind: "initialize" });
@@ -206,7 +206,7 @@ describe("staged-request handoff", () => {
       intent_id: "produce-explicit",
       request_digest: produce.request_digest,
     });
-    expect(produce.staged!.path).toBe(`.archflow/tasks/${task}/intents/produce-explicit.request.json`);
+    expect(produce.staged!.path).toBe(`.archflow/work/tasks/${task}/transient/intents/produce-explicit.request.json`);
     const stagedFile = join(intentsDir, "produce-explicit.request.json");
     const stagedBytes = readFileSync(stagedFile);
     const stagedRecord = JSON.parse(stagedBytes.toString("utf8")) as {
@@ -259,28 +259,17 @@ describe("staged-request handoff", () => {
     expect(unchanged.status).toBe(before.status);
 
     // The genuine reference round-trips through a real transaction.
-    const statePath = join(root, ".archflow", "tasks", task, "state.json");
-    const priorStateBytes = readFileSync(statePath);
     const success = await h.invoke("archflow_state", { ...reference });
     expect(success.request_digest).toBe(produce.request_digest);
     expect(success.status).toBe("succeeded");
     const committed = await h.status();
     expect(committed.revision).toBe((beforeRevision ?? 0) + 1);
 
-    // After a full commit the reference behaves exactly like the byte-identical full payload:
-    // the compare-and-set precedes receipt arbitration, so the recorded expected_revision now
-    // conflicts. Replay discipline is unchanged by staging.
-    const postCommit = await h.invokeRaw("archflow_state", { ...reference });
-    expect(postCommit.ok).toBe(false);
-    expect(postCommit.error?.code).toBe("STATE_CONFLICT");
-
-    // The replay that must hold byte-for-byte is the interrupted-call window: receipt durable,
-    // state not yet promoted. Re-presenting the same reference rehydrates the same bytes, the
-    // receipt comparison holds, and the recorded outcome is returned while the commit is
-    // re-promoted.
-    writeFileSync(statePath, priorStateBytes);
-    const replayed = await h.invoke("archflow_state", { ...reference });
-    expect(replayed).toEqual(success);
+    // The staged request and temporary receipt are cleaned after commit. Replaying the original
+    // full input is authenticated by state.last_transition and does not advance the revision.
+    const postCommit = await h.invokeRaw("archflow_state", produce.request.input);
+    expect(postCommit.ok).toBe(true);
+    expect(postCommit.value).toEqual(success);
     expect((await h.status()).revision).toBe((beforeRevision ?? 0) + 1);
 
     // A second tool through its own staged reference: counter_review entry, then the review.
@@ -304,24 +293,25 @@ describe("staged-request handoff", () => {
       stub.restore();
     }
 
-    // Maintenance and reconciliation stay sound with receipts, staged requests, and even a
+    // Cleanup inspection and reconciliation stay sound with receipts, staged requests, and even a
     // garbage staged file sharing the intents directory.
     writeFileSync(join(intentsDir, "garbage.request.json"), "not json at all");
     const services = await h.services();
-    const rootsEnumerated = await enumerateMaintenanceRoots(services.dependencies, services.authority);
-    expect(rootsEnumerated.ok, rootsEnumerated.ok ? undefined : rootsEnumerated.error.code).toBe(true);
-    const pruned = await pruneSupersededResultPayloads(services.dependencies, services.authority);
-    expect(pruned.ok, pruned.ok ? undefined : pruned.error.code).toBe(true);
+    if (services.state === undefined) throw new Error("state unavailable");
+    const inspected = await inspectWorkspaceCleanup(services.dependencies, services.authority, services.state.value);
+    expect(inspected.ok, inspected.ok ? undefined : inspected.error.code).toBe(true);
+    const cleaned = await cleanTaskWorkspace(services.dependencies, services.authority, services.state.value);
+    expect(cleaned.ok, cleaned.ok ? undefined : cleaned.error.code).toBe(true);
     const statusWithStaged = await h.status();
     expect(statusWithStaged.blocking_reasons).not.toContain("reconciliation-unavailable");
 
     // The receipt reader can never be handed a staged request: the intent class refuses the
     // reserved suffix at resolution time.
-    const asReceipt = await resolveTaskPath({
+    const asReceipt = await resolveTaskWorkspacePath({
       runner: services.runner,
       taskId: services.authority.task_id,
-      claim: parseTaskPathClaim("intents/garbage.request.json"),
-      expectedClass: "intent",
+      claim: parseWorkspacePathClaim("transient/intents/garbage.request.json"),
+      expectedClass: "workspace-intent",
       context: services.authority.context,
     });
     expect(asReceipt.ok).toBe(false);

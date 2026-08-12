@@ -47,24 +47,21 @@
         "step": "produce",
         "result_digest": "7777777777777777777777777777777777777777777777777777777777777777",
         "result_id": "design:produce:1",
-        "input_fingerprint": "8888888888888888888888888888888888888888888888888888888888888888",
-        "manifest_path": ".archflow/tasks/mcp-integration/results/design-produce/manifest.json"
+        "input_fingerprint": "8888888888888888888888888888888888888888888888888888888888888888"
       },
       {
         "phase_instance": "phase-impl-1",
         "step": "counter_review",
         "result_digest": "9999999999999999999999999999999999999999999999999999999999999999",
         "result_id": "phase-impl-1:counter_review:1",
-        "input_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "manifest_path": ".archflow/tasks/mcp-integration/results/phase-impl-1-counter-review/manifest.json"
+        "input_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       },
       {
         "phase_instance": "phase-impl-1",
         "step": "produce",
         "result_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "result_id": "phase-impl-1:produce:1",
-        "input_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "manifest_path": ".archflow/tasks/mcp-integration/results/phase-impl-1-produce/manifest.json"
+        "input_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
       }
     ],
     "approvals": [
@@ -105,10 +102,6 @@
       "context_digest": "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
       "frozen_state_digest": "3a1494eaf16809503723b4aed46b17474bc61526dccbe68d97bc007f6cf8701e",
       "opened_at_revision": 7
-    },
-    "adopted_checkpoint": {
-      "revision": 7,
-      "checkpoint_digest": "2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c"
     }
   }
 }

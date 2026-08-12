@@ -1,6 +1,6 @@
 # workflow/SKILLS
 
-**Explored:** 2026-08-12 · **Commit:** `e7a63c0` · **Covers:** `skills/`, `src/init/`, `assets/`
+**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** `skills/`, `src/init/`, `assets/`
 
 The eight skills are the human-facing entry points. They are prose playbooks — they enforce nothing themselves; every rule they state is backed (where mechanically possible) by the server. In Codex the same skills are invoked with `$` instead of `/`.
 
@@ -21,7 +21,7 @@ flowchart LR
 
 ## archflow-init
 
-Runs `archflow-local init` from the repo root and relays its report verbatim. Init scaffolds `.archflow/` (workflow.yaml, constitution, config.yaml from templates), appends `.archflow/** -text merge=binary` to `.gitattributes` (this is what makes digests stable across platforms), and registers the MCP server with both hosts — a project-scoped `.mcp.json` entry for Claude Code, a fenced managed block in `.codex/config.toml` for Codex.
+Runs `archflow-local init` from the repo root and relays its report verbatim. Init scaffolds `.archflow/` (workflow.yaml, constitution, config.yaml, and the nested `.gitignore` whose only rule is `/work/`), appends `.archflow/** -text merge=binary` to `.gitattributes` (this is what makes digests stable across platforms), and registers the MCP server with both hosts — a project-scoped `.mcp.json` entry for Claude Code, a fenced managed block in `.codex/config.toml` for Codex. It reports whether the nested ignore file was created or already present and diagnoses that work is ignored and contains no tracked paths; it never edits the root `.gitignore`.
 
 Three things it deliberately never does: overwrite a diverged file (it refuses with `scaffold-diverged`), claim it passed a host's human approval/trust step (Claude approval and Codex repo trust are always the human's), or create task state or commits. **The human's commit of the scaffolded files is the policy approval** — that commit becomes each task's `policy_base_commit`.
 
@@ -43,7 +43,7 @@ Designs one phase (`phases/<n>/design.md`): goal, files, work chunks, pinned cro
 
 ## archflow-phase-impl
 
-The only skill that writes production code, and the most heavily gated. Requires durable state to say `phase-impl-<n>` before touching code. Runs every verification step from the phase design and saves the raw output to `phases/<n>/verification.txt` — the only verification evidence the counter-reviewer accepts. Keeps a structured log in `impl-notes.md` (decisions, deviations, patterns, gotchas, interfaces, evidence).
+The only skill that writes production code, and the most heavily gated. Requires durable state to say `phase-impl-<n>` before touching code. Runs every verification step from the phase design and saves raw output to ignored `.archflow/work/tasks/<task>/cache/phases/<n>/verification.txt`. The required implementation-output `verification_evidence` records its digest and byte count, binding review to the exact transcript even though cleanup removes the raw file after phase advancement. Keeps a tracked structured log in `impl-notes.md` (decisions, deviations, patterns, gotchas, interfaces, evidence).
 
 Committing is a double lock: first the durable `commit-authorization` gate bound to the final diff, then a separate stop where the agent stages only declared outputs, shows the exact staged diff and message, and waits for explicit confirmation. Generated files must be marked `linguist-generated` so review capacity goes to hand-written change; an `ENVELOPE_OVERFLOW` means the phase is too big and should be split at the design gate, not trimmed to sneak under the cap.
 
@@ -53,7 +53,7 @@ Strictly read-only. Runs `archflow-local manual-status --task <task>`, reports t
 
 ## archflow-upgrade
 
-Migrates a legacy flat-file task into the canonical layout. Governing principle: **stage, never convert.** Legacy files are copied byte-for-byte into a content-addressed import (after a mandatory secret scan), mapped into `draft` seeds (prd, design — inputs for redoing the work) and `historical` material (old phase docs, logs, reviews). The task then re-enters at the PRD and runs the *full* pipeline; a `migration-audit` gate at the approved design authorizes a guarded jump to the derived resume phase. The load-bearing rule: imported prose, history, and prior decisions are **never** approval evidence.
+Migrates a legacy flat-file task into the canonical layout. Governing principle: **stage, never convert.** Legacy files are copied byte-for-byte into ignored `.archflow/work/tasks/<task>/cache/imports/` staging (after a mandatory secret scan), mapped into `draft` seeds (prd, design — inputs for redoing the work) and `historical` material (old phase docs, logs, reviews). The task then re-enters at the PRD and runs the *full* pipeline; a `migration-audit` gate at the approved design authorizes a guarded jump to the derived resume phase. The load-bearing rule: imported prose, history, and prior decisions are **never** approval evidence.
 
 ## Shared conventions across skills
 

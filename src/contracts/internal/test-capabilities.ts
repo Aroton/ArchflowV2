@@ -71,15 +71,12 @@ export function createRetainedEvidenceReference<K extends EvidenceKind, A extend
   ) {
     throw new TypeError("retained manifest does not contain review or adjudication evidence");
   }
-  const expectedManifestPath =
-    `.archflow/tasks/${manifest.task_id}/results/sha256/${canonical.digest}/manifest.json`;
   if (
     reference.result_digest !== canonical.digest ||
     reference.result_id !== manifest.result_id ||
     reference.phase_instance !== manifest.phase_instance ||
     reference.step !== manifest.step ||
-    reference.input_fingerprint !== manifest.input_fingerprint ||
-    reference.manifest_path !== expectedManifestPath
+    reference.input_fingerprint !== manifest.input_fingerprint
   ) {
     throw new TypeError("retained evidence reference does not match its manifest");
   }
@@ -108,7 +105,7 @@ export function createTransactionAuthorityLink<K extends EvidenceKind, A extends
     throw new TypeError("an authenticated retained evidence reference is required");
   }
   assertAuthenticTransactionOutcome(outcome);
-  const committed = outcome.state.value.committed_intent;
+  const committed = outcome.state.value.last_transition;
   const reference = retained.reference;
   const evidence = retained.verified.evidence;
   if (
@@ -120,8 +117,7 @@ export function createTransactionAuthorityLink<K extends EvidenceKind, A extends
       candidate.result_id === reference.result_id &&
       candidate.phase_instance === reference.phase_instance &&
       candidate.step === reference.step &&
-      candidate.input_fingerprint === reference.input_fingerprint &&
-      candidate.manifest_path === reference.manifest_path
+      candidate.input_fingerprint === reference.input_fingerprint
     )
   ) {
     throw new TypeError("transaction outcome does not authenticate the retained evidence result");

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
-import { parseActiveGate, parseGateRequest } from "../../src/contracts/durable-gate.js";
+import { parseGateRequest } from "../../src/contracts/durable-gate.js";
 import { intentOutcomeDigest, parseIntentReceipt } from "../../src/contracts/durable-intent.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parsePathSafeId, parseSafeCode, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
@@ -35,7 +35,7 @@ async function harness() {
   writeFileSync(join(root, "tracked.txt"), "root\n");
   execFileSync("git", ["add", "--", "tracked.txt"], { cwd: root, env });
   execFileSync("git", ["commit", "-q", "-m", "root"], { cwd: root, env });
-  mkdirSync(join(root, ".archflow", "tasks", TASK, "intents"), { recursive: true });
+  mkdirSync(join(root, ".archflow", "work", "tasks", TASK, "transient", "intents"), { recursive: true });
   const created = await createProductionServices({
     working_directory: root,
     task_id: TASK,
@@ -73,8 +73,8 @@ describe("discoverReconciliationInput", () => {
   it("ignores accumulated historical receipts on a healthy task", async () => {
     const h = await harness();
     const current = h.state();
-    writeFileSync(join(h.services.authority.task_root, "intents", "old-a.json"), receipt(h.state({ revision: parseSafeInteger(2) }), "old-a", "7").bytes);
-    writeFileSync(join(h.services.authority.task_root, "intents", "old-b.json"), receipt(h.state({ revision: parseSafeInteger(3) }), "old-b", "8").bytes);
+    writeFileSync(join(h.services.authority.workspace_root, "transient", "intents", "old-a.json"), receipt(h.state({ revision: parseSafeInteger(2) }), "old-a", "7").bytes);
+    writeFileSync(join(h.services.authority.workspace_root, "transient", "intents", "old-b.json"), receipt(h.state({ revision: parseSafeInteger(3) }), "old-b", "8").bytes);
 
     const discovered = await discoverReconciliationInput(h.services.dependencies, h.services.authority, canonicalDocument(current));
     expect(discovered).toMatchObject({ ok: true, value: { active_heads: {} } });
@@ -87,7 +87,7 @@ describe("discoverReconciliationInput", () => {
     const h = await harness();
     const current = h.state();
     const orphan = receipt(current, "orphan", "9");
-    writeFileSync(join(h.services.authority.task_root, "intents", "orphan.json"), orphan.bytes);
+    writeFileSync(join(h.services.authority.workspace_root, "transient", "intents", "orphan.json"), orphan.bytes);
 
     const discovered = await discoverReconciliationInput(h.services.dependencies, h.services.authority, canonicalDocument(current));
     expect(discovered).toMatchObject({ ok: true, value: { intent: { request_digest: D("9"), receipt: { digest: orphan.digest } } } });
@@ -98,8 +98,8 @@ describe("discoverReconciliationInput", () => {
   it("reports ambiguity instead of guessing between two valid successors", async () => {
     const h = await harness();
     const current = h.state();
-    writeFileSync(join(h.services.authority.task_root, "intents", "orphan-a.json"), receipt(current, "orphan-a", "a").bytes);
-    writeFileSync(join(h.services.authority.task_root, "intents", "orphan-b.json"), receipt(current, "orphan-b", "b").bytes);
+    writeFileSync(join(h.services.authority.workspace_root, "transient", "intents", "orphan-a.json"), receipt(current, "orphan-a", "a").bytes);
+    writeFileSync(join(h.services.authority.workspace_root, "transient", "intents", "orphan-b.json"), receipt(current, "orphan-b", "b").bytes);
 
     const discovered = await discoverReconciliationInput(h.services.dependencies, h.services.authority, canonicalDocument(current));
     expect(discovered).toMatchObject({
@@ -116,7 +116,6 @@ describe("discoverReconciliationInput", () => {
     const reference = {
       phase_instance: PHASE, step: "produce", result_digest: D("7"), result_id: parseSafeId("result-1"),
       input_fingerprint: D("2"),
-      manifest_path: parseRepositoryPathClaim(`.archflow/tasks/${TASK}/results/sha256/${D("7")}/manifest.json`),
     } as TaskStateV1["authoritative_results"][number];
 
     const gateId = parsePathSafeId("gate-1");
@@ -136,18 +135,8 @@ describe("discoverReconciliationInput", () => {
       kind: "artifact-approval", context: gateContext,
       allowed_decisions: ["approve", "revise", "reject", "cancel"], opened_at_revision: 4,
     });
-    const active = parseActiveGate({
-      ...request, status: "awaiting-human", supplemental: [],
-      decision_template: {
-        schema_version: "1", gate_id: gateId, task_id: TASK, phase_instance: PHASE,
-        kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest,
-        required_fields: ["payload", "human_provenance"],
-        cancellation_fields: ["cancelled", "reason", "human_provenance"],
-      },
-    });
-    mkdirSync(join(h.services.authority.task_root, "decisions", gateId), { recursive: true });
-    writeFileSync(join(h.services.authority.task_root, "gate.json"), canonicalDocument(active).bytes);
-    writeFileSync(join(h.services.authority.task_root, "decisions", gateId, "request.json"), canonicalDocument(request).bytes);
+    mkdirSync(join(h.services.authority.task_root, "authority", "decisions", gateId), { recursive: true });
+    writeFileSync(join(h.services.authority.task_root, "authority", "decisions", gateId, "request.json"), canonicalDocument(request).bytes);
 
     const current = h.state({
       authoritative_results: [reference],
@@ -190,12 +179,10 @@ describe("discoverReconciliationInput", () => {
     const older = {
       phase_instance: "design", step: "produce", result_digest: D("7"), result_id: parseSafeId("older"),
       input_fingerprint: D("2"),
-      manifest_path: parseRepositoryPathClaim(`.archflow/tasks/${TASK}/results/sha256/${D("7")}/manifest.json`),
     } as TaskStateV1["authoritative_results"][number];
     const newer = {
       phase_instance: PHASE, step: "produce", result_digest: D("8"), result_id: parseSafeId("newer"),
       input_fingerprint: D("2"),
-      manifest_path: parseRepositoryPathClaim(`.archflow/tasks/${TASK}/results/sha256/${D("8")}/manifest.json`),
     } as TaskStateV1["authoritative_results"][number];
     const dependencies = {
       ...h.services.dependencies,

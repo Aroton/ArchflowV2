@@ -1,6 +1,6 @@
 # mcp/DISPATCH
 
-**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/dispatch/`
+**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** `src/dispatch/`, `src/state/workspace-cleanup.ts`
 
 Dispatch is how the server turns "get an independent review" into a real child process running the *other* model family's CLI. It exists so that counter-review and constitution-review evidence is something the producer **cannot author** — the server itself spawns the reviewer, captures its bytes, and binds the output to its provenance. One `archflow_counter_review` call may run two child dispatches sequentially: the rubric reviewer, which gets a read-only repository checkout, and — only when the pinned constitution has active rules — the constitution-review child, which gets a sealed envelope and deliberately no checkout.
 
@@ -12,14 +12,14 @@ flowchart LR
     W --> C["cli.ts<br/>preflight, argv lockdown,<br/>output schema"]
     C --> P["process.ts<br/>spawn, 15 min timeout,<br/>8 MiB output caps"]
     P --> O["cli.ts<br/>extract + classify output,<br/>mint observation"]
-    O --> T["coordinator.ts<br/>failure record under<br/>attempts/ (failures only)"]
+    O --> T["coordinator.ts<br/>failure record under ignored<br/>diagnostics/attempts/ (failures only)"]
 ```
 
 - **`routing.ts`** — pure policy. Given the task config, phase, and role, it picks `{adapter, family, model, effort}`. The config roles stay `producer` / `counter-reviewer` / `adjudicator`: `adjudicator` is now simply the model/effort route for the constitution-review child, and the producer is always the connected MCP host itself (derived from the initialize handshake) — it is never dispatched. Family is inferred from the model name prefix (`claude-*` / `gpt-*`), and the cross-family rule is enforced here for both dispatched routes: a counter-reviewer or constitution reviewer in the producer's own family fails with `FAMILY_MISMATCH`.
 - **`workspace.ts`** — builds a disposable sandbox outside the repo: a fake `HOME` containing a symlink to only the one relevant credential file, a 7-name environment allowlist, and (for the rubric counter-review only) a read-only repository view — the constitution-review child gets none.
 - **`cli.ts`** — the two adapters (`claude-cli`, `codex-cli`): version/auth preflight with minimum CLI versions, a hard-coded lockdown argv (read-only tools, no slash commands, no session persistence, no user config), output-schema projection into each host's dialect, output extraction, and failure classification.
 - **`process.ts`** — one child run: detached spawn, piped stdio, 15-minute timeout, 8 MiB per-channel cap, SIGTERM→SIGKILL escalation.
-- **`coordinator.ts`** — assembles one attempt end to end and always disposes the workspace. Telemetry is **failure-only**: a failed dispatch (timeout, cancellation, nonzero exit, bad output) writes a JSON forensic record under `.archflow/tasks/<task>/attempts/` with stdout/stderr tails and the preflight's managed-policy observations; a successful dispatch writes nothing there — its evidence is the retained result itself.
+- **`coordinator.ts`** — assembles one attempt end to end and always disposes the process workspace. Telemetry is **failure-only**: a failed dispatch (timeout, cancellation, nonzero exit, bad output) writes a JSON forensic record under ignored `.archflow/work/tasks/<task>/diagnostics/attempts/` with stdout/stderr tails and the preflight's managed-policy observations; a successful dispatch writes nothing there. Attempts are current-phase diagnostics and cleanup removes them when the phase advances.
 
 ## The read-only repository view
 

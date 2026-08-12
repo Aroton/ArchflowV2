@@ -38,13 +38,15 @@ import {
 import { discoverWorktree } from "../repository/identity.js";
 import {
   classifyTaskPath,
+  parseWorkspacePathClaim,
   resolveLegacySourcePath,
   resolveTaskPath,
+  resolveTaskWorkspacePath,
 } from "../repository/paths.js";
 import { createProjectionWriter, type ProjectionWriter } from "../state/atomic.js";
 import { createInternalTransactionAuthority } from "../state/authority.js";
 import { detectTaskLocalConstitutionEdit } from "../state/constitution.js";
-import { ensureTaskProjectionParent } from "../state/layout.js";
+import { ensureWorkspaceProjectionParent } from "../state/layout.js";
 import { createSecretlintScanner, secretScanCandidateFromBytes } from "../state/secret-scan.js";
 import {
   canonicalTaskPaths,
@@ -140,20 +142,8 @@ function mappedEntry(
       disposition: "historical",
     };
   }
-  if (legacyPath === "reviews/architecture-counter-review.md") {
-    return { legacy_path: legacyPath, destination_path: parseRepositoryPathClaim(`${prefix}reviews/design.counter.md`), phase_instance: parsePhaseInstanceId("design"), disposition: "historical" };
-  }
-  const review = /^reviews\/phase-([1-9][0-9]*)-(design|impl)-counter-review\.md$/u.exec(legacyPath);
-  if (review !== null) {
-    const number = parsePositiveSafePhaseNumber(Number(review[1]));
-    const kind = review[2] === "impl" ? "phase-impl" : "phase-design";
-    return {
-      legacy_path: legacyPath,
-      destination_path: parseRepositoryPathClaim(`${prefix}reviews/${kind}-${number}.counter.md`),
-      phase_instance: parsePhaseInstanceId(`${kind}-${number}`),
-      disposition: "historical",
-    };
-  }
+  // Rendered legacy reviews are evidence cache, not durable documents. Their exact source bytes
+  // remain in ignored import staging and are reported as unmapped for the migration audit.
   return undefined;
 }
 
@@ -277,7 +267,6 @@ export async function stageLegacyUpgrade(input: StageLegacyUpgradeInput): Promis
       return fail(createProjectError("PATH_INVALID", { task_id: taskId, path_class: "document" }));
     }
     const importDigest = canonicalJsonDigest({ schema_version: "1", staged_payload_refs: stagedRefs, mapping });
-    const taskPrefix = `.archflow/tasks/${taskId}`;
     const sourceRelative = relative(runner.location.worktreeRoot, sourceRoot).split(sep).join("/");
     const sourceIdentityDigest = canonicalJsonDigest({
       schema_version: "1",
@@ -305,21 +294,21 @@ export async function stageLegacyUpgrade(input: StageLegacyUpgradeInput): Promis
     const stagedPaths: string[] = [];
     const stagedByLegacy = new Map<string, string>();
     for (const file of selected.value.files) {
-      const claim = parseTaskPathClaim(`imports/${importDigest}/payload/${file.legacy_path}`);
-      const target = await resolveTaskPath({ runner, taskId, claim, expectedClass: "import", context });
+      const claim = parseWorkspacePathClaim(`cache/imports/${importDigest}/payload/${file.legacy_path}`);
+      const target = await resolveTaskWorkspacePath({ runner, taskId, claim, expectedClass: "workspace-import", context });
       if (!target.ok) return target;
-      await ensureTaskProjectionParent(authority, target.value.absolute);
+      await ensureWorkspaceProjectionParent(authority, target.value.absolute);
       await writer.replaceRegular(target.value, file.bytes, false);
-      const stagedPath = `${taskPrefix}/${claim}`;
+      const stagedPath = target.value.repositoryRelative as string;
       stagedPaths.push(stagedPath);
       stagedByLegacy.set(file.legacy_path, stagedPath);
     }
-    const manifestClaim = parseTaskPathClaim(`imports/${importDigest}/manifest.json`);
-    const manifestTarget = await resolveTaskPath({ runner, taskId, claim: manifestClaim, expectedClass: "import", context });
+    const manifestClaim = parseWorkspacePathClaim(`cache/imports/${importDigest}/manifest.json`);
+    const manifestTarget = await resolveTaskWorkspacePath({ runner, taskId, claim: manifestClaim, expectedClass: "workspace-import", context });
     if (!manifestTarget.ok) return manifestTarget;
-    await ensureTaskProjectionParent(authority, manifestTarget.value.absolute);
+    await ensureWorkspaceProjectionParent(authority, manifestTarget.value.absolute);
     await writer.replaceRegular(manifestTarget.value, canonicalDocument(initialization).bytes, false);
-    const manifestPath = `${taskPrefix}/${manifestClaim}`;
+    const manifestPath = manifestTarget.value.repositoryRelative as string;
     stagedPaths.push(manifestPath);
     stagedPaths.sort(ordinal);
     const unmapped = [

@@ -5,18 +5,14 @@ import {
   canonicalJsonDigest,
   type CanonicalDocument,
 } from "../contracts/canonical.js";
-import {
-  createCommittedIntentSubject,
-  validateDurableSemantics,
-  type DurableArtifact,
-} from "../contracts/durable.js";
+import { validateDurableSemantics, type DurableArtifact } from "../contracts/durable.js";
 import {
   intentOutcomeDigest,
   intentReceiptDigest,
   parseIntentReceipt,
   type IntentReceiptV1,
 } from "../contracts/durable-intent.js";
-import type { CommittedIntentRef, TaskStateV1 } from "../contracts/durable-state.js";
+import type { LastTransition, TaskStateV1 } from "../contracts/durable-state.js";
 import type { LegacyImportInitializationV1 } from "../contracts/durable-legacy-import.js";
 import type { TaskInitializationV1 } from "../contracts/durable-task-initialization.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
@@ -34,13 +30,23 @@ import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-in
 import { parseTaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { verifyRepositoryIdentity } from "../repository/identity.js";
-import { classifyTaskPath, resolveTaskPath, type ResolvedPath } from "../repository/paths.js";
+import {
+  classifyTaskPath,
+  initializationAuthorityClaim,
+  openResolved,
+  parseWorkspacePathClaim,
+  resolveTaskPath,
+  resolveTaskWorkspacePath,
+  type ResolvedPath,
+  type ResolvedWorkspacePath,
+} from "../repository/paths.js";
 import { AtomicReplaceError } from "./atomic.js";
 import { assertInternalTransactionAuthority } from "./authority.js";
 import { identifyTransactionRequest } from "./request.js";
-import { IntentLayoutError, ensureIntentDirectory } from "./layout.js";
+import { IntentLayoutError, ensureAuthorityDirectory, ensureIntentDirectory } from "./layout.js";
 import { TaskLockError } from "./lock.js";
 import type { TransactionDependencies, TransactionOutcome, TransactionRequest } from "./transaction.js";
+import { cleanTaskWorkspace } from "./workspace-cleanup.js";
 
 type InitializationArtifact = TaskInitializationV1 | LegacyImportInitializationV1;
 type StateCall = Extract<ParsedToolCall, { readonly name: "archflow_state" }>;
@@ -273,17 +279,17 @@ export async function identifyStateInitialization(
 async function intentTarget(
   dependencies: TransactionDependencies,
   request: TransactionRequest<"archflow_state">,
-): Promise<ProjectResult<ResolvedPath>> {
-  const claim = parseTaskPathClaim(`intents/${request.call.input.intent_id}.json`);
-  const result = await resolveTaskPath({
+): Promise<ProjectResult<ResolvedWorkspacePath>> {
+  const claim = parseWorkspacePathClaim(`transient/intents/${request.call.input.intent_id}.json`);
+  const result = await resolveTaskWorkspacePath({
     runner: dependencies.runner,
     taskId: request.authority.task_id,
     claim,
-    expectedClass: "intent",
+    expectedClass: "workspace-intent",
     context: request.authority.context,
   });
   if (!result.ok) return result;
-  const rel = relative(request.authority.task_root, result.value.absolute);
+  const rel = relative(request.authority.workspace_root, result.value.absolute);
   if (rel === "" || rel === ".." || rel.startsWith("../") || isAbsolute(rel)) {
     throw new TypeError("initialization intent target escaped the task root");
   }
@@ -292,68 +298,54 @@ async function intentTarget(
 
 function committed(receipt: CanonicalDocument<IntentReceiptV1>): CanonicalDocument<TaskStateV1> {
   const value = receipt.value;
-  const reference: CommittedIntentRef = {
+  const reference: LastTransition = {
+    schema_version: "1",
+    tool: value.tool,
+    operation: value.operation,
     intent_id: value.intent_id,
     request_digest: value.request_digest,
-    receipt_digest: receipt.digest,
+    input_fingerprint: value.input_fingerprint,
+    result_id: value.result_id,
+    outcome: value.outcome,
     outcome_digest: value.outcome_digest,
     prior_revision: value.prior_revision,
     resulting_revision: value.resulting_revision,
-    result_id: value.result_id,
   };
-  return canonicalDocument({ ...value.prepared_state, committed_intent: reference });
-}
-
-function replay(
-  request: TransactionRequest<"archflow_state">,
-  state: CanonicalDocument<TaskStateV1>,
-  receipt: CanonicalDocument<IntentReceiptV1>,
-): ProjectResult<TransactionOutcome<"archflow_state">> {
-  const semantic = validateDurableSemantics(createCommittedIntentSubject(state, receipt));
-  if (!semantic.ok) return semantic;
-  const artifact = request.call.input.artifact;
-  if (
-    receipt.value.tool !== "archflow_state" ||
-    receipt.value.intent_id !== request.call.input.intent_id ||
-    receipt.value.task_id !== request.authority.task_id ||
-    receipt.value.repository_identity_digest !== request.authority.repository_identity_digest ||
-    receipt.value.prior_revision !== 0 ||
-    receipt.value.resulting_revision !== 1
-  ) return contract("initialization-receipt-identity-mismatch");
-  if (artifact === undefined || receipt.value.operation !== operationFor(artifact)) return contract("initialization-receipt-operation-mismatch");
-  if (receipt.value.input_fingerprint !== request.call.input.input_fingerprint) {
-    return fail(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
-      expected_digest: receipt.value.input_fingerprint,
-      observed_digest: request.call.input.input_fingerprint,
-    }));
-  }
-  const identified = identifyTransactionRequest(request.call, request.authority, receipt.value.input_fingerprint);
-  if (identified.request_digest !== receipt.value.request_digest) {
-    return fail(createProjectError("INTENT_MISMATCH", {
-      expected_digest: receipt.value.request_digest,
-      observed_digest: identified.request_digest,
-    }));
-  }
-  const outcome = validateProjectResultStructure(request.call, { schema_version: "1", ok: true, value: receipt.value.outcome });
-  if (!outcome.ok) return outcome;
-  return ok(Object.freeze({ state, outcome: outcome.value, replayed: true }));
+  return canonicalDocument({ ...value.prepared_state, last_transition: reference });
 }
 
 async function executeLocked(
   dependencies: TransactionDependencies,
   request: TransactionRequest<"archflow_state">,
-  path: ResolvedPath,
+  path: ResolvedWorkspacePath,
 ): Promise<ProjectResult<TransactionOutcome<"archflow_state">>> {
   const stateRead = await dependencies.read_state(request.authority.state);
   if (stateRead.kind === "canonical") {
     const repository = verifyRepositoryIdentity(stateRead.document.value.repository_identity_digest, request.authority.repository_identity);
     if (!repository.ok) return repository;
-    const receiptRead = await dependencies.read_receipt(path);
     if (
       stateRead.document.value.revision === 1 &&
-      stateRead.document.value.committed_intent?.intent_id === request.call.input.intent_id &&
-      receiptRead.kind === "canonical"
-    ) return replay(request, stateRead.document, receiptRead.document);
+      stateRead.document.value.last_transition?.intent_id === request.call.input.intent_id
+    ) {
+      const transition = stateRead.document.value.last_transition;
+      const artifact = request.call.input.artifact;
+      if (
+        transition.tool !== "archflow_state" || artifact === undefined ||
+        transition.operation !== operationFor(artifact) ||
+        transition.input_fingerprint !== request.call.input.input_fingerprint ||
+        transition.outcome_digest !== intentOutcomeDigest(transition.outcome)
+      ) return contract("initialization-last-transition-mismatch");
+      const identified = identifyTransactionRequest(request.call, request.authority, transition.input_fingerprint);
+      if (identified.request_digest !== transition.request_digest) {
+        return fail(createProjectError("INTENT_MISMATCH", {
+          expected_digest: transition.request_digest,
+          observed_digest: identified.request_digest,
+        }));
+      }
+      const outcome = validateProjectResultStructure(request.call, { schema_version: "1", ok: true, value: transition.outcome });
+      if (!outcome.ok) return outcome;
+      return ok(Object.freeze({ state: stateRead.document, outcome: outcome.value, replayed: true }));
+    }
     return fail(createProjectError("STATE_CONFLICT", { expected_revision: 0, observed_revision: stateRead.document.value.revision }));
   }
   if (stateRead.kind !== "missing") return contract(stateRead.kind === "unreadable" ? "task-state-unreadable" : "task-state-noncanonical");
@@ -371,6 +363,15 @@ async function executeLocked(
   const identified = identification.value;
 
   const artifact = structuredClone(request.call.input.artifact!) as DurableArtifact;
+  const artifactDocument = canonicalDocument(artifact);
+  const initializationTarget = await resolveTaskPath({
+    runner: dependencies.runner,
+    taskId: request.authority.task_id,
+    claim: initializationAuthorityClaim(),
+    expectedClass: "authority-initialization",
+    context: request.authority.context,
+  });
+  if (!initializationTarget.ok) return initializationTarget;
 
   const success = { path: parseTaskPathClaim("state.json"), revision: 1, status: request.call.input.status };
   const expectation = createInternalResultExpectation({
@@ -416,7 +417,24 @@ async function executeLocked(
   }
 
   try {
+    await ensureAuthorityDirectory(request.authority);
     await ensureIntentDirectory(request.authority);
+    const installedInitialization = await dependencies.atomic.createExclusive(
+      initializationTarget.value,
+      artifactDocument.bytes,
+    );
+    if (installedInitialization === "exists") {
+      let handle;
+      try {
+        handle = await openResolved(initializationTarget.value.absolute, 0);
+        const existingBytes = new Uint8Array(await handle.readFile());
+        if (!Buffer.from(existingBytes).equals(Buffer.from(artifactDocument.bytes))) {
+          return contract("initialization-authority-disagreement");
+        }
+      } finally {
+        await handle?.close().catch(() => undefined);
+      }
+    }
     if (existing.kind === "missing") {
       const created = await dependencies.atomic.createExclusive(path, receipt.bytes);
       if (created === "exists") {
@@ -439,6 +457,7 @@ async function executeLocked(
   }
   const observed = await dependencies.read_state(request.authority.state);
   if (observed.kind !== "canonical" || observed.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
+  await cleanTaskWorkspace(dependencies, request.authority, observed.document.value).catch(() => undefined);
   return ok(Object.freeze({ state: observed.document, outcome, replayed: false }));
 }
 
@@ -451,9 +470,15 @@ export async function runStateInitialization(
   assertAuthenticParsedToolCall(request.call);
   const path = await intentTarget(dependencies, request);
   if (!path.ok) return path;
+  try {
+    await ensureIntentDirectory(request.authority);
+  } catch (error) {
+    if (error instanceof IntentLayoutError) return io(request, "intent-receipt-create");
+    throw error;
+  }
   let completed: ProjectResult<TransactionOutcome<"archflow_state">> | undefined;
   try {
-    return await dependencies.lock.runExclusive(request.authority.task_root, async () => {
+    return await dependencies.lock.runExclusive(request.authority.workspace_root, async () => {
       completed = await executeLocked(dependencies, request, path.value);
       return completed;
     });

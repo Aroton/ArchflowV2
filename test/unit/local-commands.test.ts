@@ -6,7 +6,7 @@ import { LOCAL_COMMANDS, assertGateCounterRequestBinding, runLocalCommand } from
 describe("archflow-local pure adapters", () => {
   it("publishes exactly the fifteen local commands", () => {
     expect([...LOCAL_COMMANDS].sort()).toEqual([
-      "build-request", "decide", "envelope", "gate-counter", "hash", "init", "maintain",
+      "build-request", "clean", "decide", "envelope", "gate-counter", "hash", "init",
       "manual-status", "reconcile", "render", "restore", "snapshot", "status", "upgrade", "validate",
     ]);
   });

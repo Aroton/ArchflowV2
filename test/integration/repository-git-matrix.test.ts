@@ -72,10 +72,14 @@ import {
 import { readIndexEntries, type IndexEntry } from "../../src/repository/index-entries.js";
 import {
   openResolved,
+  parseWorkspacePathClaim,
   resolveRepositoryPath,
   resolveTaskPath,
+  resolveTaskWorkspacePath,
   type ResolvedPath,
   type ResolvedTaskPath,
+  type ResolvedTaskWorkspacePath,
+  type ResolvedWorkspacePath,
 } from "../../src/repository/paths.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import {
@@ -114,6 +118,7 @@ interface StackRequest {
   readonly taskClaim: TaskPathClaim;
   /** A claim rooted at the worktree. */
   readonly repositoryClaim: RepositoryPathClaim;
+  readonly workspaceClaim?: ReturnType<typeof parseWorkspacePathClaim>;
   /** Extra claims to read from the index alongside the two resolved ones. */
   readonly extraIndexClaims?: readonly RepositoryPathClaim[];
   /** Claims to check attributes for; defaults to the resolved task claim alone. */
@@ -126,7 +131,7 @@ interface StackResult {
   readonly repositoryIdentity: RepositoryIdentity;
   readonly taskIdentity: TaskIdentity;
   readonly taskPath: ResolvedPath;
-  readonly repositoryPath: ResolvedPath;
+  readonly repositoryPath: ResolvedPath | ResolvedWorkspacePath;
   readonly entries: readonly IndexEntry[];
   readonly attributes: readonly AttributeCheck[];
   readonly history: WorktreeHistoryStatus;
@@ -161,10 +166,12 @@ async function driveStack(directory: string, request: StackRequest): Promise<Sta
     await resolveTaskPath({ runner: bound, taskId: TASK_ID, claim: request.taskClaim, context }),
     "resolveTaskPath"
   );
-  const repositoryPath = unwrap(
-    await resolveRepositoryPath({ runner: bound, claim: request.repositoryClaim, context }),
-    "resolveRepositoryPath"
-  );
+  const repositoryPath = request.workspaceClaim === undefined
+    ? unwrap(await resolveRepositoryPath({ runner: bound, claim: request.repositoryClaim, context }), "resolveRepositoryPath")
+    : unwrap(await resolveTaskWorkspacePath({
+        runner: bound, taskId: TASK_ID, claim: request.workspaceClaim,
+        expectedClass: "workspace-result-payload", context,
+      }), "resolveTaskWorkspacePath");
 
   const indexClaims = [
     taskPath.repositoryRelative,
@@ -199,7 +206,7 @@ async function driveStack(directory: string, request: StackRequest): Promise<Sta
 }
 
 /** Reads the bytes at a resolved path through the layer's own sanctioned open (containment step 7). */
-async function readResolved(path: ResolvedTaskPath): Promise<Buffer> {
+async function readResolved(path: ResolvedTaskPath | ResolvedTaskWorkspacePath): Promise<Buffer> {
   const handle = await openResolved(path, 0);
   try {
     return await handle.readFile();
@@ -382,25 +389,26 @@ describe.skipIf(!hasGit)("the full stack from a subdirectory equals the full sta
 describe.skipIf(!hasGit)("a Unicode, space-containing name round-trips the whole chain", () => {
   it("resolves, indexes, and attributes the same unquoted name", async () => {
     const digest = "a".repeat(64);
-    const payloadClaim = parseTaskPathClaim(`results/sha256/${digest}/payload/ü space.json`);
-    const payloadRepositoryClaim = `.archflow/tasks/${TASK_ID}/results/sha256/${digest}/payload/ü space.json`;
+    const workspaceClaim = parseWorkspacePathClaim(`cache/results/${digest}/payload/ü space.json`);
+    const payloadRepositoryClaim = `.archflow/work/tasks/${TASK_ID}/${workspaceClaim}`;
 
     const repository = seededRepository("unicode");
     repository.write(payloadRepositoryClaim, '{"u":"ü"}\n');
     repository.commitAll("payload");
 
     const result = await driveStack(repository.path, {
-      taskClaim: payloadClaim,
+      taskClaim: stateClaim,
       repositoryClaim: workflowClaim,
+      workspaceClaim,
       attributeClaims: [parseRepositoryPathClaim(payloadRepositoryClaim)],
     });
 
-    expect(result.taskPath.path_class).toBe("result-payload");
-    expect(result.taskPath.repositoryRelative).toBe(payloadRepositoryClaim);
+    expect(result.repositoryPath.path_class).toBe("workspace-result-payload");
+    expect(result.repositoryPath.repositoryRelative).toBe(payloadRepositoryClaim);
 
     const entry = entryFor(result, payloadRepositoryClaim);
     expect(entry.mode).toBe("100644");
-    expect(entry.oid).toBe(gitBlobOid(await readResolved(result.taskPath.absolute)));
+    expect(entry.oid).toBe(gitBlobOid(await readResolved(result.repositoryPath.absolute)));
     expect(result.attributes).toEqual([
       { path: payloadRepositoryClaim, text: "unset", merge: "binary" },
     ]);

@@ -4,16 +4,17 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { ResolvedTaskPath } from "../../src/repository/paths.js";
+import type { ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
 import { createTaskLock, TaskLockError } from "../../src/state/lock.js";
 
 const roots: string[] = [];
-const LOCK_DIRECTORY = ".transaction-lock";
+const LOCK_DIRECTORY = join("transient", ".transaction-lock");
 
-async function taskRoot(): Promise<ResolvedTaskPath> {
+async function taskRoot(): Promise<ResolvedTaskWorkspacePath> {
   const root = await mkdtemp(join(tmpdir(), "archflow-state-lock-"));
   roots.push(root);
-  return root as ResolvedTaskPath;
+  await mkdir(join(root, "transient"));
+  return root as ResolvedTaskWorkspacePath;
 }
 
 afterEach(async () => {

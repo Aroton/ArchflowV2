@@ -39,11 +39,9 @@ describe("reconcileCurrentAuthority", () => {
     expect(result.findings).toEqual([expect.objectContaining({ kind: "projection-mismatch", recorded_digest: D("a"), observed_digest: D("b") })]);
   });
 
-  it("compares an active gate head and ignores the legacy adopted_checkpoint field", () => {
+  it("compares an active gate head", () => {
     const gate = { gate_id: parsePathSafeId("gate-1"), gate_kind: "commit-authorization" as const, subject_digest: D("a"), context_digest: D("b"), frozen_state_digest: D("f"), opened_at_revision: parseSafeInteger(4) };
-    // adopted_checkpoint is a tolerated legacy field on pre-retirement states; reconciliation
-    // neither compares nor reports it.
-    const state = { ...STATE, open_gate: gate, adopted_checkpoint: { revision: parseSafeInteger(3), checkpoint_digest: D("c") } };
+    const state = { ...STATE, open_gate: gate };
     const result = reconcileCurrentAuthority({
       state: canonicalDocument(state), recorded_projections: [], current_projections: [],
       active_heads: { gate: { gate_id: gate.gate_id, subject_digest: gate.subject_digest, context_digest: gate.context_digest } },
@@ -80,14 +78,18 @@ describe("reconcileCurrentAuthority", () => {
 
     const committedState: TaskStateV1 = {
       ...prepared,
-      committed_intent: {
+      last_transition: {
+        schema_version: "1",
+        tool: valid.value.tool,
+        operation: valid.value.operation,
         intent_id: valid.value.intent_id,
         request_digest: valid.value.request_digest,
-        receipt_digest: valid.digest,
+        input_fingerprint: valid.value.input_fingerprint,
+        result_id: valid.value.result_id,
+        outcome: valid.value.outcome,
         outcome_digest: valid.value.outcome_digest,
         prior_revision: valid.value.prior_revision,
         resulting_revision: valid.value.resulting_revision,
-        result_id: valid.value.result_id,
       },
     };
     const committedResult = reconcileCurrentAuthority({

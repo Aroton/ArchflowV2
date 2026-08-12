@@ -2,6 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import { createProjectError, type ProjectError } from "../contracts/errors.js";
+import { parseSafeCode } from "../contracts/evidence.js";
 import type { AdapterId } from "../contracts/review.js";
 import {
   CLAUDE_MANAGED_POLICY_PATHS,
@@ -11,7 +12,14 @@ import {
 } from "../dispatch/cli.js";
 import { DispatchProcessError } from "../dispatch/process.js";
 import { createDispatchWorkspace } from "../dispatch/workspace.js";
+import { createGitRunner, GitInvocationError } from "../repository/git.js";
 import { CLAUDE_MCP_TIMEOUT_MS, CODEX_TOOL_TIMEOUT_SEC, type HostRegistrationReport } from "./registration.js";
+
+export type WorkDirectoryInitDiagnostic = Readonly<{
+  ignored: boolean | null;
+  tracked_paths: readonly string[];
+  error: ProjectError | null;
+}>;
 
 export type CliInitDiagnostic = Readonly<{
   adapter: AdapterId;
@@ -32,6 +40,7 @@ export type InitDiagnostics = Readonly<{
   codex_project_trusted: boolean | null;
   codex_masked_by_higher_precedence: boolean | null;
   timeout_findings: readonly string[];
+  work_directory: WorkDirectoryInitDiagnostic;
   limitations: readonly string[];
   recovery_guidance: readonly string[];
 }>;
@@ -154,12 +163,43 @@ async function readHostConfig(path: string): Promise<string | undefined> {
   }
 }
 
+/** Verifies both halves of the workspace boundary: Git ignores new work bytes and tracks none. */
+export async function diagnoseWorkDirectory(repository: string): Promise<WorkDirectoryInitDiagnostic> {
+  const runner = createGitRunner({ cwd: repository });
+  try {
+    const ignored = await runner.run({
+      argv: ["check-ignore", "--quiet", "--no-index", "--", ".archflow/work/.archflow-ignore-probe"],
+      operation: parseSafeCode("init-check-work-ignore"),
+      expectedAbsence: [{ code: 1, stderrIncludes: "" }],
+    });
+    const trackedPaths = await runner.runNulFields({
+      argv: ["ls-files", "-z", "--", ".archflow/work"],
+      operation: parseSafeCode("init-list-work-files"),
+    });
+    return Object.freeze({
+      ignored: !ignored.absent,
+      tracked_paths: Object.freeze([...trackedPaths]),
+      error: null,
+    });
+  } catch (error) {
+    return Object.freeze({
+      ignored: null,
+      tracked_paths: Object.freeze([]),
+      error: createProjectError("IO_ERROR", {
+        operation: error instanceof GitInvocationError ? error.operation : "init-check-work-directory",
+        attempt: 1,
+      }),
+    });
+  }
+}
+
 export async function collectInitDiagnostics(input: InitDiagnosticsInput): Promise<InitDiagnostics> {
-  const [claude, codex, claudeHostConfig, codexHostConfig] = await Promise.all([
+  const [claude, codex, claudeHostConfig, codexHostConfig, workDirectory] = await Promise.all([
     diagnoseAdapter("claude-cli", input.working_directory),
     diagnoseAdapter("codex-cli", input.working_directory),
     readHostConfig(join(input.working_directory, ".mcp.json")),
     readHostConfig(join(input.working_directory, ".codex", "config.toml")),
+    diagnoseWorkDirectory(input.working_directory),
   ]);
   return Object.freeze({
     schema_version: "1",
@@ -174,6 +214,7 @@ export async function collectInitDiagnostics(input: InitDiagnosticsInput): Promi
       [claudeTimeoutFinding(claudeHostConfig), codexTimeoutFinding(codexHostConfig)]
         .filter((finding): finding is string => finding !== undefined),
     ),
+    work_directory: workDirectory,
     limitations: Object.freeze([
       "Dispatch context hygiene uses a generated home and scrubbed environment, but it is best-effort and is not an enforced isolation boundary.",
       "Claude project MCP registration may remain pending until a human approves it; reset choices with `claude mcp reset-project-choices` when needed.",

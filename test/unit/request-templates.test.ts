@@ -251,7 +251,6 @@ describe("run-step template legality", () => {
       result_digest: subjectDigest,
       result_id: "result-1",
       input_fingerprint: fingerprint,
-      manifest_path: `.archflow/tasks/${taskId}/results/sha256/${"b".repeat(64)}/manifest.json`,
     } as unknown as AuthoritativeResultRef;
   }
 

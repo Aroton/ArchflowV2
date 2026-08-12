@@ -57,7 +57,13 @@ import {
   discoverWorktree,
   type RootBoundGitRunner,
 } from "../../src/repository/identity.js";
-import type { ResolvedPath, ResolvedTaskPath } from "../../src/repository/paths.js";
+import {
+  parseWorkspacePathClaim,
+  type ResolvedPath,
+  type ResolvedTaskPath,
+  type ResolvedTaskWorkspacePath,
+  type ResolvedWorkspacePath,
+} from "../../src/repository/paths.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import { rulesForEnvelope } from "../../src/review/adjudication.js";
 import {
@@ -223,10 +229,13 @@ async function retainedResult(
   root: string,
   reference: AuthoritativeResultRef,
 ) {
+  const manifestRepositoryPath = parseRepositoryPathClaim(
+    `.archflow/tasks/${task}/authority/results/${reference.result_digest}.json`,
+  );
   const manifestTarget = {
-    absolute: join(root, reference.manifest_path) as ResolvedTaskPath,
-    repositoryRelative: reference.manifest_path,
-    path_class: "result-manifest",
+    absolute: join(root, manifestRepositoryPath) as ResolvedTaskPath,
+    repositoryRelative: manifestRepositoryPath,
+    path_class: "authority-result",
   } as const satisfies ResolvedPath;
   const manifest = parseCanonicalDocument<ResultManifestV1>(
     await readFile(manifestTarget.absolute),
@@ -234,16 +243,15 @@ async function retainedResult(
   const payloads = await Promise.all(manifest.value.outputs
     .filter((output) => output.storage === "raw-payload")
     .map(async (output) => {
+      const workspaceRelative = parseWorkspacePathClaim(
+        `cache/results/${reference.result_digest}/payload/${output.path}`,
+      );
       const target = {
-        absolute: join(
-          root,
-          `.archflow/tasks/${task}/results/sha256/${reference.result_digest}/payload/${output.path}`,
-        ) as ResolvedTaskPath,
-        repositoryRelative: parseRepositoryPathClaim(
-          `.archflow/tasks/${task}/results/sha256/${reference.result_digest}/payload/${output.path}`,
-        ),
-        path_class: "result-payload",
-      } as const satisfies ResolvedPath;
+        absolute: join(root, `.archflow/work/tasks/${task}/${workspaceRelative}`) as ResolvedTaskWorkspacePath,
+        workspaceRelative,
+        repositoryRelative: parseRepositoryPathClaim(`.archflow/work/tasks/${task}/${workspaceRelative}`),
+        path_class: "workspace-result-payload",
+      } as const satisfies ResolvedWorkspacePath;
       return {
         path: output.path,
         target,
@@ -924,18 +932,18 @@ async function rewrite(
   };
   const manifest = canonicalDocument(manifestValue);
   const manifestPath = parseRepositoryPathClaim(
-    `.archflow/tasks/${task}/results/sha256/${manifest.digest}/manifest.json`,
+    `.archflow/tasks/${task}/authority/results/${manifest.digest}.json`,
   );
-  const payloadPath = parseRepositoryPathClaim(
-    `.archflow/tasks/${task}/results/sha256/${manifest.digest}/payload/${outputPath}`,
+  const payloadWorkspacePath = parseWorkspacePathClaim(
+    `cache/results/${manifest.digest}/payload/${outputPath}`,
   );
+  const payloadPath = parseRepositoryPathClaim(`.archflow/work/tasks/${task}/${payloadWorkspacePath}`);
   const reference: AuthoritativeResultRef = {
     phase_instance: phase,
     step: "produce",
     result_digest: manifest.digest,
     result_id: resultId,
     input_fingerprint: fingerprint,
-    manifest_path: manifestPath,
   };
   const installation = prepareResultInstallation({
     reference,
@@ -946,16 +954,17 @@ async function rewrite(
         path: outputPath,
         bytes,
         target: {
-          absolute: join(h.root, payloadPath) as ResolvedTaskPath,
+          absolute: join(h.root, payloadPath) as ResolvedTaskWorkspacePath,
+          workspaceRelative: payloadWorkspacePath,
           repositoryRelative: payloadPath,
-          path_class: "result-payload",
+          path_class: "workspace-result-payload",
         },
       }],
     },
     manifest_target: {
       absolute: join(h.root, manifestPath) as ResolvedTaskPath,
       repositoryRelative: manifestPath,
-      path_class: "result-manifest",
+      path_class: "authority-result",
     },
     projection_plan: {
       entries: [],

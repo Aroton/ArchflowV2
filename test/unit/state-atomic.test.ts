@@ -4,8 +4,16 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { PathClass, RepositoryPathClaim } from "../../src/contracts/path-claims.js";
-import type { ResolvedPath, ResolvedTaskPath } from "../../src/repository/paths.js";
+import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
+import {
+  parseWorkspacePathClaim,
+  type ResolvedPath,
+  type ResolvedTaskPath,
+  type ResolvedTaskWorkspacePath,
+  type ResolvedWorkspacePath,
+  type WorkspacePathClass,
+} from "../../src/repository/paths.js";
+import type { PathClass } from "../../src/contracts/path-claims.js";
 import {
   AtomicReplaceError,
   createAtomicWriter,
@@ -26,8 +34,17 @@ afterEach(async () => {
 function resolved(absolute: string, pathClass: PathClass): ResolvedPath {
   return Object.freeze({
     path_class: pathClass,
-    repositoryRelative: ".archflow/tasks/demo/target" as RepositoryPathClaim,
+    repositoryRelative: parseRepositoryPathClaim(".archflow/tasks/demo/target"),
     absolute: absolute as ResolvedTaskPath,
+  });
+}
+
+function workspaceResolved(absolute: string, pathClass: WorkspacePathClass): ResolvedWorkspacePath {
+  return Object.freeze({
+    path_class: pathClass,
+    workspaceRelative: parseWorkspacePathClaim("transient/intents/target.json"),
+    repositoryRelative: parseRepositoryPathClaim(".archflow/work/tasks/demo/transient/intents/target.json"),
+    absolute: absolute as ResolvedTaskWorkspacePath,
   });
 }
 
@@ -49,7 +66,7 @@ describe("createAtomicWriter.createExclusive", () => {
     const target = join(intents, "intent-1.json");
     const bytes = new TextEncoder().encode('{"schema_version":"1"}\n');
 
-    await expect(createAtomicWriter().createExclusive(resolved(target, "intent"), bytes)).resolves.toBe(
+    await expect(createAtomicWriter().createExclusive(workspaceResolved(target, "workspace-intent"), bytes)).resolves.toBe(
       "created",
     );
     expect(await readFile(target)).toEqual(Buffer.from(bytes));
@@ -65,7 +82,7 @@ describe("createAtomicWriter.createExclusive", () => {
 
     await expect(
       createAtomicWriter().createExclusive(
-        resolved(target, "intent"),
+        workspaceResolved(target, "workspace-intent"),
         new TextEncoder().encode("replacement"),
       ),
     ).resolves.toBe("exists");
@@ -77,7 +94,7 @@ describe("createAtomicWriter.createExclusive", () => {
     const root = await temporaryRoot();
     const target = join(root, "decision.json");
     await expect(createAtomicWriter().createExclusive(
-      resolved(target, "decision"),
+      resolved(target, "authority-decision"),
       new TextEncoder().encode("decision"),
     )).resolves.toBe("created");
     expect(await readFile(target, "utf8")).toBe("decision");
@@ -99,7 +116,7 @@ describe("createAtomicWriter.createExclusive", () => {
     const target = join(missingParent, "intent-1.json");
 
     const error = await atomicFailure(
-      createAtomicWriter().createExclusive(resolved(target, "intent"), new Uint8Array([1])),
+      createAtomicWriter().createExclusive(workspaceResolved(target, "workspace-intent"), new Uint8Array([1])),
     );
     expect(error).toMatchObject({
       operation: "create-exclusive",
@@ -139,7 +156,7 @@ describe("createAtomicWriter.replace", () => {
     const target = join(root, "intent.json");
 
     await expect(
-      createAtomicWriter().replace(resolved(target, "intent"), new Uint8Array([1])),
+      createAtomicWriter().replace(workspaceResolved(target, "workspace-intent"), new Uint8Array([1])),
     ).rejects.toThrow(TypeError);
     await expect(readFile(target)).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -187,11 +204,11 @@ describe("createAtomicWriter.replace", () => {
     const root = await temporaryRoot();
     const target = join(root, "gate.decision");
     const writer = createAtomicWriter();
-    await writer.replace(resolved(target, "gate-interface"), new TextEncoder().encode("decision"));
+    await writer.replace(workspaceResolved(target, "workspace-gate-interface"), new TextEncoder().encode("decision"));
     expect(await readFile(target, "utf8")).toBe("decision");
-    await writer.removeGateInterface(resolved(target, "gate-interface"));
-    await writer.removeGateInterface(resolved(target, "gate-interface"));
+    await writer.removeGateInterface(workspaceResolved(target, "workspace-gate-interface"));
+    await writer.removeGateInterface(workspaceResolved(target, "workspace-gate-interface"));
     await expect(readFile(target)).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(writer.removeGateInterface(resolved(target, "task-state"))).rejects.toThrow(TypeError);
+    await expect(writer.removeGateInterface(resolved(target, "task-state") as never)).rejects.toThrow(TypeError);
   });
 });

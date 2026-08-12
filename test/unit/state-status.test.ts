@@ -155,6 +155,21 @@ describe("computeTaskStatus", () => {
     });
     expect(status.value.next_action.guidance).toContain("archflow-local envelope");
     expect(status.value).not.toHaveProperty("subject_digest");
+    expect(status.value.workspace).toMatchObject({ cleanup_pending: false });
+  });
+
+  it("reports cleanup debt as non-blocking derived workspace state", async () => {
+    const h = await harness();
+    writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state()).bytes);
+    const stale = join(h.root, ".archflow", "work", "tasks", TASK, "cache", "reviews", "old.md");
+    mkdirSync(join(stale, ".."), { recursive: true });
+    writeFileSync(stale, "reconstructible review\n");
+    const status = await computeTaskStatus(h.services.dependencies, h.services.authority);
+    expect(status).toMatchObject({
+      ok: true,
+      value: { workspace: { cleanup_pending: true, removed_files: 0, removed_bytes: 0 } },
+    });
+    if (status.ok) expect(status.value.blocking_reasons).not.toContain("workspace.cleanup_pending");
   });
 
   it("degrades config and missing gate archive disagreements without throwing", async () => {
@@ -181,7 +196,9 @@ describe("computeTaskStatus", () => {
         context_digest: active.context_digest, frozen_state_digest: D("c"), opened_at_revision: parseSafeInteger(4),
       },
     })).bytes);
-    writeFileSync(join(h.services.authority.task_root, "gate.json"), canonicalDocument(active).bytes);
+    const activePath = join(h.root, ".archflow", "work", "tasks", TASK, "cache", "gates", "gate.json");
+    mkdirSync(join(activePath, ".."), { recursive: true });
+    writeFileSync(activePath, canonicalDocument(active).bytes);
     writeFileSync(h.services.authority.config.absolute, `${configText}max_attempts: 4\n`);
     const status = await computeTaskStatus(h.services.dependencies, h.services.authority);
     expect(status).toMatchObject({
@@ -234,10 +251,12 @@ describe("computeTaskStatus", () => {
         context_digest: active.context_digest, frozen_state_digest: D("c"), opened_at_revision: parseSafeInteger(4),
       },
     })).bytes);
-    writeFileSync(join(h.services.authority.task_root, "gate.json"), canonicalDocument(active).bytes);
-    mkdirSync(join(h.services.authority.task_root, "decisions", active.gate_id), { recursive: true });
+    const activePath = join(h.root, ".archflow", "work", "tasks", TASK, "cache", "gates", "gate.json");
+    mkdirSync(join(activePath, ".."), { recursive: true });
+    writeFileSync(activePath, canonicalDocument(active).bytes);
+    mkdirSync(join(h.services.authority.task_root, "authority", "decisions", active.gate_id), { recursive: true });
     writeFileSync(
-      join(h.services.authority.task_root, "decisions", active.gate_id, "request.json"),
+      join(h.services.authority.task_root, "authority", "decisions", active.gate_id, "request.json"),
       canonicalDocument(request).bytes,
     );
 
@@ -247,9 +266,9 @@ describe("computeTaskStatus", () => {
       value: {
         open_gate: {
           gate_id: active.gate_id,
-          decision_path: "gate.decision",
-          archive_decision_path: `decisions/${active.gate_id}/decision.json`,
-          request_path: `decisions/${active.gate_id}/request.json`,
+          decision_path: `.archflow/work/tasks/${TASK}/cache/gates/gate.decision`,
+          archive_decision_path: `.archflow/tasks/${TASK}/authority/decisions/${active.gate_id}/decision.json`,
+          request_path: `.archflow/tasks/${TASK}/authority/decisions/${active.gate_id}/request.json`,
         },
         next_action: { code: "resolve-open-gate", gate_id: active.gate_id, human_required: true },
       },
@@ -261,5 +280,17 @@ describe("computeTaskStatus", () => {
     expect(status.value.open_gate.counter_review_prompt).toContain("Perform an optional independent counter-review");
     expect(status.value.open_gate.counter_review_prompt).toContain(active.gate_id);
     expect(status.value.open_gate.counter_review_prompt).toContain(active.request_digest);
+
+    rmSync(activePath);
+    const reconstructed = await computeTaskStatus(h.services.dependencies, h.services.authority);
+    expect(reconstructed).toMatchObject({
+      ok: true,
+      value: {
+        open_gate: {
+          gate_id: active.gate_id,
+          decision_path: `.archflow/work/tasks/${TASK}/cache/gates/gate.decision`,
+        },
+      },
+    });
   });
 });

@@ -46,9 +46,6 @@
         },
         "input_fingerprint": {
           "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
-        },
-        "manifest_path": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
         }
       },
       "required": [
@@ -56,8 +53,7 @@
         "step",
         "result_digest",
         "result_id",
-        "input_fingerprint",
-        "manifest_path"
+        "input_fingerprint"
       ],
       "additionalProperties": false
     },
@@ -195,17 +191,39 @@
       ],
       "additionalProperties": false
     },
-    "committedIntentRef": {
+    "lastTransition": {
       "type": "object",
       "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "tool": {
+          "type": "string",
+          "enum": [
+            "archflow_state",
+            "archflow_counter_review",
+            "archflow_gate",
+            "archflow_waiver"
+          ]
+        },
+        "operation": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeCode"
+        },
         "intent_id": {
           "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
         },
         "request_digest": {
           "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
         },
-        "receipt_digest": {
+        "input_fingerprint": {
           "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "result_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+        },
+        "outcome": {
+          "$ref": "#/$defs/plainJson"
         },
         "outcome_digest": {
           "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
@@ -217,39 +235,50 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
-        },
-        "result_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
         }
       },
       "required": [
+        "schema_version",
+        "tool",
+        "operation",
         "intent_id",
         "request_digest",
-        "receipt_digest",
+        "input_fingerprint",
+        "result_id",
+        "outcome",
         "outcome_digest",
         "prior_revision",
-        "resulting_revision",
-        "result_id"
+        "resulting_revision"
       ],
       "additionalProperties": false
     },
-    "adoptedCheckpointRef": {
-      "type": "object",
-      "properties": {
-        "revision": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 9007199254740991
+    "plainJson": {
+      "anyOf": [
+        {
+          "type": "null"
         },
-        "checkpoint_digest": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/plainJson"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/plainJson"
+          }
         }
-      },
-      "required": [
-        "revision",
-        "checkpoint_digest"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   "type": "object",
@@ -333,11 +362,8 @@
     "open_gate": {
       "$ref": "#/$defs/openGateRef"
     },
-    "committed_intent": {
-      "$ref": "#/$defs/committedIntentRef"
-    },
-    "adopted_checkpoint": {
-      "$ref": "#/$defs/adoptedCheckpointRef"
+    "last_transition": {
+      "$ref": "#/$defs/lastTransition"
     },
     "terminal": {
       "type": "string",

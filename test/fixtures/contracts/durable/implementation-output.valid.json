@@ -75,6 +75,10 @@
     ],
     "unrepresentable_count": 1
   },
+  "verification_evidence": {
+    "transcript_digest": "b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3",
+    "byte_count": 4096
+  },
   "declared_inputs": [
     { "input_id": "architecture:v3", "digest": "8192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f70" },
     { "input_id": "prd:v1", "digest": "92a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081" }

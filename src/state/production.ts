@@ -1,4 +1,5 @@
 import { canonicalJsonDigest, parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
+import { lstat, readFile, readlink } from "node:fs/promises";
 import type { BlobIdentity, OutputEntry } from "../contracts/durable-primitives.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
@@ -15,11 +16,15 @@ import { discoverWorktree, type RootBoundGitRunner } from "../repository/identit
 import {
   gateSupplementalReviewClaim,
   openResolved,
+  parseWorkspacePathClaim,
   resolveDeclaredOutputPath,
   resolveRepositoryPath,
   resolveTaskPath,
+  resolveTaskWorkspacePath,
+  resultAuthorityClaim,
   type ResolvedPath,
   type ResolvedTaskPath,
+  type ResolvedWorkspacePath,
 } from "../repository/paths.js";
 import { createAtomicWriter, createProjectionWriter, type AtomicWriter } from "./atomic.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
@@ -91,8 +96,8 @@ export async function readRetainedResult(
   const manifestTarget = await resolvePath(
     runner,
     authority,
-    parseTaskPathClaim(reference.manifest_path.replace(`.archflow/tasks/${authority.task_id}/`, "")),
-    "result-manifest",
+    resultAuthorityClaim(reference.result_digest),
+    "authority-result",
   );
   if (!manifestTarget.ok) return manifestTarget;
   const read = await readSnapshot({
@@ -111,22 +116,67 @@ export async function readRetainedResult(
   ) return stateFailure(authority.context.phase_instance, "retained-result-reference-mismatch");
 
   const payloads: PreparedSnapshot["payloads"][number][] = [];
-  const payloadTargets = new Map<RepositoryPathClaim, ResolvedPath>();
+  const payloadTargets = new Map<RepositoryPathClaim, ResolvedWorkspacePath>();
+  const payloadBytes = new Map<RepositoryPathClaim, Uint8Array>();
   for (const output of manifest.outputs) {
     if (output.storage !== "raw-payload") continue;
-    const taskRelative = `results/sha256/${reference.result_digest}/payload/${output.path}`;
-    const payloadTarget = await resolvePath(runner, authority, parseTaskPathClaim(taskRelative), "result-payload");
+    const payloadTarget = await resolveTaskWorkspacePath({
+      runner,
+      taskId: authority.task_id,
+      claim: parseWorkspacePathClaim(`cache/results/${reference.result_digest}/payload/${output.path}`),
+      expectedClass: "workspace-result-payload",
+      context: authority.context,
+    });
     if (!payloadTarget.ok) return payloadTarget;
-    const bytes = await readSnapshotPayload({
+    let bytes = await readSnapshotPayload({
       target: payloadTarget.value,
       expected_digest: output.payload_digest,
       expected_bytes: output.payload_bytes,
       snapshot_digest: manifest.snapshot_digest,
       worktree_root: runner.location.worktreeRoot as ResolvedTaskPath,
     });
+    if (!bytes.ok) {
+      try {
+        const projection = await resolveDeclaredOutputPath({
+          runner,
+          taskId: authority.task_id,
+          claim: output.path,
+          pathClass: output.path_class,
+          context: authority.context,
+        });
+        let restored: Uint8Array | undefined;
+        if (projection.ok) {
+          try {
+            const metadata = await lstat(projection.value.absolute);
+            restored = metadata.isSymbolicLink()
+              ? Buffer.from(await readlink(projection.value.absolute), "utf8")
+              : metadata.isFile()
+                ? new Uint8Array(await readFile(projection.value.absolute))
+                : undefined;
+            if (restored !== undefined &&
+                (restored.byteLength !== output.payload_bytes || sha256Bytes(restored) !== output.payload_digest)) {
+              restored = undefined;
+            }
+          } catch {
+            restored = undefined;
+          }
+        }
+        restored ??= output.file_type === "symlink"
+          ? await readGitBlobBytes(runner, output.after.oid)
+          : await readGitBlobProjectedBytes(runner, output.after.oid, output.path);
+        if (restored.byteLength !== output.payload_bytes || sha256Bytes(restored) !== output.payload_digest) {
+          return bytes;
+        }
+        bytes = ok(restored);
+      } catch {
+        return stateFailure(authority.context.phase_instance, "active-result-cache-missing-rerun-required");
+      }
+    }
     if (!bytes.ok) return bytes;
-    payloads.push(Object.freeze({ path: output.path, bytes: bytes.value, target: payloadTarget.value }));
+    const retainedBytes = bytes.value;
+    payloads.push(Object.freeze({ path: output.path, bytes: retainedBytes, target: payloadTarget.value }));
     payloadTargets.set(output.path, payloadTarget.value);
+    payloadBytes.set(output.path, retainedBytes);
   }
 
   const resolveOutput = async (claim: RepositoryPathClaim, output?: OutputEntry): Promise<ProjectResult<ResolvedPath>> => {
@@ -163,14 +213,21 @@ export async function readRetainedResult(
   for (const output of manifest.outputs) {
     const target = await resolveOutput(output.path, output);
     if (!target.ok) return target;
-    const desired = await restoreSnapshotOutput({
-      target: manifestTarget.value,
-      expected_result_digest: reference.result_digest,
-      runner,
-      worktree_root: runner.location.worktreeRoot as ResolvedTaskPath,
-      output_path: output.path,
-      ...(payloadTargets.get(output.path) === undefined ? {} : { payload_target: payloadTargets.get(output.path)! }),
-    });
+    const cached = payloadBytes.get(output.path);
+    if (cached !== undefined && output.operation === "delete") {
+      return stateFailure(authority.context.phase_instance, "retained-result-payload-operation-mismatch");
+    }
+    const desired = cached === undefined
+      ? await restoreSnapshotOutput({
+          target: manifestTarget.value,
+          expected_result_digest: reference.result_digest,
+          runner,
+          worktree_root: runner.location.worktreeRoot as ResolvedTaskPath,
+          output_path: output.path,
+        })
+      : ok(output.file_type === "symlink"
+          ? Object.freeze({ state: "present" as const, file_type: "symlink" as const, mode: "120000" as const, bytes: cached })
+          : Object.freeze({ state: "present" as const, file_type: "regular" as const, mode: output.operation === "delete" ? "100644" : output.after.mode as "100644" | "100755", bytes: cached }));
     if (!desired.ok) return desired;
     const before = output.operation === "add"
       ? undefined
@@ -300,7 +357,7 @@ export async function createProductionServices(input: ProductionInput): Promise<
         discovered.value,
         authority,
         gateSupplementalReviewClaim(request.gate_id),
-        "decision",
+        "authority-decision",
       );
       if (!target.ok) return target;
       let handle;

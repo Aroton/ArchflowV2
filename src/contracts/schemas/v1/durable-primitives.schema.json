@@ -69,12 +69,8 @@
       "type": "string",
       "enum": [
         "document",
-        "import",
         "repository-source",
-        "result-payload",
-        "review",
-        "task-branch-constitution",
-        "verification-transcript"
+        "task-branch-constitution"
       ]
     },
     "declaredInputRef": {

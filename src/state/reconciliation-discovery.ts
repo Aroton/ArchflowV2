@@ -8,7 +8,7 @@ import {
   type CanonicalDocument,
 } from "../contracts/canonical.js";
 import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
-import { parseActiveGate, parseGateRequest } from "../contracts/durable-gate.js";
+import { parseGateRequest } from "../contracts/durable-gate.js";
 import { parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
 import type { ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
@@ -17,17 +17,20 @@ import {
   validateDurableSemantics,
 } from "../contracts/durable.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
-import { parseTaskPathClaim } from "../contracts/path-claims.js";
+import { parsePathSafeId } from "../contracts/evidence.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import {
   gateRequestClaim,
+  intentReceiptClaim,
   openResolved,
+  resolveTaskWorkspacePath,
   resolveDeclaredOutputPath,
   resolveTaskPath,
   type ResolvedPath,
+  type ResolvedWorkspacePath,
 } from "../repository/paths.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
-import { activeGateHead, type ReconciliationInput } from "./reconciliation.js";
+import type { ReconciliationInput } from "./reconciliation.js";
 import type { GateLifecycleDependencies } from "./gates.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
@@ -48,7 +51,7 @@ const ioFailure = (authority: TransactionAuthority, operation: string): ProjectR
   });
 
 async function readCanonical<T extends PlainJsonValue>(
-  path: ResolvedPath,
+  path: ResolvedPath | ResolvedWorkspacePath,
   label: string,
   parse: (value: unknown) => T,
 ): Promise<"missing" | "invalid" | CanonicalDocument<T>> {
@@ -156,26 +159,18 @@ async function discoverProjections(
 async function discoverGateHead(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
+  state: CanonicalDocument<TaskStateV1>,
 ): Promise<ProjectResult<Readonly<{
   head?: NonNullable<ReconciliationInput["active_heads"]["gate"]>;
   blocker?: string;
 }>>> {
-  const activePath = await resolveTaskPath({
-    runner: dependencies.runner,
-    taskId: authority.task_id,
-    claim: parseTaskPathClaim("gate.json"),
-    expectedClass: "gate-interface",
-    context: authority.context,
-  });
-  if (!activePath.ok) return activePath;
-  const active = await readCanonical(activePath.value, "active gate", parseActiveGate);
-  if (active === "missing") return ok(Object.freeze({}));
-  if (active === "invalid") return ok(Object.freeze({ blocker: "active-gate-invalid" }));
+  const open = state.value.open_gate;
+  if (open === undefined) return ok(Object.freeze({}));
   const requestPath = await resolveTaskPath({
     runner: dependencies.runner,
     taskId: authority.task_id,
-    claim: gateRequestClaim(active.value.gate_id),
-    expectedClass: "decision",
+    claim: gateRequestClaim(open.gate_id),
+    expectedClass: "authority-decision",
     context: authority.context,
   });
   if (!requestPath.ok) return requestPath;
@@ -183,7 +178,16 @@ async function discoverGateHead(
   if (request === "missing") return ok(Object.freeze({ blocker: "active-gate-request-missing" }));
   if (request === "invalid") return ok(Object.freeze({ blocker: "active-gate-request-invalid" }));
   try {
-    return ok(Object.freeze({ head: activeGateHead(active.value, request.value) }));
+    if (request.value.gate_id !== open.gate_id ||
+        request.value.subject_digest !== open.subject_digest ||
+        request.value.context_digest !== open.context_digest) {
+      return ok(Object.freeze({ blocker: "active-gate-request-mismatch" }));
+    }
+    return ok(Object.freeze({ head: Object.freeze({
+      gate_id: request.value.gate_id,
+      subject_digest: request.value.subject_digest,
+      context_digest: request.value.context_digest,
+    }) }));
   } catch {
     return ok(Object.freeze({ blocker: "active-gate-request-mismatch" }));
   }
@@ -199,7 +203,7 @@ async function discoverIntent(
 }>>> {
   let names: string[];
   try {
-    names = await readdir(join(authority.task_root, "intents"));
+    names = await readdir(join(authority.workspace_root, "transient", "intents"));
   } catch (error) {
     if ((error as { code?: unknown }).code === "ENOENT") return ok(Object.freeze({}));
     return ioFailure(authority, "discover-reconciliation-intents");
@@ -210,11 +214,11 @@ async function discoverIntent(
     // `.request.json` names are staged requests, a different path class in the same directory;
     // resolving one as an intent receipt would fail classification and abort discovery.
     if (name.endsWith(".request.json")) continue;
-    const target = await resolveTaskPath({
+    const target = await resolveTaskWorkspacePath({
       runner: dependencies.runner,
       taskId: authority.task_id,
-      claim: parseTaskPathClaim(`intents/${name}`),
-      expectedClass: "intent",
+      claim: intentReceiptClaim(parsePathSafeId(name.slice(0, -5))),
+      expectedClass: "workspace-intent",
       context: authority.context,
     });
     if (!target.ok) return target;
@@ -244,7 +248,7 @@ export async function discoverReconciliationInput(
   assertInternalTransactionAuthority(authority, dependencies);
   const projections = await discoverProjections(dependencies, authority, state);
   if (!projections.ok) return projections;
-  const gate = await discoverGateHead(dependencies, authority);
+  const gate = await discoverGateHead(dependencies, authority, state);
   if (!gate.ok) return gate;
   const intent = await discoverIntent(dependencies, authority, state);
   if (!intent.ok) return intent;

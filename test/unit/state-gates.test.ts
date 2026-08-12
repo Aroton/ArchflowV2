@@ -42,6 +42,10 @@ const state = (): TaskStateV1 => ({ schema_version: "1", task_id: parseTaskSlug(
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+const withoutLastTransition = (value: TaskStateV1): Omit<TaskStateV1, "last_transition"> => {
+  const { last_transition: _transition, ...rest } = value;
+  return rest;
+};
 
 const AUTHORITY = { link_digest: D("9"), purpose: "restore-adoption", proposed_generation_digest: D("a"), changed_input_fingerprint: D("b") } as const;
 const EFFECT_CASES = [
@@ -131,7 +135,8 @@ describe("durable gate decisions", () => {
     expect(first).toMatchObject({ ok: false, error: { code: "CANCELLED" } });
     const pending = await readTaskState(authority.state); expect(pending).toMatchObject({ kind: "canonical", document: { value: { revision: 5, open_gate: { gate_id: lifecycleGate } } } });
     const lifecycleContextDigest = computeGateContextDigest("constitution-review", reviewContext);
-    writeFileSync(join(taskRoot, "gate.decision"), canonicalDocument({
+    const gateWorkspace = join(authority.workspace_root, "cache", "gates");
+    writeFileSync(join(gateWorkspace, "gate.decision"), canonicalDocument({
       schema_version: "1", gate_id: lifecycleGate, task_id: "task-1",
       phase_instance: initial.phase_instance, kind: "constitution-review",
       subject_digest: D("c"), context_digest: lifecycleContextDigest,
@@ -140,11 +145,11 @@ describe("durable gate decisions", () => {
     }).bytes);
     const resumed = await runDurableGate(dependencies, { ...lifecycle, signal: new AbortController().signal });
     expect(resumed).toMatchObject({ ok: true, value: { replayed: false, effect: "advance", state: { value: { revision: 6, approvals: [{ gate_id: lifecycleGate }] } } } });
-    expect(existsSync(join(taskRoot, "decisions", lifecycleGate, "decision.json"))).toBe(true);
-    expect(existsSync(join(taskRoot, "intents", "intent-1.json"))).toBe(true);
-    expect(existsSync(join(taskRoot, "gate.json"))).toBe(false);
-    expect(existsSync(join(taskRoot, "gate.decision"))).toBe(false);
-    expect(readFileSync(join(taskRoot, "state.json"), "utf8")).toContain('"committed_intent"');
+    expect(existsSync(join(taskRoot, "authority", "decisions", lifecycleGate, "decision.json"))).toBe(true);
+    expect(existsSync(join(authority.workspace_root, "transient", "intents", "intent-1.json"))).toBe(false);
+    expect(existsSync(join(gateWorkspace, "gate.json"))).toBe(false);
+    expect(existsSync(join(gateWorkspace, "gate.decision"))).toBe(false);
+    expect(readFileSync(join(taskRoot, "state.json"), "utf8")).toContain('"last_transition"');
 
     const resolvedState = (await readTaskState(authority.state));
     if (resolvedState.kind !== "canonical") throw new Error("resolved state missing");
@@ -255,7 +260,6 @@ describe("durable gate decisions", () => {
     const resultReference = (resultId: string, phaseInstance: TaskStateV1["phase_instance"], artifactDigest: ReturnType<typeof D>) => ({
       phase_instance: phaseInstance, step: "produce" as const, result_digest: artifactDigest,
       result_id: resultId as never, input_fingerprint: inputFingerprint,
-      manifest_path: parseRepositoryPathClaim(`.archflow/tasks/task-1/results/sha256/${artifactDigest}/manifest.json`),
     });
     const installDesign = (markdown: string, resultId: string) => {
       const bytes = new TextEncoder().encode(markdown);
@@ -302,7 +306,8 @@ describe("durable gate decisions", () => {
       const aborted = new AbortController(); aborted.abort();
       expect(await runDurableGate(dependencies, { ...base, signal: aborted.signal })).toMatchObject({ ok: false, error: { code: "CANCELLED" } });
       const contextDigest = computeGateContextDigest(kind, gateContext as never);
-      writeFileSync(join(taskRoot, "gate.decision"), canonicalDocument({
+      const gateWorkspace = join(authority.workspace_root, "cache", "gates");
+      writeFileSync(join(gateWorkspace, "gate.decision"), canonicalDocument({
         schema_version: "1", gate_id: gate, task_id: "task-1", phase_instance: current.phase_instance,
         kind, subject_digest: subjectDigest, context_digest: contextDigest, human_provenance: {
           ...provenance, decision_event_id: `decision-${sequence}`, helper_invocation_id: `helper-${sequence}`,
@@ -320,11 +325,11 @@ describe("durable gate decisions", () => {
           kind: "canonical",
           document: { value: { planned_final_phase: current.planned_final_phase, open_gate: { gate_id: gate } } },
         });
-        const archive = join(taskRoot, "decisions", gate, "decision.json");
+        const archive = join(taskRoot, "authority", "decisions", gate, "decision.json");
         expect(existsSync(archive)).toBe(false);
         // The rejected approval remains a correctable human interface, not a server-owned archive
         // that requires manual deletion. Exercise the ordinary revise escape path on the same gate.
-        writeFileSync(join(taskRoot, "gate.decision"), canonicalDocument({
+        writeFileSync(join(gateWorkspace, "gate.decision"), canonicalDocument({
           schema_version: "1", gate_id: gate, task_id: "task-1", phase_instance: current.phase_instance,
           kind, subject_digest: subjectDigest, context_digest: contextDigest, human_provenance: {
             ...provenance, decision_event_id: `decision-${sequence}-revised`, helper_invocation_id: `helper-${sequence}-revised`,
@@ -346,7 +351,7 @@ describe("durable gate decisions", () => {
     expect(current.planned_final_phase).toBe(2);
 
     const amended = installDesign("### Phase 1: One\n### Phase 2: Two\n### Phase 3: Three\n", "design-2");
-    current = { ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "triage", status: "succeeded", authoritative_results: [amended] };
+    current = { ...withoutLastTransition(current), revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "triage", status: "succeeded", authoritative_results: [amended] };
     writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
     await approve("artifact-approval", amended.result_digest, { artifact_kind: "design" });
     expect(current.planned_final_phase).toBe(3);
@@ -365,14 +370,14 @@ describe("durable gate decisions", () => {
     ] as const;
     for (const [name, markdown] of invalidPlans) {
       const invalid = installDesign(markdown, `design-invalid-${name.replaceAll(" ", "-")}`);
-      current = { ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "triage", status: "succeeded", authoritative_results: [invalid] };
+      current = { ...withoutLastTransition(current), revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "triage", status: "succeeded", authoritative_results: [invalid] };
       writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
       await approve("artifact-approval", invalid.result_digest, { artifact_kind: "design" }, "approved-design-phase-count-invalid");
       expect(current.planned_final_phase).toBe(3);
     }
 
     const openEnded = installDesign("# Intentionally open-ended design\n\n<!-- archflow:phase-plan:open-ended -->\n", "design-3");
-    current = { ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "triage", status: "succeeded", authoritative_results: [openEnded] };
+    current = { ...withoutLastTransition(current), revision: parseSafeInteger(current.revision + 1), phase_instance: "design" as TaskStateV1["phase_instance"], step: "triage", status: "succeeded", authoritative_results: [openEnded] };
     writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);
     await approve("artifact-approval", openEnded.result_digest, { artifact_kind: "design" });
     expect(current.planned_final_phase).toBeUndefined();
@@ -384,7 +389,7 @@ describe("durable gate decisions", () => {
       source_artifact: { artifact_kind: "implementation-output", diff_digest: D("e"), parent_documents: [{ content_digest: D("f") }] },
     } as never), payloads: [] } };
     current = {
-      ...current, revision: parseSafeInteger(current.revision + 1), phase_instance: "phase-impl-3" as TaskStateV1["phase_instance"],
+      ...withoutLastTransition(current), revision: parseSafeInteger(current.revision + 1), phase_instance: "phase-impl-3" as TaskStateV1["phase_instance"],
       step: "triage", status: "succeeded", planned_final_phase: parseSafeInteger(3), authoritative_results: [implementationReference],
     };
     writeFileSync(join(taskRoot, "state.json"), canonicalDocument(current).bytes);

@@ -10,8 +10,8 @@ import {
   type SupplementalLedger,
   type WaiverGateContext,
 } from "../contracts/durable-gate.js";
-import type { ApprovalRef, CommittedIntentRef, TaskStateV1, WaiverRef } from "../contracts/durable-state.js";
-import { intentOutcomeDigest, intentReceiptDigest, parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
+import type { ApprovalRef, LastTransition, TaskStateV1, WaiverRef } from "../contracts/durable-state.js";
+import { intentOutcomeDigest, parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
 import { createCommittedIntentSubject, createPreparedIntentSubject, openGateFrozenStateDigest, validateDurableSemantics } from "../contracts/durable.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeCode, parseSafeId, parseSafeInteger, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
@@ -21,8 +21,14 @@ import { gateDecisionEffect } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import { parseReviewEvidence, type ReviewEvidence } from "../contracts/review.js";
 import { parseSupplementalReviewOutcome, type SupplementalReviewOutcome } from "../contracts/supplemental.js";
-import { gateCounterReviewClaim, gateDecisionClaim, gateRequestClaim, resolveTaskPath } from "../repository/paths.js";
-import { parseTaskPathClaim } from "../contracts/path-claims.js";
+import {
+  gateCounterReviewClaim,
+  gateDecisionClaim,
+  gateRequestClaim,
+  intentReceiptClaim,
+  resolveTaskWorkspacePath,
+  type ResolvedTaskWorkspacePath,
+} from "../repository/paths.js";
 import { verifyRepositoryIdentity } from "../repository/identity.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
 import {
@@ -46,17 +52,31 @@ import {
   type GateResolution,
 } from "./gate-core.js";
 import { waitForGateInterface } from "./gate-wait.js";
-import { ensureDecisionDirectory, ensureIntentDirectory } from "./layout.js";
+import { ensureDecisionDirectory, ensureIntentDirectory, ensureWorkspaceProjectionParent } from "./layout.js";
 import { loadLegacyImportResumePhase } from "./legacy-import-resume.js";
 import { TaskLockError } from "./lock.js";
 import { loadApprovedDesignFinalPhase } from "./planned-final-phase.js";
 import { planStateTransition } from "./transitions.js";
 import { applyProjectionPlan, captureProjectionTarget, prepareProjectionPlan, projectionGenerationDigest, type ProjectionSource } from "./snapshots.js";
+import { cleanTaskWorkspace } from "./workspace-cleanup.js";
 
 export { loadAuthenticatedGateApproval } from "./gate-approvals.js";
 export { buildGateDecisionTemplates, writeGateDecisionInterface } from "./gate-decision-interface.js";
 export type { GateLifecycleDependencies, GateOpenInput } from "./gate-core.js";
 export { findLegacyImportResumePhase } from "./legacy-import-resume.js";
+
+/** Cleanup is derived work: a committed state must never be rolled back because it failed. */
+async function cleanupCommittedGateWorkspace(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  state: TaskStateV1,
+): Promise<void> {
+  try {
+    await cleanTaskWorkspace(dependencies, authority, state);
+  } catch {
+    // Full status derives cleanup debt from the workspace and the next mutation retries it.
+  }
+}
 
 async function validateLiveGateState(
   dependencies: GateLifecycleDependencies,
@@ -79,8 +99,8 @@ async function authenticateWaiverOrigin(
   authority: TransactionAuthority,
   context: WaiverGateContext,
 ): Promise<ProjectResult<void>> {
-  const requestPath = await resolvePath(dependencies, authority, gateRequestClaim(context.origin.origin_gate_id), "decision");
-  const decisionPath = await resolvePath(dependencies, authority, gateDecisionClaim(context.origin.origin_gate_id), "decision");
+  const requestPath = await resolvePath(dependencies, authority, gateRequestClaim(context.origin.origin_gate_id), "authority-decision");
+  const decisionPath = await resolvePath(dependencies, authority, gateDecisionClaim(context.origin.origin_gate_id), "authority-decision");
   if (!requestPath.ok) return requestPath;
   if (!decisionPath.ok) return decisionPath;
   const request = await readCanonical(requestPath.value, "waiver origin request", parseGateRequest);
@@ -100,14 +120,15 @@ async function cleanupResolvedInterfaces(
   record: GateDecisionRecordV1,
 ): Promise<ProjectResult<void>> {
   try {
-    return await dependencies.lock.runExclusive(authority.task_root, async () => {
-      const gateJson = await resolvePath(dependencies, authority, "gate.json", "gate-interface");
+    await ensureIntentDirectory(authority);
+    return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
+      const gateJson = await resolvePath(dependencies, authority, "gate.json", "workspace-gate-interface");
       if (!gateJson.ok) return gateJson;
       const active = await readCanonical(gateJson.value, "active gate", parseActiveGate);
       if (active !== "missing" && active !== "invalid" && active.value.gate_id === request.gate_id && active.value.task_id === request.task_id && active.value.phase_instance === request.phase_instance && active.value.subject_digest === request.subject_digest && active.value.context_digest === request.context_digest) {
         await dependencies.atomic.removeGateInterface(gateJson.value);
       }
-      const decision = await resolvePath(dependencies, authority, "gate.decision", "gate-interface");
+      const decision = await resolvePath(dependencies, authority, "gate.decision", "workspace-gate-interface");
       if (!decision.ok) return decision;
       const projected = await readCanonical(decision.value, "gate decision interface", (value) => value as PlainJsonValue);
       if (projected !== "missing" && projected !== "invalid") {
@@ -128,12 +149,17 @@ async function currentSupplementalLedger(
   inputFingerprint: Sha256Digest,
   callerOutcome?: SupplementalReviewOutcome,
 ): Promise<SupplementalLedger | undefined> {
-  const target = await resolvePath(dependencies, authority, "gate.json", "gate-interface");
+  const target = await resolvePath(dependencies, authority, "gate.json", "workspace-gate-interface");
   if (!target.ok) return undefined;
-  const active = await readCanonical(target.value, "active gate", parseActiveGate);
-  if (active === "missing" || active === "invalid") return Object.freeze([]);
+  const projected = await readCanonical(target.value, "active gate", parseActiveGate);
+  const active = projected === "missing" || projected === "invalid"
+    ? parseActiveGate(activeProjection(request))
+    : projected.value;
+  const candidates = callerOutcome === undefined || callerOutcome.action === "supersede" || active.supplemental.some((entry) => isDeepStrictEqual(entry, callerOutcome))
+    ? active.supplemental
+    : [...active.supplemental, callerOutcome];
   const derived: SupplementalLedger[number][] = [];
-  for (const entry of active.value.supplemental) {
+  for (const entry of candidates) {
     if (callerOutcome === undefined || !isDeepStrictEqual(entry, callerOutcome)) continue;
     const binding = supplementalGate(entry);
     if (binding.prior_gate_id !== request.gate_id || binding.task_id !== request.task_id || binding.phase_instance !== request.phase_instance || binding.subject_digest !== request.subject_digest || binding.input_fingerprint !== inputFingerprint) continue;
@@ -201,7 +227,8 @@ export async function openDurableGate(
 ): Promise<ProjectResult<GateOpenResult>> {
   assertInternalTransactionAuthority(input.authority, { runner: dependencies.runner, environment: dependencies.environment });
   try {
-    return await dependencies.lock.runExclusive(input.authority.task_root, async () => {
+    await ensureIntentDirectory(input.authority);
+    return await dependencies.lock.runExclusive(input.authority.workspace_root, async () => {
       const stateResult = await stateOrFailure(dependencies, input.authority);
       if (!stateResult.ok) return stateResult;
       const current = stateResult.value;
@@ -214,8 +241,8 @@ export async function openDurableGate(
       if (!live.ok) return live;
       const gateId = computeGateId({ task_identity_digest: input.authority.task_identity_digest, intent_id: input.intent_id, request_digest: input.request_digest });
       await ensureDecisionDirectory(input.authority, gateId);
-      const requestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(gateId), "decision");
-      const decisionPath = await resolvePath(dependencies, input.authority, gateDecisionClaim(gateId), "decision");
+      const requestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(gateId), "authority-decision");
+      const decisionPath = await resolvePath(dependencies, input.authority, gateDecisionClaim(gateId), "authority-decision");
       if (!requestPath.ok) return requestPath;
       if (!decisionPath.ok) return decisionPath;
       const archived = await readCanonical(decisionPath.value, "gate decision record", parseGateDecisionRecord);
@@ -235,15 +262,25 @@ export async function openDurableGate(
         if (current.value.open_gate?.gate_id === gateId) {
           return ok({ gate_id: gateId, state: current, request: requestRead, replay: archived });
         }
-        if (current.value.committed_intent?.intent_id === input.intent_id) {
-          const receiptTarget = await resolveTaskPath({ runner: dependencies.runner, taskId: input.authority.task_id, claim: parseTaskPathClaim(`intents/${input.intent_id}.json`), expectedClass: "intent", context: input.authority.context });
-          if (!receiptTarget.ok) return receiptTarget;
-          const receipt = await dependencies.read_receipt(receiptTarget.value);
+        if (current.value.last_transition?.intent_id === input.intent_id) {
+          const transition = current.value.last_transition;
           const expectedTool = archived.value.outcome === "waiver-decided" ? "archflow_waiver" : "archflow_gate";
           const expectedOperation = archived.value.outcome === "waiver-decided" ? "waiver" : "gate";
-          const expectedOutcome = earnsReceipt(archived.value) ? receiptOutcome(archived.value, current.value.revision) : undefined;
-          if (receipt.kind !== "canonical" || expectedOutcome === undefined || receipt.document.digest !== current.value.committed_intent.receipt_digest || receipt.document.value.tool !== expectedTool || receipt.document.value.operation !== expectedOperation || receipt.document.value.request_digest !== requestRead.value.request_digest || String(receipt.document.value.result_id) !== String(archived.value.gate_id) || !isDeepStrictEqual(receipt.document.value.outcome, expectedOutcome) || receipt.document.value.outcome_digest !== intentOutcomeDigest(expectedOutcome) || !validateDurableSemantics(createCommittedIntentSubject(current, receipt.document)).ok) {
-            return issue("STATE_INVALID", current.value, "gate-replay-receipt-invalid");
+          const expectedOutcome = archived.value.outcome === "cancelled" || archived.value.outcome === "superseded"
+            ? undefined
+            : receiptOutcome(archived.value, current.value.revision);
+          if (
+            expectedOutcome === undefined || transition.tool !== expectedTool ||
+            transition.operation !== expectedOperation ||
+            transition.request_digest !== requestRead.value.request_digest ||
+            transition.input_fingerprint !== input.input_fingerprint ||
+            String(transition.result_id) !== String(archived.value.gate_id) ||
+            transition.resulting_revision !== current.value.revision ||
+            transition.prior_revision + 1 !== transition.resulting_revision ||
+            !isDeepStrictEqual(transition.outcome, expectedOutcome) ||
+            transition.outcome_digest !== intentOutcomeDigest(expectedOutcome)
+          ) {
+            return issue("STATE_INVALID", current.value, "gate-replay-transition-invalid");
           }
           return ok({ gate_id: gateId, state: current, request: requestRead, replay: archived });
         }
@@ -268,7 +305,7 @@ export async function openDurableGate(
         }));
       }
       if (current.value.open_gate !== undefined) {
-        const activeRequestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(current.value.open_gate.gate_id), "decision");
+        const activeRequestPath = await resolvePath(dependencies, input.authority, gateRequestClaim(current.value.open_gate.gate_id), "authority-decision");
         if (!activeRequestPath.ok) return activeRequestPath;
         const activeRequest = await readCanonical(activeRequestPath.value, "active gate request", parseGateRequest);
         if (activeRequest === "missing" || activeRequest === "invalid") return issue("STATE_INVALID", current.value, "active-gate-request-invalid");
@@ -276,12 +313,13 @@ export async function openDurableGate(
           return fail(createProjectError("INTENT_MISMATCH", { expected_digest: activeRequest.value.request_digest, observed_digest: input.request_digest }));
         }
         if (current.value.open_gate.gate_id !== gateId) return fail(createProjectError("GATE_ACTIVE", { gate_id: current.value.open_gate.gate_id, gate_kind: current.value.open_gate.gate_kind }));
-        const gateJson = await resolvePath(dependencies, input.authority, "gate.json", "gate-interface"); if (!gateJson.ok) return gateJson;
+        const gateJson = await resolvePath(dependencies, input.authority, "gate.json", "workspace-gate-interface"); if (!gateJson.ok) return gateJson;
         const projected = await readCanonical(gateJson.value, "active gate", parseActiveGate);
         let active = projected === "missing" || projected === "invalid"
           ? parseActiveGate(activeProjection(activeRequest.value))
           : projected.value;
         if (projected === "missing" || projected === "invalid") {
+          await ensureWorkspaceProjectionParent(input.authority, gateJson.value.absolute as ResolvedTaskWorkspacePath);
           await dependencies.atomic.replace(gateJson.value, canonicalDocument(active).bytes);
         }
         if (input.supplemental_outcome !== undefined) {
@@ -289,7 +327,7 @@ export async function openDurableGate(
           const binding = supplementalGate(supplemental);
           if (binding.prior_gate_id !== gateId || binding.task_id !== input.authority.task_id || binding.phase_instance !== input.phase_instance || binding.subject_digest !== input.subject_digest || binding.input_fingerprint !== input.input_fingerprint) return issue("CONTRACT_INVALID", undefined, "supplemental-gate-binding-invalid");
           if (supplemental.action !== "decline") {
-            const resolvedReview = await resolveTaskPath({ runner: dependencies.runner, taskId: input.authority.task_id, claim: gateCounterReviewClaim(input.phase_instance, gateId), expectedClass: "review", context: input.authority.context });
+            const resolvedReview = await resolveTaskWorkspacePath({ runner: dependencies.runner, taskId: input.authority.task_id, claim: gateCounterReviewClaim(input.phase_instance, gateId), expectedClass: "workspace-review", context: input.authority.context });
             if (!resolvedReview.ok) return resolvedReview;
             if (!await authenticSupplementalReview(
               dependencies,
@@ -304,17 +342,19 @@ export async function openDurableGate(
             if (ledger === undefined) return issue("STATE_INVALID", current.value, "supplemental-ledger-invalid");
             const record = parseGateDecisionRecord({ schema_version: "1", gate_id: gateId, task_id: input.authority.task_id, phase_instance: input.phase_instance, kind: input.kind, subject_digest: input.subject_digest, context_digest: activeRequest.value.context_digest, supplemental: ledger, outcome: "superseded", supersession: { superseded_gate_id: gateId, accepted_triage_digest: supplemental.accepted_triage_digest, old_subject_digest: supplemental.old_subject_digest } });
             const document = canonicalDocument(record);
-            const archivePath = await resolvePath(dependencies, input.authority, gateDecisionClaim(gateId), "decision"); if (!archivePath.ok) return archivePath;
+            const archivePath = await resolvePath(dependencies, input.authority, gateDecisionClaim(gateId), "authority-decision"); if (!archivePath.ok) return archivePath;
             if (await dependencies.atomic.createExclusive(archivePath.value, document.bytes) !== "created") return issue("STATE_INVALID", current.value, "gate-supersession-race");
             const final = nextStateForRecord(current.value, record, document.digest);
             await dependencies.atomic.replace(input.authority.state, final.bytes);
             await dependencies.atomic.removeGateInterface(gateJson.value);
+            await cleanupCommittedGateWorkspace(dependencies, input.authority, final.value);
             return ok({ gate_id: gateId, state: final, request: activeRequest, replay: document });
           }
           const ledger = active.supplemental.some((entry) => isDeepStrictEqual(entry, supplemental))
             ? active.supplemental
             : [...active.supplemental, supplemental];
           active = parseActiveGate({ ...active, supplemental: ledger });
+          await ensureWorkspaceProjectionParent(input.authority, gateJson.value.absolute as ResolvedTaskWorkspacePath);
           await dependencies.atomic.replace(gateJson.value, canonicalDocument(active).bytes);
         }
         return ok({ gate_id: gateId, state: current, request: activeRequest });
@@ -405,7 +445,7 @@ export async function openDurableGate(
       }
       // A crash may leave a human-authored interface before state names the gate. Preserve it only
       // when it binds this exact immutable request; an unrelated stale interface is safe to remove.
-      const pendingInterface = await resolvePath(dependencies, input.authority, "gate.decision", "gate-interface");
+      const pendingInterface = await resolvePath(dependencies, input.authority, "gate.decision", "workspace-gate-interface");
       if (!pendingInterface.ok) return pendingInterface;
       const pending = await readCanonical(pendingInterface.value, "gate decision interface", (value) => value as PlainJsonValue);
       if (pending !== "missing") {
@@ -415,8 +455,9 @@ export async function openDurableGate(
         }
         if (!bound) await dependencies.atomic.removeGateInterface(pendingInterface.value);
       }
-      const gateJson = await resolvePath(dependencies, input.authority, "gate.json", "gate-interface");
+      const gateJson = await resolvePath(dependencies, input.authority, "gate.json", "workspace-gate-interface");
       if (!gateJson.ok) return gateJson;
+      await ensureWorkspaceProjectionParent(input.authority, gateJson.value.absolute as ResolvedTaskWorkspacePath);
       await dependencies.atomic.replace(gateJson.value, canonicalDocument(parseActiveGate(activeProjection(request))).bytes);
       await dependencies.atomic.replace(input.authority.state, openState.bytes);
       return ok({ gate_id: gateId, state: openState, request: requestDocument });
@@ -443,7 +484,7 @@ function nextStateForRecord(
     waivers.push({ gate_id: record.gate_id, rule_id: record.origin.rule.rule_id, rule_version: record.origin.rule.rule_version, subject_digest: record.origin.subject_digest, scope: record.scope, granted: record.granted, expires: "task-complete", granted_at_revision: revision } as WaiverRef);
     waivers.sort((a, b) => a.gate_id.localeCompare(b.gate_id));
   }
-  const { open_gate: _open, committed_intent: _intent, ...base } = state;
+  const { open_gate: _open, last_transition: _transition, ...base } = state;
   const { planned_final_phase: existingPlannedFinalPhase, ...withoutPlannedFinalPhase } = base;
   const preserved = plannedFinalPhase === undefined
     ? { ...withoutPlannedFinalPhase, ...(existingPlannedFinalPhase === undefined ? {} : { planned_final_phase: existingPlannedFinalPhase }) }
@@ -471,7 +512,7 @@ function exactOpenGateMatches(state: TaskStateV1, request: GateRequestV1): boole
     state.revision !== request.opened_at_revision ||
     state.phase_instance !== request.phase_instance
   ) return false;
-  const { open_gate: _open, committed_intent: _intent, ...base } = state;
+  const { open_gate: _open, last_transition: _transition, ...base } = state;
   return open.frozen_state_digest === openGateFrozenStateDigest(base as TaskStateV1);
 }
 
@@ -506,7 +547,7 @@ async function planGateAuthorizedReentry(
     current,
   });
   if (!fingerprint.ok) return fingerprint;
-  const { open_gate: _open, committed_intent: _intent, ...predecessor } = current.value;
+  const { open_gate: _open, last_transition: _transition, ...predecessor } = current.value;
   const transition = planStateTransition({
     current: predecessor as TaskStateV1,
     target: {
@@ -599,6 +640,35 @@ function receiptOutcome(record: GateDecisionRecordV1, revision: number): PlainJs
   throw new TypeError("non-success gate record has no receipt outcome");
 }
 
+function withGateTransition(
+  authority: TransactionAuthority,
+  request: GateRequestV1,
+  record: GateDecisionRecordV1,
+  predecessor: CanonicalDocument<TaskStateV1>,
+  prepared: CanonicalDocument<TaskStateV1>,
+  inputFingerprint: Sha256Digest,
+): ProjectResult<CanonicalDocument<TaskStateV1>> {
+  if (record.outcome === "cancelled" || record.outcome === "superseded") return ok(prepared);
+  const outcome = receiptOutcome(record, prepared.value.revision);
+  const transition: LastTransition = {
+    schema_version: "1",
+    tool: record.outcome === "waiver-decided" ? "archflow_waiver" : "archflow_gate",
+    operation: parseSafeCode(record.outcome === "waiver-decided" ? "waiver" : "gate"),
+    intent_id: request.intent_id,
+    request_digest: request.request_digest,
+    input_fingerprint: inputFingerprint,
+    result_id: parseSafeId(record.gate_id),
+    outcome,
+    outcome_digest: intentOutcomeDigest(outcome),
+    prior_revision: predecessor.value.revision,
+    resulting_revision: prepared.value.revision,
+  };
+  const final = canonicalDocument({ ...prepared.value, last_transition: transition });
+  return validateDurableSemantics({ state: final }).ok
+    ? ok(final)
+    : issue("STATE_INVALID", predecessor.value, "gate-transition-invalid");
+}
+
 async function installReceipt(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
@@ -609,7 +679,13 @@ async function installReceipt(
   inputFingerprint: Sha256Digest,
 ): Promise<ProjectResult<Readonly<{ receipt: CanonicalDocument<IntentReceiptV1>; final: CanonicalDocument<TaskStateV1> }>>> {
   await ensureIntentDirectory(authority);
-  const target = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: parseTaskPathClaim(`intents/${request.intent_id}.json`), expectedClass: "intent", context: authority.context });
+  const target = await resolveTaskWorkspacePath({
+    runner: dependencies.runner,
+    taskId: authority.task_id,
+    claim: intentReceiptClaim(request.intent_id),
+    expectedClass: "workspace-intent",
+    context: authority.context,
+  });
   if (!target.ok) return target;
   const outcome = receiptOutcome(record, prepared.value.revision);
   const receipt = canonicalDocument(parseIntentReceipt({
@@ -632,12 +708,20 @@ async function installReceipt(
       return issue("STATE_INVALID", prepared.value, "gate-receipt-collision");
     }
   }
-  const reference: CommittedIntentRef = {
-    intent_id: request.intent_id, request_digest: request.request_digest, receipt_digest: intentReceiptDigest(receipt.value),
-    outcome_digest: receipt.value.outcome_digest, prior_revision: receipt.value.prior_revision,
-    resulting_revision: receipt.value.resulting_revision, result_id: receipt.value.result_id,
+  const reference: LastTransition = {
+    schema_version: "1",
+    tool: receipt.value.tool,
+    operation: receipt.value.operation,
+    intent_id: request.intent_id,
+    request_digest: request.request_digest,
+    input_fingerprint: receipt.value.input_fingerprint,
+    result_id: receipt.value.result_id,
+    outcome: receipt.value.outcome,
+    outcome_digest: receipt.value.outcome_digest,
+    prior_revision: receipt.value.prior_revision,
+    resulting_revision: receipt.value.resulting_revision,
   };
-  const final = canonicalDocument({ ...prepared.value, committed_intent: reference });
+  const final = canonicalDocument({ ...prepared.value, last_transition: reference });
   if (!validateDurableSemantics(createCommittedIntentSubject(final, receipt)).ok) {
     return issue("STATE_INVALID", predecessor.value, "gate-receipt-committed-invalid");
   }
@@ -653,14 +737,15 @@ export async function resolveDurableGate(
 ): Promise<ProjectResult<GateResolution>> {
   assertInternalTransactionAuthority(authority, { runner: dependencies.runner, environment: dependencies.environment });
   try {
-    return await dependencies.lock.runExclusive(authority.task_root, async () => {
+    await ensureIntentDirectory(authority);
+    return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
       const stateResult = await stateOrFailure(dependencies, authority);
       if (!stateResult.ok) return stateResult;
       const current = stateResult.value;
       const live = await validateLiveGateState(dependencies, authority, current, inputFingerprint ?? current.value.input_fingerprint);
       if (!live.ok) return live;
-      const requestPath = await resolvePath(dependencies, authority, gateRequestClaim(gateId), "decision");
-      const archivePath = await resolvePath(dependencies, authority, gateDecisionClaim(gateId), "decision");
+      const requestPath = await resolvePath(dependencies, authority, gateRequestClaim(gateId), "authority-decision");
+      const archivePath = await resolvePath(dependencies, authority, gateDecisionClaim(gateId), "authority-decision");
       if (!requestPath.ok) return requestPath;
       if (!archivePath.ok) return archivePath;
       const request = await readCanonical(requestPath.value, "gate request", parseGateRequest);
@@ -688,10 +773,16 @@ export async function resolveDurableGate(
         // carries no fingerprint field, so only non-success closures can be resumed here; success
         // receipt recovery is driven by runDurableGate, which supplies the authenticated fingerprint.
         if (earnsReceipt(archived.value)) return issue("STATE_INVALID", current.value, "gate-success-receipt-resume-required");
-        await dependencies.atomic.replace(authority.state, prepared.bytes);
-        const gateJson = await resolvePath(dependencies, authority, "gate.json", "gate-interface");
+        const transitioned = withGateTransition(
+          authority, request.value, archived.value, current, prepared,
+          inputFingerprint ?? current.value.input_fingerprint,
+        );
+        if (!transitioned.ok) return transitioned;
+        const final = transitioned.value;
+        await dependencies.atomic.replace(authority.state, final.bytes);
+        const gateJson = await resolvePath(dependencies, authority, "gate.json", "workspace-gate-interface");
         if (gateJson.ok) await dependencies.atomic.removeGateInterface(gateJson.value);
-        const decisionInterface = await resolvePath(dependencies, authority, "gate.decision", "gate-interface");
+        const decisionInterface = await resolvePath(dependencies, authority, "gate.decision", "workspace-gate-interface");
         if (decisionInterface.ok) {
           const projected = await readCanonical(decisionInterface.value, "gate decision interface", (value) => value as PlainJsonValue);
           if (projected !== "missing" && projected !== "invalid") {
@@ -701,11 +792,12 @@ export async function resolveDurableGate(
             } catch { /* leave an unbound interface untouched */ }
           }
         }
+        await cleanupCommittedGateWorkspace(dependencies, authority, final.value);
         if (archived.value.outcome === "cancelled") return fail(createProjectError("GATE_CANCELLED", { gate_id: gateId, gate_kind: archived.value.kind }));
-        return ok({ state: prepared, record: archived, effect, replayed: true });
+        return ok({ state: final, record: archived, effect, replayed: true });
       }
       if (current.value.open_gate?.gate_id !== gateId) return fail(createProjectError("GATE_ACTIVE", { gate_id: current.value.open_gate?.gate_id ?? gateId, gate_kind: current.value.open_gate?.gate_kind ?? request.value.kind }));
-      const interfacePath = await resolvePath(dependencies, authority, "gate.decision", "gate-interface");
+      const interfacePath = await resolvePath(dependencies, authority, "gate.decision", "workspace-gate-interface");
       if (!interfacePath.ok) return interfacePath;
       const raw = await readCanonical(interfacePath.value, "gate decision interface", (value) => value as PlainJsonValue);
       if (raw === "missing" || raw === "invalid") return fail(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request.value.kind, issue_code: raw === "missing" ? "decision-missing" : "decision-noncanonical" }));
@@ -723,12 +815,18 @@ export async function resolveDurableGate(
       const created = await dependencies.atomic.createExclusive(archivePath.value, document.bytes);
       if (created !== "created") return issue("STATE_INVALID", current.value, "gate-resolution-race");
       const effect = record.outcome === "decided" ? gateDecisionEffect(record.envelope.payload) : "non-advancing";
-      const final = closure.value;
+      const transitioned = withGateTransition(
+        authority, request.value, document.value, current, closure.value,
+        inputFingerprint ?? current.value.input_fingerprint,
+      );
+      if (!transitioned.ok) return transitioned;
+      const final = transitioned.value;
       if (earnsReceipt(record)) return issue("STATE_INVALID", current.value, "gate-success-requires-run-service");
       await dependencies.atomic.replace(authority.state, final.bytes);
-      const gateJson = await resolvePath(dependencies, authority, "gate.json", "gate-interface");
+      const gateJson = await resolvePath(dependencies, authority, "gate.json", "workspace-gate-interface");
       if (gateJson.ok) await dependencies.atomic.removeGateInterface(gateJson.value);
       await dependencies.atomic.removeGateInterface(interfacePath.value);
+      await cleanupCommittedGateWorkspace(dependencies, authority, final.value);
       if (record.outcome === "cancelled") return fail(createProjectError("GATE_CANCELLED", { gate_id: gateId, gate_kind: record.kind }));
       return ok({ state: final, record: document, effect, replayed: false });
     });
@@ -755,9 +853,9 @@ export async function runDurableGate(
       ? resolveAdvancingGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint, input.supplemental_outcome)
       : resolveDurableGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint, input.supplemental_outcome);
   }
-  const decision = await resolvePath(dependencies, input.authority, "gate.decision", "gate-interface");
+  const decision = await resolvePath(dependencies, input.authority, "gate.decision", "workspace-gate-interface");
   if (!decision.ok) return decision;
-  const review = await resolveTaskPath({ runner: dependencies.runner, taskId: input.authority.task_id, claim: gateCounterReviewClaim(input.phase_instance, opened.value.gate_id), expectedClass: "review", context: input.authority.context });
+  const review = await resolveTaskWorkspacePath({ runner: dependencies.runner, taskId: input.authority.task_id, claim: gateCounterReviewClaim(input.phase_instance, opened.value.gate_id), expectedClass: "workspace-review", context: input.authority.context });
   if (!review.ok) return review;
   const authenticatedLedger = await currentSupplementalLedger(dependencies, input.authority, opened.value.request.value, input.input_fingerprint, input.supplemental_outcome);
   if (authenticatedLedger === undefined) return issue("STATE_INVALID", opened.value.state.value, "supplemental-ledger-invalid");
@@ -815,14 +913,15 @@ async function resolveAdvancingGate(
   supplementalOutcome?: SupplementalReviewOutcome,
 ): Promise<ProjectResult<GateResolution>> {
   try {
-    return await dependencies.lock.runExclusive(authority.task_root, async () => {
+    await ensureIntentDirectory(authority);
+    return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
       const stateResult = await stateOrFailure(dependencies, authority); if (!stateResult.ok) return stateResult;
       const current = stateResult.value;
       const live = await validateLiveGateState(dependencies, authority, current, inputFingerprint);
       if (!live.ok) return live;
-      const requestPath = await resolvePath(dependencies, authority, gateRequestClaim(gateId), "decision");
-      const archivePath = await resolvePath(dependencies, authority, gateDecisionClaim(gateId), "decision");
-      const interfacePath = await resolvePath(dependencies, authority, "gate.decision", "gate-interface");
+      const requestPath = await resolvePath(dependencies, authority, gateRequestClaim(gateId), "authority-decision");
+      const archivePath = await resolvePath(dependencies, authority, gateDecisionClaim(gateId), "authority-decision");
+      const interfacePath = await resolvePath(dependencies, authority, "gate.decision", "workspace-gate-interface");
       if (!requestPath.ok) return requestPath; if (!archivePath.ok) return archivePath; if (!interfacePath.ok) return interfacePath;
       const request = await readCanonical(requestPath.value, "gate request", parseGateRequest);
       if (request === "missing" || request === "invalid") return issue("STATE_INVALID", current.value, "gate-request-invalid");
@@ -909,9 +1008,10 @@ async function resolveAdvancingGate(
       const installed = await installReceipt(dependencies, authority, request.value, archived.value, current, prepared, inputFingerprint);
       if (!installed.ok) return installed;
       await dependencies.atomic.replace(authority.state, installed.value.final.bytes);
-      const gateJson = await resolvePath(dependencies, authority, "gate.json", "gate-interface");
+      const gateJson = await resolvePath(dependencies, authority, "gate.json", "workspace-gate-interface");
       if (gateJson.ok) await dependencies.atomic.removeGateInterface(gateJson.value);
       await dependencies.atomic.removeGateInterface(interfacePath.value);
+      await cleanupCommittedGateWorkspace(dependencies, authority, installed.value.final.value);
       return ok({ state: installed.value.final, record: archived, effect: "advance", replayed: false });
     });
   } catch (error) { return error instanceof TaskLockError ? io(authority, `gate-lock-${error.stage}`) : io(authority, "gate-resolve-advance"); }

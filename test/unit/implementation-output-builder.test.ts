@@ -81,6 +81,9 @@ describe("implementation-output builder", () => {
       runner: discovered.value, environment: environment.value, task_id: taskId, context,
     });
     if (!authority.ok) throw authority.error;
+    const transcriptPath = join(root, ".archflow", "work", "tasks", taskId, "cache", "phases", "17");
+    mkdirSync(transcriptPath, { recursive: true });
+    writeFileSync(join(transcriptPath, "verification.txt"), "npm test\nall passed\n");
     const fingerprint = parseSha256Digest("1".repeat(64));
     const makeState = (revision: number) => canonicalDocument<TaskStateV1>({
       schema_version: "1",
@@ -141,6 +144,10 @@ describe("implementation-output builder", () => {
     expect(first.value.declared_inputs[0]?.digest)
       .toBe(sha256Bytes(new TextEncoder().encode("declared input\n")));
     expect(first.value.secret_scan.outcome).toBe("clean");
+    expect(first.value.verification_evidence).toEqual({
+      transcript_digest: sha256Bytes(new TextEncoder().encode("npm test\nall passed\n")),
+      byte_count: 20,
+    });
     await expect(verifyImplementationManifest(discovered.value, first.value, context)).resolves.toBeDefined();
     await expect(implementationOutputCommittedAtCurrentTarget(
       discovered.value, first.value, "refs/heads/main",

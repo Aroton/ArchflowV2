@@ -6,7 +6,7 @@
  * happy-path first review install failed with an opaque INTERNAL_ERROR.
  */
 import { execFileSync } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,7 +18,6 @@ import {
   canonicalJsonDigest,
 } from "../../src/contracts/canonical.js";
 import type { ConfigV1 } from "../../src/contracts/config.js";
-import type { ResultManifestV1 } from "../../src/contracts/durable-result-manifest.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import {
   parseSafeCode,
@@ -60,9 +59,10 @@ import {
   prepareEvidenceResult,
   type PreparedEvidenceResult,
 } from "../../src/state/evidence-results.js";
+import { ensureResultDirectory } from "../../src/state/layout.js";
 import { createTaskLock } from "../../src/state/lock.js";
 import { readIntentReceipt, readTaskState } from "../../src/state/read.js";
-import { readSnapshot } from "../../src/state/snapshots.js";
+import { installSnapshot, readSnapshot } from "../../src/state/snapshots.js";
 import { identifyTransactionRequest } from "../../src/state/request.js";
 import {
   prepareResultInstallation,
@@ -324,7 +324,7 @@ async function commitCounterReview(
   });
   return runStateTransaction(h.dependencies, { authority: h.authority, call }, async (stateDocument, identifiedCall) => {
     const revision = parseSafeInteger(stateDocument.value.revision + 1);
-    const success = { path: parseTaskPathClaim(`reviews/${phase}.counter.md`), verdict: "pass" as const, blocking_count: 0, constitution: { status: "not-run" as const, reason: "no-active-constitution-rules" as const }, revision };
+    const success = { path: parseRepositoryPathClaim(`.archflow/work/tasks/${task}/cache/reviews/${phase}.counter.md`), verdict: "pass" as const, blocking_count: 0, constitution: { status: "not-run" as const, reason: "no-active-constitution-rules" as const }, revision };
     const next = planStateTransition({
       current: stateDocument.value,
       target: {
@@ -361,36 +361,37 @@ async function commitCounterReview(
   });
 }
 
-describe("superseded result payload reclamation at commit", () => {
-  it("reclaims the replaced result's payload, keeps its manifest, and accounts for the pass", async () => {
+describe("superseded result authority reclamation at commit", () => {
+  it("reclaims a replaced result manifest after committing its successor", async () => {
     const h = await fixture();
-    const oldManifest = {
-      schema_version: "1",
-      task_id: task,
-      outputs: [{ path: "evidence.json", storage: "raw-payload" }],
-    } as unknown as ResultManifestV1;
-    const oldDocument = canonicalDocument(oldManifest as never);
-    const oldDirectory = join(h.authority.task_root, "results", "sha256", oldDocument.digest);
-    await mkdir(join(oldDirectory, "payload"), { recursive: true });
-    await writeFile(join(oldDirectory, "manifest.json"), oldDocument.bytes);
-    await writeFile(join(oldDirectory, "payload", "evidence.json"), "superseded counter evidence");
-    const oldReference = {
-      phase_instance: phase,
-      step: "counter_review",
-      result_digest: oldDocument.digest,
+    const oldPrepared = await prepareEvidenceResult({
+      authority: h.authority,
+      runner: h.runner,
       result_id: parseSafeId("counter-v0"),
-      input_fingerprint: FINGERPRINT,
-      manifest_path: `.archflow/tasks/${task}/results/sha256/${oldDocument.digest}/manifest.json`,
-    } as TaskStateV1["authoritative_results"][number];
+      retained_task_bytes: parseSafeInteger(0),
+      measured_at_revision: parseSafeInteger(7),
+      scanner: cleanScanner,
+      value: { kind: "review", evidence: counterReview(canonicalJsonDigest({ artifact: 0 })) },
+    });
+    if (!oldPrepared.ok) throw new Error(oldPrepared.error.code);
+    await ensureResultDirectory(h.authority, oldPrepared.value.reference.result_digest);
+    const installed = await installSnapshot(
+      h.dependencies.atomic,
+      oldPrepared.value.prepared,
+      oldPrepared.value.manifest_target,
+      h.root as ResolvedTaskPath,
+    );
+    if (!installed.ok) throw new Error(installed.error.code);
+    const oldReference = oldPrepared.value.reference;
+    const oldManifest = oldPrepared.value.manifest_target.absolute;
     await writeFile(
       h.authority.state.absolute,
       canonicalDocument(initialState(h.authority, [oldReference])).bytes,
     );
 
     await enterCounterReview(h, "counter-running-2");
-    // The boundary transition replaced no reference, so nothing may be reclaimed yet.
-    await expect(readFile(join(oldDirectory, "payload", "evidence.json"), "utf8"))
-      .resolves.toBe("superseded counter evidence");
+    // The boundary transition replaced no reference, so its authority remains live.
+    await expect(readFile(oldManifest)).resolves.toEqual(Buffer.from(oldPrepared.value.prepared.manifest.bytes));
 
     const evidence = counterReview(canonicalJsonDigest({ artifact: 1 }));
     const running = await durableState(h.authority);
@@ -409,30 +410,9 @@ describe("superseded result payload reclamation at commit", () => {
 
     const committed = await durableState(h.authority);
     expect(committed.authoritative_results.map((entry) => entry.result_digest))
-      .not.toContain(oldDocument.digest);
-
-    // The superseded payload bytes are gone; the digest-bound manifest stays forever.
-    await expect(readFile(join(oldDirectory, "payload", "evidence.json")))
-      .rejects.toMatchObject({ code: "ENOENT" });
-    expect(await readFile(join(oldDirectory, "manifest.json"))).toEqual(Buffer.from(oldDocument.bytes));
-
-    const record = JSON.parse(await readFile(
-      join(h.authority.task_root, "maintenance", `auto-prune-r${committed.revision}.json`),
-      "utf8",
-    )) as { performed_at_revision: number; deletions: readonly { path: string; category: string }[] };
-    expect(record.performed_at_revision).toBe(committed.revision);
-    expect(record.deletions).toEqual(expect.arrayContaining([expect.objectContaining({
-      category: "superseded-payload",
-      path: `.archflow/tasks/${task}/results/sha256/${oldDocument.digest}/payload/evidence.json`,
-    })]));
-    // The same pass reclaims retired boundary receipts: nothing reads a record-state-boundary
-    // receipt once its step's terminal result commits. Result-bearing receipts are retained,
-    // because adjudication and gate replay both read retired receipts by intent id.
-    expect(record.deletions.some((deletion) => deletion.category === "retired-intent")).toBe(true);
-    expect(await readFile(join(h.authority.task_root, "intents", "counter-intent-2.json"), "utf8"))
-      .toContain("counter-intent-2");
-    // Reclaiming a payload leaves no empty mirror directory tower behind.
-    await expect(readdir(join(oldDirectory, "payload"))).rejects.toMatchObject({ code: "ENOENT" });
+      .not.toContain(oldReference.result_digest);
+    await expect(readFile(oldManifest)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(lstat(join(h.authority.task_root, "maintenance"))).rejects.toMatchObject({ code: "ENOENT" });
 
     // The retained-result reader — what crash arbitration and resume consume — still verifies.
     const newReference = committed.authoritative_results.find((entry) => entry.step === "counter_review")!;
@@ -449,8 +429,8 @@ describe("superseded result payload reclamation at commit", () => {
 describe("first review install on a fresh task", () => {
   it("installs the first review projection without any pre-created directories", async () => {
     const h = await fixture();
-    await expect(lstat(join(h.authority.task_root, "reviews"))).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(lstat(join(h.authority.task_root, "results"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(lstat(join(h.authority.workspace_root, "cache", "reviews"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(lstat(join(h.authority.task_root, "authority", "results"))).rejects.toMatchObject({ code: "ENOENT" });
 
     await enterCounterReview(h, "counter-running-1");
     const evidence = counterReview(canonicalJsonDigest({ artifact: 0 }));
@@ -466,12 +446,14 @@ describe("first review install on a fresh task", () => {
     });
     if (!prepared.ok) throw new Error(prepared.error.code);
     const entry = prepared.value.projection_plan.entries[0]!;
-    expect(entry.target.path_class).toBe("review");
+    expect(entry.target.path_class).toBe("workspace-review");
+    expect(prepared.value.prepared.manifest.value.outputs).toEqual([]);
 
     const result = await commitCounterReview(h, "counter-intent-1", prepared.value);
     expect(result).toMatchObject({ ok: true });
 
-    expect((await lstat(join(h.authority.task_root, "reviews"))).isDirectory()).toBe(true);
+    expect((await lstat(join(h.authority.workspace_root, "cache", "reviews"))).isDirectory()).toBe(true);
+    expect((await lstat(join(h.authority.task_root, "authority", "results"))).isDirectory()).toBe(true);
     const desired = entry.desired;
     if (desired.state !== "present" || desired.file_type !== "regular") throw new Error("expected a regular projection");
     expect(await readFile(entry.target.absolute)).toEqual(Buffer.from(desired.bytes));

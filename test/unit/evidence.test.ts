@@ -153,17 +153,10 @@ describe("the ID vocabularies are usable as single path components", () => {
             ["document", `phases/${String(phase)}/design.md`] as const,
             ["document", `phases/${String(phase)}/impl-notes.md`] as const
           ]),
-          ...phaseInstances.flatMap((instance) => [
-            ["review", `reviews/${instance}.counter.md`] as const,
-            ["review", `reviews/${instance}.triage.md`] as const,
-            ["review", `reviews/${instance}.adjudication.md`] as const,
-            ["review", `reviews/${instance}.gate-counter.${id}.md`] as const,
-            ["attempt", `attempts/${instance}/${id}.json`] as const
-          ]),
-          ["decision", `decisions/${id}/request.json`],
-          ["decision", `decisions/${id}/decision.json`],
-          ["intent", `intents/${id}.json`],
-          ["maintenance-record", `maintenance/${id}.json`],
+          ["authority-decision", `authority/decisions/${id}/request.json`],
+          ["authority-decision", `authority/decisions/${id}/decision.json`],
+          ["authority-decision", `authority/decisions/${id}/supplemental-review.json`],
+          ["authority-result", `authority/results/${"a".repeat(64)}.json`],
           ["task-config", "config.yaml"]
         ];
 

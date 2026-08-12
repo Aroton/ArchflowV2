@@ -41,7 +41,12 @@ async function taskRoot(taskId: string): Promise<string> {
   roots.push(repository);
   const root = join(repository, ".archflow", "tasks", taskId);
   await mkdir(root, { recursive: true });
+  await mkdir(join(repository, ".archflow", "work", "tasks", taskId, "transient"), { recursive: true });
   return root;
+}
+
+function workspaceRoot(taskRoot: string): string {
+  return taskRoot.replace("/.archflow/tasks/", "/.archflow/work/tasks/");
 }
 
 const gitEnvironment: NodeJS.ProcessEnv = {
@@ -131,7 +136,7 @@ async function transactionRepository(taskIds: readonly string[]): Promise<Readon
 }
 
 function startLockChild(root: string): ChildProcess {
-  const child = spawn(process.execPath, [childProgram.pathname, "hold-lock", root], {
+  const child = spawn(process.execPath, [childProgram.pathname, "hold-lock", workspaceRoot(root)], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
@@ -205,7 +210,11 @@ describe("state transaction process coordination", { timeout: 20_000 }, () => {
     roots.push(repository);
     const firstRoot = join(repository, ".archflow", "tasks", "task-a");
     const secondRoot = join(repository, ".archflow", "tasks", "task-b");
-    await Promise.all([mkdir(firstRoot, { recursive: true }), mkdir(secondRoot, { recursive: true })]);
+    await Promise.all([
+      mkdir(firstRoot, { recursive: true }), mkdir(secondRoot, { recursive: true }),
+      mkdir(join(workspaceRoot(firstRoot), "transient"), { recursive: true }),
+      mkdir(join(workspaceRoot(secondRoot), "transient"), { recursive: true }),
+    ]);
 
     const first = startLockChild(firstRoot);
     const second = startLockChild(secondRoot);
@@ -243,7 +252,7 @@ describe("state transaction process coordination", { timeout: 20_000 }, () => {
     ]);
 
     const originalCas = await waitForEvent(
-      startTransactionChild(fixture.taskRoots["task-a"]!, "intent-a", 1),
+      startTransactionChild(fixture.taskRoots["task-a"]!, "intent-stale", 1),
       "result",
     ) as Extract<ChildEvent, { type: "result" }>;
     expect(originalCas).toEqual(expect.objectContaining({ ok: false, code: "STATE_CONFLICT", prepareCalls: 0 }));

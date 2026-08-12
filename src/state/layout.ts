@@ -4,7 +4,11 @@ import { isAbsolute, join, relative, sep } from "node:path";
 
 import { parsePathSafeId, type PathSafeId } from "../contracts/evidence.js";
 import { parsePhaseInstanceId, type PhaseInstanceId } from "../contracts/phase-instance.js";
-import { openResolved, type ResolvedTaskPath } from "../repository/paths.js";
+import {
+  openResolved,
+  type ResolvedTaskPath,
+  type ResolvedTaskWorkspacePath,
+} from "../repository/paths.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
 
 export class IntentLayoutError extends Error {
@@ -37,33 +41,31 @@ function errnoOf(error: unknown): string | undefined {
     : undefined;
 }
 
-/** Creates and verifies the one fixed `intents/` child of an authentic task authority. */
+type ResolvedLayoutPath = ResolvedTaskPath | ResolvedTaskWorkspacePath;
+
+async function ensureWorkspaceRoot(authority: TransactionAuthority): Promise<void> {
+  const archflowRoot = join(authority.task_root, "..", "..");
+  const fixed = [
+    join(archflowRoot, "work"),
+    join(archflowRoot, "work", "tasks"),
+    authority.workspace_root,
+  ];
+  for (const directory of fixed) await ensureRealDirectory(directory as ResolvedLayoutPath);
+}
+
+/** Creates and verifies `work/tasks/<task>/transient/intents/`. */
 export async function ensureIntentDirectory(authority: TransactionAuthority): Promise<void> {
   assertInternalTransactionAuthority(authority);
-  // This is the sole state-layer path-brand cast: the child name is a fixed literal under a
-  // constructor-proven authentic task root, and verification opens it with O_NOFOLLOW and
-  // O_DIRECTORY. No caller-controlled path component crosses this boundary.
-  const directory = join(authority.task_root, "intents") as ResolvedTaskPath;
   try {
-    await mkdir(directory);
+    await ensureWorkspaceRoot(authority);
+    await ensureRealDirectory(join(authority.workspace_root, "transient") as ResolvedTaskWorkspacePath);
+    await ensureRealDirectory(
+      join(authority.workspace_root, "transient", "intents") as ResolvedTaskWorkspacePath,
+    );
   } catch (error) {
-    if (errnoOf(error) !== "EEXIST") throw new IntentLayoutError("create");
-  }
-
-  const directoryFlag = (fsConstants as { O_DIRECTORY?: number }).O_DIRECTORY ?? 0;
-  let handle;
-  try {
-    const metadata = await lstat(directory);
-    if (metadata.isSymbolicLink() || !metadata.isDirectory()) throw new IntentLayoutError("verify");
-    // `openResolved` adds O_NOFOLLOW. O_DIRECTORY independently rejects an existing regular file.
-    handle = await openResolved(directory, fsConstants.O_RDONLY | directoryFlag);
-    const stat = await handle.stat();
-    if (!stat.isDirectory()) throw new IntentLayoutError("verify");
-  } catch (error) {
-    if (error instanceof IntentLayoutError) throw error;
-    throw new IntentLayoutError("verify");
-  } finally {
-    await handle?.close().catch(() => undefined);
+    throw new IntentLayoutError(
+      error instanceof ResultLayoutError && error.stage === "verify" ? "verify" : "create",
+    );
   }
 }
 
@@ -95,25 +97,33 @@ export async function ensureDecisionDirectory(
 ): Promise<void> {
   assertInternalTransactionAuthority(authority);
   const validatedGateId = parsePathSafeId(gateId);
-  const decisions = join(authority.task_root, "decisions") as ResolvedTaskPath;
+  const authorityRoot = join(authority.task_root, "authority") as ResolvedTaskPath;
+  const decisions = join(authorityRoot, "decisions") as ResolvedTaskPath;
   const gate = join(decisions, validatedGateId) as ResolvedTaskPath;
+  await ensureDecisionChild(authorityRoot);
   await ensureDecisionChild(decisions);
   await ensureDecisionChild(gate);
 }
 
-/** Creates and verifies `attempts/<phase-instance>/` for diagnostic dispatch records. */
+/** Creates and verifies ignored `diagnostics/attempts/<phase-instance>/` dispatch records. */
 export async function ensureAttemptDirectory(
   authority: TransactionAuthority,
   phaseInstance: PhaseInstanceId,
 ): Promise<void> {
   assertInternalTransactionAuthority(authority);
   const validated = parsePhaseInstanceId(phaseInstance);
-  await ensureRealDirectory(join(authority.task_root, "attempts") as ResolvedTaskPath);
-  await ensureRealDirectory(join(authority.task_root, "attempts", validated) as ResolvedTaskPath);
+  await ensureWorkspaceRoot(authority);
+  await ensureRealDirectory(join(authority.workspace_root, "diagnostics") as ResolvedTaskWorkspacePath);
+  await ensureRealDirectory(
+    join(authority.workspace_root, "diagnostics", "attempts") as ResolvedTaskWorkspacePath,
+  );
+  await ensureRealDirectory(
+    join(authority.workspace_root, "diagnostics", "attempts", validated) as ResolvedTaskWorkspacePath,
+  );
 }
 
 
-async function ensureRealDirectory(path: ResolvedTaskPath): Promise<void> {
+async function ensureRealDirectory(path: ResolvedLayoutPath): Promise<void> {
   try {
     await mkdir(path);
   } catch (error) {
@@ -134,15 +144,24 @@ async function ensureRealDirectory(path: ResolvedTaskPath): Promise<void> {
   }
 }
 
-/** Creates only the fixed task-local content-address hierarchy for one validated digest. */
+/** Creates and verifies the durable task authority root. */
+export async function ensureAuthorityDirectory(authority: TransactionAuthority): Promise<void> {
+  assertInternalTransactionAuthority(authority);
+  await ensureRealDirectory(join(authority.task_root, "authority") as ResolvedTaskPath);
+}
+
+/** Creates durable result authority and its ignored payload-cache hierarchy. */
 export async function ensureResultDirectory(authority: TransactionAuthority, digest: string): Promise<void> {
   assertInternalTransactionAuthority(authority);
   if (!/^[0-9a-f]{64}$/u.test(digest)) throw new TypeError("result digest must be lowercase SHA-256");
-  const parts = ["results", "sha256", digest, "payload"];
-  let current = authority.task_root as string;
+  await ensureAuthorityDirectory(authority);
+  await ensureRealDirectory(join(authority.task_root, "authority", "results") as ResolvedTaskPath);
+  await ensureWorkspaceRoot(authority);
+  const parts = ["cache", "results", digest, "payload"];
+  let current = authority.workspace_root as string;
   for (const part of parts) {
     current = join(current, part);
-    await ensureRealDirectory(current as ResolvedTaskPath);
+    await ensureRealDirectory(current as ResolvedTaskWorkspacePath);
   }
 }
 
@@ -150,15 +169,38 @@ export async function ensureResultDirectory(authority: TransactionAuthority, dig
 export async function ensurePayloadParent(
   authority: TransactionAuthority,
   digest: string,
-  target: ResolvedTaskPath,
+  target: ResolvedTaskWorkspacePath,
 ): Promise<void> {
   assertInternalTransactionAuthority(authority);
   if (!/^[0-9a-f]{64}$/u.test(digest)) throw new TypeError("result digest must be lowercase SHA-256");
-  const root = join(authority.task_root, "results", "sha256", digest, "payload");
+  const root = join(authority.workspace_root, "cache", "results", digest, "payload");
   const parent = join(target, "..");
   const rel = relative(root, parent);
   if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new TypeError("payload parent escaped result directory");
-  await mkdir(parent, { recursive: true });
+  let current = root;
+  for (const part of rel.split(sep).filter((candidate) => candidate !== "" && candidate !== ".")) {
+    current = join(current, part);
+    await ensureRealDirectory(current as ResolvedTaskWorkspacePath);
+  }
+}
+
+/** Materializes ignored workspace parents one verified real directory at a time. */
+export async function ensureWorkspaceProjectionParent(
+  authority: TransactionAuthority,
+  target: ResolvedTaskWorkspacePath,
+): Promise<void> {
+  assertInternalTransactionAuthority(authority);
+  const parent = join(target, "..");
+  const rel = relative(authority.workspace_root, parent);
+  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    throw new TypeError("workspace projection parent escaped task workspace");
+  }
+  await ensureWorkspaceRoot(authority);
+  let current = authority.workspace_root as string;
+  for (const part of rel.split(sep).filter((candidate) => candidate !== "" && candidate !== ".")) {
+    current = join(current, part);
+    await ensureRealDirectory(current as ResolvedTaskWorkspacePath);
+  }
 }
 
 /** Materializes task-local projection parents one verified real directory at a time. */

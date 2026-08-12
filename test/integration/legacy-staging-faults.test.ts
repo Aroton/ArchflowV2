@@ -171,24 +171,25 @@ describe("legacy staging faults and collisions", () => {
     expect(interrupted).toMatchObject({ ok: false, error: { code: "IO_ERROR" } });
     expect(writes).toBe(2);
     const destination = join(prepared.root, ".archflow", "tasks", "destination");
+    const workspace = join(prepared.root, ".archflow", "work", "tasks", "destination");
     expect(existsSync(join(destination, "state.json"))).toBe(false);
-    const interruptedFiles = regularFiles(destination);
-    expect(interruptedFiles).toHaveLength(2);
-    expect(interruptedFiles).toContain("config.yaml");
-    expect(interruptedFiles.some((path) => path.endsWith("/payload/architecture.md"))).toBe(true);
+    expect(regularFiles(destination)).toEqual(["config.yaml"]);
+    const interruptedFiles = regularFiles(workspace);
+    expect(interruptedFiles).toHaveLength(1);
+    expect(interruptedFiles[0]).toMatch(/cache\/imports\/.+\/payload\/architecture\.md$/u);
     expect(interruptedFiles.some((path) => path.endsWith("/manifest.json"))).toBe(false);
 
     const converged = await stageLegacyUpgrade(stageInput(prepared));
     expect(converged.ok).toBe(true);
     if (!converged.ok) return;
     expect(existsSync(join(destination, "state.json"))).toBe(false);
-    expect(regularFiles(destination)).toEqual([
-      "config.yaml",
-      ...converged.value.staged_paths.map((path) => path.replace(".archflow/tasks/destination/", "")),
-    ].sort());
+    expect(regularFiles(destination)).toEqual(["config.yaml"]);
+    expect(regularFiles(workspace)).toEqual(converged.value.staged_paths
+      .map((path) => path.replace(".archflow/work/tasks/destination/", "")).sort());
     for (const reference of converged.value.initialization.staged_payload_refs) {
       expect(readFileSync(join(
-        destination,
+        workspace,
+        "cache",
         "imports",
         converged.value.initialization.import_digest,
         "payload",

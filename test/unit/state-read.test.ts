@@ -7,8 +7,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { canonicalJsonBytes, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
 import type { IntentReceiptV1 } from "../../src/contracts/durable-intent.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
-import type { PathClass, RepositoryPathClaim } from "../../src/contracts/path-claims.js";
-import type { ResolvedPath, ResolvedTaskPath } from "../../src/repository/paths.js";
+import { parseRepositoryPathClaim, type PathClass } from "../../src/contracts/path-claims.js";
+import {
+  parseWorkspacePathClaim,
+  type ResolvedPath,
+  type ResolvedTaskPath,
+  type ResolvedTaskWorkspacePath,
+  type ResolvedWorkspacePath,
+} from "../../src/repository/paths.js";
 import { readIntentReceipt, readTaskConfig, readTaskState } from "../../src/state/read.js";
 
 const roots: string[] = [];
@@ -23,8 +29,17 @@ async function temporaryRoot(): Promise<string> {
 function resolved(absolute: string, pathClass: PathClass): ResolvedPath {
   return Object.freeze({
     path_class: pathClass,
-    repositoryRelative: ".archflow/tasks/demo/value" as RepositoryPathClaim,
+    repositoryRelative: parseRepositoryPathClaim(".archflow/tasks/demo/value"),
     absolute: absolute as ResolvedTaskPath,
+  });
+}
+
+function workspaceResolved(absolute: string): ResolvedWorkspacePath {
+  return Object.freeze({
+    path_class: "workspace-intent",
+    workspaceRelative: parseWorkspacePathClaim("transient/intents/intent-1.json"),
+    repositoryRelative: parseRepositoryPathClaim(".archflow/work/tasks/demo/transient/intents/intent-1.json"),
+    absolute: absolute as ResolvedTaskWorkspacePath,
   });
 }
 
@@ -44,7 +59,7 @@ describe("canonical state and receipt readers", () => {
     expect(stateRead.document.value).toEqual(state);
     expect(stateRead.document.bytes).toEqual(canonicalJsonBytes(state));
 
-    const { committed_intent: _committed, ...prepared } = state;
+    const { last_transition: _transition, ...prepared } = state;
     const outcome = { path: "state.json", revision: prepared.revision, status: prepared.status };
     const receipt: IntentReceiptV1 = {
       schema_version: "1",
@@ -65,7 +80,7 @@ describe("canonical state and receipt readers", () => {
     };
     const receiptPath = join(root, "intent-1.json");
     await writeFile(receiptPath, canonicalJsonBytes(receipt));
-    const receiptRead = await readIntentReceipt(resolved(receiptPath, "intent"));
+    const receiptRead = await readIntentReceipt(workspaceResolved(receiptPath));
     expect(receiptRead.kind).toBe("canonical");
     if (receiptRead.kind === "canonical") expect(receiptRead.document.value).toEqual(receipt);
   });
@@ -85,13 +100,13 @@ describe("canonical state and receipt readers", () => {
     const structurallyInvalid = join(root, "invalid.json");
     await writeFile(structurallyInvalid, canonicalJsonBytes({ schema_version: "1" }));
     expect(await readTaskState(resolved(structurallyInvalid, "task-state"))).toEqual({ kind: "noncanonical" });
-    expect(await readIntentReceipt(resolved(structurallyInvalid, "intent"))).toEqual({ kind: "noncanonical" });
+    expect(await readIntentReceipt(workspaceResolved(structurallyInvalid))).toEqual({ kind: "noncanonical" });
   });
 
   it("rejects path-class substitution before I/O", async () => {
     const root = await temporaryRoot();
-    await expect(readTaskState(resolved(join(root, "missing"), "intent"))).rejects.toThrow(/task-state/u);
-    await expect(readIntentReceipt(resolved(join(root, "missing"), "task-state"))).rejects.toThrow(/intent resolved/u);
+    await expect(readTaskState(workspaceResolved(join(root, "missing")) as never)).rejects.toThrow(/task-state/u);
+    await expect(readIntentReceipt(resolved(join(root, "missing"), "task-state") as never)).rejects.toThrow(/workspace-intent resolved/u);
   });
 });
 

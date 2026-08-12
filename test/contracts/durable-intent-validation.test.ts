@@ -91,13 +91,16 @@ describe("intent-receipt validation under the Zod authority", () => {
    * Generation retired the ordering keywords from the committed schema, so the compiled document
    * accepts these fixtures; the Zod authority behind `parseIntentReceipt` must keep rejecting them.
    */
-  for (const [keyword, stateFixture] of [
-    ["authoritative_results sorted by (phase_instance, step)", "task-state.invalid-unsorted-authoritative-results"],
-    ["approvals unique by gate_id", "task-state.invalid-duplicate-approval-gate-id"],
-    ["waivers unique by gate_id", "task-state.invalid-duplicate-waiver-gate-id"],
+  for (const [keyword, field, mutation] of [
+    ["authoritative_results sorted by (phase_instance, step)", "authoritative_results", "reverse"],
+    ["approvals unique by gate_id", "approvals", "duplicate"],
+    ["waivers unique by gate_id", "waivers", "duplicate"],
   ] as const) {
     it(`the Zod authority rejects a prepared_state violating ${keyword}`, () => {
-      const mutated = { ...sample, prepared_state: fixture(stateFixture) };
+      const prepared = structuredClone(sample.prepared_state) as JsonObject;
+      const values = prepared[field] as unknown[];
+      prepared[field] = mutation === "reverse" ? [...values].reverse() : [...values, values[0]];
+      const mutated = { ...sample, prepared_state: prepared };
       expect(json.validate(mutated), "generated schema kept a retired keyword").toBe(true);
       rejects(mutated, keyword);
     });

@@ -14,11 +14,10 @@ import type { DegradedReview } from "../../src/contracts/review.js";
 import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import { createAtomicWriter } from "../../src/state/atomic.js";
 import { prepareEvidenceResult } from "../../src/state/evidence-results.js";
-import { ensurePayloadParent, ensureResultDirectory } from "../../src/state/layout.js";
+import { ensureResultDirectory } from "../../src/state/layout.js";
 import { createProductionServices } from "../../src/state/production.js";
-import { enumerateMaintenanceCandidates, enumerateMaintenanceRoots } from "../../src/state/maintenance-roots.js";
 import { installSnapshot } from "../../src/state/snapshots.js";
-import { runLocalCommand } from "../../src/local/commands.js";
+import { cleanTaskWorkspace, inspectWorkspaceCleanup } from "../../src/state/workspace-cleanup.js";
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
@@ -100,7 +99,7 @@ describe("production dependency assembly", () => {
     });
   });
 
-  it("rehydrates retained payload bytes and a non-empty projection plan", async () => {
+  it("rehydrates embedded retained evidence after the ignored workspace is absent", async () => {
     const root = repository();
     const input = { working_directory: root, task_id: task, operation: parseSafeCode("production-retained-test"), phase_instance: committedPhase };
     const service = await createProductionServices(input);
@@ -121,25 +120,10 @@ describe("production dependency assembly", () => {
       value: { kind: "review", evidence: review },
     });
     if (!prepared.ok) throw new Error(`preparation failed: ${prepared.error.code}`);
-    const payload = prepared.value.prepared.payloads[0]!;
-    const localInstalled = await runLocalCommand({
-      command: "snapshot", working_directory: root, task_id: task,
-      value: {
-        manifest: prepared.value.prepared.manifest.value,
-        retained_task_bytes: 0,
-        payloads: [{ path: payload.path, bytes_base64: Buffer.from(payload.bytes).toString("base64") }],
-      },
-    });
-    expect(localInstalled, JSON.stringify(localInstalled)).toMatchObject({ ok: true });
-    const localRestored = await runLocalCommand({
-      command: "restore", working_directory: root, task_id: task,
-      value: { result_digest: prepared.value.reference.result_digest, output_path: payload.path },
-    });
-    expect(localRestored).toMatchObject({ ok: true, value: { state: "present", bytes: Buffer.from(payload.bytes).toString("base64") } });
+    expect(prepared.value.prepared.payloads).toEqual([]);
+    expect(prepared.value.prepared.manifest.value.outputs).toEqual([]);
+    expect(prepared.value.prepared.manifest.value.projections).toEqual([]);
     await ensureResultDirectory(service.value.authority, prepared.value.reference.result_digest);
-    for (const payload of prepared.value.prepared.payloads) {
-      await ensurePayloadParent(service.value.authority, prepared.value.reference.result_digest, payload.target.absolute);
-    }
     const installed = await installSnapshot(
       createAtomicWriter(), prepared.value.prepared, prepared.value.manifest_target,
       service.value.runner.location.worktreeRoot as never,
@@ -154,18 +138,19 @@ describe("production dependency assembly", () => {
       authoritative_results: [prepared.value.reference], approvals: [], waivers: [],
     };
     writeFileSync(service.value.authority.state.absolute, canonicalDocument(state).bytes);
+    await rm(service.value.authority.workspace_root, { recursive: true, force: true });
     const restarted = await createProductionServices(input);
     if (!restarted.ok) throw new Error("production restart failed");
     const retained = await restarted.value.dependencies.load_retained_result!(prepared.value.reference);
     expect(retained.ok).toBe(true);
     if (!retained.ok) return;
-    expect(retained.value.prepared.payloads).toHaveLength(1);
-    expect(retained.value.projection_plan.entries).toHaveLength(1);
-    expect(retained.value.projection_plan.entries[0]?.path).toBe(prepared.value.projection_plan.entries[0]?.path);
-    await expect(restarted.value.dependencies.read_retained_task_bytes!()).resolves.toBeGreaterThan(0);
+    expect(retained.value.prepared.payloads).toEqual([]);
+    expect(retained.value.projection_plan.entries).toEqual([]);
+    expect(retained.value.prepared.manifest.value.source_artifact).toEqual(prepared.value.prepared.manifest.value.source_artifact);
+    await expect(restarted.value.dependencies.read_retained_task_bytes!()).resolves.toBe(0);
   });
 
-  it("enumerates the exact maintenance roots and admitted candidate set", async () => {
+  it("reports and removes stale reconstructible workspace files", async () => {
     const root = repository();
     const input = { working_directory: root, task_id: task, operation: parseSafeCode("maintenance-inventory"), phase_instance: committedPhase };
     const initial = await createProductionServices(input);
@@ -178,22 +163,22 @@ describe("production dependency assembly", () => {
       authoritative_results: [], approvals: [], waivers: [],
     };
     writeFileSync(initial.value.authority.state.absolute, canonicalDocument(state).bytes);
-    mkdirSync(join(initial.value.authority.task_root, "attempts", committedPhase), { recursive: true });
-    writeFileSync(join(initial.value.authority.task_root, "attempts", committedPhase, "attempt-one.json"), "attempt\n");
-    const orphanDigest = "f".repeat(64);
-    mkdirSync(join(initial.value.authority.task_root, "results", "sha256", orphanDigest, "payload"), { recursive: true });
-    writeFileSync(join(initial.value.authority.task_root, "results", "sha256", orphanDigest, "payload", "orphan.txt"), "orphan\n");
+    const staleAttempt = join(initial.value.authority.workspace_root, "diagnostics", "attempts", "phase-impl-14", "attempt-one.json");
+    const staleReview = join(initial.value.authority.workspace_root, "cache", "reviews", "prd.counter.md");
+    mkdirSync(join(staleAttempt, ".."), { recursive: true });
+    mkdirSync(join(staleReview, ".."), { recursive: true });
+    writeFileSync(staleAttempt, "attempt\n");
+    writeFileSync(staleReview, "review\n");
     const service = await createProductionServices(input);
     if (!service.ok) throw new Error("production restart failed");
-    const maintenanceRoots = await enumerateMaintenanceRoots(service.value.dependencies, service.value.authority);
-    expect(maintenanceRoots).toMatchObject({ ok: true, value: { current_state: state, resumable_receipts: [], decision_review_evidence: [] } });
-    if (!maintenanceRoots.ok) return;
-    const candidates = await enumerateMaintenanceCandidates(service.value.dependencies, service.value.authority, maintenanceRoots.value);
-    expect(candidates.ok).toBe(true);
-    if (!candidates.ok) return;
-    expect(candidates.value.map(({ path, category }) => ({ path, category })).sort((a, b) => a.path.localeCompare(b.path))).toEqual([
-      { path: `.archflow/tasks/${task}/attempts/${committedPhase}/attempt-one.json`, category: "unreferenced-attempt" },
-      { path: `.archflow/tasks/${task}/results/sha256/${orphanDigest}/payload/orphan.txt`, category: "superseded-payload" },
-    ].sort((a, b) => a.path.localeCompare(b.path)));
+    const inspected = await inspectWorkspaceCleanup(service.value.dependencies, service.value.authority, state);
+    expect(inspected).toMatchObject({ ok: true, value: { cleanup_pending: true, retained_files: 0 } });
+    const cleaned = await cleanTaskWorkspace(service.value.dependencies, service.value.authority, state);
+    expect(cleaned).toMatchObject({
+      ok: true,
+      value: { removed_files: 2, removed_bytes: 15, retained_files: 0, cleanup_pending: false },
+    });
+    const after = await inspectWorkspaceCleanup(service.value.dependencies, service.value.authority, state);
+    expect(after).toMatchObject({ ok: true, value: { cleanup_pending: false, retained_files: 0 } });
   });
 });

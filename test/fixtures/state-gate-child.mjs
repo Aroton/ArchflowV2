@@ -114,16 +114,16 @@ try {
   const wrappedAtomic = {
     createExclusive: async (path, bytes) => {
       const result = await realAtomic.createExclusive(path, bytes);
-      if (result === "created" && path.path_class === "decision") {
+      if (result === "created" && path.path_class === "authority-decision") {
         const name = basename(path.absolute);
         await hit(name === "request.json" ? "request-created" : "archive-created", path.absolute);
       }
-      if (result === "created" && path.path_class === "intent") await hit("receipt-created", path.absolute);
+      if (result === "created" && path.path_class === "workspace-intent") await hit("receipt-created", path.absolute);
       return result;
     },
     replace: async (path, bytes) => {
       await realAtomic.replace(path, bytes);
-      if (path.path_class === "gate-interface" && basename(path.absolute) === "gate.json") await hit("gate-published", path.absolute);
+      if (path.path_class === "workspace-gate-interface" && basename(path.absolute) === "gate.json") await hit("gate-published", path.absolute);
       if (path.path_class === "task-state") {
         stateReplacements += 1;
         await hit(stateReplacements === 1 && action.startsWith("open") ? "state-opened" : "state-resolved", path.absolute);

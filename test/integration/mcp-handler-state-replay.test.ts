@@ -94,6 +94,7 @@ Preserve explicit human review gates.
     waivers: [],
   };
   mkdirSync(authority.value.task_root, { recursive: true });
+  mkdirSync(join(authority.value.workspace_root, "transient"), { recursive: true });
   writeFileSync(authority.value.state.absolute, canonicalDocument(state).bytes);
   const documentPath = parseTaskPathClaim("phases/15/impl-notes.md");
   const projectionTarget = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/${documentPath}`);
@@ -170,7 +171,7 @@ describe("state handler durable integration", () => {
     const committed = parseCanonicalDocument<TaskStateV1>(stateAfterFirst, "committed state").value;
     expect(committed.authoritative_results).toHaveLength(1);
     const reference = committed.authoritative_results[0]!;
-    expect(existsSync(join(h.authority.task_root, reference.manifest_path.replace(`.archflow/tasks/${TASK}/`, "")))).toBe(true);
+    expect(existsSync(join(h.authority.task_root, "authority", "results", `${reference.result_digest}.json`))).toBe(true);
 
     const replay = await boundary.invoke(
       "archflow_state",

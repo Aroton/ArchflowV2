@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { afterEach, describe, expect, it } from "vitest";
 
 import { sha256Bytes } from "../../src/contracts/canonical.js";
 import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
@@ -22,8 +25,17 @@ import {
 } from "../../src/review/pinned-context.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import type { CurrentProduceSubject } from "../../src/state/produce-subject.js";
+import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
 
 const digest = (character: string) => parseSha256Digest(character.repeat(64));
+const workspaces: TaskWorkspace[] = [];
+afterEach(() => { for (const workspace of workspaces.splice(0)) workspace.dispose(); });
+
+async function transcriptWorkspace(label: string): Promise<TaskWorkspace> {
+  const workspace = await createTaskWorkspace({ taskId: "pinned-context", label, operation: label });
+  workspaces.push(workspace);
+  return workspace;
+}
 
 const subject = (): DispatchSubject => ({
   task_id: parseTaskSlug("pinned-context"),
@@ -146,22 +158,21 @@ describe("verificationTranscriptEvidence", () => {
     task_id: parseTaskSlug("pinned-context"),
     phase_instance: parsePhaseInstanceId("phase-impl-3"),
   } as TaskStateV1;
-  const implSubject = (entries: readonly unknown[]): CurrentProduceSubject => ({
+  const implSubject = (evidence = { transcript_digest: sha256Bytes(TRANSCRIPT), byte_count: TRANSCRIPT.byteLength }): CurrentProduceSubject => ({
     artifact_digest: digest("a"),
-    artifact: { artifact_kind: "implementation-output" } as never,
-    retained: { projection_plan: { entries } } as never,
+    artifact: { artifact_kind: "implementation-output", verification_evidence: evidence } as never,
+    retained: { projection_plan: { entries: [] } } as never,
   });
 
-  it("lifts the phase transcript from the change set into a typed pinned entry", () => {
-    const entries = verificationTranscriptEvidence(implState, implSubject([
-      {
-        path: ".archflow/tasks/pinned-context/phases/3/verification.txt",
-        desired: { state: "present", bytes: TRANSCRIPT },
-      },
-    ]));
+  it("lifts the digest-bound workspace transcript into a typed pinned entry", async () => {
+    const h = await transcriptWorkspace("pinned-transcript");
+    const directory = join(h.services.authority.workspace_root, "cache", "phases", "3");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, "verification.txt"), TRANSCRIPT);
+    const entries = await verificationTranscriptEvidence(h.services.runner, h.services.authority, implState, implSubject());
     expect(entries).toEqual([{
       kind: "verification-transcript",
-      label: "phases/3/verification.txt",
+      label: "cache/phases/3/verification.txt",
       status: "pinned",
       content_digest: sha256Bytes(TRANSCRIPT),
       encoding: "utf8",
@@ -169,25 +180,25 @@ describe("verificationTranscriptEvidence", () => {
     }]);
   });
 
-  it("names an absent transcript instead of omitting it", () => {
-    const entries = verificationTranscriptEvidence(implState, implSubject([
-      { path: "src/index.ts", desired: { state: "present", bytes: new Uint8Array([65]) } },
-    ]));
+  it("names an absent transcript instead of omitting it", async () => {
+    const h = await transcriptWorkspace("missing-transcript");
+    const entries = await verificationTranscriptEvidence(h.services.runner, h.services.authority, implState, implSubject());
     expect(entries).toEqual([{
       kind: "verification-transcript",
-      label: "phases/3/verification.txt",
+      label: "cache/phases/3/verification.txt",
       status: "unavailable",
-      note: "no verification transcript in the change set; claimed-but-untranscribed verification is an unverifiable claim, not a pass",
+      note: "verification transcript cache is absent; rerun verification before requesting review",
     }]);
   });
 
-  it("emits nothing outside implementation phases", () => {
+  it("emits nothing outside implementation phases", async () => {
+    const h = await transcriptWorkspace("document-transcript");
     const documentSubject = {
       artifact_digest: digest("a"),
       artifact: { artifact_kind: "document" } as never,
       retained: {} as never,
     };
-    expect(verificationTranscriptEvidence(implState, documentSubject)).toEqual([]);
+    await expect(verificationTranscriptEvidence(h.services.runner, h.services.authority, implState, documentSubject)).resolves.toEqual([]);
   });
 });
 
@@ -197,7 +208,6 @@ describe("priorTriageEvidence", () => {
   const reference = (step: string, resultDigest: string) => ({
     phase_instance: PHASE, step, result_digest: resultDigest,
     result_id: `result-${step.replace("_", "-")}`, input_fingerprint: digest("b"),
-    manifest_path: `x/${step}`,
   });
   const installation = (manifest: Record<string, unknown>) =>
     ({ prepared: { manifest: { value: manifest } } }) as never;

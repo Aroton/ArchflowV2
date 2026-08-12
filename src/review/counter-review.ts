@@ -15,7 +15,7 @@ import {
   type ParsedToolCall,
   type RequestIdentifiedToolCall,
 } from "../contracts/mcp-tools.js";
-import { adjudicationReviewClaim, counterReviewClaim } from "../contracts/path-claims.js";
+import { parseRepositoryPathClaim } from "../contracts/path-claims.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import type { ModelFamily, ReviewEvidence } from "../contracts/review.js";
 import {
@@ -25,7 +25,7 @@ import {
 } from "../dispatch/cli.js";
 import { resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
 import type { TransactionAuthority } from "../state/authority.js";
-import type { ResolvedTaskPath } from "../repository/paths.js";
+import { adjudicationReviewClaim, counterReviewClaim, type ResolvedTaskPath } from "../repository/paths.js";
 import {
   deriveEvidenceSetFromCounter,
   type PreparedEvidenceResult,
@@ -164,7 +164,7 @@ async function planCounterReviewCommit(
     })
     : Object.freeze({
       status: "evaluated" as const,
-      path: adjudicationReviewClaim(current.value.phase_instance),
+      path: parseRepositoryPathClaim(`.archflow/work/tasks/${current.value.task_id}/${adjudicationReviewClaim(current.value.phase_instance)}`),
       constitution: constitutionEvidence.constitution,
       drift: constitutionEvidence.drift,
       triggers: canonicalRuleRefs([
@@ -173,7 +173,7 @@ async function planCounterReviewCommit(
       ]),
     });
   const success = Object.freeze({
-    path: counterReviewClaim(current.value.phase_instance),
+    path: parseRepositoryPathClaim(`.archflow/work/tasks/${current.value.task_id}/${counterReviewClaim(current.value.phase_instance)}`),
     verdict: inputs.review_evidence.verdict,
     blocking_count: inputs.review_evidence.blocking_count,
     constitution: constitutionOutcome,

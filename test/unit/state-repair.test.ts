@@ -41,7 +41,8 @@ async function authorityWithLock() {
   if (!environment.ok) throw new Error("preflight failed");
   const authority = await createInternalTransactionAuthority({ runner: discovered.value, environment: environment.value, task_id: task, context });
   if (!authority.ok) throw new Error("authority failed");
-  return { authority: authority.value, taskRoot };
+  await mkdir(authority.value.workspace_root, { recursive: true });
+  return { authority: authority.value, workspaceRoot: authority.value.workspace_root };
 }
 
 describe("classifySuppliedRepairHistory", () => {
@@ -60,20 +61,23 @@ describe("classifySuppliedRepairHistory", () => {
   });
 
   it("removes only the exact empty inspected lock after explicit confirmation", async () => {
-    const { authority, taskRoot } = await authorityWithLock();
-    const lock = join(taskRoot, ".transaction-lock");
+    const { authority, workspaceRoot } = await authorityWithLock();
+    const lock = join(workspaceRoot, "transient", ".transaction-lock");
+    await mkdir(join(workspaceRoot, "transient"), { recursive: true });
     await mkdir(lock);
     const plan = await planAbandonedLockRepair(authority);
     await expect(repairAbandonedLock(authority, plan, false)).rejects.toMatchObject({ reason: "unconfirmed" });
     await repairAbandonedLock(authority, plan, true);
     await expect(planAbandonedLockRepair(authority)).rejects.toMatchObject({ reason: "missing" });
-    expect((await readdir(taskRoot)).filter((name) => name.startsWith(".transaction-lock.repair-"))).toEqual([]);
+    expect((await readdir(join(workspaceRoot, "transient"))).filter((name) => name.startsWith(".transaction-lock.repair-"))).toEqual([]);
   });
 
   it("rejects symlink, non-empty, and replaced lock targets", async () => {
-    const { authority, taskRoot } = await authorityWithLock();
-    const lock = join(taskRoot, ".transaction-lock");
-    const outside = join(taskRoot, "outside");
+    const { authority, workspaceRoot } = await authorityWithLock();
+    const transient = join(workspaceRoot, "transient");
+    await mkdir(transient, { recursive: true });
+    const lock = join(transient, ".transaction-lock");
+    const outside = join(workspaceRoot, "outside");
     await mkdir(outside);
     await symlink(outside, lock);
     await expect(planAbandonedLockRepair(authority)).rejects.toMatchObject({ reason: "symlink" });
@@ -87,7 +91,7 @@ describe("classifySuppliedRepairHistory", () => {
     await rm(lock, { recursive: true });
     await mkdir(lock);
     await expect(repairAbandonedLock(authority, plan, true)).rejects.toBeInstanceOf(TaskLockRepairError);
-    const quarantines = (await readdir(taskRoot)).filter((name) => name.startsWith(".transaction-lock.repair-"));
+    const quarantines = (await readdir(transient)).filter((name) => name.startsWith(".transaction-lock.repair-"));
     expect(quarantines).toEqual([]);
     await expect(access(lock)).resolves.toBeUndefined();
   });

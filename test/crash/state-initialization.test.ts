@@ -105,7 +105,7 @@ describe("revision-0 crash cuts", () => {
         expect(observed.kind).toBe("canonical");
         if (observed.kind === "canonical") expect(observed.document.value.revision).toBe(1);
       } else expect(observed.kind).toBe("missing");
-      expect(existsSync(join(fixture.taskRoot, ".transaction-lock"))).toBe(true);
+      expect(existsSync(join(fixture.authority.workspace_root, "transient", ".transaction-lock"))).toBe(true);
       const plan = await inspectAbandonedTaskLock(fixture.authority);
       await removeConfirmedAbandonedTaskLock(fixture.authority, plan, true);
       const resumed = start(fixture.taskRoot, "none");
@@ -120,7 +120,7 @@ describe("revision-0 crash cuts", () => {
     await message(child, "cut");
     await new Promise<void>((resolve) => child.once("exit", () => resolve()));
     expect((await readTaskState(fixture.authority.state)).kind).toBe("missing");
-    expect(existsSync(join(fixture.taskRoot, "intents", "initialize.json"))).toBe(true);
+    expect(existsSync(join(fixture.authority.workspace_root, "transient", "intents", "initialize.json"))).toBe(true);
     const plan = await inspectAbandonedTaskLock(fixture.authority);
     await removeConfirmedAbandonedTaskLock(fixture.authority, plan, true);
     const resumed = start(fixture.taskRoot, "none");

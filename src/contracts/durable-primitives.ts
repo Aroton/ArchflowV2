@@ -45,24 +45,23 @@ export type SymlinkBlobIdentity = {
 };
 export type BlobIdentity = RegularBlobIdentity | SymlinkBlobIdentity;
 
-/** The 7 classes an implementation output may claim. */
+/** Durable classes an implementation output may claim. Ignored workspace bytes are never outputs. */
 export const CLAIMABLE_OUTPUT_PATH_CLASSES = [
-  "document", "import", "repository-source",
-  "result-payload", "review", "task-branch-constitution", "verification-transcript",
+  "document", "repository-source", "task-branch-constitution",
 ] as const;
 export type ClaimableOutputPathClass = (typeof CLAIMABLE_OUTPUT_PATH_CLASSES)[number];
 
 /**
- * The 12 classes an output may never claim. Together with `CLAIMABLE_OUTPUT_PATH_CLASSES` this
- * partitions all 19 `PATH_CLASSES`. The two members `READ_ONLY_PATH_CLASSES`
+ * The eight classes an output may never claim. Together with `CLAIMABLE_OUTPUT_PATH_CLASSES` this
+ * partitions all 11 durable `PATH_CLASSES`. The two members `READ_ONLY_PATH_CLASSES`
  * (`path-claims.ts:101`) also names are re-listed literally rather than spread: this must stay a
  * closed `as const` tuple whose element type is a literal union, and `READ_ONLY_PATH_CLASSES` is
  * typed `readonly PathClass[]`. `task-ask` is agent-authored PRD-phase context rather than
  * server-owned authority, but it lives here because an implementation output must never claim it.
  */
 export const SERVER_OWNED_PATH_CLASSES = [
-  "attempt", "decision", "gate-interface", "intent", "maintenance-record", "result-manifest",
-  "shared-constitution", "shared-workflow", "staged-request", "task-ask", "task-config", "task-state",
+  "authority-decision", "authority-initialization", "authority-result",
+  "shared-constitution", "shared-workflow", "task-ask", "task-config", "task-state",
 ] as const;
 
 /**

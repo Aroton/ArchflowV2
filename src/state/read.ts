@@ -11,7 +11,7 @@ import { taskStateV1Schema, type TaskStateV1 } from "../contracts/durable-state.
 import type { Sha256Digest } from "../contracts/evidence.js";
 import type { ParsedToolCall } from "../contracts/mcp-tools.js";
 import type { ToolName } from "../contracts/tool-names.js";
-import { openResolved, type ResolvedPath } from "../repository/paths.js";
+import { openResolved, type ResolvedPath, type ResolvedWorkspacePath } from "../repository/paths.js";
 import type { RepositoryOperationContext } from "../repository/git.js";
 import type { RootBoundGitRunner } from "../repository/identity.js";
 import type { TransactionAuthority } from "./authority.js";
@@ -63,7 +63,7 @@ function errnoOf(error: unknown): string | undefined {
     : undefined;
 }
 
-async function readBytes(path: ResolvedPath): Promise<Readonly<{ kind: "bytes"; bytes: Uint8Array }> | Readonly<{ kind: "missing" | "unreadable" }>> {
+async function readBytes(path: ResolvedPath | ResolvedWorkspacePath): Promise<Readonly<{ kind: "bytes"; bytes: Uint8Array }> | Readonly<{ kind: "missing" | "unreadable" }>> {
   let handle;
   try {
     handle = await openResolved(path.absolute, fsConstants.O_RDONLY);
@@ -89,8 +89,8 @@ export async function readTaskState(path: ResolvedPath): Promise<StateReadResult
   }
 }
 
-export async function readIntentReceipt(path: ResolvedPath): Promise<ReceiptReadResult> {
-  if (path.path_class !== "intent") throw new TypeError("readIntentReceipt requires an intent resolved path");
+export async function readIntentReceipt(path: ResolvedWorkspacePath): Promise<ReceiptReadResult> {
+  if (path.path_class !== "workspace-intent") throw new TypeError("readIntentReceipt requires a workspace-intent resolved path");
   const read = await readBytes(path);
   if (read.kind !== "bytes") return read;
   try {

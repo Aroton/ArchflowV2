@@ -12,7 +12,7 @@ import {
 } from "../contracts/mcp-tools.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { TOOL_NAMES, type ToolName } from "../contracts/tool-names.js";
-import { openResolved, resolveTaskPath, stagedRequestClaim } from "../repository/paths.js";
+import { openResolved, resolveTaskWorkspacePath, stagedRequestClaim } from "../repository/paths.js";
 import type { RepositoryPathClaim } from "../contracts/path-claims.js";
 import { ensureIntentDirectory } from "./layout.js";
 import { createProductionServices, type ProductionServices } from "./production.js";
@@ -66,11 +66,11 @@ export async function writeStagedRequest(input: Readonly<{
 }>): Promise<ProjectResult<Readonly<{ path: RepositoryPathClaim; reference: StagedRequestReference }>>> {
   const { services } = input;
   await ensureIntentDirectory(services.authority);
-  const target = await resolveTaskPath({
+  const target = await resolveTaskWorkspacePath({
     runner: services.runner,
     taskId: services.authority.task_id,
     claim: stagedRequestClaim(input.intent_id),
-    expectedClass: "staged-request",
+    expectedClass: "workspace-staged-request",
     context: services.authority.context,
   });
   if (!target.ok) return target;
@@ -117,11 +117,11 @@ export async function rehydrateStagedToolCall<K extends ToolName>(
     operation: parseSafeCode(name),
   });
   if (!services.ok) return services;
-  const target = await resolveTaskPath({
+  const target = await resolveTaskWorkspacePath({
     runner: services.value.runner,
     taskId: services.value.authority.task_id,
     claim: stagedRequestClaim(reference.intent_id),
-    expectedClass: "staged-request",
+    expectedClass: "workspace-staged-request",
     context: services.value.authority.context,
   });
   if (!target.ok) return target;

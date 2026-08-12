@@ -2,15 +2,15 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import { lstat, mkdir, open, readdir, realpath, rename, rmdir, type FileHandle } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 
-import type { ResolvedTaskPath } from "../repository/paths.js";
+import type { ResolvedTaskWorkspacePath } from "../repository/paths.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
 
 export type TaskLock = Readonly<{
-  runExclusive<T>(taskRoot: ResolvedTaskPath, work: () => Promise<T>): Promise<T>;
+  runExclusive<T>(workspaceRoot: ResolvedTaskWorkspacePath, work: () => Promise<T>): Promise<T>;
 }>;
 
 export class TaskLockError extends Error {
@@ -21,7 +21,7 @@ export class TaskLockError extends Error {
 }
 
 const TASK_LOCK_POLICY = Object.freeze({
-  directoryName: ".transaction-lock",
+  relativePath: join("transient", ".transaction-lock"),
   pollIntervalMs: 10,
   deadlineMs: 250,
 });
@@ -30,7 +30,7 @@ const authenticRepairPlans = new WeakSet<object>();
 const repairPlanHandles = new WeakMap<object, FileHandle>();
 
 export type AbandonedTaskLockPlan = Readonly<{
-  task_root: ResolvedTaskPath;
+  workspace_root: ResolvedTaskWorkspacePath;
   lock_path: string;
   device: number;
   inode: number;
@@ -53,9 +53,9 @@ function errnoOf(error: unknown): string | undefined {
 
 async function verifiedLock(authority: TransactionAuthority): Promise<{ lockPath: string; device: number; inode: number; birthtimeMs: number; ctimeMs: number }> {
   assertInternalTransactionAuthority(authority);
-  const root = await realpath(authority.task_root).catch(() => { throw new TaskLockRepairError("io"); });
-  if (root !== authority.task_root) throw new TaskLockRepairError("replaced");
-  const lockPath = join(root, TASK_LOCK_POLICY.directoryName);
+  const root = await realpath(authority.workspace_root).catch(() => { throw new TaskLockRepairError("io"); });
+  if (root !== authority.workspace_root) throw new TaskLockRepairError("replaced");
+  const lockPath = join(root, TASK_LOCK_POLICY.relativePath);
   let stat;
   try {
     stat = await lstat(lockPath);
@@ -87,7 +87,7 @@ export async function inspectAbandonedTaskLock(authority: TransactionAuthority):
     throw new TaskLockRepairError("replaced");
   }
   const plan = Object.freeze({
-    task_root: authority.task_root,
+    workspace_root: authority.workspace_root,
     lock_path: lock.lockPath,
     device: lock.device,
     inode: lock.inode,
@@ -107,10 +107,10 @@ export async function removeConfirmedAbandonedTaskLock(
 ): Promise<void> {
   assertInternalTransactionAuthority(authority);
   if (!humanConfirmedNoLiveWriter) throw new TaskLockRepairError("unconfirmed");
-  if (!authenticRepairPlans.has(plan) || plan.task_root !== authority.task_root) throw new TaskLockRepairError("replaced");
+  if (!authenticRepairPlans.has(plan) || plan.workspace_root !== authority.workspace_root) throw new TaskLockRepairError("replaced");
   const handle = repairPlanHandles.get(plan);
   if (handle === undefined) throw new TaskLockRepairError("replaced");
-  const quarantine = join(authority.task_root, `.transaction-lock.repair-${randomUUID()}`);
+  const quarantine = join(dirname(plan.lock_path), `.transaction-lock.repair-${randomUUID()}`);
   try {
     const current = await verifiedLock(authority);
     const held = await handle.stat().catch(() => { throw new TaskLockRepairError("replaced"); });
@@ -151,7 +151,7 @@ export async function removeConfirmedAbandonedTaskLock(
 }
 
 export function createTaskLock(): TaskLock {
-  const heldRoots = new AsyncLocalStorage<ReadonlySet<ResolvedTaskPath>>();
+  const heldRoots = new AsyncLocalStorage<ReadonlySet<ResolvedTaskWorkspacePath>>();
 
   async function acquire(lockPath: string): Promise<void> {
     const deadline = performance.now() + TASK_LOCK_POLICY.deadlineMs;
@@ -169,10 +169,10 @@ export function createTaskLock(): TaskLock {
     }
   }
 
-  async function runExclusive<T>(taskRoot: ResolvedTaskPath, work: () => Promise<T>): Promise<T> {
-    const inheritedRoots = heldRoots.getStore() ?? new Set<ResolvedTaskPath>();
+  async function runExclusive<T>(taskRoot: ResolvedTaskWorkspacePath, work: () => Promise<T>): Promise<T> {
+    const inheritedRoots = heldRoots.getStore() ?? new Set<ResolvedTaskWorkspacePath>();
     if (inheritedRoots.has(taskRoot)) throw new TaskLockError("acquire");
-    const lockPath = join(taskRoot, TASK_LOCK_POLICY.directoryName);
+    const lockPath = join(taskRoot, TASK_LOCK_POLICY.relativePath);
     await acquire(lockPath);
     const scopedRoots = new Set([...inheritedRoots, taskRoot]);
     let workResult: T;

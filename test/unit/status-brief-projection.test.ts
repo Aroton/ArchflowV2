@@ -53,10 +53,10 @@ describe("projectBriefStatus", () => {
       open_gate: {
         gate_id: "gate-1",
         kind: "artifact-approval",
-        decision_path: "gate.decision",
-        archive_decision_path: "decisions/gate-1/decision.json",
-        request_path: "decisions/gate-1/request.json",
-        gate_counter_review_path: "reviews/prd.gate-counter.gate-1.md",
+        decision_path: ".archflow/work/tasks/brief-task/cache/gates/gate.decision",
+        archive_decision_path: ".archflow/tasks/brief-task/authority/decisions/gate-1/decision.json",
+        request_path: ".archflow/tasks/brief-task/authority/decisions/gate-1/request.json",
+        gate_counter_review_path: ".archflow/work/tasks/brief-task/cache/reviews/prd.gate-counter.gate-1.md",
         decision_templates: [
           { decision: "approve", reason: "placeholder body" },
           { decision: "revise", reason: "placeholder body" },
@@ -103,5 +103,27 @@ describe("projectBriefStatus", () => {
       reconciliation: { classification: "consistent", findings: [] },
     }));
     expect(empty.reconciliation).toBeUndefined();
+  });
+
+  it("exposes workspace cleanup only while cleanup is pending", () => {
+    const clean = projectBriefStatus(fullStatus({
+      workspace: {
+        removed_files: 0, removed_bytes: 0, retained_files: 2, retained_bytes: 20,
+        cleanup_pending: false,
+      },
+    }));
+    expect(clean.workspace).toBeUndefined();
+
+    const pending = projectBriefStatus(fullStatus({
+      workspace: {
+        removed_files: 0, removed_bytes: 0, retained_files: 1, retained_bytes: 10,
+        cleanup_pending: true,
+      },
+    }));
+    expect(pending.workspace).toEqual({
+      removed_files: 0, removed_bytes: 0, retained_files: 1, retained_bytes: 10,
+      cleanup_pending: true,
+    });
+    expect(pending.blocking_reasons).toEqual(["gate-decision-required"]);
   });
 });

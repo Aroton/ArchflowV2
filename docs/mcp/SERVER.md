@@ -1,6 +1,6 @@
 # mcp/SERVER
 
-**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/main.ts`, `src/mcp/`
+**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** `src/main.ts`, `src/mcp/`, `src/state/staged-requests.ts`
 
 `archflow-mcp` is a stdio MCP server speaking newline-delimited JSON-RPC. It is the system's sole authority: the only writer of durable state and the only judge of request validity. It takes no arguments and has no other mode — `src/main.ts` is 28 lines that either print usage or start the runtime.
 
@@ -17,11 +17,13 @@ Tool names are frozen in `src/contracts/tool-names.ts`; handlers live in `src/mc
 
 The advertised catalogue carries names and JSON Schemas; each input schema also carries one description naming its two parameter groups. The skills, not the tool listing, teach agents when to call what.
 
+Paths returned for rendered reviews and gate UI point below ignored `.archflow/work/tasks/<task>/cache/`; they are disposable interfaces, not authority. The durable result is the current manifest at `.archflow/tasks/<task>/authority/results/<result-digest>.json`, whose structured evidence can regenerate those renderings after cleanup or on a fresh clone.
+
 The *advertised* input schema is deliberately flatter than the normative contract. The normative input is a root-level `oneOf` (full payload | staged reference) built from `$ref`/`allOf` composition — and at least one MCP host flattens a root-level `oneOf` by dropping every branch it cannot resolve, which advertised every tool as a zero-field object and left models composing calls with guessed (all-string) types. `standaloneSchema` in `src/mcp/tools.ts` therefore merges the two branches into one plain object root: the union of both groups' properties (typed by `$ref` into the pruned `$defs`, which hosts do preserve below the root), the fields common to both groups as `required`, and the group-naming description. The merge is advisory; the server's strict `oneOf` validation in `parseToolCall` is unchanged and remains the authority. A regression fence in `test/contracts/mcp-advertised-schema.test.ts` forbids root-level combinators from ever coming back.
 
 When the server rejects an input, `CONTRACT_INVALID` carries a bounded `issues` list (up to five `"<field path>: <message>"` strings) alongside `issue_code: "input-invalid"`, so a caller can correct the offending field instead of retrying blind; `STAGED_REQUEST_MISMATCH` does the same for a staged file that no longer re-parses.
 
-Every tool input is a union of two arms. The full payload is the complete request object. The **staged reference** — `{schema_version, task_id, intent_id, request_digest}` — points at the request `archflow-local build-request` staged at `intents/<intent-id>.request.json`; the tool boundary (`server.ts` + `src/state/staged-requests.ts`) rehydrates the staged bytes into an authentic full-payload call *before any handler runs*, re-parses them through the tool's own contract, and recomputes the request digest exactly as the live path does. The recomputed digest must equal both the digest recorded in the staged file and the digest the model typed; the staged tool must equal the tool actually called; the inner `intent_id`/`task_id` must equal the reference's. Any disagreement fails closed — `STAGED_REQUEST_MISMATCH`, or `STAGED_REQUEST_NOT_FOUND` for a missing file — with no state change. This exists because hand-copying the multi-kilobyte `request.input` was the loop's largest token cost and corruption surface; the digest, not the transcription, is what binds semantics.
+Every tool input is a union of two arms. The full payload is the complete request object. The **staged reference** — `{schema_version, task_id, intent_id, request_digest}` — points at the request `archflow-local build-request` staged below ignored `.archflow/work/tasks/<task>/transient/intents/`; the tool boundary (`server.ts` + `src/state/staged-requests.ts`) rehydrates the staged bytes into an authentic full-payload call *before any handler runs*, re-parses them through the tool's own contract, and recomputes the request digest exactly as the live path does. The recomputed digest must equal both the digest recorded in the staged file and the digest the model typed; the staged tool must equal the tool actually called; the inner `intent_id`/`task_id` must equal the reference's. Any disagreement fails closed — `STAGED_REQUEST_MISMATCH`, or `STAGED_REQUEST_NOT_FOUND` for a missing file — with no state change. The staged file is deleted after a successful state replacement; exact replay of the most recent call comes from `state.json.last_transition`, not a permanent receipt. This exists because hand-copying the multi-kilobyte `request.input` was the loop's largest token cost and corruption surface; the digest, not the transcription, is what binds semantics.
 
 ## How a request flows
 
@@ -40,7 +42,7 @@ sequenceDiagram
     A->>A: SDK dispatches: envelope,<br/>method, params, cancellation
     A->>B: validated tools/call
     B->>B: name lookup, schema_version gate,<br/>zod parse of input<br/>(full payload or staged reference)
-    B->>B: staged reference? rehydrate from<br/>intents/&lt;id&gt;.request.json, recheck digest
+    B->>B: staged reference? rehydrate from ignored<br/>transient/intents/, recheck digest
     B->>HD: dispatch
     HD->>HD: open handler session, replay probe,<br/>state transaction / dispatch
     HD-->>B: result

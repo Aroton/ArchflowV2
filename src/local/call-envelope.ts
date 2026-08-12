@@ -6,7 +6,7 @@ import { createProjectError, type ProjectError, type ProjectResult } from "../co
 import { type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
 import { computeGateContextDigest, computeGateId, computeInputFingerprint } from "../contracts/fingerprints.js";
 import { parseToolCall, type ParsedToolCall, type StagedRequestReference } from "../contracts/mcp-tools.js";
-import { parseTaskPathClaim, type RepositoryPathClaim, type TaskPathClaim } from "../contracts/path-claims.js";
+import { parseRepositoryPathClaim, type RepositoryPathClaim, type TaskPathClaim } from "../contracts/path-claims.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import type { ModelFamily } from "../contracts/review.js";
 import { TOOL_NAMES, isToolName, type ToolName } from "../contracts/tool-names.js";
@@ -50,10 +50,10 @@ export type CallEnvelope = Readonly<{
   artifact_digest?: Sha256Digest;
   gate?: Readonly<{
     gate_id: PathSafeId;
-    decision_path: TaskPathClaim;
+    decision_path: RepositoryPathClaim;
     archive_decision_path: TaskPathClaim;
     request_path: TaskPathClaim;
-    gate_counter_review_path: TaskPathClaim;
+    gate_counter_review_path: RepositoryPathClaim;
     counter_review_prompt: string;
   }>;
 }>;
@@ -161,7 +161,7 @@ async function archivedWaiverRequest(
     runner: services.runner,
     taskId: services.authority.task_id,
     claim: gateRequestClaim(call.input.origin.origin_gate_id),
-    expectedClass: "decision",
+    expectedClass: "authority-decision",
     context: services.authority.context,
   });
   if (!target.ok) return target;
@@ -297,10 +297,10 @@ export async function computeCallEnvelope(
     ...envelope,
     gate: Object.freeze({
       gate_id: gateId,
-      decision_path: parseTaskPathClaim("gate.decision"),
+      decision_path: parseRepositoryPathClaim(`.archflow/work/tasks/${services.authority.task_id}/cache/gates/gate.decision`),
       archive_decision_path: gateDecisionClaim(gateId),
       request_path: gateRequestClaim(gateId),
-      gate_counter_review_path: gateCounterReviewClaim(phaseInstance, gateId),
+      gate_counter_review_path: parseRepositoryPathClaim(`.archflow/work/tasks/${services.authority.task_id}/${gateCounterReviewClaim(phaseInstance, gateId)}`),
       counter_review_prompt: renderGateCounterPrompt(promptInput),
     }),
   }));

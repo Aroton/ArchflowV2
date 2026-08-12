@@ -1,6 +1,6 @@
 # COMPLEXITY
 
-**Explored:** 2026-08-12 · **Commit:** `ae25739` · **Covers:** the whole repository
+**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** the whole repository
 
 A per-subsystem audit of where the machinery is heaviest, what it buys, and what could be simplified. Written to support iterating on the workflow — each item states the concrete problem the complexity solves so a simplification can be judged against it, per the engineering priorities in CLAUDE.md.
 
@@ -16,7 +16,7 @@ Three categories recur:
 
 ### 1. The manual/offline parallel universe (state layer) — resolved 2026-08-11
 
-The audit asked directly: how often is the MCP server actually down, and could degraded mode shrink to "read-only status + stop" instead of a full recording workflow? It could, and it did. `manual-import.ts`, `manual-checkpoints.ts`, the manual half of `gates.ts`, and the `manual-workflow.ts` driver (~3,000 lines of mirror machinery, every normal-path invariant change carrying a mirror obligation) are retired; `manual-status` survives as a read-only classifier. Pre-retirement checkpoint chains are stranded with no recovery path — see `LIMITATIONS.md`.
+The audit asked directly: how often is the MCP server actually down, and could degraded mode shrink to "read-only status + stop" instead of a full recording workflow? It could, and it did. The offline write path and its parallel gate/import driver (~3,000 lines of mirror machinery, every normal-path invariant change carrying a mirror obligation) are removed; `manual-status` survives as a read-only classifier, with no persisted compatibility layer.
 
 ### 2. `gates.ts` at 2,311 lines — resolved 2026-08-11
 
@@ -62,7 +62,7 @@ The child-CLI lockdown argvs (long literal flag lists per host) and the regex-ba
 
 For balance — machinery that directly implements the trust boundaries and should survive any simplification pass:
 
-- The **transaction kernel** (receipt-as-commit-point, CAS, arbitration of crash windows) — this is why state is never guessed.
+- The **transaction kernel** (`last_transition`, CAS, and arbitration of temporary recovery receipts across crash windows) — this is why state is never guessed while receipts can still be cleaned after durable state replacement.
 - **Canonical JSON + strict re-render parsing + domain-tagged digests** — why "same digest" means "same bytes" everywhere.
 - **`assertPlainJson` + materialize-once** — closed a real bug class (split observation), not a hypothetical one.
 - The **WeakSet trust-brand pattern** — why approvals, review sets, and write authority cannot be forged by shape. Non-obvious but cheap, and it's the codebase's signature.

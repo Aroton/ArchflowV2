@@ -8,7 +8,6 @@ import { parseResultManifest, type ResultManifestV1, type ReviewEvidenceArtifact
 import { validateDurableSemantics } from "../../src/contracts/durable.js";
 import { parseSha256Digest } from "../../src/contracts/evidence.js";
 import { createRetainedEvidenceReference, createTransactionAuthorityLink } from "../../src/contracts/internal/test-capabilities.js";
-import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 
 const source = JSON.parse(readFileSync(new URL("../fixtures/contracts/durable/implementation-output.valid.json", import.meta.url), "utf8")) as ImplementationOutputV1;
 const repositoryDigest = parseSha256Digest("f".repeat(64));
@@ -67,8 +66,6 @@ const reviewSource = (): ReviewEvidenceArtifactV1 => ({
 
 const reviewManifest = (): ResultManifestV1 => {
   const sourceArtifact = reviewSource();
-  const path = `.archflow/tasks/${source.task_id}/reviews/${source.phase_instance}.counter.md` as typeof firstOutput.path;
-  const renderedDigest = parseSha256Digest("3".repeat(64));
   return {
     schema_version: "1",
     task_id: source.task_id,
@@ -80,31 +77,22 @@ const reviewManifest = (): ResultManifestV1 => {
     source_artifact: sourceArtifact,
     input_fingerprint: source.input_fingerprint,
     snapshot_digest: parseSha256Digest("4".repeat(64)),
-    outputs: [{
-      path,
-      path_class: "review",
-      operation: "add",
-      storage: "raw-payload",
-      payload_bytes: 100 as never,
-      payload_digest: renderedDigest,
-      file_type: "regular",
-      after: { oid: "1234567890abcdef1234567890abcdef12345678" as never, mode: "100644", size_bytes: 100 as never },
-    }],
-    projections: [{ path, content_digest: renderedDigest }],
+    outputs: [],
+    projections: [],
     accounting: {
       schema_version: "1",
-      result_bytes: 100 as never,
-      task_bytes: 100 as never,
+      result_bytes: 0 as never,
+      task_bytes: 0 as never,
       result_byte_cap: 26_214_400 as never,
       task_byte_cap: 262_144_000 as never,
-      counted_entries: [{ path, storage: "raw-payload", stored_bytes: 100 as never }],
+      counted_entries: [],
       measured_at_revision: 3 as never,
     },
     secret_scan: {
       schema_version: "1",
       outcome: "clean",
       detector_set_id: "archflow.default:v1" as never,
-      scanned_paths: [path],
+      scanned_paths: [],
     },
   };
 };
@@ -126,7 +114,7 @@ describe("ResultManifestV1", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "SNAPSHOT_INVALID", diagnostic: { parameters: { issue_code: "result-manifest-artifact-digest-mismatch" } } } });
   });
 
-  it("retains evidence by canonical payload identity and its exact review projection", () => {
+  it("retains structured evidence without a durable review projection", () => {
     const value = reviewManifest();
     expect(parseResultManifest(value)).toEqual(value);
     expect(validateDurableSemantics({ result_manifest: canonicalDocument(value) })).toMatchObject({ ok: true });
@@ -135,8 +123,8 @@ describe("ResultManifestV1", () => {
 
     for (const changed of [
       { ...value, artifact_digest: canonicalJsonDigest(value.source_artifact) },
-      { ...value, outputs: [{ ...value.outputs[0]!, path_class: "document" }] },
-      { ...value, projections: [{ ...value.projections[0]!, content_digest: parseSha256Digest("5".repeat(64)) }] },
+      { ...value, outputs: structuredClone(manifest().outputs) },
+      { ...value, projections: structuredClone(manifest().projections) },
     ] as const) {
       expect(validateDurableSemantics({ result_manifest: canonicalDocument(changed) }).ok).toBe(false);
     }
@@ -150,9 +138,6 @@ describe("ResultManifestV1", () => {
       result_digest: manifestDocument.digest,
       result_id: manifestDocument.value.result_id,
       input_fingerprint: manifestDocument.value.input_fingerprint,
-      manifest_path: parseRepositoryPathClaim(
-        `.archflow/tasks/${manifestDocument.value.task_id}/results/sha256/${manifestDocument.digest}/manifest.json`,
-      ),
     };
     const retained = createRetainedEvidenceReference<"review", "server-attested">(manifestDocument, reference);
     expect(retained.verified.evidence_digest).toBe(manifestDocument.value.artifact_digest);

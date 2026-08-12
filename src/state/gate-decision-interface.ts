@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { canonicalDocument } from "../contracts/canonical.js";
-import { parseActiveGate, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
+import { parseActiveGate, parseGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import type { PathSafeId, Sha256Digest } from "../contracts/evidence.js";
 import {
@@ -10,9 +10,13 @@ import {
   type HumanDecisionProvenance,
 } from "../contracts/gates.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
+import type { RepositoryPathClaim } from "../contracts/path-claims.js";
+import { gateRequestClaim, type ResolvedTaskWorkspacePath } from "../repository/paths.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
+import { ensureIntentDirectory, ensureWorkspaceProjectionParent } from "./layout.js";
 import {
   deepFreezeGateJson,
+  activeProjection,
   fail,
   io,
   issue,
@@ -121,7 +125,7 @@ export function buildGateDecisionTemplates(active: ActiveGateV1): readonly Plain
 
 export type GateDecisionInterfaceWriteResult = Readonly<{
   gate_id: PathSafeId;
-  decision_path: "gate.decision";
+  decision_path: RepositoryPathClaim;
   decision_digest: Sha256Digest;
 }>;
 
@@ -151,22 +155,33 @@ export async function writeGateDecisionInterface(
     : selected;
 
   try {
-    return await dependencies.lock.runExclusive(authority.task_root, async () => {
+    await ensureIntentDirectory(authority);
+    return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
       const stateResult = await stateOrFailure(dependencies, authority);
       if (!stateResult.ok) return stateResult;
       const current = stateResult.value;
       const gate = current.value.open_gate;
       if (gate === undefined) return issue("STATE_INVALID", current.value, "gate-interface-open-gate-missing");
 
-      const activePath = await resolvePath(dependencies, authority, "gate.json", "gate-interface");
-      const interfacePath = await resolvePath(dependencies, authority, "gate.decision", "gate-interface");
+      const requestPath = await resolvePath(
+        dependencies,
+        authority,
+        gateRequestClaim(gate.gate_id),
+        "authority-decision",
+      );
+      const activePath = await resolvePath(dependencies, authority, "gate.json", "workspace-gate-interface");
+      const interfacePath = await resolvePath(dependencies, authority, "gate.decision", "workspace-gate-interface");
+      if (!requestPath.ok) return requestPath;
       if (!activePath.ok) return activePath;
       if (!interfacePath.ok) return interfacePath;
-      const projected = await readCanonical(activePath.value, "active gate", parseActiveGate);
-      if (projected === "missing" || projected === "invalid") {
-        return issue("STATE_INVALID", current.value, "active-gate-interface-invalid");
+      const durableRequest = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+      if (durableRequest === "missing" || durableRequest === "invalid") {
+        return issue("STATE_INVALID", current.value, "active-gate-request-invalid");
       }
-      const active = projected.value;
+      const projected = await readCanonical(activePath.value, "active gate", parseActiveGate);
+      const active = projected === "missing" || projected === "invalid"
+        ? parseActiveGate(activeProjection(durableRequest.value))
+        : projected.value;
       if (
         active.task_id !== authority.task_id ||
         active.gate_id !== gate.gate_id ||
@@ -174,6 +189,11 @@ export async function writeGateDecisionInterface(
         active.subject_digest !== gate.subject_digest ||
         active.context_digest !== gate.context_digest
       ) return issue("STATE_INVALID", current.value, "active-gate-interface-mismatch");
+
+      if (projected === "missing" || projected === "invalid") {
+        await ensureWorkspaceProjectionParent(authority, activePath.value.absolute as ResolvedTaskWorkspacePath);
+        await dependencies.atomic.replace(activePath.value, canonicalDocument(active).bytes);
+      }
 
       try {
         parseInterface(candidate, active);
@@ -197,10 +217,11 @@ export async function writeGateDecisionInterface(
       }
 
       const document = canonicalDocument(candidate);
+      await ensureWorkspaceProjectionParent(authority, interfacePath.value.absolute as ResolvedTaskWorkspacePath);
       await dependencies.atomic.replace(interfacePath.value, document.bytes);
       return ok({
         gate_id: active.gate_id,
-        decision_path: "gate.decision",
+        decision_path: interfacePath.value.repositoryRelative,
         decision_digest: document.digest,
       });
     });

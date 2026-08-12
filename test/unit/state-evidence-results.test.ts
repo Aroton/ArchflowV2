@@ -186,26 +186,23 @@ describe("evidence result preparation", () => {
           manifest: {
             value: {
               artifact_digest: canonicalJsonDigest(evidence),
-              outputs: [{
-                path_class: "review",
-                operation: "add",
-                storage: "raw-payload",
-                file_type: "regular",
-                after: { mode: "100644" },
-              }],
+              outputs: [],
+              projections: [],
             },
           },
         },
       },
     });
     if (!prepared.ok) return;
-    const payload = prepared.value.prepared.payloads[0];
-    expect(payload).toBeDefined();
-    expect(prepared.value.rendered_digest).toBe(sha256Bytes(payload!.bytes));
+    expect(prepared.value.prepared.payloads).toEqual([]);
+    const rendered = prepared.value.projection_plan.entries[0]?.desired;
+    expect(rendered?.state).toBe("present");
+    if (rendered?.state !== "present") return;
+    expect(prepared.value.rendered_digest).toBe(sha256Bytes(rendered.bytes));
     expect(prepared.value.rendered_digest).not.toBe(prepared.value.evidence_digest);
     expect(prepared.value.projection_plan.entries).toHaveLength(1);
     expect(prepared.value.projection_plan.entries[0]?.path).toBe(
-      `.archflow/tasks/${task}/reviews/${phase}.counter.md`,
+      `.archflow/work/tasks/${task}/cache/reviews/${phase}.counter.md`,
     );
   });
 
@@ -281,7 +278,7 @@ describe("evidence result preparation", () => {
       expect(prepared).toMatchObject({ ok: true });
       if (!prepared.ok) continue;
       expect(prepared.value.projection_plan.entries[0]?.path).toBe(
-        `.archflow/tasks/${task}/reviews/${phase}${item.suffix}`,
+        `.archflow/work/tasks/${task}/cache/reviews/${phase}${item.suffix}`,
       );
     }
   });

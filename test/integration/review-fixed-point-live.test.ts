@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, cpSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -118,6 +118,9 @@ async function fixture() {
     operation: parseSafeCode("live-resolve"),
   });
   if (!services.ok || services.value.state === undefined) throw new Error("production services unavailable");
+  const verificationDirectory = join(services.value.authority.workspace_root, "cache", "phases", "17");
+  await mkdir(verificationDirectory, { recursive: true });
+  await writeFile(join(verificationDirectory, "verification.txt"), "npm test\nall tests passed\n");
   const liveConfig = await readTaskConfig(services.value.authority.config);
   if (liveConfig.kind !== "valid") throw new Error("live config unavailable");
   return { root, services: services.value, liveConfig: liveConfig.snapshot };
@@ -261,7 +264,7 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
       };
       const opened = await openDurableGate(currentServices.dependencies, input);
       if (!opened.ok) throw new Error(JSON.stringify(opened));
-      await writeFile(join(currentServices.authority.task_root, "gate.decision"), canonicalDocument({
+      await writeFile(join(currentServices.authority.workspace_root, "cache", "gates", "gate.decision"), canonicalDocument({
         schema_version: "1",
         gate_id: opened.value.gate_id,
         task_id: task,
@@ -335,6 +338,9 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
       working_directory: h.root, task_id: task, operation: parseSafeCode("final-produce"),
     });
     if (!advanced.ok) throw new Error(advanced.error.code);
+    const finalVerificationDirectory = join(advanced.value.authority.workspace_root, "cache", "phases", "18");
+    await mkdir(finalVerificationDirectory, { recursive: true });
+    await writeFile(join(finalVerificationDirectory, "verification.txt"), "npm test\nall tests passed\n");
     const finalOutput = await build(advanced.value, finalPhase, finalFingerprint);
     await invokeState({
       schema_version: "1", task_id: task, intent_id: "final-produce",
@@ -417,7 +423,7 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
       if (!prepared.ok) throw new Error(prepared.error.code);
       await ensureResultDirectory(h.services.authority, prepared.value.reference.result_digest);
       for (const payload of prepared.value.prepared.payloads) {
-        await ensurePayloadParent(h.services.authority, prepared.value.reference.result_digest, payload.target.absolute);
+        await ensurePayloadParent(h.services.authority, prepared.value.reference.result_digest, payload.target.absolute as never);
       }
       const installed = await installSnapshot(
         h.services.dependencies.atomic, prepared.value.prepared, prepared.value.manifest_target,
@@ -454,7 +460,7 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
       };
       const opened = await openDurableGate(services.value.dependencies, gateInput);
       if (!opened.ok) throw new Error(JSON.stringify(opened));
-      await writeFile(join(services.value.authority.task_root, "gate.decision"), canonicalDocument({
+      await writeFile(join(services.value.authority.workspace_root, "cache", "gates", "gate.decision"), canonicalDocument({
         schema_version: "1", gate_id: opened.value.gate_id, task_id: task, phase_instance: phase,
         kind: "artifact-approval", subject_digest: subject,
         context_digest: computeGateContextDigest("artifact-approval", gateInput.context),
@@ -465,7 +471,7 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
       if (!resolved.ok || !("state" in resolved.value)) throw new Error(JSON.stringify(resolved));
       approvalState = resolved.value.state.value;
     }
-    const { committed_intent: _approvalIntent, ...approvalAuthority } = approvalState;
+    const { last_transition: _approvalTransition, ...approvalAuthority } = approvalState;
     const produceRunning: TaskStateV1 = {
       ...approvalAuthority, revision: parseSafeInteger(4), step: "produce", status: "running",
       authoritative_results: approvalState.authoritative_results,

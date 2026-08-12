@@ -338,7 +338,7 @@
         "type": "object",
         "properties": {
           "path": {
-            "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
+            "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
           },
           "verdict": {
             "type": "string",
@@ -361,7 +361,7 @@
                     "const": "evaluated"
                   },
                   "path": {
-                    "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
+                    "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
                   },
                   "constitution": {
                     "type": "string",

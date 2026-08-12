@@ -21,7 +21,7 @@ import { createToolHandlers } from "../../src/mcp/handlers/index.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
 import { createGitRunner, preflightGit, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
-import type { ResolvedTaskPath } from "../../src/repository/paths.js";
+import type { ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
 import { createAtomicWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "../../src/state/authority.js";
 import { openDurableGate, runDurableGate, type GateLifecycleDependencies, type GateOpenInput } from "../../src/state/gates.js";
@@ -81,7 +81,7 @@ async function harness(): Promise<Harness> {
   writeFileSync(authority.value.state.absolute, canonicalDocument(state).bytes);
   const dependencies: GateLifecycleDependencies = {
     runner: discovered.value, environment: environment.value, atomic: createAtomicWriter(),
-    lock: { runExclusive: async <T>(_root: ResolvedTaskPath, work: () => Promise<T>) => work() },
+    lock: { runExclusive: async <T>(_root: ResolvedTaskWorkspacePath, work: () => Promise<T>) => work() },
     resolve_input_fingerprint: async () => ({ schema_version: "1", ok: true, value: SUBJECT }),
     read_state: readTaskState,
     read_config: async () => ({ kind: "valid", snapshot: { bytes: Buffer.from(CONFIG_TEXT), digest: sha256Bytes(Buffer.from(CONFIG_TEXT)) } }),
@@ -123,9 +123,9 @@ function waiverOrigin(h: Harness, suffix: string) {
   });
   const requestDocument = canonicalDocument(request);
   const decisionDocument = canonicalDocument(decision);
-  mkdirSync(join(h.authority.task_root, "decisions", gateId), { recursive: true });
-  writeFileSync(join(h.authority.task_root, "decisions", gateId, "request.json"), requestDocument.bytes);
-  writeFileSync(join(h.authority.task_root, "decisions", gateId, "decision.json"), decisionDocument.bytes);
+  mkdirSync(join(h.authority.task_root, "authority", "decisions", gateId), { recursive: true });
+  writeFileSync(join(h.authority.task_root, "authority", "decisions", gateId, "request.json"), requestDocument.bytes);
+  writeFileSync(join(h.authority.task_root, "authority", "decisions", gateId, "decision.json"), decisionDocument.bytes);
   return {
     schema_version: "1" as const, task_id: TASK, intent_id: `waiver-${suffix}`, expected_revision: 7,
     input_fingerprint: FINGERPRINT,
@@ -203,11 +203,11 @@ function recordFor(request: GateRequestV1): SupplementalReviewRecordV1 {
 }
 
 function retainedPath(h: Harness, gateId: string): string {
-  return join(h.authority.task_root, "decisions", gateId, "supplemental-review.json");
+  return join(h.authority.task_root, "authority", "decisions", gateId, "supplemental-review.json");
 }
 
 function projectionPath(h: Harness, gateId: string): string {
-  return join(h.authority.task_root, "reviews", `${PHASE}.gate-counter.${gateId}.md`);
+  return join(h.authority.workspace_root, "cache", "reviews", `${PHASE}.gate-counter.${gateId}.md`);
 }
 
 describe("production supplemental gate round trip", () => {
@@ -233,7 +233,7 @@ describe("production supplemental gate round trip", () => {
     await boundary.invoke("archflow_waiver", waiverHandlerInput(electedInput), invocation(elected.root, openElected.signal, "waiver-elected-open"));
     const electedStatus = await liveStatus(elected.root);
     const waiverGateId = electedStatus.open_gate!.gate_id;
-    const waiverRequest = parseGateRequest(JSON.parse(readFileSync(join(elected.authority.task_root, "decisions", waiverGateId, "request.json"), "utf8")));
+    const waiverRequest = parseGateRequest(JSON.parse(readFileSync(join(elected.authority.task_root, "authority", "decisions", waiverGateId, "request.json"), "utf8")));
     const record = recordFor(waiverRequest);
     await runLocalCommand({ command: "gate-counter", working_directory: elected.root, task_id: TASK, value: record });
     const required = await boundary.invoke("archflow_waiver", waiverHandlerInput(electedInput), invocation(elected.root, new AbortController().signal, "waiver-review-required"));
@@ -265,7 +265,7 @@ describe("production supplemental gate round trip", () => {
     expect(opened).toMatchObject({ kind: "project-result", result: { ok: false, error: { code: "CANCELLED" } } });
     const electedStatus = await liveStatus(elected.root);
     const gateId = electedStatus.open_gate!.gate_id;
-    const request = JSON.parse(readFileSync(join(elected.authority.task_root, "decisions", gateId, "request.json"), "utf8")) as GateRequestV1;
+    const request = JSON.parse(readFileSync(join(elected.authority.task_root, "authority", "decisions", gateId, "request.json"), "utf8")) as GateRequestV1;
     const record = recordFor(request);
     await runLocalCommand({ command: "gate-counter", working_directory: elected.root, task_id: TASK, value: record });
     const installedStatus = await liveStatus(elected.root);
@@ -317,7 +317,7 @@ describe("production supplemental gate round trip", () => {
     expect(declinedResult).toMatchObject({
       kind: "project-result", result: { ok: true, value: { kind: "artifact-approval", decision: { payload: { decision: "reject" } } } },
     });
-    expect(existsSync(join(declined.authority.task_root, "reviews"))).toBe(false);
+    expect(existsSync(join(declined.authority.workspace_root, "cache", "reviews"))).toBe(false);
   });
 
   it("retains the immutable record before publishing, retries identically, and authenticates through runDurableGate", async () => {
@@ -326,7 +326,7 @@ describe("production supplemental gate round trip", () => {
     const opened = await openDurableGate(h.dependencies, input);
     if (!opened.ok) throw new Error(`gate open failed: ${JSON.stringify(opened.error)}`);
     const record = recordFor(opened.value.request.value);
-    mkdirSync(join(h.authority.task_root, "reviews"), { recursive: true });
+    mkdirSync(join(h.authority.workspace_root, "cache", "reviews"), { recursive: true });
     mkdirSync(projectionPath(h, opened.value.gate_id));
 
     await expect(runLocalCommand({ command: "gate-counter", working_directory: h.root, task_id: TASK, value: record })).rejects.toThrow();
@@ -367,7 +367,7 @@ describe("production supplemental gate round trip", () => {
     const opened = await openDurableGate(h.dependencies, input);
     if (!opened.ok) throw new Error("gate open failed");
     const record = recordFor(opened.value.request.value);
-    mkdirSync(join(h.authority.task_root, "reviews"), { recursive: true });
+    mkdirSync(join(h.authority.workspace_root, "cache", "reviews"), { recursive: true });
     writeFileSync(projectionPath(h, opened.value.gate_id), "forged wake-up projection\n");
     if (variant !== "projection-only") writeFileSync(retainedPath(h, opened.value.gate_id), canonicalDocument(mutate(record) as never).bytes);
     expect(existsSync(projectionPath(h, opened.value.gate_id))).toBe(true);

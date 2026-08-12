@@ -17,7 +17,7 @@ import { DispatchProcessError, scanDispatchOutput } from "../../src/dispatch/pro
 import type { DispatchRoute } from "../../src/dispatch/routing.js";
 import { createGitRunner, preflightGit, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
-import type { ResolvedTaskPath } from "../../src/repository/paths.js";
+import type { ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
 import type { DispatchEnvelope } from "../../src/review/envelopes.js";
 import { mapHandlerErrors } from "../../src/mcp/handlers/errors.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
@@ -126,7 +126,7 @@ if (argv.length === 1 && argv[0] === "--version") {
     environment: environment.value,
     atomic: createAtomicWriter(),
     projection_writer: createProjectionWriter(),
-    lock: { runExclusive: async <T>(_taskRoot: ResolvedTaskPath, work: () => Promise<T>) => work() },
+    lock: { runExclusive: async <T>(_taskRoot: ResolvedTaskWorkspacePath, work: () => Promise<T>) => work() },
     resolve_input_fingerprint: async () => { throw new Error("not used"); },
     read_state: async () => ({ kind: "missing" }),
     read_config: async () => ({ kind: "missing" }),
@@ -151,14 +151,14 @@ async function withDispatchEnvironment<T>(
 }
 
 async function attemptRecord(repository: string): Promise<Record<string, unknown>> {
-  const directory = join(repository, ".archflow", "tasks", TASK, "attempts", PHASE);
+  const directory = join(repository, ".archflow", "work", "tasks", TASK, "diagnostics", "attempts", PHASE);
   const names = await readdir(directory);
   expect(names).toHaveLength(1);
   return JSON.parse(await readFile(join(directory, names[0]!), "utf8")) as Record<string, unknown>;
 }
 
 async function attemptsAbsent(repository: string): Promise<void> {
-  await expect(readdir(join(repository, ".archflow", "tasks", TASK, "attempts")))
+  await expect(readdir(join(repository, ".archflow", "work", "tasks", TASK, "diagnostics", "attempts")))
     .rejects.toMatchObject({ code: "ENOENT" });
 }
 

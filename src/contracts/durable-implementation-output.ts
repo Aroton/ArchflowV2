@@ -52,6 +52,12 @@ export type UndeclaredChangeReport = {
   readonly unrepresentable_count: SafeInteger;
 };
 
+/** Digest binding for the ignored raw verification transcript. */
+export type VerificationEvidence = {
+  readonly transcript_digest: Sha256Digest;
+  readonly byte_count: SafeInteger;
+};
+
 /**
  * The manifest an implementation step produces: what it changed, against which tree, what the
  * review and commit authorization actually cover, and what it declared as input.
@@ -108,6 +114,8 @@ export type ImplementationOutputV1 = {
   readonly accounting: SnapshotAccountingV1;
   readonly secret_scan: SecretScanResult;
   readonly undeclared_changes: UndeclaredChangeReport;
+  /** Binds this durable output to the exact verification bytes reviewed for it. */
+  readonly verification_evidence: VerificationEvidence;
   /** SET — sorted by `input_id`, duplicates rejected. */
   readonly declared_inputs: readonly DeclaredInputRef[];
   readonly input_fingerprint: Sha256Digest;
@@ -139,6 +147,12 @@ export const undeclaredChangeReportV1Schema = z.object({
   unrepresentable_count: safeInteger,
 }).strict();
 
+/** Exported for schema generation only: the `verificationEvidence` `$def` is root-internal. */
+export const verificationEvidenceV1Schema = z.object({
+  transcript_digest: sha256Digest,
+  byte_count: safeInteger,
+}).strict() as unknown as z.ZodType<VerificationEvidence>;
+
 /**
  * `.strict()` mirrors `additionalProperties: false`; absence is `.optional()` plus omission from
  * `required`, never `null`. Every set rule calls the same exported `isSortedUniqueBy` — with
@@ -166,6 +180,7 @@ export const implementationOutputV1Schema = z.object({
   accounting: snapshotAccountingV1Schema,
   secret_scan: secretScanResultV1Schema,
   undeclared_changes: undeclaredChangeReportV1Schema,
+  verification_evidence: verificationEvidenceV1Schema,
   declared_inputs: z.array(declaredInputRefV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
   input_fingerprint: sha256Digest,

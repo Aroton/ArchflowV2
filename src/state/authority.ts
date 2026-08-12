@@ -12,8 +12,10 @@ import {
 import {
   resolveTaskPath,
   resolveTaskRoot,
+  resolveTaskWorkspaceRoot,
   type ResolvedPath,
   type ResolvedTaskPath,
+  type ResolvedTaskWorkspacePath,
 } from "../repository/paths.js";
 
 const transactionAuthorityBrand: unique symbol = Symbol("TransactionAuthority");
@@ -27,6 +29,7 @@ export type TransactionAuthority = Readonly<{
   task_identity_digest: Sha256Digest;
   context: RepositoryOperationContext;
   task_root: ResolvedTaskPath;
+  workspace_root: ResolvedTaskWorkspacePath;
   state: ResolvedPath;
   config: ResolvedPath;
 }> & { readonly [transactionAuthorityBrand]: true };
@@ -59,6 +62,8 @@ export async function createInternalTransactionAuthority(input: Readonly<{
   const taskIdentity = computeTaskIdentity(input.task_id, repository.value);
   const taskRoot = await resolveTaskRoot({ runner: input.runner, taskId: input.task_id, context });
   if (!taskRoot.ok) return taskRoot;
+  const workspaceRoot = await resolveTaskWorkspaceRoot({ runner: input.runner, taskId: input.task_id, context });
+  if (!workspaceRoot.ok) return workspaceRoot;
   const state = await resolveTaskPath({
     runner: input.runner,
     taskId: input.task_id,
@@ -83,6 +88,7 @@ export async function createInternalTransactionAuthority(input: Readonly<{
     task_identity_digest: taskIdentity.digest,
     context,
     task_root: taskRoot.value,
+    workspace_root: workspaceRoot.value,
     state: state.value,
     config: config.value,
   } as unknown as TransactionAuthority;

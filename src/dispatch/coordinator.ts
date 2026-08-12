@@ -2,11 +2,10 @@ import { randomUUID } from "node:crypto";
 
 import { canonicalJsonBytes, type GitOid } from "../contracts/canonical.js";
 import type { HostIdentity } from "../contracts/hosts.js";
-import { parseTaskPathClaim } from "../contracts/path-claims.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import type { DispatchEnvelope } from "../review/envelopes.js";
-import { resolveTaskPath } from "../repository/paths.js";
+import { parseWorkspacePathClaim, resolveTaskWorkspacePath } from "../repository/paths.js";
 import {
   CliAdapterError,
   exitClass,
@@ -88,11 +87,11 @@ async function writeAttemptRecord(
   if (writer === undefined || error === undefined) return;
 
   await ensureAttemptDirectory(input.authority, input.phase_instance);
-  const target = await resolveTaskPath({
+  const target = await resolveTaskWorkspacePath({
     runner: input.dependencies.runner,
     taskId: input.authority.task_id,
-    claim: parseTaskPathClaim(`attempts/${input.phase_instance}/${attemptId}.json`),
-    expectedClass: "attempt",
+    claim: parseWorkspacePathClaim(`diagnostics/attempts/${input.phase_instance}/${attemptId}.json`),
+    expectedClass: "workspace-attempt",
     context: input.authority.context,
   });
   if (!target.ok) return;

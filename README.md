@@ -55,7 +55,9 @@ are not listed yet.
 From the repository you want to initialize, run `/archflow-init` in Claude Code or
 `$archflow-init` in Codex. Initialization scaffolds the repository-owned ArchFlow assets and
 project MCP registrations, then reports the host approval/trust steps that still require you.
-It does not create a task, commit changes, or claim that host approval has completed.
+It also creates `.archflow/.gitignore` with the single `/work/` rule and diagnoses whether that
+workspace is ignored and free of tracked files. It never edits the project root `.gitignore`.
+Initialization does not create a task, commit changes, or claim that host approval has completed.
 
 > **Self-hosting note:** Phase 19 ships and proves the legacy upgrade path, while this repository deliberately finishes its own `mcp-integration` task under the legacy system. For any in-flight legacy task, either finish it with the legacy tooling or run `archflow-upgrade` into a distinct new task. ArchFlow never performs a silent in-place conversion.
 
@@ -141,16 +143,14 @@ See reconciled durable state and exactly one next action for each task.
 
 ## File Structure
 
-All workflow artifacts live in `.archflow/` within your project:
+ArchFlow keeps tracked workflow authority and ignored local work together under `.archflow/`:
 
 ```
 .archflow/
+  .gitignore                         # Contains only: /work/
+  config.yaml                       # Repository task-config template
   workflow.yaml                     # Canonical phase graph
   constitution/                     # Repository-owned policy rules
-  context/                          # Shared codebase references
-    architecture.md
-    patterns.md
-    dependencies.md
   tasks/
     my-feature/                     # One directory per task
       config.yaml                   # Versioned task configuration
@@ -164,12 +164,21 @@ All workflow artifacts live in `.archflow/` within your project:
         2/
           design.md
           impl-notes.md
-      reviews/                      # Durable review projections
-      decisions/                    # Archived human gate decisions
-      results/                      # Content-addressed retained results
+      authority/
+        initialization.json         # Adopted initialization authority
+        results/<digest>.json       # Current immutable result manifests
+        decisions/<gate-id>/        # State-referenced requests and decisions
+  work/                             # Entire ignored, reconstructible workspace
+    tasks/my-feature/
+      transient/                    # Staged requests, receipts, transaction lock
+      cache/                        # Payloads, rendered reviews/gates, verification, imports
+      diagnostics/attempts/         # Current-phase failed dispatch evidence
 ```
 
-Planning docs are tracked in git during development to preserve progress across sessions. Remove `.archflow/` before creating a PR.
+Durable documents and authority are tracked on the working branch during development to preserve
+the last checked-in workflow boundary across sessions and fresh clones. The ignored `work/` tree is
+only a cache and may be regenerated or cleaned with `archflow-local clean --task <id>`. Remove
+`.archflow/` before creating the final product PR, as before.
 
 ## Key Design Decisions
 

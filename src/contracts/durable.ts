@@ -8,7 +8,6 @@ import type {
   TriageArtifactV1,
 } from "./durable-result-manifest.js";
 import type { LegacyImportInitializationV1 } from "./durable-legacy-import.js";
-import type { MaintenanceRecordV1 } from "./durable-maintenance.js";
 import type { IntentReceiptV1 } from "./durable-intent.js";
 import type { TaskStateV1 } from "./durable-state.js";
 import type { TaskInitializationV1 } from "./durable-task-initialization.js";
@@ -22,7 +21,7 @@ import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
 /**
  * The phase's single cross-document semantic authority.
  *
- * **The subject has three independent durable slots plus one discriminated intent relation.** There is no
+ * **The subject has durable document slots plus one discriminated intent relation.** There is no
  * decision, approval, waiver, authority-link, or evidence slot, so those reference targets are not
  * resolved here: not `approvals[*].gate_id`, not `open_gate.gate_id`, or `waivers[*].gate_id`.
  * Result manifests are the one resolved retained-result authority added by Phase 11.
@@ -46,7 +45,6 @@ export type DurableArtifact =
 export type DurableSemanticSubject = {
   readonly state?: CanonicalDocument<TaskStateV1>;
   readonly artifact?: CanonicalDocument<DurableArtifact>;
-  readonly maintenance?: CanonicalDocument<MaintenanceRecordV1>;
   readonly result_manifest?: CanonicalDocument<ResultManifestV1>;
   readonly gate_request?: CanonicalDocument<GateRequestV1>;
   readonly gate_decision?: CanonicalDocument<GateDecisionRecordV1>;
@@ -111,19 +109,20 @@ export const DURABLE_ISSUE_CODES = Object.freeze({
   /** 6f */ accountingStoredBytesMismatch: "accounting-stored-bytes-mismatch",
   /** 7a */ initializationDigestMismatch: "initialization-digest-mismatch",
   /** 7b */ artifactTaskIdMismatch: "artifact-task-id-mismatch",
-  /** 7c */ maintenanceTaskIdMismatch: "maintenance-task-id-mismatch",
   /** 7d */ repositoryIdentityDigestMismatch: "repository-identity-digest-mismatch",
   /** 7e */ configDigestMismatch: "config-digest-mismatch",
   /** 7f */ workflowDigestMismatch: "workflow-digest-mismatch",
   /** 7g */ constitutionDigestMismatch: "constitution-digest-mismatch",
   /** 7h */ policyBaseCommitMismatch: "policy-base-commit-mismatch",
   /** 3 */ intentReceiptSelfDigestMismatch: "intent-receipt-self-digest-mismatch",
+  /** state */ lastTransitionOutcomeDigestMismatch: "last-transition-outcome-digest-mismatch",
+  /** state */ lastTransitionRevisionMismatch: "last-transition-revision-mismatch",
   /** 4b */ intentReceiptOutcomeDigestMismatch: "intent-receipt-outcome-digest-mismatch",
   /** 4b */ intentReceiptPreparedStateDigestMismatch: "intent-receipt-prepared-state-digest-mismatch",
   /** 4b */ intentReceiptRevisionNotSuccessor: "intent-receipt-revision-not-successor",
   /** 8a */ intentReceiptFutureRevision: "intent-receipt-future-revision",
   /** 4b */ intentReceiptPreparedStateRevisionMismatch: "intent-receipt-prepared-state-revision-mismatch",
-  /** 4b */ intentReceiptPreparedStateCommittedIntentPresent: "intent-receipt-prepared-state-committed-intent-present",
+  /** 4b */ intentReceiptPreparedStateLastTransitionPresent: "intent-receipt-prepared-state-last-transition-present",
   /** 8a */ intentReceiptTaskMismatch: "intent-receipt-task-mismatch",
   /** 8a */ intentReceiptRepositoryMismatch: "intent-receipt-repository-mismatch",
   /** 8a */ intentReceiptInitializationMismatch: "intent-receipt-initialization-mismatch",
@@ -134,13 +133,10 @@ export const DURABLE_ISSUE_CODES = Object.freeze({
   /** 8b */ intentReceiptIntentMismatch: "intent-receipt-intent-mismatch",
   /** 8b */ intentReceiptRequestMismatch: "intent-receipt-request-mismatch",
   /** 8a */ intentReceiptInputFingerprintMismatch: "intent-receipt-input-fingerprint-mismatch",
-  /** 8b */ intentReceiptReferenceDigestMismatch: "intent-receipt-reference-digest-mismatch",
   /** 8b */ intentReceiptReferenceOutcomeMismatch: "intent-receipt-reference-outcome-mismatch",
   /** 8b */ intentReceiptReferenceRevisionMismatch: "intent-receipt-reference-revision-mismatch",
   /** 8b */ intentReceiptReferenceResultMismatch: "intent-receipt-reference-result-mismatch",
   /** 8b */ intentReceiptFinalStateMismatch: "intent-receipt-final-state-mismatch",
-  /** 9a */ maintenanceTotalBytesMismatch: "maintenance-total-bytes-mismatch",
-  /** 9b */ maintenanceRevisionAfterState: "maintenance-revision-after-state",
   /** result */ resultManifestArtifactDigestMismatch: "result-manifest-artifact-digest-mismatch",
   /** result */ resultManifestTaskMismatch: "result-manifest-task-mismatch",
   /** result */ resultManifestPhaseMismatch: "result-manifest-phase-mismatch",
@@ -250,10 +246,6 @@ function artifactInvalid(artifact: DurableArtifact, issue_code: IssueCode): Proj
       });
 }
 
-function maintenanceInvalid(maintenance: MaintenanceRecordV1, issue_code: IssueCode): ProjectError {
-  return createProjectError("TASK_INVALID", { task_id: maintenance.task_id, issue_code });
-}
-
 function receiptInvalid(receipt: IntentReceiptV1, issue_code: IssueCode): ProjectError {
   return createProjectError("TASK_INVALID", { task_id: receipt.task_id, issue_code });
 }
@@ -327,7 +319,7 @@ function isEvidenceArtifact(
  * `ProjectResult` carries exactly one error, so the evaluation order below is normative: the
  * reported error is the minimum under *(rank, sub-rank, slot, collection path, index)* compared
  * lexicographically, and the clauses are written in exactly that order so the first failure found
- * is that minimum. Slot is `state` = 0, `artifact` = 1, `maintenance` = 2; collection path is the
+ * is that minimum. Slot is `state` = 0, `artifact` = 1; collection path is the
  * walked collection's dotted property path, `""` for a root clause, which sorts below every
  * property name; index is the ascending array index, `0` for a root clause.
  */
@@ -335,7 +327,6 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   /* Rank 1 — input discipline, before any slot and before any `.value` or `.digest` is read. */
   const stateDocument = ownDataSlot(subject, "state");
   const artifactDocument = ownDataSlot(subject, "artifact");
-  const maintenanceDocument = ownDataSlot(subject, "maintenance");
   const resultManifestDocument = ownDataSlot(subject, "result_manifest");
   const gateRequestDocument = ownDataSlot(subject, "gate_request");
   const gateDecisionDocument = ownDataSlot(subject, "gate_decision");
@@ -347,10 +338,6 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     artifactDocument === undefined
       ? undefined
       : materialize<DurableArtifact>(artifactDocument, "durable artifact document");
-  const maintenanceSlot =
-    maintenanceDocument === undefined
-      ? undefined
-      : materialize<MaintenanceRecordV1>(maintenanceDocument, "durable maintenance document");
   const resultManifestSlot =
     resultManifestDocument === undefined
       ? undefined
@@ -381,7 +368,6 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
 
   const state = stateSlot?.value;
   const artifact = artifactSlot?.value;
-  const maintenance = maintenanceSlot?.value;
   const resultManifest = resultManifestSlot?.value;
   const gateRequest = gateRequestSlot?.value;
   const gateDecision = gateDecisionSlot?.value;
@@ -414,9 +400,6 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   if (artifact !== undefined && canonicalJsonDigest(artifact) !== artifactSlot?.digest) {
     return fail(artifactInvalid(artifact, DURABLE_ISSUE_CODES.documentDigestMismatch));
   }
-  if (maintenance !== undefined && canonicalJsonDigest(maintenance) !== maintenanceSlot?.digest) {
-    return fail(maintenanceInvalid(maintenance, DURABLE_ISSUE_CODES.documentDigestMismatch));
-  }
   if (resultManifest !== undefined && canonicalJsonDigest(resultManifest) !== resultManifestSlot?.digest) {
     return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.documentDigestMismatch));
   }
@@ -428,6 +411,22 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   }
   if (state?.open_gate !== undefined && openGateFrozenStateDigest(state) !== state.open_gate.frozen_state_digest) {
     return fail(stateInvalid(state, DURABLE_ISSUE_CODES.openGateFrozenStateMismatch));
+  }
+  if (
+    state?.last_transition !== undefined &&
+    canonicalJsonDigest(state.last_transition.outcome) !== state.last_transition.outcome_digest
+  ) {
+    return fail(stateInvalid(state, DURABLE_ISSUE_CODES.lastTransitionOutcomeDigestMismatch));
+  }
+  if (
+    state?.last_transition !== undefined &&
+    (
+      state.last_transition.resulting_revision !== state.revision ||
+      state.last_transition.prior_revision === Number.MAX_SAFE_INTEGER ||
+      state.last_transition.resulting_revision !== state.last_transition.prior_revision + 1
+    )
+  ) {
+    return fail(stateInvalid(state, DURABLE_ISSUE_CODES.lastTransitionRevisionMismatch));
   }
   if (receipt !== undefined && canonicalJsonDigest(receipt) !== relation?.receipt.digest) {
     return fail(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptSelfDigestMismatch));
@@ -567,34 +566,12 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
         return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
       }
     } else {
-      const output = resultManifest.outputs[0];
-      const roleSuffix = source.artifact_kind === "review-evidence"
-        ? source.evidence.role === "counter-review"
-          ? "counter"
-          : undefined
-        : source.artifact_kind === "triage"
-          ? "triage"
-          : "adjudication";
-      const expectedPath = roleSuffix === undefined
-        ? undefined
-        : `.archflow/tasks/${source.evidence.task_id}/reviews/${source.evidence.phase_instance}.${roleSuffix}.md`;
-      if (
-        resultManifest.outputs.length !== 1 ||
-        expectedPath === undefined ||
-        output?.operation !== "add" ||
-        output.storage !== "raw-payload" ||
-        output.file_type !== "regular" ||
-        output.path !== expectedPath ||
-        output.path_class !== "review" ||
-        output.after.mode !== "100644"
-      ) {
+      // Review, triage, and adjudication evidence is embedded in the manifest. Any human-facing
+      // Markdown is a reconstructible workspace projection and therefore is not a durable output.
+      if (resultManifest.outputs.length !== 0) {
         return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestOutputsMismatch));
       }
-      if (
-        resultManifest.projections.length !== 1 ||
-        resultManifest.projections[0]?.path !== expectedPath ||
-        resultManifest.projections[0]?.content_digest !== output.payload_digest
-      ) {
+      if (resultManifest.projections.length !== 0) {
         return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
       }
     }
@@ -614,8 +591,8 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     if (receipt.prepared_state.revision !== receipt.resulting_revision) {
       return fail(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptPreparedStateRevisionMismatch));
     }
-    if (receipt.prepared_state.committed_intent !== undefined) {
-      return fail(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptPreparedStateCommittedIntentPresent));
+    if (receipt.prepared_state.last_transition !== undefined) {
+      return fail(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptPreparedStateLastTransitionPresent));
     }
   }
 
@@ -693,7 +670,7 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   }
 
   /*
-   * Rank 7 — state <-> artifact and state <-> maintenance agreement. A clause spanning two slots
+   * Rank 7 — state <-> artifact agreement. A clause spanning two slots
    * reports against the slot its rank is named for, so every clause here reports against `state`.
    * 7d-7h presuppose 7a: comparing pinned inputs against a document the state does not actually
    * adopt would report a mismatch that is not one.
@@ -706,9 +683,6 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     }
     if (artifact !== undefined && state.task_id !== durableArtifactTaskId(artifact)) {
       return fail(stateInvalid(state, DURABLE_ISSUE_CODES.artifactTaskIdMismatch));
-    }
-    if (maintenance !== undefined && state.task_id !== maintenance.task_id) {
-      return fail(stateInvalid(state, DURABLE_ISSUE_CODES.maintenanceTaskIdMismatch));
     }
     if (initialization !== undefined) {
       /*
@@ -807,15 +781,12 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
 
   /* Rank 8b — final state is prepared state plus only the kernel-derived committed binding. */
   if (relation?.mode === "committed" && receipt !== undefined && intentState !== undefined) {
-    const reference = intentState.committed_intent;
+    const reference = intentState.last_transition;
     if (reference === undefined || reference.intent_id !== receipt.intent_id) {
       return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptIntentMismatch));
     }
     if (reference.request_digest !== receipt.request_digest) {
       return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptRequestMismatch));
-    }
-    if (reference.receipt_digest !== canonicalJsonDigest(receipt)) {
-      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptReferenceDigestMismatch));
     }
     if (reference.outcome_digest !== receipt.outcome_digest) {
       return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptReferenceOutcomeMismatch));
@@ -829,21 +800,18 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     if (reference.result_id !== receipt.result_id) {
       return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptReferenceResultMismatch));
     }
-    const expectedState: TaskStateV1 = { ...receipt.prepared_state, committed_intent: reference };
-    if (!isDeepStrictEqual(intentState, expectedState)) {
+    if (
+      reference.schema_version !== "1" ||
+      reference.tool !== receipt.tool ||
+      reference.operation !== receipt.operation ||
+      reference.input_fingerprint !== receipt.input_fingerprint ||
+      !isDeepStrictEqual(reference.outcome, receipt.outcome)
+    ) {
       return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptFinalStateMismatch));
     }
-  }
-
-  /* Rank 9 — the maintenance record's own arithmetic, and its position relative to the state. */
-  if (maintenance !== undefined) {
-    let deletedTotal = 0;
-    for (const deletion of maintenance.deletions) deletedTotal += deletion.byte_count;
-    if (maintenance.total_bytes_deleted !== deletedTotal) {
-      return fail(maintenanceInvalid(maintenance, DURABLE_ISSUE_CODES.maintenanceTotalBytesMismatch));
-    }
-    if (state !== undefined && maintenance.performed_at_revision > state.revision) {
-      return fail(maintenanceInvalid(maintenance, DURABLE_ISSUE_CODES.maintenanceRevisionAfterState));
+    const expectedState: TaskStateV1 = { ...receipt.prepared_state, last_transition: reference };
+    if (!isDeepStrictEqual(intentState, expectedState)) {
+      return fail(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptFinalStateMismatch));
     }
   }
 

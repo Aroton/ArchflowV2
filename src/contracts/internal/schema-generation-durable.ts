@@ -1,10 +1,9 @@
 import { z } from "zod";
 
 import { documentArtifactV1Schema } from "../durable-document.js";
-import { implementationOutputV1Schema, parentDocumentRefV1Schema, undeclaredChangeReportV1Schema } from "../durable-implementation-output.js";
+import { implementationOutputV1Schema, parentDocumentRefV1Schema, undeclaredChangeReportV1Schema, verificationEvidenceV1Schema } from "../durable-implementation-output.js";
 import { intentReceiptV1Schema, plainJsonV1Schema } from "../durable-intent.js";
 import { legacyImportInitializationV1Schema, legacyMappingEntryV1Schema, stagedPayloadRefV1Schema } from "../durable-legacy-import.js";
-import { maintenanceDeletionV1Schema, maintenanceRecordV1Schema } from "../durable-maintenance.js";
 import {
   blobIdentityV1Schema,
   blobTreeModeV1Schema,
@@ -25,11 +24,11 @@ import {
   triageArtifactV1Schema,
 } from "../durable-result-manifest.js";
 import {
-  adoptedCheckpointRefV1Schema,
   approvalRefV1Schema,
   authoritativeResultRefV1Schema,
-  committedIntentRefV1Schema,
   gateKindV1Schema,
+  lastTransitionOutcomeV1Schema,
+  lastTransitionV1Schema,
   openGateRefV1Schema,
   stepStatusV1Schema,
   taskStateV1Schema,
@@ -91,9 +90,10 @@ export const durableSchemaGroup: SchemaGenerationGroup = {
         approvalRef: approvalRefV1Schema,
         waiverRef: waiverRefV1Schema,
         openGateRef: openGateRefV1Schema,
-        committedIntentRef: committedIntentRefV1Schema,
-        adoptedCheckpointRef: adoptedCheckpointRefV1Schema,
+        lastTransition: lastTransitionV1Schema,
+        plainJson: lastTransitionOutcomeV1Schema,
       },
+      overrides: { plainJson: PLAIN_JSON_FRAGMENT },
       migrated: true,
     },
     {
@@ -102,13 +102,6 @@ export const durableSchemaGroup: SchemaGenerationGroup = {
       root: intentReceiptV1Schema,
       defs: { plainJson: plainJsonV1Schema },
       overrides: { plainJson: PLAIN_JSON_FRAGMENT },
-      migrated: true,
-    },
-    {
-      file: "maintenance-record",
-      id: SCHEMA_IDS.maintenanceRecord,
-      root: maintenanceRecordV1Schema,
-      defs: { maintenanceDeletion: maintenanceDeletionV1Schema },
       migrated: true,
     },
     {
@@ -140,6 +133,7 @@ export const durableSchemaGroup: SchemaGenerationGroup = {
       defs: {
         parentDocumentRef: parentDocumentRefV1Schema,
         undeclaredChangeReport: undeclaredChangeReportV1Schema,
+        verificationEvidence: verificationEvidenceV1Schema,
       },
       migrated: true,
     },

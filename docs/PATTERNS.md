@@ -1,6 +1,6 @@
 # PATTERNS
 
-**Explored:** 2026-08-12 · **Commit:** `ae25739` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
+**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
 
 This is a strict TypeScript/Node package whose conventions are enforced primarily by the type checker, runtime validators, and tests. There is no configured linter or formatter. Match the surrounding file: contract registries intentionally use dense declarations, while state, repository, and MCP algorithms favor expanded control flow and rationale-heavy comments.
 
@@ -142,12 +142,12 @@ Durable objects and capability handles are commonly frozen. Authentic internal a
 
 ### Durable writes and transaction ownership
 
-- `src/state/atomic.ts` centralizes exclusive immutable creation, atomic replacement, projection writes, and gate-interface removal. Operations are restricted by `path_class`; ordinary source code does not write durable files directly.
-- Immutable receipts/results are created exclusively. Replaceable projections such as `state.json` and the disposable human gate interface use atomic replacement.
-- `runStateTransaction` in `src/state/transaction.ts` is the write coordinator: authenticate request authority, acquire the task lock, recompute fingerprints/digests, prepare a draft that cannot set kernel-owned revision/intent fields, journal intent, publish canonical state, install retained results/projections, and arbitrate uncertain outcomes for replay.
+- `src/state/atomic.ts` centralizes exclusive immutable authority creation, atomic replacement, projection writes, and disposable-interface removal. Operations are restricted by `path_class`; ordinary source code does not write authority directly.
+- Durable result manifests and decision archives are created exclusively. Replaceable projections such as `state.json` use atomic replacement; request staging, recovery receipts, locks, rendered gate UI, and diagnostic attempts belong under ignored `.archflow/work/tasks/<task>/`.
+- `runStateTransaction` in `src/state/transaction.ts` is the write coordinator: authenticate request authority, acquire the work-root task lock, recompute fingerprints/digests, prepare a draft that cannot set kernel-owned revision/transition fields, stage recovery bytes, publish canonical state with `last_transition`, install current result authority/projections, clean successful buffers and superseded authority, and arbitrate uncertain outcomes for replay.
 - State readers return classified unions such as canonical/missing/unreadable/noncanonical, leaving policy decisions to callers (`src/state/read.ts`).
 - I/O and state dependencies are injected through explicit dependency records, enabling deterministic unit and crash testing without weakening production boundaries.
-- The gate interface is a reconstructible projection, not authority. Durable gate records/state remain sufficient if it is missing or corrupt; rendering and resolution logic lives under `src/state/gates.ts`, `src/state/request-templates.ts`, and MCP gate handlers.
+- The gate interface is a reconstructible projection below ignored work, not authority. Records under `authority/decisions/` and state remain sufficient if it is missing or corrupt; archive the human decision before deleting the UI.
 
 ## CLI and MCP conventions
 

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
-import type { ResolvedPath, ResolvedTaskPath } from "../../src/repository/paths.js";
+import { parseWorkspacePathClaim, type ResolvedTaskWorkspacePath, type ResolvedWorkspacePath } from "../../src/repository/paths.js";
 import { GATE_POLL_INTERVAL_MS, waitForGateInterface } from "../../src/state/gate-wait.js";
 
 const roots: string[] = [];
@@ -16,12 +16,13 @@ async function temporaryRoot(label: string): Promise<string> {
 }
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
 
-function resolved(absolute: string, pathClass: "gate-interface" | "review"): ResolvedPath {
-  const suffix = pathClass === "review" ? "reviews/phase-impl-1.gate-counter.gate-1.md" : "gate.decision";
+function resolved(absolute: string, pathClass: "workspace-gate-interface" | "workspace-review"): ResolvedWorkspacePath {
+  const suffix = pathClass === "workspace-review" ? "cache/reviews/phase-impl-1.gate-counter.gate-1.md" : "cache/gates/gate.decision";
   return {
-    absolute: absolute as ResolvedTaskPath,
+    absolute: absolute as ResolvedTaskWorkspacePath,
     path_class: pathClass,
-    repositoryRelative: parseRepositoryPathClaim(`.archflow/tasks/demo/${suffix}`),
+    workspaceRelative: parseWorkspacePathClaim(suffix),
+    repositoryRelative: parseRepositoryPathClaim(`.archflow/work/tasks/demo/${suffix}`),
   };
 }
 
@@ -32,7 +33,7 @@ describe("waitForGateInterface", () => {
     const temporary = join(root, ".gate.decision.tmp");
     const controller = new AbortController();
     await writeFile(temporary, "{\"torn\":");
-    const waiting = waitForGateInterface({ decision_path: resolved(target, "gate-interface"), signal: controller.signal });
+    const waiting = waitForGateInterface({ decision_path: resolved(target, "workspace-gate-interface"), signal: controller.signal });
     await new Promise((resolve) => setTimeout(resolve, 20));
     await writeFile(temporary, "{}\n");
     await rename(temporary, target);
@@ -45,8 +46,8 @@ describe("waitForGateInterface", () => {
     await writeFile(review, "review\n");
     const controller = new AbortController();
     await expect(waitForGateInterface({
-      decision_path: resolved(join(root, "gate.decision"), "gate-interface"),
-      supplemental: { path: resolved(review, "review"), already_recorded: false },
+      decision_path: resolved(join(root, "gate.decision"), "workspace-gate-interface"),
+      supplemental: { path: resolved(review, "workspace-review"), already_recorded: false },
       signal: controller.signal,
     })).resolves.toEqual({ kind: "supplemental" });
   });
@@ -57,8 +58,8 @@ describe("waitForGateInterface", () => {
     const bytes = Buffer.from("first review\n");
     await writeFile(review, bytes);
     await expect(waitForGateInterface({
-      decision_path: resolved(join(root, "gate.decision"), "gate-interface"),
-      supplemental: { path: resolved(review, "review"), already_recorded: false },
+      decision_path: resolved(join(root, "gate.decision"), "workspace-gate-interface"),
+      supplemental: { path: resolved(review, "workspace-review"), already_recorded: false },
       signal: new AbortController().signal,
     })).resolves.toEqual({ kind: "supplemental" });
   });
@@ -70,8 +71,8 @@ describe("waitForGateInterface", () => {
     const bytes = Buffer.from("counter review\n");
     await Promise.all([writeFile(review, bytes), writeFile(decision, "{}\n")]);
     await expect(waitForGateInterface({
-      decision_path: resolved(decision, "gate-interface"),
-      supplemental: { path: resolved(review, "review"), already_recorded: false },
+      decision_path: resolved(decision, "workspace-gate-interface"),
+      supplemental: { path: resolved(review, "workspace-review"), already_recorded: false },
       signal: new AbortController().signal,
     })).resolves.toEqual({ kind: "supplemental" });
   });
@@ -82,8 +83,8 @@ describe("waitForGateInterface", () => {
     await writeFile(review, "review\n");
     const controller = new AbortController();
     const waiting = waitForGateInterface({
-      decision_path: resolved(join(root, "gate.decision"), "gate-interface"),
-      supplemental: { path: resolved(review, "review"), already_recorded: true },
+      decision_path: resolved(join(root, "gate.decision"), "workspace-gate-interface"),
+      supplemental: { path: resolved(review, "workspace-review"), already_recorded: true },
       signal: controller.signal,
     });
     controller.abort();
@@ -94,7 +95,7 @@ describe("waitForGateInterface", () => {
     const root = await temporaryRoot("gate-wait-abort");
     const controller = new AbortController();
     const waiting = waitForGateInterface({
-      decision_path: resolved(join(root, "gate.decision"), "gate-interface"),
+      decision_path: resolved(join(root, "gate.decision"), "workspace-gate-interface"),
       signal: controller.signal,
     });
     controller.abort();

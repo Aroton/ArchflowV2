@@ -362,7 +362,7 @@ async function installedRestoreCollisionFixture(
   const retainedFingerprint = state.authoritative_results.at(-1).input_fingerprint;
   if (changedFingerprint) {
     writeFileSync(join(root, "README.md"), "changed declared input for installed adoption\n");
-    const { committed_intent: _committedIntent, ...stateWithoutIntent } = state;
+    const { last_transition: _lastTransition, ...stateWithoutIntent } = state;
     state = {
       ...stateWithoutIntent,
       input_fingerprint: canonicalJsonDigest({
@@ -639,37 +639,28 @@ describe.skipIf(!enabled)("installed terminal journeys", () => {
     expect(existsSync(join(root, ".archflow", "tasks", task, "gate.decision"))).toBe(false);
   }, TIMEOUT);
 
-  it("records a safe installed maintenance prune before deleting an unreachable attempt", async () => {
-    const root = makeRepository("maintenance");
+  it("cleans reconstructible task work without creating a maintenance record", async () => {
+    const root = makeRepository("clean");
     expect(local(root, undefined, "init").value).toMatchObject({ ok: true });
     commitPolicy(root);
     const task = "maintenance-task";
     const staged = stagedInitialization(root, task);
-    expect(await adopt(root, task, staged, "installed-maintenance-init"))
+    expect(await adopt(root, task, staged, "installed-clean-init"))
       .toMatchObject({ ok: true, value: { revision: 1 } });
-    const orphan = join(root, ".archflow", "tasks", task, "attempts", "phase-impl-21", "orphan.json");
+    const orphan = join(root, ".archflow", "work", "tasks", task, "diagnostics", "attempts", "phase-impl-21", "orphan.json");
     mkdirSync(dirname(orphan), { recursive: true });
     writeFileSync(orphan, "installed orphan attempt\n");
 
-    expect(local(root, task, "maintain", {
-      maintenance_id: "installed-prune",
-      human_reason: "remove unreachable installed journey attempt",
-    }).value).toEqual({ record: "created", deleted: 1 });
-    expect(existsSync(orphan)).toBe(false);
-    const record = JSON.parse(readFileSync(
-      join(root, ".archflow", "tasks", task, "maintenance", "installed-prune.json"),
-      "utf8",
-    ));
-    expect(record).toMatchObject({
-      performed_at_revision: 1,
-      deletions: [{
-        path: `.archflow/tasks/${task}/attempts/phase-impl-21/orphan.json`,
-        category: "unreferenced-attempt",
-        byte_count: Buffer.byteLength("installed orphan attempt\n"),
-      }],
-      total_bytes_deleted: Buffer.byteLength("installed orphan attempt\n"),
+    expect(local(root, task, "clean").value).toMatchObject({
+      ok: true,
+      value: {
+        removed_files: 1,
+        removed_bytes: Buffer.byteLength("installed orphan attempt\n"),
+        cleanup_pending: false,
+      },
     });
-    expect(record.reachability_proof_digest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(existsSync(orphan)).toBe(false);
+    expect(existsSync(join(root, ".archflow", "tasks", task, "maintenance"))).toBe(false);
   }, TIMEOUT);
 
   it("rejects a secret-bearing implementation output before projection or state advancement", async () => {

@@ -115,8 +115,9 @@ async function harness() {
   } as const;
   const opened = await openDurableGate(dependencies, gateInput);
   if (!opened.ok) throw new Error(`gate open failed: ${opened.error.code}`);
-  const active = parseActiveGate(JSON.parse(readFileSync(join(taskRoot, "gate.json"), "utf8")));
-  return { root, taskRoot, authority, dependencies, opened, active, gateInput };
+  const gateCache = join(authority.workspace_root, "cache", "gates");
+  const active = parseActiveGate(JSON.parse(readFileSync(join(gateCache, "gate.json"), "utf8")));
+  return { root, taskRoot, gateCache, authority, dependencies, opened, active, gateInput };
 }
 
 function convertToWaiverGate(h: Harness): Readonly<{ active: ActiveGateV1; origin: WaiverOriginRef }> {
@@ -148,10 +149,10 @@ function convertToWaiverGate(h: Harness): Readonly<{ active: ActiveGateV1; origi
   });
   const { status: _status, decision_template: _template, supplemental: _supplemental, ...request } = active;
   writeFileSync(
-    join(h.taskRoot, "decisions", h.active.gate_id, "request.json"),
+    join(h.taskRoot, "authority", "decisions", h.active.gate_id, "request.json"),
     canonicalDocument(parseGateRequest(request)).bytes,
   );
-  writeFileSync(join(h.taskRoot, "gate.json"), canonicalDocument(active).bytes);
+  writeFileSync(join(h.gateCache, "gate.json"), canonicalDocument(active).bytes);
   const state = JSON.parse(readFileSync(join(h.taskRoot, "state.json"), "utf8")) as TaskStateV1;
   writeFileSync(join(h.taskRoot, "state.json"), canonicalDocument({
     ...state,
@@ -226,7 +227,7 @@ describe("gate decision interface", () => {
 
       expect(await writeGateDecisionInterface(h.dependencies, h.authority, template)).toMatchObject({
         ok: true,
-        value: { gate_id: active.gate_id, decision_path: "gate.decision" },
+        value: { gate_id: active.gate_id, decision_path: ".archflow/work/tasks/task-1/cache/gates/gate.decision" },
       });
       const firstResolution = await resolveDurableGate(h.dependencies, h.authority, active.gate_id, D("2"));
       const resolved = choice === "grant"
@@ -258,16 +259,36 @@ describe("gate decision interface", () => {
     const h = await harness();
     const templates = buildGateDecisionTemplates(h.active);
     const chosen = templates.find((template) => (template as { payload?: { decision?: string } }).payload?.decision === "reject")!;
-    writeFileSync(join(h.taskRoot, "gate.decision"), canonicalDocument({ invalid: true }).bytes);
-    expect(await writeGateDecisionInterface(h.dependencies, h.authority, chosen)).toMatchObject({ ok: true, value: { gate_id: h.active.gate_id, decision_path: "gate.decision" } });
-    const written = JSON.parse(readFileSync(join(h.taskRoot, "gate.decision"), "utf8"));
+    writeFileSync(join(h.gateCache, "gate.decision"), canonicalDocument({ invalid: true }).bytes);
+    expect(await writeGateDecisionInterface(h.dependencies, h.authority, chosen)).toMatchObject({ ok: true, value: { gate_id: h.active.gate_id, decision_path: ".archflow/work/tasks/task-1/cache/gates/gate.decision" } });
+    const written = JSON.parse(readFileSync(join(h.gateCache, "gate.decision"), "utf8"));
     expect(written).toMatchObject({ payload: { decision: "reject" }, human_provenance: { channel: "archflow-local", recorded_at: expect.stringMatching(/\.\d{3}Z$/u) } });
     const refusal = await writeGateDecisionInterface(h.dependencies, h.authority, templates[0]!);
     expect(refusal).toMatchObject({ ok: false, error: { code: "GATE_ACTIVE" } });
 
-    writeFileSync(join(h.taskRoot, "gate.decision"), canonicalDocument({ ...written, gate_id: "stale-gate" }).bytes);
+    writeFileSync(join(h.gateCache, "gate.decision"), canonicalDocument({ ...written, gate_id: "stale-gate" }).bytes);
     expect(await writeGateDecisionInterface(h.dependencies, h.authority, templates[0]!)).toMatchObject({ ok: true });
-    expect(JSON.parse(readFileSync(join(h.taskRoot, "gate.decision"), "utf8"))).toMatchObject({ gate_id: h.active.gate_id, payload: { decision: "approve" } });
+    expect(JSON.parse(readFileSync(join(h.gateCache, "gate.decision"), "utf8"))).toMatchObject({ gate_id: h.active.gate_id, payload: { decision: "approve" } });
+  });
+
+  it("reconstructs disposable gate UI from the durable request before installing a decision", async () => {
+    const h = await harness();
+    const chosen = buildGateDecisionTemplates(h.active).find(
+      (template) => (template as { payload?: { decision?: string } }).payload?.decision === "reject",
+    )!;
+    rmSync(h.gateCache, { recursive: true, force: true });
+
+    const written = await writeGateDecisionInterface(h.dependencies, h.authority, chosen);
+
+    expect(written).toMatchObject({ ok: true, value: { gate_id: h.active.gate_id } });
+    expect(JSON.parse(readFileSync(join(h.gateCache, "gate.json"), "utf8"))).toMatchObject({
+      gate_id: h.active.gate_id,
+      status: "awaiting-human",
+    });
+    expect(JSON.parse(readFileSync(join(h.gateCache, "gate.decision"), "utf8"))).toMatchObject({
+      gate_id: h.active.gate_id,
+      payload: { decision: "reject" },
+    });
   });
 
   it("writes the structurally distinct cancellation and the resolver cancels the gate", async () => {
@@ -276,7 +297,7 @@ describe("gate decision interface", () => {
     expect(await writeGateDecisionInterface(h.dependencies, h.authority, cancellation)).toMatchObject({ ok: true });
     const resolved = await resolveDurableGate(h.dependencies, h.authority, h.active.gate_id, D("2"));
     expect(resolved).toMatchObject({ ok: false, error: { code: "GATE_CANCELLED" } });
-    expect(existsSync(join(h.taskRoot, "gate.decision"))).toBe(false);
+    expect(existsSync(join(h.gateCache, "gate.decision"))).toBe(false);
   });
 
   it("serializes a writer with the resolver so the freshly valid decision is not overwritten", async () => {
@@ -306,6 +327,6 @@ describe("gate decision interface", () => {
     release();
     expect(await writing).toMatchObject({ ok: true });
     expect(await resolving).toMatchObject({ ok: true, value: { record: { value: { outcome: "decided", envelope: { payload: { decision: "reject" } } } } } });
-    expect(existsSync(join(h.taskRoot, "gate.decision"))).toBe(false);
+    expect(existsSync(join(h.gateCache, "gate.decision"))).toBe(false);
   });
 });

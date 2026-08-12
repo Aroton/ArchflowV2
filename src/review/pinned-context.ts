@@ -15,7 +15,7 @@ import {
   readHeadCommit,
 } from "../repository/git.js";
 import type { RootBoundGitRunner } from "../repository/identity.js";
-import { openResolved, resolveTaskPath } from "../repository/paths.js";
+import { openResolved, resolveTaskPath, resolveTaskWorkspacePath, verificationTranscriptClaim } from "../repository/paths.js";
 import type { TransactionAuthority } from "../state/authority.js";
 import {
   expectedProduceUpstreamBindings,
@@ -190,7 +190,7 @@ export async function assembleReviewContext(input: {
     let mechanical: readonly PinnedContextEntry[];
     if (input.subject.artifact.artifact_kind === "implementation-output") {
       mechanical = [
-        ...verificationTranscriptEvidence(input.state, input.subject),
+        ...await verificationTranscriptEvidence(input.runner, input.authority, input.state, input.subject),
         ...await implementationMechanicalEvidence(input.runner, input.subject),
       ];
     } else {
@@ -372,27 +372,46 @@ async function documentMechanicalEvidence(
  * server-attested runner that executes the verification command itself is the named upgrade path
  * if that limitation proves live.
  */
-export function verificationTranscriptEvidence(
+export async function verificationTranscriptEvidence(
+  runner: RootBoundGitRunner,
+  authority: TransactionAuthority,
   state: TaskStateV1,
   subject: CurrentProduceSubject,
-): readonly PinnedContextEntry[] {
+): Promise<readonly PinnedContextEntry[]> {
   if (subject.artifact.artifact_kind !== "implementation-output") return Object.freeze([]);
   const phase = decodePhaseInstance(state.phase_instance);
   if (phase.kind !== "phase-impl") return Object.freeze([]);
-  const transcriptPath = `.archflow/tasks/${state.task_id}/phases/${String(phase.phase)}/verification.txt`;
-  const entry = subject.retained.projection_plan.entries
-    .find((candidate) => candidate.path === transcriptPath);
-  if (entry === undefined || entry.desired.state !== "present") {
+  const displayPath = `cache/phases/${String(phase.phase)}/verification.txt`;
+  const resolved = await resolveTaskWorkspacePath({
+    runner,
+    taskId: state.task_id,
+    claim: verificationTranscriptClaim(phase.phase),
+    expectedClass: "workspace-verification-transcript",
+    context: authority.context,
+  });
+  if (!resolved.ok) {
     return [unavailableContextEntry(
       "verification-transcript",
-      `phases/${String(phase.phase)}/verification.txt`,
+      displayPath,
       "no verification transcript in the change set; claimed-but-untranscribed verification is an unverifiable claim, not a pass",
     )];
   }
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await readFile(resolved.value.absolute));
+  } catch {
+    return [unavailableContextEntry("verification-transcript", displayPath,
+      "verification transcript cache is absent; rerun verification before requesting review")];
+  }
+  const evidence = subject.artifact.verification_evidence;
+  if (sha256Bytes(bytes) !== evidence.transcript_digest || bytes.byteLength !== evidence.byte_count) {
+    return [unavailableContextEntry("verification-transcript", displayPath,
+      "verification transcript cache does not match the durable implementation authority")];
+  }
   return [excerptContextEntry(
     "verification-transcript",
-    `phases/${String(phase.phase)}/verification.txt`,
-    entry.desired.bytes,
+    displayPath,
+    bytes,
   )];
 }
 

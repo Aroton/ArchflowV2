@@ -26,7 +26,16 @@ import {
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import type { ReviewEvidence } from "../contracts/review.js";
 import type { GateSupersessionRef, SupplementalReviewOutcome } from "../contracts/supplemental.js";
-import { gateDecisionClaim, gateRequestClaim, openResolved, resolveTaskPath, type ResolvedPath } from "../repository/paths.js";
+import {
+  gateDecisionClaim,
+  gateRequestClaim,
+  openResolved,
+  parseWorkspacePathClaim,
+  resolveTaskPath,
+  resolveTaskWorkspacePath,
+  type ResolvedPath,
+  type ResolvedWorkspacePath,
+} from "../repository/paths.js";
 import type { TransactionAuthority } from "./authority.js";
 import type { TransactionDependencies } from "./transaction.js";
 import { projectionGenerationDigest } from "./snapshots.js";
@@ -117,24 +126,44 @@ export const issue = (code: "CONTRACT_INVALID" | "STATE_INVALID", state: TaskSta
 export const io = (authority: TransactionAuthority, operation: string): ProjectResult<never> =>
   fail(createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt }));
 
+export function resolvePath(
+  dependencies: Pick<GateLifecycleDependencies, "runner">,
+  authority: TransactionAuthority,
+  claim: "gate.json" | "gate.decision",
+  expectedClass: "workspace-gate-interface",
+): Promise<ProjectResult<ResolvedWorkspacePath>>;
+export function resolvePath(
+  dependencies: Pick<GateLifecycleDependencies, "runner">,
+  authority: TransactionAuthority,
+  claim: ReturnType<typeof gateRequestClaim> | ReturnType<typeof gateDecisionClaim>,
+  expectedClass: "authority-decision",
+): Promise<ProjectResult<ResolvedPath>>;
 export async function resolvePath(
   dependencies: Pick<GateLifecycleDependencies, "runner">,
   authority: TransactionAuthority,
   claim: ReturnType<typeof gateRequestClaim> | ReturnType<typeof gateDecisionClaim> | "gate.json" | "gate.decision",
-  expectedClass: "decision" | "gate-interface",
-): Promise<ProjectResult<ResolvedPath>> {
-  const resolved = await resolveTaskPath({
+  expectedClass: "authority-decision" | "workspace-gate-interface",
+): Promise<ProjectResult<ResolvedPath | ResolvedWorkspacePath>> {
+  if (expectedClass === "workspace-gate-interface") {
+    return resolveTaskWorkspacePath({
+      runner: dependencies.runner,
+      taskId: authority.task_id,
+      claim: parseWorkspacePathClaim(`cache/gates/${claim as "gate.json" | "gate.decision"}`),
+      expectedClass: "workspace-gate-interface",
+      context: authority.context,
+    });
+  }
+  return resolveTaskPath({
     runner: dependencies.runner,
     taskId: authority.task_id,
-    claim: typeof claim === "string" ? claim as never : claim,
-    expectedClass,
+    claim: claim as ReturnType<typeof gateRequestClaim> | ReturnType<typeof gateDecisionClaim>,
+    expectedClass: "authority-decision",
     context: authority.context,
   });
-  return resolved;
 }
 
 export async function readCanonical<T extends PlainJsonValue>(
-  path: ResolvedPath,
+  path: ResolvedPath | ResolvedWorkspacePath,
   label: string,
   parse: (value: unknown) => T,
 ): Promise<"missing" | "invalid" | CanonicalDocument<T>> {
@@ -157,7 +186,7 @@ export function supplementalGate(outcome: SupplementalReviewOutcome): Readonly<{
 }
 
 export function stateWithOpen(state: TaskStateV1, request: Pick<GateRequestV1, "gate_id" | "kind" | "subject_digest" | "context_digest" | "context">): CanonicalDocument<TaskStateV1> {
-  const { committed_intent: _committed, open_gate: _open, ...base } = state;
+  const { last_transition: _transition, open_gate: _open, ...base } = state;
   const revision = parseSafeInteger(state.revision + 1);
   const frozenStateDigest = openGateFrozenStateDigest({ ...base, revision } as TaskStateV1);
   return canonicalDocument({

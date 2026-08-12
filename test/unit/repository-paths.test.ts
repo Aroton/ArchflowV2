@@ -21,11 +21,8 @@ import {
 import {
   REPOSITORY_PATH_CLASSES,
   TASK_PATH_CLASSES,
-  adjudicationReviewClaim,
-  counterReviewClaim,
   parseRepositoryPathClaim,
   parseTaskPathClaim,
-  triageReviewClaim,
   type PathClass,
   type RepositoryPathClaim,
   type RepositoryPathClass,
@@ -35,8 +32,11 @@ import {
 import { createGitRunner, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree, type RootBoundGitRunner } from "../../src/repository/identity.js";
 import {
+  adjudicationReviewClaim,
   classifyRepositoryPath,
   classifyTaskPath,
+  classifyWorkspacePath,
+  counterReviewClaim,
   gateCounterReviewClaim,
   gateDecisionClaim,
   gateRequestClaim,
@@ -45,6 +45,7 @@ import {
   resolveRepositoryPath,
   resolveTaskRoot,
   resolveTaskPath,
+  triageReviewClaim,
   type ResolvedTaskPath,
 } from "../../src/repository/paths.js";
 
@@ -54,10 +55,10 @@ describe("gate path constructors", () => {
   it("constructs deterministic decision and gate-counter claims", () => {
     const gateId = parsePathSafeId("gate-1");
     const phase = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(6) });
-    expect(gateRequestClaim(gateId)).toBe("decisions/gate-1/request.json");
-    expect(gateDecisionClaim(gateId)).toBe("decisions/gate-1/decision.json");
-    expect(gateSupplementalReviewClaim(gateId)).toBe("decisions/gate-1/supplemental-review.json");
-    expect(gateCounterReviewClaim(phase, gateId)).toBe("reviews/phase-impl-6.gate-counter.gate-1.md");
+    expect(gateRequestClaim(gateId)).toBe("authority/decisions/gate-1/request.json");
+    expect(gateDecisionClaim(gateId)).toBe("authority/decisions/gate-1/decision.json");
+    expect(gateSupplementalReviewClaim(gateId)).toBe("authority/decisions/gate-1/supplemental-review.json");
+    expect(gateCounterReviewClaim(phase, gateId)).toBe("cache/reviews/phase-impl-6.gate-counter.gate-1.md");
   });
 
   it("constructs every fixed-point review projection and round-trips the review classifier", () => {
@@ -68,12 +69,15 @@ describe("gate path constructors", () => {
       adjudicationReviewClaim(phase),
     ];
     expect(claims).toEqual([
-      "reviews/phase-impl-6.counter.md",
-      "reviews/phase-impl-6.triage.md",
-      "reviews/phase-impl-6.adjudication.md",
+      "cache/reviews/phase-impl-6.counter.md",
+      "cache/reviews/phase-impl-6.triage.md",
+      "cache/reviews/phase-impl-6.adjudication.md",
     ]);
     for (const claim of claims) {
-      expect(classifyTaskPath(TASK_ID, claim)).toMatchObject({ ok: true, value: "review" });
+      expect(classifyWorkspacePath(TASK_ID, claim)).toMatchObject({
+        ok: true,
+        value: "workspace-review",
+      });
     }
   });
 });
@@ -161,47 +165,36 @@ const asRepositoryClaim = (value: string): RepositoryPathClaim =>
   value as unknown as RepositoryPathClaim;
 
 const DIGEST_A = "a".repeat(64);
-const DIGEST_B = "b".repeat(64);
 
 interface TaskSample {
   readonly path_class: TaskPathClass;
   readonly claims: readonly string[];
 }
 
-/** Every task-scoped class of the nineteen, with each template form the table pins. */
+/** Every durable task-scoped class, with each template form the table pins. */
 const TASK_SAMPLES: readonly TaskSample[] = [
   { path_class: "task-config", claims: ["config.yaml"] },
   { path_class: "task-state", claims: ["state.json"] },
   { path_class: "task-ask", claims: ["ask.md"] },
-  { path_class: "gate-interface", claims: ["gate.json", "gate.decision"] },
   {
     path_class: "document",
     claims: ["prd.md", "design.md", "phases/6/design.md", "phases/6/impl-notes.md"],
   },
-  { path_class: "verification-transcript", claims: ["phases/6/verification.txt"] },
   {
-    path_class: "review",
+    path_class: "authority-initialization",
+    claims: ["authority/initialization.json"],
+  },
+  {
+    path_class: "authority-result",
+    claims: [`authority/results/${DIGEST_A}.json`],
+  },
+  {
+    path_class: "authority-decision",
     claims: [
-      "reviews/prd.counter.md",
-      "reviews/design.counter.md",
-      "reviews/phase-design-6.triage.md",
-      "reviews/phase-impl-6.adjudication.md",
-      "reviews/phase-impl-6.gate-counter.gate-1.md",
+      "authority/decisions/gate-1/request.json",
+      "authority/decisions/gate-1/decision.json",
+      "authority/decisions/gate-1/supplemental-review.json",
     ],
-  },
-  {
-    path_class: "decision",
-    claims: ["decisions/gate-1/request.json", "decisions/gate-1/decision.json"],
-  },
-  { path_class: "result-manifest", claims: [`results/sha256/${DIGEST_A}/manifest.json`] },
-  { path_class: "result-payload", claims: [`results/sha256/${DIGEST_A}/payload/src/index.ts`] },
-  { path_class: "intent", claims: ["intents/intent-1.json"] },
-  { path_class: "staged-request", claims: ["intents/intent-1.request.json"] },
-  { path_class: "attempt", claims: ["attempts/phase-impl-6/attempt-1.json"] },
-  { path_class: "maintenance-record", claims: ["maintenance/vacuum-1.json"] },
-  {
-    path_class: "import",
-    claims: [`imports/${DIGEST_B}/manifest.json`, `imports/${DIGEST_B}/payload/legacy/notes.md`],
   },
 ];
 
@@ -235,26 +228,13 @@ const REPOSITORY_SAMPLES: readonly RepositorySample[] = [
   },
 ];
 
-describe.skipIf(!hasGit)("the nineteen-class table", () => {
+describe.skipIf(!hasGit)("the durable path-class table", () => {
   it("covers every class exactly once across the two frames", () => {
     expect(TASK_SAMPLES.map((sample) => sample.path_class)).toEqual([...TASK_PATH_CLASSES]);
     expect(REPOSITORY_SAMPLES.map((sample) => sample.path_class)).toEqual([
       ...REPOSITORY_PATH_CLASSES,
     ]);
-    expect(TASK_SAMPLES.length + REPOSITORY_SAMPLES.length).toBe(19);
-  });
-
-  it("keeps the two intent-directory suffixes disjoint: a staged request never classifies as a receipt", () => {
-    // `.request.json` is reserved for staged requests; the receipt rule's lookbehind refuses it
-    // even though a receipt id may legally contain dots.
-    expect(classifyTaskPath(TASK_ID, parseTaskPathClaim("intents/abc.request.json")))
-      .toMatchObject({ ok: true, value: "staged-request" });
-    expect(classifyTaskPath(TASK_ID, parseTaskPathClaim("intents/abc.request.request.json")))
-      .toMatchObject({ ok: true, value: "staged-request" });
-    expect(classifyTaskPath(TASK_ID, parseTaskPathClaim("intents/abc.requested.json")))
-      .toMatchObject({ ok: true, value: "intent" });
-    expect(classifyTaskPath(TASK_ID, parseTaskPathClaim("intents/with.dots.json")))
-      .toMatchObject({ ok: true, value: "intent" });
+    expect(TASK_SAMPLES.length + REPOSITORY_SAMPLES.length).toBe(11);
   });
 
   it("resolves every task-scoped class through the resolver that owns it", async () => {
@@ -481,42 +461,24 @@ describe.skipIf(!hasGit)("verification step 10 — the path matrix", () => {
     }
   );
 
-  it("rejects a lexically traversing tail inside a classifying template as PATH_INVALID", async () => {
-    const { runner } = await freshWorktree();
-    const claim = asTaskClaim(`results/sha256/${DIGEST_A}/payload/${"../".repeat(12)}etc/passwd`);
-
-    // The template matches, so classification passes; re-framing to the worktree is what rejects it,
-    // because `.archflow/tasks/<task-id>/…` composed with `..` segments is not a valid claim.
-    expect(classifyTaskPath(TASK_ID, claim)).toMatchObject({ ok: true, value: "result-payload" });
-
-    const result = await resolveTaskPath({ runner, taskId: TASK_ID, claim, context });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe("PATH_INVALID");
-    expect(result.error.diagnostic.parameters).toEqual({
-      task_id: TASK_ID,
-      path_class: "result-payload",
-    });
-  });
-
   it("rejects a symlinked escape inside a classifying template as PATH_ESCAPE", async () => {
     const { parent, root, runner } = await freshWorktree();
-    const outside = join(parent, "outside-payload");
+    const outside = join(parent, "outside-authority");
     mkdirSync(outside, { recursive: true });
-    writeFileSync(join(outside, "index.ts"), "secret\n", "utf8");
+    writeFileSync(join(outside, "request.json"), "{}\n", "utf8");
 
-    const payload = join(root, ".archflow", "tasks", TASK_ID, "results", "sha256", DIGEST_A, "payload");
-    mkdirSync(payload, { recursive: true });
-    symlinkSync(outside, join(payload, "src"));
+    const decisions = join(root, ".archflow", "tasks", TASK_ID, "authority", "decisions");
+    mkdirSync(decisions, { recursive: true });
+    symlinkSync(outside, join(decisions, "gate-1"));
 
-    const claim = parseTaskPathClaim(`results/sha256/${DIGEST_A}/payload/src/index.ts`);
+    const claim = parseTaskPathClaim("authority/decisions/gate-1/request.json");
     const result = await resolveTaskPath({ runner, taskId: TASK_ID, claim, context });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe("PATH_ESCAPE");
     expect(result.error.diagnostic.parameters).toEqual({
       task_id: TASK_ID,
-      path_class: "result-payload",
+      path_class: "authority-decision",
     });
   });
 });
@@ -894,6 +856,6 @@ describe("path brands", () => {
 
   it("keeps the class partition total over PathClass", () => {
     const all: readonly PathClass[] = [...TASK_PATH_CLASSES, ...REPOSITORY_PATH_CLASSES];
-    expect(all).toHaveLength(19);
+    expect(all).toHaveLength(11);
   });
 });

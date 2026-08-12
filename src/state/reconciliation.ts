@@ -120,7 +120,15 @@ export function reconcileCurrentAuthority(value: ReconciliationInput): Reconcili
 
   const receipt = input.intent?.receipt;
   if (receipt !== undefined) {
-    const isCommitted = input.state.value.committed_intent?.receipt_digest === receipt.digest;
+    const transition = input.state.value.last_transition;
+    const isCommitted = transition !== undefined &&
+      transition.intent_id === receipt.value.intent_id &&
+      transition.request_digest === receipt.value.request_digest &&
+      transition.input_fingerprint === receipt.value.input_fingerprint &&
+      transition.result_id === receipt.value.result_id &&
+      transition.outcome_digest === receipt.value.outcome_digest &&
+      transition.prior_revision === receipt.value.prior_revision &&
+      transition.resulting_revision === receipt.value.resulting_revision;
     let valid = false;
     try {
       const parsed = parseIntentReceipt(receipt.value);

@@ -30,7 +30,13 @@ import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/con
 import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { createGitRunner, preflightGit, type GitEnvironment, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree, type RootBoundGitRunner } from "../../src/repository/identity.js";
-import type { ResolvedPath, ResolvedTaskPath } from "../../src/repository/paths.js";
+import type {
+  ResolvedPath,
+  ResolvedTaskPath,
+  ResolvedTaskWorkspacePath,
+  ResolvedWorkspacePath,
+  WorkspacePathClaim,
+} from "../../src/repository/paths.js";
 import { AtomicReplaceError, createProjectionWriter, type AtomicWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "../../src/state/authority.js";
 import { identifyTransactionRequest } from "../../src/state/request.js";
@@ -157,8 +163,8 @@ async function harness(): Promise<Harness> {
 
   const atomic: AtomicWriter = {
     createExclusive: async (path, bytes) => {
-      if (path.path_class !== "intent") {
-        events.push(path.path_class === "result-manifest" ? "result-manifest" : "result-payload");
+      if (path.path_class !== "workspace-intent") {
+        events.push(path.path_class === "authority-result" ? "authority-result" : "workspace-result-payload");
         mkdirSync(dirname(path.absolute), { recursive: true });
         if (existsSync(path.absolute)) return "exists";
         writeFileSync(path.absolute, bytes);
@@ -191,7 +197,7 @@ async function harness(): Promise<Harness> {
     runner: value.runner,
     environment: value.environment,
     atomic,
-    lock: { runExclusive: async <T>(_root: ResolvedTaskPath, work: () => Promise<T>) => { events.push("lock"); return work(); } },
+    lock: { runExclusive: async <T>(_root: ResolvedTaskWorkspacePath, work: () => Promise<T>) => { events.push("lock"); return work(); } },
     resolve_input_fingerprint: async () => {
       counts.fingerprint += 1;
       events.push("fingerprint");
@@ -252,70 +258,57 @@ function documentResultFixture(h: Harness, bytes: Uint8Array): Readonly<{
     secret_scan: { schema_version: "1", outcome: "clean", detector_set_id: parseSafeId("test"), scanned_paths: [outputPath] },
   };
   const manifest = canonicalDocument(manifestValue);
-  const manifestPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/results/sha256/${manifest.digest}/manifest.json`);
-  const payloadPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/results/sha256/${manifest.digest}/payload/${outputPath}`);
+  const manifestPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/authority/results/${manifest.digest}.json`);
+  const payloadRelative = `cache/results/${manifest.digest}/payload/${outputPath}` as WorkspacePathClaim;
+  const payloadPath = parseRepositoryPathClaim(`.archflow/work/tasks/${TASK}/${payloadRelative}`);
   return {
     prepared: { manifest, result_digest: manifest.digest, payloads: [{
       path: outputPath, bytes,
-      target: { absolute: join(h.root, payloadPath) as ResolvedTaskPath, repositoryRelative: payloadPath, path_class: "result-payload" },
+      target: {
+        absolute: join(h.root, payloadPath) as ResolvedTaskWorkspacePath,
+        repositoryRelative: payloadPath,
+        workspaceRelative: payloadRelative,
+        path_class: "workspace-result-payload",
+      },
     }] },
     manifestPath,
-    manifestTarget: { absolute: join(h.root, manifestPath) as ResolvedTaskPath, repositoryRelative: manifestPath, path_class: "result-manifest" },
+    manifestTarget: { absolute: join(h.root, manifestPath) as ResolvedTaskPath, repositoryRelative: manifestPath, path_class: "authority-result" },
   };
 }
 
 type ResultFixture = ReturnType<typeof documentResultFixture>;
 
 function triageResultFixture(h: Harness, source: TriageArtifactV1): ResultFixture {
-  const bytes = new TextEncoder().encode("# Triage\n");
-  const outputPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/reviews/${PHASE}.triage.md`);
-  const renderedDigest = sha256Bytes(bytes);
-  const byteCount = parseSafeInteger(bytes.byteLength);
-  const output = {
-    path: outputPath, path_class: "review" as const, operation: "add" as const,
-    storage: "raw-payload" as const, payload_bytes: byteCount, payload_digest: renderedDigest,
-    file_type: "regular" as const, after: { oid: gitBlobOid(bytes), mode: "100644" as const, size_bytes: byteCount },
-  };
-  const projections = [{ path: outputPath, content_digest: renderedDigest }];
-  const snapshotDigest = deriveDeclaredSnapshotDigest([output], projections);
+  const snapshotDigest = deriveDeclaredSnapshotDigest([], []);
   const manifestValue: ResultManifestV1 = {
     schema_version: "1", task_id: TASK, repository_identity_digest: h.authority.repository_identity_digest,
     result_id: parseSafeId("state:8"), phase_instance: PHASE, step: "triage",
     artifact_digest: canonicalJsonDigest(source.evidence), source_artifact: source,
-    input_fingerprint: FINGERPRINT, snapshot_digest: snapshotDigest, outputs: [output], projections,
+    input_fingerprint: FINGERPRINT, snapshot_digest: snapshotDigest, outputs: [], projections: [],
     accounting: {
-      schema_version: "1", result_bytes: byteCount, task_bytes: byteCount,
+      schema_version: "1", result_bytes: parseSafeInteger(0), task_bytes: parseSafeInteger(0),
       result_byte_cap: 26_214_400, task_byte_cap: 262_144_000,
-      counted_entries: [{ path: outputPath, storage: "raw-payload", stored_bytes: byteCount }],
+      counted_entries: [],
       measured_at_revision: parseSafeInteger(7),
     },
     secret_scan: {
       schema_version: "1", outcome: "clean", detector_set_id: parseSafeId("test"),
-      scanned_paths: [outputPath],
+      scanned_paths: [],
     },
   };
   const manifest = canonicalDocument(manifestValue);
-  const manifestPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/results/sha256/${manifest.digest}/manifest.json`);
-  const payloadPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/results/sha256/${manifest.digest}/payload/${outputPath}`);
+  const manifestPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/authority/results/${manifest.digest}.json`);
   return {
     prepared: {
       manifest,
       result_digest: manifest.digest,
-      payloads: [{
-        path: outputPath,
-        bytes,
-        target: {
-          absolute: join(h.root, payloadPath) as ResolvedTaskPath,
-          repositoryRelative: payloadPath,
-          path_class: "result-payload",
-        },
-      }],
+      payloads: [],
     },
     manifestPath,
     manifestTarget: {
       absolute: join(h.root, manifestPath) as ResolvedTaskPath,
       repositoryRelative: manifestPath,
-      path_class: "result-manifest",
+      path_class: "authority-result",
     },
   };
 }
@@ -327,18 +320,18 @@ function remanifest(
 ): ResultFixture {
   const manifest = canonicalDocument(transform(structuredClone(fixture.prepared.manifest.value)));
   const manifestPath = parseRepositoryPathClaim(
-    `.archflow/tasks/${TASK}/results/sha256/${manifest.digest}/manifest.json`,
+    `.archflow/tasks/${TASK}/authority/results/${manifest.digest}.json`,
   );
   const payloads = fixture.prepared.payloads.map((payload) => {
-    const payloadPath = parseRepositoryPathClaim(
-      `.archflow/tasks/${TASK}/results/sha256/${manifest.digest}/payload/${payload.path}`,
-    );
+    const payloadRelative = `cache/results/${manifest.digest}/payload/${payload.path}` as WorkspacePathClaim;
+    const payloadPath = parseRepositoryPathClaim(`.archflow/work/tasks/${TASK}/${payloadRelative}`);
     return {
       ...payload,
       target: {
-        absolute: join(h.root, payloadPath) as ResolvedTaskPath,
+        absolute: join(h.root, payloadPath) as ResolvedTaskWorkspacePath,
         repositoryRelative: payloadPath,
-        path_class: "result-payload" as const,
+        workspaceRelative: payloadRelative,
+        path_class: "workspace-result-payload" as const,
       },
     };
   });
@@ -348,7 +341,7 @@ function remanifest(
     manifestTarget: {
       absolute: join(h.root, manifestPath) as ResolvedTaskPath,
       repositoryRelative: manifestPath,
-      path_class: "result-manifest",
+      path_class: "authority-result",
     },
   };
 }
@@ -410,7 +403,7 @@ function request(authority: TransactionAuthority, parsed: StateCall): Transactio
 }
 
 function nextState(current: TaskStateV1, status: TaskStateV1["status"]): PreparedTransaction<"archflow_state">["next_state"] {
-  const { revision: _revision, committed_intent: _committed, ...draft } = current;
+  const { revision: _revision, last_transition: _lastTransition, ...draft } = current;
   return { ...draft, status };
 }
 
@@ -469,7 +462,6 @@ async function runInstallation(
       result_digest: retained.prepared.result_digest,
       result_id: parseSafeId("state:8"),
       input_fingerprint: FINGERPRINT,
-      manifest_path: retained.manifestPath,
     };
     const capability = prepareResultInstallation({
       reference,
@@ -526,7 +518,12 @@ describe("mature state transaction kernel", () => {
     if (!result.ok) return;
     expect(result.value.replayed).toBe(false);
     expect(result.value.state.value.revision).toBe(8);
-    expect(result.value.state.value.committed_intent?.receipt_digest).toBe(h.receipt?.digest);
+    expect(result.value.state.value.last_transition).toMatchObject({
+      intent_id: parsed.input.intent_id,
+      request_digest: identifyTransactionRequest(parsed, h.authority, FINGERPRINT).request_digest,
+      prior_revision: 7,
+      resulting_revision: 8,
+    });
     expect(() => assertAuthenticTransactionOutcome(result.value)).not.toThrow();
     expect(() => assertAuthenticTransactionOutcome({
       ...result.value,
@@ -550,7 +547,6 @@ describe("mature state transaction kernel", () => {
         result_digest: retained.prepared.result_digest,
         result_id: parseSafeId("state:8"),
         input_fingerprint: FINGERPRINT,
-        manifest_path: retained.manifestPath,
       };
       const capability = prepareResultInstallation({
         reference,
@@ -569,7 +565,7 @@ describe("mature state transaction kernel", () => {
       };
     });
     expect(result.ok).toBe(true);
-    expect(h.events).toEqual(["lock", "config", "fingerprint", "prepare", "result-payload", "result-manifest", "receipt-create", "state-replace"]);
+    expect(h.events).toEqual(["lock", "config", "fingerprint", "prepare", "workspace-result-payload", "authority-result", "receipt-create", "state-replace"]);
     expect(h.state.value.authoritative_results).toHaveLength(1);
   });
 
@@ -631,20 +627,19 @@ describe("mature state transaction kernel", () => {
       async (current, identified) => {
         const revision = parseSafeInteger(current.value.revision + 1);
         const success = {
-          path: parseTaskPathClaim(`reviews/${PHASE}.counter.md`),
+          path: parseRepositoryPathClaim(`.archflow/work/tasks/${TASK}/cache/reviews/${PHASE}.counter.md`),
           verdict: "pass" as const,
           blocking_count: 0,
           constitution: { status: "not-run" as const, reason: "no-active-constitution-rules" as const },
           revision,
         };
-        const { revision: _revision, committed_intent: _intent, ...draft } = current.value;
+        const { revision: _revision, last_transition: _lastTransition, ...draft } = current.value;
         const reference = {
           phase_instance: PHASE,
           step: "produce" as const,
           result_digest: wrongToolFixture.prepared.result_digest,
           result_id: parseSafeId("state:8"),
           input_fingerprint: FINGERPRINT,
-          manifest_path: wrongToolFixture.manifestPath,
         };
         return {
           schema_version: "1" as const,
@@ -695,7 +690,7 @@ describe("mature state transaction kernel", () => {
     wrongBoundary.state = canonicalDocument({ ...wrongBoundary.state.value, step: "triage", status: "running" });
     const boundarySource = triageArtifact();
     const boundaryFixture = triageResultFixture(wrongBoundary, boundarySource);
-    const { revision: _boundaryRevision, committed_intent: _boundaryIntent, ...boundaryDraft } =
+    const { revision: _boundaryRevision, last_transition: _boundaryTransition, ...boundaryDraft } =
       wrongBoundary.state.value;
     await expect(runInstallation(
       wrongBoundary,
@@ -707,7 +702,6 @@ describe("mature state transaction kernel", () => {
         result_digest: boundaryFixture.prepared.result_digest,
         result_id: parseSafeId("state:8"),
         input_fingerprint: FINGERPRINT,
-        manifest_path: boundaryFixture.manifestPath,
       }] } },
     )).rejects.toThrow(/only at its successful evidence boundary/u);
 
@@ -715,7 +709,7 @@ describe("mature state transaction kernel", () => {
     wrongReference.state = canonicalDocument({ ...wrongReference.state.value, step: "triage", status: "running" });
     const referenceSource = triageArtifact();
     const referenceFixture = triageResultFixture(wrongReference, referenceSource);
-    const { revision: _revision, committed_intent: _intent, ...referenceDraft } = wrongReference.state.value;
+    const { revision: _revision, last_transition: _lastTransition, ...referenceDraft } = wrongReference.state.value;
     await expect(runInstallation(
       wrongReference,
       triageCall(7, referenceSource),
@@ -791,7 +785,8 @@ describe("mature state transaction kernel", () => {
         issueCode: "result-installation-payload-target-mismatch",
         arrange: (h) => {
           const original = documentResultFixture(h, new Uint8Array([1]));
-          const wrongPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/unexpected/payload`);
+          const wrongRelative = `cache/results/${"9".repeat(64)}/payload/unexpected` as WorkspacePathClaim;
+          const wrongPath = parseRepositoryPathClaim(`.archflow/work/tasks/${TASK}/${wrongRelative}`);
           return {
             fixture: {
               ...original,
@@ -800,9 +795,10 @@ describe("mature state transaction kernel", () => {
                 payloads: original.prepared.payloads.map((payload) => ({
                   ...payload,
                   target: {
-                    absolute: join(h.root, wrongPath) as ResolvedTaskPath,
+                    absolute: join(h.root, wrongPath) as ResolvedTaskWorkspacePath,
                     repositoryRelative: wrongPath,
-                    path_class: "result-payload" as const,
+                    workspaceRelative: wrongRelative,
+                    path_class: "workspace-result-payload" as const,
                   },
                 })),
               },
@@ -826,7 +822,7 @@ describe("mature state transaction kernel", () => {
                   target: {
                     absolute: join(h.root, output.path) as ResolvedTaskPath,
                     repositoryRelative: output.path,
-                    path_class: "implementation-output",
+                    path_class: "repository-source",
                   },
                   observed_before: { state: "absent" },
                   desired: { state: "absent" },
@@ -863,7 +859,7 @@ describe("mature state transaction kernel", () => {
     const retained = documentResultFixture(h, new TextEncoder().encode("retained"));
     const reference = {
       phase_instance: PHASE, step: "produce" as const, result_digest: D("9"), result_id: parseSafeId("result-1"),
-      input_fingerprint: FINGERPRINT, manifest_path: retained.manifestPath,
+      input_fingerprint: FINGERPRINT,
     };
     expect(() => prepareResultInstallation({
       reference,
@@ -886,7 +882,7 @@ describe("mature state transaction kernel", () => {
       const retained = documentResultFixture(h, bytes);
       const reference = {
         phase_instance: PHASE, step: current.value.step, result_digest: retained.prepared.result_digest,
-        result_id: parseSafeId("state:8"), input_fingerprint: FINGERPRINT, manifest_path: retained.manifestPath,
+        result_id: parseSafeId("state:8"), input_fingerprint: FINGERPRINT,
       };
       const capability = prepareResultInstallation({
         reference,
@@ -899,8 +895,8 @@ describe("mature state transaction kernel", () => {
         next_state: { ...transaction.value.next_state, authoritative_results: [reference] }, result_installation: capability } };
     });
     expect(result.ok ? undefined : result.error.code).toBe("SNAPSHOT_LIMIT");
-    expect(h.events).not.toContain("result-payload");
-    expect(h.events).not.toContain("result-manifest");
+    expect(h.events).not.toContain("workspace-result-payload");
+    expect(h.events).not.toContain("authority-result");
     expect(h.events).not.toContain("receipt-create");
   });
 
@@ -921,7 +917,7 @@ describe("mature state transaction kernel", () => {
     });
     const snapshot = documentResultFixture(h, desired);
     const reference = { phase_instance: PHASE, step: "produce" as const, result_digest: snapshot.prepared.result_digest,
-      result_id: parseSafeId("state:8"), input_fingerprint: FINGERPRINT, manifest_path: snapshot.manifestPath };
+      result_id: parseSafeId("state:8"), input_fingerprint: FINGERPRINT };
     const retained = {
       prepared: snapshot.prepared,
       manifest_target: snapshot.manifestTarget,
@@ -966,7 +962,7 @@ describe("mature state transaction kernel", () => {
     const target: ResolvedPath = { absolute: join(h.root, targetPath) as ResolvedTaskPath, repositoryRelative: targetPath, path_class: "document" };
     const snapshot = documentResultFixture(h, desired);
     const reference = { phase_instance: PHASE, step: "produce" as const, result_digest: snapshot.prepared.result_digest,
-      result_id: parseSafeId("state:8"), input_fingerprint: FINGERPRINT, manifest_path: snapshot.manifestPath };
+      result_id: parseSafeId("state:8"), input_fingerprint: FINGERPRINT };
     return runStateTransaction(h.dependencies, request(h.authority, parsed), async (current, identified) => {
       const transaction = await base(current, identified);
       if (!transaction.ok) return transaction;
@@ -1012,7 +1008,7 @@ describe("mature state transaction kernel", () => {
     }
   });
 
-  it("runs CAS before receipt/config and requires refreshed CAS for exact replay", async () => {
+  it("replays the last transition with either its prior or resulting revision", async () => {
     const h = await harness();
     const original = call(7);
     const first = await runStateTransaction(h.dependencies, request(h.authority, original), preparer(h, original));
@@ -1020,7 +1016,7 @@ describe("mature state transaction kernel", () => {
     const configAfterCommit = h.counts.config;
 
     const stale = await runStateTransaction(h.dependencies, request(h.authority, original), preparer(h, original));
-    expect(stale.ok ? undefined : stale.error.code).toBe("STATE_CONFLICT");
+    expect(stale).toMatchObject({ ok: true, value: { replayed: true, outcome: { revision: 8 } } });
     expect(h.counts.config).toBe(configAfterCommit);
 
     const refreshed = call(8);
@@ -1082,7 +1078,11 @@ describe("mature state transaction kernel", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.state.value.revision).toBe(8);
-    expect(result.value.state.value.committed_intent?.receipt_digest).toBe(h.receipt?.digest);
+    expect(result.value.state.value.last_transition).toMatchObject({
+      intent_id: parsed.input.intent_id,
+      prior_revision: 7,
+      resulting_revision: 8,
+    });
   });
 
   it("rereads durable authority after an ambiguous release even when the callback reread failed", async () => {
@@ -1097,7 +1097,7 @@ describe("mature state transaction kernel", () => {
         return originalReadState(path);
       },
       lock: {
-        runExclusive: async <T>(_root: ResolvedTaskPath, work: () => Promise<T>): Promise<T> => {
+        runExclusive: async <T>(_root: ResolvedTaskWorkspacePath, work: () => Promise<T>): Promise<T> => {
           await work();
           throw new TaskLockError("release");
         },
@@ -1132,33 +1132,20 @@ describe("mature state transaction kernel", () => {
     expect(h.events).not.toContain("state-replace");
   });
 
-  it("classifies exact retired reuse separately from changed reuse", async () => {
+  it("classifies exact last-transition replay separately from changed reuse", async () => {
     const h = await harness();
     const original = call(7);
     expect((await runStateTransaction(h.dependencies, request(h.authority, original), preparer(h, original))).ok).toBe(true);
-    const committed = h.state.value.committed_intent;
-    if (committed === undefined) throw new Error("missing committed fixture");
-    h.state = canonicalDocument({
-      ...h.state.value,
-      revision: parseSafeInteger(9),
-      committed_intent: { ...committed, intent_id: "another-intent" as typeof committed.intent_id },
-    });
+    const exact = call(8);
+    const replay = await runStateTransaction(h.dependencies, request(h.authority, exact), preparer(h, exact));
+    expect(replay).toMatchObject({ ok: true, value: { replayed: true, outcome: { revision: 8 } } });
 
-    const exact = call(9);
-    const retired = await runStateTransaction(h.dependencies, request(h.authority, exact), preparer(h, exact));
-    expect(retired.ok ? undefined : retired.error).toMatchObject({
-      code: "INTENT_NOT_CURRENT",
-      retryable: false,
-      next_action: "inspect-current-state",
-      diagnostic: { parameters: { intent_id: "intent-1", receipt_revision: 8, current_revision: 9 } },
-    });
-
-    const changed = call(9, "failed");
+    const changed = call(8, "failed");
     const mismatch = await runStateTransaction(h.dependencies, request(h.authority, changed), preparer(h, changed));
     expect(mismatch.ok ? undefined : mismatch.error.code).toBe("INTENT_MISMATCH");
   });
 
-  it("reports state-claimed receipt substitution before caller fingerprint/request mismatch", async () => {
+  it("replays committed state without consulting a substituted crash receipt", async () => {
     const h = await harness();
     const original = call(7);
     expect((await runStateTransaction(h.dependencies, request(h.authority, original), preparer(h, original))).ok).toBe(true);
@@ -1173,10 +1160,7 @@ describe("mature state transaction kernel", () => {
     });
     const refreshed = call(8);
     const result = await runStateTransaction(h.dependencies, request(h.authority, refreshed), preparer(h, refreshed));
-    expect(result.ok ? undefined : result.error).toMatchObject({
-      code: "STATE_INVALID",
-      diagnostic: { parameters: { issue_code: "intent-receipt-request-mismatch" } },
-    });
+    expect(result).toMatchObject({ ok: true, value: { replayed: true, outcome: { revision: 8 } } });
   });
 
   it("reports receipt-local rank 4b before foreign identity", async () => {
@@ -1266,7 +1250,7 @@ describe("mature state transaction kernel", () => {
   });
 
   it.each(["missing", "noncanonical"] as const)(
-    "classifies a state-claimed %s receipt as STATE_INVALID",
+    "replays from state when the temporary receipt is %s",
     async (kind) => {
       const h = await harness();
       const original = call(7);
@@ -1274,10 +1258,7 @@ describe("mature state transaction kernel", () => {
       h.dependencies = { ...h.dependencies, read_receipt: async () => ({ kind }) };
       const refreshed = call(8);
       const result = await runStateTransaction(h.dependencies, request(h.authority, refreshed), preparer(h, refreshed));
-      expect(result.ok ? undefined : result.error).toMatchObject({
-        code: "STATE_INVALID",
-        diagnostic: { parameters: { issue_code: `intent-receipt-${kind}` } },
-      });
+      expect(result).toMatchObject({ ok: true, value: { replayed: true, outcome: { revision: 8 } } });
     },
   );
 
@@ -1375,7 +1356,6 @@ describe("mature state transaction kernel", () => {
       result_digest: D("1"),
       result_id: parseSafeId(`result-${String(index).padStart(6, "0")}`),
       input_fingerprint: D("2"),
-      manifest_path: parseRepositoryPathClaim(`.archflow/tasks/${TASK}/results/result-${String(index).padStart(6, "0")}/manifest.json`),
     })).sort((left, right) => left.phase_instance.localeCompare(right.phase_instance));
 
     await expect(runStateTransaction(h.dependencies, request(h.authority, parsed), async (current, identified) => {
@@ -1412,7 +1392,7 @@ describe("mature state transaction kernel", () => {
         ...prepared,
         value: { ...prepared.value, next_state: { ...prepared.value.next_state, [field]: changed } },
       } as typeof prepared;
-    })).rejects.toThrow(/changed gate authority or the adopted checkpoint/u);
+    })).rejects.toThrow(/changed gate authority/u);
     expect(h.events).not.toContain("receipt-create");
     expect(h.events).not.toContain("state-replace");
   });
@@ -1424,7 +1404,7 @@ describe("mature state transaction kernel", () => {
     programmer.dependencies = {
       ...programmer.dependencies,
       lock: {
-        runExclusive: async <T>(_root: ResolvedTaskPath, work: () => Promise<T>): Promise<T> => {
+        runExclusive: async <T>(_root: ResolvedTaskWorkspacePath, work: () => Promise<T>): Promise<T> => {
           try {
             return await work();
           } catch (error) {
@@ -1444,7 +1424,7 @@ describe("mature state transaction kernel", () => {
     operation.dependencies = {
       ...operation.dependencies,
       lock: {
-        runExclusive: async <T>(_root: ResolvedTaskPath, work: () => Promise<T>): Promise<T> => {
+        runExclusive: async <T>(_root: ResolvedTaskWorkspacePath, work: () => Promise<T>): Promise<T> => {
           await work();
           throw new TaskLockError("release");
         },

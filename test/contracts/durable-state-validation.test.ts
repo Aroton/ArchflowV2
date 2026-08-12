@@ -46,8 +46,7 @@ describe("task-state validation under the Zod authority", () => {
   it("accepts every optional-field combination", () => {
     const sample = fixture("task-state.valid");
     delete sample.open_gate;
-    delete sample.committed_intent;
-    delete sample.adopted_checkpoint;
+    delete sample.last_transition;
     const minimal = { ...sample };
     const maximal = { ...fixture("task-state.valid"), planned_final_phase: 3, terminal: "complete" };
     for (const [label, value] of [["minimal", minimal], ["maximal", maximal]] as const) {
@@ -55,13 +54,10 @@ describe("task-state validation under the Zod authority", () => {
     }
   });
 
-  it("preserves the legacy adopted_checkpoint field verbatim", () => {
+  it("rejects retired state compatibility fields", () => {
     const sample = fixture("task-state.valid");
-    expect(sample.adopted_checkpoint).toEqual({
-      revision: 7,
-      checkpoint_digest: "2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c",
-    });
-    accepts(sample, "adopted_checkpoint");
+    expect(taskStateV1Schema.safeParse({ ...sample, committed_intent: {} }).success).toBe(false);
+    expect(taskStateV1Schema.safeParse({ ...sample, adopted_checkpoint: {} }).success).toBe(false);
   });
 
   it("rejects an unknown property", () => {
@@ -73,13 +69,14 @@ describe("task-state validation under the Zod authority", () => {
    * Generation retired the set-ordering keywords, so the compiled document accepts these fixtures;
    * the Zod authority behind `readTaskState` must keep rejecting them.
    */
-  describe("set ordering — the Zod authority rejects each committed violation", () => {
+  describe("set ordering — the Zod authority rejects each violation", () => {
     it.each([
-      ["task-state.invalid-unsorted-authoritative-results", "authoritative_results out of (phase_instance, step) order"],
-      ["task-state.invalid-duplicate-approval-gate-id", "approvals with a duplicate gate_id"],
-      ["task-state.invalid-duplicate-waiver-gate-id", "waivers with a duplicate gate_id"],
-    ])("%s", (name, label) => {
-      const value = fixture(name);
+      ["authoritative_results", (sample: JsonObject) => [...sample.authoritative_results as unknown[],].reverse(), "authoritative_results out of (phase_instance, step) order"],
+      ["approvals", (sample: JsonObject) => [...(sample.approvals as unknown[]), (sample.approvals as unknown[])[0]], "approvals with a duplicate gate_id"],
+      ["waivers", (sample: JsonObject) => [...(sample.waivers as unknown[]), (sample.waivers as unknown[])[0]], "waivers with a duplicate gate_id"],
+    ] as const)("%s", (field, mutate, label) => {
+      const sample = fixture("task-state.valid");
+      const value = { ...sample, [field]: mutate(sample) };
       expect(validator.validate(value), `${label}: generated schema kept a retired keyword`).toBe(true);
       expect(taskStateV1Schema.safeParse(value).success, `${label}: Zod accepted`).toBe(false);
     });

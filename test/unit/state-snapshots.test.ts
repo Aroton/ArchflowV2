@@ -13,7 +13,13 @@ import { parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug, type S
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import type { RepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import type { SecretScanner } from "../../src/contracts/secret-scan.js";
-import type { ResolvedPath, ResolvedTaskPath } from "../../src/repository/paths.js";
+import type {
+  ResolvedPath,
+  ResolvedTaskPath,
+  ResolvedTaskWorkspacePath,
+  ResolvedWorkspacePath,
+  WorkspacePathClaim,
+} from "../../src/repository/paths.js";
 import { createGitRunner, hashGitBlobIdentity } from "../../src/repository/git.js";
 import { createAtomicWriter, createProjectionWriter, type ProjectionWriter } from "../../src/state/atomic.js";
 import { deriveImplementationDiffDigest } from "../../src/state/implementation-manifest.js";
@@ -39,6 +45,17 @@ const P = (value: string): RepositoryPathClaim => value as RepositoryPathClaim;
 function resolved(absolute: string, path_class: ResolvedPath["path_class"], claim = P("file.txt")): ResolvedPath {
   return Object.freeze({ absolute: absolute as ResolvedTaskPath, path_class, repositoryRelative: claim });
 }
+function workspaceResolved(
+  absolute: string,
+  claim = P("cache/results/" + "a".repeat(64) + "/payload/file.txt"),
+): ResolvedWorkspacePath {
+  return Object.freeze({
+    absolute: absolute as ResolvedTaskWorkspacePath,
+    path_class: "workspace-result-payload",
+    repositoryRelative: claim,
+    workspaceRelative: claim as unknown as WorkspacePathClaim,
+  });
+}
 
 async function root(): Promise<string> {
   const value = await mkdtemp(join(tmpdir(), "archflow-snapshot-"));
@@ -48,12 +65,12 @@ async function root(): Promise<string> {
 
 async function documentSnapshotFixture(directory: string, bytes: Uint8Array): Promise<Readonly<{
   manifest: ResultManifestV1;
-  payload: { path: RepositoryPathClaim; bytes: Uint8Array; target: ResolvedPath };
+  payload: { path: RepositoryPathClaim; bytes: Uint8Array; target: ResolvedWorkspacePath };
   manifestTarget: ResolvedPath;
 }>> {
   const task = parseTaskSlug("demo");
   const path = P(".archflow/tasks/demo/phases/phase-1-setup.md");
-  const payloadTarget = resolved(join(directory, "payload.md"), "result-payload", P("payload.md"));
+  const payloadTarget = workspaceResolved(join(directory, "payload.md"), P("payload.md"));
   const phase = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(1) });
   const identity = await hashGitBlobIdentity(createGitRunner({ cwd: directory }), bytes, path);
   const contentDigest = sha256Bytes(bytes);
@@ -76,7 +93,7 @@ async function documentSnapshotFixture(directory: string, bytes: Uint8Array): Pr
       counted_entries: [{ path, storage: "raw-payload", stored_bytes: parseSafeInteger(bytes.byteLength) }], measured_at_revision: parseSafeInteger(1) },
     secret_scan: { schema_version: "1", outcome: "clean", detector_set_id: parseSafeId("test"), scanned_paths: [path] } };
   return { manifest, payload: { path, bytes, target: payloadTarget },
-    manifestTarget: resolved(join(directory, "manifest.json"), "result-manifest", P("manifest.json")) };
+    manifestTarget: resolved(join(directory, "manifest.json"), "authority-result", P("manifest.json")) };
 }
 
 const cleanScanner: SecretScanner = {
@@ -102,7 +119,7 @@ describe("snapshot storage", () => {
       accounting: { schema_version: "1", result_bytes: bytes.byteLength, task_bytes: bytes.byteLength, result_byte_cap: 26214400, task_byte_cap: 262144000, counted_entries: [{ path: output.path, storage: "raw-payload", stored_bytes: bytes.byteLength }], measured_at_revision: 1 },
       secret_scan: { schema_version: "1", outcome: "clean", detector_set_id: "test", scanned_paths: [] },
     } as unknown as ResultManifestV1;
-    const payloadTarget = resolved(join(payloadDirectory, "file.txt"), "result-payload", P("payload/file.txt"));
+    const payloadTarget = workspaceResolved(join(payloadDirectory, "file.txt"), P("payload/file.txt"));
     const prepared = prepareSnapshot({ manifest, payloads: [{ path: output.path, bytes, target: payloadTarget }], retained_task_bytes: 0 as SafeInteger, validate_manifest: (value) => value as ResultManifestV1 });
     expect(prepared.ok).toBe(true);
     expect(prepareSnapshot({
@@ -112,11 +129,11 @@ describe("snapshot storage", () => {
       validate_manifest: (value) => value as ResultManifestV1,
     })).toMatchObject({ ok: false, error: { code: "SNAPSHOT_INVALID" } });
     if (!prepared.ok) return;
-    const manifestTarget = resolved(join(directory, "manifest.json"), "result-manifest", P("manifest.json"));
+    const manifestTarget = resolved(join(directory, "manifest.json"), "authority-result", P("manifest.json"));
     await expect(installSnapshot(createAtomicWriter(), prepared.value, manifestTarget, directory as ResolvedTaskPath)).resolves.toMatchObject({ ok: true, value: { manifest: "created" } });
     await expect(installSnapshot(createAtomicWriter(), prepared.value, manifestTarget, directory as ResolvedTaskPath)).resolves.toMatchObject({ ok: true, value: { manifest: "reused", payloads_created: 0 } });
     expect(await readFile(payloadTarget.absolute)).toEqual(bytes);
-    const symlinkTarget = resolved(join(directory, "manifest-link.json"), "result-manifest", P("manifest-link.json"));
+    const symlinkTarget = resolved(join(directory, "manifest-link.json"), "authority-result", P("manifest-link.json"));
     await symlink(manifestTarget.absolute, symlinkTarget.absolute);
     await expect(installSnapshot(createAtomicWriter(), prepared.value, symlinkTarget, directory as ResolvedTaskPath)).resolves.toMatchObject({ ok: false, error: { code: "SNAPSHOT_INVALID" } });
   });
@@ -133,7 +150,7 @@ describe("snapshot storage", () => {
 
   it("rejects the first byte above either copied-byte cap before installation", async () => {
     const directory = await root();
-    const payloadTarget = resolved(join(directory, "payload.bin"), "result-payload", P("payload.bin"));
+    const payloadTarget = workspaceResolved(join(directory, "payload.bin"), P("payload.bin"));
     const check = (bytes: Uint8Array, retained: number) => {
       const byteCount = parseSafeInteger(bytes.byteLength);
       const digest = sha256Bytes(bytes);
@@ -173,7 +190,7 @@ describe("snapshot storage", () => {
     await expect(installSnapshot(createAtomicWriter(), prepared.value, fixture.manifestTarget, directory as ResolvedTaskPath)).resolves.toMatchObject({ ok: true });
     const reference = { phase_instance: fixture.manifest.phase_instance, step: fixture.manifest.step,
       result_digest: prepared.value.result_digest, result_id: fixture.manifest.result_id,
-      input_fingerprint: fixture.manifest.input_fingerprint, manifest_path: fixture.manifestTarget.repositoryRelative };
+      input_fingerprint: fixture.manifest.input_fingerprint };
     const reused = await resolveExistingSnapshot({ reference, target: fixture.manifestTarget,
       phase_instance: reference.phase_instance, step: reference.step, input_fingerprint: reference.input_fingerprint,
       runner: createGitRunner({ cwd: directory }), worktree_root: directory as ResolvedTaskPath });
@@ -190,7 +207,7 @@ describe("snapshot storage", () => {
   it("rejects immutable symlink reuse and validates payload bytes on read", async () => {
     const directory = await root();
     const real = join(directory, "real.bin");
-    const target = resolved(join(directory, "payload.bin"), "result-payload", P("payload.bin"));
+    const target = workspaceResolved(join(directory, "payload.bin"), P("payload.bin"));
     const bytes = new TextEncoder().encode("retained");
     await writeFile(real, bytes);
     await symlink(real, target.absolute);
@@ -253,7 +270,7 @@ describe("snapshot storage", () => {
       source_artifact: adjustedSource, input_fingerprint: source.input_fingerprint, snapshot_digest: snapshotDigest,
       outputs, projections, accounting: adjustedSource.accounting, secret_scan: adjustedSource.secret_scan } as ResultManifestV1;
     const document = canonicalDocument(manifest);
-    const target = resolved(join(directory, "manifest.json"), "result-manifest", P("manifest.json"));
+    const target = resolved(join(directory, "manifest.json"), "authority-result", P("manifest.json"));
     await writeFile(target.absolute, document.bytes);
     const runner = createGitRunner({ cwd: directory });
     await expect(readSnapshot({ target, expected_result_digest: document.digest, runner, worktree_root: directory as ResolvedTaskPath })).resolves.toMatchObject({ ok: true });

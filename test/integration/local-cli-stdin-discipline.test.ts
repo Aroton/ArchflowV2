@@ -59,4 +59,30 @@ describe("archflow-local process", () => {
     expect(stderr).toContain("status requires --task <task>");
     child.stdin.destroy();
   }, TEST_TIMEOUT_MS);
+
+  it("does not wait for stdin when clean has no input payload", async () => {
+    const child = spawn(process.execPath, [localBundle, "clean", "--task", "missing-clean-task"], {
+      cwd: repositoryRoot,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stderr = "";
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => { stderr += chunk; });
+
+    const result = await new Promise<Readonly<{ code: number | null; signal: NodeJS.Signals | null }>>((resolveResult, reject) => {
+      const timer = setTimeout(() => {
+        child.kill("SIGKILL");
+        reject(new Error("archflow-local clean waited for stdin"));
+      }, PROCESS_TIMEOUT_MS);
+      child.once("error", reject);
+      child.once("exit", (code, signal) => {
+        clearTimeout(timer);
+        resolveResult({ code, signal });
+      });
+    });
+
+    expect(result).toEqual({ code: 1, signal: null });
+    expect(stderr).toContain("clean requires current task state");
+    child.stdin.destroy();
+  }, TEST_TIMEOUT_MS);
 });

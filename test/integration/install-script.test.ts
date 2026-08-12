@@ -126,6 +126,8 @@ describe("installer", () => {
     await expect(readFile(join(skillRoot, "archflow-status", "obsolete.md"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(join(home, "archflow-home", "bundle", "assets", "config.template.yaml"), "utf8"))
       .toBe(await readFile(join(root, "assets", "config.template.yaml"), "utf8"));
+    expect(await readFile(join(home, "archflow-home", "bundle", "assets", "archflow.gitignore"), "utf8"))
+      .toBe("/work/\n");
 
     const handshake = `${JSON.stringify({
       jsonrpc: "2.0", id: 1, method: "initialize",
@@ -151,7 +153,7 @@ describe("installer", () => {
     expect(initialized.code, initialized.stderr).toBe(0);
     expect(JSON.parse(initialized.stdout)).toMatchObject({ ok: true, value: { creates_task_state: false, creates_commit: false } });
 
-    git(root, "add", "--", ".gitattributes", ".archflow/workflow.yaml", ".archflow/constitution", ".archflow/config.yaml");
+    git(root, "add", "--", ".gitattributes", ".archflow/.gitignore", ".archflow/workflow.yaml", ".archflow/constitution", ".archflow/config.yaml");
     git(root, "commit", "-q", "-m", "approve policy");
     const taskInit = spawnSync(join(bin, "archflow-local"), ["build-request", "--task", "demo"], {
       cwd: root, encoding: "utf8", env: hostEnvironment, timeout: TEST_TIMEOUT_MS,
@@ -176,10 +178,10 @@ describe("installer", () => {
     const root = await checkoutCopy();
     const home = join(root, "home");
     const bin = join(home, "bin");
-    await writeFile(join(root, "assets", "workflow.yaml"), "mutated\n");
+    await writeFile(join(root, "assets", "archflow.gitignore"), "mutated\n");
     const installed = runInstaller(root, home, bin);
     expect(installed.status).toBe(1);
-    expect(installed.stderr).toContain("payload verification failed for assets/workflow.yaml");
+    expect(installed.stderr).toContain("payload verification failed for assets/archflow.gitignore");
   }, TEST_TIMEOUT_MS);
 
   it("prints the exact PATH export and fails when launchers are not resolvable", async () => {

@@ -299,7 +299,7 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     input.target.attempt === input.current.attempt &&
     input.target.input_fingerprint === input.current.input_fingerprint;
   if (completesFinalPhase) {
-    const { revision: _revision, committed_intent: _intent, ...preserved } = input.current;
+    const { revision: _revision, last_transition: _transition, ...preserved } = input.current;
     return ok(Object.freeze({ ...preserved, terminal: "complete" }));
   }
   if (
@@ -318,7 +318,7 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     return invalid(input, from, to);
   }
 
-  const { revision: _revision, committed_intent: _intent, ...preserved } = input.current;
+  const { revision: _revision, last_transition: _transition, ...preserved } = input.current;
   const draft: NextStateDraft = Object.freeze({
     ...preserved,
     phase_instance: input.target.phase_instance,

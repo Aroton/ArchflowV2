@@ -2,7 +2,6 @@ import {
   canonicalDocument,
   canonicalJsonDigest,
   sha256Bytes,
-  type GitOid,
 } from "../contracts/canonical.js";
 import type { AdjudicationEvidence } from "../contracts/adjudication.js";
 import type {
@@ -31,11 +30,7 @@ import {
 } from "../contracts/internal/trust-mints.js";
 import { registerCurrentReviewSet } from "../contracts/internal/trust-brands.js";
 import {
-  adjudicationReviewClaim,
-  counterReviewClaim,
-  parseTaskPathClaim,
-  toRepositoryPathClaim,
-  triageReviewClaim,
+  parseRepositoryPathClaim,
 } from "../contracts/path-claims.js";
 import {
   renderAdjudicationEvidence,
@@ -62,15 +57,15 @@ import {
 } from "../contracts/triage.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
-import {
-  hashGitBlobIdentity,
-  type GitRunner,
-} from "../repository/git.js";
 import type { RootBoundGitRunner } from "../repository/identity.js";
 import {
+  resultAuthorityClaim,
   resolveTaskPath,
+  resolveTaskWorkspacePath,
+  counterReviewClaim,
+  triageReviewClaim,
+  adjudicationReviewClaim,
   type ResolvedPath,
-  type ResolvedTaskPath,
 } from "../repository/paths.js";
 import {
   assertInternalTransactionAuthority,
@@ -145,15 +140,6 @@ export type DerivedCurrentEvidenceSet = Readonly<{
 const ok = <T>(value: T): ProjectResult<T> =>
   Object.freeze({ schema_version: "1", ok: true, value });
 
-function projectionClaim(
-  phaseInstance: PhaseInstanceId,
-  value: EvidenceResultValue,
-): ReturnType<typeof counterReviewClaim> {
-  if (value.kind === "triage") return triageReviewClaim(phaseInstance);
-  if (value.kind === "adjudication") return adjudicationReviewClaim(phaseInstance);
-  return counterReviewClaim(phaseInstance);
-}
-
 function qualifyAndRender(value: EvidenceResultValue): Readonly<{
   artifact: EvidenceArtifactV1;
   bytes: Uint8Array;
@@ -214,20 +200,6 @@ function qualifyAndRender(value: EvidenceResultValue): Readonly<{
   });
 }
 
-async function resolveEvidenceTarget(
-  input: PrepareEvidenceResultInput,
-  claim: ReturnType<typeof parseTaskPathClaim>,
-  expectedClass: "review" | "result-manifest" | "result-payload",
-): Promise<ProjectResult<ResolvedPath>> {
-  return resolveTaskPath({
-    runner: input.runner,
-    taskId: input.authority.task_id,
-    claim,
-    expectedClass,
-    context: input.authority.context,
-  });
-}
-
 /**
  * Prepares one evidence manifest and canonical review projection. Evidence identity is the
  * canonical payload digest; rendered-byte identity is confined to snapshot/projection fields.
@@ -251,37 +223,22 @@ export async function prepareEvidenceResult(
     throw new TypeError("server-attested evidence result_id does not match prepared result");
   }
 
-  const taskClaim = projectionClaim(qualified.phase_instance, input.value);
-  const repositoryClaim = toRepositoryPathClaim(input.authority.task_id, taskClaim);
-  const projectionTarget = await resolveEvidenceTarget(input, taskClaim, "review");
-  if (!projectionTarget.ok) return projectionTarget;
-
   const renderedDigest = sha256Bytes(qualified.bytes);
-  const byteCount = parseSafeInteger(qualified.bytes.byteLength);
-  const gitIdentity = await hashGitBlobIdentity(
-    input.runner as unknown as GitRunner,
-    qualified.bytes,
-    repositoryClaim,
-  );
-  const output = Object.freeze({
-    path: repositoryClaim,
-    path_class: "review" as const,
-    operation: "add" as const,
-    storage: "raw-payload" as const,
-    payload_bytes: byteCount,
-    payload_digest: renderedDigest,
-    file_type: "regular" as const,
-    after: Object.freeze({
-      oid: gitIdentity.oid as GitOid,
-      mode: "100644" as const,
-      size_bytes: parseSafeInteger(gitIdentity.size_bytes),
-    }),
+  const snapshotDigest = deriveDeclaredSnapshotDigest([], []);
+  const workspaceClaim = input.value.kind === "triage"
+    ? triageReviewClaim(qualified.phase_instance)
+    : input.value.kind === "adjudication"
+      ? adjudicationReviewClaim(qualified.phase_instance)
+      : counterReviewClaim(qualified.phase_instance);
+  const projectionTarget = await resolveTaskWorkspacePath({
+    runner: input.runner,
+    taskId: input.authority.task_id,
+    claim: workspaceClaim,
+    expectedClass: "workspace-review",
+    context: input.authority.context,
   });
-  const projections = Object.freeze([
-    Object.freeze({ path: repositoryClaim, content_digest: renderedDigest }),
-  ]);
-  const snapshotDigest = deriveDeclaredSnapshotDigest([output], projections);
-
+  if (!projectionTarget.ok) return projectionTarget;
+  const repositoryClaim = projectionTarget.value.repositoryRelative;
   const captured = await captureProjectionTarget(projectionTarget.value);
   let secretScan: SecretScanResult | undefined;
   const capturingScanner: SecretScanner = Object.freeze({
@@ -294,22 +251,15 @@ export async function prepareEvidenceResult(
   const source: ProjectionSource = Object.freeze({
     path: repositoryClaim,
     target: projectionTarget.value,
-    desired: Object.freeze({
-      state: "present",
-      file_type: "regular",
-      mode: "100644",
-      bytes: qualified.bytes,
-    }),
+    desired: Object.freeze({ state: "present", file_type: "regular", mode: "100644", bytes: qualified.bytes }),
     authenticated_before: captured.observation,
-    ...(captured.observation.state === "present"
-      ? { rollback: captured.rollback }
-      : {}),
-    git_tracked: true,
+    ...(captured.observation.state === "present" ? { rollback: captured.rollback } : {}),
+    git_tracked: false,
   });
   const projectionPlan = await prepareProjectionPlan(
     [source],
     capturingScanner,
-    input.runner.location.worktreeRoot as ResolvedTaskPath,
+    input.runner.location.worktreeRoot as import("../repository/paths.js").ResolvedTaskPath,
   );
   if (!projectionPlan.ok) return projectionPlan;
   if (secretScan === undefined || secretScan.outcome !== "clean") {
@@ -327,48 +277,32 @@ export async function prepareEvidenceResult(
     source_artifact: qualified.artifact,
     input_fingerprint: qualified.input_fingerprint,
     snapshot_digest: snapshotDigest,
-    outputs: Object.freeze([output]),
-    projections,
+    outputs: Object.freeze([]),
+    projections: Object.freeze([]),
     accounting: Object.freeze({
       schema_version: "1",
-      result_bytes: byteCount,
-      task_bytes: parseSafeInteger(input.retained_task_bytes + byteCount),
+      result_bytes: parseSafeInteger(0),
+      task_bytes: input.retained_task_bytes,
       result_byte_cap: 26_214_400,
       task_byte_cap: 262_144_000,
-      counted_entries: Object.freeze([
-        Object.freeze({
-          path: repositoryClaim,
-          storage: "raw-payload",
-          stored_bytes: byteCount,
-        }),
-      ]),
+      counted_entries: Object.freeze([]),
       measured_at_revision: input.measured_at_revision,
     }),
     secret_scan: secretScan,
   });
   const manifest = canonicalDocument(manifestValue);
-  const manifestClaim = parseTaskPathClaim(
-    `results/sha256/${manifest.digest}/manifest.json`,
-  );
-  const payloadClaim = parseTaskPathClaim(
-    `results/sha256/${manifest.digest}/payload/${repositoryClaim}`,
-  );
-  const [manifestTarget, payloadTarget] = await Promise.all([
-    resolveEvidenceTarget(input, manifestClaim, "result-manifest"),
-    resolveEvidenceTarget(input, payloadClaim, "result-payload"),
-  ]);
+  const manifestTarget = await resolveTaskPath({
+    runner: input.runner,
+    taskId: input.authority.task_id,
+    claim: resultAuthorityClaim(manifest.digest),
+    expectedClass: "authority-result",
+    context: input.authority.context,
+  });
   if (!manifestTarget.ok) return manifestTarget;
-  if (!payloadTarget.ok) return payloadTarget;
 
   const prepared = prepareSnapshot({
     manifest: manifestValue,
-    payloads: Object.freeze([
-      Object.freeze({
-        path: repositoryClaim,
-        bytes: qualified.bytes,
-        target: payloadTarget.value,
-      }),
-    ]),
+    payloads: Object.freeze([]),
     retained_task_bytes: input.retained_task_bytes,
     validate_manifest: parseResultManifest,
   });
@@ -379,7 +313,6 @@ export async function prepareEvidenceResult(
     result_digest: prepared.value.result_digest,
     result_id: input.result_id,
     input_fingerprint: qualified.input_fingerprint,
-    manifest_path: manifestTarget.value.repositoryRelative,
   });
   return ok(Object.freeze({
     reference,
@@ -408,8 +341,7 @@ function validateLoadedEvidence(
     !Buffer.from(document.bytes).equals(Buffer.from(loaded.prepared.manifest.bytes)) ||
     loaded.prepared.result_digest !== document.digest ||
     reference.result_digest !== document.digest ||
-    reference.manifest_path !== loaded.manifest_target.repositoryRelative ||
-    loaded.manifest_target.path_class !== "result-manifest"
+    loaded.manifest_target.path_class !== "authority-result"
   ) {
     throw new TypeError("loaded evidence result identity disagrees");
   }

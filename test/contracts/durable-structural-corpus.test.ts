@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import { documentArtifactV1Schema } from "../../src/contracts/durable-document.js";
 import { implementationOutputV1Schema } from "../../src/contracts/durable-implementation-output.js";
 import { legacyImportInitializationV1Schema } from "../../src/contracts/durable-legacy-import.js";
-import { maintenanceRecordV1Schema } from "../../src/contracts/durable-maintenance.js";
 import { snapshotAccountingV1Schema } from "../../src/contracts/durable-primitives.js";
 import { taskStateV1Schema } from "../../src/contracts/durable-state.js";
 import { taskInitializationV1Schema } from "../../src/contracts/durable-task-initialization.js";
@@ -13,7 +12,6 @@ import documentArtifactSchema from "../../src/contracts/schemas/v1/document-arti
 import durablePrimitivesSchema from "../../src/contracts/schemas/v1/durable-primitives.schema.json" with { type: "json" };
 import implementationOutputSchema from "../../src/contracts/schemas/v1/implementation-output.schema.json" with { type: "json" };
 import legacyImportSchema from "../../src/contracts/schemas/v1/legacy-import-initialization.schema.json" with { type: "json" };
-import maintenanceRecordSchema from "../../src/contracts/schemas/v1/maintenance-record.schema.json" with { type: "json" };
 import pathClaimSchema from "../../src/contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
 import primitivesSchema from "../../src/contracts/schemas/v1/primitives.schema.json" with { type: "json" };
 import secretScanResultSchema from "../../src/contracts/schemas/v1/secret-scan-result.schema.json" with { type: "json" };
@@ -86,13 +84,6 @@ const taskState: Shape = {
   sample: fixture("task-state"),
 };
 
-const maintenanceRecord: Shape = {
-  name: "maintenance-record",
-  json: validator(maintenanceRecordSchema, [primitivesSchema, pathClaimSchema]),
-  zod: maintenanceRecordV1Schema,
-  sample: fixture("maintenance-record"),
-};
-
 const taskInitialization: Shape = {
   name: "task-initialization",
   json: validator(taskInitializationSchema, [primitivesSchema, pathClaimSchema, durablePrimitivesSchema]),
@@ -147,7 +138,6 @@ const snapshotAccounting: Shape = {
 
 const SHAPES: readonly Shape[] = [
   taskState,
-  maintenanceRecord,
   taskInitialization,
   legacyImport,
   documentArtifact,
@@ -236,7 +226,7 @@ const taskStateTwoWaivers: JsonObject = at(taskState.sample, "waivers", (value) 
 
 /**
  * Every declared set in the phase, with the shape whose fixture carries it. This list is asserted
- * below to be exactly the set of arrays the seven schemas declare — the design is explicit that
+ * below to be exactly the set of arrays these schemas declare — the design is explicit that
  * after the Phase 8 split *there is no sequence in this phase*, so an array missing from this table
  * is either an unordered collection that should not exist or a set nobody is testing.
  */
@@ -244,7 +234,6 @@ const DECLARED_SETS: readonly { readonly shape: string; readonly path: string; r
   { shape: "task-state", path: "authoritative_results" },
   { shape: "task-state", path: "approvals" },
   { shape: "task-state", path: "waivers", base: taskStateTwoWaivers },
-  { shape: "maintenance-record", path: "deletions" },
   { shape: "legacy-import-initialization", path: "mapping" },
   { shape: "legacy-import-initialization", path: "staged_payload_refs" },
   { shape: "document-artifact", path: "declared_inputs" },
@@ -281,12 +270,11 @@ describe("durable set ordering and uniqueness are structural", () => {
 /**
  * The sweep. Generation retired the ordering keywords, so no array-shaped subschema may carry one
  * any more — the ordering authority is the Zod refinement exercised above — and the set of arrays
- * must still be exactly the thirteen collections above: nothing new, nothing untested.
+ * must still be exactly the twelve collections above: nothing new, nothing untested.
  */
 const SCHEMA_FILES: readonly { readonly name: string; readonly schema: object }[] = [
   { name: "durable-primitives", schema: durablePrimitivesSchema },
   { name: "task-state", schema: taskStateSchema },
-  { name: "maintenance-record", schema: maintenanceRecordSchema },
   { name: "task-initialization", schema: taskInitializationSchema },
   { name: "legacy-import-initialization", schema: legacyImportSchema },
   { name: "document-artifact", schema: documentArtifactSchema },
@@ -324,7 +312,7 @@ describe("no array in this phase is exempt from set ordering", () => {
     expect(carrying.map((entry) => entry.location)).toStrictEqual([]);
   });
 
-  it("the arrays the schemas declare are exactly the thirteen collections under test", () => {
+  it("the arrays the schemas declare are exactly the twelve collections under test", () => {
     expect(collectArraySubschemas().map((entry) => entry.location).sort()).toStrictEqual(
       [
         "durable-primitives/$defs/snapshotAccounting/properties/counted_entries",
@@ -336,13 +324,14 @@ describe("no array in this phase is exempt from set ordering", () => {
         "implementation-output/properties/restore_targets",
         "legacy-import-initialization/properties/mapping",
         "legacy-import-initialization/properties/staged_payload_refs",
-        "maintenance-record/properties/deletions",
+        "task-state/$defs/plainJson/anyOf/4",
         "task-state/properties/approvals",
         "task-state/properties/authoritative_results",
         "task-state/properties/waivers",
       ].sort()
     );
-    expect(DECLARED_SETS).toHaveLength(collectArraySubschemas().length);
+    // The recursive PlainJson array is value data, not a set.
+    expect(DECLARED_SETS).toHaveLength(collectArraySubschemas().length - 1);
   });
 });
 
@@ -380,7 +369,6 @@ const resultRef = (phaseInstance: string, step: string, fill: string): JsonObjec
   result_digest: fill.repeat(64),
   result_id: `${phaseInstance}:${step}:1`,
   input_fingerprint: fill.repeat(64),
-  manifest_path: `.archflow/tasks/mcp-integration/results/${phaseInstance}-${step}/manifest.json`,
 });
 
 const tupleOrderedPair = [resultRef("phase-design-1", "produce", "1"), resultRef("phase-design-11", "produce", "2")];
@@ -481,7 +469,7 @@ describe("byte accounting is bound structurally, not by the validator", () => {
 
 /**
  * `SafeInteger` admits `0` (`primitives.schema.json#/$defs/safeInteger` has `"minimum": 0`), so each
- * positive count pins its own minimum at the field and must not `$ref` it. Fourteen fields do.
+ * positive count pins its own minimum at the field and must not `$ref` it.
  */
 const POSITIVE_FIELDS: readonly { readonly shape: string; readonly path: string }[] = [
   { shape: "task-state", path: "revision" },
@@ -490,16 +478,14 @@ const POSITIVE_FIELDS: readonly { readonly shape: string; readonly path: string 
   { shape: "task-state", path: "open_gate.opened_at_revision" },
   { shape: "task-state", path: "waivers.0.rule_version" },
   { shape: "task-state", path: "waivers.0.granted_at_revision" },
-  { shape: "task-state", path: "committed_intent.resulting_revision" },
-  { shape: "maintenance-record", path: "performed_at_revision" },
+  { shape: "task-state", path: "last_transition.resulting_revision" },
   { shape: "snapshot-accounting", path: "measured_at_revision" },
-  { shape: "task-state", path: "adopted_checkpoint.revision" },
 ];
 
 describe("every >= 1 field rejects 0 (D8)", () => {
-  it("pins the ten positive-field routes and seven exercised shapes", () => {
-    expect(POSITIVE_FIELDS).toHaveLength(10);
-    expect(SHAPES).toHaveLength(7);
+  it("pins the eight positive-field routes and six exercised shapes", () => {
+    expect(POSITIVE_FIELDS).toHaveLength(8);
+    expect(SHAPES).toHaveLength(6);
   });
 
   for (const field of POSITIVE_FIELDS) {
@@ -615,6 +601,8 @@ describe("absence is omission, never null", () => {
     expect(offenders).toStrictEqual([
       "intent-receipt.schema.json",
       "intent-receipt.schema.json/$defs/plainJson/anyOf/0/type",
+      "task-state.schema.json",
+      "task-state.schema.json/$defs/plainJson/anyOf/0/type",
     ]);
   });
 
@@ -631,7 +619,7 @@ describe("absence is omission, never null", () => {
   });
 
   it("supplying null for an optional field is rejected", () => {
-    for (const path of ["open_gate", "committed_intent", "terminal"]) {
+    for (const path of ["open_gate", "last_transition", "terminal"]) {
       accepts(taskState, without(taskState.sample, path), `${path} omitted`);
       rejects(taskState, at(taskState.sample, path, () => null), `${path} null`);
     }
@@ -681,31 +669,12 @@ describe("shape-specific structural pins", () => {
     rejects(taskState, at(taskState.sample, "open_gate", (value) => [value, value]), "nested gates");
   });
 
-  it("deletions is non-empty", () => {
-    rejects(maintenanceRecord, at(maintenanceRecord.sample, "deletions", () => []), "empty deletions");
-  });
-
   it("outputs is non-empty", () => {
     rejects(implementationOutput, at(implementationOutput.sample, "outputs", () => []), "empty outputs");
   });
 
-  it("human_reason is bounded at both ends", () => {
-    const bounded = (text: string): JsonObject => at(maintenanceRecord.sample, "human_reason", () => text);
-    rejects(maintenanceRecord, bounded(""), "empty human_reason");
-    accepts(maintenanceRecord, bounded("a"), "one-byte human_reason");
-    accepts(maintenanceRecord, bounded("a".repeat(4096)), "human_reason at 4096 bytes");
-    // The upper bound was `x-archflow-max-utf8-bytes`, retired by generation; the Zod `.refine()`
-    // behind `parseMaintenanceRecord` counts UTF-8 bytes and is the surviving authority.
-    rejectsInZodAuthority(maintenanceRecord, bounded("a".repeat(4097)), "human_reason at 4097 bytes");
-    // The cap is UTF-8 *bytes*, not code units: 2049 two-byte characters is 4098 bytes in 2049 chars.
-    const multiByte = "é".repeat(2049);
-    expect(Buffer.byteLength(multiByte, "utf8")).toBe(4098);
-    expect(multiByte.length).toBe(2049);
-    rejectsInZodAuthority(maintenanceRecord, bounded(multiByte), "human_reason above 4096 UTF-8 bytes");
-  });
-
   it("an implementation output cannot claim a server-owned path class", () => {
-    for (const pathClass of ["task-state", "result-manifest", "intent", "decision"]) {
+    for (const pathClass of ["task-state", "authority-result", "authority-initialization", "authority-decision"]) {
       rejects(
         implementationOutput,
         at(implementationOutput.sample, "outputs.0.path_class", () => pathClass),

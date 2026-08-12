@@ -20,6 +20,7 @@ import { computeCallEnvelope } from "../../src/local/call-envelope.js";
 import { createToolHandlers } from "../../src/mcp/handlers/index.js";
 import { prepareDocumentResult } from "../../src/mcp/handlers/state-results.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
+import type { ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
 import { buildDocumentArtifact } from "../../src/state/document-artifact.js";
 import { openDurableGate, runDurableGate } from "../../src/state/gates.js";
 import { ensurePayloadParent, ensureResultDirectory } from "../../src/state/layout.js";
@@ -105,7 +106,7 @@ function stage(root: string, source: string, head: string) {
     import_baseline_commit: head, code_baseline_commit: head,
   });
   expect(result.status, result.stderr).toBe(0);
-  expect(result.value).toMatchObject({ ok: true, value: { resume_phase: "phase-design-4" } });
+  expect(result.value).toMatchObject({ ok: true, value: { resume_phase: "phase-design-3" } });
   return result.value.value;
 }
 
@@ -118,7 +119,7 @@ async function initializationCall(root: string, initialization: ReturnType<typeo
     status: "running" as const, artifact: initialization,
   };
   const envelope = await computeCallEnvelope(services.value, { tool: "archflow_state", input: draft });
-  if (!envelope.ok) throw new Error(envelope.error.code);
+  if (!envelope.ok) throw new Error(JSON.stringify(envelope.error));
   return { ...draft, input_fingerprint: envelope.value.input_fingerprint };
 }
 
@@ -139,7 +140,7 @@ describe("bundled legacy upgrade workflow", () => {
     ]));
     expect(initialization.mapping.some((entry) => entry.legacy_path === "phases/phase-3-unlogged-review-log.md")).toBe(false);
     for (const reference of initialization.staged_payload_refs) {
-      expect(readFileSync(join(root, `.archflow/tasks/${task}/imports/${initialization.import_digest}/payload/${reference.legacy_path}`)))
+      expect(readFileSync(join(root, `.archflow/work/tasks/${task}/cache/imports/${initialization.import_digest}/payload/${reference.legacy_path}`)))
         .toEqual(readFileSync(join(source, reference.legacy_path)));
     }
     expect(JSON.parse(readFileSync(join(root, emitted.manifest_path), "utf8"))).toEqual(initialization);
@@ -183,9 +184,7 @@ describe("bundled legacy upgrade workflow", () => {
       const seeded = readFileSync(join(root, draft.staged_path));
       writeFileSync(
         join(services.value.authority.task_root, spec.path),
-        spec.phase === "design"
-          ? Buffer.concat([seeded, Buffer.from("\n### Phase 4: Resume Imported Work\n\nContinue from the audited legacy boundary.\n")])
-          : seeded,
+        seeded,
       );
       const artifact = await buildDocumentArtifact(services.value.runner, services.value.authority, {
         phase_instance: spec.phase, step: "produce", document_path: spec.path,
@@ -199,7 +198,7 @@ describe("bundled legacy upgrade workflow", () => {
       if (!prepared.ok) throw new Error(prepared.error.code);
       await ensureResultDirectory(services.value.authority, prepared.value.reference.result_digest);
       for (const payload of prepared.value.prepared.payloads) {
-        await ensurePayloadParent(services.value.authority, prepared.value.reference.result_digest, payload.target.absolute);
+        await ensurePayloadParent(services.value.authority, prepared.value.reference.result_digest, payload.target.absolute as ResolvedTaskWorkspacePath);
       }
       const installed = await installSnapshot(services.value.dependencies.atomic, prepared.value.prepared,
         prepared.value.manifest_target, services.value.runner.location.worktreeRoot as never);
@@ -207,12 +206,12 @@ describe("bundled legacy upgrade workflow", () => {
       references.push(prepared.value.reference);
       retainedBytes = parseSafeInteger(retainedBytes + prepared.value.prepared.manifest.value.accounting.result_bytes);
     }
-    const { committed_intent: _initialIntent, ...initializedState } = services.value.state.value;
+    const { last_transition: _initialTransition, ...initializedState } = services.value.state.value;
     writeFileSync(services.value.authority.state.absolute, canonicalDocument({
       ...initializedState, phase_instance: "design", step: "triage", status: "succeeded",
       authoritative_results: [...references].sort((left, right) =>
         `${left.phase_instance}\0${left.step}`.localeCompare(`${right.phase_instance}\0${right.step}`)),
-      planned_final_phase: 4,
+      planned_final_phase: 3,
     }).bytes);
 
     const evidence = currentEvidenceSetRef([
@@ -240,7 +239,8 @@ describe("bundled legacy upgrade workflow", () => {
       };
       const opened = await openDurableGate(services.value.dependencies, gateInput);
       if (!opened.ok) throw new Error(JSON.stringify(opened));
-      writeFileSync(join(services.value.authority.task_root, "gate.decision"), canonicalDocument({
+      mkdirSync(join(services.value.authority.workspace_root, "cache", "gates"), { recursive: true });
+      writeFileSync(join(services.value.authority.workspace_root, "cache", "gates", "gate.decision"), canonicalDocument({
         schema_version: "1", gate_id: opened.value.gate_id, task_id: task, phase_instance: gateInput.phase_instance,
         kind: "artifact-approval", subject_digest: subject, context_digest: computeGateContextDigest("artifact-approval", context),
         human_provenance: { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local",
@@ -268,7 +268,8 @@ describe("bundled legacy upgrade workflow", () => {
       .toMatchObject({ ok: false, error: { code: "STATE_INVALID" } });
     const opened = await openDurableGate(services.value.dependencies, auditInput);
     if (!opened.ok) throw new Error(JSON.stringify(opened));
-    writeFileSync(join(services.value.authority.task_root, "gate.decision"), canonicalDocument({
+    mkdirSync(join(services.value.authority.workspace_root, "cache", "gates"), { recursive: true });
+    writeFileSync(join(services.value.authority.workspace_root, "cache", "gates", "gate.decision"), canonicalDocument({
       schema_version: "1", gate_id: opened.value.gate_id, task_id: task, phase_instance: "design", kind: "migration-audit",
       subject_digest: designSubject, context_digest: computeGateContextDigest("migration-audit", emitted.audit_context),
       human_provenance: { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local",
@@ -282,25 +283,25 @@ describe("bundled legacy upgrade workflow", () => {
     if (!services.ok || services.value.state === undefined) throw new Error("jump services unavailable");
     const draftCall = {
       schema_version: "1" as const, task_id: task, intent_id: "legacy-jump", expected_revision: services.value.state.value.revision,
-      input_fingerprint: services.value.state.value.input_fingerprint, phase_instance: "phase-design-4" as const,
+      input_fingerprint: services.value.state.value.input_fingerprint, phase_instance: "phase-design-3" as const,
       step: "produce" as const, status: "running" as const,
     };
     const envelope = await computeCallEnvelope(services.value, { tool: "archflow_state", input: draftCall });
     if (!envelope.ok) throw new Error(JSON.stringify(envelope));
     const jumped = await invokeState(root, { ...draftCall, input_fingerprint: envelope.value.input_fingerprint }, "legacy-jump");
-    expect(jumped).toMatchObject({ kind: "project-result", result: { ok: true, value: { status: "running" } } });
+    expect(jumped, JSON.stringify(jumped)).toMatchObject({ kind: "project-result", result: { ok: true, value: { status: "running" } } });
     const afterJump = await createProductionServices({ working_directory: root, task_id: task, operation: parseSafeCode("legacy-after-jump") });
     if (!afterJump.ok || afterJump.value.state === undefined) throw new Error("jumped state unavailable");
     expect(afterJump.value.state.value).toMatchObject({
-      phase_instance: "phase-design-4", step: "produce", status: "running", attempt: 1,
+      phase_instance: "phase-design-3", step: "produce", status: "running", attempt: 1,
     });
     expect(afterJump.value.state.value.authoritative_results).toEqual(expect.arrayContaining(references));
 
-    mkdirSync(join(afterJump.value.authority.task_root, "phases", "4"), { recursive: true });
-    writeFileSync(join(afterJump.value.authority.task_root, "phases", "4", "design.md"), "# Phase 4\n\nResume imported work.\n");
+    mkdirSync(join(afterJump.value.authority.task_root, "phases", "3"), { recursive: true });
+    writeFileSync(join(afterJump.value.authority.task_root, "phases", "3", "design.md"), "# Phase 3\n\nResume imported work.\n");
     const phaseArtifact = await buildDocumentArtifact(afterJump.value.runner, afterJump.value.authority, {
-      phase_instance: parsePhaseInstanceId("phase-design-4"), step: "produce",
-      document_path: parseTaskPathClaim("phases/4/design.md"), declared_inputs: [],
+      phase_instance: parsePhaseInstanceId("phase-design-3"), step: "produce",
+      document_path: parseTaskPathClaim("phases/3/design.md"), declared_inputs: [],
       input_fingerprint: afterJump.value.state.value.input_fingerprint,
     });
     if (!phaseArtifact.ok) throw new Error(phaseArtifact.error.code);
@@ -308,7 +309,7 @@ describe("bundled legacy upgrade workflow", () => {
       schema_version: "1" as const, task_id: task, intent_id: "legacy-resume-produce",
       expected_revision: afterJump.value.state.value.revision,
       input_fingerprint: afterJump.value.state.value.input_fingerprint,
-      phase_instance: "phase-design-4" as const, step: "produce" as const, status: "succeeded" as const,
+      phase_instance: "phase-design-3" as const, step: "produce" as const, status: "succeeded" as const,
       artifact: phaseArtifact.value,
     };
     const produceEnvelope = await computeCallEnvelope(afterJump.value, { tool: "archflow_state", input: produceDraft });
@@ -327,7 +328,7 @@ describe("bundled legacy upgrade workflow", () => {
     if (!afterProduce.ok || afterProduce.value.state === undefined) throw new Error("resume produce state unavailable");
     expect(afterProduce.value.state.value.authoritative_results).toEqual(expect.arrayContaining([
       ...references,
-      expect.objectContaining({ phase_instance: "phase-design-4", step: "produce" }),
+      expect.objectContaining({ phase_instance: "phase-design-3", step: "produce" }),
     ]));
   }, TIMEOUT);
 });

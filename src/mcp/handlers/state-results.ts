@@ -9,7 +9,15 @@ import { parseTaskPathClaim, type RepositoryPathClaim } from "../../contracts/pa
 import { parseSecretScanResult, type SecretScanCandidate, type SecretScanResult, type SecretScanner } from "../../contracts/secret-scan.js";
 import type { OutputEntry } from "../../contracts/durable-primitives.js";
 import { hashGitBlobIdentity } from "../../repository/git.js";
-import { resolveDeclaredOutputPath, resolveTaskPath, type ResolvedPath, type ResolvedTaskPath } from "../../repository/paths.js";
+import {
+  parseWorkspacePathClaim,
+  resolveDeclaredOutputPath,
+  resolveTaskPath,
+  resolveTaskWorkspacePath,
+  resultAuthorityClaim,
+  type ResolvedPath,
+  type ResolvedTaskPath,
+} from "../../repository/paths.js";
 import type { TransactionAuthority } from "../../state/authority.js";
 import { verifyImplementationManifest } from "../../state/implementation-manifest.js";
 import {
@@ -47,13 +55,23 @@ const contractInvalid = <T>(issueCode: string): ProjectResult<T> => Object.freez
 async function target(
   services: ProductionServices,
   claim: string,
-  expectedClass: "result-manifest" | "result-payload" | "document",
+  expectedClass: "authority-result" | "document",
 ) {
   return resolveTaskPath({
     runner: services.runner,
     taskId: services.authority.task_id,
     claim: parseTaskPathClaim(claim),
     expectedClass,
+    context: services.authority.context,
+  });
+}
+
+async function payloadTarget(services: ProductionServices, resultDigest: string, path: RepositoryPathClaim) {
+  return resolveTaskWorkspacePath({
+    runner: services.runner,
+    taskId: services.authority.task_id,
+    claim: parseWorkspacePathClaim(`cache/results/${resultDigest}/payload/${path}`),
+    expectedClass: "workspace-result-payload",
     context: services.authority.context,
   });
 }
@@ -165,14 +183,14 @@ export async function prepareDocumentResult(input: Readonly<{
     secret_scan: capture.result(),
   };
   const manifest = canonicalDocument(manifestValue);
-  const manifestTarget = await target(input.services, `results/sha256/${manifest.digest}/manifest.json`, "result-manifest");
-  const payloadTarget = await target(input.services, `results/sha256/${manifest.digest}/payload/${output.path}`, "result-payload");
+  const manifestTarget = await target(input.services, resultAuthorityClaim(manifest.digest), "authority-result");
+  const payload = await payloadTarget(input.services, manifest.digest, output.path);
   if (!manifestTarget.ok) return manifestTarget;
-  if (!payloadTarget.ok) return payloadTarget;
+  if (!payload.ok) return payload;
   const prepared = await prepareDocumentSnapshot({
     runner: input.services.runner,
     manifest: manifestValue,
-    payloads: [{ path: output.path, bytes, target: payloadTarget.value }],
+    payloads: [{ path: output.path, bytes, target: payload.value }],
     retained_task_bytes: input.retained_task_bytes,
   });
   if (!prepared.ok) return prepared;
@@ -183,7 +201,6 @@ export async function prepareDocumentResult(input: Readonly<{
       result_digest: prepared.value.result_digest,
       result_id: input.result_id,
       input_fingerprint: input.artifact.input_fingerprint,
-      manifest_path: manifestTarget.value.repositoryRelative,
     }),
     prepared: prepared.value,
     manifest_target: manifestTarget.value,
@@ -293,13 +310,13 @@ export async function prepareImplementationResult(input: Readonly<{
   };
   parseResultManifest(manifestValue);
   const manifest = canonicalDocument(manifestValue);
-  const manifestTarget = await target(input.services, `results/sha256/${manifest.digest}/manifest.json`, "result-manifest");
+  const manifestTarget = await target(input.services, resultAuthorityClaim(manifest.digest), "authority-result");
   if (!manifestTarget.ok) return manifestTarget;
   const payloads = [];
   for (const [path, bytes] of facts.raw_payloads) {
-    const payloadTarget = await target(input.services, `results/sha256/${manifest.digest}/payload/${path}`, "result-payload");
-    if (!payloadTarget.ok) return payloadTarget;
-    payloads.push(Object.freeze({ path, bytes, target: payloadTarget.value }));
+    const targetResult = await payloadTarget(input.services, manifest.digest, path);
+    if (!targetResult.ok) return targetResult;
+    payloads.push(Object.freeze({ path, bytes, target: targetResult.value }));
   }
   const prepared = prepareSnapshot({
     manifest: manifestValue,
@@ -315,11 +332,9 @@ export async function prepareImplementationResult(input: Readonly<{
       result_digest: prepared.value.result_digest,
       result_id: input.result_id,
       input_fingerprint: input.artifact.input_fingerprint,
-      manifest_path: manifestTarget.value.repositoryRelative,
     }),
     prepared: prepared.value,
     manifest_target: manifestTarget.value,
     projection_plan: plan.value,
   }));
 }
-

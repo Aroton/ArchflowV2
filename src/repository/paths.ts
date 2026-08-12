@@ -1,5 +1,5 @@
 import { constants as fsConstants } from "node:fs";
-import { open, realpath, type FileHandle } from "node:fs/promises";
+import { lstat, open, realpath, type FileHandle } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -19,11 +19,9 @@ import {
 import { parseTaskSlug, type PathSafeId, type TaskSlug } from "../contracts/evidence.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import {
-  adjudicationReviewClaim,
-  counterReviewClaim,
+  parseRepositoryPathClaim,
   parseTaskPathClaim,
   toRepositoryPathClaim,
-  triageReviewClaim,
   type PathClass,
   type RepositoryPathClaim,
   type RepositoryPathClass,
@@ -35,12 +33,9 @@ import type { RepositoryOperationContext } from "./git.js";
 import type { RootBoundGitRunner } from "./identity.js";
 
 declare const resolvedTaskPathBrand: unique symbol;
-
-export {
-  adjudicationReviewClaim,
-  counterReviewClaim,
-  triageReviewClaim,
-};
+declare const workspacePathClaimBrand: unique symbol;
+declare const resolvedTaskWorkspacePathBrand: unique symbol;
+declare const resolvedWorkspaceCleanupTargetBrand: unique symbol;
 
 /**
  * A path proven contained under the worktree root by `realpath` **at resolution time**.
@@ -51,10 +46,58 @@ export {
  */
 export type ResolvedTaskPath = string & { readonly [resolvedTaskPathBrand]: true };
 
+/** A lexical claim rooted at `.archflow/work/tasks/<task-id>/`. */
+export type WorkspacePathClaim = string & { readonly [workspacePathClaimBrand]: true };
+
+/** A workspace path proven contained beneath the active task's ignored workspace. */
+export type ResolvedTaskWorkspacePath = string & {
+  readonly [resolvedTaskWorkspacePathBrand]: true;
+};
+
+/**
+ * A recursive-removal target whose ancestors were authenticated without resolving the target
+ * itself. Keeping this brand distinct prevents a normal read/write path from accidentally being
+ * used as a cleanup root (or vice versa).
+ */
+export type ResolvedWorkspaceCleanupTarget = string & {
+  readonly [resolvedWorkspaceCleanupTargetBrand]: true;
+};
+
 export interface ResolvedPath {
   readonly path_class: PathClass;
   readonly repositoryRelative: RepositoryPathClaim;
   readonly absolute: ResolvedTaskPath;
+}
+
+export const WORKSPACE_PATH_CLASSES = [
+  "workspace-intent",
+  "workspace-staged-request",
+  "workspace-lock",
+  "workspace-result-payload",
+  "workspace-review",
+  "workspace-gate-interface",
+  "workspace-verification-transcript",
+  "workspace-import",
+  "workspace-attempt",
+  "workspace-scratch",
+] as const;
+
+export type WorkspacePathClass = (typeof WORKSPACE_PATH_CLASSES)[number];
+
+export interface ResolvedWorkspacePath {
+  readonly path_class: WorkspacePathClass;
+  readonly workspaceRelative: WorkspacePathClaim;
+  readonly repositoryRelative: RepositoryPathClaim;
+  readonly absolute: ResolvedTaskWorkspacePath;
+}
+
+export type WorkspaceCleanupLeafKind = "missing" | "symlink" | "directory" | "file" | "other";
+
+export interface WorkspaceCleanupTarget {
+  readonly workspaceRelative: WorkspacePathClaim | "";
+  readonly repositoryRelative: RepositoryPathClaim;
+  readonly absolute: ResolvedWorkspaceCleanupTarget;
+  readonly leaf_kind: WorkspaceCleanupLeafKind;
 }
 
 export type ResolvedSourcePath = Readonly<{
@@ -63,27 +106,63 @@ export type ResolvedSourcePath = Readonly<{
 }>;
 
 export function gateRequestClaim(gateId: PathSafeId): TaskPathClaim {
-  return parseTaskPathClaim(`decisions/${gateId}/request.json`);
+  return parseTaskPathClaim(`authority/decisions/${gateId}/request.json`);
 }
 
-/** The staged-request slot for one intent; distinct by suffix from the `intents/<id>.json` receipt. */
-export function stagedRequestClaim(intentId: PathSafeId): TaskPathClaim {
-  return parseTaskPathClaim(`intents/${intentId}.request.json`);
+/** The ignored staged-request slot for one intent. */
+export function stagedRequestClaim(intentId: PathSafeId): WorkspacePathClaim {
+  return parseWorkspacePathClaim(`transient/intents/${intentId}.request.json`);
 }
 
 export function gateDecisionClaim(gateId: PathSafeId): TaskPathClaim {
-  return parseTaskPathClaim(`decisions/${gateId}/decision.json`);
+  return parseTaskPathClaim(`authority/decisions/${gateId}/decision.json`);
 }
 
 export function gateSupplementalReviewClaim(gateId: PathSafeId): TaskPathClaim {
-  return parseTaskPathClaim(`decisions/${gateId}/supplemental-review.json`);
+  return parseTaskPathClaim(`authority/decisions/${gateId}/supplemental-review.json`);
+}
+
+export function initializationAuthorityClaim(): TaskPathClaim {
+  return parseTaskPathClaim("authority/initialization.json");
+}
+
+export function resultAuthorityClaim(resultDigest: string): TaskPathClaim {
+  if (!/^[0-9a-f]{64}$/u.test(resultDigest)) {
+    throw new TypeError("result digest must be lowercase SHA-256");
+  }
+  return parseTaskPathClaim(`authority/results/${resultDigest}.json`);
+}
+
+export function intentReceiptClaim(intentId: PathSafeId): WorkspacePathClaim {
+  return parseWorkspacePathClaim(`transient/intents/${intentId}.json`);
+}
+
+export function verificationTranscriptClaim(phase: number): WorkspacePathClaim {
+  if (!Number.isSafeInteger(phase) || phase < 1) {
+    throw new TypeError("phase must be a positive safe integer");
+  }
+  return parseWorkspacePathClaim(`cache/phases/${phase}/verification.txt`);
+}
+
+export function counterReviewClaim(phaseInstance: PhaseInstanceId): WorkspacePathClaim {
+  return parseWorkspacePathClaim(`cache/reviews/${phaseInstance}.counter.md`);
+}
+
+export function triageReviewClaim(phaseInstance: PhaseInstanceId): WorkspacePathClaim {
+  return parseWorkspacePathClaim(`cache/reviews/${phaseInstance}.triage.md`);
+}
+
+export function adjudicationReviewClaim(phaseInstance: PhaseInstanceId): WorkspacePathClaim {
+  return parseWorkspacePathClaim(`cache/reviews/${phaseInstance}.adjudication.md`);
 }
 
 export function gateCounterReviewClaim(
   phaseInstance: PhaseInstanceId,
   gateId: PathSafeId,
-): TaskPathClaim {
-  return parseTaskPathClaim(`reviews/${phaseInstance}.gate-counter.${gateId}.md`);
+): WorkspacePathClaim {
+  return parseWorkspacePathClaim(
+    `cache/reviews/${phaseInstance}.gate-counter.${gateId}.md`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -101,15 +180,13 @@ export function gateCounterReviewClaim(
  * | `SHA256`          | `Sha256Digest` — already a strict subset of `PathSafeId` |
  * | `PHASE_INSTANCE`  | `PhaseInstanceId` (`phase-instance.ts`)      |
  * | `PHASE_NUMBER`    | `PositiveSafePhaseNumber`                    |
- * | `REVISION`        | `SafeInteger` (permits `0`)                  |
  */
 const PATH_SAFE_ID = "[A-Za-z0-9][A-Za-z0-9._-]{0,127}";
 const SHA256 = "[0-9a-f]{64}";
 const PHASE_INSTANCE = "(?:prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)";
 const PHASE_NUMBER = "[1-9][0-9]*";
-const REVISION = "(?:0|[1-9][0-9]*)";
 
-interface ClassRule<C extends PathClass> {
+interface ClassRule<C extends string> {
   readonly path_class: C;
   readonly pattern: RegExp;
 }
@@ -125,27 +202,15 @@ const anchored = (body: string): RegExp => new RegExp(`^${body}$`, "u");
  * | `task-config`       | `config.yaml`                                                                               | —                               |
  * | `task-state`        | `state.json`                                                                                | —                               |
  * | `task-ask`          | `ask.md`                                                                                    | —                               |
- * | `gate-interface`    | `gate.json` \| `gate.decision`                                                              | —                               |
  * | `document`          | `prd.md` \| `design.md` \| `phases/<n>/design.md` \| `phases/<n>/impl-notes.md`             | positive phase number           |
- * | `verification-transcript` | `phases/<n>/verification.txt`                                                         | positive phase number           |
- * | `review`            | `reviews/<phase-instance>.{counter,triage,adjudication}.md` \| `reviews/<phase-instance>.gate-counter.<gate-id>.md` | phase instance; gate ID for the last form |
- * | `decision`          | `decisions/<gate-id>/request.json` \| `decisions/<gate-id>/decision.json` \| `decisions/<gate-id>/supplemental-review.json` | gate ID |
- * | `result-manifest`   | `results/sha256/<result-digest>/manifest.json`                                              | result digest                   |
- * | `result-payload`    | `results/sha256/<result-digest>/payload/<declared-output-path>`                              | result digest; declared output claim |
- * | `intent`            | `intents/<intent-id>.json`                                                                  | intent ID                       |
- * | `staged-request`    | `intents/<intent-id>.request.json`                                                          | intent ID                       |
- * | `attempt`           | `attempts/<phase-instance>/<attempt-id>.json`                                               | phase instance; attempt ID      |
- * | `maintenance-record`| `maintenance/<maintenance-id>.json`                                                         | maintenance ID                  |
- * | `import`            | `imports/<import-digest>/manifest.json` \| `imports/<import-digest>/payload/<legacy-relative-path>` | import digest; legacy claim |
- *
- * `attempt-id` and `maintenance-id` have no occurrence in `src/` yet; they are declared `PathSafeId`
- * here at birth rather than retrofitted later.
+ * | `authority-initialization` | `authority/initialization.json`                                                   | —                               |
+ * | `authority-result`  | `authority/results/<result-digest>.json`                                                   | result digest                   |
+ * | `authority-decision`| `authority/decisions/<gate-id>/{request,decision,supplemental-review}.json`                  | gate ID                         |
  */
 const TASK_CLASS_RULES: readonly ClassRule<TaskPathClass>[] = [
   { path_class: "task-config", pattern: anchored("config\\.yaml") },
   { path_class: "task-state", pattern: anchored("state\\.json") },
   { path_class: "task-ask", pattern: anchored("ask\\.md") },
-  { path_class: "gate-interface", pattern: anchored("gate\\.(?:json|decision)") },
   {
     path_class: "document",
     pattern: anchored(
@@ -153,32 +218,66 @@ const TASK_CLASS_RULES: readonly ClassRule<TaskPathClass>[] = [
     ),
   },
   {
-    path_class: "verification-transcript",
-    pattern: anchored(`phases/${PHASE_NUMBER}/verification\\.txt`),
+    path_class: "authority-initialization",
+    pattern: anchored("authority/initialization\\.json"),
   },
   {
-    path_class: "review",
+    path_class: "authority-result",
+    pattern: anchored(`authority/results/${SHA256}\\.json`),
+  },
+  {
+    path_class: "authority-decision",
     pattern: anchored(
-      `reviews/${PHASE_INSTANCE}\\.(?:counter|triage|adjudication)\\.md` +
-        `|reviews/${PHASE_INSTANCE}\\.gate-counter\\.${PATH_SAFE_ID}\\.md`
+      `authority/decisions/${PATH_SAFE_ID}/(?:request|decision|supplemental-review)\\.json`,
+    ),
+  },
+];
+
+/**
+ * Ignored, reconstructible task-workspace paths. This table intentionally lives outside the
+ * persisted `PathClass` contract: workspace files are neither durable authority nor claimable
+ * implementation outputs.
+ */
+const WORKSPACE_CLASS_RULES: readonly ClassRule<WorkspacePathClass>[] = [
+  {
+    path_class: "workspace-staged-request",
+    pattern: anchored(`transient/intents/${PATH_SAFE_ID}\\.request\\.json`),
+  },
+  {
+    path_class: "workspace-intent",
+    pattern: anchored(`transient/intents/${PATH_SAFE_ID}(?<!\\.request)\\.json`),
+  },
+  { path_class: "workspace-lock", pattern: anchored("transient/\\.transaction-lock") },
+  {
+    path_class: "workspace-result-payload",
+    pattern: anchored(`cache/results/${SHA256}/payload/.+`),
+  },
+  {
+    path_class: "workspace-review",
+    pattern: anchored(
+      `cache/reviews/${PHASE_INSTANCE}\\.(?:counter|triage|adjudication)\\.md` +
+        `|cache/reviews/${PHASE_INSTANCE}\\.gate-counter\\.${PATH_SAFE_ID}\\.md`,
     ),
   },
   {
-    path_class: "decision",
-    pattern: anchored(`decisions/${PATH_SAFE_ID}/(?:request|decision|supplemental-review)\\.json`),
+    path_class: "workspace-gate-interface",
+    pattern: anchored(`cache/gates/(?:gate\\.(?:json|decision)|${PATH_SAFE_ID}\\.(?:json|md))`),
   },
-  { path_class: "result-manifest", pattern: anchored(`results/sha256/${SHA256}/manifest\\.json`) },
-  { path_class: "result-payload", pattern: anchored(`results/sha256/${SHA256}/payload/.+`) },
-  // The two intent-directory suffixes are disjoint by construction: the receipt rule refuses any
-  // name ending in `.request.json` via lookbehind, so a staged request can never classify as a
-  // receipt regardless of rule order, and a receipt id may still legally contain dots.
-  { path_class: "staged-request", pattern: anchored(`intents/${PATH_SAFE_ID}\\.request\\.json`) },
-  { path_class: "intent", pattern: anchored(`intents/${PATH_SAFE_ID}(?<!\\.request)\\.json`) },
-  { path_class: "attempt", pattern: anchored(`attempts/${PHASE_INSTANCE}/${PATH_SAFE_ID}\\.json`) },
-  { path_class: "maintenance-record", pattern: anchored(`maintenance/${PATH_SAFE_ID}\\.json`) },
   {
-    path_class: "import",
-    pattern: anchored(`imports/${SHA256}/(?:manifest\\.json|payload/.+)`),
+    path_class: "workspace-verification-transcript",
+    pattern: anchored(`cache/phases/${PHASE_NUMBER}/verification\\.txt`),
+  },
+  {
+    path_class: "workspace-import",
+    pattern: anchored(`cache/imports/${SHA256}/(?:manifest\\.json|payload/.+)`),
+  },
+  {
+    path_class: "workspace-attempt",
+    pattern: anchored(`diagnostics/attempts/${PHASE_INSTANCE}/${PATH_SAFE_ID}\\.json`),
+  },
+  {
+    path_class: "workspace-scratch",
+    pattern: anchored(`(?:transient|cache|diagnostics)/scratch(?:/.+)?`),
   },
 ];
 
@@ -269,7 +368,7 @@ function errnoOf(error: unknown): string | undefined {
 // Classification
 // ---------------------------------------------------------------------------
 
-function classifyIn<C extends PathClass>(
+function classifyIn<C extends string>(
   rules: readonly ClassRule<C>[],
   claim: string
 ): C | undefined {
@@ -284,6 +383,23 @@ export function classifyTaskPath(
 ): ProjectResult<TaskPathClass> {
   const matched = classifyIn(TASK_CLASS_RULES, claim);
   if (matched === undefined) return fail(pathInvalid(taskId, undefined));
+  return ok(matched);
+}
+
+/** Parses a bounded lexical claim in the ignored task-workspace frame. */
+export function parseWorkspacePathClaim(value: unknown): WorkspacePathClaim {
+  return parseTaskPathClaim(value) as unknown as WorkspacePathClaim;
+}
+
+/** Classifies a path relative to `.archflow/work/tasks/<task-id>/`. */
+export function classifyWorkspacePath(
+  taskId: TaskSlug,
+  claim: WorkspacePathClaim,
+): ProjectResult<WorkspacePathClass> {
+  const matched = classifyIn(WORKSPACE_CLASS_RULES, claim);
+  // Workspace classes deliberately are not persisted PathClass values. Use task-state as the
+  // stable public diagnostic class while returning the precise workspace class on success.
+  if (matched === undefined) return fail(pathInvalid(taskId, "task-state"));
   return ok(matched);
 }
 
@@ -510,6 +626,203 @@ export async function resolveTaskRoot(options: {
   return ok(self.absolute);
 }
 
+const workspaceRepositoryRelative = (
+  taskId: TaskSlug,
+  suffix?: WorkspacePathClaim,
+): RepositoryPathClaim =>
+  parseRepositoryPathClaim(
+    suffix === undefined
+      ? `${ARCHFLOW_TREE}/work/tasks/${taskId}`
+      : `${ARCHFLOW_TREE}/work/tasks/${taskId}/${suffix}`,
+  );
+
+/**
+ * Resolves the ignored workspace root for exactly one validated task. Like the durable task-root
+ * resolver, this supports a not-yet-created root while authenticating its nearest existing
+ * ancestor through `realpath`.
+ */
+export async function resolveTaskWorkspaceRoot(options: {
+  readonly runner: RootBoundGitRunner;
+  readonly taskId: TaskSlug;
+  readonly context: RepositoryOperationContext;
+}): Promise<ProjectResult<ResolvedTaskWorkspacePath>> {
+  const { runner, context } = options;
+  let taskId: TaskSlug;
+  let repositoryRelative: RepositoryPathClaim;
+  try {
+    taskId = parseTaskSlug(options.taskId);
+    repositoryRelative = workspaceRepositoryRelative(taskId);
+  } catch {
+    return fail(pathInvalid(context.task_id, "task-state"));
+  }
+
+  const withinWorktree = await containedUnder(runner.location.worktreeRoot, repositoryRelative);
+  if (withinWorktree.kind === "io") return fail(ioError(context));
+  if (withinWorktree.kind === "escape") return fail(pathEscape(taskId, "task-state"));
+
+  const workspaceRoot = resolvePath(
+    runner.location.worktreeRoot,
+    ARCHFLOW_TREE,
+    "work",
+    "tasks",
+    taskId,
+  );
+  const tasksRoot = resolvePath(runner.location.worktreeRoot, ARCHFLOW_TREE, "work", "tasks");
+  let realTasksRoot: string;
+  let realWorkspaceRoot: string;
+  try {
+    realTasksRoot = await realpathWithMissingTail(tasksRoot);
+    realWorkspaceRoot = await realpathWithMissingTail(workspaceRoot);
+  } catch {
+    return fail(ioError(context));
+  }
+  // Containment alone is insufficient here: a symlink named for this task can resolve to a sibling
+  // that is still beneath `work/tasks`. Require the resolved child identity itself to remain exact.
+  if (relative(realTasksRoot, realWorkspaceRoot) !== taskId) {
+    return fail(taskScopeViolation(taskId, "task-state"));
+  }
+  return ok(realWorkspaceRoot as ResolvedTaskWorkspacePath);
+}
+
+/**
+ * Resolves a classified workspace file with independent worktree and exact-task containment.
+ * A symlink into a sibling task therefore reports `TASK_SCOPE_VIOLATION`; a symlink outside the
+ * worktree reports `PATH_ESCAPE`.
+ */
+export async function resolveTaskWorkspacePath(options: {
+  readonly runner: RootBoundGitRunner;
+  readonly taskId: TaskSlug;
+  readonly claim: WorkspacePathClaim;
+  readonly expectedClass?: WorkspacePathClass;
+  readonly context: RepositoryOperationContext;
+}): Promise<ProjectResult<ResolvedWorkspacePath>> {
+  const { runner, claim, expectedClass, context } = options;
+  let taskId: TaskSlug;
+  try {
+    taskId = parseTaskSlug(options.taskId);
+  } catch {
+    return fail(pathInvalid(context.task_id, "task-state"));
+  }
+
+  const classified = classifyWorkspacePath(taskId, claim);
+  if (!classified.ok) return classified;
+  if (expectedClass !== undefined && classified.value !== expectedClass) {
+    return fail(pathInvalid(taskId, "task-state"));
+  }
+
+  let repositoryRelative: RepositoryPathClaim;
+  try {
+    repositoryRelative = workspaceRepositoryRelative(taskId, claim);
+  } catch {
+    return fail(pathInvalid(taskId, "task-state"));
+  }
+
+  const withinWorktree = await containedUnder(runner.location.worktreeRoot, repositoryRelative);
+  if (withinWorktree.kind === "io") return fail(ioError(context));
+  if (withinWorktree.kind === "escape") return fail(pathEscape(taskId, "task-state"));
+
+  const authenticatedRoot = await resolveTaskWorkspaceRoot({ runner, taskId, context });
+  if (!authenticatedRoot.ok) return authenticatedRoot;
+
+  const workspaceRoot = authenticatedRoot.value;
+  const withinWorkspace = await containedUnder(workspaceRoot, claim);
+  if (withinWorkspace.kind === "io") return fail(ioError(context));
+  if (withinWorkspace.kind === "escape") {
+    return fail(taskScopeViolation(taskId, "task-state"));
+  }
+
+  return ok(Object.freeze({
+    path_class: classified.value,
+    workspaceRelative: claim,
+    repositoryRelative,
+    absolute: withinWorkspace.absolute as unknown as ResolvedTaskWorkspacePath,
+  }));
+}
+
+async function cleanupLeafKind(path: string): Promise<WorkspaceCleanupLeafKind> {
+  try {
+    const metadata = await lstat(path);
+    if (metadata.isSymbolicLink()) return "symlink";
+    if (metadata.isDirectory()) return "directory";
+    if (metadata.isFile()) return "file";
+    return "other";
+  } catch (error) {
+    if (errnoOf(error) === "ENOENT") return "missing";
+    throw error;
+  }
+}
+
+/**
+ * Authenticates a target for recursive workspace cleanup without following its leaf.
+ *
+ * All existing ancestors are realpathed and checked against both the worktree and exact task
+ * workspace. The returned target is the lexical leaf, not its realpath. A symlink at that leaf is
+ * consequently removed as a symlink by a no-follow recursive remover; it can never redirect the
+ * cleanup traversal. Callers must still use `lstat`-based traversal (Node's `fs.rm` has this
+ * property) and must not replace the returned lexical target with `realpath(target)`.
+ */
+export async function resolveTaskWorkspaceCleanupTarget(options: {
+  readonly runner: RootBoundGitRunner;
+  readonly taskId: TaskSlug;
+  /** Omit to clean the whole task-specific workspace at a terminal boundary. */
+  readonly claim?: WorkspacePathClaim;
+  readonly context: RepositoryOperationContext;
+}): Promise<ProjectResult<WorkspaceCleanupTarget>> {
+  const { runner, context, claim } = options;
+  let taskId: TaskSlug;
+  let repositoryRelative: RepositoryPathClaim;
+  try {
+    taskId = parseTaskSlug(options.taskId);
+    repositoryRelative = workspaceRepositoryRelative(taskId, claim);
+  } catch {
+    return fail(pathInvalid(context.task_id, "task-state"));
+  }
+
+  const worktreeRoot = runner.location.worktreeRoot;
+  const workspaceRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "work", "tasks", taskId);
+  const target = resolvePath(worktreeRoot, repositoryRelative);
+
+  // Never realpath the leaf: it may itself be a symlink that cleanup can safely unlink. The parent
+  // is the complete traversal authority for a leaf deletion. For whole-workspace deletion, the
+  // shared `work/tasks` parent plays the same role.
+  const parent = dirname(target);
+  const parentRepositoryRelative = relative(worktreeRoot, parent);
+  const withinWorktree = await containedUnder(worktreeRoot, parentRepositoryRelative);
+  if (withinWorktree.kind === "io") return fail(ioError(context));
+  if (withinWorktree.kind === "escape") return fail(pathEscape(taskId, "task-state"));
+
+  if (claim !== undefined) {
+    const authenticatedRoot = await resolveTaskWorkspaceRoot({ runner, taskId, context });
+    if (!authenticatedRoot.ok) return authenticatedRoot;
+    const parentWorkspaceRelative = relative(workspaceRoot, parent);
+    const withinWorkspace = await containedUnder(workspaceRoot, parentWorkspaceRelative);
+    if (withinWorkspace.kind === "io") return fail(ioError(context));
+    if (withinWorkspace.kind === "escape") {
+      return fail(taskScopeViolation(taskId, "task-state"));
+    }
+  } else {
+    // The task workspace is itself the leaf. Authenticate the fixed shared parent and keep the task
+    // component lexical, so even a malicious task-root symlink is unlinked rather than followed.
+    const tasksRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "work", "tasks");
+    const tasksParent = await containedUnder(worktreeRoot, relative(worktreeRoot, tasksRoot));
+    if (tasksParent.kind === "io") return fail(ioError(context));
+    if (tasksParent.kind === "escape") return fail(pathEscape(taskId, "task-state"));
+  }
+
+  let leafKind: WorkspaceCleanupLeafKind;
+  try {
+    leafKind = await cleanupLeafKind(target);
+  } catch {
+    return fail(ioError(context));
+  }
+  return ok(Object.freeze({
+    workspaceRelative: claim ?? "",
+    repositoryRelative,
+    absolute: target as ResolvedWorkspaceCleanupTarget,
+    leaf_kind: leafKind,
+  }));
+}
+
 /**
  * Resolves a worktree-frame claim.
  *
@@ -552,10 +865,6 @@ export async function resolveRepositoryPath(options: {
 
 const TASK_OUTPUT_CLASSES: ReadonlySet<ClaimableOutputPathClass> = new Set([
   "document",
-  "import",
-  "result-payload",
-  "review",
-  "verification-transcript",
 ]);
 
 /**
@@ -633,7 +942,10 @@ export async function resolveDeclaredRename(options: {
  * The real point is platform-specific: **`O_NOFOLLOW` does not exist on Windows**, so there step 7
  * is a no-op and the symlink defence rests entirely on steps 3–6.
  */
-export async function openResolved(path: ResolvedTaskPath, flags: number): Promise<FileHandle> {
+export async function openResolved(
+  path: ResolvedTaskPath | ResolvedTaskWorkspacePath,
+  flags: number,
+): Promise<FileHandle> {
   const noFollow = (fsConstants as { O_NOFOLLOW?: number }).O_NOFOLLOW ?? 0;
   return open(path, flags | noFollow);
 }

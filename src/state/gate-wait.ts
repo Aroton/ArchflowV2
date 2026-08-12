@@ -1,7 +1,7 @@
 import { constants as fsConstants } from "node:fs";
 import { lstat } from "node:fs/promises";
 
-import { openResolved, type ResolvedPath } from "../repository/paths.js";
+import { openResolved, type ResolvedWorkspacePath } from "../repository/paths.js";
 
 export const GATE_POLL_INTERVAL_MS = 500;
 
@@ -11,15 +11,15 @@ export type GateWaitOutcome =
   | Readonly<{ kind: "aborted" }>;
 
 export type GateWaitInput = Readonly<{
-  decision_path: ResolvedPath;
+  decision_path: ResolvedWorkspacePath;
   supplemental?: Readonly<{
-    path: ResolvedPath;
+    path: ResolvedWorkspacePath;
     already_recorded: boolean;
   }>;
   signal: AbortSignal;
 }>;
 
-async function isCompleteRegularProjection(path: ResolvedPath): Promise<boolean> {
+async function isCompleteRegularProjection(path: ResolvedWorkspacePath): Promise<boolean> {
   let handle;
   try {
     const metadata = await lstat(path.absolute);
@@ -53,10 +53,10 @@ function delayOrAbort(signal: AbortSignal): Promise<"poll" | "aborted"> {
 
 /** Waits outside the task lock and returns only a signal; resolve must re-read under the lock. */
 export async function waitForGateInterface(input: GateWaitInput): Promise<GateWaitOutcome> {
-  if (input.decision_path.path_class !== "gate-interface") {
+  if (input.decision_path.path_class !== "workspace-gate-interface") {
     throw new TypeError("gate wait decision path must be a gate-interface");
   }
-  if (input.supplemental !== undefined && input.supplemental.path.path_class !== "review") {
+  if (input.supplemental !== undefined && input.supplemental.path.path_class !== "workspace-review") {
     throw new TypeError("gate wait supplemental path must be a review");
   }
 

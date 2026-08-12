@@ -27,12 +27,13 @@ import { resolvePinnedConstitution, type ResolvedConstitution } from "./constitu
 import { deriveCurrentEvidenceSet, loadRetainedEvidence, type RetainedEvidenceSet } from "./evidence-results.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
 import { buildGateDecisionTemplates } from "./gate-decision-interface.js";
-import type { GateLifecycleDependencies } from "./gate-core.js";
+import { activeProjection, type GateLifecycleDependencies } from "./gate-core.js";
 import { deriveNextAction, type NextAction } from "./next-action.js";
 import { buildNextActionRequest } from "./request-templates.js";
 import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject } from "./produce-subject.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
 import { implementationOutputCommittedAtCurrentTarget } from "./implementation-manifest.js";
+import { inspectWorkspaceCleanup, type WorkspaceCleanupReport } from "./workspace-cleanup.js";
 import { discoverReconciliationInput } from "./reconciliation-discovery.js";
 import {
   activeGateHead,
@@ -40,7 +41,13 @@ import {
   type ReconciliationFinding,
   type ReconciliationResult,
 } from "./reconciliation.js";
-import { gateCounterReviewClaim } from "../repository/paths.js";
+import {
+  gateCounterReviewClaim,
+  gateRequestClaim,
+  parseWorkspacePathClaim,
+  resolveTaskPath,
+  resolveTaskWorkspacePath,
+} from "../repository/paths.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 
@@ -89,7 +96,7 @@ type StatusEvidence = Readonly<{
 type OpenGateStatus = Readonly<{
   gate_id: PathSafeId;
   kind: ActiveGateV1["kind"];
-  decision_path: "gate.decision";
+  decision_path: string;
   archive_decision_path: string;
   request_path: string;
   gate_counter_review_path: string;
@@ -176,6 +183,8 @@ export type TaskStatusV1 = Readonly<{
     }>[];
   }>;
   gate_input?: CommitAuthorizationInput;
+  /** Derived cleanup state. Cleanup debt is non-blocking and never changes workflow routing. */
+  workspace?: WorkspaceCleanupReport;
   next_action: NextAction;
 }>;
 
@@ -208,6 +217,8 @@ export type BriefTaskStatusV1 = Readonly<{
     digest: Sha256Digest;
     active_rule_ids: readonly string[];
   }>;
+  /** Included in the routine view only when cleanup work remains. */
+  workspace?: WorkspaceCleanupReport;
   next_action: NextAction;
 }>;
 
@@ -255,6 +266,7 @@ export function projectBriefStatus(full: TaskStatusV1): BriefTaskStatusV1 {
         active_rule_ids: Object.freeze(full.constitution.active_rules.map((rule) => rule.id)),
       }),
     }),
+    ...(full.workspace?.cleanup_pending === true ? { workspace: full.workspace } : {}),
     next_action: full.next_action,
   });
 }
@@ -316,24 +328,43 @@ function unavailableConfig(expected?: Sha256Digest, observed?: Sha256Digest, iss
   });
 }
 
-async function readActiveGate(authority: TransactionAuthority): Promise<ActiveGateV1 | undefined> {
+async function readActiveGateProjection(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+): Promise<ActiveGateV1 | undefined> {
   try {
-    const bytes = new Uint8Array(await readFile(join(authority.task_root, "gate.json")));
+    const target = await resolveTaskWorkspacePath({
+      runner: dependencies.runner,
+      taskId: authority.task_id,
+      claim: parseWorkspacePathClaim("cache/gates/gate.json"),
+      expectedClass: "workspace-gate-interface",
+      context: authority.context,
+    });
+    if (!target.ok) return undefined;
+    const bytes = new Uint8Array(await readFile(target.value.absolute));
     return parseActiveGate(parseCanonicalDocument(bytes, "active gate").value);
-  } catch (error) {
-    if ((error as { code?: unknown }).code === "ENOENT") return undefined;
-    throw error;
+  } catch {
+    // The projection is disposable. Durable request authority remains sufficient to reconstruct
+    // the base interface after a fresh clone or corrupt/missing cache.
+    return undefined;
   }
 }
 
 async function readArchivedGateRequest(
+  dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
-  active: ActiveGateV1,
+  gateId: PathSafeId,
 ): Promise<GateRequestV1 | undefined> {
   try {
-    const bytes = new Uint8Array(await readFile(join(
-      authority.task_root, "decisions", active.gate_id, "request.json",
-    )));
+    const target = await resolveTaskPath({
+      runner: dependencies.runner,
+      taskId: authority.task_id,
+      claim: gateRequestClaim(gateId),
+      expectedClass: "authority-decision",
+      context: authority.context,
+    });
+    if (!target.ok) return undefined;
+    const bytes = new Uint8Array(await readFile(target.value.absolute));
     return parseGateRequest(parseCanonicalDocument(bytes, "gate request").value);
   } catch (error) {
     if ((error as { code?: unknown }).code === "ENOENT") return undefined;
@@ -520,10 +551,10 @@ async function gateStatus(
   return Object.freeze({
     gate_id: active.gate_id,
     kind: active.kind,
-    decision_path: "gate.decision",
-    archive_decision_path: `decisions/${active.gate_id}/decision.json`,
-    request_path: `decisions/${active.gate_id}/request.json`,
-    gate_counter_review_path: gateCounterReviewClaim(active.phase_instance, active.gate_id),
+    decision_path: `.archflow/work/tasks/${active.task_id}/cache/gates/gate.decision`,
+    archive_decision_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/decision.json`,
+    request_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/request.json`,
+    gate_counter_review_path: `.archflow/work/tasks/${active.task_id}/${gateCounterReviewClaim(active.phase_instance, active.gate_id)}`,
     decision_templates: buildGateDecisionTemplates(active),
     counter_review_prompt: renderGateCounterPrompt({
       tool: active.context !== null && typeof active.context === "object" && "origin" in active.context
@@ -903,8 +934,11 @@ export async function computeTaskStatus(
   if (state.open_gate !== undefined) {
     blockers.push("gate-decision-required");
     try {
-      activeGate = await readActiveGate(authority);
-      const request = activeGate === undefined ? undefined : await readArchivedGateRequest(authority, activeGate);
+      const request = await readArchivedGateRequest(dependencies, authority, state.open_gate.gate_id);
+      // Preserve an in-progress supplemental ledger when the disposable projection is valid, but
+      // never require that projection to reconstruct the base gate after a fresh clone.
+      activeGate = await readActiveGateProjection(dependencies, authority) ??
+        (request === undefined ? undefined : parseActiveGate(activeProjection(request)));
       const stateBindingMatches = activeGate !== undefined &&
         activeGate.task_id === state.task_id &&
         activeGate.phase_instance === state.phase_instance &&
@@ -986,6 +1020,28 @@ export async function computeTaskStatus(
     maximum_attempts: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS,
   });
 
+  let workspace: WorkspaceCleanupReport;
+  try {
+    const inspected = await inspectWorkspaceCleanup(dependencies, authority, state);
+    workspace = inspected.ok
+      ? inspected.value
+      : Object.freeze({
+          removed_files: 0 as WorkspaceCleanupReport["removed_files"],
+          removed_bytes: 0 as WorkspaceCleanupReport["removed_bytes"],
+          retained_files: 0 as WorkspaceCleanupReport["retained_files"],
+          retained_bytes: 0 as WorkspaceCleanupReport["retained_bytes"],
+          cleanup_pending: true,
+        });
+  } catch {
+    workspace = Object.freeze({
+      removed_files: 0 as WorkspaceCleanupReport["removed_files"],
+      removed_bytes: 0 as WorkspaceCleanupReport["removed_bytes"],
+      retained_files: 0 as WorkspaceCleanupReport["retained_files"],
+      retained_bytes: 0 as WorkspaceCleanupReport["retained_bytes"],
+      cleanup_pending: true,
+    });
+  }
+
   return ok(Object.freeze({
     task_id: authority.task_id,
     state: state.terminal ?? "active",
@@ -1005,6 +1061,7 @@ export async function computeTaskStatus(
     evidence,
     ...(editorialRevision === undefined ? {} : { editorial_revision: editorialRevision }),
     ...(gateInput === undefined ? {} : { gate_input: gateInput }),
+    workspace,
     blocking_reasons: Object.freeze([...new Set(blockers)]),
     next_action: nextActionWithRequest,
   }));

@@ -12,7 +12,7 @@ import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type Sha256Diges
 import { GATE_KINDS, gateDecisionEnvelopeV1Schema, humanDecisionProvenanceV1Schema, parseGateContext, parseGateDecisionEnvelope, validateGateDecision, type GateContext, type GateDecisionEnvelope, type GateKind, type HumanDecisionProvenance, type RuleVersionRef, type WaiverOriginRef, type WaiverScope } from "./gates.js";
 import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
-import { taskPathClaimV1Schema, type TaskPathClaim } from "./path-claims.js";
+import { repositoryPathClaimV1Schema, taskPathClaimV1Schema, type RepositoryPathClaim, type TaskPathClaim } from "./path-claims.js";
 import { rubricV1Schema, type RubricV1 } from "./rubric.js";
 import { parseSupplementalReviewOutcome, supplementalReviewOutcomeSchema, type GateSupersessionRef, type SupplementalReviewOutcome } from "./supplemental.js";
 import { TOOL_NAMES, type ToolName } from "./tool-names.js";
@@ -53,9 +53,9 @@ export interface CounterReviewInput extends CommonToolInput { readonly artifact_
  * constitution has active rules, and reported "not-run" explicitly when it has none.
  */
 export type CounterReviewConstitutionOutcome =
-  | Readonly<{ status: "evaluated"; path: TaskPathClaim; constitution: ConstitutionResult; drift: DriftResult; triggers: readonly RuleVersionRef[] }>
+  | Readonly<{ status: "evaluated"; path: RepositoryPathClaim; constitution: ConstitutionResult; drift: DriftResult; triggers: readonly RuleVersionRef[] }>
   | Readonly<{ status: "not-run"; reason: "no-active-constitution-rules" }>;
-export interface CounterReviewSuccess { readonly path: TaskPathClaim; readonly verdict: "pass" | "advisory" | "fail"; readonly blocking_count: number; readonly constitution: CounterReviewConstitutionOutcome; readonly revision: number; readonly request_digest?: Sha256Digest }
+export interface CounterReviewSuccess { readonly path: RepositoryPathClaim; readonly verdict: "pass" | "advisory" | "fail"; readonly blocking_count: number; readonly constitution: CounterReviewConstitutionOutcome; readonly revision: number; readonly request_digest?: Sha256Digest }
 export type GateInput = { readonly [K in GateKind]: CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly summary: string; readonly subject_digest: Sha256Digest; readonly current_evidence: CurrentEvidenceSetRef; readonly supersedes?: GateSupersessionRef; readonly supplemental_outcome?: SupplementalReviewOutcome; readonly kind: K; readonly context: GateContext<K> } }[GateKind];
 export type GateSuccess = { readonly [K in GateKind]: { readonly kind: K; readonly decision: GateDecisionEnvelope<K>; readonly notes: string; readonly revision: number; readonly request_digest?: Sha256Digest } }[GateKind];
 export interface WaiverInput extends CommonToolInput { readonly origin: WaiverOriginRef; readonly rationale: string; readonly supplemental_outcome?: SupplementalReviewOutcome }
@@ -167,11 +167,11 @@ export function bindParsedToolCallRequest<K extends ToolName>(call: Extract<Pars
 export const toolSuccessSchemas = {
   archflow_state: z.object({ path: taskPathClaimV1Schema, revision: safeInteger, status: z.enum(["running", "succeeded", "failed"]), request_digest: digest.optional() }).strict(),
   archflow_counter_review: z.object({
-    path: taskPathClaimV1Schema,
+    path: repositoryPathClaimV1Schema,
     verdict: z.enum(["pass", "advisory", "fail"]),
     blocking_count: safeInteger,
     constitution: z.union([
-      z.object({ status: z.literal("evaluated"), path: taskPathClaimV1Schema, constitution: z.enum(CONSTITUTION_RESULTS), drift: z.enum(DRIFT_RESULTS), triggers: z.array(rule) }).strict(),
+      z.object({ status: z.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: z.enum(CONSTITUTION_RESULTS), drift: z.enum(DRIFT_RESULTS), triggers: z.array(rule) }).strict(),
       z.object({ status: z.literal("not-run"), reason: z.literal("no-active-constitution-rules") }).strict(),
     ]),
     revision: safeInteger,

@@ -52,6 +52,7 @@ const createManifest = (): Record<string, unknown> => ({
     { path: "package.json", size: 20, digest: digest("f") },
   ],
   runtime_assets: [
+    { path: "assets/archflow.gitignore", size: 7, digest: digest("6") },
     { path: "assets/config.template.yaml", size: 10, digest: digest("7") },
     { path: "assets/workflow.yaml", size: 20, digest: digest("8") },
   ],

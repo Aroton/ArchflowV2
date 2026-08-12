@@ -75,13 +75,13 @@ export async function loadAuthenticatedGateApproval(
     dependencies,
     authority,
     gateRequestClaim(claimed.gate_id),
-    "decision",
+    "authority-decision",
   );
   const decisionPath = await resolvePath(
     dependencies,
     authority,
     gateDecisionClaim(claimed.gate_id),
-    "decision",
+    "authority-decision",
   );
   if (!requestPath.ok) return requestPath;
   if (!decisionPath.ok) return decisionPath;

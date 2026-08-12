@@ -1,7 +1,6 @@
 import { z } from "zod";
 
-import { endsWithDotOrSpace, isReservedDeviceName, type TaskSlug } from "./evidence.js";
-import type { PhaseInstanceId } from "./phase-instance.js";
+import { endsWithDotOrSpace, isReservedDeviceName, type PathSafeId, type Sha256Digest, type TaskSlug } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
 
 declare const taskPathClaimBrand: unique symbol;
@@ -89,16 +88,25 @@ export function userAskClaim(): TaskPathClaim {
   return parseTaskPathClaim("ask.md");
 }
 
-export function counterReviewClaim(phaseInstance: PhaseInstanceId): TaskPathClaim {
-  return parseTaskPathClaim(`reviews/${phaseInstance}.counter.md`);
+export function authorityInitializationClaim(): TaskPathClaim {
+  return parseTaskPathClaim("authority/initialization.json");
 }
 
-export function triageReviewClaim(phaseInstance: PhaseInstanceId): TaskPathClaim {
-  return parseTaskPathClaim(`reviews/${phaseInstance}.triage.md`);
+/** The sole durable manifest location derived from its content digest. */
+export function authorityResultClaim(resultDigest: Sha256Digest): TaskPathClaim {
+  return parseTaskPathClaim(`authority/results/${resultDigest}.json`);
 }
 
-export function adjudicationReviewClaim(phaseInstance: PhaseInstanceId): TaskPathClaim {
-  return parseTaskPathClaim(`reviews/${phaseInstance}.adjudication.md`);
+export function authorityDecisionRequestClaim(gateId: PathSafeId): TaskPathClaim {
+  return parseTaskPathClaim(`authority/decisions/${gateId}/request.json`);
+}
+
+export function authorityDecisionRecordClaim(gateId: PathSafeId): TaskPathClaim {
+  return parseTaskPathClaim(`authority/decisions/${gateId}/decision.json`);
+}
+
+export function authoritySupplementalReviewClaim(gateId: PathSafeId): TaskPathClaim {
+  return parseTaskPathClaim(`authority/decisions/${gateId}/supplemental-review.json`);
 }
 
 /** Total constructor: a path is branded as Git's output without asserting anything about it. */
@@ -117,9 +125,8 @@ export function tryRepositoryPathClaim(value: RawGitPath): RepositoryPathClaim |
 }
 
 export const TASK_PATH_CLASSES = [
-  "task-config", "task-state", "task-ask", "gate-interface", "document", "verification-transcript",
-  "review", "decision", "result-manifest", "result-payload", "intent", "staged-request", "attempt",
-  "maintenance-record", "import",
+  "task-config", "task-state", "task-ask", "document",
+  "authority-initialization", "authority-result", "authority-decision",
 ] as const;
 export const REPOSITORY_PATH_CLASSES = [
   "shared-workflow", "shared-constitution", "task-branch-constitution", "repository-source",

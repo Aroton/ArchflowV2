@@ -18,4 +18,4 @@ Create the second phase with an implementation log.
 
 ### Phase 3: Unlogged Review
 
-Retain a log-less phase and both counter-review files; its implementation-review mapping makes the derived resume point phase 4.
+Retain a log-less phase and both counter-review files; rendered reviews remain staged audit input, while the last durable implementation log determines the resume point.

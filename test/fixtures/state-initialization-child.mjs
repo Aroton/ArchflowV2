@@ -62,15 +62,15 @@ try {
         if (error?.code === "EEXIST") return "exists";
         throw error;
       } finally { await unlink(temporary).catch(() => undefined); }
-      if (cutPoint === "initialization-receipt-only") await killAt(cutPoint, path.absolute);
+      if (cutPoint === "initialization-receipt-only" && path.path_class === "workspace-intent") await killAt(cutPoint, path.absolute);
       return "created";
     },
     replace: async (path, bytes) => {
       const temporary = join(dirname(path.absolute), `.${basename(path.absolute)}.${process.pid}.initialization.tmp`);
       await writeTemporary(temporary, bytes);
-      if (cutPoint === "state-before") await killAt(cutPoint, temporary);
+      if (cutPoint === "state-before" && path.path_class === "task-state") await killAt(cutPoint, temporary);
       await rename(temporary, path.absolute);
-      if (cutPoint === "state-after") await killAt(cutPoint, path.absolute);
+      if (cutPoint === "state-after" && path.path_class === "task-state") await killAt(cutPoint, path.absolute);
     },
   };
   const dependencies = {

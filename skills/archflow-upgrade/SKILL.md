@@ -17,7 +17,7 @@ Stop if the helper rejects an unresolved task-local constitution edit or secretl
 
 ## Stage and initialize
 
-Review the selected baselines, exclusion list, staged and unmapped paths, derived mapping, draft sources, and resume phase with the user before initialization. Explain that every selected regular file is staged byte-for-byte under the destination import, while an unmapped file remains historical material with no canonical document slot.
+Review the selected baselines, exclusion list, staged and unmapped paths, derived mapping, draft sources, and resume phase with the user before initialization. Explain that every selected regular file is staged byte-for-byte below the ignored `.archflow/work/tasks/<task>/cache/imports/` workspace, while an unmapped file remains historical material with no canonical document slot. These staging bytes are disposable; only the adopted initialization authority and later canonical documents survive a fresh clone.
 
 Pass the returned initialization manifest unchanged to the first `archflow_state` request with `expected_revision: 0`, `phase_instance: "prd"`, `step: "produce"`, and `status: "running"` — the canonical rerun starts at the PRD and the server rejects any other entry point; the resume jump happens only after the migration-audit gate. Use `archflow-local envelope --task <task>` for the complete request and its server-checked fingerprint. A successful initialization establishes only the new destination and its import identity; it does not approve, adopt, or complete any imported work.
 
@@ -37,4 +37,4 @@ Open the `migration-audit` gate only while durable status is at the approved `de
 
 Treat `accept-import-audit` as authorization for the guarded resume jump, not as approval of legacy material. The accepted gate leaves the cursor at `design`; the next ordinary `archflow_state` produce call performs the jump to the derived `phase-design` instance. A revise, abort, or cancel outcome advances nothing. Never claim the jump from the decision file or conversation alone; rerun status and follow its authenticated next action.
 
-At the derived phase, continue with the ordinary `archflow-phase-design` and `archflow-phase-impl` skills. Historical phase material remains available under the content-addressed import for reference, but canonical state represents only work reviewed and approved after initialization.
+At the derived phase, continue with the ordinary `archflow-phase-design` and `archflow-phase-impl` skills. Historical phase material remains available in ignored import staging only while the current phase needs it; canonical state represents only work reviewed and approved after initialization.

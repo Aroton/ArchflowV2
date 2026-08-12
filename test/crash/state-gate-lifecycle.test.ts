@@ -116,8 +116,8 @@ async function waitForAbsent(path: string): Promise<void> {
 }
 
 async function decision(input: Fixture, choice = "approve"): Promise<string> {
-  const active = JSON.parse(await readFile(join(input.taskRoot, "gate.json"), "utf8"));
-  const requestPath = join(input.taskRoot, "decisions", active.gate_id, "request.json");
+  const active = JSON.parse(await readFile(join(input.authority.workspace_root, "cache", "gates", "gate.json"), "utf8"));
+  const requestPath = join(input.taskRoot, "authority", "decisions", active.gate_id, "request.json");
   const request = JSON.parse(await readFile(requestPath, "utf8"));
   const envelope = {
     schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance,
@@ -125,7 +125,7 @@ async function decision(input: Fixture, choice = "approve"): Promise<string> {
     human_provenance: { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "crash-decision", helper_invocation_id: "crash-helper", recorded_at: "2026-07-30T12:00:00.000Z" },
     payload: { decision: choice, reason: "Human reviewed the phase" },
   };
-  await writeFile(join(input.taskRoot, "gate.decision"), canonicalDocument(envelope).bytes);
+  await writeFile(join(input.authority.workspace_root, "cache", "gates", "gate.decision"), canonicalDocument(envelope).bytes);
   return request.gate_id;
 }
 
@@ -141,9 +141,9 @@ describe("gate process and SIGKILL boundaries", { timeout: 20_000 }, () => {
     expect((await event(winner, "result")).result).toMatchObject({ ok: true });
     const state = await readTaskState(input.authority.state);
     expect(state).toMatchObject({ kind: "canonical", document: { value: { revision: 8, open_gate: { gate_id: expect.any(String) } } } });
-    expect((await readFile(join(input.taskRoot, "gate.json"), "utf8"))).toContain("winner-intent");
-    expect((await readFile(join(input.taskRoot, "gate.json"), "utf8"))).not.toContain("loser-intent");
-    expect(await readdir(join(input.taskRoot, "decisions"))).toHaveLength(1);
+    expect((await readFile(join(input.authority.workspace_root, "cache", "gates", "gate.json"), "utf8"))).toContain("winner-intent");
+    expect((await readFile(join(input.authority.workspace_root, "cache", "gates", "gate.json"), "utf8"))).not.toContain("loser-intent");
+    expect(await readdir(join(input.taskRoot, "authority", "decisions"))).toHaveLength(1);
   });
 
   it("serializes conflicting resolves and appends one approval", async () => {
@@ -165,10 +165,10 @@ describe("gate process and SIGKILL boundaries", { timeout: 20_000 }, () => {
     const second = await fixture("gate-wait-two");
     const left = start(first, "run");
     const right = start(second, "run");
-    await Promise.all([waitForFile(join(first.taskRoot, "gate.json")), waitForFile(join(second.taskRoot, "gate.json"))]);
-    await Promise.all([waitForAbsent(join(first.taskRoot, ".transaction-lock")), waitForAbsent(join(second.taskRoot, ".transaction-lock"))]);
-    expect(existsSync(join(first.taskRoot, ".transaction-lock"))).toBe(false);
-    expect(existsSync(join(second.taskRoot, ".transaction-lock"))).toBe(false);
+    await Promise.all([waitForFile(join(first.authority.workspace_root, "cache", "gates", "gate.json")), waitForFile(join(second.authority.workspace_root, "cache", "gates", "gate.json"))]);
+    await Promise.all([waitForAbsent(join(first.authority.workspace_root, "transient", ".transaction-lock")), waitForAbsent(join(second.authority.workspace_root, "transient", ".transaction-lock"))]);
+    expect(existsSync(join(first.authority.workspace_root, "transient", ".transaction-lock"))).toBe(false);
+    expect(existsSync(join(second.authority.workspace_root, "transient", ".transaction-lock"))).toBe(false);
     await Promise.all([decision(first), decision(second)]);
     const [leftResult, rightResult] = await Promise.all([event(left, "result"), event(right, "result")]);
     expect(leftResult.result.ok).toBe(true);
@@ -199,7 +199,7 @@ describe("gate process and SIGKILL boundaries", { timeout: 20_000 }, () => {
     expect((await event(start(input, "run"), "result")).result).toMatchObject({ ok: true });
     const state = await readTaskState(input.authority.state);
     expect(state.kind === "canonical" ? state.document.value.approvals : []).toHaveLength(1);
-    expect(existsSync(join(input.taskRoot, "decisions", gateId, "decision.json"))).toBe(true);
+    expect(existsSync(join(input.taskRoot, "authority", "decisions", gateId, "decision.json"))).toBe(true);
   });
 
   for (const cut of ["archive-created", "receipt-created", "state-resolved", "interface-remove-before"] as const) {
@@ -215,9 +215,9 @@ describe("gate process and SIGKILL boundaries", { timeout: 20_000 }, () => {
       expect(result.result).toMatchObject({ ok: true });
       const state = await readTaskState(input.authority.state);
       expect(state.kind === "canonical" ? state.document.value.approvals : []).toHaveLength(1);
-      expect(existsSync(join(input.taskRoot, "decisions", gateId, "decision.json"))).toBe(true);
-      expect(existsSync(join(input.taskRoot, "gate.json"))).toBe(false);
-      expect(existsSync(join(input.taskRoot, "gate.decision"))).toBe(false);
+      expect(existsSync(join(input.taskRoot, "authority", "decisions", gateId, "decision.json"))).toBe(true);
+      expect(existsSync(join(input.authority.workspace_root, "cache", "gates", "gate.json"))).toBe(false);
+      expect(existsSync(join(input.authority.workspace_root, "cache", "gates", "gate.decision"))).toBe(false);
     });
   }
 
@@ -260,9 +260,9 @@ describe("gate process and SIGKILL boundaries", { timeout: 20_000 }, () => {
           },
         },
       });
-      expect(existsSync(join(input.taskRoot, "decisions", gateId, "decision.json"))).toBe(true);
-      expect(existsSync(join(input.taskRoot, "gate.json"))).toBe(false);
-      expect(existsSync(join(input.taskRoot, "gate.decision"))).toBe(false);
+      expect(existsSync(join(input.taskRoot, "authority", "decisions", gateId, "decision.json"))).toBe(true);
+      expect(existsSync(join(input.authority.workspace_root, "cache", "gates", "gate.json"))).toBe(false);
+      expect(existsSync(join(input.authority.workspace_root, "cache", "gates", "gate.decision"))).toBe(false);
     },
   );
 });

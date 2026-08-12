@@ -55,13 +55,13 @@ export async function handleWaiver(
 
     const originTarget = await resolveTaskPath({
       runner: services.runner, taskId: services.authority.task_id,
-      claim: gateRequestClaim(call.input.origin.origin_gate_id), expectedClass: "decision",
+      claim: gateRequestClaim(call.input.origin.origin_gate_id), expectedClass: "authority-decision",
       context: services.authority.context,
     });
     if (!originTarget.ok) return originTarget;
     const decisionTarget = await resolveTaskPath({
       runner: services.runner, taskId: services.authority.task_id,
-      claim: gateDecisionClaim(call.input.origin.origin_gate_id), expectedClass: "decision",
+      claim: gateDecisionClaim(call.input.origin.origin_gate_id), expectedClass: "authority-decision",
       context: services.authority.context,
     });
     if (!decisionTarget.ok) return decisionTarget;

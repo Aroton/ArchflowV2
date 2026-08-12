@@ -18,7 +18,7 @@ import {
   parseIntentReceipt,
   type IntentReceiptV1,
 } from "../contracts/durable-intent.js";
-import type { AuthoritativeResultRef, CommittedIntentRef, TaskStateV1 } from "../contracts/durable-state.js";
+import type { AuthoritativeResultRef, LastTransition, TaskStateV1 } from "../contracts/durable-state.js";
 import { parseResultManifest, type ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
@@ -39,10 +39,16 @@ import type { ToolName } from "../contracts/tool-names.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
 import type { GitEnvironment } from "../repository/git.js";
 import { verifyRepositoryIdentity, type RootBoundGitRunner } from "../repository/identity.js";
-import { resolveTaskPath, type ResolvedPath, type ResolvedTaskPath } from "../repository/paths.js";
+import {
+  parseWorkspacePathClaim,
+  resolveTaskPath,
+  resolveTaskWorkspacePath,
+  type ResolvedPath,
+  type ResolvedTaskPath,
+  type ResolvedWorkspacePath,
+} from "../repository/paths.js";
 import { AtomicReplaceError, type AtomicWriter, type ProjectionWriter } from "./atomic.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
-import { pruneSupersededResultPayloads } from "./maintenance-roots.js";
 import type { InputFingerprintResolver } from "./fingerprint.js";
 import { identifyTransactionRequest } from "./request.js";
 import {
@@ -52,6 +58,7 @@ import {
   ensurePayloadParent,
   ensureResultDirectory,
   ensureTaskProjectionParent,
+  ensureWorkspaceProjectionParent,
 } from "./layout.js";
 import type {
   ConfigReadResult,
@@ -68,6 +75,7 @@ import {
   type PreparedSnapshot,
   type ProjectionPlan,
 } from "./snapshots.js";
+import { cleanTaskWorkspace, cleanTerminalTaskWorkspace } from "./workspace-cleanup.js";
 
 const MAX_RECEIPT_BYTES = 1024 * 1024;
 
@@ -79,16 +87,16 @@ export type TransactionDependencies = Readonly<{
   resolve_input_fingerprint: InputFingerprintResolver;
   read_state: (path: ResolvedPath) => Promise<StateReadResult>;
   read_config: (path: ResolvedPath) => Promise<ConfigReadResult>;
-  read_receipt: (path: ResolvedPath) => Promise<ReceiptReadResult>;
+  read_receipt: (path: ResolvedWorkspacePath) => Promise<ReceiptReadResult>;
   projection_writer?: ProjectionWriter;
   /** Returns retained bytes excluding `reference`, when supplied, so replay never double-counts its generation. */
   read_retained_task_bytes?: (reference?: AuthoritativeResultRef) => Promise<SafeInteger>;
   load_retained_result?: (reference: AuthoritativeResultRef) => Promise<ProjectResult<RetainedResultInstallation>>;
 }>;
 
-export type NextStateDraft = Omit<TaskStateV1, "revision" | "committed_intent"> & {
+export type NextStateDraft = Omit<TaskStateV1, "revision" | "last_transition"> & {
   readonly revision?: never;
-  readonly committed_intent?: never;
+  readonly last_transition?: never;
 };
 
 export type PreparedTransaction<K extends ToolName> = Readonly<{
@@ -138,7 +146,7 @@ function materializeResultInstallation(plan: ResultInstallationPlan): ResultInst
   if (reference.result_digest !== prepared.result_digest || prepared.manifest.digest !== prepared.result_digest) {
     throw new TypeError("result installation reference does not bind the prepared snapshot");
   }
-  if (manifestTarget.path_class !== "result-manifest" || reference.manifest_path !== manifestTarget.repositoryRelative) {
+  if (manifestTarget.path_class !== "authority-result") {
     throw new TypeError("result installation reference does not bind the manifest target");
   }
   const canonical = canonicalDocument(prepared.manifest.value);
@@ -297,14 +305,10 @@ function materializeFingerprint(value: InputFingerprintSubject): InputFingerprin
 
 function materializeDraft(value: unknown): NextStateDraft {
   assertPlainJson(value, "next state draft");
-  if (Object.hasOwn(value as object, "revision") || Object.hasOwn(value as object, "committed_intent")) {
-    throw new TypeError("next state draft cannot carry revision or committed_intent");
+  if (Object.hasOwn(value as object, "revision") || Object.hasOwn(value as object, "last_transition")) {
+    throw new TypeError("next state draft cannot carry revision or last_transition");
   }
   return structuredClone(value as PlainJsonValue) as NextStateDraft;
-}
-
-function sameCheckpoint(left: TaskStateV1["adopted_checkpoint"], right: TaskStateV1["adopted_checkpoint"]): boolean {
-  return isDeepStrictEqual(left, right);
 }
 
 function assertPreserved(current: TaskStateV1, next: NextStateDraft): void {
@@ -319,15 +323,12 @@ function assertPreserved(current: TaskStateV1, next: NextStateDraft): void {
   ) {
     throw new TypeError("next state draft changed a transaction-substrate identity or pin");
   }
-  // `adopted_checkpoint` survives only as a tolerated legacy key: every transaction preserves
-  // it verbatim, and nothing writes it anew.
   if (
-    !sameCheckpoint(next.adopted_checkpoint, current.adopted_checkpoint) ||
     !isDeepStrictEqual(next.open_gate, current.open_gate) ||
     !isDeepStrictEqual(next.approvals, current.approvals) ||
     !isDeepStrictEqual(next.waivers, current.waivers)
   ) {
-    throw new TypeError("next state draft changed gate authority or the adopted checkpoint");
+    throw new TypeError("next state draft changed gate authority");
   }
 }
 
@@ -344,20 +345,20 @@ function outcomeResult<K extends ToolName>(
 async function resolveIntentTarget<K extends ToolName>(
   dependencies: TransactionDependencies,
   request: TransactionRequest<K>,
-): Promise<ProjectResult<ResolvedPath>> {
-  const claim = parseTaskPathClaim(`intents/${request.call.input.intent_id}.json`);
-  const resolved = await resolveTaskPath({
+): Promise<ProjectResult<ResolvedWorkspacePath>> {
+  const claim = parseWorkspacePathClaim(`transient/intents/${request.call.input.intent_id}.json`);
+  const resolved = await resolveTaskWorkspacePath({
     runner: dependencies.runner,
     taskId: request.authority.task_id,
     claim,
-    expectedClass: "intent",
+    expectedClass: "workspace-intent",
     context: request.authority.context,
   });
   if (!resolved.ok) return resolved;
-  requirePath(resolved.value, "intent", "intent target");
-  const expectedClaim = `.archflow/tasks/${request.authority.task_id}/${claim}`;
+  if (resolved.value.path_class !== "workspace-intent") throw new TypeError("intent target has the wrong resolved path class");
+  const expectedClaim = `.archflow/work/tasks/${request.authority.task_id}/${claim}`;
   if (resolved.value.repositoryRelative !== expectedClaim) throw new TypeError("intent target claim mismatch");
-  const rel = relative(request.authority.task_root, resolved.value.absolute);
+  const rel = relative(request.authority.workspace_root, resolved.value.absolute);
   if (rel === "" || rel === ".." || rel.startsWith("../") || isAbsolute(rel)) {
     throw new TypeError("intent target is not contained by the authenticated task root");
   }
@@ -471,8 +472,8 @@ function validateReceiptLocally(receiptDocument: CanonicalDocument<IntentReceipt
   if (receipt.prepared_state.revision !== receipt.resulting_revision) {
     return taskIssue(receipt.task_id, "intent-receipt-prepared-state-revision-mismatch");
   }
-  if (receipt.prepared_state.committed_intent !== undefined) {
-    return taskIssue(receipt.task_id, "intent-receipt-prepared-state-committed-intent-present");
+  if (receipt.prepared_state.last_transition !== undefined) {
+    return taskIssue(receipt.task_id, "intent-receipt-prepared-state-last-transition-present");
   }
   return ok(undefined);
 }
@@ -496,20 +497,62 @@ function replayOutcome<K extends ToolName>(
   }
 }
 
+function replayLastTransition<K extends ToolName>(
+  request: TransactionRequest<K>,
+  current: CanonicalDocument<TaskStateV1>,
+  transition: LastTransition,
+): ProjectResult<TransactionOutcome<K>> {
+  if (transition.tool !== request.call.name || transition.operation !== operationFor(request.call)) {
+    return taskIssue(current.value.task_id, "last-transition-operation-mismatch");
+  }
+  if (transition.input_fingerprint !== request.call.input.input_fingerprint) {
+    return fingerprintMismatch(transition.input_fingerprint, request.call.input.input_fingerprint);
+  }
+  const identified = identifyTransactionRequest(request.call, request.authority, transition.input_fingerprint);
+  if (identified.request_digest !== transition.request_digest) {
+    return mismatch(transition.request_digest, identified.request_digest);
+  }
+  if (
+    transition.resulting_revision !== current.value.revision ||
+    transition.prior_revision + 1 !== transition.resulting_revision ||
+    intentOutcomeDigest(transition.outcome) !== transition.outcome_digest
+  ) return stateIssue(current.value, "last-transition-invalid");
+  try {
+    const validated = validateProjectResultStructure(request.call, {
+      schema_version: "1",
+      ok: true,
+      value: transition.outcome,
+    });
+    if (!validated.ok || validated.value.revision !== transition.resulting_revision) {
+      return stateIssue(current.value, "last-transition-result-mismatch");
+    }
+    return outcomeResult(current, validated.value, true);
+  } catch {
+    return stateIssue(current.value, "last-transition-result-mismatch");
+  }
+}
+
+function lastTransition(receipt: IntentReceiptV1): LastTransition {
+  return {
+    schema_version: "1",
+    tool: receipt.tool,
+    operation: receipt.operation,
+    intent_id: receipt.intent_id,
+    request_digest: receipt.request_digest,
+    input_fingerprint: receipt.input_fingerprint,
+    result_id: receipt.result_id,
+    outcome: receipt.outcome,
+    outcome_digest: receipt.outcome_digest,
+    prior_revision: receipt.prior_revision,
+    resulting_revision: receipt.resulting_revision,
+  };
+}
+
 function committedState(
   receiptDocument: CanonicalDocument<IntentReceiptV1>,
 ): CanonicalDocument<TaskStateV1> {
   const receipt = receiptDocument.value;
-  const reference: CommittedIntentRef = {
-    intent_id: receipt.intent_id,
-    request_digest: receipt.request_digest,
-    receipt_digest: receiptDocument.digest,
-    outcome_digest: receipt.outcome_digest,
-    prior_revision: receipt.prior_revision,
-    resulting_revision: receipt.resulting_revision,
-    result_id: receipt.result_id,
-  };
-  return canonicalDocument({ ...receipt.prepared_state, committed_intent: reference });
+  return canonicalDocument({ ...receipt.prepared_state, last_transition: lastTransition(receipt) });
 }
 
 function validatePreparedAndCommitted(
@@ -597,7 +640,7 @@ function expectedInstallationSource(
   throw new TypeError("result installation tool and source kind do not match");
 }
 
-function targetIsInside(root: string, target: ResolvedPath): boolean {
+function targetIsInside(root: string, target: ResolvedPath | ResolvedWorkspacePath): boolean {
   const rel = relative(root, target.absolute);
   return rel !== "" && rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel);
 }
@@ -607,7 +650,7 @@ export function resultProjectionTargetIsContained(
   artifactKind: ResultManifestV1["source_artifact"]["artifact_kind"],
   taskRoot: string,
   worktreeRoot: string,
-  target: ResolvedPath,
+  target: ResolvedPath | ResolvedWorkspacePath,
 ): boolean {
   return targetIsInside(
     artifactKind === "implementation-output" ? worktreeRoot : taskRoot,
@@ -648,30 +691,37 @@ function validateInstallationFacts<K extends ToolName>(
     manifest.input_fingerprint !== identified.input_fingerprint
   ) return stateIssue(current.value, "result-installation-state-mismatch");
   const expectedManifestPath =
-    `.archflow/tasks/${request.authority.task_id}/results/sha256/${facts.prepared.result_digest}/manifest.json`;
+    `.archflow/tasks/${request.authority.task_id}/authority/results/${facts.prepared.result_digest}.json`;
   if (
     facts.worktree_root !== authenticatedWorktreeRoot ||
     facts.manifest_target.repositoryRelative !== expectedManifestPath ||
     !targetIsInside(request.authority.task_root, facts.manifest_target)
   ) return issue("CONTRACT_INVALID", "result-installation-target-mismatch");
   const payloadRoot =
-    `.archflow/tasks/${request.authority.task_id}/results/sha256/${facts.prepared.result_digest}/payload/`;
+    `.archflow/work/tasks/${request.authority.task_id}/cache/results/${facts.prepared.result_digest}/payload/`;
   if (facts.prepared.payloads.some((payload) =>
     !payload.target.repositoryRelative.startsWith(payloadRoot) ||
-    !targetIsInside(request.authority.task_root, payload.target)
+    !targetIsInside(request.authority.workspace_root, payload.target)
   )) return issue("CONTRACT_INVALID", "result-installation-payload-target-mismatch");
   const outputs = new Map(manifest.outputs.map((output) => [output.path, output.path_class]));
+  const evidenceProjection = manifest.source_artifact.artifact_kind === "review-evidence" ||
+    manifest.source_artifact.artifact_kind === "triage" ||
+    manifest.source_artifact.artifact_kind === "adjudication-evidence";
   if (
     outputs.size !== manifest.outputs.length ||
     facts.projection_plan.entries.some((entry) =>
-      outputs.get(entry.path) !== entry.target.path_class ||
+      (evidenceProjection
+        ? entry.target.path_class !== "workspace-review"
+        : outputs.get(entry.path) !== entry.target.path_class) ||
       entry.target.repositoryRelative !== entry.path ||
-      !resultProjectionTargetIsContained(
-        manifest.source_artifact.artifact_kind,
-        request.authority.task_root,
-        authenticatedWorktreeRoot,
-        entry.target,
-      ))
+      ("workspaceRelative" in entry.target
+        ? !targetIsInside(request.authority.workspace_root, entry.target)
+        : !resultProjectionTargetIsContained(
+            manifest.source_artifact.artifact_kind,
+            request.authority.task_root,
+            authenticatedWorktreeRoot,
+            entry.target,
+          )))
   ) return issue("CONTRACT_INVALID", "result-installation-projection-target-mismatch");
   return ok(undefined);
 }
@@ -792,7 +842,7 @@ async function authenticateCommitted<K extends ToolName>(
 async function arbitrate<K extends ToolName>(
   dependencies: TransactionDependencies,
   request: TransactionRequest<K>,
-  intentPath: ResolvedPath,
+  intentPath: ResolvedWorkspacePath,
   predecessor: CanonicalDocument<TaskStateV1>,
   plan: PlannedCommit<K>,
   operation: "intent-receipt-create" | "task-state-replace" | "task-lock-release",
@@ -800,19 +850,10 @@ async function arbitrate<K extends ToolName>(
 ): Promise<ProjectResult<TransactionOutcome<K>>> {
   const stateRead = await dependencies.read_state(request.authority.state);
   if (stateRead.kind === "canonical") {
-    const receiptRead = await dependencies.read_receipt(intentPath);
     if (stateRead.document.digest === plan.final.digest) {
-      if (receiptRead.kind !== "canonical") {
-        if (receiptRead.kind === "unreadable") return io(request.authority, "intent-receipt-read");
-        return stateIssue(stateRead.document.value, receiptRead.kind === "missing"
-          ? "intent-receipt-missing"
-          : "intent-receipt-noncanonical");
-      }
-      const committed = validateDurableSemantics(createCommittedIntentSubject(stateRead.document, receiptRead.document));
+      const committed = validateDurableSemantics({ state: stateRead.document });
       if (!committed.ok) return committed;
-      if (receiptRead.document.digest !== plan.receipt.digest) {
-        return stateIssue(stateRead.document.value, "intent-receipt-reference-digest-mismatch");
-      }
+      await cleanupCommittedWorkspace(dependencies, request.authority, stateRead.document.value);
       return outcomeResult(stateRead.document, plan.outcome, false);
     }
     if (stateRead.document.digest === predecessor.digest) {
@@ -835,7 +876,7 @@ function copiedResultBytes(prepared: PreparedSnapshot): number {
     if (output.storage !== "raw-payload") continue;
     const payload = payloads.get(output.path);
     if (
-      payload === undefined || payload.target.path_class !== "result-payload" ||
+      payload === undefined || payload.target.path_class !== "workspace-result-payload" ||
       payload.bytes.byteLength !== output.payload_bytes || sha256Bytes(payload.bytes) !== output.payload_digest
     ) throw new TypeError("prepared snapshot payload facts disagree");
     bytes += payload.bytes.byteLength;
@@ -893,6 +934,9 @@ async function installResultFacts(
   try {
     await ensureResultDirectory(authority, revalidated.value.result_digest);
     for (const payload of revalidated.value.payloads) {
+      if (payload.target.path_class !== "workspace-result-payload") {
+        throw new TypeError("result payload target has the wrong storage class");
+      }
       await ensurePayloadParent(
         authority,
         revalidated.value.result_digest,
@@ -915,7 +959,11 @@ async function installResultFacts(
   let projected;
   try {
     for (const entry of facts.plan.projection_plan.entries) {
-      await ensureTaskProjectionParent(authority, entry.target.absolute as ResolvedTaskPath);
+      if ("workspaceRelative" in entry.target) {
+        await ensureWorkspaceProjectionParent(authority, entry.target.absolute);
+      } else {
+        await ensureTaskProjectionParent(authority, entry.target.absolute);
+      }
     }
     projected = await applyProjectionPlan(dependencies.projection_writer, facts.plan.projection_plan);
   } catch (error) {
@@ -932,36 +980,23 @@ async function installResultFacts(
   return ok(undefined);
 }
 
-/**
- * Post-commit, best-effort: when a commit drops an authoritative result reference — the single
- * point at which a result becomes superseded — the replaced result's payload bytes have just
- * become unreadable and are reclaimed through the maintenance machinery, which writes an
- * immutable maintenance record before deleting anything. Failure never surfaces: the committed
- * outcome is already durable, and an unfinished prune is retried by the next superseding commit.
- */
-async function reclaimSupersededPayloads(
+/** Post-commit cleanup never changes the already-authenticated outcome. */
+async function cleanupCommittedWorkspace(
   dependencies: TransactionDependencies,
   authority: TransactionAuthority,
-  previous: TaskStateV1,
   committed: TaskStateV1,
 ): Promise<void> {
   try {
-    const retained = new Set(committed.authoritative_results.map((reference) => reference.result_digest));
-    if (!previous.authoritative_results.some((reference) => !retained.has(reference.result_digest))) return;
-    // The maintenance enumerators sit above modules that depend on this kernel, so this static
-    // edge is part of a module cycle — safe, because the binding is only dereferenced here at
-    // call time. A dynamic import() must not be used: it forces esbuild to lazy-wrap the whole
-    // cycle (and, transitively, zod), which breaks bundled runtime initialization before main.
-    await pruneSupersededResultPayloads(dependencies, authority);
+    await cleanTaskWorkspace(dependencies, authority, committed);
   } catch {
-    // Best-effort by contract; whatever was reclaimed is accounted for by its maintenance record.
+    // Cleanup debt is derived and reported by status; authority is already committed.
   }
 }
 
 async function installPlan<K extends ToolName>(
   dependencies: TransactionDependencies,
   request: TransactionRequest<K>,
-  intentPath: ResolvedPath,
+  intentPath: ResolvedWorkspacePath,
   current: CanonicalDocument<TaskStateV1>,
   plan: PlannedCommit<K>,
   receiptAlreadyExists: boolean,
@@ -1051,14 +1086,14 @@ async function installPlan<K extends ToolName>(
   }
   const committed = validateDurableSemantics(createCommittedIntentSubject(observed.document, plan.receipt));
   if (!committed.ok) return committed;
-  await reclaimSupersededPayloads(dependencies, request.authority, current.value, observed.document.value);
+  await cleanupCommittedWorkspace(dependencies, request.authority, observed.document.value);
   return outcomeResult(observed.document, plan.outcome, false);
 }
 
 async function handleExisting<K extends ToolName>(
   dependencies: TransactionDependencies,
   request: TransactionRequest<K>,
-  intentPath: ResolvedPath,
+  intentPath: ResolvedWorkspacePath,
   current: CanonicalDocument<TaskStateV1>,
   receipt: CanonicalDocument<IntentReceiptV1>,
   onPlan: (plan: PlannedCommit<K>) => void,
@@ -1068,7 +1103,7 @@ async function handleExisting<K extends ToolName>(
   const identity = validateReceiptIdentity(request, receipt.value);
   if (!identity.ok) return identity;
 
-  const claimed = current.value.committed_intent?.intent_id === request.call.input.intent_id;
+  const claimed = current.value.last_transition?.intent_id === request.call.input.intent_id;
   if (claimed) return authenticateCommitted(request, current, receipt);
 
   if (receipt.value.prior_revision > current.value.revision) {
@@ -1113,7 +1148,7 @@ async function handleExisting<K extends ToolName>(
 async function executeLocked<K extends ToolName>(
   dependencies: TransactionDependencies,
   request: TransactionRequest<K>,
-  intentPath: ResolvedPath,
+  intentPath: ResolvedWorkspacePath,
   prepare: (
     current: CanonicalDocument<TaskStateV1>,
     call: Extract<RequestIdentifiedToolCall, { readonly name: K }>,
@@ -1127,6 +1162,19 @@ async function executeLocked<K extends ToolName>(
   if (!stateSemantics.ok) return stateSemantics;
   const repository = verifyRepositoryIdentity(current.value.repository_identity_digest, request.authority.repository_identity);
   if (!repository.ok) return repository;
+  const last = current.value.last_transition;
+  if (last?.intent_id === request.call.input.intent_id) {
+    if (
+      request.call.input.expected_revision !== current.value.revision &&
+      request.call.input.expected_revision !== last.prior_revision
+    ) {
+      return fail(createProjectError("STATE_CONFLICT", {
+        expected_revision: request.call.input.expected_revision,
+        observed_revision: current.value.revision,
+      }));
+    }
+    return replayLastTransition(request, current, last);
+  }
   if (request.call.input.expected_revision !== current.value.revision) {
     return fail(createProjectError("STATE_CONFLICT", {
       expected_revision: request.call.input.expected_revision,
@@ -1138,7 +1186,7 @@ async function executeLocked<K extends ToolName>(
   if (receiptRead.kind === "canonical") {
     return handleExisting(dependencies, request, intentPath, current, receiptRead.document, (plan) => onPlan(current, plan));
   }
-  const claimed = current.value.committed_intent?.intent_id === request.call.input.intent_id;
+  const claimed = false;
   const shellFailure = receiptShellFailure(current.value, claimed, receiptRead, request.authority);
   if (shellFailure !== undefined) return shellFailure;
 
@@ -1181,24 +1229,37 @@ export async function runStateTransaction<K extends ToolName>(
   requirePath(request.authority.config, "task-config", "authority config");
   const intent = await resolveIntentTarget(dependencies, request);
   if (!intent.ok) return intent;
+  try {
+    await ensureIntentDirectory(request.authority);
+  } catch (error) {
+    if (error instanceof IntentLayoutError) return io(request.authority, "intent-receipt-create");
+    throw error;
+  }
 
   let completed: ProjectResult<TransactionOutcome<K>> | undefined;
   let arbitrationFacts: Readonly<{
     current: CanonicalDocument<TaskStateV1>;
     plan: PlannedCommit<K>;
   }> | undefined;
+  const finalize = async (result: ProjectResult<TransactionOutcome<K>>): Promise<ProjectResult<TransactionOutcome<K>>> => {
+    if (result.ok && result.value.state.value.terminal !== undefined) {
+      await cleanTerminalTaskWorkspace(dependencies, request.authority).catch(() => undefined);
+    }
+    return result;
+  };
   try {
-    return await dependencies.lock.runExclusive(request.authority.task_root, async () => {
+    const result = await dependencies.lock.runExclusive(request.authority.workspace_root, async () => {
       completed = await executeLocked(dependencies, request, intent.value, prepare, (current, plan) => {
         arbitrationFacts = Object.freeze({ current, plan });
       });
       return completed;
     });
+    return finalize(result);
   } catch (error) {
     if (!(error instanceof TaskLockError)) throw error;
     if (error.stage === "acquire") return io(request.authority, "task-lock-acquire");
     if (completed === undefined && error.cause !== undefined) throw error.cause;
-    if (completed?.ok) return completed;
+    if (completed?.ok) return finalize(completed);
     if (arbitrationFacts !== undefined) {
       return arbitrate(
         dependencies,

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parsePathSafeId, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
-import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import type { EvidenceAssessment } from "../../src/review/fixed-point.js";
 import { deriveNextAction, type NextActionInput } from "../../src/state/next-action.js";
 import type { ReconciliationFinding } from "../../src/state/reconciliation.js";
@@ -23,7 +22,6 @@ const produced = (phaseInstance: TaskStateV1["phase_instance"]): TaskStateV1["au
   result_digest: D("7"),
   result_id: parseSafeId("result-1"),
   input_fingerprint: D("2"),
-  manifest_path: parseRepositoryPathClaim(`.archflow/tasks/task-1/results/sha256/${"7".repeat(64)}/manifest.json`),
 });
 
 function state(overrides: Partial<TaskStateV1> = {}): TaskStateV1 {

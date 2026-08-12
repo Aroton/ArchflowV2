@@ -11,8 +11,8 @@ import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/con
 import { createGitRunner, preflightGit, type RepositoryOperationContext } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { createInternalTransactionAuthority, type TransactionAuthority } from "../../src/state/authority.js";
-import { ensureAttemptDirectory, ensureDecisionDirectory, ensureIntentDirectory, ensureTaskProjectionParent, type DecisionLayoutError, type IntentLayoutError, type ResultLayoutError } from "../../src/state/layout.js";
-import type { ResolvedTaskPath } from "../../src/repository/paths.js";
+import { ensureAttemptDirectory, ensureDecisionDirectory, ensureIntentDirectory, ensurePayloadParent, ensureResultDirectory, ensureTaskProjectionParent, ensureWorkspaceProjectionParent, type DecisionLayoutError, type IntentLayoutError, type ResultLayoutError } from "../../src/state/layout.js";
+import type { ResolvedTaskPath, ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -55,22 +55,24 @@ describe("intent directory layout", () => {
     const { root, value } = await authority();
     await ensureIntentDirectory(value);
     await ensureIntentDirectory(value);
-    const intents = join(root, ".archflow", "tasks", taskId, "intents");
+    const intents = join(root, ".archflow", "work", "tasks", taskId, "transient", "intents");
     expect((await lstat(intents)).isDirectory()).toBe(true);
-    expect(await readdir(join(root, ".archflow", "tasks", taskId))).toEqual(["intents"]);
+    expect(await readdir(join(root, ".archflow", "tasks", taskId))).toEqual([]);
   });
 
   it("rejects symlinks and non-directories without replacing them", async () => {
     const first = await authority();
     const external = realpathSync(mkdtempSync(join(tmpdir(), "archflow-state-layout-target-")));
     roots.push(external);
-    const firstPath = join(first.value.task_root, "intents");
+    mkdirSync(join(first.value.workspace_root, "transient"), { recursive: true });
+    const firstPath = join(first.value.workspace_root, "transient", "intents");
     symlinkSync(external, firstPath, "dir");
     await expect(ensureIntentDirectory(first.value)).rejects.toMatchObject({ stage: "verify" } satisfies Partial<IntentLayoutError>);
     expect((await lstat(firstPath)).isSymbolicLink()).toBe(true);
 
     const second = await authority();
-    const secondPath = join(second.value.task_root, "intents");
+    mkdirSync(join(second.value.workspace_root, "transient"), { recursive: true });
+    const secondPath = join(second.value.workspace_root, "transient", "intents");
     writeFileSync(secondPath, "not a directory");
     await expect(ensureIntentDirectory(second.value)).rejects.toMatchObject({ stage: "verify" } satisfies Partial<IntentLayoutError>);
     expect((await lstat(secondPath)).isFile()).toBe(true);
@@ -78,7 +80,7 @@ describe("intent directory layout", () => {
 
   it("accepts no caller path and rejects structural authority lookalikes", async () => {
     const { value } = await authority();
-    const sibling = join(value.task_root, "..", "other-task", "intents");
+    const sibling = join(value.workspace_root, "..", "other-task", "transient", "intents");
     await expect(ensureIntentDirectory({ ...value } as TransactionAuthority)).rejects.toThrow(/authentic/u);
     await expect(lstat(sibling)).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -89,20 +91,21 @@ describe("decision directory layout", () => {
     const { value } = await authority();
     await ensureDecisionDirectory(value, parsePathSafeId("gate-1"));
     await ensureDecisionDirectory(value, parsePathSafeId("gate-1"));
-    expect((await lstat(join(value.task_root, "decisions", "gate-1"))).isDirectory()).toBe(true);
+    expect((await lstat(join(value.task_root, "authority", "decisions", "gate-1"))).isDirectory()).toBe(true);
   });
 
   it("rejects symlink substitutions at either directory level", async () => {
     const external = realpathSync(mkdtempSync(join(tmpdir(), "archflow-decision-layout-target-")));
     roots.push(external);
     const first = await authority();
-    symlinkSync(external, join(first.value.task_root, "decisions"), "dir");
+    mkdirSync(join(first.value.task_root, "authority"));
+    symlinkSync(external, join(first.value.task_root, "authority", "decisions"), "dir");
     await expect(ensureDecisionDirectory(first.value, parsePathSafeId("gate-1")))
       .rejects.toMatchObject({ stage: "verify" } satisfies Partial<DecisionLayoutError>);
 
     const second = await authority();
-    mkdirSync(join(second.value.task_root, "decisions"));
-    symlinkSync(external, join(second.value.task_root, "decisions", "gate-1"), "dir");
+    mkdirSync(join(second.value.task_root, "authority", "decisions"), { recursive: true });
+    symlinkSync(external, join(second.value.task_root, "authority", "decisions", "gate-1"), "dir");
     await expect(ensureDecisionDirectory(second.value, parsePathSafeId("gate-1")))
       .rejects.toMatchObject({ stage: "verify" } satisfies Partial<DecisionLayoutError>);
   });
@@ -150,6 +153,34 @@ describe("task directory layouts", () => {
     const { value } = await authority();
     await ensureAttemptDirectory(value, context.phase_instance);
     await ensureAttemptDirectory(value, context.phase_instance);
-    expect((await lstat(join(value.task_root, "attempts", context.phase_instance))).isDirectory()).toBe(true);
+    expect((await lstat(join(
+      value.workspace_root,
+      "diagnostics",
+      "attempts",
+      context.phase_instance,
+    ))).isDirectory()).toBe(true);
+  });
+
+  it("separates durable result authority from ignored payload storage", async () => {
+    const { value } = await authority();
+    const digest = "a".repeat(64);
+    await ensureResultDirectory(value, digest);
+    expect((await lstat(join(value.task_root, "authority", "results"))).isDirectory()).toBe(true);
+    const payloadRoot = join(value.workspace_root, "cache", "results", digest, "payload");
+    expect((await lstat(payloadRoot)).isDirectory()).toBe(true);
+
+    const payload = join(payloadRoot, "src", "nested", "index.ts") as ResolvedTaskWorkspacePath;
+    await ensurePayloadParent(value, digest, payload);
+    expect((await lstat(join(payloadRoot, "src", "nested"))).isDirectory()).toBe(true);
+  });
+
+  it("creates reconstructible cache parents only within the exact task workspace", async () => {
+    const { value } = await authority();
+    const review = join(value.workspace_root, "cache", "reviews", "prd.counter.md") as ResolvedTaskWorkspacePath;
+    await ensureWorkspaceProjectionParent(value, review);
+    expect((await lstat(join(value.workspace_root, "cache", "reviews"))).isDirectory()).toBe(true);
+
+    const outside = join(value.task_root, "prd.md") as ResolvedTaskWorkspacePath;
+    await expect(ensureWorkspaceProjectionParent(value, outside)).rejects.toThrow(/escaped/u);
   });
 });
