@@ -117,9 +117,8 @@ const gateInputEmission: GeneratedDefOverride = {
         kind: {
           enum: [
             "artifact-approval",
-            "review-trigger",
+            "constitution-review",
             "material-drift",
-            "adjudication-failure",
             "attempts-exhausted",
             "constitution-edit",
             "commit-authorization",
@@ -133,9 +132,8 @@ const gateInputEmission: GeneratedDefOverride = {
         {
           oneOf: [
             { properties: { kind: { const: "artifact-approval" }, context: gateContractContext("artifactApproval") } },
-            { properties: { kind: { const: "review-trigger" }, context: gateContractContext("reviewTrigger") } },
+            { properties: { kind: { const: "constitution-review" }, context: gateContractContext("constitutionReview") } },
             { properties: { kind: { const: "material-drift" }, context: gateContractContext("materialDrift") } },
-            { properties: { kind: { const: "adjudication-failure" }, context: gateContractContext("adjudicationFailure") } },
             { properties: { kind: { const: "attempts-exhausted" }, context: gateContractContext("attemptsExhausted") } },
             { properties: { kind: { const: "constitution-edit" }, context: gateContractContext("constitutionEdit") } },
             { properties: { kind: { const: "commit-authorization" }, context: gateContractContext("commitAuthorization") } },

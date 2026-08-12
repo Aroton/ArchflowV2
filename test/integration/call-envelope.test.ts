@@ -157,12 +157,12 @@ describe("local call envelopes", () => {
     const originGateId = "origin-gate";
     const rule = { rule_id: "review-rule", rule_version: 1 };
     const scope = { operation: "review-trigger" as const, boundary: "subject" as const };
-    const originContext = { matched_rules: [rule], uncertain_rules: [], eligible_waiver_rules: [rule], waiver_scope: scope };
-    const originContextDigest = computeGateContextDigest("review-trigger", originContext);
+    const originContext = { constitution: "pass" as const, failed_rules: [], uncertain_rules: [], matched_trigger_rules: [rule], uncertain_trigger_rules: [], eligible_waivers: [{ rule, scope }] };
+    const originContextDigest = computeGateContextDigest("constitution-review", originContext);
     const originRequest = parseGateRequest({
       schema_version: "1", gate_id: originGateId, intent_id: "origin-intent", request_digest: D("e"), task_id: task,
       phase_instance: "prd", summary: "Review trigger", subject_digest: D("f"), context_digest: originContextDigest,
-      current_evidence: currentEvidence, kind: "review-trigger", context: originContext,
+      current_evidence: currentEvidence, kind: "constitution-review", context: originContext,
       allowed_decisions: ["approve", "revise", "reject", "waiver-requested", "cancel"], opened_at_revision: parseSafeInteger(state.revision),
     });
     mkdirSync(join(production.value.authority.task_root, "decisions", originGateId), { recursive: true });

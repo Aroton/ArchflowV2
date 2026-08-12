@@ -186,14 +186,13 @@ function adjudication(): DerivedAdjudication {
     rule_findings: [{
       rule_id: "active-rule",
       rule_version: 2,
-      compliance: "uncertain",
-      rationale: "needs mechanical proof",
+      compliance: "fail",
+      rationale: "the artifact violates the rule",
       trigger: "not-matched",
       trigger_evidence: "none",
-      enforced_by: [{ mechanism: "tests", state: "unknown", details: "not supplied" }],
     }],
     drift_findings: [],
-    constitution: "uncertain",
+    constitution: "fail",
     drift: "aligned",
     matched_rule_versions: [],
     uncertain_rule_versions: [],
@@ -201,7 +200,7 @@ function adjudication(): DerivedAdjudication {
 }
 
 describe("review services", () => {
-  it("cross-checks exact active registry coverage and declared mechanisms", () => {
+  it("cross-checks exact active registry coverage, ignoring declared mechanisms", () => {
     const registry: ConstitutionRegistry = new Map([
       ["active-rule", {
         id: "active-rule", version: 2, status: "active", text: "rule", enforced_by: ["tests"],
@@ -209,11 +208,13 @@ describe("review services", () => {
       ["old-rule", { id: "old-rule", version: 1, status: "deprecated", text: "old" }],
     ]);
     expect(crossCheckRuleFindings(registry, adjudication()).rule_findings).toHaveLength(1);
-    expect(() => crossCheckRuleFindings(registry, {
+    // The rule declares enforced_by; that must not stand between it and a pass.
+    const passing = {
       ...adjudication(),
       rule_findings: [{ ...adjudication().rule_findings[0]!, compliance: "pass" }],
       constitution: "pass",
-    }, "codex-cli")).toThrow(AdjudicationServiceError);
+    } as unknown as DerivedAdjudication;
+    expect(crossCheckRuleFindings(registry, passing, "codex-cli")).toBe(passing);
     expect(() => crossCheckRuleFindings(registry, {
       ...adjudication(),
       rule_findings: [{ ...adjudication().rule_findings[0]!, rule_version: 3 }],
@@ -444,7 +445,7 @@ describe("review services", () => {
       .toThrow(/retained adjudication/u);
   });
 
-  it("selects adjudication gates in compliance, material-drift, then trigger order", () => {
+  it("selects one constitution-review gate, then material-drift", () => {
     const registry: ConstitutionRegistry = new Map([
       ["active-rule", {
         id: "active-rule", version: 2, status: "active", text: "rule", enforced_by: ["tests"],
@@ -465,11 +466,11 @@ describe("review services", () => {
       drift: "material",
       matched_rule_versions: [{ rule_id: "active-rule", rule_version: 2 }],
     } as unknown as AdjudicationEvidence;
-    expect(selectAdjudicationGate(registry, base)?.kind).toBe("adjudication-failure");
+    // Failing compliance and a matched trigger on one rule are one decision, not two.
+    expect(selectAdjudicationGate(registry, base)?.kind).toBe("constitution-review");
     expect(selectAdjudicationGates(registry, base).map((gate) => gate.kind)).toEqual([
-      "adjudication-failure",
+      "constitution-review",
       "material-drift",
-      "review-trigger",
     ]);
 
     const material = {
@@ -477,18 +478,21 @@ describe("review services", () => {
       rule_findings: [{
         ...adjudication().rule_findings[0]!,
         compliance: "pass",
-        enforced_by: [],
       }],
       constitution: "pass",
+      matched_rule_versions: [],
     } as unknown as AdjudicationEvidence;
-    expect(selectAdjudicationGate(registry, material)?.kind).toBe("material-drift");
+    expect(selectAdjudicationGates(registry, material).map((gate) => gate.kind)).toEqual([
+      "material-drift",
+    ]);
 
-    const trigger = {
+    // A rule declaring enforced_by is judged like any other: compliant means no gate at all.
+    const clean = {
       ...material,
       drift_findings: [],
       drift: "aligned",
     } as unknown as AdjudicationEvidence;
-    expect(selectAdjudicationGate(registry, trigger)?.kind).toBe("review-trigger");
+    expect(selectAdjudicationGates(registry, clean)).toEqual([]);
   });
 
   it("requires each simultaneous adjudication obligation to be resolved exactly", () => {
@@ -515,9 +519,8 @@ describe("review services", () => {
     } as unknown as AdjudicationEvidence;
     const gates = selectAdjudicationGates(registry, evidence);
     expect(gates.map((gate) => gate.kind)).toEqual([
-      "adjudication-failure",
+      "constitution-review",
       "material-drift",
-      "review-trigger",
     ]);
 
     const evidenceSet = new Map(retained());
@@ -535,7 +538,7 @@ describe("review services", () => {
         },
       },
     });
-    const adjudicationFailure = gates[0]!;
+    const constitutionReview = gates[0]!;
     const materialDrift = gates[1]!;
     const liveFailureWaiver = {
       gate_id: "waiver",
@@ -559,19 +562,34 @@ describe("review services", () => {
     expect(afterFailureWaiver.next).toBe("adjudication-gate");
     expect(afterFailureWaiver.adjudication_gate_pending).toBe(false);
 
+    // The rule is waivable on both axes, so waiving compliance alone leaves constitution-review
+    // standing as the first unmet gate: exempting a rule's compliance says nothing about whether
+    // its review trigger still applies. An open material-drift gate is therefore not yet the one
+    // the fixed point wants.
+    const materialOpenState = {
+      gate_id: "material-gate",
+      gate_kind: materialDrift.kind,
+      subject_digest: materialDrift.subject_digest,
+      context_digest: computeGateContextDigest(materialDrift.kind, materialDrift.context),
+      frozen_state_digest: D("f"),
+      opened_at_revision: 8,
+    } as const;
+    const materialOpenBeforeTriggerWaiver = assessCurrentEvidence(
+      state({ step: "triage", status: "succeeded", waivers: [liveFailureWaiver], open_gate: materialOpenState }),
+      evidenceSet,
+      { subject_digest: D("8"), input_fingerprint: D("2"), constitution },
+    );
+    expect(materialOpenBeforeTriggerWaiver.next).toBe("adjudication-gate");
+    expect(materialOpenBeforeTriggerWaiver.adjudication_gate_pending).toBe(false);
+
+    // Once both axes are waived, constitution-review is satisfied and the open material-drift
+    // gate becomes the one the fixed point is waiting on.
     const withMaterialOpen = assessCurrentEvidence(
       state({
         step: "triage",
         status: "succeeded",
-        waivers: [liveFailureWaiver],
-        open_gate: {
-          gate_id: "material-gate",
-          gate_kind: materialDrift.kind,
-          subject_digest: materialDrift.subject_digest,
-          context_digest: computeGateContextDigest(materialDrift.kind, materialDrift.context),
-          frozen_state_digest: D("f"),
-          opened_at_revision: 8,
-        },
+        waivers: [liveFailureWaiver, { ...liveFailureWaiver, gate_id: "waiver-trigger", scope: { operation: "review-trigger", boundary: "subject" } }],
+        open_gate: materialOpenState,
       }),
       evidenceSet,
       { subject_digest: D("8"), input_fingerprint: D("2"), constitution },
@@ -579,8 +597,8 @@ describe("review services", () => {
     expect(withMaterialOpen.next).toBe("adjudication-gate");
     expect(withMaterialOpen.adjudication_gate_pending).toBe(true);
     expect(computeGateContextDigest(
-      adjudicationFailure.kind,
-      adjudicationFailure.context,
+      constitutionReview.kind,
+      constitutionReview.context,
     )).not.toBe(computeGateContextDigest(materialDrift.kind, materialDrift.context));
   });
 
@@ -615,7 +633,7 @@ describe("review services", () => {
       uncertain_rule_versions: [{ rule_id: "active-rule", rule_version: 2 }],
     } as unknown as AdjudicationEvidence;
     const selected = selectAdjudicationGate(registry, evidence);
-    expect(selected?.kind).toBe("adjudication-failure");
+    expect(selected?.kind).toBe("constitution-review");
     if (selected === undefined) throw new Error("expected gate");
     const gated = new Map(retained());
     const sourceEvidenceSetDigest =

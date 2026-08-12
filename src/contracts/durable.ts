@@ -454,7 +454,7 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
       }
     } else if (gateDecision.outcome === "waiver-decided") {
       const waiverContext = gateRequest.context as WaiverGateContext;
-      if (!("origin" in waiverContext) || !isDeepStrictEqual(gateDecision.origin, waiverContext.origin) || !isDeepStrictEqual(gateDecision.scope, waiverContext.origin.scope) || gateDecision.kind !== waiverContext.origin.scope.operation) {
+      if (!("origin" in waiverContext) || !isDeepStrictEqual(gateDecision.origin, waiverContext.origin) || !isDeepStrictEqual(gateDecision.scope, waiverContext.origin.scope) || gateDecision.kind !== "constitution-review") {
         return fail(contractInvalid(DURABLE_ISSUE_CODES.waiverDecisionOriginMismatch));
       }
     }

@@ -39,9 +39,8 @@
           "type": "string",
           "enum": [
             "artifact-approval",
-            "review-trigger",
+            "constitution-review",
             "material-drift",
-            "adjudication-failure",
             "attempts-exhausted",
             "constitution-edit",
             "commit-authorization",
@@ -103,9 +102,8 @@
           "type": "string",
           "enum": [
             "artifact-approval",
-            "review-trigger",
+            "constitution-review",
             "material-drift",
-            "adjudication-failure",
             "attempts-exhausted",
             "constitution-edit",
             "commit-authorization",
@@ -186,9 +184,8 @@
           "type": "string",
           "enum": [
             "artifact-approval",
-            "review-trigger",
+            "constitution-review",
             "material-drift",
-            "adjudication-failure",
             "attempts-exhausted",
             "constitution-edit",
             "commit-authorization",
@@ -257,9 +254,8 @@
           "type": "string",
           "enum": [
             "artifact-approval",
-            "review-trigger",
+            "constitution-review",
             "material-drift",
-            "adjudication-failure",
             "attempts-exhausted",
             "constitution-edit",
             "commit-authorization",

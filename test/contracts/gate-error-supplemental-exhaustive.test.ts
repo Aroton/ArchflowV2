@@ -24,14 +24,14 @@ const projectValidator = createJsonSchemaValidator(projectErrorSchema);
 const protocolValidator = createJsonSchemaValidator(protocolErrorSchema);
 const supplementalValidator = createJsonSchemaValidator(supplementalSchema, [primitivesSchema]);
 
+const CONSTITUTION_CONTEXT = { constitution: "fail", failed_rules: [RULE], uncertain_rules: [], matched_trigger_rules: [RULE], uncertain_trigger_rules: [], eligible_waivers: [{ rule: RULE, scope: { operation: "adjudication-failure", boundary: "subject" } }, { rule: RULE, scope: { operation: "review-trigger", boundary: "subject" } }] };
+
 const gateCases: readonly JsonObject[] = [
   ...["approve", "revise", "reject"].map((decision) => ({ kind: "artifact-approval", context: { artifact_kind: "prd" }, payload: { decision, reason: "Reviewed" } })),
-  ...["approve", "revise", "reject"].map((decision) => ({ kind: "review-trigger", context: { matched_rules: [RULE], uncertain_rules: [], eligible_waiver_rules: [RULE], waiver_scope: { operation: "review-trigger", boundary: "subject" } }, payload: { decision, reason: "Reviewed" } })),
-  { kind: "review-trigger", context: { matched_rules: [RULE], uncertain_rules: [], eligible_waiver_rules: [RULE], waiver_scope: { operation: "review-trigger", boundary: "subject" } }, payload: { decision: "waiver-requested", reason: "Exception", rule: RULE, rationale: "Task-scoped exception" } },
+  ...["approve", "revise", "reject"].map((decision) => ({ kind: "constitution-review", context: CONSTITUTION_CONTEXT, payload: { decision, reason: "Reviewed" } })),
+  // One waiver template per axis the gate offered.
+  ...["adjudication-failure", "review-trigger"].map((operation) => ({ kind: "constitution-review", context: CONSTITUTION_CONTEXT, payload: { decision: "waiver-requested", reason: "Exception", rule: RULE, operation, rationale: "Task-scoped exception" } })),
   ...["amend-upstream", "revise-current", "reject"].map((decision) => ({ kind: "material-drift", context: { affected_upstream: { kind: "architecture", digest: D("a") }, drift: "material", affected_claim_ids: ["claim-one"] }, payload: { decision, reason: "Reviewed" } })),
-  { kind: "adjudication-failure", context: { constitution: "fail", failed_rules: [RULE], uncertain_rules: [], eligible_waiver_rules: [RULE], waiver_scope: { operation: "adjudication-failure", boundary: "phase" } }, payload: { decision: "approve", reason: "Resolved", resolutions: [] } },
-  ...["revise", "reject"].map((decision) => ({ kind: "adjudication-failure", context: { constitution: "fail", failed_rules: [RULE], uncertain_rules: [], eligible_waiver_rules: [RULE], waiver_scope: { operation: "adjudication-failure", boundary: "phase" } }, payload: { decision, reason: "Reviewed" } })),
-  { kind: "adjudication-failure", context: { constitution: "fail", failed_rules: [RULE], uncertain_rules: [], eligible_waiver_rules: [RULE], waiver_scope: { operation: "adjudication-failure", boundary: "phase" } }, payload: { decision: "waiver-requested", reason: "Exception", rule: RULE, rationale: "Task-scoped exception" } },
   ...["retry-once", "revise", "abort"].map((decision) => ({ kind: "attempts-exhausted", context: { step: "counter_review", attempts: 2, maximum_attempts: 2 }, payload: { decision, reason: "Reviewed" } })),
   ...["revert-edit", "start-base-amendment", "abort"].map((decision) => ({ kind: "constitution-edit", context: { pinned_constitution_digest: D("a"), current_constitution_digest: D("b"), changed_path_class: "task-branch-constitution" }, payload: { decision, reason: "Reviewed" } })),
   ...["authorize-commit", "revise", "abort"].map((decision) => ({ kind: "commit-authorization", context: { target_ref: "refs/heads/task", diff_digest: D("a"), current_artifact_digests: [D("b")], parent_document_digests: [D("c")] }, payload: { decision, reason: "Reviewed" } })),
@@ -107,7 +107,7 @@ describe("exhaustive gate, error, and supplemental authority", () => {
     }
 
     // The generated per-kind decision defs carry the vocabularies as enums, consts, or unions of
-    // both; the flattened kind:decision matrix must be exactly the 29 exercised cases.
+    // both; the flattened kind:decision matrix must be exactly the 26 exercised cases.
     const root = gateContractSchema as unknown as JsonObject;
     const decisionsOf = (schema: JsonObject): readonly string[] => {
       if (typeof schema.$ref === "string") return decisionsOf(localRef(root, schema.$ref as string));
@@ -130,7 +130,7 @@ describe("exhaustive gate, error, and supplemental authority", () => {
   });
 
   it("accepts every gate decision variant without mutation and rejects trust-boundary substitutions", () => {
-    expect(gateCases).toHaveLength(29);
+    expect(gateCases).toHaveLength(26);
     for (const value of gateCases) {
       const before = structuredClone(value);
       expect(gateValidator.validate(value), `${String(value.kind)}:${JSON.stringify(gateValidator.validate.errors)}`).toBe(true);

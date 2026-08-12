@@ -48,7 +48,7 @@ type GateRequestCommon = {
 export type GateRequestV1 = {
   readonly [K in GateKind]: GateRequestCommon & {
     readonly kind: K;
-    readonly context: GateContext<K> | (K extends "review-trigger" | "adjudication-failure" ? WaiverGateContext : never);
+    readonly context: GateContext<K> | (K extends "constitution-review" ? WaiverGateContext : never);
     readonly allowed_decisions: readonly (GateDecisionPayload<K>["decision"] | "grant" | "deny" | "cancel")[];
   };
 }[GateKind];
@@ -125,9 +125,8 @@ export const gateDecisionRecordV1Schema = z.discriminatedUnion("outcome", [
  */
 const GATE_REQUEST_DECISIONS = {
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
-  "review-trigger": ["approve", "revise", "reject", "waiver-requested", "cancel"],
+  "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
-  "adjudication-failure": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
   "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
@@ -172,25 +171,23 @@ const gateArm = (kind: GateKind, context: z.ZodType, decisions: z.ZodType, extra
   z.object({ ...gateRequestCommon, ...extra, kind: z.literal(kind), context, allowed_decisions: decisions }).strict();
 
 /**
- * One arm per `gate-request.schema.json` `$defs` branch: the nine gate kinds plus the two waiver
- * arms, keyed by their committed def names. Non-waiver arms embed `GATE_CONTRACTS[kind].context` —
+ * One arm per `gate-request.schema.json` `$defs` branch: the eight gate kinds plus the waiver arm,
+ * keyed by their committed def names. Non-waiver arms embed `GATE_CONTRACTS[kind].context` —
  * the same Zod context schemas `parseGateContext` runs — so the gate-semantics checks
- * (sorted-unique rule sets, eligible-waiver subset, waiver-scope operation match, attempts >=
- * maximum) ride along instead of being restated. The arms are disjoint: the pinned
- * `allowed_decisions` tuples separate a waiver arm from its same-kind review arm.
+ * (sorted-unique rule sets, eligible-waiver axis match, attempts >= maximum) ride along instead of
+ * being restated. The arms are disjoint: the pinned `allowed_decisions` tuples separate the waiver
+ * arm from the constitution-review arm it shares a kind with.
  */
 const gateArms = (extra: Record<string, z.ZodType>) => ({
   artifactApproval: gateArm("artifact-approval", GATE_CONTRACTS["artifact-approval"].context, allowedDecisionTuples["artifact-approval"], extra),
-  reviewTrigger: gateArm("review-trigger", GATE_CONTRACTS["review-trigger"].context, allowedDecisionTuples["review-trigger"], extra),
+  constitutionReview: gateArm("constitution-review", GATE_CONTRACTS["constitution-review"].context, allowedDecisionTuples["constitution-review"], extra),
   materialDrift: gateArm("material-drift", GATE_CONTRACTS["material-drift"].context, allowedDecisionTuples["material-drift"], extra),
-  adjudicationFailure: gateArm("adjudication-failure", GATE_CONTRACTS["adjudication-failure"].context, allowedDecisionTuples["adjudication-failure"], extra),
   attemptsExhausted: gateArm("attempts-exhausted", GATE_CONTRACTS["attempts-exhausted"].context, allowedDecisionTuples["attempts-exhausted"], extra),
   constitutionEdit: gateArm("constitution-edit", GATE_CONTRACTS["constitution-edit"].context, allowedDecisionTuples["constitution-edit"], extra),
   commitAuthorization: gateArm("commit-authorization", GATE_CONTRACTS["commit-authorization"].context, allowedDecisionTuples["commit-authorization"], extra),
   restoreCollision: gateArm("restore-collision", GATE_CONTRACTS["restore-collision"].context, allowedDecisionTuples["restore-collision"], extra),
   migrationAudit: gateArm("migration-audit", GATE_CONTRACTS["migration-audit"].context, allowedDecisionTuples["migration-audit"], extra),
-  reviewWaiver: gateArm("review-trigger", waiverGateContextSchema, waiverDecisionsTuple, extra),
-  adjudicationWaiver: gateArm("adjudication-failure", waiverGateContextSchema, waiverDecisionsTuple, extra),
+  constitutionWaiver: gateArm("constitution-review", waiverGateContextSchema, waiverDecisionsTuple, extra),
 });
 
 const armUnion = (arms: Record<string, z.ZodType>) =>
@@ -228,7 +225,7 @@ export const activeGateV1Schema = armUnion(gateArms({
 
 /**
  * The generated `$defs` layouts, keyed by committed def name. The arms are the union options above,
- * registered so each document root emits `$ref`s instead of eleven inline copies; `supplemental`
+ * registered so each document root emits `$ref`s instead of nine inline copies; `supplemental`
  * lives with the decision record and the active gate reaches it cross-file, exactly as the
  * committed schemas always did.
  */
@@ -238,9 +235,8 @@ export const gateRequestSchemaDefs: Readonly<Record<string, z.ZodType>> = Object
   origin,
   waiverContext: waiverGateContextSchema,
   artifactApprovalDecisions: allowedDecisionTuples["artifact-approval"],
-  reviewTriggerDecisions: allowedDecisionTuples["review-trigger"],
+  constitutionReviewDecisions: allowedDecisionTuples["constitution-review"],
   materialDriftDecisions: allowedDecisionTuples["material-drift"],
-  adjudicationFailureDecisions: allowedDecisionTuples["adjudication-failure"],
   attemptsExhaustedDecisions: allowedDecisionTuples["attempts-exhausted"],
   constitutionEditDecisions: allowedDecisionTuples["constitution-edit"],
   commitAuthorizationDecisions: allowedDecisionTuples["commit-authorization"],
@@ -257,9 +253,8 @@ export const gateRequestSchemaDefs: Readonly<Record<string, z.ZodType>> = Object
  */
 export const gateRequestSchemaDefOverrides: Readonly<Record<string, Readonly<Record<string, unknown>>>> = Object.freeze({
   artifactApprovalDecisions: { const: GATE_REQUEST_DECISIONS["artifact-approval"] },
-  reviewTriggerDecisions: { const: GATE_REQUEST_DECISIONS["review-trigger"] },
+  constitutionReviewDecisions: { const: GATE_REQUEST_DECISIONS["constitution-review"] },
   materialDriftDecisions: { const: GATE_REQUEST_DECISIONS["material-drift"] },
-  adjudicationFailureDecisions: { const: GATE_REQUEST_DECISIONS["adjudication-failure"] },
   attemptsExhaustedDecisions: { const: GATE_REQUEST_DECISIONS["attempts-exhausted"] },
   constitutionEditDecisions: { const: GATE_REQUEST_DECISIONS["constitution-edit"] },
   commitAuthorizationDecisions: { const: GATE_REQUEST_DECISIONS["commit-authorization"] },

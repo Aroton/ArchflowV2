@@ -89,7 +89,7 @@ async function authenticateWaiverOrigin(
   if (!validateDurableSemantics({ gate_request: request, gate_decision: decision }).ok || decision.digest !== context.origin.origin_decision_digest || decision.value.outcome !== "decided" || decision.value.envelope.payload.decision !== "waiver-requested") return issue("CONTRACT_INVALID", undefined, "waiver-origin-decision-invalid");
   const payload = decision.value.envelope.payload as Extract<typeof decision.value.envelope.payload, { decision: "waiver-requested" }>;
   const requestContext = request.value.context;
-  if (!("waiver_scope" in requestContext) || request.value.gate_id !== context.origin.origin_gate_id || request.value.context_digest !== context.origin.origin_context_digest || request.value.task_id !== context.origin.task_id || request.value.phase_instance !== context.origin.phase_instance || request.value.subject_digest !== context.origin.subject_digest || request.value.current_evidence.set_digest !== context.origin.current_evidence_set_digest || !isDeepStrictEqual(payload.rule, context.origin.rule) || !isDeepStrictEqual(requestContext.waiver_scope, context.origin.scope)) return issue("CONTRACT_INVALID", undefined, "waiver-origin-binding-invalid");
+  if (!("eligible_waivers" in requestContext) || request.value.gate_id !== context.origin.origin_gate_id || request.value.context_digest !== context.origin.origin_context_digest || request.value.task_id !== context.origin.task_id || request.value.phase_instance !== context.origin.phase_instance || request.value.subject_digest !== context.origin.subject_digest || request.value.current_evidence.set_digest !== context.origin.current_evidence_set_digest || !isDeepStrictEqual(payload.rule, context.origin.rule) || payload.operation !== context.origin.scope.operation || !requestContext.eligible_waivers.some((eligible) => isDeepStrictEqual(eligible.rule, context.origin.rule) && isDeepStrictEqual(eligible.scope, context.origin.scope))) return issue("CONTRACT_INVALID", undefined, "waiver-origin-binding-invalid");
   return ok(undefined);
 }
 
@@ -454,8 +454,7 @@ function nextStateForRecord(
 function enactsReentry(record: GateDecisionRecordV1): boolean {
   if (record.outcome !== "decided") return false;
   const decision = record.envelope.payload.decision;
-  return (record.kind === "review-trigger" && decision === "revise") ||
-    (record.kind === "adjudication-failure" && decision === "revise") ||
+  return (record.kind === "constitution-review" && decision === "revise") ||
     (record.kind === "material-drift" && decision === "revise-current") ||
     (record.kind === "attempts-exhausted" && (decision === "retry-once" || decision === "revise"));
 }

@@ -236,45 +236,29 @@ describe("correlated MCP tool contracts", () => {
 
     const reviewCall = parseToolCall("archflow_gate", {
       ...commonInput,
-      kind: "review-trigger",
-      context: {
-        matched_rules: [ruleA, ruleB],
-        uncertain_rules: [],
-        eligible_waiver_rules: [ruleA],
-        waiver_scope: { operation: "review-trigger", boundary: "subject" }
-      }
-    });
-    expect(validateProjectResultStructure(reviewCall, result("review-trigger", {
-      decision: "waiver-requested", reason: "Eligible exception", rule: ruleA, rationale: "Temporary"
-    })).ok).toBe(true);
-    expect(() => validateProjectResultStructure(reviewCall, result("review-trigger", {
-      decision: "waiver-requested", reason: "Ineligible exception", rule: ruleB, rationale: "Temporary"
-    }))).toThrow(/eligible/);
-
-    const adjudicationCall = parseToolCall("archflow_gate", {
-      ...commonInput,
-      kind: "adjudication-failure",
+      kind: "constitution-review",
       context: {
         constitution: "fail",
-        failed_rules: [ruleA, ruleB],
+        failed_rules: [ruleB],
         uncertain_rules: [],
-        eligible_waiver_rules: [],
-        waiver_scope: { operation: "adjudication-failure", boundary: "phase" }
+        matched_trigger_rules: [ruleA],
+        uncertain_trigger_rules: [],
+        eligible_waivers: [
+          { rule: ruleA, scope: { operation: "review-trigger", boundary: "subject" } },
+          { rule: ruleB, scope: { operation: "adjudication-failure", boundary: "subject" } }
+        ]
       }
     });
-    const validResolutions = [
-      { rule: ruleA, resolution: "Accepted mitigation A" },
-      { rule: ruleB, resolution: "Accepted mitigation B" }
-    ] as const;
-    expect(validateProjectResultStructure(adjudicationCall, result("adjudication-failure", {
-      decision: "approve", reason: "Resolved", resolutions: validResolutions
+    expect(validateProjectResultStructure(reviewCall, result("constitution-review", {
+      decision: "waiver-requested", reason: "Eligible exception", rule: ruleA, operation: "review-trigger", rationale: "Temporary"
     })).ok).toBe(true);
-    expect(() => validateProjectResultStructure(adjudicationCall, result("adjudication-failure", {
-      decision: "approve", reason: "Incomplete", resolutions: validResolutions.slice(0, 1)
-    }))).toThrow(/resolutions/);
-    expect(() => validateProjectResultStructure(adjudicationCall, result("adjudication-failure", {
-      decision: "approve", reason: "Unsorted", resolutions: [...validResolutions].reverse()
-    }))).toThrow(/resolutions/);
+    expect(validateProjectResultStructure(reviewCall, result("constitution-review", {
+      decision: "waiver-requested", reason: "Eligible exception", rule: ruleB, operation: "adjudication-failure", rationale: "Temporary"
+    })).ok).toBe(true);
+    // Right rule, wrong axis: the gate never offered rule A on the compliance axis.
+    expect(() => validateProjectResultStructure(reviewCall, result("constitution-review", {
+      decision: "waiver-requested", reason: "Ineligible axis", rule: ruleA, operation: "adjudication-failure", rationale: "Temporary"
+    }))).toThrow(/eligible/);
 
     const authority = {
       link_digest: "5".repeat(64),

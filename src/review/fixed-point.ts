@@ -303,21 +303,20 @@ export function gateApprovalBindingFailure(
     evidenceBindingFailure(request, evidence, subject);
 }
 
-/** The waiver escape path: a waiverable gate kind whose every eligible rule is durably waived. */
+/**
+ * The waiver escape path: a waiverable gate whose every eligible (rule, axis) pair is durably
+ * waived. Both axes must be covered — waiving a rule's compliance says nothing about whether its
+ * review trigger still applies.
+ */
 function waiverPathSatisfiesGate(state: TaskStateV1, gate: AdjudicationGate): boolean {
-  if (
-    (gate.kind !== "review-trigger" && gate.kind !== "adjudication-failure") ||
-    !("eligible_waiver_rules" in gate.context) ||
-    !("waiver_scope" in gate.context)
-  ) return false;
-  const required = gate.context.eligible_waiver_rules;
-  const scope = gate.context.waiver_scope;
-  return required.length > 0 && required.every((rule) =>
+  if (gate.kind !== "constitution-review" || !("eligible_waivers" in gate.context)) return false;
+  const required = gate.context.eligible_waivers;
+  return required.length > 0 && required.every((eligible) =>
     waiverInForce(
       state,
-      rule,
+      eligible.rule,
       gate.subject_digest,
-      scope,
+      eligible.scope,
     ) !== undefined);
 }
 

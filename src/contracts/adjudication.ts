@@ -9,27 +9,17 @@ export const CONSTITUTION_RESULTS = ["pass", "fail", "uncertain"] as const;
 export const DRIFT_RESULTS = ["aligned", "incidental", "material"] as const;
 export const COMPLIANCE_RESULTS = ["pass", "fail", "uncertain"] as const;
 export const TRIGGER_RESULTS = ["not-matched", "matched", "uncertain"] as const;
-export const MECHANICAL_EVIDENCE_STATES = ["current", "missing", "stale", "unknown", "failed", "digest-mismatch"] as const;
 
 export type ConstitutionResult = (typeof CONSTITUTION_RESULTS)[number];
 export type DriftResult = (typeof DRIFT_RESULTS)[number];
 export type ComplianceResult = (typeof COMPLIANCE_RESULTS)[number];
 export type TriggerResult = (typeof TRIGGER_RESULTS)[number];
-export type MechanicalEvidenceState = (typeof MECHANICAL_EVIDENCE_STATES)[number];
 
-export type MechanicalEvidence = {
-  readonly mechanism: string;
-  readonly state: MechanicalEvidenceState;
-  readonly subject_digest?: Sha256Digest;
-  readonly evidence_digest?: Sha256Digest;
-  readonly details: string;
-};
 export type ConstitutionRuleFinding = RuleVersionRef & {
   readonly compliance: ComplianceResult;
   readonly rationale: string;
   readonly trigger: TriggerResult;
   readonly trigger_evidence: string;
-  readonly enforced_by: readonly MechanicalEvidence[];
 };
 export type DriftFinding = {
   readonly upstream_digest: Sha256Digest;
@@ -63,23 +53,11 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/u) as unknown as z.ZodType<Sha25
 const taskSlug = createTaskSlugV1Schema();
 /** Module-local twin of review's rule-version shape so this document emits self-contained. */
 const ruleVersionSchema = z.object({ rule_id: id, rule_version: z.number().int().positive().safe() }).strict();
-const mechanicalEvidenceSchema = z.object({
-  mechanism: nonBlank,
-  state: z.enum(MECHANICAL_EVIDENCE_STATES),
-  subject_digest: digest.optional(),
-  evidence_digest: digest.optional(),
-  details: nonBlank,
-}).strict().superRefine((evidence, context) => {
-  const hasBindings = evidence.subject_digest !== undefined && evidence.evidence_digest !== undefined;
-  if ((evidence.state === "current" || evidence.state === "stale") && !hasBindings) context.addIssue({ code: "custom", message: `${evidence.state} evidence requires subject and evidence digests` });
-  if ((evidence.state === "missing" || evidence.state === "unknown") && (evidence.subject_digest !== undefined || evidence.evidence_digest !== undefined)) context.addIssue({ code: "custom", message: `${evidence.state} evidence cannot claim digests` });
-}) as unknown as z.ZodType<MechanicalEvidence>;
 const constitutionRuleFindingSchema = ruleVersionSchema.extend({
   compliance: z.enum(COMPLIANCE_RESULTS),
   rationale: nonBlank,
   trigger: z.enum(TRIGGER_RESULTS),
   trigger_evidence: nonBlank,
-  enforced_by: z.array(mechanicalEvidenceSchema),
 }).strict();
 const driftFindingSchema = z.object({
   upstream_digest: digest,
@@ -117,12 +95,6 @@ function validateAdjudicationClaims(parsed: RawAdjudication): void {
   assertSortedUnique(parsed.rule_findings.map(ruleKey), "rule_findings");
   assertSortedUnique(parsed.drift_findings.map((finding) => finding.upstream_digest), "drift_findings");
   if (parsed.drift_findings.length !== parsed.approved_upstream_digests.length || parsed.drift_findings.some((finding, index) => finding.upstream_digest !== parsed.approved_upstream_digests[index])) throw new TypeError("drift_findings must exactly cover approved_upstream_digests");
-  for (const finding of parsed.rule_findings) {
-    for (const evidence of finding.enforced_by) {
-      if (evidence.state === "current" && evidence.subject_digest !== parsed.subject_digest) throw new TypeError(`current mechanical evidence for ${ruleKey(finding)} binds the wrong subject`);
-      if (evidence.state !== "current" && finding.compliance === "pass") throw new TypeError(`suspect mechanical evidence cannot establish compliance for ${ruleKey(finding)}`);
-    }
-  }
   const expectedConstitution: ConstitutionResult = parsed.rule_findings.some((finding) => finding.compliance === "fail") ? "fail" : parsed.rule_findings.some((finding) => finding.compliance === "uncertain") ? "uncertain" : "pass";
   if (parsed.constitution !== expectedConstitution) throw new TypeError(`constitution must be ${expectedConstitution}`);
   const expectedDrift: DriftResult = parsed.drift_findings.some((finding) => finding.drift === "material") ? "material" : parsed.drift_findings.some((finding) => finding.drift === "incidental") ? "incidental" : "aligned";
@@ -134,14 +106,13 @@ function validateAdjudicationClaims(parsed: RawAdjudication): void {
 }
 
 /**
- * The generated `adjudication.schema.json` `$defs` layout. The def names are load-bearing:
- * `projectCliOutputSchema` rewrites `taskSlug` (lookahead simplification) and `mechanical`
- * (codex state-branch expansion) by name before handing the document to a child host, and the
- * document must stay self-contained because hosts cannot resolve cross-document references.
+ * The generated `adjudication.schema.json` `$defs` layout. The def name is load-bearing:
+ * `projectCliOutputSchema` rewrites `taskSlug` (lookahead simplification) by name before handing
+ * the document to a child host, and the document must stay self-contained because hosts cannot
+ * resolve cross-document references.
  */
 export const adjudicationDocumentDefs = {
   taskSlug,
-  mechanical: mechanicalEvidenceSchema,
 } as const;
 
 export function parseAndDeriveAdjudication(value: unknown): DerivedAdjudication {

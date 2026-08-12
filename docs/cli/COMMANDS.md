@@ -1,6 +1,6 @@
 # cli/COMMANDS
 
-**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/local/`, `install.sh`
+**Explored:** 2026-08-11 · **Commit:** `56f4d2c` · **Covers:** `src/local/`, `install.sh`
 
 `archflow-local` is the agent's local helper: it composes requests and reads status — including a read-only classification of where a task stands when the MCP server is unavailable. It is deliberately *not* the authority — with one narrow exception (task initialization staging inside `build-request`), it derives and verifies rather than writes.
 
@@ -76,7 +76,7 @@ Properties worth knowing:
 - `intent_id` is optional: when omitted, the composer generates `<kind>-<UTC stamp>-<4 hex>` and echoes it in the request and reference. An explicit id is only for replaying or resuming an interrupted call.
 - `running` enters a pipeline step; the steps are exactly `produce`, `counter_review`, and `triage`.
 - `triage` enforces exactly one disposition per current finding — unknown IDs, duplicates, and gaps are rejected before the server ever sees them.
-- `gate` composes a pending constitution gate (`adjudication-failure`, `material-drift`, `review-trigger`, derived by the server after triage) mechanically from retained adjudication evidence — kind, subject, and context all derived; otherwise it picks the kind from the phase (`phase-impl` → `commit-authorization`, else `artifact-approval`). Either way the author writes only the summary.
+- `gate` composes a pending constitution gate (`constitution-review`, `material-drift`, derived by the server after triage) mechanically from retained adjudication evidence — kind, subject, and context all derived; otherwise it picks the kind from the phase (`phase-impl` → `commit-authorization`, else `artifact-approval`). Either way the author writes only the summary.
 - `initialize` is the documented exception: the only composer that writes (it must stage the task before a fingerprint can resolve), legal only before durable state exists. Its envelope carries **no** `staged` block — there is no durable task directory yet to hold a staged file — so the create-task call is the one place `request.input` is passed verbatim by design, as typed JSON (`artifact` an object, `expected_revision` the number `0`).
 - A contract test pins that every prefill the server emits maps onto a composer kind — "the one door" is literally true, not aspirational.
 

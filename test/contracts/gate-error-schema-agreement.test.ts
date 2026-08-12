@@ -32,8 +32,8 @@ describe("gate and error JSON Schema authority", () => {
     // `parseGateContract` — running the same context schemas — is the surviving authority.
     const invalid = [
       { kind: "attempts-exhausted", context: { step: "produce", attempts: 1, maximum_attempts: 2 }, payload: { decision: "abort", reason: "Stop" } },
-      { kind: "review-trigger", context: { matched_rules: [{ rule_id: "z", rule_version: 1 }, { rule_id: "a", rule_version: 1 }], uncertain_rules: [], eligible_waiver_rules: [], waiver_scope: { operation: "review-trigger", boundary: "subject" } }, payload: { decision: "approve", reason: "No" } },
-      { kind: "adjudication-failure", context: { constitution: "fail", failed_rules: [{ rule_id: "rule", rule_version: 1 }], uncertain_rules: [], eligible_waiver_rules: [], waiver_scope: { operation: "adjudication-failure", boundary: "phase" } }, payload: { decision: "approve", reason: "Handled", resolutions: [] } }
+      { kind: "constitution-review", context: { constitution: "pass", failed_rules: [], uncertain_rules: [], matched_trigger_rules: [{ rule_id: "z", rule_version: 1 }, { rule_id: "a", rule_version: 1 }], uncertain_trigger_rules: [], eligible_waivers: [] }, payload: { decision: "approve", reason: "No" } },
+      { kind: "constitution-review", context: { constitution: "pass", failed_rules: [{ rule_id: "rule", rule_version: 1 }], uncertain_rules: [], matched_trigger_rules: [], uncertain_trigger_rules: [], eligible_waivers: [] }, payload: { decision: "approve", reason: "Handled" } }
     ];
     for (const value of invalid) { expect(gateValidator.validate(value)).toBe(true); expect(() => parseGateContract(value)).toThrow(); }
   });

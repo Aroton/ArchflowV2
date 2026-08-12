@@ -21,15 +21,38 @@
       }
     ]
   },
-  "kind": "adjudication-failure",
+  "kind": "constitution-review",
   "context": {
     "constitution": "fail",
-    "failed_rules": [{ "rule_id": "rule-a", "rule_version": 1 }],
+    "failed_rules": [
+      {
+        "rule_id": "rule-a",
+        "rule_version": 1
+      }
+    ],
     "uncertain_rules": [],
-    "eligible_waiver_rules": [{ "rule_id": "rule-a", "rule_version": 1 }],
-    "waiver_scope": { "operation": "review-trigger", "boundary": "subject" }
+    "matched_trigger_rules": [],
+    "uncertain_trigger_rules": [],
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "rule-a",
+          "rule_version": 1
+        },
+        "scope": {
+          "operation": "review-trigger",
+          "boundary": "subject"
+        }
+      }
+    ]
   },
-  "allowed_decisions": ["approve", "revise", "reject", "waiver-requested", "cancel"],
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
   "opened_at_revision": 4,
   "status": "awaiting-human",
   "decision_template": {
@@ -37,11 +60,18 @@
     "gate_id": "gate-adjudication-1",
     "task_id": "task-1",
     "phase_instance": "phase-impl-2",
-    "kind": "adjudication-failure",
+    "kind": "constitution-review",
     "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "context_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-    "required_fields": ["payload", "human_provenance"],
-    "cancellation_fields": ["cancelled", "reason", "human_provenance"]
+    "required_fields": [
+      "payload",
+      "human_provenance"
+    ],
+    "cancellation_fields": [
+      "cancelled",
+      "reason",
+      "human_provenance"
+    ]
   },
   "supplemental": []
 }

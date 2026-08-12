@@ -13,7 +13,7 @@ import {
 import type { Sha256Digest } from "../contracts/evidence.js";
 import type { AdapterId } from "../contracts/review.js";
 import type { AdjudicationEnvelopeInput } from "./envelopes.js";
-import type { GateContext, GateKind } from "../contracts/gates.js";
+import type { EligibleWaiver, GateContext, GateKind, RuleVersionRef, WaivableOperation } from "../contracts/gates.js";
 
 export class AdjudicationServiceError extends Error {
   public constructor(public readonly project_error: ProjectError) {
@@ -36,6 +36,11 @@ const invalidOutput = (issueCode: string, adapter: AdapterId | undefined): never
 /**
  * Applies only registry-dependent checks. Structural folds, drift coverage, and observation
  * bindings remain owned by the contract and observation layers.
+ *
+ * A rule's `enforced_by` labels are deliberately not cross-checked here. They name where the rule
+ * is mechanically enforced in the repository and travel to the child as context; the server has no
+ * channel through which mechanism evidence could arrive, so judging a finding against them could
+ * only ever manufacture uncertainty.
  */
 export function crossCheckRuleFindings<T extends DerivedAdjudication>(
   registry: ConstitutionRegistry,
@@ -53,16 +58,6 @@ export function crossCheckRuleFindings<T extends DerivedAdjudication>(
     const finding = adjudication.rule_findings[index]!;
     if (finding.rule_id !== rule.id || finding.rule_version !== rule.version) {
       return invalidOutput("constitution-rule-version", adapter);
-    }
-    const declared = rule.enforced_by ?? [];
-    const labels = finding.enforced_by.map((entry) => entry.mechanism);
-    if (
-      new Set(labels).size !== labels.length ||
-      labels.length !== declared.length ||
-      declared.some((label) => !labels.includes(label))
-    ) return invalidOutput("constitution-enforcement-labels", adapter);
-    if (declared.length > 0 && finding.compliance === "pass") {
-      return invalidOutput("constitution-mechanism-pass", adapter);
     }
   }
   return adjudication;
@@ -115,6 +110,29 @@ export function canonicalRuleRefs(rules: readonly Readonly<{
 }
 
 /**
+ * The waivable (rule, axis) pairs in the canonical sorted, unique order the gate context requires.
+ * One rule can appear on both axes — that is the whole point of the merged gate — but only once
+ * per axis, so pairs are deduplicated by rule and operation together.
+ */
+function eligibleWaivers(
+  entries: readonly Readonly<{ rule: RuleVersionRef; operation: WaivableOperation }>[],
+): readonly EligibleWaiver[] {
+  const unique = new Map<string, Readonly<{ rule: RuleVersionRef; operation: WaivableOperation }>>();
+  for (const entry of entries) {
+    unique.set(`${entry.rule.rule_id}:${entry.rule.rule_version}:${entry.operation}`, entry);
+  }
+  return Object.freeze([...unique.values()]
+    .map((entry) => Object.freeze({
+      rule: entry.rule,
+      scope: Object.freeze({ operation: entry.operation, boundary: "subject" as const }),
+    }))
+    .sort((left, right) =>
+      left.rule.rule_id.localeCompare(right.rule.rule_id) ||
+      left.rule.rule_version - right.rule.rule_version ||
+      left.scope.operation.localeCompare(right.scope.operation)));
+}
+
+/**
  * The deterministic gates a constitution-review verdict demands. The constitution review runs
  * inside archflow_counter_review; these gates open at the post-triage fixed point through the
  * ordinary archflow_gate flow — status and build-request compose them mechanically from this
@@ -125,22 +143,33 @@ export function selectAdjudicationGates(
   evidence: AdjudicationEvidence,
 ): readonly AdjudicationGateRequest[] {
   const gates: AdjudicationGateRequest[] = [];
-  if (evidence.constitution === "fail" || evidence.constitution === "uncertain") {
-    const failed = evidence.rule_findings.filter((item) => item.compliance === "fail");
-    const uncertain = evidence.rule_findings.filter((item) => item.compliance === "uncertain");
+  const failed = evidence.rule_findings.filter((item) => item.compliance === "fail");
+  const uncertain = evidence.rule_findings.filter((item) => item.compliance === "uncertain");
+  const failedRules = refs(failed.map((item) => registry.get(item.rule_id)!));
+  const uncertainRules = refs(uncertain.map((item) => registry.get(item.rule_id)!));
+  const matchedTriggers = evidence.matched_rule_versions;
+  const uncertainTriggers = evidence.uncertain_rule_versions;
+  // Compliance and trigger are separate judgments about the same rules and routinely share one
+  // root cause, so they are disclosed together and decided once rather than asked twice.
+  if (
+    failedRules.length > 0 || uncertainRules.length > 0 ||
+    matchedTriggers.length > 0 || uncertainTriggers.length > 0
+  ) {
     gates.push(Object.freeze({
-      kind: "adjudication-failure",
+      kind: "constitution-review",
       subject_digest: evidence.subject_digest,
       context: Object.freeze({
         constitution: evidence.constitution,
-        failed_rules: refs(failed.map((item) => registry.get(item.rule_id)!)),
-        uncertain_rules: refs(uncertain.map((item) => registry.get(item.rule_id)!)),
-        eligible_waiver_rules: refs([...failed, ...uncertain].map((item) =>
-          registry.get(item.rule_id)!)),
-        waiver_scope: Object.freeze({
-          operation: "adjudication-failure",
-          boundary: "subject",
-        }),
+        failed_rules: failedRules,
+        uncertain_rules: uncertainRules,
+        matched_trigger_rules: matchedTriggers,
+        uncertain_trigger_rules: uncertainTriggers,
+        eligible_waivers: eligibleWaivers([
+          ...[...failedRules, ...uncertainRules].map((rule) =>
+            ({ rule, operation: "adjudication-failure" as const })),
+          ...[...matchedTriggers, ...uncertainTriggers].map((rule) =>
+            ({ rule, operation: "review-trigger" as const })),
+        ]),
       }),
     }));
   }
@@ -158,27 +187,6 @@ export function selectAdjudicationGates(
         }),
         drift: "material",
         affected_claim_ids: Object.freeze([...material.affected_claim_ids].sort()),
-      }),
-    }));
-  }
-  if (
-    evidence.matched_rule_versions.length > 0 ||
-    evidence.uncertain_rule_versions.length > 0
-  ) {
-    gates.push(Object.freeze({
-      kind: "review-trigger",
-      subject_digest: evidence.subject_digest,
-      context: Object.freeze({
-        matched_rules: evidence.matched_rule_versions,
-        uncertain_rules: evidence.uncertain_rule_versions,
-        eligible_waiver_rules: canonicalRuleRefs([
-          ...evidence.matched_rule_versions,
-          ...evidence.uncertain_rule_versions,
-        ]),
-        waiver_scope: Object.freeze({
-          operation: "review-trigger",
-          boundary: "subject",
-        }),
       }),
     }));
   }

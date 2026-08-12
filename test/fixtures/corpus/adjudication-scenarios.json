@@ -12,109 +12,435 @@
       "id": "declared-rule",
       "version": 1,
       "text": "The contract suite must corroborate this rule.",
-      "enforced_by": ["contract-test"]
+      "enforced_by": [
+        "contract-test"
+      ]
     }
   },
   "scenarios": [
     {
       "name": "trigger-negative-undeclared-aligned",
-      "registry_rules": ["plain"],
+      "registry_rules": [
+        "plain"
+      ],
       "expected_parser": "valid",
       "expected_cross_check": "valid",
       "expected_gate": null,
-      "output": {"schema_version":"1","task_id":"mcp-integration","phase_instance":"phase-impl-14","step":"adjudicate","subject_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","input_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pinned_constitution_digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","approved_upstream_digests":[],"source_evidence_set_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","rule_findings":[{"rule_id":"plain-rule","rule_version":1,"compliance":"pass","rationale":"No defect is present.","trigger":"not-matched","trigger_evidence":"DEFECT-SEED is absent.","enforced_by":[]}],"drift_findings":[],"constitution":"pass","drift":"aligned","matched_rule_versions":[],"uncertain_rule_versions":[]}
+      "output": {
+        "schema_version": "1",
+        "task_id": "mcp-integration",
+        "phase_instance": "phase-impl-14",
+        "step": "adjudicate",
+        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "approved_upstream_digests": [],
+        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "rule_findings": [
+          {
+            "rule_id": "plain-rule",
+            "rule_version": 1,
+            "compliance": "pass",
+            "rationale": "No defect is present.",
+            "trigger": "not-matched",
+            "trigger_evidence": "DEFECT-SEED is absent."
+          }
+        ],
+        "drift_findings": [],
+        "constitution": "pass",
+        "drift": "aligned",
+        "matched_rule_versions": [],
+        "uncertain_rule_versions": []
+      }
     },
     {
       "name": "trigger-positive-undeclared",
-      "registry_rules": ["plain"],
+      "registry_rules": [
+        "plain"
+      ],
       "expected_parser": "valid",
       "expected_cross_check": "valid",
-      "expected_gate": "review-trigger",
-      "output": {"schema_version":"1","task_id":"mcp-integration","phase_instance":"phase-impl-14","step":"adjudicate","subject_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","input_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pinned_constitution_digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","approved_upstream_digests":[],"source_evidence_set_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","rule_findings":[{"rule_id":"plain-rule","rule_version":1,"compliance":"pass","rationale":"The defect is reviewable.","trigger":"matched","trigger_evidence":"DEFECT-SEED is present.","enforced_by":[]}],"drift_findings":[],"constitution":"pass","drift":"aligned","matched_rule_versions":[{"rule_id":"plain-rule","rule_version":1}],"uncertain_rule_versions":[]}
+      "expected_gate": "constitution-review",
+      "output": {
+        "schema_version": "1",
+        "task_id": "mcp-integration",
+        "phase_instance": "phase-impl-14",
+        "step": "adjudicate",
+        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "approved_upstream_digests": [],
+        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "rule_findings": [
+          {
+            "rule_id": "plain-rule",
+            "rule_version": 1,
+            "compliance": "pass",
+            "rationale": "The defect is reviewable.",
+            "trigger": "matched",
+            "trigger_evidence": "DEFECT-SEED is present."
+          }
+        ],
+        "drift_findings": [],
+        "constitution": "pass",
+        "drift": "aligned",
+        "matched_rule_versions": [
+          {
+            "rule_id": "plain-rule",
+            "rule_version": 1
+          }
+        ],
+        "uncertain_rule_versions": []
+      }
     },
     {
       "name": "trigger-uncertain-undeclared",
-      "registry_rules": ["plain"],
+      "registry_rules": [
+        "plain"
+      ],
       "expected_parser": "valid",
       "expected_cross_check": "valid",
-      "expected_gate": "review-trigger",
-      "output": {"schema_version":"1","task_id":"mcp-integration","phase_instance":"phase-impl-14","step":"adjudicate","subject_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","input_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pinned_constitution_digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","approved_upstream_digests":[],"source_evidence_set_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","rule_findings":[{"rule_id":"plain-rule","rule_version":1,"compliance":"pass","rationale":"The artifact is compliant.","trigger":"uncertain","trigger_evidence":"The trigger text is ambiguous for this artifact.","enforced_by":[]}],"drift_findings":[],"constitution":"pass","drift":"aligned","matched_rule_versions":[],"uncertain_rule_versions":[{"rule_id":"plain-rule","rule_version":1}]}
+      "expected_gate": "constitution-review",
+      "output": {
+        "schema_version": "1",
+        "task_id": "mcp-integration",
+        "phase_instance": "phase-impl-14",
+        "step": "adjudicate",
+        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "approved_upstream_digests": [],
+        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "rule_findings": [
+          {
+            "rule_id": "plain-rule",
+            "rule_version": 1,
+            "compliance": "pass",
+            "rationale": "The artifact is compliant.",
+            "trigger": "uncertain",
+            "trigger_evidence": "The trigger text is ambiguous for this artifact."
+          }
+        ],
+        "drift_findings": [],
+        "constitution": "pass",
+        "drift": "aligned",
+        "matched_rule_versions": [],
+        "uncertain_rule_versions": [
+          {
+            "rule_id": "plain-rule",
+            "rule_version": 1
+          }
+        ]
+      }
     },
     {
-      "name": "declared-mechanism-fail-closed",
-      "registry_rules": ["declared"],
+      "name": "compliance-and-trigger-share-one-gate",
+      "registry_rules": [
+        "plain"
+      ],
       "expected_parser": "valid",
       "expected_cross_check": "valid",
-      "expected_gate": "adjudication-failure",
-      "output": {"schema_version":"1","task_id":"mcp-integration","phase_instance":"phase-impl-14","step":"adjudicate","subject_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","input_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pinned_constitution_digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","approved_upstream_digests":[],"source_evidence_set_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","rule_findings":[{"rule_id":"declared-rule","rule_version":1,"compliance":"uncertain","rationale":"The model cannot corroborate the declared mechanism.","trigger":"not-matched","trigger_evidence":"The rule declares no review trigger.","enforced_by":[{"mechanism":"contract-test","state":"unknown","details":"Server corroboration is unavailable in this phase."}]}],"drift_findings":[],"constitution":"uncertain","drift":"aligned","matched_rule_versions":[],"uncertain_rule_versions":[]}
+      "expected_gate": "constitution-review",
+      "output": {
+        "schema_version": "1",
+        "task_id": "mcp-integration",
+        "phase_instance": "phase-impl-14",
+        "step": "adjudicate",
+        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "approved_upstream_digests": [],
+        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "rule_findings": [
+          {
+            "rule_id": "plain-rule",
+            "rule_version": 1,
+            "compliance": "fail",
+            "rationale": "The seeded defect is present.",
+            "trigger": "matched",
+            "trigger_evidence": "DEFECT-SEED is present."
+          }
+        ],
+        "drift_findings": [],
+        "constitution": "fail",
+        "drift": "aligned",
+        "matched_rule_versions": [
+          {
+            "rule_id": "plain-rule",
+            "rule_version": 1
+          }
+        ],
+        "uncertain_rule_versions": []
+      }
     },
     {
-      "name": "incidental-drift",
-      "registry_rules": ["plain"],
+      "name": "declared-mechanism-rule-can-pass",
+      "registry_rules": [
+        "declared"
+      ],
       "expected_parser": "valid",
       "expected_cross_check": "valid",
       "expected_gate": null,
-      "output": {"schema_version":"1","task_id":"mcp-integration","phase_instance":"phase-impl-14","step":"adjudicate","subject_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","input_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pinned_constitution_digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","approved_upstream_digests":["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"],"source_evidence_set_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","rule_findings":[{"rule_id":"plain-rule","rule_version":1,"compliance":"pass","rationale":"The artifact is compliant.","trigger":"not-matched","trigger_evidence":"DEFECT-SEED is absent.","enforced_by":[]}],"drift_findings":[{"upstream_digest":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","drift":"incidental","affected_claim_ids":["wording"],"rationale":"Only descriptive wording moved."}],"constitution":"pass","drift":"incidental","matched_rule_versions":[],"uncertain_rule_versions":[]}
+      "output": {
+        "schema_version": "1",
+        "task_id": "mcp-integration",
+        "phase_instance": "phase-impl-14",
+        "step": "adjudicate",
+        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "approved_upstream_digests": [],
+        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "rule_findings": [
+          {
+            "rule_id": "declared-rule",
+            "rule_version": 1,
+            "compliance": "pass",
+            "rationale": "The artifact satisfies the rule; its declared enforcement mechanisms are context, not evidence to verify.",
+            "trigger": "not-matched",
+            "trigger_evidence": "The rule declares no review trigger."
+          }
+        ],
+        "drift_findings": [],
+        "constitution": "pass",
+        "drift": "aligned",
+        "matched_rule_versions": [],
+        "uncertain_rule_versions": []
+      }
+    },
+    {
+      "name": "incidental-drift",
+      "registry_rules": [
+        "plain"
+      ],
+      "expected_parser": "valid",
+      "expected_cross_check": "valid",
+      "expected_gate": null,
+      "output": {
+        "schema_version": "1",
+        "task_id": "mcp-integration",
+        "phase_instance": "phase-impl-14",
+        "step": "adjudicate",
+        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "approved_upstream_digests": [
+          "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ],
+        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "rule_findings": [
+          {
+            "rule_id": "plain-rule",
+            "rule_version": 1,
+            "compliance": "pass",
+            "rationale": "The artifact is compliant.",
+            "trigger": "not-matched",
+            "trigger_evidence": "DEFECT-SEED is absent."
+          }
+        ],
+        "drift_findings": [
+          {
+            "upstream_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "drift": "incidental",
+            "affected_claim_ids": [
+              "wording"
+            ],
+            "rationale": "Only descriptive wording moved."
+          }
+        ],
+        "constitution": "pass",
+        "drift": "incidental",
+        "matched_rule_versions": [],
+        "uncertain_rule_versions": []
+      }
     },
     {
       "name": "two-material-upstreams",
-      "registry_rules": ["plain"],
+      "registry_rules": [
+        "plain"
+      ],
       "expected_parser": "valid",
       "expected_cross_check": "valid",
       "expected_gate": "material-drift",
       "expected_first_upstream": "1111111111111111111111111111111111111111111111111111111111111111",
       "modeled_resolution": "amend-upstream",
-      "output": {"schema_version":"1","task_id":"mcp-integration","phase_instance":"phase-impl-14","step":"adjudicate","subject_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","input_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pinned_constitution_digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","approved_upstream_digests":["1111111111111111111111111111111111111111111111111111111111111111","2222222222222222222222222222222222222222222222222222222222222222"],"source_evidence_set_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","rule_findings":[{"rule_id":"plain-rule","rule_version":1,"compliance":"pass","rationale":"The artifact is compliant.","trigger":"not-matched","trigger_evidence":"DEFECT-SEED is absent.","enforced_by":[]}],"drift_findings":[{"upstream_digest":"1111111111111111111111111111111111111111111111111111111111111111","drift":"material","affected_claim_ids":["claim-one"],"rationale":"The first upstream changes claim one."},{"upstream_digest":"2222222222222222222222222222222222222222222222222222222222222222","drift":"material","affected_claim_ids":["claim-two"],"rationale":"The second upstream changes claim two."}],"constitution":"pass","drift":"material","matched_rule_versions":[],"uncertain_rule_versions":[]}
+      "output": {
+        "schema_version": "1",
+        "task_id": "mcp-integration",
+        "phase_instance": "phase-impl-14",
+        "step": "adjudicate",
+        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "approved_upstream_digests": [
+          "1111111111111111111111111111111111111111111111111111111111111111",
+          "2222222222222222222222222222222222222222222222222222222222222222"
+        ],
+        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "rule_findings": [
+          {
+            "rule_id": "plain-rule",
+            "rule_version": 1,
+            "compliance": "pass",
+            "rationale": "The artifact is compliant.",
+            "trigger": "not-matched",
+            "trigger_evidence": "DEFECT-SEED is absent."
+          }
+        ],
+        "drift_findings": [
+          {
+            "upstream_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+            "drift": "material",
+            "affected_claim_ids": [
+              "claim-one"
+            ],
+            "rationale": "The first upstream changes claim one."
+          },
+          {
+            "upstream_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+            "drift": "material",
+            "affected_claim_ids": [
+              "claim-two"
+            ],
+            "rationale": "The second upstream changes claim two."
+          }
+        ],
+        "constitution": "pass",
+        "drift": "material",
+        "matched_rule_versions": [],
+        "uncertain_rule_versions": []
+      }
     },
     {
       "name": "second-material-upstream-after-readjudication",
-      "registry_rules": ["plain"],
+      "registry_rules": [
+        "plain"
+      ],
       "expected_parser": "valid",
       "expected_cross_check": "valid",
       "expected_gate": "material-drift",
       "expected_first_upstream": "2222222222222222222222222222222222222222222222222222222222222222",
       "modeled_resolution": "revise-current",
-      "output": {"schema_version":"1","task_id":"mcp-integration","phase_instance":"phase-impl-14","step":"adjudicate","subject_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","input_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pinned_constitution_digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","approved_upstream_digests":["1111111111111111111111111111111111111111111111111111111111111111","2222222222222222222222222222222222222222222222222222222222222222"],"source_evidence_set_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","rule_findings":[{"rule_id":"plain-rule","rule_version":1,"compliance":"pass","rationale":"The artifact is compliant.","trigger":"not-matched","trigger_evidence":"DEFECT-SEED is absent.","enforced_by":[]}],"drift_findings":[{"upstream_digest":"1111111111111111111111111111111111111111111111111111111111111111","drift":"aligned","affected_claim_ids":[],"rationale":"The first upstream was amended and is now aligned."},{"upstream_digest":"2222222222222222222222222222222222222222222222222222222222222222","drift":"material","affected_claim_ids":["claim-two"],"rationale":"The second upstream still changes claim two."}],"constitution":"pass","drift":"material","matched_rule_versions":[],"uncertain_rule_versions":[]}
+      "output": {
+        "schema_version": "1",
+        "task_id": "mcp-integration",
+        "phase_instance": "phase-impl-14",
+        "step": "adjudicate",
+        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "approved_upstream_digests": [
+          "1111111111111111111111111111111111111111111111111111111111111111",
+          "2222222222222222222222222222222222222222222222222222222222222222"
+        ],
+        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "rule_findings": [
+          {
+            "rule_id": "plain-rule",
+            "rule_version": 1,
+            "compliance": "pass",
+            "rationale": "The artifact is compliant.",
+            "trigger": "not-matched",
+            "trigger_evidence": "DEFECT-SEED is absent."
+          }
+        ],
+        "drift_findings": [
+          {
+            "upstream_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+            "drift": "aligned",
+            "affected_claim_ids": [],
+            "rationale": "The first upstream was amended and is now aligned."
+          },
+          {
+            "upstream_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+            "drift": "material",
+            "affected_claim_ids": [
+              "claim-two"
+            ],
+            "rationale": "The second upstream still changes claim two."
+          }
+        ],
+        "constitution": "pass",
+        "drift": "material",
+        "matched_rule_versions": [],
+        "uncertain_rule_versions": []
+      }
     },
     {
       "name": "missing-rule-finding",
-      "registry_rules": ["declared","plain"],
+      "registry_rules": [
+        "declared",
+        "plain"
+      ],
       "expected_parser": "valid",
       "expected_cross_check": "invalid",
       "expected_gate": null,
-      "output": {"schema_version":"1","task_id":"mcp-integration","phase_instance":"phase-impl-14","step":"adjudicate","subject_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","input_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pinned_constitution_digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","approved_upstream_digests":[],"source_evidence_set_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","rule_findings":[{"rule_id":"plain-rule","rule_version":1,"compliance":"pass","rationale":"The artifact is compliant.","trigger":"not-matched","trigger_evidence":"DEFECT-SEED is absent.","enforced_by":[]}],"drift_findings":[],"constitution":"pass","drift":"aligned","matched_rule_versions":[],"uncertain_rule_versions":[]}
+      "output": {
+        "schema_version": "1",
+        "task_id": "mcp-integration",
+        "phase_instance": "phase-impl-14",
+        "step": "adjudicate",
+        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "approved_upstream_digests": [],
+        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "rule_findings": [
+          {
+            "rule_id": "plain-rule",
+            "rule_version": 1,
+            "compliance": "pass",
+            "rationale": "The artifact is compliant.",
+            "trigger": "not-matched",
+            "trigger_evidence": "DEFECT-SEED is absent."
+          }
+        ],
+        "drift_findings": [],
+        "constitution": "pass",
+        "drift": "aligned",
+        "matched_rule_versions": [],
+        "uncertain_rule_versions": []
+      }
     },
     {
       "name": "contradictory-matched-rules",
-      "registry_rules": ["plain"],
+      "registry_rules": [
+        "plain"
+      ],
       "expected_parser": "invalid",
       "expected_cross_check": "not-reached",
       "expected_gate": null,
-      "output": {"schema_version":"1","task_id":"mcp-integration","phase_instance":"phase-impl-14","step":"adjudicate","subject_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","input_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pinned_constitution_digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","approved_upstream_digests":[],"source_evidence_set_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","rule_findings":[{"rule_id":"plain-rule","rule_version":1,"compliance":"pass","rationale":"The artifact is compliant.","trigger":"not-matched","trigger_evidence":"DEFECT-SEED is absent.","enforced_by":[]}],"drift_findings":[],"constitution":"pass","drift":"aligned","matched_rule_versions":[{"rule_id":"plain-rule","rule_version":1}],"uncertain_rule_versions":[]}
-    },
-    {
-      "name": "declared-mechanism-pass",
-      "registry_rules": ["declared"],
-      "expected_parser": "valid",
-      "expected_cross_check": "invalid",
-      "expected_gate": null,
-      "output": {"schema_version":"1","task_id":"mcp-integration","phase_instance":"phase-impl-14","step":"adjudicate","subject_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","input_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pinned_constitution_digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","approved_upstream_digests":[],"source_evidence_set_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","rule_findings":[{"rule_id":"declared-rule","rule_version":1,"compliance":"pass","rationale":"The child improperly self-corroborated.","trigger":"not-matched","trigger_evidence":"The rule declares no review trigger.","enforced_by":[{"mechanism":"contract-test","state":"current","subject_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","evidence_digest":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","details":"The child claims the suite passed."}]}],"drift_findings":[],"constitution":"pass","drift":"aligned","matched_rule_versions":[],"uncertain_rule_versions":[]}
-    },
-    {
-      "name": "undeclared-mechanism-nonempty",
-      "registry_rules": ["plain"],
-      "expected_parser": "valid",
-      "expected_cross_check": "invalid",
-      "expected_gate": null,
-      "output": {"schema_version":"1","task_id":"mcp-integration","phase_instance":"phase-impl-14","step":"adjudicate","subject_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","input_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pinned_constitution_digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","approved_upstream_digests":[],"source_evidence_set_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","rule_findings":[{"rule_id":"plain-rule","rule_version":1,"compliance":"pass","rationale":"The child invented enforcement.","trigger":"not-matched","trigger_evidence":"DEFECT-SEED is absent.","enforced_by":[{"mechanism":"invented-check","state":"current","subject_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","evidence_digest":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","details":"The child claims an undeclared check passed."}]}],"drift_findings":[],"constitution":"pass","drift":"aligned","matched_rule_versions":[],"uncertain_rule_versions":[]}
-    },
-    {
-      "name": "invented-mechanism-label",
-      "registry_rules": ["declared"],
-      "expected_parser": "valid",
-      "expected_cross_check": "invalid",
-      "expected_gate": null,
-      "output": {"schema_version":"1","task_id":"mcp-integration","phase_instance":"phase-impl-14","step":"adjudicate","subject_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","input_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pinned_constitution_digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","approved_upstream_digests":[],"source_evidence_set_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","rule_findings":[{"rule_id":"declared-rule","rule_version":1,"compliance":"uncertain","rationale":"The declared mechanism is not corroborated.","trigger":"not-matched","trigger_evidence":"The rule declares no review trigger.","enforced_by":[{"mechanism":"invented-check","state":"unknown","details":"The child returned a label outside the registry."}]}],"drift_findings":[],"constitution":"uncertain","drift":"aligned","matched_rule_versions":[],"uncertain_rule_versions":[]}
+      "output": {
+        "schema_version": "1",
+        "task_id": "mcp-integration",
+        "phase_instance": "phase-impl-14",
+        "step": "adjudicate",
+        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pinned_constitution_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "approved_upstream_digests": [],
+        "source_evidence_set_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "rule_findings": [
+          {
+            "rule_id": "plain-rule",
+            "rule_version": 1,
+            "compliance": "pass",
+            "rationale": "The artifact is compliant.",
+            "trigger": "not-matched",
+            "trigger_evidence": "DEFECT-SEED is absent."
+          }
+        ],
+        "drift_findings": [],
+        "constitution": "pass",
+        "drift": "aligned",
+        "matched_rule_versions": [
+          {
+            "rule_id": "plain-rule",
+            "rule_version": 1
+          }
+        ],
+        "uncertain_rule_versions": []
+      }
     }
   ]
 }

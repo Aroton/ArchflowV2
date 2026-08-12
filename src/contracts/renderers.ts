@@ -1,4 +1,4 @@
-import type { AdjudicationEvidence, MechanicalEvidence } from "./adjudication.js";
+import type { AdjudicationEvidence } from "./adjudication.js";
 import type { ReviewEvidence, ReviewFinding, RuleVersionRef } from "./review.js";
 import type { QualifiedAdjudicationEvidence, QualifiedReviewEvidence, VerifiedReferencedEvidence } from "./trust.js";
 import type { TriageDisposition, ValidatedTriage } from "./triage.js";
@@ -62,9 +62,6 @@ export function renderTriage(value: ValidatedTriage): Uint8Array {
   return linesToBytes(lines);
 }
 
-function renderMechanicalEvidence(value: MechanicalEvidence): string[] {
-  return [`    mechanism: ${visibleJsonString(value.mechanism)}`, `    state: ${canonical(value.state)}`, `    subject_digest: ${optional(value.subject_digest)}`, `    evidence_digest: ${optional(value.evidence_digest)}`, prose("details", value.details, "    ")];
-}
 export function renderAdjudicationEvidence(
   value: QualifiedAdjudicationEvidence | VerifiedReferencedEvidence<"adjudication">,
 ): Uint8Array {
@@ -77,8 +74,7 @@ export function renderAdjudicationEvidence(
     ["schema_version", evidence.schema_version], ["task_id", evidence.task_id], ["phase_instance", evidence.phase_instance], ["step", evidence.step], ["subject_digest", evidence.subject_digest], ["input_fingerprint", evidence.input_fingerprint], ["evidence_digest", value.evidence_digest], ["pinned_constitution_digest", evidence.pinned_constitution_digest], ["approved_upstream_digests", evidence.approved_upstream_digests], ["source_evidence_set_digest", evidence.source_evidence_set_digest], ["constitution", evidence.constitution], ["drift", evidence.drift], ["matched_rule_versions", evidence.matched_rule_versions.map((rule) => `${rule.rule_id}@${rule.rule_version}`)], ["uncertain_rule_versions", evidence.uncertain_rule_versions.map((rule) => `${rule.rule_id}@${rule.rule_version}`)], ...provenanceMetadata(evidence),
   ]), "", "## Constitution Findings"];
   for (const finding of evidence.rule_findings) {
-    lines.push("", `### Rule ${visibleJsonString(`${finding.rule_id}@${finding.rule_version}`)}`, `compliance: ${canonical(finding.compliance)}`, `trigger: ${canonical(finding.trigger)}`, prose("rationale", finding.rationale), prose("trigger_evidence", finding.trigger_evidence), "  enforced_by:");
-    for (const mechanism of finding.enforced_by) lines.push(...renderMechanicalEvidence(mechanism));
+    lines.push("", `### Rule ${visibleJsonString(`${finding.rule_id}@${finding.rule_version}`)}`, `compliance: ${canonical(finding.compliance)}`, `trigger: ${canonical(finding.trigger)}`, prose("rationale", finding.rationale), prose("trigger_evidence", finding.trigger_evidence));
   }
   lines.push("", "## Drift Findings");
   for (const finding of evidence.drift_findings) lines.push("", `### Upstream ${visibleJsonString(finding.upstream_digest)}`, `drift: ${canonical(finding.drift)}`, `affected_claim_ids: ${canonical(finding.affected_claim_ids)}`, prose("rationale", finding.rationale));

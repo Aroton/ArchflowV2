@@ -22,6 +22,7 @@ import {
   AdjudicationServiceError,
   crossCheckRuleFindings,
   selectAdjudicationGate,
+  selectAdjudicationGates,
 } from "../../src/review/adjudication.js";
 import type { AdjudicationSubject, DispatchEnvelope, DispatchSubject } from "../../src/review/envelopes.js";
 
@@ -209,7 +210,7 @@ describe("deterministic fake-CLI review corpus", () => {
     }
   });
 
-  it("dispatches and attests representative trigger, mechanism, and drift adjudications", async () => {
+  it("dispatches and attests representative trigger, compliance, and drift adjudications", async () => {
     const document = await adjudicationCorpus();
     const entries = document.scenarios;
     expect(entries.filter((entry) => entry.modeled_resolution !== undefined).map((entry) => [
@@ -243,6 +244,23 @@ describe("deterministic fake-CLI review corpus", () => {
         expect(crossCheckRuleFindings(registry, result.evidence)).toBe(result.evidence);
         const gate = selectAdjudicationGate(registry, result.evidence);
         expect(gate?.kind).toBe(scenario.expected_gate ?? undefined);
+        if (scenario.name === "compliance-and-trigger-share-one-gate") {
+          // One rule failing on both axes costs exactly one human decision, and that decision
+          // must disclose both axes and offer a waiver on each.
+          expect(selectAdjudicationGates(registry, result.evidence)).toHaveLength(1);
+          expect(gate).toMatchObject({
+            kind: "constitution-review",
+            context: {
+              constitution: "fail",
+              failed_rules: [{ rule_id: "plain-rule", rule_version: 1 }],
+              matched_trigger_rules: [{ rule_id: "plain-rule", rule_version: 1 }],
+              eligible_waivers: [
+                { rule: { rule_id: "plain-rule" }, scope: { operation: "adjudication-failure" } },
+                { rule: { rule_id: "plain-rule" }, scope: { operation: "review-trigger" } },
+              ],
+            },
+          });
+        }
         if (scenario.expected_first_upstream !== undefined) {
           expect(gate).toMatchObject({
             kind: "material-drift",
@@ -288,9 +306,6 @@ describe("deterministic fake-CLI review corpus", () => {
       scenario.expected_cross_check === "invalid");
     expect(malformed.map((scenario) => scenario.name)).toEqual([
       "missing-rule-finding",
-      "declared-mechanism-pass",
-      "undeclared-mechanism-nonempty",
-      "invented-mechanism-label",
     ]);
     for (const scenario of malformed) {
       const parsed = parseAndDeriveAdjudication(scenario.output);

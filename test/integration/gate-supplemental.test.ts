@@ -104,22 +104,22 @@ function waiverOrigin(h: Harness, suffix: string) {
   const gateId = `origin-${suffix}`;
   const rule = { rule_id: "review-rule", rule_version: 1 } as const;
   const scope = { operation: "review-trigger", boundary: "subject" } as const;
-  const context = { matched_rules: [rule], uncertain_rules: [], eligible_waiver_rules: [rule], waiver_scope: scope } as const;
-  const contextDigest = computeGateContextDigest("review-trigger", context);
+  const context = { constitution: "pass", failed_rules: [], uncertain_rules: [], matched_trigger_rules: [rule], uncertain_trigger_rules: [], eligible_waivers: [{ rule, scope }] } as const;
+  const contextDigest = computeGateContextDigest("constitution-review", context);
   const request = parseGateRequest({
     schema_version: "1", gate_id: gateId, intent_id: `origin-intent-${suffix}`, request_digest: D("d"),
     task_id: TASK, phase_instance: PHASE, summary: "Constitution review trigger", subject_digest: D("9"),
     context_digest: contextDigest, current_evidence: gateInput(h, suffix).current_evidence,
-    kind: "review-trigger", context,
+    kind: "constitution-review", context,
     allowed_decisions: ["approve", "revise", "reject", "waiver-requested", "cancel"], opened_at_revision: 7,
   });
   const provenance = { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: `decision-${suffix}`, helper_invocation_id: `helper-${suffix}`, recorded_at: "2026-08-03T12:00:00.000Z" } as const;
   const decision = parseGateDecisionRecord({
-    schema_version: "1", gate_id: gateId, task_id: TASK, phase_instance: PHASE, kind: "review-trigger",
+    schema_version: "1", gate_id: gateId, task_id: TASK, phase_instance: PHASE, kind: "constitution-review",
     subject_digest: request.subject_digest, context_digest: contextDigest, supplemental: [], outcome: "decided",
-    envelope: { schema_version: "1", gate_id: gateId, task_id: TASK, phase_instance: PHASE, kind: "review-trigger",
+    envelope: { schema_version: "1", gate_id: gateId, task_id: TASK, phase_instance: PHASE, kind: "constitution-review",
       subject_digest: request.subject_digest, context_digest: contextDigest, human_provenance: provenance,
-      payload: { decision: "waiver-requested", reason: "A bounded exception is appropriate", rule, rationale: "The rule does not apply to this subject" } },
+      payload: { decision: "waiver-requested", reason: "A bounded exception is appropriate", rule, operation: "review-trigger", rationale: "The rule does not apply to this subject" } },
   });
   const requestDocument = canonicalDocument(request);
   const decisionDocument = canonicalDocument(decision);

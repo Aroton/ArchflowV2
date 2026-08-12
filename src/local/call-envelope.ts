@@ -276,7 +276,7 @@ export async function computeCallEnvelope(
     if (!origin.ok) return origin;
     const waiverContext: WaiverGateContext = { origin: call.input.origin, rationale: call.input.rationale };
     phaseInstance = call.input.origin.phase_instance;
-    kind = call.input.origin.scope.operation;
+    kind = "constitution-review";
     subjectDigest = call.input.origin.subject_digest;
     contextDigest = computeGateContextDigest("waiver", waiverContext);
     currentEvidence = origin.value.current_evidence;

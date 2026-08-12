@@ -82,12 +82,6 @@
                 "type": "string",
                 "minLength": 1,
                 "pattern": "\\S"
-              },
-              "enforced_by": {
-                "type": "array",
-                "items": {
-                  "$ref": "urn:archflow:schema:v1:adjudication#/$defs/mechanical"
-                }
               }
             },
             "required": [
@@ -96,8 +90,7 @@
               "compliance",
               "rationale",
               "trigger",
-              "trigger_evidence",
-              "enforced_by"
+              "trigger_evidence"
             ],
             "additionalProperties": false
           }
@@ -348,12 +341,6 @@
                 "type": "string",
                 "minLength": 1,
                 "pattern": "\\S"
-              },
-              "enforced_by": {
-                "type": "array",
-                "items": {
-                  "$ref": "urn:archflow:schema:v1:adjudication#/$defs/mechanical"
-                }
               }
             },
             "required": [
@@ -362,8 +349,7 @@
               "compliance",
               "rationale",
               "trigger",
-              "trigger_evidence",
-              "enforced_by"
+              "trigger_evidence"
             ],
             "additionalProperties": false
           }
@@ -632,12 +618,6 @@
                 "type": "string",
                 "minLength": 1,
                 "pattern": "\\S"
-              },
-              "enforced_by": {
-                "type": "array",
-                "items": {
-                  "$ref": "urn:archflow:schema:v1:adjudication#/$defs/mechanical"
-                }
               }
             },
             "required": [
@@ -646,8 +626,7 @@
               "compliance",
               "rationale",
               "trigger",
-              "trigger_evidence",
-              "enforced_by"
+              "trigger_evidence"
             ],
             "additionalProperties": false
           }

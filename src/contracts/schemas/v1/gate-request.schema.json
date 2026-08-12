@@ -117,7 +117,7 @@
         "cancel"
       ]
     },
-    "reviewTriggerDecisions": {
+    "constitutionReviewDecisions": {
       "const": [
         "approve",
         "revise",
@@ -131,15 +131,6 @@
         "amend-upstream",
         "revise-current",
         "reject",
-        "cancel"
-      ]
-    },
-    "adjudicationFailureDecisions": {
-      "const": [
-        "approve",
-        "revise",
-        "reject",
-        "waiver-requested",
         "cancel"
       ]
     },
@@ -268,7 +259,7 @@
       ],
       "additionalProperties": false
     },
-    "reviewTrigger": {
+    "constitutionReview": {
       "type": "object",
       "properties": {
         "schema_version": {
@@ -319,13 +310,13 @@
         },
         "kind": {
           "type": "string",
-          "const": "review-trigger"
+          "const": "constitution-review"
         },
         "context": {
-          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/reviewTriggerContext"
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/constitutionReviewContext"
         },
         "allowed_decisions": {
-          "$ref": "#/$defs/reviewTriggerDecisions"
+          "$ref": "#/$defs/constitutionReviewDecisions"
         }
       },
       "required": [
@@ -404,84 +395,6 @@
         },
         "allowed_decisions": {
           "$ref": "#/$defs/materialDriftDecisions"
-        }
-      },
-      "required": [
-        "schema_version",
-        "gate_id",
-        "intent_id",
-        "request_digest",
-        "task_id",
-        "phase_instance",
-        "summary",
-        "subject_digest",
-        "context_digest",
-        "current_evidence",
-        "opened_at_revision",
-        "kind",
-        "context",
-        "allowed_decisions"
-      ],
-      "additionalProperties": false
-    },
-    "adjudicationFailure": {
-      "type": "object",
-      "properties": {
-        "schema_version": {
-          "type": "string",
-          "const": "1"
-        },
-        "gate_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-        },
-        "intent_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-        },
-        "request_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "task_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
-        },
-        "phase_instance": {
-          "type": "string",
-          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
-        },
-        "summary": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 4096,
-          "pattern": "\\S"
-        },
-        "subject_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "context_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "current_evidence": {
-          "$ref": "#/$defs/currentEvidence"
-        },
-        "supersedes": {
-          "$ref": "#/$defs/supersession"
-        },
-        "opened_at_revision": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 9007199254740991
-        },
-        "kind": {
-          "type": "string",
-          "const": "adjudication-failure"
-        },
-        "context": {
-          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/adjudicationFailureContext"
-        },
-        "allowed_decisions": {
-          "$ref": "#/$defs/adjudicationFailureDecisions"
         }
       },
       "required": [
@@ -892,7 +805,7 @@
       ],
       "additionalProperties": false
     },
-    "reviewWaiver": {
+    "constitutionWaiver": {
       "type": "object",
       "properties": {
         "schema_version": {
@@ -943,85 +856,7 @@
         },
         "kind": {
           "type": "string",
-          "const": "review-trigger"
-        },
-        "context": {
-          "$ref": "#/$defs/waiverContext"
-        },
-        "allowed_decisions": {
-          "$ref": "#/$defs/waiverDecisions"
-        }
-      },
-      "required": [
-        "schema_version",
-        "gate_id",
-        "intent_id",
-        "request_digest",
-        "task_id",
-        "phase_instance",
-        "summary",
-        "subject_digest",
-        "context_digest",
-        "current_evidence",
-        "opened_at_revision",
-        "kind",
-        "context",
-        "allowed_decisions"
-      ],
-      "additionalProperties": false
-    },
-    "adjudicationWaiver": {
-      "type": "object",
-      "properties": {
-        "schema_version": {
-          "type": "string",
-          "const": "1"
-        },
-        "gate_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-        },
-        "intent_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-        },
-        "request_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "task_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
-        },
-        "phase_instance": {
-          "type": "string",
-          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
-        },
-        "summary": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 4096,
-          "pattern": "\\S"
-        },
-        "subject_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "context_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "current_evidence": {
-          "$ref": "#/$defs/currentEvidence"
-        },
-        "supersedes": {
-          "$ref": "#/$defs/supersession"
-        },
-        "opened_at_revision": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 9007199254740991
-        },
-        "kind": {
-          "type": "string",
-          "const": "adjudication-failure"
+          "const": "constitution-review"
         },
         "context": {
           "$ref": "#/$defs/waiverContext"
@@ -1054,13 +889,10 @@
       "$ref": "#/$defs/artifactApproval"
     },
     {
-      "$ref": "#/$defs/reviewTrigger"
+      "$ref": "#/$defs/constitutionReview"
     },
     {
       "$ref": "#/$defs/materialDrift"
-    },
-    {
-      "$ref": "#/$defs/adjudicationFailure"
     },
     {
       "$ref": "#/$defs/attemptsExhausted"
@@ -1078,10 +910,7 @@
       "$ref": "#/$defs/migrationAudit"
     },
     {
-      "$ref": "#/$defs/reviewWaiver"
-    },
-    {
-      "$ref": "#/$defs/adjudicationWaiver"
+      "$ref": "#/$defs/constitutionWaiver"
     }
   ]
 }

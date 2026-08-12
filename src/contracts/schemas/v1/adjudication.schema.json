@@ -5,46 +5,6 @@
     "taskSlug": {
       "type": "string",
       "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
-    },
-    "mechanical": {
-      "type": "object",
-      "properties": {
-        "mechanism": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "\\S"
-        },
-        "state": {
-          "type": "string",
-          "enum": [
-            "current",
-            "missing",
-            "stale",
-            "unknown",
-            "failed",
-            "digest-mismatch"
-          ]
-        },
-        "subject_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "evidence_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "details": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "\\S"
-        }
-      },
-      "required": [
-        "mechanism",
-        "state",
-        "details"
-      ],
-      "additionalProperties": false
     }
   },
   "type": "object",
@@ -126,12 +86,6 @@
             "type": "string",
             "minLength": 1,
             "pattern": "\\S"
-          },
-          "enforced_by": {
-            "type": "array",
-            "items": {
-              "$ref": "#/$defs/mechanical"
-            }
           }
         },
         "required": [
@@ -140,8 +94,7 @@
           "compliance",
           "rationale",
           "trigger",
-          "trigger_evidence",
-          "enforced_by"
+          "trigger_evidence"
         ],
         "additionalProperties": false
       }

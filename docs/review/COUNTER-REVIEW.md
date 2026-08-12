@@ -1,6 +1,6 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/review/`, `src/state/produce-subject.ts`
+**Explored:** 2026-08-11 · **Commit:** `56f4d2c` · **Covers:** `src/review/`, `src/state/produce-subject.ts`
 
 Counter-review is the system's adversarial check: every artifact is reviewed by the *opposite model family* (Claude ⇄ Codex), dispatched by the server itself so the evidence is something the producer cannot author. One `archflow_counter_review` call covers up to two dispatches: the rubric counter-review, and — only when the pinned constitution has active rules, a decision the server makes alone — the constitution review (see below). This page covers the review envelope, the review flow, the constitution review, and waivers.
 
@@ -95,7 +95,11 @@ A task cannot amend its own governing constitution: a task-branch edit detected 
 
 The constitution-review child gets a sealed envelope — the artifact, the sorted active rules, the approved upstream documents, and fixed instructions — and deliberately **no repository checkout**: it judges exactly the sealed evidence. Before dispatching, the server is unusually strict: durable state, the pinned constitution digest, the authenticated review set, and a durable `artifact-approval` for every declared upstream must all agree, or nothing is dispatched.
 
-The output is cross-checked mechanically: one finding per active rule, in ID order, matching versions — and a rule with declared `enforced_by` mechanisms may never be reported as `pass`, because the model cannot claim mechanical evidence it does not have.
+The output is cross-checked mechanically: one finding per active rule, in ID order, matching versions.
+
+A rule may also declare `enforced_by` — labels naming where the rule is mechanically enforced in the repository, such as a test suite. These travel to the child as *context for its judgment*, nothing more. They are deliberately not something the reviewer reports back on, and a rule that declares them is judged exactly like a rule that does not.
+
+That was once the opposite, and the reason is worth recording. The reviewer used to be instructed to report a per-mechanism evidence state for each declared label, and forbidden from claiming current mechanical evidence — which it could never have, because the sealed envelope has no field through which such evidence could arrive, for any subject. So a rule declaring `enforced_by` could never be reported `pass`; it was permanently `uncertain`, and every review of every artifact opened a human gate carrying no information. Declaring where a rule is enforced made it strictly impossible to satisfy. The instruction and the mechanism reporting are both gone.
 
 ### What the verdict opens
 
@@ -104,22 +108,27 @@ A failing or uncertain rule, material upstream drift, or a matched `review_trigg
 ```mermaid
 flowchart TB
     T[triage succeeds] -->|all rules pass, no triggers, no material drift| Adv["advance<br/>(to the phase's approval gate)"]
-    T -->|"rule fail / uncertain"| GF{{"adjudication-failure gate"}}
+    T -->|"rule fail / uncertain<br/>and/or review_trigger matched"| GF{{"constitution-review gate<br/>discloses both axes"}}
     T -->|"material drift"| GD{{"material-drift gate<br/>resolving re-enters production"}}
-    T -->|"review_trigger matched"| GT{{"review-trigger gate"}}
-    GF -->|human approves fix| P[re-enter produce]
-    GF -->|"human: waiver-requested"| W["archflow_waiver"]
-    GT -->|human decision| P
-    W -->|granted| Adv
+    GF -->|human approves| Adv
+    GF -->|human revises| P[re-enter produce]
+    GF -->|"human: waiver-requested<br/>(names rule + axis)"| W["archflow_waiver"]
+    W -->|granted on every eligible rule and axis| Adv
 ```
 
-`archflow-local status` derives the pending gate, and `archflow-local build-request` (kind `"gate"`) composes the complete gate request mechanically from the retained adjudication evidence — kind, subject, and context are all derived; only the summary is authored.
+Compliance ("did the subject violate this rule") and trigger ("does this rule's `review_trigger` condition apply here") are two different judgments about the same rules, and they routinely share one root cause. They were once two separate gates, which meant one rule flagged on both axes cost the human two sequential decisions — and whoever answered the second knew nothing they had not already known at the first. One counter-review now yields **one** constitution decision. The gate context discloses both axes separately (`failed_rules` / `uncertain_rules` for compliance, `matched_trigger_rules` / `uncertain_trigger_rules` for the trigger), and `eligible_waivers` names each rule the human may waive *together with the axis that waiver would cover*, so both waiver operations stay offerable at the one gate.
+
+Material drift stays its own gate. It concerns a different subject — an approved upstream document — and resolving it re-enters production, so it is deliberately serialized behind the constitution decision.
+
+`archflow-local status` derives the pending gate, and `archflow-local build-request` (kind `"gate"`) composes the complete gate request mechanically from the retained adjudication evidence — kind, subject, and context are all derived; only the summary is authored. When a review demands more than one gate, status also reports `pending_gate_kinds` on the next action, so the human can be told up front how many decisions the review will cost instead of discovering the next gate after answering the last.
 
 ### Waivers
 
 A waiver is a durable, human-granted exemption from **one specific rule version**, for **one specific subject digest**, under one specific scope, lasting only until the task completes. The semantics are exact-match: change the artifact and the subject digest changes, so the waiver evaporates; bump the rule version and it evaporates.
 
-Waivers are requested from an existing gate, never conjured: the origin gate must be a `review-trigger` or `adjudication-failure` whose recorded decision literally says `waiver-requested`, and the server re-reads and re-authenticates the archived request and decision before binding the waiver. A `waiver-requested` decision is not approval; a denied or cancelled waiver grants nothing.
+A waiver also names **one axis**: `adjudication-failure` exempts the rule's compliance verdict, `review-trigger` exempts its matched trigger. Waiving one says nothing about the other, so a gate that flagged a rule on both axes is satisfied by the waiver path only when both are granted.
+
+Waivers are requested from an existing gate, never conjured: the origin gate must be a `constitution-review` whose recorded decision literally says `waiver-requested`, naming a rule and axis pair the gate actually offered in `eligible_waivers`, and the server re-reads and re-authenticates the archived request and decision before binding the waiver. A `waiver-requested` decision is not approval; a denied or cancelled waiver grants nothing.
 
 ### Durable decisions
 

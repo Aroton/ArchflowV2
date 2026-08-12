@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `skills/`
+**Explored:** 2026-08-11 · **Commit:** `56f4d2c` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -47,7 +47,7 @@ Every gated stage runs the same evidence pipeline to a fixed point:
    - **accepted-editorial** — the fix is purely wording or formatting and the finding is non-blocking (the server refuses this disposition for blocking findings). See the editorial path below.
    - **rejected** — with a written rationale. Findings prefixed `unverifiable-` mean "the reviewer lacked evidence," and are rejected with an `envelope-gap:` rationale, never accepted.
 
-   The constitution verdict is never triaged: a failing or uncertain rule, material drift, or a matched `review_trigger` opens a human gate *after* triage, through the ordinary gate flow — status derives the pending gate and `build-request` (kind `"gate"`) composes the complete request mechanically; the human decides at the gate.
+   The constitution verdict is never triaged: a failing or uncertain rule, a matched `review_trigger`, or material drift opens a human gate *after* triage, through the ordinary gate flow — status derives the pending gate and `build-request` (kind `"gate"`) composes the complete request mechanically; the human decides at the gate. One counter-review yields at most one constitution decision: compliance and trigger are separate judgments about the same rules that usually share a root cause, so a single `constitution-review` gate discloses both axes rather than asking twice about one rule.
 
 Editing the artifact changes the subject digest, which invalidates all downstream evidence — the pipeline re-runs until everything agrees about the same bytes. Re-entry is bounded (`max_attempts`, default 3); exhaustion opens an `attempts-exhausted` gate rather than looping forever.
 
@@ -71,14 +71,13 @@ The phase-completion signal fires from **triage-succeeded**: once triage closes 
 
 ## Gates: where humans decide
 
-Nine gate kinds exist (`src/contracts/gates.ts`):
+Eight gate kinds exist (`src/contracts/gates.ts`):
 
 | Gate kind | Opens when |
 |---|---|
 | `artifact-approval` | a PRD, design, or phase design reaches its fixed point |
 | `commit-authorization` | a phase implementation is ready to commit |
-| `review-trigger` | a constitution rule's `review_trigger` condition matched (derived after triage) |
-| `adjudication-failure` | the constitution review found a rule `fail` or `uncertain` (derived after triage) |
+| `constitution-review` | the constitution review found a rule `fail`/`uncertain`, or a rule's `review_trigger` matched, or both (derived after triage; one gate discloses both axes and offers a waiver per rule *and* axis) |
 | `material-drift` | an approved upstream document drifted materially (derived after triage) |
 | `attempts-exhausted` | the produce/review loop hit its attempt cap (status prefills its request; `build-request` composes only the approval kinds, so complete it through `archflow-local envelope`) |
 | `constitution-edit` | a task branch tried to amend its own governing constitution (detected at counter-review time; on the first round, with no retained review set to bind, this is a plain `constitution-edited-on-task-branch` error instead) |

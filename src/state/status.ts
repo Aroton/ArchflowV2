@@ -364,19 +364,25 @@ async function currentApprovedUpstreams(
 }
 
 /**
- * The next unresolved constitution-review gate, derived mechanically from retained adjudication
- * evidence: a gate the selector demands that is neither approved for the current evidence set
- * nor fully covered by in-force waivers. Shared by status and build-request so the composed
- * gate request and the fixed point can never disagree about which gate is pending.
+ * Every unresolved constitution-review gate, derived mechanically from retained adjudication
+ * evidence: the gates the selector demands that are neither approved for the current evidence set
+ * nor fully covered by in-force waivers, in selector order. Shared by status and build-request so
+ * the composed gate request and the fixed point can never disagree about which gate is pending.
+ *
+ * Only one gate can be open at a time, so the caller acts on the first. The rest are reported so a
+ * human learns up front how many decisions one review costs, rather than discovering the next gate
+ * only after answering the previous one. This is disclosure only: each gate is still opened and
+ * decided separately.
  */
-export function pendingAdjudicationGate(
+export function pendingAdjudicationGates(
   state: TaskStateV1,
   constitution: ResolvedConstitution,
   retained: RetainedEvidenceSet,
   authenticated: readonly AuthenticatedGateApproval[],
-): ReturnType<typeof selectAdjudicationGates>[number] | undefined {
+): readonly ReturnType<typeof selectAdjudicationGates>[number][] {
   const source = retained.get("adjudicate")?.manifest.source_artifact;
-  if (source?.artifact_kind !== "adjudication-evidence") return undefined;
+  if (source?.artifact_kind !== "adjudication-evidence") return [];
+  const pending: ReturnType<typeof selectAdjudicationGates>[number][] = [];
   let currentSet: CurrentEvidenceSetRef | undefined;
   try { currentSet = deriveCurrentEvidenceSet(retained).current_evidence_set; } catch { /* degraded below */ }
   for (const gate of selectAdjudicationGates(constitution.rules, source.evidence)) {
@@ -389,16 +395,24 @@ export function pendingAdjudicationGate(
       item.request.current_evidence.set_digest === currentSet.set_digest &&
       source.evidence.source_evidence_set_digest === currentSet.set_digest);
     let waived = false;
-    if ((gate.kind === "review-trigger" || gate.kind === "adjudication-failure") &&
-        "eligible_waiver_rules" in gate.context && "waiver_scope" in gate.context) {
-      const waiverContext = gate.context;
-      waived = waiverContext.eligible_waiver_rules.length > 0 &&
-        waiverContext.eligible_waiver_rules.every((rule) =>
-          waiverInForce(state, rule, gate.subject_digest, waiverContext.waiver_scope) !== undefined);
+    if (gate.kind === "constitution-review" && "eligible_waivers" in gate.context) {
+      const eligible = gate.context.eligible_waivers;
+      waived = eligible.length > 0 && eligible.every((item) =>
+        waiverInForce(state, item.rule, gate.subject_digest, item.scope) !== undefined);
     }
-    if (!approved && !waived) return gate;
+    if (!approved && !waived) pending.push(gate);
   }
-  return undefined;
+  return Object.freeze(pending);
+}
+
+/** The next unresolved constitution-review gate: the one the caller may act on now. */
+export function pendingAdjudicationGate(
+  state: TaskStateV1,
+  constitution: ResolvedConstitution,
+  retained: RetainedEvidenceSet,
+  authenticated: readonly AuthenticatedGateApproval[],
+): ReturnType<typeof selectAdjudicationGates>[number] | undefined {
+  return pendingAdjudicationGates(state, constitution, retained, authenticated)[0];
 }
 
 function supplementalReviewRef(
@@ -920,10 +934,11 @@ export async function computeTaskStatus(
     }
   }
 
-  let adjudicationGate: ReturnType<typeof pendingAdjudicationGate>;
+  let pendingGates: ReturnType<typeof pendingAdjudicationGates> = [];
   if (assessment?.next === "adjudication-gate" && constitution !== undefined) {
-    adjudicationGate = pendingAdjudicationGate(state, constitution, retained, authenticatedApprovals);
+    pendingGates = pendingAdjudicationGates(state, constitution, retained, authenticatedApprovals);
   }
+  const adjudicationGate = pendingGates[0];
   const adjudicationGateKind = adjudicationGate?.kind;
   const nextAction = deriveNextAction({
     repository_initialized: true,
@@ -943,6 +958,7 @@ export async function computeTaskStatus(
     authenticated_approvals: approvalFacts,
     commit_observed: commitObserved,
     ...(adjudicationGateKind === undefined ? {} : { adjudication_gate_kind: adjudicationGateKind }),
+    ...(pendingGates.length === 0 ? {} : { pending_adjudication_gate_kinds: pendingGates.map((gate) => gate.kind) }),
   });
 
   let gateInput: CommitAuthorizationInput | undefined;

@@ -48,6 +48,13 @@ export type NextAction = Readonly<{
   skill?: string;
   gate_id?: PathSafeId;
   gate_kind?: GateKind;
+  /**
+   * Every constitution gate this review still demands, in the order they will open, including the
+   * one named by `gate_kind`. Present only when more than one remains, so a human can be told the
+   * total cost of the review before answering the first. Disclosure only: each gate is still
+   * opened and decided separately.
+   */
+  pending_gate_kinds?: readonly GateKind[];
   /** Set on the produce run-step routed by `editorial_revision_required`: the produce re-entry applies exactly the accepted editorial revision intents and preserves review evidence. */
   editorial_revision?: boolean;
   request?: NextActionRequest;
@@ -72,6 +79,8 @@ export type NextActionInput = Readonly<{
   authenticated_approvals?: readonly AuthenticatedApprovalFact[];
   commit_observed?: boolean;
   adjudication_gate_kind?: GateKind;
+  /** Every constitution gate still pending, in the order they open; the first is `adjudication_gate_kind`. */
+  pending_adjudication_gate_kinds?: readonly GateKind[];
 }>;
 
 function action(
@@ -208,11 +217,17 @@ export function deriveNextAction(input: NextActionInput): NextAction {
       return action("open-gate", "Open the attempts-exhausted gate.", true, state, { gate_kind: "attempts-exhausted" });
     }
     if (next === "adjudication-gate") {
-      return input.adjudication_gate_kind === undefined
-        ? action("inspect-state", "Inspect the unresolved adjudication gate obligation.", true, state)
-        : action("open-gate", `Open the required ${input.adjudication_gate_kind} gate.`, true, state, {
-            gate_kind: input.adjudication_gate_kind,
-          });
+      if (input.adjudication_gate_kind === undefined) {
+        return action("inspect-state", "Inspect the unresolved adjudication gate obligation.", true, state);
+      }
+      const pending = input.pending_adjudication_gate_kinds ?? [];
+      const remaining = pending.length > 1
+        ? ` This review requires ${pending.length} separate human decisions; the rest open in turn: ${pending.slice(1).join(", ")}.`
+        : "";
+      return action("open-gate", `Open the required ${input.adjudication_gate_kind} gate.${remaining}`, true, state, {
+        gate_kind: input.adjudication_gate_kind,
+        ...(pending.length > 1 ? { pending_gate_kinds: Object.freeze([...pending]) } : {}),
+      });
     }
     if (next === "produce" && input.assessment?.editorial_revision_required === true) {
       return action(

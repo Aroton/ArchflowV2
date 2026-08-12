@@ -708,7 +708,6 @@ function constitutionPlan(
             rationale: "Checked the retained subject.",
             trigger: "not-matched",
             trigger_evidence: "No review trigger matched.",
-            enforced_by: [],
           })),
           drift_findings: [],
           constitution: "pass",

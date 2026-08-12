@@ -1,6 +1,6 @@
 # contracts/CONTRACTS
 
-**Explored:** 2026-08-11 · **Commit:** `4bc1c81` · **Covers:** `src/contracts/`
+**Explored:** 2026-08-11 · **Commit:** `56f4d2c` · **Covers:** `src/contracts/`
 
 `src/contracts/` is the bottom layer: ~40 modules plus 36 JSON Schemas that define what a valid thing looks like and how to prove a thing is what it claims. Everything else imports from here; nothing here imports back out.
 

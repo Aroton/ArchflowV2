@@ -52,9 +52,10 @@ afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: 
 
 const CASES = [
   { kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, allowed: ["approve", "revise", "reject", "cancel"] },
-  { kind: "review-trigger", context: { matched_rules: [RULE_A, RULE_B], uncertain_rules: [], eligible_waiver_rules: [RULE_A, RULE_B], waiver_scope: { operation: "review-trigger", boundary: "subject" } }, allowed: ["approve", "revise", "reject", "waiver-requested", "cancel"] },
+  // One rule failing compliance and another matching a review trigger: the gate must offer a
+  // waiver on each rule's own axis, so the human never has to read server source to find one.
+  { kind: "constitution-review", context: { constitution: "fail", failed_rules: [RULE_B], uncertain_rules: [], matched_trigger_rules: [RULE_A], uncertain_trigger_rules: [], eligible_waivers: [{ rule: RULE_A, scope: { operation: "review-trigger", boundary: "subject" } }, { rule: RULE_B, scope: { operation: "adjudication-failure", boundary: "subject" } }] }, allowed: ["approve", "revise", "reject", "waiver-requested", "cancel"] },
   { kind: "material-drift", context: { affected_upstream: { kind: "architecture", digest: D("a") }, drift: "material", affected_claim_ids: ["claim-one"] }, allowed: ["amend-upstream", "revise-current", "reject", "cancel"] },
-  { kind: "adjudication-failure", context: { constitution: "fail", failed_rules: [RULE_B], uncertain_rules: [RULE_A], eligible_waiver_rules: [RULE_B], waiver_scope: { operation: "adjudication-failure", boundary: "phase" } }, allowed: ["approve", "revise", "reject", "waiver-requested", "cancel"] },
   { kind: "attempts-exhausted", context: { step: "produce", attempts: 2, maximum_attempts: 2 }, allowed: ["retry-once", "revise", "abort", "cancel"] },
   { kind: "constitution-edit", context: { pinned_constitution_digest: D("a"), current_constitution_digest: D("b"), changed_path_class: "task-branch-constitution" }, allowed: ["revert-edit", "start-base-amendment", "abort", "cancel"] },
   { kind: "commit-authorization", context: { target_ref: "refs/heads/task", diff_digest: D("a"), current_artifact_digests: [D("b")], parent_document_digests: [D("c")] }, allowed: ["authorize-commit", "revise", "abort", "cancel"] },
@@ -134,13 +135,13 @@ function convertToWaiverGate(h: Harness): Readonly<{ active: ActiveGateV1; origi
   const contextDigest = computeGateContextDigest("waiver", context);
   const active = parseActiveGate({
     ...h.active,
-    kind: "review-trigger",
+    kind: "constitution-review",
     context,
     context_digest: contextDigest,
     allowed_decisions: ["grant", "deny", "cancel"],
     decision_template: {
       ...h.active.decision_template,
-      kind: "review-trigger",
+      kind: "constitution-review",
       context_digest: contextDigest,
       required_fields: ["granted", "scope", "origin", "notes", "human_provenance"],
     },
@@ -154,7 +155,7 @@ function convertToWaiverGate(h: Harness): Readonly<{ active: ActiveGateV1; origi
   const state = JSON.parse(readFileSync(join(h.taskRoot, "state.json"), "utf8")) as TaskStateV1;
   writeFileSync(join(h.taskRoot, "state.json"), canonicalDocument({
     ...state,
-    open_gate: { ...state.open_gate!, gate_kind: "review-trigger", context_digest: contextDigest },
+    open_gate: { ...state.open_gate!, gate_kind: "constitution-review", context_digest: contextDigest },
   } as TaskStateV1).bytes);
   return { active, origin };
 }
@@ -174,17 +175,18 @@ describe("gate decision interface", () => {
         expect(template).not.toHaveProperty("human_provenance");
         if ("payload" in (template as object)) expect(() => parseGateDecisionEnvelope(withProvenance(template)), entry.kind).not.toThrow();
       }
-      if (entry.kind === "review-trigger") {
-        expect(templates.filter((template) => (template as { payload?: { decision?: string } }).payload?.decision === "waiver-requested")).toHaveLength(2);
+      if (entry.kind === "constitution-review") {
+        // One template per waivable (rule, axis) pair, each naming its operation explicitly.
+        const waivers = templates.filter((template) => (template as { payload?: { decision?: string } }).payload?.decision === "waiver-requested");
+        expect(waivers.map((template) => (template as { payload: { rule: { rule_id: string }; operation: string } }).payload)).toEqual([
+          { decision: "waiver-requested", reason: expect.any(String), rule: RULE_A, operation: "review-trigger", rationale: expect.any(String) },
+          { decision: "waiver-requested", reason: expect.any(String), rule: RULE_B, operation: "adjudication-failure", rationale: expect.any(String) },
+        ]);
         const noEligible = parseActiveGate({
           ...active,
-          context: { ...active.context as GateContext<"review-trigger">, eligible_waiver_rules: [] },
+          context: { ...active.context as GateContext<"constitution-review">, eligible_waivers: [] },
         });
         expect(buildGateDecisionTemplates(noEligible).some((template) => (template as { payload?: { decision?: string } }).payload?.decision === "waiver-requested")).toBe(false);
-      }
-      if (entry.kind === "adjudication-failure") {
-        const approve = templates.find((template) => (template as { payload?: { decision?: string } }).payload?.decision === "approve") as { payload: { resolutions: readonly { rule: unknown }[] } };
-        expect(approve.payload.resolutions.map((item) => item.rule)).toEqual([RULE_A]);
       }
       if (entry.kind === "restore-collision") {
         const withoutCandidate = parseActiveGate({ ...active, context: { path: parseTaskPathClaim("task/file.md"), recorded_generation_digest: D("a"), current_generation_digest: D("b") } });

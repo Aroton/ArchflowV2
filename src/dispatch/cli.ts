@@ -178,34 +178,6 @@ function boundSubjectNode(property: PlainJsonValue, value: PlainJsonValue, adapt
   };
 }
 
-function codexMechanicalSchema(value: PlainJsonValue): PlainJsonValue {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
-  const mechanical = value as Readonly<Record<string, PlainJsonValue>>;
-  const properties = mechanical.properties;
-  if (properties === null || typeof properties !== "object" || Array.isArray(properties)) return value;
-  const base = properties as Readonly<Record<string, PlainJsonValue>>;
-  const branch = (states: readonly string[], digests: readonly ("subject_digest" | "evidence_digest")[]): PlainJsonValue => {
-    const selected = {
-      mechanism: base.mechanism!,
-      state: { type: "string", enum: [...states] },
-      ...Object.fromEntries(digests.map((name) => [name, base[name]!])),
-      details: base.details!,
-    };
-    return { type: "object", additionalProperties: false, properties: selected, required: Object.keys(selected) };
-  };
-  return {
-    type: "object",
-    anyOf: [
-      branch(["current", "stale"], ["subject_digest", "evidence_digest"]),
-      branch(["missing", "unknown"], []),
-      branch(["failed", "digest-mismatch"], []),
-      branch(["failed", "digest-mismatch"], ["subject_digest"]),
-      branch(["failed", "digest-mismatch"], ["evidence_digest"]),
-      branch(["failed", "digest-mismatch"], ["subject_digest", "evidence_digest"]),
-    ],
-  };
-}
-
 function hostFindingSchema(value: PlainJsonValue): PlainJsonValue {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
   const finding = value as Readonly<Record<string, PlainJsonValue>>;
@@ -267,16 +239,6 @@ export function projectCliOutputSchema(
         ? { ...common, finding: hostFindingSchema(common.finding!) }
         : common,
     };
-  }
-  if (adapter === "codex-cli" && resultKind === "adjudication") {
-    const codexDefinitions = root.$defs;
-    if (codexDefinitions !== null && typeof codexDefinitions === "object" && !Array.isArray(codexDefinitions)) {
-      const common = codexDefinitions as Readonly<Record<string, PlainJsonValue>>;
-      root = {
-        ...root,
-        $defs: { ...common, mechanical: codexMechanicalSchema(common.mechanical!) },
-      };
-    }
   }
   const bindingKeys = resultKind === "review"
     ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family"]

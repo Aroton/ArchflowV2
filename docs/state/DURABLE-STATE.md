@@ -1,6 +1,6 @@
 # state/DURABLE-STATE
 
-**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/state/`, `src/repository/`
+**Explored:** 2026-08-11 · **Commit:** `56f4d2c` · **Covers:** `src/state/`, `src/repository/`
 
 Durable state is ArchFlow's memory and its authority. Every server answer — "what phase am I in?", "what do I do next?" — is recomputed from bytes on disk under `.archflow/`, never from session memory. This page covers where those bytes live, how writes stay safe, the state machine, and how drift is detected and repaired.
 
@@ -94,7 +94,7 @@ The input fingerprint is recomputed and compared *before* any write, so a reques
 
 ## Deriving "the one next action"
 
-`status.ts` reassembles all the facts read-only (config verification, reconciliation, retained evidence, approvals, commit observation, the evidence fixed point), and `next-action.ts` reduces them through a strict precedence ladder — repair findings first, then terminal/gate states, then the evidence pipeline's next step, then advancement. The result is exactly one `next_action`, usually with a mechanically complete prefilled request attached where only the judgment fields are left blank. That's what `archflow-local status` prints and what every skill follows.
+`status.ts` reassembles all the facts read-only (config verification, reconciliation, retained evidence, approvals, commit observation, the evidence fixed point), and `next-action.ts` reduces them through a strict precedence ladder — repair findings first, then terminal/gate states, then the evidence pipeline's next step, then advancement. The result is exactly one `next_action`, usually with a mechanically complete prefilled request attached where only the judgment fields are left blank. That's what `archflow-local status` prints and what every skill follows. Because only one gate can be open at a time, a constitution review that demands more than one gate also reports `pending_gate_kinds` on that action — the whole queue, in the order it will open — so a human can be told the total cost of the review before answering the first gate rather than discovering the next one afterwards. It is disclosure only: each gate is still opened and decided separately.
 
 One subtlety: when re-entry is required (accepted findings), some projection drift is *expected* — status reclassifies those findings out of the blockers but keeps them visible as `expected_reentry_edits`, so drift is never hidden.
 

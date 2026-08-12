@@ -180,8 +180,7 @@ else {
     source_evidence_set_digest: subject.source_evidence_set_digest,
     rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
       compliance: "pass", rationale: "Checked the sealed envelope.",
-      trigger: "not-matched", trigger_evidence: "No review trigger matched.",
-      enforced_by: [] })),
+      trigger: "not-matched", trigger_evidence: "No review trigger matched." })),
     drift_findings: subject.approved_upstream_digests.map((upstream_digest) => ({
       upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift found." })),
     constitution: "pass", drift: "aligned", matched_rule_versions: [], uncertain_rule_versions: []

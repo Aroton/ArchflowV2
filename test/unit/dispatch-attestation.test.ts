@@ -74,13 +74,6 @@ const rawAdjudication = (value: AdjudicationSubject): Record<string, unknown> =>
     rationale: "The rule is satisfied.",
     trigger: "not-matched",
     trigger_evidence: "No trigger condition was observed.",
-    enforced_by: [{
-      mechanism: "path-contract",
-      state: "current",
-      subject_digest: value.subject_digest,
-      evidence_digest: digest("f"),
-      details: "The contract passed.",
-    }],
   }],
   drift_findings: [{
     upstream_digest: value.approved_upstream_digests[0],

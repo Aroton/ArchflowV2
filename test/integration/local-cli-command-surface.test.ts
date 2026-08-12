@@ -244,12 +244,12 @@ describe("bundled local CLI", () => {
     const originGateId = "origin-cli";
     const rule = { rule_id: "review-rule", rule_version: 1 };
     const scope = { operation: "review-trigger", boundary: "subject" };
-    const originContext = { matched_rules: [rule], uncertain_rules: [], eligible_waiver_rules: [rule], waiver_scope: scope };
-    const originContextDigest = computeGateContextDigest("review-trigger", originContext as never);
+    const originContext = { constitution: "pass", failed_rules: [], uncertain_rules: [], matched_trigger_rules: [rule], uncertain_trigger_rules: [], eligible_waivers: [{ rule, scope }] };
+    const originContextDigest = computeGateContextDigest("constitution-review", originContext as never);
     const request = parseGateRequest({
       schema_version: "1", gate_id: originGateId, intent_id: "origin-intent", request_digest: digest("e"), task_id: task,
       phase_instance: "prd", summary: "Review", subject_digest: digest("f"), context_digest: originContextDigest,
-      current_evidence: evidence, kind: "review-trigger", context: originContext,
+      current_evidence: evidence, kind: "constitution-review", context: originContext,
       allowed_decisions: ["approve", "revise", "reject", "waiver-requested", "cancel"], opened_at_revision: parseSafeInteger(state.revision),
     });
     mkdirSync(join(production.value.authority.task_root, "decisions", originGateId), { recursive: true });

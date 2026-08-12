@@ -196,9 +196,8 @@ export function buildNextActionRequest(next: NextAction, facts: NextActionReques
       ));
     }
     if (
-      (next.gate_kind === "adjudication-failure" ||
-        next.gate_kind === "material-drift" ||
-        next.gate_kind === "review-trigger") &&
+      (next.gate_kind === "constitution-review" ||
+        next.gate_kind === "material-drift") &&
       facts.adjudication_gate !== undefined &&
       facts.adjudication_gate.kind === next.gate_kind &&
       facts.current_evidence !== undefined
@@ -217,7 +216,7 @@ export function buildNextActionRequest(next: NextAction, facts: NextActionReques
       }, envelopeGuidance(
         facts.task_id,
         "archflow_gate",
-        "Write the summary for the human reviewer: name the constitution rules that failed, matched a review trigger, or drifted, and what the constitution review reported about each.",
+        "Write the summary for the human reviewer: name the constitution rules that failed compliance, are uncertain, matched a review trigger, or drifted, say which of those axes each rule appears on, and report what the constitution review said about each.",
       ));
     }
     // Exhaustion is a decision point, not a failure: without a template the human's entire view

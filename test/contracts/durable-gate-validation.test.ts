@@ -65,19 +65,18 @@ const waiverOrigin = (operation: "review-trigger" | "adjudication-failure"): Jso
   scope: { operation, boundary: "subject" },
 });
 
-/** One sample per `gate-request.schema.json` `oneOf` arm: the nine kinds plus both waiver arms. */
+/** One sample per `gate-request.schema.json` `oneOf` arm: the eight kinds plus both waiver-axis arms. */
 const ARM_SAMPLES: readonly { name: string; kind: string; context: JsonObject; allowed: readonly string[]; waiver: boolean }[] = [
   { name: "artifact-approval", kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, allowed: ["approve", "revise", "reject", "cancel"], waiver: false },
-  { name: "review-trigger", kind: "review-trigger", context: { matched_rules: [rule("rule-a", 1), rule("rule-b", 2)], uncertain_rules: [rule("rule-c", 1)], eligible_waiver_rules: [rule("rule-a", 1)], waiver_scope: { operation: "review-trigger", boundary: "subject" } }, allowed: ["approve", "revise", "reject", "waiver-requested", "cancel"], waiver: false },
+  { name: "constitution-review", kind: "constitution-review", context: { constitution: "fail", failed_rules: [rule("rule-a", 1)], uncertain_rules: [], matched_trigger_rules: [rule("rule-b", 2)], uncertain_trigger_rules: [rule("rule-c", 1)], eligible_waivers: [{ rule: rule("rule-a", 1), scope: { operation: "adjudication-failure", boundary: "subject" } }, { rule: rule("rule-b", 2), scope: { operation: "review-trigger", boundary: "subject" } }] }, allowed: ["approve", "revise", "reject", "waiver-requested", "cancel"], waiver: false },
   { name: "material-drift", kind: "material-drift", context: { affected_upstream: { kind: "prd", digest: d("4") }, drift: "material", affected_claim_ids: ["claim-a", "claim-b"] }, allowed: ["amend-upstream", "revise-current", "reject", "cancel"], waiver: false },
-  { name: "adjudication-failure", kind: "adjudication-failure", context: { constitution: "fail", failed_rules: [rule("rule-a", 1)], uncertain_rules: [], eligible_waiver_rules: [rule("rule-a", 1)], waiver_scope: { operation: "adjudication-failure", boundary: "phase" } }, allowed: ["approve", "revise", "reject", "waiver-requested", "cancel"], waiver: false },
   { name: "attempts-exhausted", kind: "attempts-exhausted", context: { step: "produce", attempts: 3, maximum_attempts: 3 }, allowed: ["retry-once", "revise", "abort", "cancel"], waiver: false },
   { name: "constitution-edit", kind: "constitution-edit", context: { pinned_constitution_digest: d("5"), current_constitution_digest: d("6"), changed_path_class: "task-branch-constitution" }, allowed: ["revert-edit", "start-base-amendment", "abort", "cancel"], waiver: false },
   { name: "commit-authorization", kind: "commit-authorization", context: { target_ref: "refs/heads/feature", diff_digest: d("7"), current_artifact_digests: [d("8")], parent_document_digests: [d("9")] }, allowed: ["authorize-commit", "revise", "abort", "cancel"], waiver: false },
   { name: "restore-collision", kind: "restore-collision", context: { path: "docs/notes.md", recorded_generation_digest: d("a"), current_generation_digest: d("b"), adoption_candidate: { link_digest: d("0"), purpose: "restore-adoption", proposed_generation_digest: d("1"), changed_input_fingerprint: d("2") } }, allowed: ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"], waiver: false },
   { name: "migration-audit", kind: "migration-audit", context: { source_identity_digest: d("1"), destination_identity_digest: d("2"), import_digest: d("3"), code_baseline_digest: d("4"), policy_baseline_digest: d("5") }, allowed: ["accept-import-audit", "revise", "abort", "cancel"], waiver: false },
-  { name: "review-trigger waiver", kind: "review-trigger", context: { origin: waiverOrigin("review-trigger"), rationale: "Waiver requested for the flagged rule" }, allowed: ["grant", "deny", "cancel"], waiver: true },
-  { name: "adjudication-failure waiver", kind: "adjudication-failure", context: { origin: waiverOrigin("adjudication-failure"), rationale: "Waiver requested for the failed rule" }, allowed: ["grant", "deny", "cancel"], waiver: true },
+  { name: "trigger-axis waiver", kind: "constitution-review", context: { origin: waiverOrigin("review-trigger"), rationale: "Waiver requested for the flagged rule" }, allowed: ["grant", "deny", "cancel"], waiver: true },
+  { name: "compliance-axis waiver", kind: "constitution-review", context: { origin: waiverOrigin("adjudication-failure"), rationale: "Waiver requested for the failed rule" }, allowed: ["grant", "deny", "cancel"], waiver: true },
 ];
 
 const armRequest = (arm: (typeof ARM_SAMPLES)[number]): JsonObject => ({
@@ -201,10 +200,10 @@ describe("negatives under retired keyword-backed rules are rejected by the Zod a
  * to `false` and this suite can tighten.
  */
 describe("gate-semantics negatives are rejected by the Zod authority", () => {
-  it("rejects an eligible waiver rule that neither matched nor is uncertain", () => {
+  it("rejects an eligible waiver naming a rule the gate never flagged", () => {
     const sample = fixture("gate-request.invalid-ineligible-waiver-rule");
     expect(gateRequestV1Schema.safeParse(sample).success).toBe(false);
-    expect(() => parseGateRequest(clone(sample))).toThrowError(/eligible waiver rule/);
+    expect(() => parseGateRequest(clone(sample))).toThrowError(/axis its operation covers/);
     expect(gateRequestValidator.validate(clone(sample))).toBe(true);
   });
 
@@ -215,10 +214,10 @@ describe("gate-semantics negatives are rejected by the Zod authority", () => {
     expect(gateRequestValidator.validate(clone(sample))).toBe(true);
   });
 
-  it("rejects an active adjudication-failure gate whose waiver scope names the wrong operation", () => {
+  it("rejects an active constitution-review gate offering a waiver on an axis the rule is not on", () => {
     const sample = fixture("active-gate.invalid-waiver-scope-operation");
     expect(activeGateV1Schema.safeParse(sample).success).toBe(false);
-    expect(() => parseGateContext("adjudication-failure", sample.context)).toThrowError(/waiver operation/);
+    expect(() => parseGateContext("constitution-review", sample.context)).toThrowError(/axis its operation covers/);
     expect(activeGateValidator.validate(clone(sample))).toBe(true);
   });
 });

@@ -187,10 +187,10 @@
         },
         "kind": {
           "type": "string",
-          "const": "review-trigger"
+          "const": "constitution-review"
         },
         "payload": {
-          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/reviewTriggerDecision"
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/constitutionReviewDecision"
         }
       },
       "required": [
@@ -245,60 +245,6 @@
         },
         "payload": {
           "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/materialDriftDecision"
-        }
-      },
-      "required": [
-        "schema_version",
-        "gate_id",
-        "task_id",
-        "phase_instance",
-        "subject_digest",
-        "context_digest",
-        "human_provenance",
-        "kind",
-        "payload"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "schema_version": {
-          "type": "string",
-          "const": "1"
-        },
-        "gate_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-        },
-        "task_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
-        },
-        "phase_instance": {
-          "type": "string",
-          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
-        },
-        "subject_digest": {
-          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
-        },
-        "context_digest": {
-          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
-        },
-        "human_provenance": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/connected"
-            },
-            {
-              "$ref": "#/$defs/local"
-            }
-          ]
-        },
-        "kind": {
-          "type": "string",
-          "const": "adjudication-failure"
-        },
-        "payload": {
-          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/adjudicationFailureDecision"
         }
       },
       "required": [

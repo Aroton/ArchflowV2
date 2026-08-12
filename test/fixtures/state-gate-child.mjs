@@ -59,7 +59,7 @@ try {
   };
   const inputFingerprint = fingerprints.computeInputFingerprint(subject);
   const reentryKind = action.startsWith("reentry")
-    ? "review-trigger"
+    ? "constitution-review"
     : action.startsWith("exhaustion")
       ? "attempts-exhausted"
       : undefined;
@@ -73,14 +73,16 @@ try {
         { role: "counter-review", evidence_digest: evidence.parseSha256Digest("c".repeat(64)), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       ],
     },
-    ...(reentryKind === "review-trigger"
+    ...(reentryKind === "constitution-review"
       ? {
           kind: reentryKind,
           context: {
-            matched_rules: [{ rule_id: "review-required", rule_version: 1 }],
+            constitution: "pass",
+            failed_rules: [],
             uncertain_rules: [],
-            eligible_waiver_rules: [],
-            waiver_scope: { operation: "review-trigger", boundary: "subject" },
+            matched_trigger_rules: [{ rule_id: "review-required", rule_version: 1 }],
+            uncertain_trigger_rules: [],
+            eligible_waivers: [],
           },
         }
       : reentryKind === "attempts-exhausted"

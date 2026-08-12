@@ -66,6 +66,28 @@
       ],
       "additionalProperties": false
     },
+    "eligibleWaiver": {
+      "type": "object",
+      "properties": {
+        "rule": {
+          "$ref": "#/$defs/rule"
+        },
+        "scope": {
+          "$ref": "#/$defs/waiverScope"
+        }
+      },
+      "required": [
+        "rule",
+        "scope"
+      ],
+      "additionalProperties": false
+    },
+    "eligibleWaivers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/eligibleWaiver"
+      }
+    },
     "authorityLink": {
       "type": "object",
       "properties": {
@@ -109,27 +131,40 @@
       ],
       "additionalProperties": false
     },
-    "reviewTriggerContext": {
+    "constitutionReviewContext": {
       "type": "object",
       "properties": {
-        "matched_rules": {
+        "constitution": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        "failed_rules": {
           "$ref": "#/$defs/rules"
         },
         "uncertain_rules": {
           "$ref": "#/$defs/rules"
         },
-        "eligible_waiver_rules": {
+        "matched_trigger_rules": {
           "$ref": "#/$defs/rules"
         },
-        "waiver_scope": {
-          "$ref": "#/$defs/waiverScope"
+        "uncertain_trigger_rules": {
+          "$ref": "#/$defs/rules"
+        },
+        "eligible_waivers": {
+          "$ref": "#/$defs/eligibleWaivers"
         }
       },
       "required": [
-        "matched_rules",
+        "constitution",
+        "failed_rules",
         "uncertain_rules",
-        "eligible_waiver_rules",
-        "waiver_scope"
+        "matched_trigger_rules",
+        "uncertain_trigger_rules",
+        "eligible_waivers"
       ],
       "additionalProperties": false
     },
@@ -179,38 +214,6 @@
         "affected_upstream",
         "drift",
         "affected_claim_ids"
-      ],
-      "additionalProperties": false
-    },
-    "adjudicationFailureContext": {
-      "type": "object",
-      "properties": {
-        "constitution": {
-          "type": "string",
-          "enum": [
-            "fail",
-            "uncertain"
-          ]
-        },
-        "failed_rules": {
-          "$ref": "#/$defs/rules"
-        },
-        "uncertain_rules": {
-          "$ref": "#/$defs/rules"
-        },
-        "eligible_waiver_rules": {
-          "$ref": "#/$defs/rules"
-        },
-        "waiver_scope": {
-          "$ref": "#/$defs/waiverScope"
-        }
-      },
-      "required": [
-        "constitution",
-        "failed_rules",
-        "uncertain_rules",
-        "eligible_waiver_rules",
-        "waiver_scope"
       ],
       "additionalProperties": false
     },
@@ -365,7 +368,7 @@
       ],
       "additionalProperties": false
     },
-    "reviewTriggerDecision": {
+    "constitutionReviewDecision": {
       "anyOf": [
         {
           "type": "object",
@@ -401,6 +404,13 @@
             "rule": {
               "$ref": "#/$defs/rule"
             },
+            "operation": {
+              "type": "string",
+              "enum": [
+                "review-trigger",
+                "adjudication-failure"
+              ]
+            },
             "rationale": {
               "$ref": "#/$defs/text"
             }
@@ -409,6 +419,7 @@
             "decision",
             "reason",
             "rule",
+            "operation",
             "rationale"
           ],
           "additionalProperties": false
@@ -435,92 +446,6 @@
         "reason"
       ],
       "additionalProperties": false
-    },
-    "adjudicationFailureDecision": {
-      "anyOf": [
-        {
-          "type": "object",
-          "properties": {
-            "decision": {
-              "type": "string",
-              "const": "approve"
-            },
-            "reason": {
-              "$ref": "#/$defs/text"
-            },
-            "resolutions": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "rule": {
-                    "$ref": "#/$defs/rule"
-                  },
-                  "resolution": {
-                    "$ref": "#/$defs/text"
-                  }
-                },
-                "required": [
-                  "rule",
-                  "resolution"
-                ],
-                "additionalProperties": false
-              }
-            }
-          },
-          "required": [
-            "decision",
-            "reason",
-            "resolutions"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "decision": {
-              "type": "string",
-              "enum": [
-                "revise",
-                "reject"
-              ]
-            },
-            "reason": {
-              "$ref": "#/$defs/text"
-            }
-          },
-          "required": [
-            "decision",
-            "reason"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "decision": {
-              "type": "string",
-              "const": "waiver-requested"
-            },
-            "reason": {
-              "$ref": "#/$defs/text"
-            },
-            "rule": {
-              "$ref": "#/$defs/rule"
-            },
-            "rationale": {
-              "$ref": "#/$defs/text"
-            }
-          },
-          "required": [
-            "decision",
-            "reason",
-            "rule",
-            "rationale"
-          ],
-          "additionalProperties": false
-        }
-      ]
     },
     "attemptsExhaustedDecision": {
       "type": "object",
@@ -676,18 +601,18 @@
       ],
       "additionalProperties": false
     },
-    "reviewTrigger": {
+    "constitutionReview": {
       "type": "object",
       "properties": {
         "kind": {
           "type": "string",
-          "const": "review-trigger"
+          "const": "constitution-review"
         },
         "context": {
-          "$ref": "#/$defs/reviewTriggerContext"
+          "$ref": "#/$defs/constitutionReviewContext"
         },
         "payload": {
-          "$ref": "#/$defs/reviewTriggerDecision"
+          "$ref": "#/$defs/constitutionReviewDecision"
         }
       },
       "required": [
@@ -709,27 +634,6 @@
         },
         "payload": {
           "$ref": "#/$defs/materialDriftDecision"
-        }
-      },
-      "required": [
-        "kind",
-        "context",
-        "payload"
-      ],
-      "additionalProperties": false
-    },
-    "adjudicationFailure": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "adjudication-failure"
-        },
-        "context": {
-          "$ref": "#/$defs/adjudicationFailureContext"
-        },
-        "payload": {
-          "$ref": "#/$defs/adjudicationFailureDecision"
         }
       },
       "required": [
@@ -850,13 +754,10 @@
       "$ref": "#/$defs/artifactApproval"
     },
     {
-      "$ref": "#/$defs/reviewTrigger"
+      "$ref": "#/$defs/constitutionReview"
     },
     {
       "$ref": "#/$defs/materialDrift"
-    },
-    {
-      "$ref": "#/$defs/adjudicationFailure"
     },
     {
       "$ref": "#/$defs/attemptsExhausted"

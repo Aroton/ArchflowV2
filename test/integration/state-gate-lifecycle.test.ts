@@ -208,15 +208,15 @@ function supplementalEvidence(request: GateRequestV1) {
 async function waiverInput(h: Harness, intent: string): Promise<GateOpenInput> {
   const rule = { rule_id: "human-review", rule_version: 1 } as const;
   const originInput: GateOpenInput = {
-    ...gateInput(h, `${intent}-origin`), kind: "review-trigger",
-    context: { matched_rules: [rule], uncertain_rules: [], eligible_waiver_rules: [rule], waiver_scope: { operation: "review-trigger", boundary: "phase" } },
+    ...gateInput(h, `${intent}-origin`), kind: "constitution-review",
+    context: { constitution: "pass", failed_rules: [], uncertain_rules: [], matched_trigger_rules: [rule], uncertain_trigger_rules: [], eligible_waivers: [{ rule, scope: { operation: "review-trigger", boundary: "phase" } }] },
   };
   const opened = await openDurableGate(h.dependencies, originInput);
   if (!opened.ok) throw new Error("origin gate open failed");
   const originEnvelope: GateDecisionEnvelope = {
-    schema_version: "1", gate_id: opened.value.gate_id, task_id: TASK, phase_instance: PHASE, kind: "review-trigger",
+    schema_version: "1", gate_id: opened.value.gate_id, task_id: TASK, phase_instance: PHASE, kind: "constitution-review",
     subject_digest: originInput.subject_digest, context_digest: opened.value.request.value.context_digest, human_provenance: PROVENANCE,
-    payload: { decision: "waiver-requested", reason: "Request waiver", rule, rationale: "Human waiver requested" },
+    payload: { decision: "waiver-requested", reason: "Request waiver", rule, operation: "review-trigger", rationale: "Human waiver requested" },
   };
   writeFileSync(decisionPath(h), canonicalDocument(originEnvelope).bytes);
   const closed = await resolveDurableGate(h.dependencies, h.authority, opened.value.gate_id);
@@ -227,7 +227,7 @@ async function waiverInput(h: Harness, intent: string): Promise<GateOpenInput> {
     rule, scope: { operation: "review-trigger", boundary: "phase" },
   };
   return {
-    ...gateInput(h, intent), expected_revision: closed.value.state.value.revision, kind: "review-trigger", context: { origin, rationale: "Human waiver requested" },
+    ...gateInput(h, intent), expected_revision: closed.value.state.value.revision, kind: "constitution-review", context: { origin, rationale: "Human waiver requested" },
     waiver_origin_gate_id: origin.origin_gate_id,
   };
 }
@@ -495,12 +495,11 @@ describe("durable gate lifecycle", () => {
     };
     const input: GateOpenInput = {
       ...gateInput(h, "gate-reentry"),
-      kind: "review-trigger",
+      kind: "constitution-review",
       context: {
-        matched_rules: [{ rule_id: "review-required", rule_version: 1 }],
-        uncertain_rules: [],
-        eligible_waiver_rules: [],
-        waiver_scope: { operation: "review-trigger", boundary: "subject" },
+        constitution: "pass", failed_rules: [], uncertain_rules: [],
+        matched_trigger_rules: [{ rule_id: "review-required", rule_version: 1 }],
+        uncertain_trigger_rules: [], eligible_waivers: [],
       },
     };
     const opened = await openDurableGate(dependencies, input);
@@ -743,11 +742,10 @@ describe("durable gate lifecycle", () => {
       const input: GateOpenInput = {
         ...gateInput(h, `gate-wrong-${testCase.label}`),
         phase_instance: testCase.phase,
-        kind: "review-trigger",
+        kind: "constitution-review",
         context: {
-          matched_rules: [{ rule_id: "review-required", rule_version: 1 }],
-          uncertain_rules: [], eligible_waiver_rules: [],
-          waiver_scope: { operation: "review-trigger", boundary: "subject" },
+          constitution: "pass", failed_rules: [], uncertain_rules: [],
+          matched_trigger_rules: [{ rule_id: "review-required", rule_version: 1 }], uncertain_trigger_rules: [], eligible_waivers: [],
         },
       };
       const opened = await openDurableGate(dependencies, input);
@@ -822,12 +820,11 @@ describe("durable gate lifecycle", () => {
       const input: GateOpenInput = issueCode === "decision-invalid"
         ? {
             ...baseInput,
-            kind: "review-trigger",
+            kind: "constitution-review",
             context: {
-              matched_rules: [{ rule_id: "review-required", rule_version: 1 }],
-              uncertain_rules: [],
-              eligible_waiver_rules: [],
-              waiver_scope: { operation: "review-trigger", boundary: "subject" },
+              constitution: "pass", failed_rules: [], uncertain_rules: [],
+              matched_trigger_rules: [{ rule_id: "review-required", rule_version: 1 }],
+              uncertain_trigger_rules: [], eligible_waivers: [],
             },
           }
         : baseInput;

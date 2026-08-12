@@ -227,12 +227,9 @@ describe("CLI invocation construction", () => {
     });
     if (id === "codex-cli") {
       expect(invocation.argv[invocation.argv.indexOf("--output-schema") + 1]).toMatch(/adjudication\.schema\.json$/u);
-      const mechanical = ((parsed.$defs as Record<string, unknown>).mechanical as Record<string, unknown>);
-      expect(mechanical).toMatchObject({ type: "object", anyOf: expect.any(Array) });
-      for (const branch of mechanical.anyOf as Array<Record<string, unknown>>) {
-        expect(branch).toMatchObject({ type: "object", additionalProperties: false });
-        expect(branch.required).toEqual(Object.keys(branch.properties as Record<string, unknown>));
-      }
+      // The codex state-branch expansion existed only for per-mechanism evidence, which findings
+      // no longer carry; the adjudication document needs no adapter-specific rewrite at all.
+      expect(parsed.$defs as Record<string, unknown>).not.toHaveProperty("mechanical");
     } else {
       expect(schemaText).not.toMatch(/"(?:minimum|maximum|minLength|minItems|maxItems|uniqueItems)"/u);
     }
@@ -392,11 +389,11 @@ describe("CLI invocation construction", () => {
 
     const projectedAdjudication = projectCliOutputSchema(adjudicationSchema as PlainJsonValue, "adjudication", "claude-cli");
     const validateProjectedAdjudication = createJsonSchemaValidator<Record<string, unknown>>(projectedAdjudication as Record<string, unknown>);
+    // The projected host schema drops the semantic keywords, so a roll-up that contradicts its own
+    // rule findings passes the child's structural check and is caught only by the Zod authority.
     const invalidAdjudication = structuredClone(validAdjudication) as Record<string, unknown>;
     const ruleFindings = invalidAdjudication.rule_findings as Array<Record<string, unknown>>;
-    const mechanical = ruleFindings[0]!.enforced_by as Array<Record<string, unknown>>;
-    delete mechanical[0]!.subject_digest;
-    delete mechanical[0]!.evidence_digest;
+    ruleFindings[0]!.compliance = "fail";
     expect(() => validateProjectedAdjudication.assert(invalidAdjudication, "projected adjudication")).not.toThrow();
     expect(() => parseAndDeriveAdjudication(invalidAdjudication)).toThrow();
   });

@@ -187,8 +187,7 @@ else {
       trigger,
       trigger_evidence: trigger === "matched"
         ? "The artifact describes reading another task's files."
-        : "No review trigger matched.",
-      enforced_by: [] })),
+        : "No review trigger matched." })),
     drift_findings: subject.approved_upstream_digests.map((upstream_digest) => ({
       upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift found." })),
     constitution: "pass", drift: "aligned",
@@ -407,7 +406,7 @@ describe("status-derived requests execute against the real handlers", () => {
     }
   }, TIMEOUT);
 
-  it("derives the post-triage review-trigger gate and composes it mechanically", async () => {
+  it("derives the post-triage constitution-review gate and composes it mechanically", async () => {
     const fixture = await repository("active");
     const h = harness(fixture.root, "claude");
     const rubric = {
@@ -449,15 +448,18 @@ describe("status-derived requests execute against the real handlers", () => {
       });
       await h.invoke(triageComposed.request.tool, triageComposed.request.input);
 
-      // Post-triage fixed point: the review-trigger gate derived from the retained constitution
-      // evidence is the pending action, with the mechanical archflow_gate prefill attached.
+      // Post-triage fixed point: the constitution-review gate derived from the retained
+      // constitution evidence is the pending action, with the mechanical archflow_gate prefill
+      // attached. Compliance passed, so the matched trigger is the whole of the question — and it
+      // is the only gate, so no pending-gate queue is disclosed.
       const gated = await h.status();
       expect(gated.evidence?.assessment).toMatchObject({ next: "adjudication-gate" });
       expect(gated.next_action).toMatchObject({
         code: "open-gate",
-        gate_kind: "review-trigger",
-        request: { tool: "archflow_gate", input: { kind: "review-trigger" } },
+        gate_kind: "constitution-review",
+        request: { tool: "archflow_gate", input: { kind: "constitution-review" } },
       });
+      expect(gated.next_action).not.toHaveProperty("pending_gate_kinds");
 
       // build-request kind "gate" composes the same pending gate mechanically — kind, subject,
       // and context all from retained adjudication evidence — in preference to artifact-approval.
@@ -467,13 +469,15 @@ describe("status-derived requests execute against the real handlers", () => {
       expect(gateComposed.request.tool).toBe("archflow_gate");
       expect(gateComposed.gate?.gate_id).toBeDefined();
       expect(gateComposed.request.input).toMatchObject({
-        kind: "review-trigger",
+        kind: "constitution-review",
         subject_digest: produceComposed.artifact_digest,
         context: {
-          matched_rules: [rule],
+          constitution: "pass",
+          failed_rules: [],
           uncertain_rules: [],
-          eligible_waiver_rules: [rule],
-          waiver_scope: { operation: "review-trigger", boundary: "subject" },
+          matched_trigger_rules: [rule],
+          uncertain_trigger_rules: [],
+          eligible_waivers: [{ rule, scope: { operation: "review-trigger", boundary: "subject" } }],
         },
       });
     } finally {

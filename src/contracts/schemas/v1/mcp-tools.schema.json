@@ -534,9 +534,8 @@
               "kind": {
                 "enum": [
                   "artifact-approval",
-                  "review-trigger",
+                  "constitution-review",
                   "material-drift",
-                  "adjudication-failure",
                   "attempts-exhausted",
                   "constitution-edit",
                   "commit-authorization",
@@ -564,10 +563,10 @@
                   {
                     "properties": {
                       "kind": {
-                        "const": "review-trigger"
+                        "const": "constitution-review"
                       },
                       "context": {
-                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/reviewTrigger/properties/context"
+                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/constitutionReview/properties/context"
                       }
                     }
                   },
@@ -578,16 +577,6 @@
                       },
                       "context": {
                         "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/materialDrift/properties/context"
-                      }
-                    }
-                  },
-                  {
-                    "properties": {
-                      "kind": {
-                        "const": "adjudication-failure"
-                      },
-                      "context": {
-                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/adjudicationFailure/properties/context"
                       }
                     }
                   },
@@ -657,9 +646,8 @@
             "type": "string",
             "enum": [
               "artifact-approval",
-              "review-trigger",
+              "constitution-review",
               "material-drift",
-              "adjudication-failure",
               "attempts-exhausted",
               "constitution-edit",
               "commit-authorization",

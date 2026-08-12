@@ -8,7 +8,6 @@ import {
   validateGateDecision,
   type GateContext,
   type HumanDecisionProvenance,
-  type RuleVersionRef,
 } from "../contracts/gates.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
@@ -29,7 +28,6 @@ import { TaskLockError } from "./lock.js";
 
 const TEMPLATE_REASON = "Record the human decision reason.";
 const TEMPLATE_RATIONALE = "Record the human decision rationale.";
-const TEMPLATE_RESOLUTION = "Record the human resolution for this rule.";
 
 function decisionTemplateBase(active: ActiveGateV1): Readonly<{
   schema_version: "1";
@@ -88,27 +86,18 @@ export function buildGateDecisionTemplates(active: ActiveGateV1): readonly Plain
     const context = request.context as GateRequestV1["context"];
     const payloads: PlainJsonValue[] = [];
     if (decision === "waiver-requested") {
-      const eligible = (context as GateContext<"review-trigger"> | GateContext<"adjudication-failure">).eligible_waiver_rules;
-      for (const rule of eligible) {
+      // One template per waivable (rule, axis) pair: waiving a rule's compliance and waiving its
+      // review trigger are different requests, and the human must be shown both.
+      const eligible = (context as GateContext<"constitution-review">).eligible_waivers;
+      for (const item of eligible) {
         payloads.push({
           decision,
           reason: TEMPLATE_REASON,
-          rule: structuredClone(rule),
+          rule: structuredClone(item.rule),
+          operation: item.scope.operation,
           rationale: TEMPLATE_RATIONALE,
         });
       }
-    } else if (request.kind === "adjudication-failure" && decision === "approve") {
-      const adjudicationContext = request.context as GateContext<"adjudication-failure">;
-      const eligible = new Set(adjudicationContext.eligible_waiver_rules.map((rule) => `${rule.rule_id}:${rule.rule_version}`));
-      const required = new Map<string, RuleVersionRef>();
-      for (const rule of [...adjudicationContext.failed_rules, ...adjudicationContext.uncertain_rules]) {
-        const key = `${rule.rule_id}:${rule.rule_version}`;
-        if (!eligible.has(key)) required.set(key, rule);
-      }
-      const resolutions = [...required.values()]
-        .sort((left, right) => left.rule_id.localeCompare(right.rule_id) || left.rule_version - right.rule_version)
-        .map((rule) => ({ rule: structuredClone(rule), resolution: TEMPLATE_RESOLUTION }));
-      payloads.push({ decision, reason: TEMPLATE_REASON, resolutions });
     } else if (request.kind === "restore-collision" && decision === "adopt-as-new-generation") {
       if (request.context.adoption_candidate !== undefined) {
         payloads.push({

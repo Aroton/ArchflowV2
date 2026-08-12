@@ -179,9 +179,7 @@ function adjudicationSemanticDiagnostic(value: unknown): string {
     const safeRules = ruleFindings.map((finding) => {
       if (finding === null || typeof finding !== "object" || Array.isArray(finding)) return "invalid-finding";
       const item = finding as Record<string, unknown>;
-      const evidence = Array.isArray(item.enforced_by) ? item.enforced_by : [];
-      return `${String(item.rule_id)}:${String(item.rule_version)} compliance=${String(item.compliance)} trigger=${String(item.trigger)} mechanical_states=${evidence.map((entry) =>
-        entry !== null && typeof entry === "object" && !Array.isArray(entry) ? String((entry as Record<string, unknown>).state) : "invalid").join(",") || "none"}`;
+      return `${String(item.rule_id)}:${String(item.rule_version)} compliance=${String(item.compliance)} trigger=${String(item.trigger)}`;
     });
     return `reason=${reasons.join(" | ") || (error instanceof Error ? error.message : "unknown")}; constitution=${String(record.constitution)} drift=${String(record.drift)} matched=${Array.isArray(record.matched_rule_versions) ? record.matched_rule_versions.length : "invalid"} uncertain=${Array.isArray(record.uncertain_rule_versions) ? record.uncertain_rule_versions.length : "invalid"} rules=[${safeRules.join("; ")}]`;
   }

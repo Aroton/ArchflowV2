@@ -51,34 +51,26 @@ const validatingKeywordCoverage = {
   "x-archflow-mcp-semantics": [
     "mcp-current-evidence",
     "mcp-waiver-origin-task",
-    "gate-review-rule-order",
-    "gate-adjudication-rule-order",
-    "gate-review-eligible-subset",
-    "gate-adjudication-eligible-subset",
-    "gate-review-waiver-scope",
-    "gate-adjudication-waiver-scope",
-    "gate-adjudication-nonempty",
+    "gate-constitution-rule-order",
+    "gate-constitution-eligible-axis",
+    "gate-constitution-nonempty",
+    "gate-constitution-pass-consistency",
     "gate-attempts-exhausted",
     "gate-material-drift-order",
     "gate-commit-artifact-order",
     "gate-commit-parent-order"
   ],
   "x-archflow-gate-semantics": [
-    "gate-review-rule-order",
-    "gate-adjudication-rule-order",
-    "gate-review-eligible-subset",
-    "gate-adjudication-eligible-subset",
-    "gate-review-waiver-scope",
-    "gate-adjudication-waiver-scope",
-    "gate-adjudication-nonempty",
+    "gate-constitution-rule-order",
+    "gate-constitution-eligible-axis",
+    "gate-constitution-nonempty",
+    "gate-constitution-pass-consistency",
     "gate-attempts-exhausted",
     "gate-material-drift-order",
     "gate-commit-artifact-order",
     "gate-commit-parent-order",
-    "gate-review-waiver-eligibility",
-    "gate-adjudication-waiver-eligibility",
-    "gate-adjudication-resolution-order",
-    "gate-adjudication-resolution-coverage",
+    "gate-constitution-waiver-rule-eligibility",
+    "gate-constitution-waiver-axis-eligibility",
     "gate-restore-adoption-authority"
   ],
   "x-archflow-nfc": ["path-nfc-input"],
@@ -143,8 +135,7 @@ const stateCall = (status = "running") => ({ ...COMMON, phase_instance: "phase-i
 const counterCall = (artifactPath = "phases/phase-3.md", criteria = [{ id: "paths", text: "Check paths", blocking: true }]) => ({ ...COMMON, artifact_path: artifactPath, rubric: { schema_version: "1", kind: "implementation", mode: "adversarial", criteria } });
 const gateCall = (kind: string, context: unknown) => ({ ...COMMON, phase_instance: "phase-impl-3", summary: "Review", subject_digest: D("b"), current_evidence: CURRENT_EVIDENCE, kind, context });
 const waiverCall = () => ({ ...COMMON, origin: { origin_gate_id: "gate-1", origin_decision_digest: D("1"), origin_context_digest: D("2"), task_id: COMMON.task_id, phase_instance: "phase-impl-3", subject_digest: D("3"), current_evidence_set_digest: D("4"), rule: RULE_A, scope: SCOPE }, rationale: "Needed" });
-const reviewContext = () => ({ matched_rules: [RULE_A], uncertain_rules: [], eligible_waiver_rules: [RULE_A], waiver_scope: SCOPE });
-const adjudicationContext = () => ({ constitution: "fail", failed_rules: [RULE_A, RULE_B], uncertain_rules: [], eligible_waiver_rules: [], waiver_scope: { operation: "adjudication-failure", boundary: "phase" } });
+const constitutionContext = () => ({ constitution: "fail", failed_rules: [RULE_A], uncertain_rules: [], matched_trigger_rules: [RULE_A], uncertain_trigger_rules: [], eligible_waivers: [{ rule: RULE_A, scope: { operation: "adjudication-failure", boundary: "subject" } }, { rule: RULE_A, scope: SCOPE }] });
 const restoreContext = () => ({ path: "task/file.md", recorded_generation_digest: D("7"), current_generation_digest: D("8"), adoption_candidate: AUTHORITY });
 const result = (value: unknown) => ({ schema_version: "1", ok: true, value });
 const decisionEnvelope = (kind: string, payload: unknown, overrides: Record<string, unknown> = {}) => ({ schema_version: "1", gate_id: "gate-1", task_id: COMMON.task_id, phase_instance: "phase-impl-3", subject_digest: D("b"), context_digest: D("9"), human_provenance: PROVENANCE, kind, payload, ...overrides });
@@ -187,13 +178,11 @@ function materialize(entry: CorpusCase): MaterializedCase {
     }
     case "waiver-origin-task": return { value: { ...waiverCall(), task_id: "other" } };
     case "current-evidence": return { value: { ...artifactGateCall, current_evidence: { ...CURRENT_EVIDENCE, slots: [COUNTER, { ...GATE_COUNTER, evidence_digest: COUNTER.evidence_digest }] } } };
-    case "review-rule-order": return { value: gateCall("review-trigger", { ...reviewContext(), matched_rules: [RULE_B, RULE_A], eligible_waiver_rules: [] }) };
-    case "adjudication-rule-order": return { value: gateCall("adjudication-failure", { ...adjudicationContext(), failed_rules: [RULE_B, RULE_A] }) };
-    case "review-eligible-subset": return { value: gateCall("review-trigger", { ...reviewContext(), eligible_waiver_rules: [RULE_B] }) };
-    case "adjudication-eligible-subset": return { value: gateCall("adjudication-failure", { ...adjudicationContext(), eligible_waiver_rules: [{ rule_id: "Rule:C", rule_version: 1 }] }) };
-    case "review-waiver-scope": return { value: gateCall("review-trigger", { ...reviewContext(), waiver_scope: { operation: "adjudication-failure", boundary: "subject" } }) };
-    case "adjudication-waiver-scope": return { value: gateCall("adjudication-failure", { ...adjudicationContext(), waiver_scope: { operation: "review-trigger", boundary: "phase" } }) };
-    case "adjudication-nonempty": return { value: gateCall("adjudication-failure", { ...adjudicationContext(), failed_rules: [], eligible_waiver_rules: [] }) };
+    case "constitution-rule-order": return { value: gateCall("constitution-review", { ...constitutionContext(), matched_trigger_rules: [RULE_B, RULE_A], failed_rules: [], constitution: "pass", eligible_waivers: [] }) };
+    // A rule offered a waiver on an axis it does not appear on.
+    case "constitution-eligible-axis": return { value: gateCall("constitution-review", { ...constitutionContext(), matched_trigger_rules: [], eligible_waivers: [{ rule: RULE_A, scope: SCOPE }] }) };
+    case "constitution-nonempty": return { value: gateCall("constitution-review", { ...constitutionContext(), constitution: "pass", failed_rules: [], matched_trigger_rules: [], eligible_waivers: [] }) };
+    case "constitution-pass-consistency": return { value: gateCall("constitution-review", { ...constitutionContext(), constitution: "pass" }) };
     case "attempts-exhausted": return { value: gateCall("attempts-exhausted", { step: "produce", attempts: 1, maximum_attempts: 2 }) };
     case "material-drift-order": return { value: gateCall("material-drift", { affected_upstream: { kind: "architecture", digest: D("4") }, drift: "material", affected_claim_ids: ["z", "a"] }) };
     case "commit-artifact-order": return { value: gateCall("commit-authorization", { target_ref: "HEAD", diff_digest: D("4"), current_artifact_digests: [D("b"), D("a")], parent_document_digests: [D("c")] }) };
@@ -207,13 +196,12 @@ function materialize(entry: CorpusCase): MaterializedCase {
     case "project-error-path-utf8": return { value: snapshotFailure([longPath]) };
     case "project-error-order": return { value: snapshotFailure(["z/file", "a/file"]) };
     case "failure-tool-correlation": return { value: { schema_version: "1", ok: false, error: { schema_version: "1", code: "CONTRACT_INVALID", owner: "contracts", retryable: false, diagnostic: { template_id: "CONTRACT_INVALID", parameters: { tool: "archflow_gate", issue_code: "input-invalid" } }, next_action: "correct-contract" } } };
-    case "review-waiver-eligibility": return { call: gateCall("review-trigger", reviewContext()), value: gateResult("review-trigger", { decision: "waiver-requested", reason: "Exception", rule: RULE_B, rationale: "Needed" }) };
-    case "adjudication-waiver-eligibility": return { call: gateCall("adjudication-failure", adjudicationContext()), value: gateResult("adjudication-failure", { decision: "waiver-requested", reason: "Exception", rule: { rule_id: "Rule:C", rule_version: 1 }, rationale: "Needed" }) };
-    case "adjudication-resolution-order": return { call: gateCall("adjudication-failure", adjudicationContext()), value: gateResult("adjudication-failure", { decision: "approve", reason: "Resolved", resolutions: [{ rule: RULE_B, resolution: "B" }, { rule: RULE_A, resolution: "A" }] }) };
-    case "adjudication-resolution-coverage": return { call: gateCall("adjudication-failure", adjudicationContext()), value: gateResult("adjudication-failure", { decision: "approve", reason: "Resolved", resolutions: [{ rule: RULE_A, resolution: "A" }] }) };
+    case "constitution-waiver-rule-eligibility": return { call: gateCall("constitution-review", constitutionContext()), value: gateResult("constitution-review", { decision: "waiver-requested", reason: "Exception", rule: RULE_B, operation: "review-trigger", rationale: "Needed" }) };
+    // The rule is eligible, but only on the other axis.
+    case "constitution-waiver-axis-eligibility": return { call: gateCall("constitution-review", { ...constitutionContext(), eligible_waivers: [{ rule: RULE_A, scope: { operation: "adjudication-failure", boundary: "subject" } }] }), value: gateResult("constitution-review", { decision: "waiver-requested", reason: "Exception", rule: RULE_A, operation: "review-trigger", rationale: "Needed" }) };
     case "restore-adoption-authority": return { call: gateCall("restore-collision", restoreContext()), value: gateResult("restore-collision", { decision: "adopt-as-new-generation", reason: "Adopt", adoption_authority: { ...AUTHORITY, link_digest: D("a") }, rationale: "Reviewed" }) };
     case "state-status-correlation": return { call: stateCall(), value: result({ path: "phases/state.json", revision: 1, status: "failed" }) };
-    case "gate-kind-correlation": return { call: artifactGateCall, value: gateResult("artifact-approval", { decision: "approve", reason: "Approved" }, { kind: "review-trigger" }) };
+    case "gate-kind-correlation": return { call: artifactGateCall, value: gateResult("artifact-approval", { decision: "approve", reason: "Approved" }, { kind: "constitution-review" }) };
     case "gate-decision-kind-correlation": return { call: artifactGateCall, value: result({ kind: "artifact-approval", decision: decisionEnvelope("material-drift", { decision: "reject", reason: "Approved" }), notes: "Approved", revision: 1 }) };
     case "gate-task-correlation": return { call: artifactGateCall, value: artifactGateResultWithDecision({ task_id: "other" }) };
     case "gate-phase-correlation": return { call: artifactGateCall, value: artifactGateResultWithDecision({ phase_instance: "phase-impl-4" }) };
@@ -319,7 +307,7 @@ describe("advertised MCP tool catalogue", () => {
     expect(stateProperties.expected_revision).toEqual({ $ref: "#/$defs/mcp-tools/$defs/integer" });
     expect(stateProperties.artifact).toEqual({ $ref: "#/$defs/mcp-tools/$defs/durableArtifact" });
     const gateProperties = (ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === "archflow_gate")!.inputSchema as { properties: Record<string, unknown> }).properties;
-    expect((gateProperties.context as { oneOf: unknown[] }).oneOf).toHaveLength(9);
+    expect((gateProperties.context as { oneOf: unknown[] }).oneOf).toHaveLength(8);
   });
 
   it("advertises exactly the reference-reachable definitions within the context-budget fence", () => {

@@ -29,12 +29,16 @@ export function authenticWaiverOriginArchive(
     request.value.subject_digest === origin.subject_digest &&
     request.value.context_digest === origin.origin_context_digest &&
     request.value.current_evidence.set_digest === origin.current_evidence_set_digest &&
-    (request.value.kind === "review-trigger" || request.value.kind === "adjudication-failure") &&
+    request.value.kind === "constitution-review" &&
     decision.digest === origin.origin_decision_digest &&
     payload?.decision === "waiver-requested" &&
     isDeepStrictEqual(payload.rule, origin.rule) &&
-    "waiver_scope" in request.value.context &&
-    isDeepStrictEqual(request.value.context.waiver_scope, origin.scope) &&
+    payload.operation === origin.scope.operation &&
+    // The origin gate must actually have offered this rule on this axis.
+    "eligible_waivers" in request.value.context &&
+    request.value.context.eligible_waivers.some((eligible) =>
+      isDeepStrictEqual(eligible.rule, origin.rule) &&
+      isDeepStrictEqual(eligible.scope, origin.scope)) &&
     validateDurableSemantics({ gate_request: request, gate_decision: decision }).ok;
 }
 
@@ -95,7 +99,7 @@ export async function handleWaiver(
       summary: `Waiver request for ${call.input.origin.rule.rule_id}`,
       subject_digest: call.input.origin.subject_digest,
       current_evidence: originRequest.value.current_evidence,
-      kind: call.input.origin.scope.operation,
+      kind: "constitution-review",
       context: waiverContext,
       waiver_origin_gate_id: call.input.origin.origin_gate_id,
       ...(call.input.supplemental_outcome === undefined ? {} : {

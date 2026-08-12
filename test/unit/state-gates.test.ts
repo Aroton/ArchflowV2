@@ -48,7 +48,7 @@ const EFFECT_CASES = [
   { kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, allowed: ["approve", "revise", "reject", "cancel"], payload: { decision: "approve", reason: "Reviewed" }, effect: "advance" },
   { kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, allowed: ["approve", "revise", "reject", "cancel"], payload: { decision: "revise", reason: "Reviewed" }, effect: "retry" },
   { kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, allowed: ["approve", "revise", "reject", "cancel"], payload: { decision: "reject", reason: "Reviewed" }, effect: "non-advancing" },
-  { kind: "review-trigger", context: { matched_rules: [RULE], uncertain_rules: [], eligible_waiver_rules: [RULE], waiver_scope: { operation: "review-trigger", boundary: "subject" } }, allowed: ["approve", "revise", "reject", "waiver-requested", "cancel"], payload: { decision: "waiver-requested", reason: "Exception", rule: RULE, rationale: "Reviewed exception" }, effect: "redirect-waiver" },
+  { kind: "constitution-review", context: { constitution: "pass", failed_rules: [], uncertain_rules: [], matched_trigger_rules: [RULE], uncertain_trigger_rules: [], eligible_waivers: [{ rule: RULE, scope: { operation: "review-trigger", boundary: "subject" } }] }, allowed: ["approve", "revise", "reject", "waiver-requested", "cancel"], payload: { decision: "waiver-requested", reason: "Exception", rule: RULE, operation: "review-trigger", rationale: "Reviewed exception" }, effect: "redirect-waiver" },
   { kind: "material-drift", context: { affected_upstream: { kind: "architecture", digest: D("a") }, drift: "material", affected_claim_ids: ["claim-one"] }, allowed: ["amend-upstream", "revise-current", "reject", "cancel"], payload: { decision: "amend-upstream", reason: "Reviewed" }, effect: "redirect-upstream" },
   { kind: "material-drift", context: { affected_upstream: { kind: "architecture", digest: D("a") }, drift: "material", affected_claim_ids: ["claim-one"] }, allowed: ["amend-upstream", "revise-current", "reject", "cancel"], payload: { decision: "revise-current", reason: "Reviewed" }, effect: "retry" },
   { kind: "attempts-exhausted", context: { step: "produce", attempts: 2, maximum_attempts: 2 }, allowed: ["retry-once", "revise", "abort", "cancel"], payload: { decision: "retry-once", reason: "Reviewed" }, effect: "retry" },
@@ -86,7 +86,7 @@ describe("durable gate decisions", () => {
     const initial: TaskStateV1 = { ...state(), repository_identity_digest: authority.repository_identity_digest, config_digest: sha256Bytes(configBytes), input_fingerprint: inputFingerprint };
     writeFileSync(join(taskRoot, "state.json"), canonicalDocument(initial).bytes);
     const dependencies = { runner: runnerResult.value, environment: git.value, atomic: createAtomicWriter(), lock: createTaskLock(), read_state: readTaskState, read_config: readTaskConfig, read_receipt: readIntentReceipt, resolve_input_fingerprint: async () => ({ schema_version: "1" as const, ok: true as const, value: {} as InputFingerprintSubject }) };
-    const reviewContext = { matched_rules: [RULE], uncertain_rules: [], eligible_waiver_rules: [RULE], waiver_scope: { operation: "review-trigger", boundary: "subject" } } as const;
+    const reviewContext = { constitution: "pass", failed_rules: [], uncertain_rules: [], matched_trigger_rules: [RULE], uncertain_trigger_rules: [], eligible_waivers: [{ rule: RULE, scope: { operation: "review-trigger", boundary: "subject" } }] } as const;
     const base = {
       schema_version: "1", task_id: "task-1", phase_instance: initial.phase_instance,
       subject_digest: D("c"), input_fingerprint: inputFingerprint,
@@ -124,16 +124,16 @@ describe("durable gate decisions", () => {
     const currentEvidence = deriveCurrentEvidenceSet(new Map([
       ["counter_review", reviewEntry(counterSlot.evidence_digest, counterEvidence)],
     ])).current_evidence_set;
-    const lifecycle = { authority, expected_revision: initial.revision, intent_id: "intent-1" as never, request_digest: D("b"), input_fingerprint: inputFingerprint, phase_instance: initial.phase_instance, summary: "Approve", subject_digest: D("c"), current_evidence: currentEvidence, kind: "review-trigger" as const, context: reviewContext };
+    const lifecycle = { authority, expected_revision: initial.revision, intent_id: "intent-1" as never, request_digest: D("b"), input_fingerprint: inputFingerprint, phase_instance: initial.phase_instance, summary: "Approve", subject_digest: D("c"), current_evidence: currentEvidence, kind: "constitution-review" as const, context: reviewContext };
     const lifecycleGate = computeGateId({ task_identity_digest: authority.task_identity_digest, intent_id: lifecycle.intent_id, request_digest: lifecycle.request_digest });
     const aborted = new AbortController(); aborted.abort();
     const first = await runDurableGate(dependencies, { ...lifecycle, signal: aborted.signal });
     expect(first).toMatchObject({ ok: false, error: { code: "CANCELLED" } });
     const pending = await readTaskState(authority.state); expect(pending).toMatchObject({ kind: "canonical", document: { value: { revision: 5, open_gate: { gate_id: lifecycleGate } } } });
-    const lifecycleContextDigest = computeGateContextDigest("review-trigger", reviewContext);
+    const lifecycleContextDigest = computeGateContextDigest("constitution-review", reviewContext);
     writeFileSync(join(taskRoot, "gate.decision"), canonicalDocument({
       schema_version: "1", gate_id: lifecycleGate, task_id: "task-1",
-      phase_instance: initial.phase_instance, kind: "review-trigger",
+      phase_instance: initial.phase_instance, kind: "constitution-review",
       subject_digest: D("c"), context_digest: lifecycleContextDigest,
       human_provenance: provenance,
       payload: { decision: "approve", reason: "Reviewed" },
@@ -206,7 +206,6 @@ describe("durable gate decisions", () => {
           rationale: "Needs human resolution",
           trigger: "matched",
           trigger_evidence: "Review rule matched",
-          enforced_by: [],
         }],
         drift_findings: [{
           upstream_digest: D("8"),

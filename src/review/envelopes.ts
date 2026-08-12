@@ -514,8 +514,8 @@ export function buildAdjudicationEnvelope(value: AdjudicationEnvelopeInput): Dis
     source_evidence_set_digest: sourceEvidenceSetDigest,
     instructions: {
       rule_coverage: "Return exactly one rule finding for every supplied rule, using its id as rule_id and version as rule_version.",
-      mechanism_evidence: "For a rule with declared enforced_by labels, return uncertain compliance and one unknown-state entry for each declared mechanism. Do not claim current mechanical evidence.",
-      undeclared_mechanisms: "For a rule with no declared enforced_by labels, return an empty enforced_by list.",
+      enforcement_context: "A rule's enforced_by labels name where that rule is mechanically enforced in the repository. They are context for your judgment, not evidence you are asked to verify or report on. Judge every rule the same way: from the artifact and the evidence supplied here.",
+      uncertainty: "Report uncertain compliance only when the artifact itself leaves the question genuinely open. Absence of test results, command output, or repository access is expected here and is not by itself a reason to be uncertain.",
     },
     subject,
   } as const satisfies PlainJsonValue;
