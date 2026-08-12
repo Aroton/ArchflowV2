@@ -774,7 +774,6 @@ async function commitCounter(
     expected_revision: runningState.revision,
     input_fingerprint: fingerprint,
     artifact_path: parseTaskPathClaim("phases/phase-14-output.md"),
-    rubric,
   });
   const result = await runCounterReview({
     transaction: dependencies,

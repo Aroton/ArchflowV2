@@ -18,6 +18,7 @@ import { resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js
 import { renderGateCounterPrompt } from "../local/call-envelope.js";
 import { selectAdjudicationGates } from "../review/adjudication.js";
 import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS, waiverInForce, type EvidenceAssessment } from "../review/fixed-point.js";
+import { canonicalRubricForPhaseKind, type CanonicalRubric } from "../review/rubrics.js";
 import { createGitRunner, preflightGit } from "../repository/git.js";
 import { discoverWorktree } from "../repository/identity.js";
 import { readTaskState } from "./read.js";
@@ -33,6 +34,7 @@ import { buildNextActionRequest } from "./request-templates.js";
 import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject } from "./produce-subject.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
 import { implementationOutputCommittedAtCurrentTarget } from "./implementation-manifest.js";
+import { phaseStatusResources, type StatusResource } from "./phase-documents.js";
 import { inspectWorkspaceCleanup, type WorkspaceCleanupReport } from "./workspace-cleanup.js";
 import { discoverReconciliationInput } from "./reconciliation-discovery.js";
 import {
@@ -147,6 +149,10 @@ export type TaskStatusV1 = Readonly<{
   blocking_reasons: readonly string[];
   attempt?: number;
   input_fingerprint?: Sha256Digest;
+  /** Canonical task and runtime paths the current phase reads or writes. */
+  resources?: readonly StatusResource[];
+  /** Immutable workflow review policy selected from the durable phase kind. */
+  review_policy?: CanonicalRubric;
   /**
    * The current review subject: the canonical digest of the whole retained produce artifact
    * (`manifest.artifact_digest`), never the document's inner `content_digest`. Present whenever
@@ -219,7 +225,7 @@ export type BriefTaskStatusV1 = Readonly<{
   }>;
   /** Included in the routine view only when cleanup work remains. */
   workspace?: WorkspaceCleanupReport;
-  next_action: NextAction;
+  next_action: Omit<NextAction, "request" | "guidance">;
 }>;
 
 /** Names one decision template by its selective fields without carrying its body. */
@@ -230,6 +236,12 @@ function decisionTemplateName(template: PlainJsonValue): string {
   if (typeof value.granted === "boolean") return value.granted ? "waiver-grant" : "waiver-deny";
   if (typeof value.decision === "string") return value.decision;
   return "unknown";
+}
+
+/** Keep routing identity in brief status without carrying request templates or their prose. */
+function projectBriefNextAction(next: NextAction): Omit<NextAction, "request" | "guidance"> {
+  const { request: _request, guidance: _guidance, ...identity } = next;
+  return Object.freeze(identity);
 }
 
 /** Projects the routine-loop brief view from an already-computed full status. */
@@ -267,7 +279,7 @@ export function projectBriefStatus(full: TaskStatusV1): BriefTaskStatusV1 {
       }),
     }),
     ...(full.workspace?.cleanup_pending === true ? { workspace: full.workspace } : {}),
-    next_action: full.next_action,
+    next_action: projectBriefNextAction(full.next_action),
   });
 }
 
@@ -1051,6 +1063,8 @@ export async function computeTaskStatus(
     status: state.status,
     attempt: state.attempt,
     input_fingerprint: state.input_fingerprint,
+    resources: phaseStatusResources(authority.task_id, state.phase_instance),
+    review_policy: canonicalRubricForPhaseKind(decodePhaseInstance(state.phase_instance).kind),
     ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),
     config,
     ...(routes === undefined ? {} : { routes }),

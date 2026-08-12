@@ -613,12 +613,6 @@ describe("mature state transaction kernel", () => {
       expected_revision: 7,
       input_fingerprint: FINGERPRINT,
       artifact_path: "phases/phase-9-output.md",
-      rubric: {
-        schema_version: "1",
-        kind: "implementation",
-        mode: "adversarial",
-        criteria: [{ id: "binding", text: "Check exact binding", blocking: true }],
-      },
     });
     const wrongToolFixture = documentResultFixture(wrongTool, new TextEncoder().encode("retained"));
     await expect(runStateTransaction(

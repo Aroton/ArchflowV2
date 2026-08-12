@@ -226,7 +226,6 @@ describe("pinned-config enforcement sites", () => {
       expected_revision: state.revision,
       input_fingerprint: state.input_fingerprint,
       artifact_path: "prd.md",
-      rubric: RUBRIC,
     });
     const connection = connectionContextFactory.captureStartup({
       connection_id: "config-pinning-handler",

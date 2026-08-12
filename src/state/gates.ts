@@ -61,7 +61,12 @@ import { applyProjectionPlan, captureProjectionTarget, prepareProjectionPlan, pr
 import { cleanTaskWorkspace } from "./workspace-cleanup.js";
 
 export { loadAuthenticatedGateApproval } from "./gate-approvals.js";
-export { buildGateDecisionTemplates, writeGateDecisionInterface } from "./gate-decision-interface.js";
+export {
+  buildGateDecisionTemplates,
+  selectGateDecisionTemplate,
+  writeGateDecisionChoice,
+  writeGateDecisionInterface,
+} from "./gate-decision-interface.js";
 export type { GateLifecycleDependencies, GateOpenInput } from "./gate-core.js";
 export { findLegacyImportResumePhase } from "./legacy-import-resume.js";
 

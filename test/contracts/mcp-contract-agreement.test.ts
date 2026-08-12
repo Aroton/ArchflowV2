@@ -123,7 +123,7 @@ describe("MCP contract schema agreement", () => {
       expect(() => parseToolCall("archflow_gate", invalid)).toThrow();
     }
     const rubric = { schema_version: "1", kind: "implementation", mode: "adversarial", criteria: [{ id: "paths", text: "Check paths", blocking: true }] };
-    const pathInput = (artifact_path: string) => ({ schema_version: "1", task_id: "task", intent_id: "intent", expected_revision: 0, input_fingerprint: "a".repeat(64), artifact_path, rubric });
+    const pathInput = (artifact_path: string) => ({ schema_version: "1", task_id: "task", intent_id: "intent", expected_revision: 0, input_fingerprint: "a".repeat(64), artifact_path });
     // Control characters stay pattern-rejected in both authorities.
     const controlPath = pathInput(`bad\u0080path`);
     expect(validator.validate(controlPath)).toBe(false);
@@ -137,7 +137,7 @@ describe("MCP contract schema agreement", () => {
     const waiverOrigin = { origin_gate_id: "gate-1", origin_decision_digest: "1".repeat(64), origin_context_digest: "2".repeat(64), task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), rule: { rule_id: "Rule:1", rule_version: 1 }, scope: { operation: "review-trigger", boundary: "subject" } };
     const examples = [
       ["archflow_state", { ...common, phase_instance: "phase-impl-2", step: "produce", status: "running" }],
-      ["archflow_counter_review", { ...common, artifact_path: "phases/2/result.md", rubric }],
+      ["archflow_counter_review", { ...common, artifact_path: "phases/2/result.md" }],
       ["archflow_gate", gate],
       ["archflow_waiver", { ...common, origin: waiverOrigin, rationale: "Needed" }]
     ] as const;

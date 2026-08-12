@@ -312,7 +312,6 @@ async function commitCounterReview(
     expected_revision: current.revision,
     input_fingerprint: prepared.reference.input_fingerprint,
     artifact_path: "phases/3/impl-notes.md",
-    rubric,
   });
   const identified = identifyTransactionRequest(call, h.authority, prepared.reference.input_fingerprint);
   const installation = prepareResultInstallation({

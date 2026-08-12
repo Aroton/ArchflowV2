@@ -321,7 +321,7 @@ describe("status-derived requests execute against the real handlers", () => {
 
     // Illegal targets refuse at compose time with the transition law's own answer, and payload
     // shape errors name the expected facts.
-    expect(await h.buildRequestError({ intent_id: "early-1", kind: "counter-review", rubric })).toBe("TRANSITION_INVALID");
+    expect(await h.buildRequestError({ intent_id: "early-1", kind: "counter-review" })).toBe("TRANSITION_INVALID");
     expect(await h.buildRequestError({ intent_id: "early-2", kind: "triage", dispositions: [] })).toBe("TRANSITION_INVALID");
     expect(await h.buildRequestError({ intent_id: "early-3", kind: "running", step: "produce" })).toBe("TRANSITION_INVALID");
     await expect(h.buildRequest({ intent_id: "early-4", kind: "running", step: "nonsense" })).rejects.toThrow(/one of produce, counter_review/u);
@@ -338,9 +338,10 @@ describe("status-derived requests execute against the real handlers", () => {
     const counterEntry = await h.buildRequest({ intent_id: "counter-entry-1", kind: "running", step: "counter_review" });
     expect(counterEntry.request.input).toMatchObject({ step: "counter_review", status: "running" });
     await h.invoke(counterEntry.request.tool, counterEntry.request.input);
-    const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review", rubric });
+    const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review" });
     expect(counterComposed.request.tool).toBe("archflow_counter_review");
-    expect(counterComposed.request.input).toMatchObject({ artifact_path: "prd.md", rubric });
+    expect(counterComposed.request.input).toMatchObject({ artifact_path: "prd.md" });
+    expect(counterComposed.request.input).not.toHaveProperty("rubric");
     // Envelope over the composed request is a fixed point: same digests, nothing left to resolve.
     const counterReplay = await h.envelope(counterComposed.request as unknown as PlainJsonValue);
     expect(counterReplay.request_digest).toBe(counterComposed.request_digest);
@@ -426,7 +427,7 @@ describe("status-derived requests execute against the real handlers", () => {
       // The merged call runs both children; the constitution review reports the matched trigger.
       const counterEntry = await h.buildRequest({ intent_id: "counter-entry-1", kind: "running", step: "counter_review" });
       await h.invoke(counterEntry.request.tool, counterEntry.request.input);
-      const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review", rubric });
+      const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review" });
       const reviewed = await h.invoke(counterComposed.request.tool, counterComposed.request.input) as {
         value: { constitution?: Record<string, unknown> };
       };

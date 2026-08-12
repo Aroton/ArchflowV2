@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 import { canonicalDocument } from "../contracts/canonical.js";
 import { parseActiveGate, parseGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
@@ -123,11 +124,113 @@ export function buildGateDecisionTemplates(active: ActiveGateV1): readonly Plain
   return deepFreezeGateJson(templates);
 }
 
+export type GateDecisionChoice = Readonly<{
+  choice: string;
+  reason: string;
+  rationale?: string;
+  rule?: PlainJsonValue;
+  operation?: string;
+}>;
+
+function choiceRecord(value: PlainJsonValue): Record<string, PlainJsonValue> {
+  assertPlainJson(value, "gate decision choice");
+  const materialized = structuredClone(value);
+  if (materialized === null || Array.isArray(materialized) || typeof materialized !== "object") {
+    throw new TypeError("gate decision choice must be a JSON object");
+  }
+  const record = materialized as Record<string, PlainJsonValue>;
+  const allowed = new Set(["choice", "reason", "rationale", "rule", "operation"]);
+  if (Object.keys(record).some((key) => !allowed.has(key))) {
+    throw new TypeError("gate decision choice contains unsupported fields");
+  }
+  if (typeof record.choice !== "string" || record.choice.trim() === "") {
+    throw new TypeError("gate decision choice.choice must be a non-empty string");
+  }
+  if (typeof record.reason !== "string" || record.reason.trim() === "") {
+    throw new TypeError("gate decision choice.reason must be a non-empty string");
+  }
+  return record;
+}
+
+/**
+ * Binds the human's small judgment-only input to the live server-owned gate template.
+ * Gate ids, digests, scopes, origins, and adoption authority never need to be copied by a caller.
+ */
+export function selectGateDecisionTemplate(active: ActiveGateV1, value: PlainJsonValue): PlainJsonValue {
+  const choice = choiceRecord(value);
+  const decision = choice.choice as string;
+  const reason = choice.reason as string;
+  const templates = buildGateDecisionTemplates(active);
+
+  if (decision === "cancel") {
+    if (choice.rationale !== undefined || choice.rule !== undefined || choice.operation !== undefined) {
+      throw new TypeError("cancel accepts only choice and reason");
+    }
+    const template = templates.find((candidate) => "cancelled" in (candidate as object));
+    if (template === undefined) throw new TypeError("cancel is not allowed for the active gate");
+    return { ...(template as Record<string, PlainJsonValue>), reason };
+  }
+
+  const waiver = waiverContext(active.context);
+  if (waiver !== undefined) {
+    if (!(["grant", "deny"] as const).includes(decision as "grant" | "deny")) {
+      throw new TypeError("choice is not allowed for the active waiver gate");
+    }
+    if (choice.rationale !== undefined || choice.rule !== undefined || choice.operation !== undefined) {
+      throw new TypeError("waiver decisions accept only choice and reason");
+    }
+    const granted = decision === "grant";
+    const template = templates.find((candidate) => (candidate as { granted?: boolean }).granted === granted);
+    if (template === undefined) throw new TypeError("choice is not allowed for the active waiver gate");
+    return { ...(template as Record<string, PlainJsonValue>), notes: reason };
+  }
+
+  let template: PlainJsonValue | undefined;
+  if (decision === "waiver-requested") {
+    if (typeof choice.rationale !== "string" || choice.rationale.trim() === "") {
+      throw new TypeError("waiver-requested requires a non-empty rationale");
+    }
+    if (choice.rule === undefined || typeof choice.operation !== "string" || choice.operation.trim() === "") {
+      throw new TypeError("waiver-requested requires rule and operation selectors");
+    }
+    template = templates.find((candidate) => {
+      const payload = (candidate as { payload?: Record<string, PlainJsonValue> }).payload;
+      return payload?.decision === decision && payload.operation === choice.operation && isDeepStrictEqual(payload.rule, choice.rule);
+    });
+  } else {
+    if (choice.rule !== undefined || choice.operation !== undefined) {
+      throw new TypeError("rule and operation apply only to waiver-requested");
+    }
+    if (decision === "adopt-as-new-generation") {
+      if (typeof choice.rationale !== "string" || choice.rationale.trim() === "") {
+        throw new TypeError("adopt-as-new-generation requires a non-empty rationale");
+      }
+    } else if (choice.rationale !== undefined) {
+      throw new TypeError("rationale is not accepted for this decision");
+    }
+    template = templates.find((candidate) =>
+      (candidate as { payload?: { decision?: string } }).payload?.decision === decision,
+    );
+  }
+  if (template === undefined) throw new TypeError("choice is not allowed for the active gate");
+  const payload = (template as { payload: Record<string, PlainJsonValue> }).payload;
+  return {
+    ...(template as Record<string, PlainJsonValue>),
+    payload: {
+      ...payload,
+      reason,
+      ...(choice.rationale === undefined ? {} : { rationale: choice.rationale }),
+    },
+  };
+}
+
 export type GateDecisionInterfaceWriteResult = Readonly<{
   gate_id: PathSafeId;
   decision_path: RepositoryPathClaim;
   decision_digest: Sha256Digest;
 }>;
+
+type DecisionSelector = (active: ActiveGateV1) => PlainJsonValue;
 
 /** Installs a selected template without overwriting a decision that already binds the live gate. */
 export async function writeGateDecisionInterface(
@@ -141,18 +244,29 @@ export async function writeGateDecisionInterface(
   });
   assertPlainJson(value, "gate decision template");
   const selected = structuredClone(value);
-  const provenance: HumanDecisionProvenance = {
-    schema_version: "1",
-    actor_class: "human",
-    assurance: "declared-local-trace",
-    channel: "archflow-local",
-    decision_event_id: randomUUID(),
-    helper_invocation_id: randomUUID(),
-    recorded_at: new Date().toISOString(),
-  };
-  const candidate = selected !== null && typeof selected === "object" && !Array.isArray(selected)
-    ? { ...selected, human_provenance: provenance } as PlainJsonValue
-    : selected;
+  return writeSelectedGateDecision(dependencies, authority, () => selected);
+}
+
+/** Installs a human choice after resolving all live gate bindings from durable authority. */
+export async function writeGateDecisionChoice(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  value: PlainJsonValue,
+): Promise<ProjectResult<GateDecisionInterfaceWriteResult>> {
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment,
+  });
+  const selected = structuredClone(choiceRecord(value));
+  return writeSelectedGateDecision(dependencies, authority, (active) => selectGateDecisionTemplate(active, selected));
+}
+
+/** Installs a selected template without overwriting a decision that already binds the live gate. */
+async function writeSelectedGateDecision(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  select: DecisionSelector,
+): Promise<ProjectResult<GateDecisionInterfaceWriteResult>> {
 
   try {
     await ensureIntentDirectory(authority);
@@ -194,6 +308,29 @@ export async function writeGateDecisionInterface(
         await ensureWorkspaceProjectionParent(authority, activePath.value.absolute as ResolvedTaskWorkspacePath);
         await dependencies.atomic.replace(activePath.value, canonicalDocument(active).bytes);
       }
+
+      let selected: PlainJsonValue;
+      try {
+        selected = select(active);
+      } catch {
+        return fail(createProjectError("GATE_DECISION_INVALID", {
+          gate_id: active.gate_id,
+          gate_kind: active.kind,
+          issue_code: "decision-choice-invalid",
+        }));
+      }
+      const provenance: HumanDecisionProvenance = {
+        schema_version: "1",
+        actor_class: "human",
+        assurance: "declared-local-trace",
+        channel: "archflow-local",
+        decision_event_id: randomUUID(),
+        helper_invocation_id: randomUUID(),
+        recorded_at: new Date().toISOString(),
+      };
+      const candidate = selected !== null && typeof selected === "object" && !Array.isArray(selected)
+        ? { ...selected, human_provenance: provenance } as PlainJsonValue
+        : selected;
 
       try {
         parseInterface(candidate, active);

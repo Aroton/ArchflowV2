@@ -26,13 +26,9 @@ describe("correlated MCP tool contracts", () => {
     }
   });
   it("detaches and recursively freezes every nested parsed-call semantic", () => {
-    const rubricSource = { schema_version: "1", kind: "implementation", mode: "adversarial", criteria: [{ id: "paths", text: "Check paths", blocking: true }] };
-    const counterSource = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, artifact_path: "phases/2/result.md", rubric: rubricSource };
+    const counterSource = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, artifact_path: "phases/2/result.md" };
     const counter = parseToolCall("archflow_counter_review", counterSource);
-    rubricSource.criteria[0]!.text = "mutated";
-    expect(counter.input.rubric.criteria[0]!.text).toBe("Check paths");
-    expect(Object.isFrozen(counter.input.rubric.criteria)).toBe(true);
-    expect(Object.isFrozen(counter.input.rubric.criteria[0])).toBe(true);
+    expect(Object.isFrozen(counter.input)).toBe(true);
 
     const originSource = { origin_gate_id: "gate-1", origin_decision_digest: "1".repeat(64), origin_context_digest: "2".repeat(64), task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), rule: { rule_id: "Rule:1", rule_version: 1 }, scope: { operation: "review-trigger", boundary: "subject" } };
     const waiver = parseToolCall("archflow_waiver", { schema_version: "1", task_id: "task-1", intent_id: "intent-3", expected_revision: 0, input_fingerprint: digest, origin: originSource, rationale: "Needed" });
@@ -303,7 +299,7 @@ describe("correlated MCP tool contracts", () => {
 
 describe("retightened boundary identifiers", () => {
   const rubric = { schema_version: "1", kind: "implementation", mode: "adversarial", criteria: [{ id: "paths", text: "Check paths", blocking: true }] } as const;
-  const counterInput = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, artifact_path: "phases/2/result.md", rubric } as const;
+  const counterInput = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, artifact_path: "phases/2/result.md" } as const;
   const waiverOrigin = { origin_gate_id: "gate-1", origin_decision_digest: "1".repeat(64), origin_context_digest: "2".repeat(64), task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), rule: { rule_id: "Rule:1", rule_version: 1 }, scope: { operation: "review-trigger", boundary: "subject" } } as const;
   const waiverInput = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, origin: waiverOrigin, rationale: "Needed" } as const;
 

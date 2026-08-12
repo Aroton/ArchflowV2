@@ -241,11 +241,10 @@ export async function runCounterReview(
   evidence: ReviewEvidence;
   constitution_evidence?: AdjudicationEvidence;
 }>>> {
-  const callRubricDigest = canonicalJsonDigest(input.call.input.rubric as never);
+  const envelopeRubricDigest = canonicalJsonDigest(input.envelope.rubric as never);
   if (
     input.producer_family !== input.envelope.subject.producer_family ||
-    input.envelope.subject.rubric_digest !== callRubricDigest ||
-    canonicalJsonDigest(input.envelope.rubric as never) !== callRubricDigest
+    input.envelope.subject.rubric_digest !== envelopeRubricDigest
   ) {
     throw new TypeError("counter-review subject is not derived from the server-owned request");
   }

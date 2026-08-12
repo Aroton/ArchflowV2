@@ -4,7 +4,6 @@ import { createProjectError, type ProjectError, type ProjectResult } from "../co
 import { parsePathSafeId, type PathSafeId } from "../contracts/evidence.js";
 import { decodePhaseInstance } from "../contracts/phase-instance.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
-import { parseRubricV1 } from "../contracts/rubric.js";
 import { parseTriageCandidate, type TriageDisposition } from "../contracts/triage.js";
 import { PIPELINE_STEPS, type PipelineStep } from "../contracts/vocabulary.js";
 import { parseDocumentArtifact } from "../contracts/durable-document.js";
@@ -47,7 +46,7 @@ const PAYLOAD_SHAPE =
   '"step"?:<pipeline step for kind running>,' +
   '"document"?:{...},"implementation"?:{...},' +
   '"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],' +
-  '"rubric"?:<rubric object for kind counter-review>,"summary"?:<gate summary text>}';
+  '"summary"?:<gate summary text>}';
 
 function record(value: unknown, name: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -346,17 +345,18 @@ function composeCounterReview(
   intentId: string,
   snapshot: Record<string, unknown>,
 ): Promise<ProjectResult<CallEnvelope>> | ProjectResult<never> {
+  if (snapshot.rubric !== undefined) {
+    throw new TypeError("build-request counter-review selects the canonical rubric from durable phase state; do not supply rubric");
+  }
   if (legalRunStepStatus(state, "counter_review") !== "succeeded") {
     return transitionInvalid(state, "counter_review-succeeded");
   }
-  const rubric = parseRubricV1(snapshot.rubric);
   const paths = phaseReviewPaths(state.phase_instance);
   return computeCallEnvelope(services, {
     tool: "archflow_counter_review",
     input: {
       ...mechanicalInput(services, state, intentId),
       artifact_path: paths.artifact_path,
-      rubric: rubric as unknown as PlainJsonValue,
     },
   });
 }
@@ -452,7 +452,8 @@ async function composeGate(
  * targeted transition with the server's own movement rules, and resolves the whole request
  * through the call envelope, so `request.input` is the finished tool call with nothing left to
  * transcribe. Judgment content is never drafted here: findings, dispositions, rationales,
- * rubric bodies, and gate summaries come only from the payload. Kind "initialize" is the one
+ * and gate summaries come only from the payload; canonical review policy comes from the server.
+ * Kind "initialize" is the one
  * request composed without durable state — it stages the initialization artifact itself and is
  * refused once state exists.
  */

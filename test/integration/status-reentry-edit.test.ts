@@ -219,7 +219,7 @@ describe("post-triage re-entry edits are expected", () => {
     await h.invoke(produceComposed.request.tool, produceComposed.request.input);
     const counterEntry = await h.buildRequest({ intent_id: "counter-entry-1", kind: "running", step: "counter_review" });
     await h.invoke(counterEntry.request.tool, counterEntry.request.input);
-    const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review", rubric });
+    const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review" });
     const stub = installReviewerStub(fixture.root);
     try {
       await h.invoke(counterComposed.request.tool, counterComposed.request.input);
@@ -355,7 +355,7 @@ describe("post-triage re-entry edits are expected", () => {
     expect(await h.status()).toMatchObject({ step: "produce", status: "succeeded", attempt: 1 });
     const counterEntry = await h.buildRequest({ intent_id: "counter-entry-1", kind: "running", step: "counter_review" });
     await h.invoke(counterEntry.request.tool, counterEntry.request.input);
-    const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review", rubric });
+    const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review" });
     const stub = installReviewerStub(fixture.root, [
       {
         finding_id: "scope-mismatch", severity: "blocker", blocking: true,
@@ -531,7 +531,7 @@ describe("post-triage re-entry edits are expected", () => {
     await h.invoke(produceComposed.request.tool, produceComposed.request.input);
     const counterEntry = await h.buildRequest({ intent_id: "counter-entry-1", kind: "running", step: "counter_review" });
     await h.invoke(counterEntry.request.tool, counterEntry.request.input);
-    const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review", rubric });
+    const counterComposed = await h.buildRequest({ intent_id: "counter-1", kind: "counter-review" });
     const stub = installReviewerStub(fixture.root);
     try {
       await h.invoke(counterComposed.request.tool, counterComposed.request.input);
@@ -574,7 +574,7 @@ describe("post-triage re-entry edits are expected", () => {
 
       const counterEntry2 = await h.buildRequest({ intent_id: "counter-entry-2", kind: "running", step: "counter_review" });
       await h.invoke(counterEntry2.request.tool, counterEntry2.request.input);
-      const counterComposed2 = await h.buildRequest({ intent_id: "counter-2", kind: "counter-review", rubric });
+      const counterComposed2 = await h.buildRequest({ intent_id: "counter-2", kind: "counter-review" });
       await h.invoke(counterComposed2.request.tool, counterComposed2.request.input);
       const triageEntry = await h.buildRequest({ intent_id: "triage-entry-1", kind: "running", step: "triage" });
       await h.invoke(triageEntry.request.tool, triageEntry.request.input);

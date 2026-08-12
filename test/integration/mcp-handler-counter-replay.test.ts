@@ -12,6 +12,7 @@ import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { createToolHandlers } from "../../src/mcp/handlers/index.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
+import { canonicalRubricForPhaseKind } from "../../src/review/rubrics.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import type { ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
@@ -30,12 +31,6 @@ const TASK = parseTaskSlug("handler-counter-replay");
 const PHASE = encodePhaseInstance({ kind: "prd" });
 const ARTIFACT = "prd.md";
 const ARTIFACT_BYTES = new TextEncoder().encode("# PRD\n\nRequirements.\n");
-const RUBRIC = {
-  schema_version: "1",
-  kind: "artifact",
-  mode: "adversarial",
-  criteria: [{ id: "correctness", text: "The artifact satisfies its stated requirements.", blocking: true }],
-} as const;
 const CONFIG = `schema_version: "1"
 roles:
   counter-reviewer:
@@ -95,7 +90,7 @@ Preserve explicit human review gates.
   if (!constitution.ok) throw new Error(constitution.error.code);
   const configDigest = sha256Bytes(new TextEncoder().encode(CONFIG));
   const workflowDigest = sha256Bytes(workflow);
-  const fingerprint = computeInputFingerprint({
+  const produceFingerprint = computeInputFingerprint({
     schema_version: "1",
     workflow_digest: workflowDigest,
     config_digest: configDigest,
@@ -106,9 +101,20 @@ Preserve explicit human review gates.
     phase_instance: PHASE,
     declared_inputs: [],
   });
+  const reviewFingerprint = computeInputFingerprint({
+    schema_version: "1",
+    workflow_digest: workflowDigest,
+    config_digest: configDigest,
+    constitution_digest: constitution.value.digest,
+    artifact_identities: [],
+    upstream_identities: [],
+    rubric_digest: canonicalRubricForPhaseKind("prd").rubric_digest,
+    phase_instance: PHASE,
+    declared_inputs: [],
+  });
   const produceArtifact = await buildDocumentArtifact(discovered.value, authority.value, {
     phase_instance: PHASE, step: "produce", document_path: parseTaskPathClaim(ARTIFACT),
-    declared_inputs: [], input_fingerprint: fingerprint,
+    declared_inputs: [], input_fingerprint: produceFingerprint,
   });
   if (!produceArtifact.ok) throw new Error(produceArtifact.error.code);
   const preparedProduce = await prepareDocumentResult({
@@ -135,7 +141,7 @@ Preserve explicit human review gates.
     step: "counter_review",
     status: "running",
     attempt: parseSafeInteger(1),
-    input_fingerprint: fingerprint,
+    input_fingerprint: reviewFingerprint,
     initialization_digest: canonicalJsonDigest({ fixture: "counter-handler" }),
     config_digest: configDigest,
     workflow_digest: workflowDigest,
@@ -211,9 +217,8 @@ else {
     task_id: TASK,
     intent_id: "counter-replay-intent",
     expected_revision: 7,
-    input_fingerprint: fingerprint,
+    input_fingerprint: reviewFingerprint,
     artifact_path: ARTIFACT,
-    rubric: RUBRIC,
   } as const;
   return { args, authority: authority.value, bin, sourceHome, countPath, initialState, invocation };
 }

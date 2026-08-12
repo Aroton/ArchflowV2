@@ -13,11 +13,13 @@ import type { TaskPathClaim } from "../../contracts/path-claims.js";
 import type { PlainJsonValue } from "../../contracts/plain-json.js";
 import type { GitOid } from "../../contracts/canonical.js";
 import type { TaskStateV1 } from "../../contracts/durable-state.js";
+import { decodePhaseInstance } from "../../contracts/phase-instance.js";
 import { createDispatchCoordinator } from "../../dispatch/coordinator.js";
 import { readHeadCommit } from "../../repository/git.js";
 import type { RootBoundGitRunner } from "../../repository/identity.js";
 import { rulesForEnvelope } from "../../review/adjudication.js";
 import { runCounterReview, type ConstitutionReviewPlan } from "../../review/counter-review.js";
+import { canonicalRubricForPhaseKind } from "../../review/rubrics.js";
 import {
   REPOSITORY_VIEW_NOTE,
   REVIEW_ENVELOPE_BYTE_CAP,
@@ -321,6 +323,9 @@ export async function handleCounterReview(
 
     const retainedBytes = services.dependencies.read_retained_task_bytes;
     if (retainedBytes === undefined) throw new TypeError("retained byte accounting is unavailable");
+    const canonicalRubric = canonicalRubricForPhaseKind(
+      decodePhaseInstance(state.value.phase_instance).kind,
+    );
 
     let constitutionPlan: ConstitutionReviewPlan | undefined;
     if (activeRules) {
@@ -397,7 +402,7 @@ export async function handleCounterReview(
       measured_at_revision: session.value.measured_at_revision,
       envelope: {
         artifact,
-        rubric: call.input.rubric,
+        rubric: canonicalRubric.rubric,
         context: context_entries.value,
         workspace: {
           kind: "read-only-repository-checkout",
@@ -411,7 +416,7 @@ export async function handleCounterReview(
           step: "counter_review",
           subject_digest: produce.value.artifact_digest,
           input_fingerprint: call.input.input_fingerprint,
-          rubric_digest: canonicalJsonDigest(call.input.rubric as unknown as PlainJsonValue),
+          rubric_digest: canonicalRubric.rubric_digest,
           producer_family: session.value.producer_family,
           invocation_id: dispatchId("invocation", context.invocation_id),
           result_id: resultId,

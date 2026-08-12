@@ -2,7 +2,7 @@
 
 **Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** `skills/`, `src/init/`, `assets/`
 
-The eight skills are the human-facing entry points. They are prose playbooks — they enforce nothing themselves; every rule they state is backed (where mechanically possible) by the server. In Codex the same skills are invoked with `$` instead of `/`.
+The eight skills are the human-facing entry points. They are thin judgment and trust-boundary playbooks: the CLI/MCP owns durable state, legal transitions, canonical task resource paths, and immutable review policy. Full status returns those resources and policy so a skill does not need to know how to traverse `.archflow/` or carry rubric JSON. In Codex the same skills are invoked with `$` instead of `/`.
 
 ## The set at a glance
 

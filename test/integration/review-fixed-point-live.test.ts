@@ -21,6 +21,7 @@ import { prepareDocumentResult } from "../../src/mcp/handlers/state-results.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
 import { runCounterReview } from "../../src/review/counter-review.js";
 import { assessCurrentEvidence } from "../../src/review/fixed-point.js";
+import { canonicalRubricForPhaseKind } from "../../src/review/rubrics.js";
 import { resolvePinnedConstitution } from "../../src/state/constitution.js";
 import { buildDocumentArtifact } from "../../src/state/document-artifact.js";
 import { buildImplementationOutput } from "../../src/state/implementation-manifest.js";
@@ -328,6 +329,12 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
       constitution_digest: initial.constitution_digest, artifact_identities: [], upstream_identities: [],
       rubric_digest: canonicalJsonDigest({}), phase_instance: finalPhase, declared_inputs: [],
     });
+    const finalReviewFingerprint = computeInputFingerprint({
+      schema_version: "1", workflow_digest: initial.workflow_digest, config_digest: initial.config_digest,
+      constitution_digest: initial.constitution_digest, artifact_identities: [], upstream_identities: [],
+      rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
+      phase_instance: finalPhase, declared_inputs: [],
+    });
     await writeFile(advanced.value.authority.state.absolute, canonicalDocument({
       ...advanced.value.state!.value,
       phase_instance: finalPhase, step: "produce", status: "running", attempt: parseSafeInteger(1),
@@ -354,6 +361,7 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
     if (!completion.ok) throw new Error(completion.error.code);
     await writeFile(completion.value.authority.state.absolute, canonicalDocument({
       ...completion.value.state!.value, step: "triage", status: "succeeded",
+      input_fingerprint: finalReviewFingerprint,
     }).bytes);
     completion = await createProductionServices({
       working_directory: h.root, task_id: task, operation: parseSafeCode("final-approval"),
@@ -372,7 +380,7 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
       schema_version: "1", task_id: task, intent_id: "final-completion",
       expected_revision: completion.value.state!.value.revision,
       phase_instance: finalPhase, step: "triage", status: "succeeded",
-      input_fingerprint: finalFingerprint,
+      input_fingerprint: finalReviewFingerprint,
     }, "final-completion");
     const completed = await createProductionServices({
       working_directory: h.root, task_id: task, operation: parseSafeCode("final-completed-observed"),
@@ -498,7 +506,8 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
     const nonProduceFingerprint = computeInputFingerprint({
       schema_version: "1", workflow_digest: initial.workflow_digest, config_digest: initial.config_digest,
       constitution_digest: initial.constitution_digest, artifact_identities: [], upstream_identities: [],
-      rubric_digest: canonicalJsonDigest({}), phase_instance: phase, declared_inputs: [],
+      rubric_digest: canonicalRubricForPhaseKind("phase-impl").rubric_digest,
+      phase_instance: phase, declared_inputs: [],
     });
 
     const bin = join(h.root, "bin");
@@ -558,7 +567,7 @@ else {
       await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "counter-running", expected_revision: 5,
         phase_instance: phase, step: "counter_review", status: "running", input_fingerprint: nonProduceFingerprint }, "counter-running");
       await invoke("archflow_counter_review", { schema_version: "1", task_id: task, intent_id: "counter-succeeded", expected_revision: 6,
-        input_fingerprint: nonProduceFingerprint, artifact_path: documentPath, rubric }, "counter-succeeded");
+        input_fingerprint: nonProduceFingerprint, artifact_path: documentPath }, "counter-succeeded");
       const afterCounter = await createProductionServices({ working_directory: h.root, task_id: task, operation: parseSafeCode("pipeline-after-counter") });
       if (!afterCounter.ok) throw new Error(afterCounter.error.code);
       const directReviews = await loadCurrentReviewSet({ read_state: afterCounter.value.dependencies.read_state,
@@ -600,7 +609,7 @@ else {
     }
   });
 
-  it("uses one production fingerprint across non-produce selectors and rubrics", async () => {
+  it("binds one canonical rubric fingerprint across the review and triage cycle", async () => {
     const h = await fixture();
     const common = {
       schema_version: "1" as const,
@@ -611,8 +620,8 @@ else {
     const calls = [
       parseToolCall("archflow_state", { ...common, intent_id: "counter-entry", phase_instance: phase, step: "counter_review", status: "running" }),
       parseToolCall("archflow_state", { ...common, intent_id: "triage", phase_instance: phase, step: "triage", status: "running" }),
-      parseToolCall("archflow_counter_review", { ...common, intent_id: "counter", artifact_path: "prd.md", rubric }),
-      parseToolCall("archflow_counter_review", { ...common, intent_id: "counter-two", artifact_path: "design.md", rubric: { ...rubric, criteria: [{ ...rubric.criteria[0], text: "Changed rubric." }] } }),
+      parseToolCall("archflow_counter_review", { ...common, intent_id: "counter", artifact_path: "prd.md" }),
+      parseToolCall("archflow_counter_review", { ...common, intent_id: "counter-two", artifact_path: "design.md" }),
     ];
     const fingerprints = [];
     for (const call of calls) {
@@ -638,7 +647,7 @@ else {
     const before = sha256Bytes(new Uint8Array(await readFile(artifactPath)));
     const call = parseToolCall("archflow_counter_review", {
       schema_version: "1", task_id: task, intent_id: "counter-mutation", expected_revision: 4,
-      input_fingerprint: "0".repeat(64), artifact_path: "phases/17/impl-notes.md", rubric,
+      input_fingerprint: "0".repeat(64), artifact_path: "phases/17/impl-notes.md",
     });
     const result = await runCounterReview({
       transaction: h.services.dependencies,

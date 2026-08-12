@@ -187,10 +187,9 @@ describe("bundled local CLI", () => {
         { role: "counter-review", evidence_digest: digest("c"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       ],
     };
-    const rubric = { schema_version: "1", kind: "artifact", mode: "adversarial", criteria: [{ id: "scope", text: "Check scope.", blocking: true }] };
     const calls = [
       { tool: "archflow_state", input: { ...common, intent_id: "state-cli", phase_instance: "prd", step: "counter_review", status: "running" } },
-      { tool: "archflow_counter_review", input: { ...common, intent_id: "counter-cli", artifact_path: "prd.md", rubric } },
+      { tool: "archflow_counter_review", input: { ...common, intent_id: "counter-cli", artifact_path: "prd.md" } },
     ];
     for (const call of calls) {
       expect(cli(fixture.root, "envelope", call)).toMatchObject({ status: 0, value: { ok: true, value: { tool: call.tool } } });

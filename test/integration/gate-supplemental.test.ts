@@ -223,7 +223,10 @@ describe("production supplemental gate round trip", () => {
     const decline = declinedStatus.open_gate!.supplemental_outcomes.find((item) => item.action === "decline");
     const deny = declinedStatus.open_gate!.decision_templates.find((item) => item !== null && typeof item === "object" && !Array.isArray(item) && (item as { granted?: unknown }).granted === false);
     if (decline === undefined || deny === undefined) throw new Error("waiver decline surface is incomplete");
-    await runLocalCommand({ command: "decide", working_directory: declined.root, task_id: TASK, value: { kind: "interface", value: deny } });
+    await runLocalCommand({
+      command: "decide", working_directory: declined.root, task_id: TASK,
+      value: { kind: "choice", choice: "deny", reason: "Decline the waiver." },
+    });
     const declinedResult = await boundary.invoke("archflow_waiver", waiverHandlerInput(declinedInput, decline), invocation(declined.root, new AbortController().signal, "waiver-decline-retry"));
     expect(declinedResult).toMatchObject({ kind: "project-result", result: { ok: true, value: { granted: false, origin_gate_id: declinedInput.origin.origin_gate_id } } });
 
@@ -308,7 +311,7 @@ describe("production supplemental gate round trip", () => {
     if (decline === undefined || rejection === undefined) throw new Error("decline surface is incomplete");
     await runLocalCommand({
       command: "decide", working_directory: declined.root, task_id: TASK,
-      value: { kind: "interface", value: rejection },
+      value: { kind: "choice", choice: "reject", reason: "The artifact requires revision." },
     });
     const declinedResult = await boundary.invoke(
       "archflow_gate", handlerInput(declinedInput, decline),

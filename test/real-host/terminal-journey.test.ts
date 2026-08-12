@@ -207,16 +207,14 @@ async function decideInstalledGate(root: string, task: string, decision: string)
     (candidate: any) => candidate.payload?.decision === decision,
   ));
   expect(template, `missing ${decision} template in ${gatePath}`).toBeDefined();
-  template.payload.reason = `Installed ${decision} decision`;
-  if (decision === "adopt-as-new-generation") {
-    template.payload.rationale = "The changed installed generation is intentional";
-  }
-  template.human_provenance = {
-    schema_version: "1", actor_class: "human", assurance: "declared-local-trace",
-    channel: "archflow-local", decision_event_id: `installed-${decision}`,
-    helper_invocation_id: `installed-${decision}-helper`, recorded_at: new Date().toISOString(),
-  };
-  const written = local(root, task, "decide", { kind: "interface", value: template });
+  const written = local(root, task, "decide", {
+    kind: "choice",
+    choice: decision,
+    reason: `Installed ${decision} decision`,
+    ...(decision === "adopt-as-new-generation"
+      ? { rationale: "The changed installed generation is intentional" }
+      : {}),
+  });
   expect(written.value).toMatchObject({ ok: true, value: { gate_id: gate.gate_id } });
   return template;
 }

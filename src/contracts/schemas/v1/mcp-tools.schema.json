@@ -313,9 +313,6 @@
               },
               "artifact_path": {
                 "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
-              },
-              "rubric": {
-                "$ref": "urn:archflow:schema:v1:rubric"
               }
             },
             "required": [
@@ -324,8 +321,7 @@
               "intent_id",
               "expected_revision",
               "input_fingerprint",
-              "artifact_path",
-              "rubric"
+              "artifact_path"
             ],
             "additionalProperties": false
           },

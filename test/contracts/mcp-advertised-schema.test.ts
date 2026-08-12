@@ -47,7 +47,6 @@ const schemaDocumentPaths = [
 
 const validatingKeywordCoverage = {
   "x-archflow-max-utf8-bytes": ["path-utf8-input", "path-utf8-output", "project-error-path-utf8"],
-  "x-archflow-unique-by": ["rubric-unique-by"],
   "x-archflow-mcp-semantics": [
     "mcp-current-evidence",
     "mcp-waiver-origin-task",
@@ -132,7 +131,7 @@ const DOCUMENT_ARTIFACT = JSON.parse(await readFile(
 )) as Record<string, unknown>;
 
 const stateCall = (status = "running") => ({ ...COMMON, phase_instance: "phase-impl-3", step: "produce", status });
-const counterCall = (artifactPath = "phases/phase-3.md", criteria = [{ id: "paths", text: "Check paths", blocking: true }]) => ({ ...COMMON, artifact_path: artifactPath, rubric: { schema_version: "1", kind: "implementation", mode: "adversarial", criteria } });
+const counterCall = (artifactPath = "phases/phase-3.md") => ({ ...COMMON, artifact_path: artifactPath });
 const gateCall = (kind: string, context: unknown) => ({ ...COMMON, phase_instance: "phase-impl-3", summary: "Review", subject_digest: D("b"), current_evidence: CURRENT_EVIDENCE, kind, context });
 const waiverCall = () => ({ ...COMMON, origin: { origin_gate_id: "gate-1", origin_decision_digest: D("1"), origin_context_digest: D("2"), task_id: COMMON.task_id, phase_instance: "phase-impl-3", subject_digest: D("3"), current_evidence_set_digest: D("4"), rule: RULE_A, scope: SCOPE }, rationale: "Needed" });
 const constitutionContext = () => ({ constitution: "fail", failed_rules: [RULE_A], uncertain_rules: [], matched_trigger_rules: [RULE_A], uncertain_trigger_rules: [], eligible_waivers: [{ rule: RULE_A, scope: { operation: "adjudication-failure", boundary: "subject" } }, { rule: RULE_A, scope: SCOPE }] });
@@ -169,7 +168,6 @@ function materialize(entry: CorpusCase): MaterializedCase {
     case "invalid-state-extra": return { value: { ...stateCall(), unexpected: true } };
     case "path-utf8-input": return { value: counterCall(longPath) };
     case "path-nfc-input": return { value: counterCall(nfdPath) };
-    case "rubric-unique": return { value: counterCall("phases/phase-3.md", [{ id: "paths", text: "First", blocking: true }, { id: "paths", text: "Second", blocking: false }]) };
     case "document-declared-input-order": {
       const artifact = structuredClone(DOCUMENT_ARTIFACT);
       const inputs = artifact.declared_inputs as unknown[];

@@ -4,11 +4,13 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
-import { parseSafeId } from "../../src/contracts/evidence.js";
+import { parseSafeCode, parseSafeId } from "../../src/contracts/evidence.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { buildDocumentArtifact } from "../../src/state/document-artifact.js";
+import { computeCallEnvelope } from "../../src/local/call-envelope.js";
 import { createToolHandlers } from "../../src/mcp/handlers/index.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
+import { createProductionServices } from "../../src/state/production.js";
 import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
 
 const workspaces: TaskWorkspace[] = [];
@@ -17,13 +19,6 @@ afterEach(() => {
   for (const workspace of workspaces.splice(0)) workspace.dispose();
   for (const target of escapedTargets.splice(0)) rmSync(target, { force: true });
 });
-
-const RUBRIC = {
-  schema_version: "1",
-  kind: "implementation",
-  mode: "adversarial",
-  criteria: [{ id: "isolation", text: "The artifact remains task-contained.", blocking: true }],
-} as const;
 
 function invocation(root: string, id: string) {
   const connection = connectionContextFactory.captureStartup({
@@ -71,17 +66,27 @@ async function fixture(): Promise<Readonly<{
     artifact: artifact.value,
   }, invocation(workspace.root, "produce"));
   expect(produced).toMatchObject({ kind: "project-result", result: { ok: true } });
-  return {
-    workspace,
-    args: {
+  const current = await createProductionServices({
+    working_directory: workspace.root,
+    task_id: workspace.taskId,
+    operation: parseSafeCode("handler-isolation-review"),
+  });
+  if (!current.ok || current.value.state === undefined) throw new Error("current services unavailable");
+  const composed = await computeCallEnvelope(current.value, {
+    tool: "archflow_counter_review",
+    input: {
       schema_version: "1",
       task_id: workspace.taskId,
       intent_id: "handler-isolation-review",
-      expected_revision: state.value.revision + 1,
-      input_fingerprint: state.value.input_fingerprint,
+      expected_revision: current.value.state.value.revision,
+      input_fingerprint: "0".repeat(64),
       artifact_path: "prd.md",
-      rubric: RUBRIC,
     },
+  });
+  if (!composed.ok) throw new Error(composed.error.code);
+  return {
+    workspace,
+    args: composed.value.request.input as Record<string, unknown>,
   };
 }
 

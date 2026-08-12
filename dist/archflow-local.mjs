@@ -25670,8 +25670,8 @@ function closedOperationFields(subject) {
     case "archflow_counter_review": {
       const fields = subject.operation_fields;
       if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
-      exactFields(fields, ["artifact_path", "rubric"]);
-      return { artifact_path: fields.artifact_path, rubric: fields.rubric };
+      exactFields(fields, ["artifact_path"]);
+      return { artifact_path: fields.artifact_path };
     }
     case "archflow_gate": {
       const fields = subject.operation_fields;
@@ -33133,6 +33133,7 @@ async function cleanTerminalTaskWorkspace(dependencies, authority) {
 
 // src/state/gate-decision-interface.ts
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
 var TEMPLATE_REASON = "Record the human decision reason.";
 var TEMPLATE_RATIONALE = "Record the human decision rationale.";
 function decisionTemplateBase(active) {
@@ -33207,6 +33208,89 @@ function buildGateDecisionTemplates(active) {
   }
   return deepFreezeGateJson(templates);
 }
+function choiceRecord(value) {
+  assertPlainJson(value, "gate decision choice");
+  const materialized = structuredClone(value);
+  if (materialized === null || Array.isArray(materialized) || typeof materialized !== "object") {
+    throw new TypeError("gate decision choice must be a JSON object");
+  }
+  const record3 = materialized;
+  const allowed = /* @__PURE__ */ new Set(["choice", "reason", "rationale", "rule", "operation"]);
+  if (Object.keys(record3).some((key) => !allowed.has(key))) {
+    throw new TypeError("gate decision choice contains unsupported fields");
+  }
+  if (typeof record3.choice !== "string" || record3.choice.trim() === "") {
+    throw new TypeError("gate decision choice.choice must be a non-empty string");
+  }
+  if (typeof record3.reason !== "string" || record3.reason.trim() === "") {
+    throw new TypeError("gate decision choice.reason must be a non-empty string");
+  }
+  return record3;
+}
+function selectGateDecisionTemplate(active, value) {
+  const choice = choiceRecord(value);
+  const decision3 = choice.choice;
+  const reason2 = choice.reason;
+  const templates = buildGateDecisionTemplates(active);
+  if (decision3 === "cancel") {
+    if (choice.rationale !== void 0 || choice.rule !== void 0 || choice.operation !== void 0) {
+      throw new TypeError("cancel accepts only choice and reason");
+    }
+    const template2 = templates.find((candidate) => "cancelled" in candidate);
+    if (template2 === void 0) throw new TypeError("cancel is not allowed for the active gate");
+    return { ...template2, reason: reason2 };
+  }
+  const waiver = waiverContext(active.context);
+  if (waiver !== void 0) {
+    if (!["grant", "deny"].includes(decision3)) {
+      throw new TypeError("choice is not allowed for the active waiver gate");
+    }
+    if (choice.rationale !== void 0 || choice.rule !== void 0 || choice.operation !== void 0) {
+      throw new TypeError("waiver decisions accept only choice and reason");
+    }
+    const granted = decision3 === "grant";
+    const template2 = templates.find((candidate) => candidate.granted === granted);
+    if (template2 === void 0) throw new TypeError("choice is not allowed for the active waiver gate");
+    return { ...template2, notes: reason2 };
+  }
+  let template;
+  if (decision3 === "waiver-requested") {
+    if (typeof choice.rationale !== "string" || choice.rationale.trim() === "") {
+      throw new TypeError("waiver-requested requires a non-empty rationale");
+    }
+    if (choice.rule === void 0 || typeof choice.operation !== "string" || choice.operation.trim() === "") {
+      throw new TypeError("waiver-requested requires rule and operation selectors");
+    }
+    template = templates.find((candidate) => {
+      const payload2 = candidate.payload;
+      return payload2?.decision === decision3 && payload2.operation === choice.operation && isDeepStrictEqual7(payload2.rule, choice.rule);
+    });
+  } else {
+    if (choice.rule !== void 0 || choice.operation !== void 0) {
+      throw new TypeError("rule and operation apply only to waiver-requested");
+    }
+    if (decision3 === "adopt-as-new-generation") {
+      if (typeof choice.rationale !== "string" || choice.rationale.trim() === "") {
+        throw new TypeError("adopt-as-new-generation requires a non-empty rationale");
+      }
+    } else if (choice.rationale !== void 0) {
+      throw new TypeError("rationale is not accepted for this decision");
+    }
+    template = templates.find(
+      (candidate) => candidate.payload?.decision === decision3
+    );
+  }
+  if (template === void 0) throw new TypeError("choice is not allowed for the active gate");
+  const payload = template.payload;
+  return {
+    ...template,
+    payload: {
+      ...payload,
+      reason: reason2,
+      ...choice.rationale === void 0 ? {} : { rationale: choice.rationale }
+    }
+  };
+}
 async function writeGateDecisionInterface(dependencies, authority, value) {
   assertInternalTransactionAuthority(authority, {
     runner: dependencies.runner,
@@ -33214,16 +33298,17 @@ async function writeGateDecisionInterface(dependencies, authority, value) {
   });
   assertPlainJson(value, "gate decision template");
   const selected = structuredClone(value);
-  const provenance2 = {
-    schema_version: "1",
-    actor_class: "human",
-    assurance: "declared-local-trace",
-    channel: "archflow-local",
-    decision_event_id: randomUUID(),
-    helper_invocation_id: randomUUID(),
-    recorded_at: (/* @__PURE__ */ new Date()).toISOString()
-  };
-  const candidate = selected !== null && typeof selected === "object" && !Array.isArray(selected) ? { ...selected, human_provenance: provenance2 } : selected;
+  return writeSelectedGateDecision(dependencies, authority, () => selected);
+}
+async function writeGateDecisionChoice(dependencies, authority, value) {
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  const selected = structuredClone(choiceRecord(value));
+  return writeSelectedGateDecision(dependencies, authority, (active) => selectGateDecisionTemplate(active, selected));
+}
+async function writeSelectedGateDecision(dependencies, authority, select) {
   try {
     await ensureIntentDirectory(authority);
     return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
@@ -33254,6 +33339,26 @@ async function writeGateDecisionInterface(dependencies, authority, value) {
         await ensureWorkspaceProjectionParent(authority, activePath.value.absolute);
         await dependencies.atomic.replace(activePath.value, canonicalDocument(active).bytes);
       }
+      let selected;
+      try {
+        selected = select(active);
+      } catch {
+        return fail8(createProjectError("GATE_DECISION_INVALID", {
+          gate_id: active.gate_id,
+          gate_kind: active.kind,
+          issue_code: "decision-choice-invalid"
+        }));
+      }
+      const provenance2 = {
+        schema_version: "1",
+        actor_class: "human",
+        assurance: "declared-local-trace",
+        channel: "archflow-local",
+        decision_event_id: randomUUID(),
+        helper_invocation_id: randomUUID(),
+        recorded_at: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      const candidate = selected !== null && typeof selected === "object" && !Array.isArray(selected) ? { ...selected, human_provenance: provenance2 } : selected;
       try {
         parseInterface(candidate, active);
       } catch {
@@ -33306,30 +33411,6 @@ var taskInitializationV1Schema = external_exports.object({
   canonical_paths: canonicalTaskPathsV1Schema
 }).strict();
 
-// src/contracts/rubric.ts
-var rubricV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  kind: external_exports.enum(["artifact", "implementation"]),
-  mode: external_exports.enum(["adversarial"]),
-  criteria: external_exports.array(external_exports.object({
-    id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
-    text: external_exports.string().min(1).regex(/\S/, "criterion text must contain a non-whitespace character"),
-    blocking: external_exports.boolean()
-  }).strict()).min(1)
-}).strict().superRefine((rubric, context2) => {
-  const seen = /* @__PURE__ */ new Set();
-  rubric.criteria.forEach((criterion, index) => {
-    if (seen.has(criterion.id)) {
-      context2.addIssue({ code: "custom", path: ["criteria", index, "id"], message: `Duplicate criterion id: ${criterion.id}` });
-    }
-    seen.add(criterion.id);
-  });
-});
-function parseRubricV1(value) {
-  assertPlainJson(value, "rubric");
-  return rubricV1Schema.parse(value);
-}
-
 // src/contracts/mcp-tools.ts
 var parsedToolInputBrand = /* @__PURE__ */ Symbol("ParsedToolInput");
 var parsedCalls = /* @__PURE__ */ new WeakSet();
@@ -33365,7 +33446,7 @@ var durableArtifact = external_exports.union([
 ]);
 var stateInputSchema = external_exports.object({ ...common2, phase_instance: phase3, step: external_exports.enum(["produce", "counter_review", "triage"]), status: external_exports.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
 var stagedReferenceInput = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest10 }).strict();
-var counterReviewInputSchema = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema, rubric: rubricV1Schema }).strict();
+var counterReviewInputSchema = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema }).strict();
 var supersedes = external_exports.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest10, old_subject_digest: digest10 }).strict();
 var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase3, summary: text2, subject_digest: digest10, current_evidence: external_exports.unknown(), supersedes: supersedes.optional(), supplemental_outcome: supplementalReviewOutcomeSchema.optional(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown() }).strict().superRefine((input, context2) => {
   try {
@@ -33642,6 +33723,101 @@ function createProjectionWriter() {
 // src/state/fingerprint-readers.ts
 import { lstat as lstat7, readFile as readFile3 } from "node:fs/promises";
 
+// src/contracts/rubric.ts
+var rubricV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  kind: external_exports.enum(["artifact", "implementation"]),
+  mode: external_exports.enum(["adversarial"]),
+  criteria: external_exports.array(external_exports.object({
+    id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
+    text: external_exports.string().min(1).regex(/\S/, "criterion text must contain a non-whitespace character"),
+    blocking: external_exports.boolean()
+  }).strict()).min(1)
+}).strict().superRefine((rubric, context2) => {
+  const seen = /* @__PURE__ */ new Set();
+  rubric.criteria.forEach((criterion, index) => {
+    if (seen.has(criterion.id)) {
+      context2.addIssue({ code: "custom", path: ["criteria", index, "id"], message: `Duplicate criterion id: ${criterion.id}` });
+    }
+    seen.add(criterion.id);
+  });
+});
+function parseRubricV1(value) {
+  assertPlainJson(value, "rubric");
+  return rubricV1Schema.parse(value);
+}
+
+// src/review/rubrics.ts
+function canonicalRubric(rubricId, value) {
+  const rubric = parseRubricV1(value);
+  const frozen = Object.freeze({
+    ...rubric,
+    criteria: Object.freeze(rubric.criteria.map((criterion) => Object.freeze({ ...criterion })))
+  });
+  return Object.freeze({
+    rubric_id: rubricId,
+    rubric_digest: canonicalJsonDigest(frozen),
+    rubric: frozen
+  });
+}
+var PRD_RUBRIC = canonicalRubric("prd-v1", {
+  schema_version: "1",
+  kind: "artifact",
+  mode: "adversarial",
+  criteria: [
+    { id: "substantive-correctness", text: "Report a finding only for a material defect: leaving the artifact unchanged is reasonably likely to change a downstream design, implementation, verification, or approval decision, or create an important product, reliability, security, or workflow risk. A blocking finding must cite the exact artifact, pinned, or repository evidence; name the concrete downstream consequence; and explain why it survives the stated non-goals and priority order. Wording is blocking only when it permits materially different reasonable interpretations. If prior-triage is present, make verification of the accepted revision intents the primary task; report a previously undiscovered issue only when it clears the same materiality bar. A challenge to a prior disposition is blocking only when its revision intent was not carried out or the change introduced a material defect. Do not report optional polish, harmless wording refinements, stylistic preferences, or other observations that would not materially change an outcome.", blocking: true },
+    { id: "ask-fidelity", text: "Compare the PRD against the pinned ask record: the verbatim original request and every recorded clarification question and answer. Report only an omitted need, unexplained exclusion, or contradiction reasonably likely to materially change what is designed, implemented, or accepted. If the ask is not pinned, do not infer it; use unverifiable-claims only when the gap prevents a material judgment.", blocking: true },
+    { id: "proportionality", text: "Report only substantial scope, machinery, or process that the pinned ask does not justify and that would materially change cost, architecture, delivery, or user outcome. Do not report minor simplifications or preferred alternatives.", blocking: true },
+    { id: "testable-requirements", text: "Report a defect only when a requirement permits materially different reasonable interpretations or prevents meaningful verification of an important outcome. Do not request extra specificity when a reasonable implementer and verifier would reach the same result.", blocking: true },
+    { id: "stated-assumptions", text: "Report only an unstated assumption or unresolved human choice that could materially change scope, behavior, acceptance, or risk; harmless implementation latitude is not a finding.", blocking: true },
+    { id: "unverifiable-claims", text: "When missing envelope or read-only repository evidence prevents a material judgment, record one non-blocking finding naming the claim and missing evidence, with a finding_id beginning unverifiable-. Never guess. An explicit assumption is handled under stated-assumptions. Omit gaps that cannot materially affect the review, report each material gap once, and do not re-report one already named in prior-triage.", blocking: false },
+    { id: "advisory-observations", text: "Do not report non-material observations, optional improvements, completeness suggestions, stylistic preferences, or harmless prose refinements. A sound, decision-ready artifact should return no findings rather than a list of possible enhancements.", blocking: false }
+  ]
+});
+var DESIGN_RUBRIC = canonicalRubric("design-v1", {
+  schema_version: "1",
+  kind: "artifact",
+  mode: "adversarial",
+  criteria: [
+    { id: "substantive-correctness", text: "Report a finding only for a material defect: leaving the artifact unchanged is reasonably likely to change downstream behavior, implementation, verification, delivery, or important risk. A blocking finding must cite exact artifact, pinned, or repository evidence; name the concrete consequence; and explain why it survives stated non-goals and priorities. Wording is blocking only when it permits materially different reasonable interpretations. If prior-triage is present, make verification of accepted revision intents the primary task; report a previously undiscovered issue only when it clears the same materiality bar. Challenge a prior disposition only when its revision intent was not carried out or the change introduced a material defect. Do not report optional polish or preferred alternatives without a material consequence.", blocking: true },
+    { id: "upstream-coverage", text: "Report only an upstream requirement that is materially unmapped or contradicted, or a substantial design element with no upstream purpose. Do not report traceability polish that would not change the design or its verification.", blocking: true },
+    { id: "interface-reality", text: "Report a repository or interface claim only when pinned or repository evidence materially contradicts it. Use unverifiable-claims only when missing evidence prevents a material judgment.", blocking: true },
+    { id: "evidence-completeness", text: "Report an unaddressed adjacent component only when the omission is reasonably likely to break a stated design element, interface, verification result, or important risk boundary.", blocking: true },
+    { id: "proportionality", text: "Report only layers, abstractions, phases, or machinery for unstated futures when they would materially increase complexity, cost, delivery time, or maintenance risk. Do not report minor simplifications or stylistic preferences.", blocking: true },
+    { id: "phase-plan-soundness", text: "Report phase ordering, scope, or verification defects only when they materially prevent independent implementation, meaningful verification, or reliable review. A phase expected to exceed roughly 10-15 hand-written files is a signal, not a defect by itself; report it only with a concrete review or delivery consequence.", blocking: true },
+    { id: "unverifiable-claims", text: "When missing pinned or read-only repository evidence prevents a material judgment, record one non-blocking finding naming the claim and missing file or interface, with a finding_id beginning unverifiable-. Never guess. Omit gaps that cannot materially affect the review, report each material gap once, and do not re-report one already named in prior-triage.", blocking: false },
+    { id: "advisory-observations", text: "Do not report non-material observations, optional improvements, completeness suggestions, stylistic preferences, or harmless wording refinements. A sound, decision-ready artifact should return no findings rather than a list of possible enhancements.", blocking: false }
+  ]
+});
+var IMPLEMENTATION_RUBRIC = canonicalRubric("implementation-v1", {
+  schema_version: "1",
+  kind: "implementation",
+  mode: "adversarial",
+  criteria: [
+    { id: "substantive-correctness", text: "Report a finding only for a material defect: merging the change unchanged is reasonably likely to alter required behavior, break verification, violate an approved boundary, or create an important reliability, security, or maintenance risk. A blocking finding must cite exact changed, pinned, or repository evidence; name the concrete consequence; and explain why it survives the phase design's non-goals and priorities. If prior-triage is present, make verification of accepted revision intents the primary task; report a previously undiscovered issue only when it clears the same materiality bar. Challenge a prior disposition only when its revision intent was not carried out or the change introduced a material defect. Do not report optional cleanup, stylistic preferences, or harmless refinements.", blocking: true },
+    { id: "design-conformance", text: "Report only a behavior, interface, file, or verification deviation from the pinned phase design that materially changes the approved outcome or leaves parent documents materially false. If missing phase-design evidence prevents that judgment, use unverifiable-claims.", blocking: true },
+    { id: "interface-fidelity", text: "Report a changed-to-unchanged interface mismatch only when it is reasonably likely to break behavior, data, compatibility, or an important contract. Use unverifiable-claims only when missing interface evidence prevents a material judgment.", blocking: true },
+    { id: "verification-evidence", text: "Report missing or failed verification only when the phase design requires it for an important behavior or risk. Claimed but untranscribed required verification is unverifiable, not a pass.", blocking: true },
+    { id: "simplicity", text: "Report complexity only when it materially harms correctness, maintainability, change cost, or the approved operating envelope; do not report a merely preferred simpler implementation.", blocking: true },
+    { id: "duplication", text: "Report duplication only when it creates a concrete material risk of divergence, defects, or disproportionate maintenance; do not request an abstraction for small or clearer repetition.", blocking: true },
+    { id: "dead-code", text: "Report unreachable code, compatibility paths, or speculative extensions only when they materially affect behavior, safety, maintenance, or the approved scope.", blocking: true },
+    { id: "error-handling", text: "Report an unhandled boundary failure only when it is reasonably likely and carries a material consequence under the current operating envelope.", blocking: true },
+    { id: "unverifiable-claims", text: "When missing envelope or read-only repository evidence prevents a material judgment, record one non-blocking finding naming exactly what is missing, with a finding_id beginning unverifiable-. Never guess. Omit gaps that cannot materially affect the review, report each material gap once, and do not re-report one already named in prior-triage.", blocking: false },
+    { id: "advisory-observations", text: "Do not report non-material observations, optional cleanup, completeness suggestions, stylistic preferences, or harmless refinements. A sound implementation should return no findings rather than a list of possible enhancements.", blocking: false }
+  ]
+});
+function canonicalRubricForPhaseKind(phaseKind2) {
+  switch (phaseKind2) {
+    case "prd":
+      return PRD_RUBRIC;
+    case "design":
+    case "phase-design":
+      return DESIGN_RUBRIC;
+    case "phase-impl":
+      return IMPLEMENTATION_RUBRIC;
+  }
+}
+
 // src/state/fingerprint.ts
 var failure = (state, issueCode) => Object.freeze({
   schema_version: "1",
@@ -33666,8 +33842,9 @@ function phaseInstance3(call, context2) {
     }
   }
 }
-function rubricDigest(_call) {
-  return canonicalJsonDigest({});
+function rubricDigest(call, phase4) {
+  const reviewCycle = call.name === "archflow_counter_review" || call.name === "archflow_state" && (call.input.step === "counter_review" || call.input.step === "triage");
+  return reviewCycle ? canonicalRubricForPhaseKind(decodePhaseInstance(phase4).kind).rubric_digest : canonicalJsonDigest({});
 }
 function createInternalInputFingerprintResolver(input) {
   return async (context2) => {
@@ -33701,7 +33878,7 @@ function createInternalInputFingerprintResolver(input) {
       constitution_digest: constitution.value,
       artifact_identities: structuredClone(artifacts.value),
       upstream_identities: structuredClone(upstream.value),
-      rubric_digest: rubricDigest(context2.call),
+      rubric_digest: rubricDigest(context2.call, state.phase_instance),
       phase_instance: phaseInstance3(context2.call, context2.context),
       declared_inputs: structuredClone(declared.value)
     };
@@ -34467,7 +34644,7 @@ function subjectFor(call, authority, inputFingerprint) {
         }
       };
     case "archflow_counter_review":
-      return { ...common3, tool: call.name, operation: "counter-review", operation_fields: { artifact_path: call.input.artifact_path, rubric: call.input.rubric } };
+      return { ...common3, tool: call.name, operation: "counter-review", operation_fields: { artifact_path: call.input.artifact_path } };
     case "archflow_gate": {
       const operation_fields = {
         phase_instance: call.input.phase_instance,
@@ -35519,6 +35696,70 @@ function deriveNextAction(input) {
 }
 
 // src/state/phase-documents.ts
+var STATUS_RESOURCE_ROLES = Object.freeze([
+  "current-artifact",
+  "user-ask",
+  "prd",
+  "task-design",
+  "phase-design",
+  "prior-implementation-notes",
+  "verification-transcript"
+]);
+function phaseStatusResources(taskId, phaseInstance4) {
+  const phase4 = decodePhaseInstance(phaseInstance4);
+  const task = (path2) => `.archflow/tasks/${taskId}/${path2}`;
+  const runtime = (path2) => `.archflow/runtime/tasks/${taskId}/${path2}`;
+  const resources = [];
+  switch (phase4.kind) {
+    case "prd":
+      resources.push(
+        { role: "current-artifact", path: task("prd.md"), access: "write" },
+        { role: "user-ask", path: task("ask.md"), access: "read-write" }
+      );
+      break;
+    case "design":
+      resources.push(
+        { role: "current-artifact", path: task("design.md"), access: "write" },
+        { role: "prd", path: task("prd.md"), access: "read-write" }
+      );
+      break;
+    case "phase-design":
+      resources.push(
+        { role: "current-artifact", path: task(`phases/${phase4.phase}/design.md`), access: "write" },
+        { role: "prd", path: task("prd.md"), access: "read-write" },
+        { role: "task-design", path: task("design.md"), access: "read-write" }
+      );
+      if (Number(phase4.phase) > 1) {
+        resources.push({
+          role: "prior-implementation-notes",
+          path: task(`phases/${Number(phase4.phase) - 1}/impl-notes.md`),
+          access: "read"
+        });
+      }
+      break;
+    case "phase-impl":
+      resources.push(
+        { role: "current-artifact", path: task(`phases/${phase4.phase}/impl-notes.md`), access: "write" },
+        { role: "prd", path: task("prd.md"), access: "read-write" },
+        { role: "task-design", path: task("design.md"), access: "read-write" },
+        { role: "phase-design", path: task(`phases/${phase4.phase}/design.md`), access: "read-write" }
+      );
+      if (Number(phase4.phase) > 1) {
+        resources.push({
+          role: "prior-implementation-notes",
+          path: task(`phases/${Number(phase4.phase) - 1}/impl-notes.md`),
+          access: "read"
+        });
+      }
+      resources.push({
+        role: "verification-transcript",
+        path: runtime(`cache/phases/${phase4.phase}/verification.txt`),
+        access: "write"
+      });
+      break;
+  }
+  return Object.freeze(resources.map((resource) => Object.freeze(resource)));
+}
 function phaseReviewPaths(phaseInstance4) {
   const phase4 = decodePhaseInstance(phaseInstance4);
   switch (phase4.kind) {
@@ -35578,7 +35819,6 @@ function phaseImplParentDocumentDefaults(phaseInstance4) {
 // src/state/request-templates.ts
 var TEMPLATE_INTENT_ID = "Choose a fresh intent id for this request.";
 var TEMPLATE_INITIALIZATION_ARTIFACT = 'Replace with the task-initialization artifact; archflow-local build-request (kind "initialize") composes this entire request already completed and fingerprint-resolved \u2014 pass its request.input verbatim.';
-var TEMPLATE_RUBRIC = "Supply the skill's stable rubric verbatim.";
 var TEMPLATE_SUMMARY = "Summarize the gate subject for the human reviewer.";
 var TEMPLATE_FINGERPRINT_SENTINEL = "0".repeat(64);
 var TERMINAL_ARTIFACT_PLACEHOLDERS = {
@@ -35640,12 +35880,11 @@ function buildNextActionRequest(next, facts) {
       if (step === "counter_review") {
         return request("archflow_counter_review", {
           ...mechanicalPrefix(facts.task_id, state),
-          artifact_path: reviewPaths(state).artifact_path,
-          rubric: TEMPLATE_RUBRIC
+          artifact_path: reviewPaths(state).artifact_path
         }, envelopeGuidance(
           facts.task_id,
           "archflow_counter_review",
-          "Replace the rubric placeholder with the skill's stable rubric verbatim. The server also runs the constitution review inside this call when the pinned constitution has active rules; the result reports both verdicts."
+          "The server selects the phase's canonical rubric and also runs the constitution review inside this call when the pinned constitution has active rules; the result reports both verdicts."
         ));
       }
       return request("archflow_state", {
@@ -36043,6 +36282,10 @@ function decisionTemplateName(template) {
   if (typeof value.decision === "string") return value.decision;
   return "unknown";
 }
+function projectBriefNextAction(next) {
+  const { request: _request, guidance: _guidance, ...identity } = next;
+  return Object.freeze(identity);
+}
 function projectBriefStatus(full) {
   return Object.freeze({
     task_id: full.task_id,
@@ -36077,7 +36320,7 @@ function projectBriefStatus(full) {
       })
     },
     ...full.workspace?.cleanup_pending === true ? { workspace: full.workspace } : {},
-    next_action: full.next_action
+    next_action: projectBriefNextAction(full.next_action)
   });
 }
 function partitionExpectedReentryEdits(findings, assessment, produceSubject, state) {
@@ -36700,6 +36943,8 @@ async function computeTaskStatus(dependencies, authority) {
     status: state.status,
     attempt: state.attempt,
     input_fingerprint: state.input_fingerprint,
+    resources: phaseStatusResources(authority.task_id, state.phase_instance),
+    review_policy: canonicalRubricForPhaseKind(decodePhaseInstance(state.phase_instance).kind),
     ...subjectDigest === void 0 ? {} : { subject_digest: subjectDigest },
     config: config2,
     ...routes === void 0 ? {} : { routes },
@@ -38747,7 +38992,7 @@ var BUILD_REQUEST_KINDS = Object.freeze([
   "counter-review",
   "gate"
 ]);
-var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"rubric"?:<rubric object for kind counter-review>,"summary"?:<gate summary text>}`;
+var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"summary"?:<gate summary text>}`;
 function record2(value, name) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${name} must be an object; expected ${PAYLOAD_SHAPE}`);
@@ -38984,17 +39229,18 @@ async function composeTriage(services2, state, intentId, snapshot2) {
   });
 }
 function composeCounterReview(services2, state, intentId, snapshot2) {
+  if (snapshot2.rubric !== void 0) {
+    throw new TypeError("build-request counter-review selects the canonical rubric from durable phase state; do not supply rubric");
+  }
   if (legalRunStepStatus(state, "counter_review") !== "succeeded") {
     return transitionInvalid(state, "counter_review-succeeded");
   }
-  const rubric = parseRubricV1(snapshot2.rubric);
   const paths = phaseReviewPaths(state.phase_instance);
   return computeCallEnvelope(services2, {
     tool: "archflow_counter_review",
     input: {
       ...mechanicalInput(services2, state, intentId),
-      artifact_path: paths.artifact_path,
-      rubric
+      artifact_path: paths.artifact_path
     }
   });
 }
@@ -39201,13 +39447,13 @@ var LOCAL_COMMAND_CONTRACTS = Object.freeze({
   snapshot: { payload: '{"manifest":<result manifest>,"payloads":[...],"retained_task_bytes":<n>}', task: "required" },
   restore: { payload: '{"result_digest":<sha256>,"output_path":<path>}', task: "required" },
   clean: { payload: null, task: "required" },
-  decide: { payload: '{"kind":"interface","value":<chosen decision template>}', task: "required" },
+  decide: { payload: '{"kind":"choice","choice":<decision>,"reason":<human reason>,"rationale"?:<human rationale>,"rule"?:<waiver rule>,"operation"?:<waiver operation>} (legacy interface payload remains accepted)', task: "required" },
   "gate-counter": { payload: "<supplemental review record from the counter-review recipe>", task: "required" },
   status: { payload: null, task: "required" },
   reconcile: { payload: '{"recorded_projections":[...],"current_projections":[...],"active_heads":{...}}', task: "required" },
   init: { payload: null, task: "ignored" },
   envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
-  "build-request": { payload: `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},...kind facts: none (initialize), "step" (running), "document"/"implementation" (produce), "dispositions":[...] (triage), "rubric" (counter-review), "summary" (gate)}`, task: "required" },
+  "build-request": { payload: `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},...kind facts: none (initialize/counter-review), "step" (running), "document"/"implementation" (produce), "dispositions":[...] (triage), "summary" (gate)}`, task: "required" },
   "manual-status": { payload: null, task: "required" },
   upgrade: { payload: "<legacy staging descriptor>", task: "optional" }
 });
@@ -39417,11 +39663,17 @@ async function restore(input) {
 }
 async function decide(input) {
   const value = recordValue(input);
-  if (value.kind !== "interface") throw new TypeError("decide input.kind must be interface");
-  assertPlainJson(value.value, "decide interface value");
   const created = await services(input);
   if (!created.ok) return created;
-  return writeGateDecisionInterface(created.value.dependencies, created.value.authority, structuredClone(value.value));
+  if (value.kind === "choice") {
+    const { kind: _kind, ...choice } = value;
+    return writeGateDecisionChoice(created.value.dependencies, created.value.authority, choice);
+  }
+  if (value.kind === "interface") {
+    assertPlainJson(value.value, "decide interface value");
+    return writeGateDecisionInterface(created.value.dependencies, created.value.authority, structuredClone(value.value));
+  }
+  throw new TypeError("decide input.kind must be choice or interface");
 }
 async function reconcile(input) {
   const created = await services(input);

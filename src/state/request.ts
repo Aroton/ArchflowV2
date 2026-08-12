@@ -40,7 +40,7 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
         },
       };
     case "archflow_counter_review":
-      return { ...common, tool: call.name, operation: "counter-review", operation_fields: { artifact_path: call.input.artifact_path, rubric: call.input.rubric } };
+      return { ...common, tool: call.name, operation: "counter-review", operation_fields: { artifact_path: call.input.artifact_path } };
     case "archflow_gate": {
       const operation_fields: Extract<RequestDigestSubject, { readonly tool: "archflow_gate" }>["operation_fields"] = {
         phase_instance: call.input.phase_instance,

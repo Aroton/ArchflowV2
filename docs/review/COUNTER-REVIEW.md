@@ -31,7 +31,7 @@ Every dispatch is a fresh reviewer with no memory, so without help round N tends
 
 ## Material defects, not review volume
 
-The rubric is not a server asset — it is a JSON literal in each skill's markdown, and the server validates only its shape. Review quality therefore depends on a crisp task for the model and disciplined producer triage, while the server deterministically binds whatever judgment was returned.
+The production rubrics are immutable server assets selected by durable phase kind (`prd`, design, or implementation). Full status publishes the selected rubric, ID, and digest for same-side non-durable review; the durable counter-review handler independently selects the same policy and binds its digest into the input fingerprint and review evidence. Skills no longer carry rubric copies, and callers cannot substitute one in an MCP request.
 
 The production rubrics use one consequence-based standard across initial and remediation reviews:
 
@@ -75,7 +75,7 @@ If the envelope still overflows after tiering and cap relief, the result is `ENV
 ## The flow, end to end
 
 1. **Produce** — the artifact is recorded durably; its digest becomes the subject digest.
-2. **Counter-review call** — `archflow_counter_review` with the artifact path, rubric, and fingerprint. Everything through step 6 happens inside this one call.
+2. **Counter-review call** — `archflow_counter_review` with the artifact path and fingerprint; in the normal flow `build-request` derives both. The server selects the rubric. Everything through step 6 happens inside this one call.
 3. **Server assembles** the review material (document text or tiered change set), pins context (failing closed on authority violations), seals the envelope under the cap, and materializes the read-only checkout — HEAD for documents, the attested `base_commit` for implementations (the reviewer sees the pre-change tree; changes travel only in the envelope).
 4. **Rubric dispatch** — the opposite-family CLI runs headless (see `../mcp/DISPATCH.md`); output is parsed and bound to its provenance (adapter, CLI version, route, envelope digest).
 5. **Constitution dispatch** — when the pinned constitution has active rules, the server then dispatches a second opposite-family child that performs the constitution and drift review (see below). The server alone decides whether this runs; with no active rules the drift check is also skipped and the result records `constitution: {status: "not-run", reason: "no-active-constitution-rules"}`, which is normal.

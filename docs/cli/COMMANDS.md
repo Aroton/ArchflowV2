@@ -14,7 +14,8 @@ archflow-local <command> [--task <task>] [--input <json-file>] [--brief]
 
 - Payload commands read JSON from `--input <file>`, or stdin when `--input` is omitted. If stdin is a TTY and no `--input` was given, the command fails immediately rather than hanging.
 - Input-free commands (`status`, `manual-status`, `init`, `clean`) never read stdin at all.
-- `--brief` (status only) projects the routine-loop view from the same computed status: position, blockers, open-gate and reconciliation summaries, constitution digest with active rule ids, and the one `next_action` — with no rule text, counter-review prompt, or decision-template bodies. Workspace state appears only when `cleanup_pending` is true (`projectBriefStatus` in `src/state/status.ts`).
+- Full `status` publishes the phase's canonical `resources` (`role`, repository-relative `path`, and `access`) plus its server-owned `review_policy`. Agents consume these entries instead of rediscovering `.archflow/` layout or copying review policy from a skill.
+- `--brief` (status only) projects the routine-loop view from the same computed status: position, blockers, open-gate and reconciliation summaries, constitution digest with active rule ids, and the identity of the one `next_action` — with no rule text, request body, guidance prose, counter-review prompt, or decision-template bodies. Workspace state appears only when `cleanup_pending` is true (`projectBriefStatus` in `src/state/status.ts`).
 - Output is always canonical JSON on stdout. **Failures exit nonzero**: any result carrying `{"ok": false, ...}` also exits 1, so shell-level checks and the JSON agree; the JSON body remains the authority for structured details.
 - `--help` is generated from the same command table that drives dispatch (`LOCAL_COMMAND_CONTRACTS` in `src/local/commands.ts`), so help can't drift from behavior.
 
@@ -48,7 +49,7 @@ archflow-local <command> [--task <task>] [--input <json-file>] [--brief]
 | Command | Purpose |
 |---|---|
 | `snapshot` / `restore` | Install / read back a content-addressed retained result |
-| `decide` | Record the human's chosen decision template (`kind: "interface"` only) — the normal-mode human decision channel |
+| `decide` | Record a human choice as `{"kind":"choice","choice":…,"reason":…}`. The helper binds it to the live server-owned gate template; waiver requests and restore adoption also accept the human-authored rationale/selectors they inherently require. The old full `kind: "interface"` form remains accepted for compatibility. |
 | `gate-counter` | Ingest an elected gate counter-review after verifying it binds the archived gate request field-for-field |
 | `clean` | Remove only unreferenced authority plus stale or reconstructible work; reports removed/retained file and byte counts |
 | `reconcile` | Compare recorded projections against what's on disk |
@@ -75,6 +76,7 @@ Properties worth knowing:
 - Every kind except `initialize` also **stages** the resolved request below `.archflow/runtime/tasks/<task>/transient/intents/` (atomically, overwrite-on-recompose) and adds `staged: {path, reference}` to the envelope. The reference — `{schema_version, task_id, intent_id, request_digest}` — is the whole MCP tool input; the server rehydrates the staged bytes and refuses on any digest disagreement, so the multi-kilobyte payload never crosses the model's context. Passing `request.input` verbatim remains the documented fallback.
 - `intent_id` is optional: when omitted, the composer generates `<kind>-<UTC stamp>-<4 hex>` and echoes it in the request and reference. An explicit id is only for replaying or resuming an interrupted call.
 - `running` enters a pipeline step; the steps are exactly `produce`, `counter_review`, and `triage`.
+- `counter-review` takes no rubric or artifact-path facts. The composer derives the artifact path from the durable phase, and the server selects the immutable rubric for that phase kind.
 - `triage` enforces exactly one disposition per current finding — unknown IDs, duplicates, and gaps are rejected before the server ever sees them.
 - `gate` composes a pending constitution gate (`constitution-review`, `material-drift`, derived by the server after triage) mechanically from retained adjudication evidence — kind, subject, and context all derived; otherwise it picks the kind from the phase (`phase-impl` → `commit-authorization`, else `artifact-approval`). Either way the author writes only the summary.
 - `initialize` is the documented exception: the only composer that writes (it must stage the task before a fingerprint can resolve), legal only before durable state exists. Its envelope carries **no** `staged` block — there is no durable task directory yet to hold a staged file — so the create-task call is the one place `request.input` is passed verbatim by design, as typed JSON (`artifact` an object, `expected_revision` the number `0`).

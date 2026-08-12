@@ -16,6 +16,20 @@ function fullStatus(overrides: Record<string, unknown> = {}): TaskStatusV1 {
     attempt: 2,
     input_fingerprint: D,
     subject_digest: D,
+    resources: [
+      { role: "current-artifact", path: ".archflow/tasks/brief-task/prd.md", access: "write" },
+      { role: "user-ask", path: ".archflow/tasks/brief-task/ask.md", access: "read-write" },
+    ],
+    review_policy: {
+      rubric_id: "prd-v1",
+      rubric_digest: D,
+      rubric: {
+        schema_version: "1",
+        kind: "artifact",
+        mode: "adversarial",
+        criteria: [{ id: "large-policy-body", text: "Verbose rubric text omitted from brief status.", blocking: true }],
+      },
+    },
     config: { verified: true, expected_digest: D, observed_digest: D },
     constitution: {
       digest: D,
@@ -26,7 +40,15 @@ function fullStatus(overrides: Record<string, unknown> = {}): TaskStatusV1 {
     },
     evidence: { available: false, reason: "review-set-incomplete" },
     blocking_reasons: ["gate-decision-required"],
-    next_action: { code: "resolve-open-gate", detail: "Resolve the open gate.", human_required: true },
+    next_action: {
+      code: "resolve-open-gate",
+      detail: "Resolve the open gate.",
+      human_required: true,
+      gate_id: "gate-1",
+      gate_kind: "artifact-approval",
+      request: { tool: "archflow_gate", input: { summary: "placeholder request body" } },
+      guidance: "Verbose generated guidance that routine status must omit.",
+    },
     ...overrides,
   } as unknown as TaskStatusV1;
 }
@@ -44,7 +66,18 @@ describe("projectBriefStatus", () => {
     });
     expect(JSON.stringify(brief)).not.toContain("Tasks are isolated");
     expect(JSON.stringify(brief)).not.toContain("input_fingerprint");
+    expect(JSON.stringify(brief)).not.toContain("current-artifact");
+    expect(JSON.stringify(brief)).not.toContain("Verbose rubric text");
     expect(brief.next_action.code).toBe("resolve-open-gate");
+    expect(brief.next_action).toMatchObject({
+      gate_id: "gate-1",
+      gate_kind: "artifact-approval",
+      human_required: true,
+    });
+    expect(brief.next_action).not.toHaveProperty("request");
+    expect(brief.next_action).not.toHaveProperty("guidance");
+    expect(JSON.stringify(brief)).not.toContain("placeholder request body");
+    expect(JSON.stringify(brief)).not.toContain("Verbose generated guidance");
   });
 
   it("names an open gate's kind and decision templates without their bodies", () => {

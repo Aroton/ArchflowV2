@@ -23,7 +23,7 @@ import {
   resultAuthorityClaim,
   type ResolvedTaskPath,
 } from "../repository/paths.js";
-import { writeGateDecisionInterface } from "../state/gates.js";
+import { writeGateDecisionChoice, writeGateDecisionInterface } from "../state/gates.js";
 import { ensureDecisionDirectory, ensureWorkspaceProjectionParent } from "../state/layout.js";
 import { ensurePayloadParent, ensureResultDirectory } from "../state/layout.js";
 import { createProductionServices } from "../state/production.js";
@@ -59,13 +59,13 @@ export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommand
   snapshot: { payload: '{"manifest":<result manifest>,"payloads":[...],"retained_task_bytes":<n>}', task: "required" },
   restore: { payload: '{"result_digest":<sha256>,"output_path":<path>}', task: "required" },
   clean: { payload: null, task: "required" },
-  decide: { payload: '{"kind":"interface","value":<chosen decision template>}', task: "required" },
+  decide: { payload: '{"kind":"choice","choice":<decision>,"reason":<human reason>,"rationale"?:<human rationale>,"rule"?:<waiver rule>,"operation"?:<waiver operation>} (legacy interface payload remains accepted)', task: "required" },
   "gate-counter": { payload: "<supplemental review record from the counter-review recipe>", task: "required" },
   status: { payload: null, task: "required" },
   reconcile: { payload: '{"recorded_projections":[...],"current_projections":[...],"active_heads":{...}}', task: "required" },
   init: { payload: null, task: "ignored" },
   envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
-  "build-request": { payload: `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},...kind facts: none (initialize), "step" (running), "document"/"implementation" (produce), "dispositions":[...] (triage), "rubric" (counter-review), "summary" (gate)}`, task: "required" },
+  "build-request": { payload: `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},...kind facts: none (initialize/counter-review), "step" (running), "document"/"implementation" (produce), "dispositions":[...] (triage), "summary" (gate)}`, task: "required" },
   "manual-status": { payload: null, task: "required" },
   upgrade: { payload: "<legacy staging descriptor>", task: "optional" },
 });
@@ -307,11 +307,17 @@ async function restore(input: CommandInput): Promise<PlainJsonValue | ProjectRes
 
 async function decide(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
   const value = recordValue(input);
-  if (value.kind !== "interface") throw new TypeError("decide input.kind must be interface");
-  assertPlainJson(value.value, "decide interface value");
   const created = await services(input);
   if (!created.ok) return created;
-  return writeGateDecisionInterface(created.value.dependencies, created.value.authority, structuredClone(value.value));
+  if (value.kind === "choice") {
+    const { kind: _kind, ...choice } = value;
+    return writeGateDecisionChoice(created.value.dependencies, created.value.authority, choice);
+  }
+  if (value.kind === "interface") {
+    assertPlainJson(value.value, "decide interface value");
+    return writeGateDecisionInterface(created.value.dependencies, created.value.authority, structuredClone(value.value));
+  }
+  throw new TypeError("decide input.kind must be choice or interface");
 }
 
 async function reconcile(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {

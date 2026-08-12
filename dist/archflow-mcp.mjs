@@ -37458,30 +37458,6 @@ var taskInitializationV1Schema = external_exports.object({
   canonical_paths: canonicalTaskPathsV1Schema
 }).strict();
 
-// src/contracts/rubric.ts
-var rubricV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  kind: external_exports.enum(["artifact", "implementation"]),
-  mode: external_exports.enum(["adversarial"]),
-  criteria: external_exports.array(external_exports.object({
-    id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
-    text: external_exports.string().min(1).regex(/\S/, "criterion text must contain a non-whitespace character"),
-    blocking: external_exports.boolean()
-  }).strict()).min(1)
-}).strict().superRefine((rubric, context2) => {
-  const seen = /* @__PURE__ */ new Set();
-  rubric.criteria.forEach((criterion, index) => {
-    if (seen.has(criterion.id)) {
-      context2.addIssue({ code: "custom", path: ["criteria", index, "id"], message: `Duplicate criterion id: ${criterion.id}` });
-    }
-    seen.add(criterion.id);
-  });
-});
-function parseRubricV1(value) {
-  assertPlainJson(value, "rubric");
-  return rubricV1Schema.parse(value);
-}
-
 // src/contracts/supplemental.ts
 var digest5 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var nonBlank3 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
@@ -37843,7 +37819,7 @@ var durableArtifact = external_exports.union([
 ]);
 var stateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, step: external_exports.enum(["produce", "counter_review", "triage"]), status: external_exports.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
 var stagedReferenceInput = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest7 }).strict();
-var counterReviewInputSchema = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema, rubric: rubricV1Schema }).strict();
+var counterReviewInputSchema = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema }).strict();
 var supersedes = external_exports.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest7, old_subject_digest: digest7 }).strict();
 var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, summary: text2, subject_digest: digest7, current_evidence: external_exports.unknown(), supersedes: supersedes.optional(), supplemental_outcome: supplementalReviewOutcomeSchema.optional(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown() }).strict().superRefine((input, context2) => {
   try {
@@ -39390,8 +39366,8 @@ function closedOperationFields(subject) {
     case "archflow_counter_review": {
       const fields = subject.operation_fields;
       if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
-      exactFields(fields, ["artifact_path", "rubric"]);
-      return { artifact_path: fields.artifact_path, rubric: fields.rubric };
+      exactFields(fields, ["artifact_path"]);
+      return { artifact_path: fields.artifact_path };
     }
     case "archflow_gate": {
       const fields = subject.operation_fields;
@@ -39680,6 +39656,101 @@ function createProjectionWriter() {
 // src/state/fingerprint-readers.ts
 import { lstat as lstat3, readFile } from "node:fs/promises";
 
+// src/contracts/rubric.ts
+var rubricV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  kind: external_exports.enum(["artifact", "implementation"]),
+  mode: external_exports.enum(["adversarial"]),
+  criteria: external_exports.array(external_exports.object({
+    id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
+    text: external_exports.string().min(1).regex(/\S/, "criterion text must contain a non-whitespace character"),
+    blocking: external_exports.boolean()
+  }).strict()).min(1)
+}).strict().superRefine((rubric, context2) => {
+  const seen = /* @__PURE__ */ new Set();
+  rubric.criteria.forEach((criterion, index) => {
+    if (seen.has(criterion.id)) {
+      context2.addIssue({ code: "custom", path: ["criteria", index, "id"], message: `Duplicate criterion id: ${criterion.id}` });
+    }
+    seen.add(criterion.id);
+  });
+});
+function parseRubricV1(value) {
+  assertPlainJson(value, "rubric");
+  return rubricV1Schema.parse(value);
+}
+
+// src/review/rubrics.ts
+function canonicalRubric(rubricId, value) {
+  const rubric = parseRubricV1(value);
+  const frozen = Object.freeze({
+    ...rubric,
+    criteria: Object.freeze(rubric.criteria.map((criterion) => Object.freeze({ ...criterion })))
+  });
+  return Object.freeze({
+    rubric_id: rubricId,
+    rubric_digest: canonicalJsonDigest(frozen),
+    rubric: frozen
+  });
+}
+var PRD_RUBRIC = canonicalRubric("prd-v1", {
+  schema_version: "1",
+  kind: "artifact",
+  mode: "adversarial",
+  criteria: [
+    { id: "substantive-correctness", text: "Report a finding only for a material defect: leaving the artifact unchanged is reasonably likely to change a downstream design, implementation, verification, or approval decision, or create an important product, reliability, security, or workflow risk. A blocking finding must cite the exact artifact, pinned, or repository evidence; name the concrete downstream consequence; and explain why it survives the stated non-goals and priority order. Wording is blocking only when it permits materially different reasonable interpretations. If prior-triage is present, make verification of the accepted revision intents the primary task; report a previously undiscovered issue only when it clears the same materiality bar. A challenge to a prior disposition is blocking only when its revision intent was not carried out or the change introduced a material defect. Do not report optional polish, harmless wording refinements, stylistic preferences, or other observations that would not materially change an outcome.", blocking: true },
+    { id: "ask-fidelity", text: "Compare the PRD against the pinned ask record: the verbatim original request and every recorded clarification question and answer. Report only an omitted need, unexplained exclusion, or contradiction reasonably likely to materially change what is designed, implemented, or accepted. If the ask is not pinned, do not infer it; use unverifiable-claims only when the gap prevents a material judgment.", blocking: true },
+    { id: "proportionality", text: "Report only substantial scope, machinery, or process that the pinned ask does not justify and that would materially change cost, architecture, delivery, or user outcome. Do not report minor simplifications or preferred alternatives.", blocking: true },
+    { id: "testable-requirements", text: "Report a defect only when a requirement permits materially different reasonable interpretations or prevents meaningful verification of an important outcome. Do not request extra specificity when a reasonable implementer and verifier would reach the same result.", blocking: true },
+    { id: "stated-assumptions", text: "Report only an unstated assumption or unresolved human choice that could materially change scope, behavior, acceptance, or risk; harmless implementation latitude is not a finding.", blocking: true },
+    { id: "unverifiable-claims", text: "When missing envelope or read-only repository evidence prevents a material judgment, record one non-blocking finding naming the claim and missing evidence, with a finding_id beginning unverifiable-. Never guess. An explicit assumption is handled under stated-assumptions. Omit gaps that cannot materially affect the review, report each material gap once, and do not re-report one already named in prior-triage.", blocking: false },
+    { id: "advisory-observations", text: "Do not report non-material observations, optional improvements, completeness suggestions, stylistic preferences, or harmless prose refinements. A sound, decision-ready artifact should return no findings rather than a list of possible enhancements.", blocking: false }
+  ]
+});
+var DESIGN_RUBRIC = canonicalRubric("design-v1", {
+  schema_version: "1",
+  kind: "artifact",
+  mode: "adversarial",
+  criteria: [
+    { id: "substantive-correctness", text: "Report a finding only for a material defect: leaving the artifact unchanged is reasonably likely to change downstream behavior, implementation, verification, delivery, or important risk. A blocking finding must cite exact artifact, pinned, or repository evidence; name the concrete consequence; and explain why it survives stated non-goals and priorities. Wording is blocking only when it permits materially different reasonable interpretations. If prior-triage is present, make verification of accepted revision intents the primary task; report a previously undiscovered issue only when it clears the same materiality bar. Challenge a prior disposition only when its revision intent was not carried out or the change introduced a material defect. Do not report optional polish or preferred alternatives without a material consequence.", blocking: true },
+    { id: "upstream-coverage", text: "Report only an upstream requirement that is materially unmapped or contradicted, or a substantial design element with no upstream purpose. Do not report traceability polish that would not change the design or its verification.", blocking: true },
+    { id: "interface-reality", text: "Report a repository or interface claim only when pinned or repository evidence materially contradicts it. Use unverifiable-claims only when missing evidence prevents a material judgment.", blocking: true },
+    { id: "evidence-completeness", text: "Report an unaddressed adjacent component only when the omission is reasonably likely to break a stated design element, interface, verification result, or important risk boundary.", blocking: true },
+    { id: "proportionality", text: "Report only layers, abstractions, phases, or machinery for unstated futures when they would materially increase complexity, cost, delivery time, or maintenance risk. Do not report minor simplifications or stylistic preferences.", blocking: true },
+    { id: "phase-plan-soundness", text: "Report phase ordering, scope, or verification defects only when they materially prevent independent implementation, meaningful verification, or reliable review. A phase expected to exceed roughly 10-15 hand-written files is a signal, not a defect by itself; report it only with a concrete review or delivery consequence.", blocking: true },
+    { id: "unverifiable-claims", text: "When missing pinned or read-only repository evidence prevents a material judgment, record one non-blocking finding naming the claim and missing file or interface, with a finding_id beginning unverifiable-. Never guess. Omit gaps that cannot materially affect the review, report each material gap once, and do not re-report one already named in prior-triage.", blocking: false },
+    { id: "advisory-observations", text: "Do not report non-material observations, optional improvements, completeness suggestions, stylistic preferences, or harmless wording refinements. A sound, decision-ready artifact should return no findings rather than a list of possible enhancements.", blocking: false }
+  ]
+});
+var IMPLEMENTATION_RUBRIC = canonicalRubric("implementation-v1", {
+  schema_version: "1",
+  kind: "implementation",
+  mode: "adversarial",
+  criteria: [
+    { id: "substantive-correctness", text: "Report a finding only for a material defect: merging the change unchanged is reasonably likely to alter required behavior, break verification, violate an approved boundary, or create an important reliability, security, or maintenance risk. A blocking finding must cite exact changed, pinned, or repository evidence; name the concrete consequence; and explain why it survives the phase design's non-goals and priorities. If prior-triage is present, make verification of accepted revision intents the primary task; report a previously undiscovered issue only when it clears the same materiality bar. Challenge a prior disposition only when its revision intent was not carried out or the change introduced a material defect. Do not report optional cleanup, stylistic preferences, or harmless refinements.", blocking: true },
+    { id: "design-conformance", text: "Report only a behavior, interface, file, or verification deviation from the pinned phase design that materially changes the approved outcome or leaves parent documents materially false. If missing phase-design evidence prevents that judgment, use unverifiable-claims.", blocking: true },
+    { id: "interface-fidelity", text: "Report a changed-to-unchanged interface mismatch only when it is reasonably likely to break behavior, data, compatibility, or an important contract. Use unverifiable-claims only when missing interface evidence prevents a material judgment.", blocking: true },
+    { id: "verification-evidence", text: "Report missing or failed verification only when the phase design requires it for an important behavior or risk. Claimed but untranscribed required verification is unverifiable, not a pass.", blocking: true },
+    { id: "simplicity", text: "Report complexity only when it materially harms correctness, maintainability, change cost, or the approved operating envelope; do not report a merely preferred simpler implementation.", blocking: true },
+    { id: "duplication", text: "Report duplication only when it creates a concrete material risk of divergence, defects, or disproportionate maintenance; do not request an abstraction for small or clearer repetition.", blocking: true },
+    { id: "dead-code", text: "Report unreachable code, compatibility paths, or speculative extensions only when they materially affect behavior, safety, maintenance, or the approved scope.", blocking: true },
+    { id: "error-handling", text: "Report an unhandled boundary failure only when it is reasonably likely and carries a material consequence under the current operating envelope.", blocking: true },
+    { id: "unverifiable-claims", text: "When missing envelope or read-only repository evidence prevents a material judgment, record one non-blocking finding naming exactly what is missing, with a finding_id beginning unverifiable-. Never guess. Omit gaps that cannot materially affect the review, report each material gap once, and do not re-report one already named in prior-triage.", blocking: false },
+    { id: "advisory-observations", text: "Do not report non-material observations, optional cleanup, completeness suggestions, stylistic preferences, or harmless refinements. A sound implementation should return no findings rather than a list of possible enhancements.", blocking: false }
+  ]
+});
+function canonicalRubricForPhaseKind(phaseKind2) {
+  switch (phaseKind2) {
+    case "prd":
+      return PRD_RUBRIC;
+    case "design":
+    case "phase-design":
+      return DESIGN_RUBRIC;
+    case "phase-impl":
+      return IMPLEMENTATION_RUBRIC;
+  }
+}
+
 // src/state/fingerprint.ts
 var failure = (state, issueCode) => Object.freeze({
   schema_version: "1",
@@ -39704,8 +39775,9 @@ function phaseInstance3(call, context2) {
     }
   }
 }
-function rubricDigest(_call) {
-  return canonicalJsonDigest({});
+function rubricDigest(call, phase4) {
+  const reviewCycle = call.name === "archflow_counter_review" || call.name === "archflow_state" && (call.input.step === "counter_review" || call.input.step === "triage");
+  return reviewCycle ? canonicalRubricForPhaseKind(decodePhaseInstance(phase4).kind).rubric_digest : canonicalJsonDigest({});
 }
 function createInternalInputFingerprintResolver(input) {
   return async (context2) => {
@@ -39739,7 +39811,7 @@ function createInternalInputFingerprintResolver(input) {
       constitution_digest: constitution.value,
       artifact_identities: structuredClone(artifacts.value),
       upstream_identities: structuredClone(upstream.value),
-      rubric_digest: rubricDigest(context2.call),
+      rubric_digest: rubricDigest(context2.call, state.phase_instance),
       phase_instance: phaseInstance3(context2.call, context2.context),
       declared_inputs: structuredClone(declared.value)
     };
@@ -46957,7 +47029,7 @@ function subjectFor(call, authority, inputFingerprint) {
         }
       };
     case "archflow_counter_review":
-      return { ...common3, tool: call.name, operation: "counter-review", operation_fields: { artifact_path: call.input.artifact_path, rubric: call.input.rubric } };
+      return { ...common3, tool: call.name, operation: "counter-review", operation_fields: { artifact_path: call.input.artifact_path } };
     case "archflow_gate": {
       const operation_fields = {
         phase_instance: call.input.phase_instance,
@@ -49986,9 +50058,6 @@ var mcp_tools_schema_default = {
               },
               artifact_path: {
                 $ref: "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
-              },
-              rubric: {
-                $ref: "urn:archflow:schema:v1:rubric"
               }
             },
             required: [
@@ -49997,8 +50066,7 @@ var mcp_tools_schema_default = {
               "intent_id",
               "expected_revision",
               "input_fingerprint",
-              "artifact_path",
-              "rubric"
+              "artifact_path"
             ],
             additionalProperties: false
           },
@@ -61338,8 +61406,8 @@ async function planCounterReviewCommit(inputs, current, call) {
   };
 }
 async function runCounterReview(dependencies, input) {
-  const callRubricDigest = canonicalJsonDigest(input.call.input.rubric);
-  if (input.producer_family !== input.envelope.subject.producer_family || input.envelope.subject.rubric_digest !== callRubricDigest || canonicalJsonDigest(input.envelope.rubric) !== callRubricDigest) {
+  const envelopeRubricDigest = canonicalJsonDigest(input.envelope.rubric);
+  if (input.producer_family !== input.envelope.subject.producer_family || input.envelope.subject.rubric_digest !== envelopeRubricDigest) {
     throw new TypeError("counter-review subject is not derived from the server-owned request");
   }
   const route = resolveDispatchRoute(
@@ -62761,6 +62829,9 @@ async function handleCounterReview(call, context2) {
     }
     const retainedBytes = services.dependencies.read_retained_task_bytes;
     if (retainedBytes === void 0) throw new TypeError("retained byte accounting is unavailable");
+    const canonicalRubric2 = canonicalRubricForPhaseKind(
+      decodePhaseInstance(state.value.phase_instance).kind
+    );
     let constitutionPlan;
     if (activeRules) {
       const upstreams = await deriveApprovedUpstreams(services, call.name, state.value);
@@ -62851,7 +62922,7 @@ async function handleCounterReview(call, context2) {
       measured_at_revision: session.value.measured_at_revision,
       envelope: {
         artifact,
-        rubric: call.input.rubric,
+        rubric: canonicalRubric2.rubric,
         context: context_entries.value,
         workspace: {
           kind: "read-only-repository-checkout",
@@ -62865,7 +62936,7 @@ async function handleCounterReview(call, context2) {
           step: "counter_review",
           subject_digest: produce.value.artifact_digest,
           input_fingerprint: call.input.input_fingerprint,
-          rubric_digest: canonicalJsonDigest(call.input.rubric),
+          rubric_digest: canonicalRubric2.rubric_digest,
           producer_family: session.value.producer_family,
           invocation_id: dispatchId("invocation", context2.invocation_id),
           result_id: resultId

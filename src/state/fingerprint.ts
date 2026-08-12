@@ -10,6 +10,8 @@ import type { Sha256Digest } from "../contracts/evidence.js";
 import type { ParsedToolCall } from "../contracts/mcp-tools.js";
 import type { ToolName } from "../contracts/tool-names.js";
 import type { RepositoryOperationContext } from "../repository/git.js";
+import { decodePhaseInstance } from "../contracts/phase-instance.js";
+import { canonicalRubricForPhaseKind } from "../review/rubrics.js";
 import type { FingerprintReadContext } from "./read.js";
 
 export type { FingerprintReadContext, LiveConfigSnapshot } from "./read.js";
@@ -53,8 +55,13 @@ function phaseInstance(call: ParsedToolCall, context: RepositoryOperationContext
   }
 }
 
-function rubricDigest(_call: ParsedToolCall): Sha256Digest {
-  return canonicalJsonDigest({});
+function rubricDigest(call: ParsedToolCall, phase: TaskStateV1["phase_instance"]): Sha256Digest {
+  const reviewCycle = call.name === "archflow_counter_review" ||
+    (call.name === "archflow_state" &&
+      (call.input.step === "counter_review" || call.input.step === "triage"));
+  return reviewCycle
+    ? canonicalRubricForPhaseKind(decodePhaseInstance(phase).kind).rubric_digest
+    : canonicalJsonDigest({});
 }
 
 /** Builds the production resolver from canonical readers; no caller digest or subject is accepted. */
@@ -98,7 +105,7 @@ export function createInternalInputFingerprintResolver(input: Readonly<{
       constitution_digest: constitution.value,
       artifact_identities: structuredClone(artifacts.value),
       upstream_identities: structuredClone(upstream.value),
-      rubric_digest: rubricDigest(context.call),
+      rubric_digest: rubricDigest(context.call, state.phase_instance),
       phase_instance: phaseInstance(context.call, context.context),
       declared_inputs: structuredClone(declared.value),
     };

@@ -24,6 +24,8 @@ import {
   openDurableGate,
   resolveDurableGate,
   runDurableGate,
+  selectGateDecisionTemplate,
+  writeGateDecisionChoice,
   writeGateDecisionInterface,
   type GateLifecycleDependencies,
 } from "../../src/state/gates.js";
@@ -167,6 +169,60 @@ function withProvenance(template: PlainJsonValue): PlainJsonValue {
 }
 
 describe("gate decision interface", () => {
+  it("binds judgment-only choices to server-owned gate state", () => {
+    const active = activeGate(CASES[0], "choice");
+    expect(selectGateDecisionTemplate(active, { choice: "reject", reason: "The acceptance evidence is incomplete." })).toEqual({
+      schema_version: "1",
+      gate_id: active.gate_id,
+      task_id: active.task_id,
+      phase_instance: active.phase_instance,
+      subject_digest: active.subject_digest,
+      context_digest: active.context_digest,
+      kind: active.kind,
+      payload: { decision: "reject", reason: "The acceptance evidence is incomplete." },
+    });
+
+    const constitutionReview = activeGate(CASES[1], "waiver-choice");
+    expect(selectGateDecisionTemplate(constitutionReview, {
+      choice: "waiver-requested",
+      reason: "A narrow exception is needed.",
+      rationale: "The operation is bounded to this subject.",
+      rule: RULE_B,
+      operation: "adjudication-failure",
+    })).toMatchObject({
+      gate_id: constitutionReview.gate_id,
+      context_digest: constitutionReview.context_digest,
+      payload: {
+        decision: "waiver-requested",
+        reason: "A narrow exception is needed.",
+        rationale: "The operation is bounded to this subject.",
+        rule: RULE_B,
+        operation: "adjudication-failure",
+      },
+    });
+    expect(() => selectGateDecisionTemplate(constitutionReview, {
+      choice: "waiver-requested",
+      reason: "Wrong selector.",
+      rationale: "Does not match an eligible waiver.",
+      rule: RULE_A,
+      operation: "adjudication-failure",
+    })).toThrow("choice is not allowed");
+  });
+
+  it("writes a choice without requiring the caller to copy gate bindings", async () => {
+    const h = await harness();
+    expect(await writeGateDecisionChoice(h.dependencies, h.authority, {
+      choice: "reject",
+      reason: "The artifact needs revision.",
+    })).toMatchObject({ ok: true, value: { gate_id: h.active.gate_id } });
+    expect(JSON.parse(readFileSync(join(h.gateCache, "gate.decision"), "utf8"))).toMatchObject({
+      gate_id: h.active.gate_id,
+      context_digest: h.active.context_digest,
+      payload: { decision: "reject", reason: "The artifact needs revision." },
+      human_provenance: { channel: "archflow-local" },
+    });
+  });
+
   it("enumerates every gate kind and all context-bound decision variants", () => {
     for (const [index, entry] of CASES.entries()) {
       const active = activeGate(entry, String(index));

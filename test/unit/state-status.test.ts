@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { canonicalDocument, sha256Bytes } from "../../src/contracts/canonical.js";
+import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
 import { parseActiveGate, parseGateRequest } from "../../src/contracts/durable-gate.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
@@ -140,10 +140,24 @@ describe("computeTaskStatus", () => {
         config: { verified: true },
         routes: { producer: { family: "codex", model: "gpt-5.4" } },
         constitution: { active_rules: [{ id: "trust", version: 1, text: "Pinned rule text." }] },
+        resources: [
+          { role: "current-artifact", path: `.archflow/tasks/${TASK}/phases/17/impl-notes.md`, access: "write" },
+          { role: "prd", path: `.archflow/tasks/${TASK}/prd.md`, access: "read-write" },
+          { role: "task-design", path: `.archflow/tasks/${TASK}/design.md`, access: "read-write" },
+          { role: "phase-design", path: `.archflow/tasks/${TASK}/phases/17/design.md`, access: "read-write" },
+          { role: "prior-implementation-notes", path: `.archflow/tasks/${TASK}/phases/16/impl-notes.md`, access: "read" },
+          { role: "verification-transcript", path: `.archflow/runtime/tasks/${TASK}/cache/phases/17/verification.txt`, access: "write" },
+        ],
       },
     });
     if (status.ok) expect(status.value).not.toHaveProperty("rubric_digest");
     if (!status.ok) return;
+    expect(status.value.review_policy).toMatchObject({
+      rubric_id: "implementation-v1",
+      rubric: { schema_version: "1", kind: "implementation", mode: "adversarial" },
+    });
+    expect(status.value.review_policy?.rubric_digest)
+      .toBe(canonicalJsonDigest(status.value.review_policy!.rubric as never));
     // The harness state is produce-running with no authoritative produce result: the derived
     // action must name the terminal record, and its prefilled request must target succeeded —
     // never the repeat running entry the server rejects. Mid-produce there is no subject yet,

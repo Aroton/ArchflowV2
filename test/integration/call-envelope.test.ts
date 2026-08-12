@@ -114,18 +114,21 @@ describe("local call envelopes", () => {
     const rubric = { schema_version: "1" as const, kind: "artifact" as const, mode: "adversarial" as const, criteria: [{ id: "scope", text: "Check scope.", blocking: true }] };
     const values = [
       { tool: "archflow_state" as const, input: { ...common, intent_id: "state-envelope", phase_instance: "prd", step: "counter_review", status: "running" } },
-      { tool: "archflow_counter_review" as const, input: { ...common, intent_id: "counter-envelope", artifact_path: "prd.md", rubric } },
+      { tool: "archflow_counter_review" as const, input: { ...common, intent_id: "counter-envelope", artifact_path: "prd.md" } },
     ];
+    const reviewFingerprints: string[] = [];
     for (const value of values) {
       const envelope = await computeCallEnvelope(production.value, value);
       expect(envelope.ok, envelope.ok ? undefined : envelope.error.code).toBe(true);
       if (envelope.ok) {
         expect(envelope.value.tool).toBe(value.tool);
-        expect(envelope.value.input_fingerprint).toBe(state.input_fingerprint);
+        expect(envelope.value.input_fingerprint).not.toBe(state.input_fingerprint);
+        reviewFingerprints.push(envelope.value.input_fingerprint);
         expect(envelope.value.request_digest).toMatch(/^[0-9a-f]{64}$/u);
         expect(envelope.value.gate).toBeUndefined();
       }
     }
+    expect(new Set(reviewFingerprints)).toHaveLength(1);
 
     const gateInput = {
       ...common,

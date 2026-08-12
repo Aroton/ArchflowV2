@@ -12,12 +12,11 @@ import type { CommitAuthorizationInput } from "./status.js";
 import { legalRunStepStatus } from "./transitions.js";
 
 // Placeholder prose deliberately fails the target field's ingress validation wherever the
-// contract allows it (intent ids reject spaces, artifacts and rubrics reject strings), so a
+// contract allows it (intent ids reject spaces and artifacts reject strings), so a
 // template submitted unedited fails closed. Judgment fields the agent or human must author are
 // only ever placeholders; mechanical fields arrive prefilled.
 const TEMPLATE_INTENT_ID = "Choose a fresh intent id for this request.";
 const TEMPLATE_INITIALIZATION_ARTIFACT = "Replace with the task-initialization artifact; archflow-local build-request (kind \"initialize\") composes this entire request already completed and fingerprint-resolved — pass its request.input verbatim.";
-const TEMPLATE_RUBRIC = "Supply the skill's stable rubric verbatim.";
 const TEMPLATE_SUMMARY = "Summarize the gate subject for the human reviewer.";
 
 // A syntactically valid, deliberately all-zero digest. It parses, so `archflow-local envelope`
@@ -130,11 +129,10 @@ export function buildNextActionRequest(next: NextAction, facts: NextActionReques
         return request("archflow_counter_review", {
           ...mechanicalPrefix(facts.task_id, state),
           artifact_path: reviewPaths(state).artifact_path,
-          rubric: TEMPLATE_RUBRIC,
         }, envelopeGuidance(
           facts.task_id,
           "archflow_counter_review",
-          "Replace the rubric placeholder with the skill's stable rubric verbatim. The server also runs the constitution review inside this call when the pinned constitution has active rules; the result reports both verdicts.",
+          "The server selects the phase's canonical rubric and also runs the constitution review inside this call when the pinned constitution has active rules; the result reports both verdicts.",
         ));
       }
       return request("archflow_state", {

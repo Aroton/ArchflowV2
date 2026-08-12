@@ -13,7 +13,6 @@ import { GATE_KINDS, gateDecisionEnvelopeV1Schema, humanDecisionProvenanceV1Sche
 import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { repositoryPathClaimV1Schema, taskPathClaimV1Schema, type RepositoryPathClaim, type TaskPathClaim } from "./path-claims.js";
-import { rubricV1Schema, type RubricV1 } from "./rubric.js";
 import { parseSupplementalReviewOutcome, supplementalReviewOutcomeSchema, type GateSupersessionRef, type SupplementalReviewOutcome } from "./supplemental.js";
 import { TOOL_NAMES, type ToolName } from "./tool-names.js";
 import { parseCurrentEvidenceSetRef, type CurrentEvidenceSetRef } from "./trust.js";
@@ -46,7 +45,7 @@ export type StateInput = CommonToolInput & { readonly phase_instance: PhaseInsta
 // untranscribed. Optional in the contract because receipts recorded before the echo existed must
 // keep replaying byte-identically; live handlers always emit it.
 export interface StateSuccess { readonly path: TaskPathClaim; readonly revision: number; readonly status: StateInput["status"]; readonly request_digest?: Sha256Digest }
-export interface CounterReviewInput extends CommonToolInput { readonly artifact_path: TaskPathClaim; readonly rubric: RubricV1 }
+export interface CounterReviewInput extends CommonToolInput { readonly artifact_path: TaskPathClaim }
 /**
  * The server decides whether the constitution review runs: it is evaluated as a second
  * opposite-family dispatch inside the same archflow_counter_review call whenever the pinned
@@ -97,7 +96,7 @@ export function parseStagedRequestReference(value: unknown): StagedRequestRefere
   assertPlainJson(value, "staged request reference");
   return deepFreeze(stagedReferenceInput.parse(structuredClone(value))) as StagedRequestReference;
 }
-export const counterReviewInputSchema = z.object({ ...common, artifact_path: taskPathClaimV1Schema, rubric: rubricV1Schema }).strict();
+export const counterReviewInputSchema = z.object({ ...common, artifact_path: taskPathClaimV1Schema }).strict();
 const supersedes = z.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest, old_subject_digest: digest }).strict();
 export const gateInputSchema = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), supersedes: supersedes.optional(), supplemental_outcome: supplementalReviewOutcomeSchema.optional(), kind: z.enum(GATE_KINDS), context: z.unknown() }).strict().superRefine((input, context) => {
   try { parseGateContext(input.kind, input.context); } catch (error) { context.addIssue({ code: "custom", path: ["context"], message: error instanceof Error ? error.message : "invalid gate context" }); }

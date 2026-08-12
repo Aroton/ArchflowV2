@@ -277,13 +277,7 @@ describe("staged-request handoff", () => {
     await h.invoke("archflow_state", counterEntry.staged!.reference as unknown as PlainJsonValue);
     const stub = installReviewerStub(root);
     try {
-      const counter = await h.buildRequest({
-        kind: "counter-review",
-        rubric: {
-          schema_version: "1", kind: "artifact", mode: "adversarial",
-          criteria: [{ id: "scope", text: "Check scope against the ask.", blocking: true }],
-        },
-      });
+      const counter = await h.buildRequest({ kind: "counter-review" });
       expect(counter.tool).toBe("archflow_counter_review");
       const reviewed = await h.invoke("archflow_counter_review", counter.staged!.reference as unknown as PlainJsonValue);
       expect(reviewed.request_digest).toBe(counter.request_digest);
@@ -327,7 +321,12 @@ describe("staged-request handoff", () => {
       "attempt", "blocking_reasons", "constitution", "next_action",
       "phase_instance", "revision", "state", "status", "step", "task_id",
     ]);
-    expect(brief.next_action).toEqual(full.next_action);
+    expect(brief.next_action).toEqual(expect.objectContaining({
+      code: full.next_action.code,
+      human_required: full.next_action.human_required,
+    }));
+    expect(brief.next_action).not.toHaveProperty("request");
+    expect(brief.next_action).not.toHaveProperty("guidance");
     expect(brief.constitution).toEqual({
       digest: full.constitution!.digest,
       active_rule_ids: full.constitution!.active_rules.map((rule) => rule.id),

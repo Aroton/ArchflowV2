@@ -155,6 +155,7 @@ describe("next-action request templates", () => {
     );
     expect(counter?.request.tool).toBe("archflow_counter_review");
     expect(counter?.request.input).toMatchObject({ artifact_path: "phases/2/design.md" });
+    expect(counter?.request.input).not.toHaveProperty("rubric");
     expect(() => parseToolCall("archflow_counter_review", structuredClone(counter?.request.input))).toThrow();
 
     // The adjudicate position is retired: no run-step template may target it from any state.
