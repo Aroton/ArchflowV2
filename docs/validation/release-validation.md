@@ -29,6 +29,15 @@ output, but that one response is correctly rejected by normative post-validation
 model-output semantics, not the obsolete provider-schema incompatibility described by earlier
 drafts of this report.
 
+**Amended 2026-08-11.** The "Real Codex adjudication succeeds" observation above expired without any
+change to the projection code. OpenAI tightened its structured-output validator, and every
+constitution review dispatched to Codex whose subject carried no approved upstream began failing
+with a 400 `invalid_json_schema` — `Unexpected constant value: []` at
+`properties.approved_upstream_digests` — surfaced to the caller as an unclassified `PROCESS_FAILED`.
+Array subject bindings are now projected to Codex as exact cardinality plus a closed element set
+rather than an array-valued `const`, covered by `test/unit/dispatch-cli.test.ts`. Re-running the
+opt-in real-host suite is what re-establishes this row; the local suite cannot.
+
 The tracked release is now published and byte-reproduced. `dist/manifest.json` binds
 `dist/archflow-mcp.mjs` to digest
 `9788624d71e48a3b683af3112f0f12e2fc735f7cd598a508e07f2d2e25d92499`. The installed terminal

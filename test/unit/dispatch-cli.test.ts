@@ -45,6 +45,22 @@ async function workspace(): Promise<DispatchWorkspace> {
   return Object.freeze({ root, home: join(root, "home"), env: Object.freeze({ PATH: process.env.PATH, HOME: join(root, "home"), TMPDIR: root, CODEX_HOME: join(root, "home", ".codex") }), dispose: async () => undefined });
 }
 
+/** Every `const` value in a projected schema, at any depth. */
+function constValues(node: unknown): unknown[] {
+  if (Array.isArray(node)) return node.flatMap(constValues);
+  if (node === null || typeof node !== "object") return [];
+  return Object.entries(node).flatMap(([key, child]) => key === "const" ? [child] : constValues(child));
+}
+
+/** The adjudication binding keys taken from the valid fixture, with a caller-chosen upstream set. */
+function adjudicationSubject(upstreamDigests: readonly string[]): Record<string, PlainJsonValue> {
+  const subject = Object.fromEntries([
+    "task_id", "phase_instance", "step", "subject_digest", "input_fingerprint",
+    "pinned_constitution_digest", "source_evidence_set_digest",
+  ].map((key) => [key, validAdjudication[key as keyof typeof validAdjudication]]));
+  return { ...subject, approved_upstream_digests: [...upstreamDigests] } as Record<string, PlainJsonValue>;
+}
+
 function projectError(call: () => unknown): CliAdapterError["project_error"] {
   try { call(); } catch (error) {
     expect(error).toBeInstanceOf(CliAdapterError);
@@ -263,6 +279,73 @@ describe("CLI invocation construction", () => {
     const properties = projected.properties as Record<string, Record<string, unknown>>;
 
     for (const [key, value] of Object.entries(subject)) expect(properties[key]).toEqual({ const: value });
+  });
+
+  it("binds the adjudication subject to Codex without an array-valued const", () => {
+    const projected = projectCliOutputSchema(
+      adjudicationSchema as PlainJsonValue,
+      "adjudication",
+      "codex-cli",
+      adjudicationSubject([]),
+    ) as Record<string, unknown>;
+    const properties = projected.properties as Record<string, Record<string, unknown>>;
+
+    // A host that rejects `"const": []` must not receive one anywhere, at any depth.
+    for (const value of constValues(projected)) expect(typeof value === "object" && value !== null).toBe(false);
+    expect(properties.approved_upstream_digests).toEqual({
+      type: "array",
+      items: { type: "string", pattern: "^[0-9a-f]{64}$" },
+      minItems: 0,
+      maxItems: 0,
+    });
+    expect(properties.subject_digest).toEqual({ const: validAdjudication.subject_digest, type: "string" });
+
+    const validateProjected = createJsonSchemaValidator<Record<string, unknown>>(projected);
+    const empty = structuredClone(validAdjudication) as Record<string, unknown>;
+    empty.approved_upstream_digests = [];
+    empty.drift_findings = [];
+    expect(() => validateProjected.assert(empty, "empty upstream binding")).not.toThrow();
+    expect(() => validateProjected.assert(validAdjudication, "non-empty upstream")).toThrow();
+  });
+
+  it("binds a non-empty upstream set to its exact members and cardinality", () => {
+    const bound = validAdjudication.approved_upstream_digests;
+    const projected = projectCliOutputSchema(
+      adjudicationSchema as PlainJsonValue,
+      "adjudication",
+      "codex-cli",
+      adjudicationSubject(bound),
+    ) as Record<string, unknown>;
+    const properties = projected.properties as Record<string, Record<string, unknown>>;
+
+    expect(properties.approved_upstream_digests).toEqual({
+      type: "array",
+      items: { type: "string", pattern: "^[0-9a-f]{64}$", enum: [...bound] },
+      minItems: 1,
+      maxItems: 1,
+    });
+
+    const validateProjected = createJsonSchemaValidator<Record<string, unknown>>(projected);
+    expect(() => validateProjected.assert(validAdjudication, "exact upstream set")).not.toThrow();
+    const foreign = structuredClone(validAdjudication) as Record<string, unknown>;
+    foreign.approved_upstream_digests = ["f".repeat(64)];
+    expect(() => validateProjected.assert(foreign, "foreign upstream digest")).toThrow();
+    const extra = structuredClone(validAdjudication) as Record<string, unknown>;
+    extra.approved_upstream_digests = [...bound, ...bound];
+    expect(() => validateProjected.assert(extra, "extra upstream digest")).toThrow();
+  });
+
+  it("keeps the exact array const for Claude, which strips the cardinality keywords", () => {
+    const projected = projectCliOutputSchema(
+      adjudicationSchema as PlainJsonValue,
+      "adjudication",
+      "claude-cli",
+      adjudicationSubject([]),
+    ) as Record<string, unknown>;
+    const properties = projected.properties as Record<string, Record<string, unknown>>;
+
+    expect(properties.approved_upstream_digests).toEqual({ const: [] });
+    expect(JSON.stringify(projected)).not.toMatch(/"(?:minItems|maxItems)"/u);
   });
 
   it("keeps Claude-supported simple patterns while simplifying only the task-slug lookahead", () => {

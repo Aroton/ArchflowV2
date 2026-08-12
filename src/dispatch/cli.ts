@@ -140,6 +140,44 @@ function codexStrictNode(value: PlainJsonValue): PlainJsonValue {
   return node;
 }
 
+/**
+ * Binds one server-derived subject field into the child's output schema so the child cannot return
+ * a result bound to a different task, digest, or rubric.
+ *
+ * A scalar binds as an exact `const`. An array cannot, on Codex: OpenAI structured outputs rejects
+ * an array-valued `const` outright — `Invalid schema for response_format 'codex_output_schema':
+ * context=('properties', 'approved_upstream_digests'), Unexpected constant value: []` — which
+ * failed every constitution review whose subject had no approved upstream. The equivalent Codex
+ * binding is exact cardinality plus a closed element set: `parseAndDeriveAdjudication` requires
+ * `approved_upstream_digests` to be sorted and unique, so a same-length array drawn from the same
+ * set is the same array, and `observationSource.observeAdjudication` still compares element by
+ * element before any evidence is minted. One shape serves both the empty and non-empty case, so
+ * whichever the host accepts, it accepts both.
+ *
+ * Claude keeps the plain `const`: its projection deliberately strips `minItems`/`maxItems`, and it
+ * accepts an array `const` today.
+ */
+function boundSubjectNode(property: PlainJsonValue, value: PlainJsonValue, adapter: AdapterId): PlainJsonValue {
+  if (adapter !== "codex-cli" || !Array.isArray(value)) return { const: structuredClone(value) };
+  const arrayProperty = property === null || typeof property !== "object" || Array.isArray(property)
+    ? undefined
+    : property as Readonly<Record<string, PlainJsonValue>>;
+  const items = arrayProperty?.items;
+  if (items === null || typeof items !== "object" || Array.isArray(items)) {
+    throw new TypeError("array subject binding requires an array property schema with an object items schema");
+  }
+  if (value.some((element) => element !== null && typeof element === "object")) {
+    throw new TypeError("array subject binding requires scalar elements");
+  }
+  const element = structuredClone(items) as Record<string, PlainJsonValue>;
+  return {
+    type: "array",
+    items: value.length === 0 ? element : { ...element, enum: [...new Set(value)] },
+    minItems: value.length,
+    maxItems: value.length,
+  };
+}
+
 function codexMechanicalSchema(value: PlainJsonValue): PlainJsonValue {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
   const mechanical = value as Readonly<Record<string, PlainJsonValue>>;
@@ -251,7 +289,7 @@ export function projectCliOutputSchema(
     const bound = { ...(properties as Readonly<Record<string, PlainJsonValue>>) };
     for (const key of bindingKeys) {
       const value = subject[key];
-      if (value !== undefined) bound[key] = { const: structuredClone(value) };
+      if (value !== undefined) bound[key] = boundSubjectNode(bound[key]!, value, adapter);
     }
     root = { ...root, properties: bound };
   }

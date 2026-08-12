@@ -56699,6 +56699,24 @@ function codexStrictNode(value) {
   }
   return node;
 }
+function boundSubjectNode(property, value, adapter2) {
+  if (adapter2 !== "codex-cli" || !Array.isArray(value)) return { const: structuredClone(value) };
+  const arrayProperty = property === null || typeof property !== "object" || Array.isArray(property) ? void 0 : property;
+  const items = arrayProperty?.items;
+  if (items === null || typeof items !== "object" || Array.isArray(items)) {
+    throw new TypeError("array subject binding requires an array property schema with an object items schema");
+  }
+  if (value.some((element2) => element2 !== null && typeof element2 === "object")) {
+    throw new TypeError("array subject binding requires scalar elements");
+  }
+  const element = structuredClone(items);
+  return {
+    type: "array",
+    items: value.length === 0 ? element : { ...element, enum: [...new Set(value)] },
+    minItems: value.length,
+    maxItems: value.length
+  };
+}
 function codexMechanicalSchema(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
   const mechanical = value;
@@ -56793,7 +56811,7 @@ function projectCliOutputSchema(outputSchema, resultKind, adapter2, subject) {
     const bound = { ...properties };
     for (const key of bindingKeys) {
       const value = subject[key];
-      if (value !== void 0) bound[key] = { const: structuredClone(value) };
+      if (value !== void 0) bound[key] = boundSubjectNode(bound[key], value, adapter2);
     }
     root = { ...root, properties: bound };
   }
