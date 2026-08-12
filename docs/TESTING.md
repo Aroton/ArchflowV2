@@ -1,6 +1,6 @@
 # TESTING
 
-**Explored:** 2026-08-11 · **Commit:** `4bc1c81` · **Covers:** `test/`, `vitest.config.ts`, `.github/workflows/`
+**Explored:** 2026-08-12 · **Commit:** `ae25739` · **Covers:** `test/`, `vitest.config.ts`, `.github/workflows/`
 
 ## Test runner and configuration
 
@@ -95,15 +95,14 @@ npm run check
 
 `npm run check` is the local aggregate gate. In order it runs:
 
-1. `probe:mcp-sdk-compatibility` — asserts pinned `@modelcontextprotocol/server`/`core` 2.0.0 public runtime and declaration behavior, protocol 2025-11-25 behavior, and live npm `latest` dist-tags. It also carries one behavioral pin per JSON-RPC defense retired with the session layer — malformed-params rejection shapes, unknown methods, pre-initialize serving, cancellation aborting `ctx.mcpReq.signal`, repeated initialize, duplicate in-flight IDs, exotic ID handling, and `__proto__`-key inertness — so SDK drift fails this gate instead of silently changing wire behavior.
+1. `probe:mcp-sdk-compatibility` — asserts the installed `@modelcontextprotocol/server`/`core` public runtime and declaration behavior and protocol 2025-11-25 behavior. It also carries one behavioral pin per JSON-RPC defense retired with the session layer — malformed-params rejection shapes, unknown methods, pre-initialize serving, cancellation aborting `ctx.mcpReq.signal`, repeated initialize, duplicate in-flight IDs, exotic ID handling, and `__proto__`-key inertness — so an incompatible installed SDK fails this gate instead of silently changing wire behavior.
 2. `typecheck`.
 3. `test:mcp-runtime` — `test/unit/mcp-*.test.ts` plus `test/integration/mcp-stdio.test.ts`.
 4. `npm test`, then `test:contracts` again as an explicit contract gate.
 5. `build:temp` — esbuilds temporary contracts/runtime bundles under the OS temp directory, smoke-exercises them, and removes them.
-6. `check:dependencies` — exact direct and lockfile versions/licenses, approved dependency closure, and prohibited-package policy.
-7. `check:notices` plus `test:notices-policy` — inventory/retained-notice validation and changed/missing/unmapped mutation cases.
-8. `check:mcp-sdk-boundary` plus `test:mcp-sdk-boundary-policy` — SDK imports restricted to `src/mcp/sdk-adapter.ts`, with mutation cases for static/type/side-effect/dynamic/re-export/private-path violations.
-9. `check:release` — tracked `dist/` validation, hostile/offline bundle smoke, release-integrity mutations, and byte reproduction.
+6. `check:notices` plus `test:notices-policy` — lockfile inventory and retained-notice validation with changed/missing/unmapped mutation cases.
+7. `check:mcp-sdk-boundary` plus `test:mcp-sdk-boundary-policy` — SDK imports restricted to `src/mcp/sdk-adapter.ts`, with mutation cases for static/type/side-effect/dynamic/re-export/private-path violations.
+8. `check:release` — tracked `dist/` validation, hostile/offline bundle smoke, release-integrity mutations, and byte reproduction.
 
 There is no separate lint or formatter command in `package.json`. There is also no coverage command or enforced coverage threshold; `vitest.config.ts` only names `coverage/` as the report directory.
 
@@ -114,7 +113,7 @@ There is no separate lint or formatter command in `package.json`. There is also 
 - validates tracked `dist/` and runs hostile/offline smoke, release mutation tests, and reproduction;
 - stages a fresh release into `$RUNNER_TEMP`, compares it with tracked `dist/`, and asserts the repository has no `.tmp` residue.
 
-Release validation is implemented by `scripts/release-support.mjs` and front ends in `scripts/check-release.mjs`, `scripts/build-release.mjs`, `scripts/reproduce-release.mjs`, `scripts/smoke-release-bundle.mjs`, and `scripts/test-release-integrity.mjs`. It checks manifest/artifact closure and digests, build/input provenance, declared runtime assets and legal material, bundle imports, copied-payload behavior under a hostile guard, exact stdio/adversarial transcripts, module/repository canaries, mutation rejection, safe staging/recovery, and reproducibility. `test/contracts/release-contracts.test.ts` and `test/integration/release-offline.test.ts` add schema and offline behavior coverage.
+Release validation is implemented by `scripts/release-support.mjs` and front ends in `scripts/check-release.mjs`, `scripts/build-release.mjs`, `scripts/reproduce-release.mjs`, `scripts/smoke-release-bundle.mjs`, and `scripts/test-release-integrity.mjs`. It checks manifest/artifact closure and digests, build/input provenance, declared runtime assets, exact copies of third-party notices and retained upstream licenses, bundle imports, copied-payload behavior under a hostile guard, exact stdio/adversarial transcripts, module/repository canaries, mutation rejection, safe staging/recovery, and reproducibility. Dependency changes require no approval/evidence artifact. `test/contracts/release-contracts.test.ts` and `test/integration/release-offline.test.ts` add schema and offline behavior coverage.
 
 ## Known current limitations and gaps
 
@@ -124,5 +123,4 @@ Release validation is implemented by `scripts/release-support.mjs` and front end
 - **Real-host security evidence is bounded.** Fake and real dispatch tests check generated homes, scrubbed environment, canaries, output scanning, and PII omission, but `docs/validation/release-validation.md` explicitly records no OS-enforced containment or proof against repository/global-instruction and persistence-capable-tool access (VAL-07).
 - **Platform coverage is narrow.** CI is Ubuntu-only. Process-group cancellation/reaping cases in `test/integration/dispatch-plumbing.test.ts` and `test/integration/mcp-stdio.test.ts` run only when `process.platform !== "win32"`; no Windows CI job proves the alternate path.
 - **No quantitative coverage gate exists.** Confidence comes from behavioral/corpus/mutation suites and the release matrix, not line/branch percentages.
-- **The compatibility probe requires network access.** `scripts/probe-mcp-sdk-compatibility.mjs` checks live npm dist-tags, so the full `npm run check` is not an air-gapped gate even though release runtime smoke itself is deliberately offline/hostile.
 - **Release-validation documentation is point-in-time evidence.** `docs/validation/release-validation.md` is stamped 2026-08-04 and contains some evolving Phase 21 observations; use executed tests/artifacts and a newly recorded opt-in run when deciding present real-host status rather than treating candidate procedures as current proof.

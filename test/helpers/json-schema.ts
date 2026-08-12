@@ -18,7 +18,7 @@ import { assertPlainJson, type PlainJsonValue } from "../../src/contracts/plain-
  *
  * The registered keywords are exactly the `x-archflow-*` keywords still present in committed
  * schemas: the `.meta`-emitted `x-archflow-mcp-semantics` on the generated `mcp-tools` document,
- * the set keywords carried by the two hand-written release schemas, and the byte/NFC pair the
+ * the set keywords carried by the hand-written release manifest, and the byte/NFC pair the
  * error group re-emits. Retired keywords are deliberately not registered — a regeneration that
  * resurrected one would fail strict compilation here.
  */

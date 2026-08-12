@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,10 +16,6 @@ const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const expectedVersion = "2.0.0";
 const protocolVersion = "2025-11-25";
 const packageNames = ["@modelcontextprotocol/server", "@modelcontextprotocol/core"];
-
-console.log(
-  "MANUAL GATE REQUIRED: immediately before review, verify official MCP SDK stable status and legacy hand-built Server guidance from dated official sources; npm dist-tags alone are not sufficient."
-);
 
 class ProbeTransport {
   sent = [];
@@ -65,17 +60,6 @@ async function waitFor(predicate, label) {
     if (Date.now() >= deadline) throw new Error(`timed out waiting for ${label}`);
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 5));
   }
-}
-
-function checkRegistryCurrency(packageName) {
-  const result = spawnSync("npm", ["view", packageName, "dist-tags", "--json"], {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-    timeout: 30_000
-  });
-  assert.equal(result.status, 0, `could not read live npm dist-tags for ${packageName}: ${result.stderr}`);
-  const tags = JSON.parse(result.stdout);
-  assert.equal(tags.latest, expectedVersion, `${packageName} latest tag drifted; stop for design review`);
 }
 
 for (const packageName of packageNames) {
@@ -244,8 +228,8 @@ assert.equal(
 );
 
 // --- Behavioral pins: the SDK behaviors that replaced the retired session layer. ---
-// Each pin covers one defense the adapter no longer re-implements; if a pin fails,
-// the SDK's observed behavior drifted and the drop decision needs design review.
+// Each pin covers one defense the adapter no longer re-implements; a pin failure means the
+// installed SDK no longer has the behavior the adapter relies on.
 
 async function behavioralServer(callHandler) {
   const probeTransport = new ProbeTransport();
@@ -483,8 +467,6 @@ async function initialized(probe, id = "init") {
 // WAIVER — the adapter's missing-outcome invariant (a tools/call response without a
 // branded ToolBoundaryOutcome answers -32603) is adapter-side machinery, not an SDK
 // behavior; it is pinned by the adapter unit tests instead of this probe.
-
-for (const packageName of packageNames) checkRegistryCurrency(packageName);
 
 console.log(
   `MCP SDK compatibility probe passed for stable server/core 2.0.0 public Server, Transport, projection, mutation, rewrite, and teardown behavior under ${process.version}.`

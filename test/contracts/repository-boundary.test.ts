@@ -124,7 +124,6 @@ describe("package.json dependencies and scripts", () => {
       "bench:review",
       "build:temp",
       "check",
-      "check:dependencies",
       "check:mcp-sdk-boundary",
       "check:notices",
       "check:release",

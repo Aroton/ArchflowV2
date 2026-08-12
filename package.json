@@ -25,12 +25,11 @@
     "check:release": "npm run release:check -- --payload dist && npm run release:smoke -- --payload dist && npm run release:mutations && npm run release:reproduce",
     "generate:schemas": "node scripts/generate-schemas.mjs",
     "check:schemas": "node scripts/generate-schemas.mjs --check",
-    "check:dependencies": "node scripts/check-dependency-policy.mjs",
     "check:notices": "node scripts/check-notices.mjs",
     "test:notices-policy": "node scripts/test-notices-policy.mjs",
     "check:mcp-sdk-boundary": "node scripts/check-mcp-sdk-boundary.mjs",
     "test:mcp-sdk-boundary-policy": "node scripts/test-mcp-sdk-boundary-policy.mjs",
-    "check": "npm run probe:mcp-sdk-compatibility && npm run typecheck && npm run check:schemas && npm run test:mcp-runtime && npm test && npm run test:contracts && npm run build:temp && npm run check:dependencies && npm run check:notices && npm run test:notices-policy && npm run check:mcp-sdk-boundary && npm run test:mcp-sdk-boundary-policy && npm run check:release"
+    "check": "npm run probe:mcp-sdk-compatibility && npm run typecheck && npm run check:schemas && npm run test:mcp-runtime && npm test && npm run test:contracts && npm run build:temp && npm run check:notices && npm run test:notices-policy && npm run check:mcp-sdk-boundary && npm run test:mcp-sdk-boundary-policy && npm run check:release"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",

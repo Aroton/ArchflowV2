@@ -1,6 +1,6 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-08-11 · **Commit:** `56f4d2c` · **Covers:** `src/review/`, `src/state/produce-subject.ts`
+**Explored:** 2026-08-12 · **Commit:** `ae25739` · **Covers:** `src/review/`, `src/state/produce-subject.ts`
 
 Counter-review is the system's adversarial check: every artifact is reviewed by the *opposite model family* (Claude ⇄ Codex), dispatched by the server itself so the evidence is something the producer cannot author. One `archflow_counter_review` call covers up to two dispatches: the rubric counter-review, and — only when the pinned constitution has active rules, a decision the server makes alone — the constitution review (see below). This page covers the review envelope, the review flow, the constitution review, and waivers.
 
@@ -64,7 +64,7 @@ Implementation reviews can't always embed whole files, so the artifact uses a th
 | `unified-diff` | larger UTF-8 text | hand-rolled Myers diff with 40 context lines (generous on purpose — it approximates full-file review) |
 | `digest-only` | generated files (`linguist-generated`), lockfiles, non-UTF-8 | digest + byte count only |
 
-The diff is hand-rolled (`src/review/line-diff.ts`) because the runtime dependency set is frozen by release policy and shelling out to `diff` would break the renderer's deterministic, in-memory character. Every non-embedded entry still names its exact bytes by digest, so nothing is silently elided.
+The diff is hand-rolled (`src/review/line-diff.ts`) so the renderer remains deterministic and in-memory; shelling out to `diff` would add a host-specific executable dependency. Every non-embedded entry still names its exact bytes by digest, so nothing is silently elided.
 
 If the envelope still overflows after tiering and cap relief, the result is `ENVELOPE_OVERFLOW` naming the five largest contributors. The intended human reading: a generated path belongs in `.gitattributes`; a hand-written one means the phase is too big for one sealed review pass and should be split at the design gate. There is deliberately no chunked multi-dispatch fallback — one subject, one attestation.
 

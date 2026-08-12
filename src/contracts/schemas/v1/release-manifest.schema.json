@@ -19,7 +19,6 @@
     "build_entries",
     "entry_provenance",
     "launch_profile",
-    "legal_review",
     "artifacts"
   ],
   "properties": {
@@ -77,7 +76,6 @@
       "x-archflow-unique-by": "id"
     },
     "launch_profile": { "$ref": "#/$defs/launch_profile" },
-    "legal_review": { "$ref": "#/$defs/legal_review_binding" },
     "artifacts": {
       "type": "array",
       "minItems": 1,
@@ -207,12 +205,12 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["input_key", "expectation", "map", "reviewed_first_party_roots", "recognized_third_party_components"],
+          "required": ["input_key", "expectation", "map", "first_party_roots", "recognized_third_party_components"],
           "properties": {
             "input_key": { "$ref": "#/$defs/dependency_prebundle_key" },
             "expectation": { "const": "present" },
             "map": { "$ref": "#/$defs/dependency_map_reference" },
-            "reviewed_first_party_roots": {
+            "first_party_roots": {
               "type": "array",
               "items": { "type": "string", "minLength": 1 },
               "uniqueItems": true,
@@ -380,16 +378,6 @@
         "digest": { "$ref": "#/$defs/digest" }
       }
     },
-    "legal_review_binding": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["source_path", "payload_path", "digest"],
-      "properties": {
-        "source_path": { "const": "release/legal-review.json" },
-        "payload_path": { "const": "legal/review.json" },
-        "digest": { "$ref": "#/$defs/digest" }
-      }
-    },
     "artifact": {
       "oneOf": [
         {
@@ -407,7 +395,7 @@
           "required": ["path", "role", "size", "digest"],
           "properties": {
             "path": { "$ref": "#/$defs/portable_path" },
-            "role": { "enum": ["executable", "metafile", "legal-review", "legal-notice", "upstream-legal"] },
+            "role": { "enum": ["executable", "metafile", "legal-notice", "upstream-legal"] },
             "size": { "$ref": "#/$defs/byte_size" },
             "digest": { "$ref": "#/$defs/digest" }
           }

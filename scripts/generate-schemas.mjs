@@ -7,7 +7,7 @@ import { build } from "esbuild";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const schemaDirectory = join(repositoryRoot, "src", "contracts", "schemas", "v1");
-const handWrittenSchemaFiles = ["release-manifest.schema.json", "release-legal-review.schema.json"];
+const handWrittenSchemaFiles = ["release-manifest.schema.json"];
 
 async function renderGeneratedSchemas() {
   const bundleDirectory = await mkdtemp(join(tmpdir(), "archflow-generate-schemas-"));
@@ -55,7 +55,7 @@ if (checkMode) {
     console.error("run `npm run generate:schemas` and commit the result");
     process.exit(1);
   }
-  console.log(`check:schemas — ${fileNames.length} generated schema(s) match the committed bytes; hand-written release schemas untouched`);
+  console.log(`check:schemas — ${fileNames.length} generated schema(s) match the committed bytes; hand-written release manifest untouched`);
 } else {
   for (const name of fileNames) await writeFile(join(schemaDirectory, name), rendered[name]);
   console.log(`generate:schemas — wrote ${fileNames.length} schema(s) to src/contracts/schemas/v1`);

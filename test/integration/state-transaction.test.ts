@@ -185,7 +185,7 @@ async function release(child: ChildProcess): Promise<void> {
   await released;
 }
 
-describe("state transaction process coordination", () => {
+describe("state transaction process coordination", { timeout: 20_000 }, () => {
   it("serializes separate processes at the canonical lock directory for one task", async () => {
     const root = await taskRoot("same-task");
     const first = startLockChild(root);

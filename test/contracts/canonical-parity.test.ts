@@ -72,7 +72,7 @@ describe("canonicalJsonBytes parity with scripts/release-support.mjs", () => {
  */
 const PORTABLE_PATHS = [
   "manifest.json",
-  "legal/review.json",
+  "legal/THIRD_PARTY_NOTICES.md",
   "a/b/c/d.txt",
   "資料/設計.md",
   "dotted.name/with.dots.json",

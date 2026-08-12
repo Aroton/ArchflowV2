@@ -46,7 +46,6 @@ export const RELEASE_FILES = Object.freeze([
   "archflow-local.mjs",
   "archflow-mcp.mjs",
   "legal/THIRD_PARTY_NOTICES.md",
-  "legal/review.json",
   "manifest.json",
   "metafile.json",
 ]);
@@ -99,7 +98,6 @@ const REQUIRED_CONTROLS = Object.freeze([
   "scripts/smoke-release-bundle.mjs",
   "scripts/test-release-integrity.mjs",
   "scripts/write-tracked-release.mjs",
-  "src/contracts/schemas/v1/release-legal-review.schema.json",
   "src/contracts/schemas/v1/release-manifest.schema.json",
   "src/contracts/versions.ts",
   "test/contracts/release-contracts.test.ts",
@@ -130,15 +128,6 @@ const KNOWN_EMBEDDED = new Map([
   ["fast-uri", "3.1.0"],
   ["json-schema-traverse", "1.0.0"],
 ]);
-const KNOWN_EMBEDDED_IDENTITIES = new Map([
-  ["ajv@8.18.0", ["https://registry.npmjs.org/ajv/-/ajv-8.18.0.tgz", "sha512-PlXPeEWMXMZ7sPYOHqmDyCJzcfNrUr3fGNKtezX14ykXOEIvyK81d+qydx89KY5O71FKMPaQ2vBfBFI5NHR63A==", "a05350a88e318e4f5f2c2a1ff1e2e88daa4dd38e6e78b71cccae422bdc762cc3"]],
-  ["ajv-formats@3.0.1", ["https://registry.npmjs.org/ajv-formats/-/ajv-formats-3.0.1.tgz", "sha512-8iUql50EUR+uUcdRQ3HDqa6EVyo3docL8g5WJ3FNcWmu62IbkGUue/pEyLBW8VGKKucTPgqeks4fIU1DA4yowQ==", "9df3bb69929a3b650ed73b3bfa1756725aaff0ac296461605753547004eafeaf"]],
-  ["content-type@1.0.5", ["https://registry.npmjs.org/content-type/-/content-type-1.0.5.tgz", "sha512-nTjqfcBFEipKdXCv4YDQWCfmcLZKm81ldF0pAopTvyrFGVbcR6P/VAAd5G7N+0tTr8QqiU0tFadD6FK4NtJwOA==", "257aed98914108e91a337912727b6a802eef218248507f74b76faffaff517a38"]],
-  ["fast-deep-equal@3.1.3", ["https://registry.npmjs.org/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz", "sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==", "7bf9b2de73a6b356761c948d0e9eeb4be6c1270bd04c79cd489c1e400ffdfc1a"]],
-  ["fast-uri@3.1.0", ["https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.0.tgz", "sha512-iPeeDKJSWf4IEOasVVrknXpaBV0IApz/gp7S2bb7Z4Lljbl2MGJRqInZiUrQwV16cpzw/D3S5j5Julj/gT52AA==", "185ef4f377743572c2bf0931f741fae52401268cbe70c880b74063799814083e"]],
-  ["json-schema-traverse@1.0.0", ["https://registry.npmjs.org/json-schema-traverse/-/json-schema-traverse-1.0.0.tgz", "sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==", "7bf9b2de73a6b356761c948d0e9eeb4be6c1270bd04c79cd489c1e400ffdfc1a"]],
-]);
-
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -147,13 +136,13 @@ function ordinal(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-const REVIEWED_BARE_EXTERNALS = new Set(["supports-color"]);
+const EXPECTED_BARE_EXTERNALS = new Set(["supports-color"]);
 const BUILTIN_IMPORTS = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 
-function assertReviewedExternalImport(path) {
+function assertExpectedExternalImport(path) {
   invariant(
-    BUILTIN_IMPORTS.has(path) || REVIEWED_BARE_EXTERNALS.has(path),
-    `unreviewed external release import: ${path}`,
+    BUILTIN_IMPORTS.has(path) || EXPECTED_BARE_EXTERNALS.has(path),
+    `unexpected external release import: ${path}`,
   );
 }
 
@@ -173,7 +162,7 @@ function resolveMetafileOutput(metafile, outputPath) {
 
 function deriveExternalImports(output) {
   const imports = [...new Set(output.imports.map((record) => record.path))].sort(ordinal);
-  for (const path of imports) assertReviewedExternalImport(path);
+  for (const path of imports) assertExpectedExternalImport(path);
   return imports;
 }
 
@@ -363,7 +352,7 @@ async function collectDeclaredPaths(repositoryRoot) {
 }
 
 async function collectLegalSourcePaths(repositoryRoot) {
-  const paths = ["release/legal-review.json"];
+  const paths = ["THIRD_PARTY_NOTICES.md"];
   const root = resolve(repositoryRoot, "release/legal/upstream");
   try {
     for (const path of await walkRegularFiles(root)) paths.push(`release/legal/upstream/${path}`);
@@ -371,16 +360,6 @@ async function collectLegalSourcePaths(repositoryRoot) {
     if (error.code !== "ENOENT") throw error;
   }
   return paths;
-}
-
-async function collectEvidencePaths(repositoryRoot) {
-  const root = resolve(repositoryRoot, "release/evidence");
-  try {
-    return (await walkRegularFiles(root)).map((path) => `release/evidence/${path}`).sort(ordinal);
-  } catch (error) {
-    if (error.code === "ENOENT") return [];
-    throw error;
-  }
 }
 
 async function deriveLaunchProfile(repositoryRoot, allowedImports) {
@@ -432,12 +411,12 @@ async function collectDependencyProvenance(repositoryRoot, metafile, contributin
       if (error.code === "ENOENT") {
         invariant(
           path === "node_modules/@modelcontextprotocol/server/dist/chunk-Br0eD_fh.mjs",
-          `missing adjacent source map has no reviewed expected-absent disposition: ${path}`,
+          `missing adjacent source map is unexpected: ${path}`,
         );
         expectations.push({
           input_key: path,
           expectation: "expected-absent",
-          rationale: "The reviewed SDK bridge chunk has no published adjacent source map in @modelcontextprotocol/server@2.0.0.",
+          rationale: "The published SDK bridge chunk has no adjacent source map in @modelcontextprotocol/server@2.0.0.",
         });
         continue;
       }
@@ -454,7 +433,7 @@ async function collectDependencyProvenance(repositoryRoot, metafile, contributin
           purpose: "source-map",
     });
     const sourceMap = JSON.parse(decoder.decode(mapBytes));
-    const reviewedRoots = new Set();
+    const firstPartyRoots = new Set();
     const recognizedComponents = new Set();
     for (const source of sourceMap.sources ?? []) {
       const match = source.match(/\.pnpm\/((?:@[^/]+\/)?[^@/]+)@([^/]+)\/node_modules\/((?:@[^/]+\/)?[^/]+)/);
@@ -467,8 +446,8 @@ async function collectDependencyProvenance(repositoryRoot, metafile, contributin
         continue;
       }
       const firstParty = source.match(/^((?:\.\.\/)+(?:core-internal\/)?src)\//);
-      invariant(firstParty, `unreviewed source-map source path: ${source}`);
-      reviewedRoots.add(firstParty[1]);
+      invariant(firstParty, `unexpected source-map source path: ${source}`);
+      firstPartyRoots.add(firstParty[1]);
     }
     expectations.push({
       input_key: path,
@@ -479,7 +458,7 @@ async function collectDependencyProvenance(repositoryRoot, metafile, contributin
         package_relative_path: mapIdentity.packagePath,
         digest: sha256(mapBytes),
       },
-      reviewed_first_party_roots: [...reviewedRoots].sort(ordinal),
+      first_party_roots: [...firstPartyRoots].sort(ordinal),
       recognized_third_party_components: [...recognizedComponents].sort(ordinal),
     });
   }
@@ -514,25 +493,6 @@ async function collectDependencyProvenance(repositoryRoot, metafile, contributin
   };
 }
 
-function legalProjection(review) {
-  const components = review.current_components ?? [];
-  const lines = [
-    "# Third-Party Notices",
-    "",
-    "This generated inventory accompanies the offline ArchFlow MCP payload.",
-    "It does not grant a license to ArchFlow itself.",
-    "",
-  ];
-  for (const component of components) {
-    const name = component.package_name;
-    const version = component.package_version;
-    const license = component.license_expression;
-    lines.push(`- ${name}@${version} — ${license}`);
-  }
-  lines.push("", "See legal/upstream/ for retained applicable upstream license and notice texts.", "");
-  return encoder.encode(lines.join("\n"));
-}
-
 async function loadSchemaValidators(repositoryRoot) {
   const schemaDirectory = resolve(repositoryRoot, "src/contracts/schemas/v1");
   const ajv = new Ajv2020({ allErrors: true, strict: true });
@@ -563,18 +523,9 @@ async function loadSchemaValidators(repositoryRoot) {
     },
   });
   const manifestSchema = JSON.parse(await readFile(resolve(schemaDirectory, "release-manifest.schema.json"), "utf8"));
-  const legalSchema = JSON.parse(await readFile(resolve(schemaDirectory, "release-legal-review.schema.json"), "utf8"));
   ajv.addSchema(manifestSchema);
-  ajv.addSchema(legalSchema);
   return {
     manifest: ajv.getSchema(manifestSchema.$id) ?? ajv.compile(manifestSchema),
-    legal: ajv.getSchema(legalSchema.$id) ?? ajv.compile(legalSchema),
-    evidence: {
-      "advisory-snapshot": ajv.getSchema(`${legalSchema.$id}#/$defs/advisory_snapshot_record`),
-      "patched-artifact-availability": ajv.getSchema(`${legalSchema.$id}#/$defs/artifact_availability_record`),
-      "focused-inert-reachability": ajv.getSchema(`${legalSchema.$id}#/$defs/reachability_record`),
-      "user-risk-acceptance": ajv.getSchema(`${legalSchema.$id}#/$defs/user_acceptance_record`),
-    },
   };
 }
 
@@ -635,195 +586,25 @@ function assertEqualPathSet(actual, expected, description) {
   );
 }
 
-async function validateLegalCorrelation(repositoryRoot, manifestValue, legalValue, ownerPaths, validators) {
-  invariant(legalValue.project_license_status === "missing" && legalValue.distribution_status === "unresolved", "release must retain unresolved project licensing status");
-  const limitationText = legalValue.limitations.join("\n").toLowerCase();
-  invariant(limitationText.includes("exact") && limitationText.includes("ajv") && limitationText.includes("json"), "legal limitations must retain attribution and empty-AJV-JSON limitations");
+async function validateNoticeContents(repositoryRoot, payloadRoot, actualFiles) {
+  const sourceNotice = await readRegularFile(repositoryRoot, "THIRD_PARTY_NOTICES.md");
+  const payloadNotice = await readRegularFile(payloadRoot, "legal/THIRD_PARTY_NOTICES.md");
+  invariant(Buffer.from(sourceNotice).equals(Buffer.from(payloadNotice)), "third-party notice differs from repository source");
 
-  const componentIds = legalValue.current_components.map((component) => component.component_id);
-  assertSortedUnique(componentIds, "current components");
-  assertSortedUnique(legalValue.limitations, "legal limitations");
-  const decisionIds = legalValue.dependency_gate_decisions.map((decision) => decision.id);
-  assertSortedUnique(decisionIds, "dependency gate decisions");
-  const amendmentIds = legalValue.amendments.map((amendment) => amendment.id);
-  assertSortedUnique(amendmentIds, "decision amendments");
-  const supersessionIds = legalValue.supersessions.map((supersession) => supersession.id);
-  assertSortedUnique(supersessionIds, "decision supersessions");
-  const decisionsById = new Map(legalValue.dependency_gate_decisions.map((decision) => [decision.id, decision]));
-  for (const amendment of legalValue.amendments) {
-    invariant(decisionIds.includes(amendment.decision_id), `amendment references an unknown decision: ${amendment.id}`);
-    invariant(decisionsById.get(amendment.decision_id).decision_digest === amendment.prior_decision_digest, `amendment prior decision digest differs: ${amendment.id}`);
-  }
-  for (const supersession of legalValue.supersessions) {
-    invariant(decisionIds.includes(supersession.superseded_decision_id), `supersession references an unknown prior decision: ${supersession.id}`);
-    invariant(decisionIds.includes(supersession.replacement_decision_id), `supersession references an unknown replacement: ${supersession.id}`);
-    invariant(supersession.superseded_decision_id !== supersession.replacement_decision_id, `supersession is self-referential: ${supersession.id}`);
-    invariant(decisionsById.get(supersession.superseded_decision_id).decision_digest === supersession.superseded_decision_digest, `superseded decision digest differs: ${supersession.id}`);
-    invariant(decisionsById.get(supersession.replacement_decision_id).decision_digest === supersession.replacement_decision_digest, `replacement decision digest differs: ${supersession.id}`);
-  }
-  const replacementByPrior = new Map();
-  for (const supersession of legalValue.supersessions) {
-    invariant(!replacementByPrior.has(supersession.superseded_decision_id), `conflicting supersessions for: ${supersession.superseded_decision_id}`);
-    replacementByPrior.set(supersession.superseded_decision_id, supersession.replacement_decision_id);
-  }
-  for (const start of replacementByPrior.keys()) {
-    const visited = new Set();
-    let cursor = start;
-    while (replacementByPrior.has(cursor)) {
-      invariant(!visited.has(cursor), `cyclic supersession graph at: ${cursor}`);
-      visited.add(cursor);
-      cursor = replacementByPrior.get(cursor);
-    }
-  }
-
-  const provenance = new Set(manifestValue.dependency_provenance_inputs.map((record) =>
-    `${record.package_name}@${record.package_version}/${record.package_relative_path}`,
-  ));
-  const embedded = new Map();
-  for (const component of legalValue.current_components) {
-    if (component.provenance_kind === "embedded") embedded.set(component.package_name, component.package_version);
-    for (const reference of component.provenance_inputs) {
-      invariant(
-        provenance.has(`${reference.package_name}@${reference.package_version}/${reference.package_relative_path}`),
-        `component has unresolved provenance: ${component.component_id}`,
-      );
-    }
-  }
-  for (const [name, version] of KNOWN_EMBEDDED) invariant(embedded.get(name) === version, `legal inventory omits embedded ${name}@${version}`);
-
-  const installedKeys = [...new Set(manifestValue.bundle_inputs
-    .filter((record) => record.origin.kind === "dependency" && record.bytes_in_output > 0)
-    .map((record) => `${record.origin.package_name}@${record.origin.package_version}`))].sort(ordinal);
-  const mappedKeys = [...new Set(manifestValue.adjacent_map_expectations.flatMap((expectation) =>
-    expectation.expectation === "present" ? expectation.recognized_third_party_components : [],
-  ))].sort(ordinal);
-  const actualInstalled = legalValue.current_components.filter((component) => component.provenance_kind === "installed")
-    .map((component) => `${component.package_name}@${component.package_version}`).sort(ordinal);
-  const actualEmbedded = legalValue.current_components.filter((component) => component.provenance_kind === "embedded")
-    .map((component) => `${component.package_name}@${component.package_version}`).sort(ordinal);
-  invariant(isDeepStrictEqual(actualInstalled, installedKeys), "installed legal component closure differs from contributing packages");
-  invariant(isDeepStrictEqual(actualEmbedded, mappedKeys), "embedded legal component closure differs from mapped packages");
-
-  const lock = JSON.parse(await readFile(resolve(repositoryRoot, "package-lock.json"), "utf8"));
-  const upstreamByComponent = new Map(legalValue.upstream_legal_sources.map((source) => [source.component_id, source]));
-  for (const component of legalValue.current_components) {
-    const key = `${component.package_name}@${component.package_version}`;
-    const upstream = upstreamByComponent.get(component.component_id);
-    invariant(upstream && isDeepStrictEqual(component.legal_source, {
-      source_path: upstream.source_path,
-      payload_path: upstream.payload_path,
-      digest: upstream.digest,
-    }), `component legal source is not the unique retained source: ${component.component_id}`);
-    invariant(isDeepStrictEqual(component.package_identity, upstream.package_identity), `component/upstream package identity differs: ${component.component_id}`);
-    let expectedIdentity;
-    if (component.provenance_kind === "installed") {
-      const locked = lock.packages?.[`node_modules/${component.package_name}`];
-      invariant(locked?.version === component.package_version, `installed component is absent from package-lock: ${key}`);
-      expectedIdentity = { authority: "package-lock", tarball_url: locked.resolved, integrity: locked.integrity };
-      const installedLicense = manifestValue.dependency_provenance_inputs.find((record) =>
-        record.package_name === component.package_name
-          && record.package_version === component.package_version
-          && record.purpose === "license",
-      );
-      invariant(installedLicense?.digest === component.legal_source.digest, `installed legal source differs from installed package bytes: ${key}`);
-    } else {
-      const identity = KNOWN_EMBEDDED_IDENTITIES.get(key);
-      invariant(identity, `embedded package has no immutable reviewed registry identity: ${key}`);
-      expectedIdentity = { authority: "npm-registry-artifact", tarball_url: identity[0], integrity: identity[1] };
-      invariant(component.legal_source.digest === identity[2], `embedded legal source differs from reviewed registry artifact bytes: ${key}`);
-    }
-    invariant(isDeepStrictEqual(component.package_identity, expectedIdentity), `package identity differs from immutable authority: ${key}`);
-    const expectedProvenance = component.provenance_kind === "installed"
-      ? manifestValue.dependency_provenance_inputs.filter((record) => record.package_name === component.package_name && record.package_version === component.package_version)
-        .map(({ package_name, package_version, package_relative_path }) => ({ package_name, package_version, package_relative_path }))
-      : manifestValue.adjacent_map_expectations.filter((expectation) => expectation.expectation === "present" && expectation.recognized_third_party_components.includes(key))
-        .map((expectation) => ({
-          package_name: expectation.map.package_name,
-          package_version: expectation.map.package_version,
-          package_relative_path: expectation.map.package_relative_path,
-        }));
-    expectedProvenance.sort((a, b) => ordinal(`${a.package_name}/${a.package_relative_path}`, `${b.package_name}/${b.package_relative_path}`));
-    invariant(isDeepStrictEqual(component.provenance_inputs, expectedProvenance), `component provenance is not the exact derived closure: ${component.component_id}`);
-    invariant(component.source_map_expected === (component.provenance_kind === "embedded" || expectedProvenance.some((record) => record.package_relative_path.endsWith(".map"))), `component source-map expectation differs: ${component.component_id}`);
-  }
-  invariant(
-    upstreamByComponent.size === legalValue.current_components.length
-      && legalValue.upstream_legal_sources.length === legalValue.current_components.length,
-    "component-to-upstream legal mapping is not one-to-one",
+  const sourcePaths = (await collectLegalSourcePaths(repositoryRoot))
+    .filter((path) => path.startsWith("release/legal/upstream/"));
+  const payloadPaths = actualFiles.filter((path) => path.startsWith("legal/upstream/"));
+  assertEqualPathSet(
+    payloadPaths,
+    sourcePaths.map((path) => path.slice("release/".length)),
+    "retained upstream license payloads",
   );
-
-  const upstreamSourcePaths = [];
-  const upstreamPayloadPaths = [];
-  for (const source of legalValue.upstream_legal_sources) {
-    invariant(componentIds.includes(source.component_id), `upstream legal source references an unknown component: ${source.source_path}`);
-    invariant(source.source_path.startsWith("release/legal/upstream/"), "upstream source is outside retained legal root");
-    invariant(source.payload_path.startsWith("legal/upstream/"), "upstream payload is outside legal closure");
-    invariant(source.payload_path === source.source_path.slice("release/".length), "upstream source/output mapping differs");
-    const sourceBytes = await readRegularFile(repositoryRoot, source.source_path);
-    invariant(sha256(sourceBytes) === source.digest, `stale upstream legal source: ${source.source_path}`);
-    upstreamSourcePaths.push(source.source_path);
-    upstreamPayloadPaths.push(source.payload_path);
+  for (const sourcePath of sourcePaths) {
+    const payloadPath = sourcePath.slice("release/".length);
+    const sourceBytes = await readRegularFile(repositoryRoot, sourcePath);
+    const payloadBytes = await readRegularFile(payloadRoot, payloadPath);
+    invariant(Buffer.from(sourceBytes).equals(Buffer.from(payloadBytes)), `retained upstream license differs: ${sourcePath}`);
   }
-  const actualUpstream = (await collectLegalSourcePaths(repositoryRoot)).filter((path) => path !== "release/legal-review.json");
-  assertEqualPathSet(upstreamSourcePaths, actualUpstream, "upstream legal sources");
-  assertSortedUnique(upstreamPayloadPaths, "upstream legal payloads");
-
-  const entryBindings = manifestValue.build_entries.map(({ id, role, handler_authority }) => ({ id, role, handler_authority }));
-  const resolveEvidence = async (binding, expectedPath, recordType) => {
-    invariant(binding.path === expectedPath, `risk evidence path differs: ${recordType}`);
-    invariant(ownerPaths.has(binding.path), `risk evidence is outside release controls: ${binding.path}`);
-    const document = parseCanonicalDocument(await readRegularFile(repositoryRoot, binding.path), `risk evidence ${recordType}`);
-    invariant(document.digest === binding.digest, `risk evidence digest differs: ${binding.path}`);
-    const validator = validators.evidence[recordType];
-    invariant(validator, `missing evidence schema validator: ${recordType}`);
-    schemaAssert(validator, document.value, `risk evidence ${recordType}`);
-    return document.value;
-  };
-  for (const decision of legalValue.dependency_gate_decisions) {
-    invariant(componentIds.some((id) => id.startsWith(`${decision.package_name.replace(/^@/, "").replaceAll("/", "-")}-`) || legalValue.current_components.some((component) => component.package_name === decision.package_name && component.package_version === decision.package_version)), `risk decision references an uninventoried component: ${decision.id}`);
-    assertSortedUnique(decision.advisories.map((advisory) => advisory.id), `risk decision advisories: ${decision.id}`);
-    invariant(decision.bundle_digest === manifestValue.bundle_digest, `risk decision bundle binding is stale: ${decision.id}`);
-    invariant(decision.dependency_inventory_digest === manifestValue.dependency_inventory_digest, `risk decision inventory binding is stale: ${decision.id}`);
-    invariant(Buffer.from(canonicalJsonBytes(decision.entry_bindings)).equals(Buffer.from(canonicalJsonBytes(entryBindings))), `risk decision entry binding is stale: ${decision.id}`);
-    invariant(["inert-no-handler", "mcp-tool-handler"].includes(decision.scope.handler_authority), `risk decision handler scope is unknown: ${decision.id}`);
-    const invalidators = ["bundle-change", "dependency-change", "entry-change", "handler-authority-change"];
-    invariant(JSON.stringify(decision.scope.invalidated_by) === JSON.stringify(invalidators), `risk decision invalidators are incomplete: ${decision.id}`);
-    const withoutDigest = { ...decision };
-    delete withoutDigest.decision_digest;
-    invariant(decision.decision_digest === sha256(canonicalJsonBytes(withoutDigest)), `risk decision digest is stale: ${decision.id}`);
-    const advisorySnapshot = await resolveEvidence(decision.advisory_snapshot, "release/evidence/advisory-snapshot.json", "advisory-snapshot");
-    const availability = await resolveEvidence(decision.patched_artifact_availability, "release/evidence/patched-artifact-availability.json", "patched-artifact-availability");
-    const reachability = await resolveEvidence(decision.reachability_evidence, "release/evidence/focused-inert-reachability.json", "focused-inert-reachability");
-    const acceptance = await resolveEvidence(decision.user_acceptance, "release/evidence/user-risk-acceptance.json", "user-risk-acceptance");
-    const snapshotAdvisories = advisorySnapshot.advisories.map(({ source_url: _sourceUrl, ...advisory }) => advisory);
-    invariant(isDeepStrictEqual(snapshotAdvisories, decision.advisories), `advisory snapshot differs from decision: ${decision.id}`);
-    invariant(advisorySnapshot.package_name === decision.package_name && advisorySnapshot.package_version === decision.package_version, `advisory snapshot package differs: ${decision.id}`);
-    invariant(availability.embedded_package === decision.package_name && availability.embedded_version === decision.package_version && availability.compatible_patched_artifact_available === false, `patched-artifact evidence differs: ${decision.id}`);
-    invariant(reachability.bundle_digest === decision.bundle_digest && isDeepStrictEqual(reachability.entry_bindings, decision.entry_bindings), `reachability evidence binding differs: ${decision.id}`);
-    invariant(acceptance.package_name === decision.package_name && acceptance.package_version === decision.package_version, `user acceptance package differs: ${decision.id}`);
-    invariant(isDeepStrictEqual(acceptance.advisory_ids, decision.advisories.map((advisory) => advisory.id)), `user acceptance advisories differ: ${decision.id}`);
-    invariant(isDeepStrictEqual(acceptance.scope, decision.scope), `user acceptance scope differs: ${decision.id}`);
-  }
-  for (const record of [...legalValue.amendments, ...legalValue.supersessions]) {
-    const binding = record.evidence;
-    invariant(ownerPaths.has(binding.path), `history evidence is outside release controls: ${binding.path}`);
-    const document = parseCanonicalDocument(await readRegularFile(repositoryRoot, binding.path), `history evidence ${record.id}`);
-    invariant(document.digest === binding.digest, `history evidence digest differs: ${record.id}`);
-    const digestField = "amendment_digest" in record ? "amendment_digest" : "supersession_digest";
-    const withoutDigest = { ...record };
-    delete withoutDigest[digestField];
-    invariant(record[digestField] === sha256(canonicalJsonBytes(withoutDigest)), `history record digest differs: ${record.id}`);
-  }
-  const fastUri = legalValue.dependency_gate_decisions.find((decision) => decision.package_name === "fast-uri" && decision.package_version === "3.1.0");
-  invariant(fastUri, "accepted fast-uri prototype risk decision is absent");
-  const advisories = fastUri.advisories.map((advisory) => advisory.id).sort();
-  invariant(JSON.stringify(advisories) === JSON.stringify([
-    "GHSA-4c8g-83qw-93j6",
-    "GHSA-q3j6-qgpj-74h6",
-    "GHSA-v2hh-gcrm-f6hx",
-    "GHSA-v39h-62p7-jpjc",
-  ]), "fast-uri decision does not bind all four advisories");
-  invariant(ownerPaths.has("release/legal-review.json"), "legal review source is outside release controls");
 }
 
 function manifestField(manifest, ...names) {
@@ -831,7 +612,7 @@ function manifestField(manifest, ...names) {
   return undefined;
 }
 
-export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, manifest, legalReview }) {
+export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, manifest }) {
   const repository = await canonicalExistingDirectory(repositoryRoot, "repository root");
   const payload = await canonicalExistingDirectory(payloadRoot, "payload root");
   const trackedPayload = resolve(repository, "dist");
@@ -842,7 +623,6 @@ export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, ma
   );
   const validators = await loadSchemaValidators(repository);
   schemaAssert(validators.manifest, manifest.value, "release manifest");
-  schemaAssert(validators.legal, legalReview.value, "release legal review");
 
   const bundleInputs = manifestField(manifest.value, "bundle_inputs");
   const controls = manifestField(manifest.value, "release_control_inputs");
@@ -902,10 +682,6 @@ export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, ma
     const bytes = await readRegularFile(payload, artifact.path);
     invariant(bytes.byteLength === artifact.size && sha256(bytes) === artifact.digest, `stale payload artifact: ${artifact.path}`);
   }
-  const legalBytes = await readRegularFile(payload, "legal/review.json");
-  invariant(Buffer.from(legalBytes).equals(Buffer.from(legalReview.bytes)), "payload legal review differs from canonical document");
-  const sourceLegal = await readRegularFile(repository, "release/legal-review.json");
-  invariant(Buffer.from(sourceLegal).equals(Buffer.from(legalReview.bytes)), "release legal source differs from payload");
   const bundleBytes = await readRegularFile(payload, "archflow-mcp.mjs");
   invariant(sha256(bundleBytes) === manifest.value.bundle_digest, "bundle digest mismatch");
   const metafileDocument = parseCanonicalDocument(await readRegularFile(payload, "metafile.json"), "release metafile");
@@ -942,26 +718,11 @@ export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, ma
     adjacent_map_expectations: manifest.value.adjacent_map_expectations,
     bundle_inputs: bundleInputs.filter((record) => record.origin.kind === "dependency"),
     dependency_provenance_inputs: dependencyInputs,
-    current_components: legalReview.value.current_components,
   }));
   invariant(dependencyInventoryDigest === manifest.value.dependency_inventory_digest, "dependency inventory digest mismatch");
-  invariant(legalReview.value.dependency_inventory_digest === undefined || legalReview.value.dependency_inventory_digest === dependencyInventoryDigest, "legal dependency inventory digest mismatch");
   invariant(isDeepStrictEqual(manifest.value.build_entries, buildEntries()), "release has unexpected build entries");
   invariant(isDeepStrictEqual(manifest.value.launch_profile, await deriveLaunchProfile(repository, derivedAllowedImports)), "release launch profile differs from derived proof inputs");
-  invariant(manifest.value.legal_review.digest === legalReview.digest, "manifest legal review binding is stale");
-  await validateLegalCorrelation(repository, manifest.value, legalReview.value, ownerPaths, validators);
-
-  const expectedLegalPayloads = new Set(legalReview.value.upstream_legal_sources.map((source) => source.payload_path));
-  const actualLegalPayloads = actualFiles.filter((path) => path.startsWith("legal/upstream/"));
-  assertEqualPathSet(actualLegalPayloads, [...expectedLegalPayloads].sort(ordinal), "payload upstream legal closure");
-  for (const source of legalReview.value.upstream_legal_sources) {
-    const sourceBytes = await readRegularFile(repository, source.source_path);
-    const payloadBytes = await readRegularFile(payload, source.payload_path);
-    invariant(Buffer.from(sourceBytes).equals(Buffer.from(payloadBytes)), `upstream legal source/output bytes differ: ${source.source_path}`);
-  }
-  const expectedNotice = legalProjection(legalReview.value);
-  const actualNotice = await readRegularFile(payload, "legal/THIRD_PARTY_NOTICES.md");
-  invariant(Buffer.from(expectedNotice).equals(Buffer.from(actualNotice)), "generated third-party notice differs from canonical projection");
+  await validateNoticeContents(repository, payload, actualFiles);
 
   const summary = Object.freeze({
     payloadRoot: payload,
@@ -969,7 +730,6 @@ export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, ma
     bundleDigest: sha256(bundleBytes),
     dependencyInventoryDigest,
     manifest,
-    legalReview,
   });
   return Object.freeze({ stageRoot: payload, summary });
 }
@@ -977,7 +737,6 @@ export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, ma
 async function readPayloadDocuments(payloadRoot) {
   return {
     manifest: parseCanonicalDocument(await readRegularFile(payloadRoot, "manifest.json"), "release manifest"),
-    legalReview: parseCanonicalDocument(await readRegularFile(payloadRoot, "legal/review.json"), "release legal review"),
   };
 }
 
@@ -1024,7 +783,6 @@ async function createControlRecords(repositoryRoot, bundleInputs) {
     ...REQUIRED_CONTROLS,
     ...(await collectDeclaredPaths(repositoryRoot)),
     ...(await collectLegalSourcePaths(repositoryRoot)),
-    ...(await collectEvidencePaths(repositoryRoot)),
   ]);
   const records = [];
   for (const path of [...candidates].sort(ordinal)) {
@@ -1039,7 +797,7 @@ async function createRuntimeAssetRecords(repositoryRoot) {
 }
 
 async function copyLegal(repositoryRoot, files) {
-  files.set("legal/review.json", await readRegularFile(repositoryRoot, "release/legal-review.json"));
+  files.set("legal/THIRD_PARTY_NOTICES.md", await readRegularFile(repositoryRoot, "THIRD_PARTY_NOTICES.md"));
   const upstreamRoot = resolve(repositoryRoot, "release/legal/upstream");
   try {
     for (const path of await walkRegularFiles(upstreamRoot)) {
@@ -1197,21 +955,16 @@ export async function buildReleasePayload({ repositoryRoot, stageRoot }) {
   const runtimeAssets = await createRuntimeAssetRecords(repository);
   const dependency = await collectDependencyProvenance(repository, result.metafile, contributing);
   const dependencyInputs = dependency.records;
-  const legalBytes = await readRegularFile(repository, "release/legal-review.json");
-  const legalReview = parseCanonicalDocument(legalBytes, "release legal review source");
   const dependencyInventoryDigest = sha256(canonicalJsonBytes({
     adjacent_map_expectations: dependency.expectations,
     bundle_inputs: bundleInputs.filter((record) => record.origin.kind === "dependency"),
     dependency_provenance_inputs: dependencyInputs,
-    current_components: legalReview.value.current_components,
   }));
   const metafileBytes = canonicalJsonBytes(normalizedMetafile(result.metafile));
   const files = new Map([...outputFiles, ["metafile.json", metafileBytes]]);
   await copyLegal(repository, files);
-  files.set("legal/THIRD_PARTY_NOTICES.md", legalProjection(legalReview.value));
   const artifactRole = (path) => path.endsWith(".mjs") ? "executable"
     : path === "metafile.json" ? "metafile"
-    : path === "legal/review.json" ? "legal-review"
     : path === "legal/THIRD_PARTY_NOTICES.md" ? "legal-notice"
     : "upstream-legal";
   const artifacts = [...files].map(([path, bytes]) => ({ path, role: artifactRole(path), size: bytes.byteLength, digest: sha256(bytes) }))
@@ -1238,7 +991,6 @@ export async function buildReleasePayload({ repositoryRoot, stageRoot }) {
     build_entries: buildEntries(),
     entry_provenance: entryProvenance,
     launch_profile: await deriveLaunchProfile(repository, allowedImports),
-    legal_review: { source_path: "release/legal-review.json", payload_path: "legal/review.json", digest: legalReview.digest },
     artifacts,
   };
   const manifest = canonicalDocument(manifestValue);
@@ -1357,61 +1109,6 @@ export async function reproduceCurrentRelease({ repositoryRoot }) {
   }
 }
 
-async function readHeadFile(repositoryRoot, path) {
-  try {
-    const { stdout } = await execFileAsync("git", ["show", `HEAD:${path}`], { cwd: repositoryRoot, encoding: "buffer", maxBuffer: 16 * 1024 * 1024 });
-    return new Uint8Array(stdout);
-  } catch (error) {
-    if (error.code === 128 || error.stderr?.toString().includes("does not exist")) return undefined;
-    throw error;
-  }
-}
-
-async function verifyHeadLegalBaseline(repositoryRoot, candidateLegal) {
-  const listed = (await execFileAsync("git", ["ls-tree", "-r", "--name-only", "HEAD", "release", "dist/legal"], { cwd: repositoryRoot })).stdout
-    .trim().split("\n").filter(Boolean).sort(ordinal);
-  const releasePaths = listed.filter((path) => path === "release/legal-review.json" || path.startsWith("release/legal/upstream/"));
-  const distPaths = listed.filter((path) => path.startsWith("dist/legal/"));
-  const source = releasePaths.includes("release/legal-review.json") ? await readHeadFile(repositoryRoot, "release/legal-review.json") : undefined;
-  const output = distPaths.includes("dist/legal/review.json") ? await readHeadFile(repositoryRoot, "dist/legal/review.json") : undefined;
-  if (!source && !output) {
-    invariant(releasePaths.length === 0 && distPaths.length === 0, "HEAD contains orphan legal artifacts without review baseline");
-    return;
-  }
-  invariant(source && output, "HEAD legal source/output baseline is inconsistent");
-  invariant(Buffer.from(source).equals(Buffer.from(output)), "HEAD legal source/output bytes differ");
-  const prior = parseCanonicalDocument(source, "HEAD legal review").value;
-  const currentDecisions = new Map((candidateLegal.value.dependency_gate_decisions ?? []).map((record) => [record.id, record]));
-  for (const priorDecision of prior.dependency_gate_decisions ?? []) {
-    const current = currentDecisions.get(priorDecision.id);
-    invariant(current?.status === "accepted", `HEAD dependency decision disappeared without explicit re-authorization: ${priorDecision.id}`);
-  }
-  for (const collection of ["amendments", "supersessions"]) {
-    const priorRecords = new Map((prior[collection] ?? []).map((record) => [record.id, canonicalJsonBytes(record)]));
-    const currentRecords = new Map((candidateLegal.value[collection] ?? []).map((record) => [record.id, canonicalJsonBytes(record)]));
-    for (const [id, bytes] of priorRecords) {
-      const current = currentRecords.get(id);
-      invariant(current && Buffer.from(current).equals(Buffer.from(bytes)), `HEAD ${collection} record changed or disappeared: ${id}`);
-    }
-  }
-  const sourceUpstream = releasePaths.filter((path) => path.startsWith("release/legal/upstream/"));
-  const distUpstream = distPaths.filter((path) => path.startsWith("dist/legal/upstream/"));
-  for (const path of sourceUpstream) {
-    const counterpart = `dist/${path.slice("release/".length)}`;
-    invariant(distUpstream.includes(counterpart), `HEAD upstream counterpart missing: ${counterpart}`);
-    invariant(Buffer.from(await readHeadFile(repositoryRoot, path)).equals(Buffer.from(await readHeadFile(repositoryRoot, counterpart))), `HEAD upstream counterpart differs: ${path}`);
-  }
-  invariant(sourceUpstream.length === distUpstream.length, "HEAD has orphan dist upstream legal artifacts");
-  const exactDistLegal = [
-    "dist/legal/THIRD_PARTY_NOTICES.md",
-    "dist/legal/review.json",
-    ...sourceUpstream.map((path) => `dist/${path.slice("release/".length)}`),
-  ].sort(ordinal);
-  invariant(isDeepStrictEqual(distPaths, exactDistLegal), "HEAD dist legal closure has missing or extra artifacts");
-  const priorNotice = await readHeadFile(repositoryRoot, "dist/legal/THIRD_PARTY_NOTICES.md");
-  invariant(Buffer.from(priorNotice).equals(Buffer.from(legalProjection(prior))), "HEAD generated notice differs from its review source");
-}
-
 export async function writeTrackedReleasePayload({ repositoryRoot, candidateStageRoot }) {
   const repository = await canonicalExistingDirectory(repositoryRoot, "repository root");
   await recoverTrackedRelease(repository);
@@ -1423,7 +1120,6 @@ export async function writeTrackedReleasePayload({ repositoryRoot, candidateStag
     "candidate stage root must be outside the repository",
   );
   const candidate = await validateReleaseSemantics({ repositoryRoot: repository, payloadRoot: candidateRoot, ...(await readPayloadDocuments(candidateRoot)) });
-  await verifyHeadLegalBaseline(repository, candidate.summary.legalReview);
   const workRoot = await mkdtemp(resolve(tmpdir(), "archflow-release-write-"));
   try {
     const proof = await reproduceReleasePayload({
@@ -1499,7 +1195,6 @@ export function jsonSummary(value) {
       bundle_digest: value.bundleDigest,
       dependency_inventory_digest: value.dependencyInventoryDigest,
       manifest_digest: value.manifest.digest,
-      legal_review_digest: value.legalReview.digest,
     };
   }
   if (value?.candidate && value?.reproduced) {

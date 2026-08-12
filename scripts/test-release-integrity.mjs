@@ -162,20 +162,20 @@ async function main() {
     }, support.checkReleasePayload);
     passed.push("launch-profile");
 
-    await mutatePayload(temporaryRoot, "legal-output", async (root) => {
+    await mutatePayload(temporaryRoot, "upstream-license", async (root) => {
       const manifestPath = resolve(root, "manifest.json");
       const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      const legalArtifact = manifest.artifacts.find((record) => record.role === "upstream-legal");
-      const outputPath = resolve(root, legalArtifact.path);
+      const licenseArtifact = manifest.artifacts.find((record) => record.role === "upstream-legal");
+      const outputPath = resolve(root, licenseArtifact.path);
       const bytes = Buffer.concat([await readFile(outputPath), Buffer.from("substitution")]);
       await writeFile(outputPath, bytes);
-      legalArtifact.size = bytes.length;
-      legalArtifact.digest = support.sha256(bytes);
+      licenseArtifact.size = bytes.length;
+      licenseArtifact.digest = support.sha256(bytes);
       await writeFile(manifestPath, `${canonicalJson(manifest)}\n`);
     }, support.checkReleasePayload);
-    passed.push("legal-output");
+    passed.push("upstream-license");
 
-    await mutatePayload(temporaryRoot, "generated-notice", async (root) => {
+    await mutatePayload(temporaryRoot, "third-party-notice", async (root) => {
       const manifestPath = resolve(root, "manifest.json");
       const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
       const noticeArtifact = manifest.artifacts.find((record) => record.role === "legal-notice");
@@ -186,7 +186,7 @@ async function main() {
       noticeArtifact.digest = support.sha256(bytes);
       await writeFile(manifestPath, `${canonicalJson(manifest)}\n`);
     }, support.checkReleasePayload);
-    passed.push("generated-notice");
+    passed.push("third-party-notice");
 
     const nonEmptyStage = resolve(temporaryRoot, "non-empty-stage");
     await mkdir(nonEmptyStage);

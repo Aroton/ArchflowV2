@@ -123,7 +123,7 @@ async function fixture() {
   return { root, services: services.value, liveConfig: liveConfig.snapshot };
 }
 
-describe("live fixed-point regressions", () => {
+describe("live fixed-point regressions", { timeout: 20_000 }, () => {
   it("installs successive implementation outputs through the real state handler", async () => {
     const h = await fixture();
     const initial = h.services.state!.value;

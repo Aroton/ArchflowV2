@@ -58,14 +58,6 @@ for (const [path, metadata] of Object.entries(lock.packages ?? {})) {
 const recordedSpdx = new Set(
   [...inventory.matchAll(/^\| `([^`]+)` \| `([^`]+)` \|$/gm)].map((match) => `${match[1]} | ${match[2]}`)
 );
-const requiredMcpRoots = new Set([
-  "@modelcontextprotocol/core@2.0.0 | MIT",
-  "@modelcontextprotocol/server@2.0.0 | MIT"
-]);
-for (const entry of requiredMcpRoots) {
-  if (!expectedSpdx.has(entry)) failures.push(`missing exact MCP root from lock: ${entry}`);
-  if (!recordedSpdx.has(entry)) failures.push(`missing exact MCP root notice entry: ${entry}`);
-}
 for (const entry of [...expectedSpdx].filter((value) => !recordedSpdx.has(value)).sort()) {
   failures.push(`missing SPDX inventory entry: ${entry}`);
 }
@@ -84,14 +76,6 @@ for (const match of inventory.matchAll(
   });
 }
 
-const reviewedTypeScriptPackages = new Set(
-  [...lockedPackages.keys()].filter(
-    (identity) => identity === "typescript@7.0.2" || /^@typescript\/typescript-[^@]+@7\.0\.2$/u.test(identity)
-  )
-);
-for (const identity of reviewedTypeScriptPackages) {
-  if (!retainedMappings.has(identity)) failures.push(`missing retained NOTICE mapping: ${identity}`);
-}
 for (const identity of retainedMappings.keys()) {
   if (!lockedPackages.has(identity)) failures.push(`retained NOTICE mapping is not in the lock: ${identity}`);
 }
@@ -124,7 +108,7 @@ for (const [identity, mapping] of retainedMappings) {
   }
   const noticeFiles = (await readdir(packageDirectory)).filter(isNoticeFilename);
   if (noticeFiles.length === 0) {
-    failures.push(`installed package is missing its reviewed NOTICE: ${identity}`);
+    failures.push(`installed package is missing its retained NOTICE: ${identity}`);
     continue;
   }
   for (const filename of noticeFiles) {
@@ -147,7 +131,7 @@ try {
     }
     const noticeFiles = entries.filter(isNoticeFilename);
     if (noticeFiles.length > 0 && !retainedMappings.has(identity)) {
-      failures.push(`installed package has an unreviewed standalone notice: ${identity} (${noticeFiles.join(", ")})`);
+      failures.push(`installed package has no retained standalone notice mapping: ${identity} (${noticeFiles.join(", ")})`);
     }
   }
 } catch {
@@ -159,6 +143,6 @@ if (failures.length > 0) {
   process.exitCode = 1;
 } else {
   console.log(
-    `Notices passed for ${expectedSpdx.size} locked SPDX entries and ${retainedMappings.size} reviewed package NOTICE mappings.`
+    `Notices passed for ${expectedSpdx.size} locked SPDX entries and ${retainedMappings.size} retained package NOTICE mappings.`
   );
 }

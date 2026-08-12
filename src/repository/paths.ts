@@ -381,14 +381,12 @@ async function realpathWithMissingTail(candidate: string): Promise<string> {
  * because a path class may legitimately resolve to the task root. The `rel !== ".."` guard is shared
  * with `isInside` and is not redundant: `"..".startsWith(".." + sep)` is `false`.
  *
- * **No dependency, and the evaluation is recorded so the choice stays auditable.** `is-path-inside`
+ * **No dependency.** `is-path-inside`
  * disqualifies itself in its own bundled type definitions — "You should not use this as a security
  * mechanism" — and never resolves symlinks; `path-is-inside`, `resolve-path`, and `contains-path`
- * are lexical-only. `@openclaw/fs-safe@0.5.0` is genuinely correct, but its primary disqualifier is
- * **licensing**: it carries an optional dependency on `jszip@3.10.1` declaring
- * `(MIT OR GPL-3.0-or-later)`, and `scripts/check-dependency-policy.mjs` matches license strings
- * exactly, so a disjunction hard-fails — and a disjunction is a human legal election, never an
- * automatic pass. Roughly thirty lines of our own code is the right call.
+ * are lexical-only. A small local implementation resolves the relevant roots before containment
+ * checks and keeps this security boundary explicit without adding a package for roughly thirty
+ * lines of code.
  */
 async function containedUnder(root: string, input: string): Promise<Containment> {
   // Step 1 — reject before resolving.

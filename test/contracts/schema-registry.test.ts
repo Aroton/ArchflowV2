@@ -15,8 +15,8 @@ import { createJsonSchemaValidator } from "../helpers/json-schema.js";
  * The registry fence. Staleness of the committed bytes is `check:schemas`' job; this suite pins
  * the surrounding invariants: the registry↔directory bijection, that every committed document
  * still compiles under a strict third-party validator with only the surviving `x-archflow-*`
- * keywords registered, and that the generation manifest covers exactly the directory minus the two
- * deliberately hand-written release schemas.
+ * keywords registered, and that the generation manifest covers exactly the directory minus the
+ * deliberately hand-written release manifest.
  */
 
 const SCHEMA_FILES = {
@@ -45,7 +45,6 @@ const SCHEMA_FILES = {
   resultExpectation: "result-expectation",
   pathClaim: "path-claim",
   releaseManifest: "release-manifest",
-  releaseLegalReview: "release-legal-review",
   secretScanResult: "secret-scan-result",
   durablePrimitives: "durable-primitives",
   taskState: "task-state",
@@ -64,11 +63,11 @@ const loadSchema = async (name: string): Promise<Record<string, unknown>> =>
   JSON.parse(await readFile(new URL(`${name}.schema.json`, SCHEMA_DIR), "utf8")) as Record<string, unknown>;
 
 describe("SCHEMA_IDS registry", () => {
-  it("is a bijection with the schema directory at 36 ids", async () => {
+  it("is a bijection with the schema directory at 35 ids", async () => {
     const files = (await readdir(SCHEMA_DIR)).filter((name) => name.endsWith(".schema.json")).sort();
-    expect(Object.keys(SCHEMA_IDS)).toHaveLength(36);
-    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(36);
-    expect(files).toHaveLength(36);
+    expect(Object.keys(SCHEMA_IDS)).toHaveLength(35);
+    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(35);
+    expect(files).toHaveLength(35);
     expect(files).toEqual(Object.values(SCHEMA_FILES).map((stem) => `${stem}.schema.json`).sort());
     expect(Object.keys(SCHEMA_IDS).sort()).toEqual(Object.keys(SCHEMA_FILES).sort());
   });
@@ -85,14 +84,14 @@ describe("SCHEMA_IDS registry", () => {
     }
   });
 
-  it("generates everything except the two hand-written release schemas", async () => {
+  it("generates everything except the hand-written release manifest", async () => {
     const generated = SCHEMA_GENERATION_GROUPS
       .flatMap((group) => group.documents)
       .filter((document) => document.migrated)
       .map((document) => document.file)
       .sort();
 
-    expect(HAND_WRITTEN_SCHEMA_FILES).toEqual(["release-manifest", "release-legal-review"]);
+    expect(HAND_WRITTEN_SCHEMA_FILES).toEqual(["release-manifest"]);
     for (const stem of HAND_WRITTEN_SCHEMA_FILES) {
       expect(generated).not.toContain(stem);
       const document = await loadSchema(stem);

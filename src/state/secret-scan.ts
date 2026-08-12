@@ -28,7 +28,7 @@ if (new Set(enabledRuleIds).size !== enabledRuleIds.length ||
   throw new TypeError("Secretlint preset exported duplicate or unsupported public rule identifiers");
 }
 
-/** Public for dependency-policy and adapter tests; filter-comments is intentionally absent. */
+/** Public for adapter tests; filter-comments is intentionally absent. */
 export const SECRETLINT_ENABLED_RULE_IDS: readonly string[] = enabledRuleIds;
 
 export const SECRETLINT_DETECTOR_SET_ID = parseSafeId(`secretlint:v1:${canonicalJsonDigest({

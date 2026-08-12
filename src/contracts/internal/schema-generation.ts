@@ -45,14 +45,12 @@ export type SchemaGenerationGroup = {
 };
 
 /**
- * The two deliberately hand-written schemas, excluded from generation forever: they describe the
- * release payload itself, are consumed only by `scripts/release-support.mjs`, and have no Zod
- * source because the server never validates them at runtime. `check:schemas` independently
- * asserts the generator never emits them.
+ * The deliberately hand-written release manifest schema is excluded from generation because it
+ * describes the release payload itself and has no runtime Zod source. `check:schemas`
+ * independently asserts the generator never emits it.
  */
 export const HAND_WRITTEN_SCHEMA_FILES: readonly string[] = Object.freeze([
   "release-manifest",
-  "release-legal-review",
 ]);
 
 /** The full emission manifest. Each group module owns exactly one shape group's documents. */

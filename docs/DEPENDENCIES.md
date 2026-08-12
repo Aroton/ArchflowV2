@@ -1,6 +1,6 @@
 # DEPENDENCIES
 
-**Explored:** 2026-08-11 · **Commit:** `4bc1c81` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, CI
+**Explored:** 2026-08-12 · **Commit:** `ae25739` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, CI
 
 ## Runtime and package baseline
 
@@ -17,7 +17,7 @@
 | `yaml` | `2.9.0` | `src/contracts/yaml.ts` implements strict, single-document YAML parsing used by `config.yaml` and `workflow.yaml`. |
 | `@secretlint/core` | `13.0.4` | `src/state/secret-scan.ts` calls `lintSource` before retaining implementation output. |
 | `@secretlint/secretlint-rule-preset-recommend` | `13.0.4` | Supplies the production detector set; the filter-comments rule is removed before scanning. |
-| `write-file-atomic` | `8.0.0` | Still admitted and lock-policy checked, but currently has **no production import**. `src/state/atomic.ts` now implements exclusive creation and atomic replacement with Node `open`/`link`/`rename`; `src/types/write-file-atomic.d.ts` is a residual narrow declaration. Do not assume the package protects current state writes. |
+| `write-file-atomic` | `8.0.0` | Declared but currently has **no production import**. `src/state/atomic.ts` now implements exclusive creation and atomic replacement with Node `open`/`link`/`rename`; `src/types/write-file-atomic.d.ts` is a residual narrow declaration. Do not assume the package protects current state writes. |
 
 `@secretlint/types` is transitive and imported type-only by `src/state/secret-scan.ts`. Production code otherwise relies heavily on Node built-ins (`fs`, `path`, `crypto`, `child_process`, `stream`, `os`, `async_hooks`, timers, and related modules).
 
@@ -30,7 +30,7 @@
 | `vitest` | `4.1.10` | Unit, integration, contract, crash, and opt-in real-host tests. `vitest.config.ts` uses the Node environment and includes `test/**/*.test.ts`. |
 | `vite` | `7.3.6` | Vitest runtime and the child-process fixture loader used by crash tests. |
 | `esbuild` | `0.28.1` | Temporary bundles in `scripts/build-temp-helper.mjs` and release bundles in `scripts/release-support.mjs`. |
-| `ajv` | `8.20.0` | Dev-only since 2026-08-11: strict compilation of the committed JSON Schemas in tests (`test/helpers/json-schema.ts`) and release-receipt validation in `scripts/release-support.mjs`. Production validates through Zod and never compiles a schema, so Ajv's transitive `fast-uri` also left the runtime dependency closure. |
+| `ajv` | `8.20.0` | Dev-only since 2026-08-11: strict compilation of committed JSON Schemas in tests (`test/helpers/json-schema.ts`) and the release manifest in `scripts/release-support.mjs`. Production validates through Zod and never compiles a schema, so Ajv's transitive `fast-uri` also left the runtime dependency closure. |
 | `ajv-formats` | `3.0.1` | Format support for the dev-only Ajv compiler. |
 | `@secretlint/secretlint-rule-aws` | `13.0.4` | Dev-only rule used to exercise secret-scanning behavior. |
 
@@ -45,7 +45,7 @@ There is no ESLint, Prettier, Biome, dotenv loader, web framework, database clie
 - The transport is newline-delimited JSON-RPC over stdio. `src/mcp/framing.ts` and `src/mcp/send-queue.ts` own framing and ordered output/backpressure; the pinned SDK owns JSON-RPC dispatch and validation (see `mcp/SERVER.md`). The SDK's `StdioServerTransport` is not used; `sdk-adapter.ts` provides a local `Transport` so output remains under the repository's queue and its canonical result-xor-error egress check.
 - The server identifies itself as `archflow-mcp@0.0.0` and supports MCP protocol `2025-11-25` (`PROTOCOL_VERSION` in `src/mcp/sdk-adapter.ts`).
 - The only SDK import in production is the public root in `src/mcp/sdk-adapter.ts`. `scripts/check-mcp-sdk-boundary.mjs` enforces that boundary; `scripts/test-mcp-sdk-boundary-policy.mjs` mutation-tests the checker.
-- `scripts/probe-mcp-sdk-compatibility.mjs` verifies the exact SDK/core package identities and the public/behavioral surfaces the adapter relies on. It also runs `npm view ... dist-tags --json`, so this verification step requires registry network access.
+- `scripts/probe-mcp-sdk-compatibility.mjs` verifies the installed SDK/core public and behavioral surfaces the adapter relies on.
 - `src/mcp/tools.ts` advertises exactly four tools: `archflow_state`, `archflow_counter_review`, `archflow_gate`, and `archflow_waiver`. Their schemas originate in `src/contracts/schemas/v1/` and `src/contracts/mcp-tools.ts`.
 
 Host identity is derived from MCP `clientInfo.name` in `src/contracts/hosts.ts`: `claude-code` maps to Claude, `codex-mcp-client` maps to Codex, and any unrecognized name maps to `unknown`. Recorded versions are evidence fixtures, not a prefix-based identity fallback.
@@ -91,7 +91,7 @@ There is no server or cloud database. Durable authority is ordinary repository c
 
 - `src/repository/git.ts` invokes `git` with `execFile`, never a shell. Defaults are an 8 MiB output buffer and 30-second timeout; binary stdin is bounded at 25 MiB. Git must be at least 2.25 and use SHA-1 object format.
 - Repository readers use commands such as `rev-parse`, `rev-list`, `status`, `ls-tree`, `ls-files`, `diff`, `merge-base`, `cat-file`, `hash-object`, and `check-attr`. Absence is accepted only through command-specific exit-code/diagnostic pairs.
-- `src/state/lock.ts` uses a task-local `mkdir` lock and `AsyncLocalStorage`; `proper-lockfile` is explicitly prohibited by dependency policy.
+- `src/state/lock.ts` uses a task-local `mkdir` lock and `AsyncLocalStorage`; no external lock library participates in this path.
 - `src/state/atomic.ts` uses exclusive temporary files, hard links, renames, and symlinks for immutable creation and projection. Paths are resolved and classed before mutation; `.archflow/**` is constrained to ordinary non-executable Git blobs.
 - `.gitattributes` marks `.archflow/** -text merge=binary` so byte-addressed state is not changed by line-ending conversion or conflict-marker insertion. It also fixes LF handling for generated `dist/` text and preserves retained license bytes.
 
@@ -122,7 +122,7 @@ Production `src/` contains no `fetch`, HTTP client, listening socket, database d
 Network access can still occur at two outer boundaries:
 
 1. The spawned Claude/Codex CLIs communicate with their own providers using existing subscription/login credentials. ArchFlow treats these CLIs as external processes and post-validates structured output.
-2. Verification/reproduction tooling accesses npm: `scripts/probe-mcp-sdk-compatibility.mjs` queries live dist-tags, and release reproduction runs an isolated `npm ci --ignore-scripts --no-audit --no-fund` with a temporary home/cache.
+2. Release reproduction accesses npm to run an isolated `npm ci --ignore-scripts --no-audit --no-fund` with a temporary home/cache.
 
 There are no application-managed users, sessions, OAuth flows, API tokens, or authorization database. Human authority is represented by durable ArchFlow gate/waiver records rather than an auth service.
 
@@ -136,13 +136,12 @@ Important `package.json` scripts:
 - `test`, `test:unit`, `test:contracts`, `test:mcp-runtime`: Vitest suites; contract and MCP runtime checks also run separately even though the broad suite includes all matching tests.
 - `test:real-host` and `bench:review`: opt-in serialized tests requiring installed/authenticated host CLIs.
 - `build:temp`: esbuild smoke bundles under a unique temporary directory.
-- `check:dependencies`: exact dependency/license/closure allowlist in `scripts/check-dependency-policy.mjs`.
 - `check:notices` and `test:notices-policy`: lockfile-to-notice reconciliation and mutation tests.
 - `check:mcp-sdk-boundary` and `test:mcp-sdk-boundary-policy`: production SDK import isolation and mutation tests.
 - `release:stage`, `release:check`, `release:reproduce`, `release:write`, `release:smoke`, and `release:mutations`: deterministic release construction, validation, promotion, smoke tests, and hostile mutations.
 - `check`: the aggregate local verification pipeline.
 
-No formatter or source linter is configured. Formatting/import style is convention-backed; correctness gates are strict TypeScript, tests, contract agreement checks, and custom policy scripts.
+No formatter or source linter is configured. Formatting/import style is convention-backed; correctness gates are strict TypeScript, tests, contract agreement checks, notice consistency, SDK boundary checks, and release integrity checks.
 
 ### Release payload and installer
 
@@ -151,7 +150,7 @@ No formatter or source linter is configured. Formatting/import style is conventi
 - `src/main.ts` -> `dist/archflow-mcp.mjs` (`mcp-stdio`).
 - `src/local/main.ts` -> `dist/archflow-local.mjs` (`local-cli`).
 
-The release is not published by automation. `dist/` is tracked and validated against `dist/manifest.json`, `dist/metafile.json`, `dist/legal/`, `release/legal-review.json`, retained upstream licenses, and dependency provenance. Reproduction materializes a clean source set, performs isolated `npm ci`, rebuilds, and byte-compares the candidate. The legal receipt currently records `project_license_status: "missing"` and `distribution_status: "unresolved"`; do not infer a distribution grant from bundled third-party notices.
+The release is not published by automation. `dist/` is tracked and validated against `dist/manifest.json`, `dist/metafile.json`, dependency provenance, the repository `THIRD_PARTY_NOTICES.md`, and retained upstream license texts. The release copies notices and licenses directly, hashes every payload artifact, and verifies source-to-payload byte equality. Reproduction materializes a clean source set, performs isolated `npm ci`, rebuilds, and byte-compares the candidate.
 
 `install.sh` verifies the tracked payload, installs it beneath `${ARCHFLOW_HOME:-$HOME/.archflow}/bundle`, writes `archflow-mcp` and `archflow-local` launchers beneath `${ARCHFLOW_BIN:-$HOME/.local/bin}`, and copies skills to `~/.claude/skills/` and/or `~/.agents/skills/`. It requires Node in `^24.15.0` and requires the launcher directory to be on `PATH`.
 
@@ -159,12 +158,11 @@ The release is not published by automation. `dist/` is tracked and validated aga
 
 `.github/workflows/ci.yml` is the only CI integration. It runs on every push and pull request with read-only repository contents permission, `ubuntu-latest`, and a non-fail-fast matrix of Node `24.15.0` and `24.18.0`. `actions/checkout` and `actions/setup-node` are pinned to full commit SHAs.
 
-After `npm ci`, CI runs the SDK compatibility probe, typecheck, focused MCP tests, the full suite, contract tests, temporary build, dependency/notices/SDK-boundary policies and their mutation tests, release verification/smoke/mutations/reproduction, a fresh release staging comparison, and finally asserts that no repository `.tmp` directory remains. There is no deployment, package publication, container build, or artifact upload workflow.
+After `npm ci`, CI runs the SDK compatibility probe, typecheck, focused MCP tests, the full suite, contract tests, temporary build, notice and SDK-boundary checks with their mutation tests, release verification/smoke/mutations/reproduction, a fresh release staging comparison, and finally asserts that no repository `.tmp` directory remains. There is no deployment, package publication, container build, or artifact upload workflow.
 
 ## Change checklist
 
-- Any direct dependency change must update the exact allowlist in `scripts/check-dependency-policy.mjs`, the lockfile, `THIRD_PARTY_NOTICES.md`, and release legal/provenance evidence as applicable.
-- The approved lockfile license set is closed: `0BSD`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`, `ISC`, and `MIT`. The policy also rejects Lightning CSS and specifically prohibited packages such as MCP framework/client packages, `execa`, and `proper-lockfile`.
+- Dependency changes update the exact pins in `package.json`, `package-lock.json`, and the ordinary third-party notice content as applicable.
 - Keep all production `@modelcontextprotocol/*` imports isolated to `src/mcp/sdk-adapter.ts` and public package roots.
-- The executable authorities for the dependency surface are `package.json`, `package-lock.json`, and the policy/release scripts — not narrative documents.
+- The executable authorities for the dependency surface are `package.json`, `package-lock.json`, and the release provenance derived from the build — not narrative documents.
 - Real-host tests are capability probes that can spend provider quota and depend on installed CLI login state; they are not part of ordinary `npm test` or CI.

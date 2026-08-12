@@ -48,7 +48,7 @@ try {
   await writeFile(`${syntheticInstalledRoot}/ajv/NOTICE.txt`, "unexpected unmapped notice\n");
   const unmapped = runCheck(syntheticInstalledRoot);
   assert.notEqual(unmapped.status, 0, "unexpected package notice must fail policy");
-  assert.match(unmapped.stderr, /unreviewed standalone notice/u);
+  assert.match(unmapped.stderr, /no retained standalone notice mapping/u);
 
   console.log("Notice policy mutation checks rejected changed, missing, and unmapped notice content.");
 } finally {

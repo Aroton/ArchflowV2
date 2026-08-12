@@ -11,10 +11,9 @@ dist/*.mjs text eol=lf
 dist/archflow-mcp.mjs -whitespace
 dist/archflow-local.mjs -whitespace
 dist/*.json text eol=lf
-dist/legal/*.json text eol=lf
 dist/legal/*.md text eol=lf
 
-# Retained upstream legal evidence preserves the exact reviewed source bytes.
+# Retained upstream license texts preserve their exact source bytes.
 release/legal/upstream/** -text
 release/legal/upstream/** -whitespace
 dist/legal/upstream/** -text

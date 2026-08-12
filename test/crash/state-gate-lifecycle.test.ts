@@ -232,7 +232,7 @@ describe("gate process and SIGKILL boundaries", { timeout: 20_000 }, () => {
       if (before.kind !== "canonical") throw new Error("fixture state unavailable");
       await writeFile(input.authority.state.absolute, canonicalDocument({
         ...before.document.value,
-        step: "adjudicate",
+        step: "triage",
         status: "succeeded",
         attempt: parseSafeInteger(attempt),
       } as TaskStateV1).bytes);

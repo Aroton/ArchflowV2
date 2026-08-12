@@ -6538,7 +6538,7 @@
       ]
     },
     "src/repository/paths.ts": {
-      "bytes": 29324,
+      "bytes": 29021,
       "format": "esm",
       "imports": [
         {
@@ -8194,7 +8194,7 @@
       ]
     },
     "src/state/secret-scan.ts": {
-      "bytes": 6319,
+      "bytes": 6297,
       "format": "esm",
       "imports": [
         {

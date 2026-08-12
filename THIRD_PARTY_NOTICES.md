@@ -1,6 +1,6 @@
 # Third-party notices
 
-This private development package currently has no project license. Its locked third-party dependency graph is listed below for license review and reproducibility. Package license declarations are retained in the SPDX inventory; standalone attribution notices are retained and content-addressed in this repository as described below.
+The locked third-party dependency graph is listed below for attribution and reproducibility. Package license declarations are retained in the SPDX inventory; standalone attribution notices are retained and content-addressed in this repository as described below.
 
 This inventory is generated from and checked against `package-lock.json`. Optional platform packages are included even when they are not installed on the current host.
 
@@ -149,9 +149,9 @@ This inventory is generated from and checked against `package-lock.json`. Option
 
 ## Retained standalone notices
 
-The SPDX table is the exact-lock license inventory. In addition, any package-distributed standalone `NOTICE` or `THIRD_PARTY` file is a required retained artifact. Phase 1 reviewed every exact TypeScript 7.0.2 registry tarball in the lock, including optional platform packages not installed on this host. All 21 tarballs contain the same raw `NOTICE.txt` digest shown below, so one repository-normalized copy is retained and every exact package is mapped to it. The source and retained SHA-256 digests deliberately differ because the tracked copy uses repository-normalized text formatting.
+The SPDX table is the exact-lock license inventory. In addition, package-distributed standalone `NOTICE` or `THIRD_PARTY` files are retained as ordinary attribution content. The TypeScript 7.0.2 packages listed below share the same raw `NOTICE.txt`, so one repository-normalized copy is retained and mapped to each package. The source and retained SHA-256 digests deliberately differ because the tracked copy uses repository-normalized text formatting.
 
-The notices checker inventories installed package notice files, verifies their source digest when present, requires the explicit mapping for all reviewed optional packages, and verifies the retained file content. A lock/version change invalidates these mappings and requires a fresh tarball review.
+The notices checker compares the SPDX table with `package-lock.json`, verifies mapped notice files and their digests, and reports installed standalone notices that have no retained mapping. Dependency updates use the normal lockfile and notice update workflow.
 
 | Locked package | Source NOTICE SHA-256 | Retained path | Retained SHA-256 |
 | --- | --- | --- | --- |

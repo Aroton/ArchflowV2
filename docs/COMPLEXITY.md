@@ -1,6 +1,6 @@
 # COMPLEXITY
 
-**Explored:** 2026-08-11 · **Commit:** `4bc1c81` · **Covers:** the whole repository
+**Explored:** 2026-08-12 · **Commit:** `ae25739` · **Covers:** the whole repository
 
 A per-subsystem audit of where the machinery is heaviest, what it buys, and what could be simplified. Written to support iterating on the workflow — each item states the concrete problem the complexity solves so a simplification can be judged against it, per the engineering priorities in CLAUDE.md.
 
@@ -28,7 +28,7 @@ The audit asked for an explicit decision about how much SDK distrust the prototy
 
 ### 4. Dual shape authorities in `contracts/` — resolved 2026-08-11
 
-Agent-facing shapes existed as JSON Schema *and* a Zod mirror, with `assertZodAgreement` proving they matched — three artifacts per shape, with some rules living in a *third* place (custom Ajv keywords). Zod is now the single runtime authority: 34 of the 36 committed schemas are generated from it (`generate:schemas` / `check:schemas`), the two release schemas stay hand-written, keyword logic became Zod refines, and Ajv left production entirely — it is a dev dependency compiled only by `test/helpers/json-schema.ts` and the release scripts.
+Agent-facing shapes existed as JSON Schema *and* a Zod mirror, with `assertZodAgreement` proving they matched — three artifacts per shape, with some rules living in a *third* place (custom Ajv keywords). Zod is now the single runtime authority: 34 of the 35 committed schemas are generated from it (`generate:schemas` / `check:schemas`), the release manifest stays hand-written, keyword logic became Zod refines, and Ajv left production entirely — it is a dev dependency compiled only by `test/helpers/json-schema.ts` and the release scripts.
 
 ### 5. Four CLI commands overlap `build-request` — resolved 2026-08-11
 
@@ -53,7 +53,7 @@ The child-CLI lockdown argvs (long literal flag lists per host) and the regex-ba
 ### 9. Things that look removable
 
 - **`workflow.ts`** parses workflow YAML and then rejects anything that doesn't deep-equal a hard-coded constant — a full file/schema/parse pipeline validating a compile-time value. Deliberate keep (2026-08-11): 47 tested lines; the pinned graph now also anchors the generated `workflow.schema.json` emission, so removal is no longer free.
-- **Orphaned schemas** — resolved 2026-08-11: the two true orphans (`authority-link`, `evidence-reference`) are deleted; the two release/legal schemas stay by declared exception as the hand-written inputs to `release-support.mjs`.
+- **Orphaned schemas** — resolved 2026-08-12: the true orphans (`authority-link`, `evidence-reference`, and the retired dependency-review receipt) are deleted; only the release manifest stays by declared exception as a hand-written input to `release-support.mjs`.
 - **`internal/test-capabilities.ts`** — resolved 2026-08-11: the three production-imported factories now live in `internal/trust-mints.ts` (mints beside the `trust-brands.ts` registries they register with); `test-capabilities.ts` keeps only test-only factories and no production module imports it.
 - **Advertised-schema pruning** in `mcp/tools.ts` — a small custom JSON-Schema `$ref` resolver owned forever, motivated by a measured 179 KB saving; worth keeping only while that saving matters.
 - **The `unified-diff` tier** — with 40 context lines it's nearly full-file for most real files; it's fair to ask whether the hand-rolled Myers diff (~200 lines, with an 8 MB worst-case allocation pattern) earns its place over "embed or digest-only."

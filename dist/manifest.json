@@ -2,6 +2,9 @@
   "adjacent_map_expectations": [
     {
       "expectation": "present",
+      "first_party_roots": [
+        "../src"
+      ],
       "input_key": "node_modules/@modelcontextprotocol/core/dist/auth-CUe6YdwF.mjs",
       "map": {
         "digest": "92212ffee512d7c81f4476a62062dfecb43c59292628ef51d026f4491c2de6a7",
@@ -9,13 +12,13 @@
         "package_relative_path": "dist/auth-CUe6YdwF.mjs.map",
         "package_version": "2.0.0"
       },
-      "recognized_third_party_components": [],
-      "reviewed_first_party_roots": [
-        "../src"
-      ]
+      "recognized_third_party_components": []
     },
     {
       "expectation": "present",
+      "first_party_roots": [
+        "../../core-internal/src"
+      ],
       "input_key": "node_modules/@modelcontextprotocol/server/dist/ajvProvider-CEoC__sr.mjs",
       "map": {
         "digest": "2eb52e887d5fda7dad8191f9b1adae36d8b77566cf2c8228eb2844e0358f751e",
@@ -29,18 +32,18 @@
         "fast-deep-equal@3.1.3",
         "fast-uri@3.1.0",
         "json-schema-traverse@1.0.0"
-      ],
-      "reviewed_first_party_roots": [
-        "../../core-internal/src"
       ]
     },
     {
       "expectation": "expected-absent",
       "input_key": "node_modules/@modelcontextprotocol/server/dist/chunk-Br0eD_fh.mjs",
-      "rationale": "The reviewed SDK bridge chunk has no published adjacent source map in @modelcontextprotocol/server@2.0.0."
+      "rationale": "The published SDK bridge chunk has no adjacent source map in @modelcontextprotocol/server@2.0.0."
     },
     {
       "expectation": "present",
+      "first_party_roots": [
+        "../../core-internal/src"
+      ],
       "input_key": "node_modules/@modelcontextprotocol/server/dist/dialects-DoSzNhcb.mjs",
       "map": {
         "digest": "196fc76d86a5665c7b12ad8727ac3c68d196001d7e12bea3b6a6347405036499",
@@ -48,13 +51,13 @@
         "package_relative_path": "dist/dialects-DoSzNhcb.mjs.map",
         "package_version": "2.0.0"
       },
-      "recognized_third_party_components": [],
-      "reviewed_first_party_roots": [
-        "../../core-internal/src"
-      ]
+      "recognized_third_party_components": []
     },
     {
       "expectation": "present",
+      "first_party_roots": [
+        "../src"
+      ],
       "input_key": "node_modules/@modelcontextprotocol/server/dist/mcp-DXXb3Vv3.mjs",
       "map": {
         "digest": "d7dfb58b7eecce56be099afc8c2551687382e084e6465889c31c933705827915",
@@ -62,13 +65,13 @@
         "package_relative_path": "dist/mcp-DXXb3Vv3.mjs.map",
         "package_version": "2.0.0"
       },
-      "recognized_third_party_components": [],
-      "reviewed_first_party_roots": [
-        "../src"
-      ]
+      "recognized_third_party_components": []
     },
     {
       "expectation": "present",
+      "first_party_roots": [
+        "../../core-internal/src"
+      ],
       "input_key": "node_modules/@modelcontextprotocol/server/dist/src-CX2iR2pK.mjs",
       "map": {
         "digest": "c1fdb7f323bc60b04d4a7fd81036694a11ef3057716a971a0502be4812de8102",
@@ -78,9 +81,6 @@
       },
       "recognized_third_party_components": [
         "content-type@1.0.5"
-      ],
-      "reviewed_first_party_roots": [
-        "../../core-internal/src"
       ]
     }
   ],
@@ -98,16 +98,10 @@
       "size": 2433583
     },
     {
-      "digest": "d25516b74a3296a41d46b5051d06ccc13bd3bd1255ca4804ae7bd13828a055cc",
+      "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
       "path": "legal/THIRD_PARTY_NOTICES.md",
       "role": "legal-notice",
-      "size": 785
-    },
-    {
-      "digest": "072fcb8a6c8d6eab1f97be3743cebc87546814f08f0d28d31e471504e2335215",
-      "path": "legal/review.json",
-      "role": "legal-review",
-      "size": 34050
+      "size": 12116
     },
     {
       "digest": "a05350a88e318e4f5f2c2a1ff1e2e88daa4dd38e6e78b71cccae422bdc762cc3",
@@ -216,7 +210,7 @@
       "role": "manifest"
     },
     {
-      "digest": "1b0d725eb8e6900a5b88316a5b48167fdb48fd194c4c8bd3279652f0ab0a9797",
+      "digest": "47af69e51f33d9c8a7c6d8516c5cf66f666ecdcfce59ef5528ea49c595a0d499",
       "path": "metafile.json",
       "role": "metafile",
       "size": 318418
@@ -3468,13 +3462,13 @@
     },
     {
       "bytes_in_output": 22198,
-      "digest": "379a7b92c2a08ae726926948011b352e88c72c652d75c7b3c70deff08790e2ff",
+      "digest": "e147a9f525521ad01ca570661c43b8e4bad34f1dd4940daec232579b655a755e",
       "key": "src/repository/paths.ts",
       "origin": {
         "kind": "repository",
         "path": "src/repository/paths.ts"
       },
-      "size": 29324
+      "size": 29021
     },
     {
       "bytes_in_output": 4698,
@@ -3828,13 +3822,13 @@
     },
     {
       "bytes_in_output": 9082,
-      "digest": "c71f37899f1bd6d721129dfc8a77ab630b3de25ed03d94dca6e9bb0445735ac8",
+      "digest": "265d1a67b4f2b509292363340eb7795a1b8588bf16afc6d7386239372b49eb43",
       "key": "src/state/secret-scan.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/secret-scan.ts"
       },
-      "size": 6319
+      "size": 6297
     },
     {
       "bytes_in_output": 47812,
@@ -4241,7 +4235,6 @@
       "src/contracts/schemas/v1/primitives.schema.json",
       "src/contracts/schemas/v1/project-error.schema.json",
       "src/contracts/schemas/v1/protocol-error.schema.json",
-      "src/contracts/schemas/v1/release-legal-review.schema.json",
       "src/contracts/schemas/v1/release-manifest.schema.json",
       "src/contracts/schemas/v1/result-expectation.schema.json",
       "src/contracts/schemas/v1/result-manifest.schema.json",
@@ -4258,7 +4251,7 @@
     ],
     "workflow": "assets/workflow.yaml"
   },
-  "dependency_inventory_digest": "640a0dcb487825b1385acaab082a4035f39bcd0bc99fc7d5a9ec1e21a5a1f81e",
+  "dependency_inventory_digest": "8cab267387b1b7b2b6ee2f518d4ff2848dbfc154f3a47b6273c4a4d9bd0458d1",
   "dependency_provenance_inputs": [
     {
       "digest": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
@@ -5173,11 +5166,6 @@
       "stdout": "pipe"
     }
   },
-  "legal_review": {
-    "digest": "072fcb8a6c8d6eab1f97be3743cebc87546814f08f0d28d31e471504e2335215",
-    "payload_path": "legal/review.json",
-    "source_path": "release/legal-review.json"
-  },
   "proof_inputs": [
     ".github/workflows/ci.yml",
     "package.json",
@@ -5192,14 +5180,19 @@
   ],
   "release_control_inputs": [
     {
-      "digest": "a5948093a230b3a0f8f832ccf88a9299365e2f6cce1d5a55694e1388e019bb8c",
+      "digest": "cf02f2966de21fababf769dcc5ae62a7d55071107d938423a424e9a321d29222",
       "path": ".gitattributes",
-      "size": 807
+      "size": 768
     },
     {
-      "digest": "76a86601de73ed59d9e20baa039b1c3484006f6f77d1e10219546b6a4ca52166",
+      "digest": "b53bc304b6dcfa41cf4c1e7feaca042936e2f1021172a2b4c0ee0a1606bd8de1",
       "path": ".github/workflows/ci.yml",
-      "size": 1331
+      "size": 1291
+    },
+    {
+      "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
+      "path": "THIRD_PARTY_NOTICES.md",
+      "size": 12116
     },
     {
       "digest": "f6b873d65e7c97dfe9f099f3a0d10d8aed448599615a35ed2ead33e99beb7c0d",
@@ -5242,34 +5235,9 @@
       "size": 72729
     },
     {
-      "digest": "eea1ee1f3681596ef4c787f2404c78c2b56a36d126d541b66c4a5a6f8016dc5f",
+      "digest": "4514122b0ad2a19d08ab2a9c29912d3bdca90ac7638423857ffc7fe08a27e361",
       "path": "package.json",
-      "size": 2557
-    },
-    {
-      "digest": "6282adc7c1d1304f245ff5877a2824b05b53f9842dc658282610c981505f0caf",
-      "path": "release/evidence/advisory-snapshot.json",
-      "size": 1060
-    },
-    {
-      "digest": "01eee5e2516fa5c29e30ebf1037b13692e553859c165fbda6e329614a4e7d632",
-      "path": "release/evidence/focused-inert-reachability.json",
-      "size": 910
-    },
-    {
-      "digest": "deb867f4b505da598ea0bf483ae6ecdb116460ebac573489d7763c720ad55ee1",
-      "path": "release/evidence/patched-artifact-availability.json",
-      "size": 424
-    },
-    {
-      "digest": "a7aa8000af47ae23b5faf1b28c49295a1b9a5b1e1da2a942a7b06327991a1207",
-      "path": "release/evidence/user-risk-acceptance.json",
-      "size": 832
-    },
-    {
-      "digest": "072fcb8a6c8d6eab1f97be3743cebc87546814f08f0d28d31e471504e2335215",
-      "path": "release/legal-review.json",
-      "size": 34050
+      "size": 2457
     },
     {
       "digest": "a05350a88e318e4f5f2c2a1ff1e2e88daa4dd38e6e78b71cccae422bdc762cc3",
@@ -5367,9 +5335,9 @@
       "size": 610
     },
     {
-      "digest": "1e12e5a7611a5913f86a74d20f617c2319613f183f36309923a5603c8139121d",
+      "digest": "fd66e3d4144c119f1fafb7ac6de5866660fc54ac48408c7a1bd62b35ba9bb432",
       "path": "scripts/release-support.mjs",
-      "size": 80624
+      "size": 55655
     },
     {
       "digest": "ccfbcc8df639e93b98bf292de22364e20c3f45b6e8993d2db8606160d0aa7a8e",
@@ -5382,9 +5350,9 @@
       "size": 15281
     },
     {
-      "digest": "ca67fdbef8798c831458b06ebbc2f027b3298826d5723302e085fa6bf9c8c773",
+      "digest": "a6c8aad40d94c5520053cff5ca8ef0227dc187b59c435c94c0cbd64fb3713382",
       "path": "scripts/test-release-integrity.mjs",
-      "size": 12878
+      "size": 12898
     },
     {
       "digest": "594a118045a89acf3b33bcca4c8bfd3d0022beed13aeef897174ce4b10c90f97",
@@ -5442,14 +5410,9 @@
       "size": 6843
     },
     {
-      "digest": "e9a0879cb1b52d02afe94c471156ab6fe7ebf3f735c9926448d41a8e28963f0e",
-      "path": "src/contracts/schemas/v1/release-legal-review.schema.json",
-      "size": 15921
-    },
-    {
-      "digest": "44e7ad12c214ee4ab3cf73b53dacdc65ac1ff0716d787a881b775e7ca5ffe185",
+      "digest": "abd0ec92c0f1c51fa436ec9671e1a4405ccec41cf7c6809ef0b5c06e0c2c8a38",
       "path": "src/contracts/schemas/v1/release-manifest.schema.json",
-      "size": 14114
+      "size": 13637
     },
     {
       "digest": "383658934b4fdb6074955e2202d764f044d49ca0295a8dfc46ebe1b8d2030861",
@@ -5477,19 +5440,19 @@
       "size": 2032
     },
     {
-      "digest": "5a96bf18371db229650ad82fc96e9918bac06962099eddbd9a1addfce988ecbe",
+      "digest": "d8f98c55183bdfdfba0f493eb579c5961a0ee46f8c50a3a3de7240e66b7d8b13",
       "path": "src/contracts/versions.ts",
-      "size": 2238
+      "size": 2169
     },
     {
-      "digest": "cb5332e9c930be8264371179b6032060f7f440ef01fadde19716049908861382",
+      "digest": "20e358d6b544682bf7644b98567a7eacd5cd185cedc9190c8875d649d9dbcc6f",
       "path": "test/contracts/release-contracts.test.ts",
-      "size": 18376
+      "size": 9487
     },
     {
-      "digest": "7efa5ecb6785e32e8da14cd8576dec935b2db00b56280fbf839b7aeefed1fd94",
+      "digest": "90d972fb8b0292af82b42f555d9c916b6f96cf854a418a96ff9b060436f8e279",
       "path": "test/contracts/schema-registry.test.ts",
-      "size": 6605
+      "size": 6529
     },
     {
       "digest": "33401af67624bd2bd7bf8073e50d33a3f20e2ade0bee33fadee00fc1aa3ad53e",
