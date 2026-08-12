@@ -24691,7 +24691,7 @@ async function resolveTaskRoot(options) {
   return ok(self2.absolute);
 }
 var workspaceRepositoryRelative = (taskId, suffix) => parseRepositoryPathClaim(
-  suffix === void 0 ? `${ARCHFLOW_TREE}/work/tasks/${taskId}` : `${ARCHFLOW_TREE}/work/tasks/${taskId}/${suffix}`
+  suffix === void 0 ? `${ARCHFLOW_TREE}/runtime/tasks/${taskId}` : `${ARCHFLOW_TREE}/runtime/tasks/${taskId}/${suffix}`
 );
 async function resolveTaskWorkspaceRoot(options) {
   const { runner, context: context2 } = options;
@@ -24709,11 +24709,11 @@ async function resolveTaskWorkspaceRoot(options) {
   const workspaceRoot = resolvePath(
     runner.location.worktreeRoot,
     ARCHFLOW_TREE,
-    "work",
+    "runtime",
     "tasks",
     taskId
   );
-  const tasksRoot = resolvePath(runner.location.worktreeRoot, ARCHFLOW_TREE, "work", "tasks");
+  const tasksRoot = resolvePath(runner.location.worktreeRoot, ARCHFLOW_TREE, "runtime", "tasks");
   let realTasksRoot;
   let realWorkspaceRoot;
   try {
@@ -24787,7 +24787,7 @@ async function resolveTaskWorkspaceCleanupTarget(options) {
     return fail2(pathInvalid(context2.task_id, "task-state"));
   }
   const worktreeRoot = runner.location.worktreeRoot;
-  const workspaceRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "work", "tasks", taskId);
+  const workspaceRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "runtime", "tasks", taskId);
   const target = resolvePath(worktreeRoot, repositoryRelative);
   const parent = dirname(target);
   const parentRepositoryRelative = relative(worktreeRoot, parent);
@@ -24804,7 +24804,7 @@ async function resolveTaskWorkspaceCleanupTarget(options) {
       return fail2(taskScopeViolation(taskId, "task-state"));
     }
   } else {
-    const tasksRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "work", "tasks");
+    const tasksRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "runtime", "tasks");
     const tasksParent = await containedUnder(worktreeRoot, relative(worktreeRoot, tasksRoot));
     if (tasksParent.kind === "io") return fail2(ioError(context2));
     if (tasksParent.kind === "escape") return fail2(pathEscape(taskId, "task-state"));
@@ -31604,7 +31604,7 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
   const scope3 = [...new Set(outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]))].sort(ordinal5);
   const changed = await readChangedGitPaths(dependencies.runner);
   const scopeSet = new Set(scope3);
-  const callerChanges = changed.paths.filter((path2) => !path2.startsWith(".archflow/work/"));
+  const callerChanges = changed.paths.filter((path2) => !path2.startsWith(".archflow/runtime/"));
   const undeclaredChanges = Object.freeze({
     scanned: true,
     undeclared_paths: Object.freeze(callerChanges.filter((path2) => !scopeSet.has(path2)).map(rawGitPath)),
@@ -31775,7 +31775,7 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
   const scope3 = sortedUniquePaths(output);
   const changed = await readChangedGitPaths(runner);
   const scopeSet = new Set(scope3);
-  const callerChanges = changed.paths.filter((path2) => !path2.startsWith(".archflow/work/"));
+  const callerChanges = changed.paths.filter((path2) => !path2.startsWith(".archflow/runtime/"));
   const undeclaredChanges = {
     scanned: true,
     undeclared_paths: callerChanges.filter((path2) => !scopeSet.has(path2)).map(rawGitPath),
@@ -32082,7 +32082,7 @@ async function restoreSnapshotOutput(input) {
     if (manifestMatch === null) {
       return snapshotInvalid(read.value.value.snapshot_digest, "manifest-path-mismatch");
     }
-    const expectedPayloadPath = `.archflow/work/tasks/${manifestMatch[1]}/cache/results/${manifestMatch[2]}/payload/${output.path}`;
+    const expectedPayloadPath = `.archflow/runtime/tasks/${manifestMatch[1]}/cache/results/${manifestMatch[2]}/payload/${output.path}`;
     if (input.payload_target === void 0 || input.payload_target.repositoryRelative !== expectedPayloadPath) {
       return snapshotInvalid(read.value.value.snapshot_digest, "payload-path-mismatch");
     }
@@ -32412,8 +32412,8 @@ function errnoOf2(error51) {
 async function ensureWorkspaceRoot(authority) {
   const archflowRoot = join2(authority.task_root, "..", "..");
   const fixed = [
-    join2(archflowRoot, "work"),
-    join2(archflowRoot, "work", "tasks"),
+    join2(archflowRoot, "runtime"),
+    join2(archflowRoot, "runtime", "tasks"),
     authority.workspace_root
   ];
   for (const directory of fixed) await ensureRealDirectory(directory);
@@ -34870,10 +34870,10 @@ async function computeCallEnvelope(services2, value) {
     ...envelope2,
     gate: Object.freeze({
       gate_id: gateId,
-      decision_path: parseRepositoryPathClaim(`.archflow/work/tasks/${services2.authority.task_id}/cache/gates/gate.decision`),
+      decision_path: parseRepositoryPathClaim(`.archflow/runtime/tasks/${services2.authority.task_id}/cache/gates/gate.decision`),
       archive_decision_path: gateDecisionClaim(gateId),
       request_path: gateRequestClaim(gateId),
-      gate_counter_review_path: parseRepositoryPathClaim(`.archflow/work/tasks/${services2.authority.task_id}/${gateCounterReviewClaim(phaseInstance4, gateId)}`),
+      gate_counter_review_path: parseRepositoryPathClaim(`.archflow/runtime/tasks/${services2.authority.task_id}/${gateCounterReviewClaim(phaseInstance4, gateId)}`),
       counter_review_prompt: renderGateCounterPrompt(promptInput)
     })
   }));
@@ -36272,10 +36272,10 @@ async function gateStatus(dependencies, authority, active, inputFingerprint, cur
   return Object.freeze({
     gate_id: active.gate_id,
     kind: active.kind,
-    decision_path: `.archflow/work/tasks/${active.task_id}/cache/gates/gate.decision`,
+    decision_path: `.archflow/runtime/tasks/${active.task_id}/cache/gates/gate.decision`,
     archive_decision_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/decision.json`,
     request_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/request.json`,
-    gate_counter_review_path: `.archflow/work/tasks/${active.task_id}/${gateCounterReviewClaim(active.phase_instance, active.gate_id)}`,
+    gate_counter_review_path: `.archflow/runtime/tasks/${active.task_id}/${gateCounterReviewClaim(active.phase_instance, active.gate_id)}`,
     decision_templates: buildGateDecisionTemplates(active),
     counter_review_prompt: renderGateCounterPrompt({
       tool: active.context !== null && typeof active.context === "object" && "origin" in active.context ? "archflow_waiver" : "archflow_gate",
@@ -36894,7 +36894,7 @@ async function scaffoldRepositoryAssets(input) {
       created: Object.freeze(created),
       unchanged: Object.freeze(unchanged),
       gitattributes_updated: gitattributesUpdated,
-      work_gitignore: created.includes(".archflow/.gitignore") ? "created" : "already-present"
+      runtime_gitignore: created.includes(".archflow/.gitignore") ? "created" : "already-present"
     }));
   } catch {
     return ioFailure2();
@@ -38074,17 +38074,17 @@ async function readHostConfig(path2) {
     return void 0;
   }
 }
-async function diagnoseWorkDirectory(repository) {
+async function diagnoseRuntimeDirectory(repository) {
   const runner = createGitRunner({ cwd: repository });
   try {
     const ignored = await runner.run({
-      argv: ["check-ignore", "--quiet", "--no-index", "--", ".archflow/work/.archflow-ignore-probe"],
-      operation: parseSafeCode("init-check-work-ignore"),
+      argv: ["check-ignore", "--quiet", "--no-index", "--", ".archflow/runtime/.archflow-ignore-probe"],
+      operation: parseSafeCode("init-check-runtime-ignore"),
       expectedAbsence: [{ code: 1, stderrIncludes: "" }]
     });
     const trackedPaths = await runner.runNulFields({
-      argv: ["ls-files", "-z", "--", ".archflow/work"],
-      operation: parseSafeCode("init-list-work-files")
+      argv: ["ls-files", "-z", "--", ".archflow/runtime"],
+      operation: parseSafeCode("init-list-runtime-files")
     });
     return Object.freeze({
       ignored: !ignored.absent,
@@ -38096,19 +38096,19 @@ async function diagnoseWorkDirectory(repository) {
       ignored: null,
       tracked_paths: Object.freeze([]),
       error: createProjectError("IO_ERROR", {
-        operation: error51 instanceof GitInvocationError ? error51.operation : "init-check-work-directory",
+        operation: error51 instanceof GitInvocationError ? error51.operation : "init-check-runtime-directory",
         attempt: 1
       })
     });
   }
 }
 async function collectInitDiagnostics(input) {
-  const [claude, codex, claudeHostConfig, codexHostConfig, workDirectory] = await Promise.all([
+  const [claude, codex, claudeHostConfig, codexHostConfig, runtimeDirectory] = await Promise.all([
     diagnoseAdapter("claude-cli", input.working_directory),
     diagnoseAdapter("codex-cli", input.working_directory),
     readHostConfig(join11(input.working_directory, ".mcp.json")),
     readHostConfig(join11(input.working_directory, ".codex", "config.toml")),
-    diagnoseWorkDirectory(input.working_directory)
+    diagnoseRuntimeDirectory(input.working_directory)
   ]);
   return Object.freeze({
     schema_version: "1",
@@ -38122,7 +38122,7 @@ async function collectInitDiagnostics(input) {
     timeout_findings: Object.freeze(
       [claudeTimeoutFinding(claudeHostConfig), codexTimeoutFinding(codexHostConfig)].filter((finding) => finding !== void 0)
     ),
-    work_directory: workDirectory,
+    runtime_directory: runtimeDirectory,
     limitations: Object.freeze([
       "Dispatch context hygiene uses a generated home and scrubbed environment, but it is best-effort and is not an enforced isolation boundary.",
       "Claude project MCP registration may remain pending until a human approves it; reset choices with `claude mcp reset-project-choices` when needed.",

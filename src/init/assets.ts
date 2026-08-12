@@ -26,7 +26,7 @@ export type AssetScaffoldReport = {
   readonly created: readonly string[];
   readonly unchanged: readonly string[];
   readonly gitattributes_updated: boolean;
-  readonly work_gitignore: "created" | "already-present";
+  readonly runtime_gitignore: "created" | "already-present";
 };
 
 export type ScaffoldRepositoryAssetsInput = {
@@ -143,7 +143,7 @@ export async function scaffoldRepositoryAssets(
       created: Object.freeze(created),
       unchanged: Object.freeze(unchanged),
       gitattributes_updated: gitattributesUpdated,
-      work_gitignore: created.includes(".archflow/.gitignore") ? "created" : "already-present",
+      runtime_gitignore: created.includes(".archflow/.gitignore") ? "created" : "already-present",
     }));
   } catch {
     return ioFailure();

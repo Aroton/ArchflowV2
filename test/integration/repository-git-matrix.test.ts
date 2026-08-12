@@ -390,7 +390,7 @@ describe.skipIf(!hasGit)("a Unicode, space-containing name round-trips the whole
   it("resolves, indexes, and attributes the same unquoted name", async () => {
     const digest = "a".repeat(64);
     const workspaceClaim = parseWorkspacePathClaim(`cache/results/${digest}/payload/ü space.json`);
-    const payloadRepositoryClaim = `.archflow/work/tasks/${TASK_ID}/${workspaceClaim}`;
+    const payloadRepositoryClaim = `.archflow/runtime/tasks/${TASK_ID}/${workspaceClaim}`;
 
     const repository = seededRepository("unicode");
     repository.write(payloadRepositoryClaim, '{"u":"ü"}\n');

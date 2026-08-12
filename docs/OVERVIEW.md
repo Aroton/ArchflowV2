@@ -29,7 +29,7 @@ flowchart TB
     Local["archflow-local CLI<br/>composes requests, reads status"]
     MCP["archflow-mcp server<br/>4 MCP tools — the authority"]
     State[("tracked .archflow authority<br/>state, decisions, manifests,<br/>canonical documents")]
-    Work[("ignored .archflow/work<br/>requests, cache, diagnostics")]
+    Work[("ignored .archflow/runtime<br/>requests, cache, diagnostics")]
     Child["Opposite-family reviewer<br/>claude or codex child process,<br/>sealed envelope + read-only checkout"]
 
     Human <-->|"gates: approve, waive,<br/>authorize commit"| Agent
@@ -86,9 +86,9 @@ Editing the artifact changes its digest, which automatically invalidates every d
 - **Waiver** — a human-granted exemption from one rule version, for one subject digest, for one task. Evaporates if the artifact or the rule changes.
 - **Degraded mode** — the read-only stance when the MCP server is unavailable: `manual-status` reports where the task stands and the answer is to wait; no offline recording exists, and it is never a shortcut around gates.
 
-## Durable authority versus local work
+## Durable authority versus local runtime
 
-Git sees only the durable side of `.archflow/`: task documents, `state.json`, adopted initialization, current result manifests under `authority/results/`, and state-referenced gate decisions under `authority/decisions/`. The shipped `.archflow/.gitignore` contains only `/work/`; staged requests, payload duplicates, rendered reviews and gate UI, verification transcripts, import staging, locks, receipts, and attempts all live below that ignored root.
+Git sees only the durable side of `.archflow/`: task documents, `state.json`, adopted initialization, current result manifests under `authority/results/`, and state-referenced gate decisions under `authority/decisions/`. The shipped `.archflow/.gitignore` contains only `/runtime/`; staged requests, payload duplicates, rendered reviews and gate UI, verification transcripts, import staging, locks, receipts, and attempts all live below that ignored root.
 
 Repeated review rounds replace the current authority for a `(phase, step)` instead of accumulating tracked files. Automatic cleanup runs after successful writes and phase boundaries; `archflow-local clean --task <id>` retries it manually. Cleanup failure is non-blocking and appears as `workspace.cleanup_pending` in full status (and in brief status only while pending).
 

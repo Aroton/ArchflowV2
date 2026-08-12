@@ -55,7 +55,7 @@ describe("intent directory layout", () => {
     const { root, value } = await authority();
     await ensureIntentDirectory(value);
     await ensureIntentDirectory(value);
-    const intents = join(root, ".archflow", "work", "tasks", taskId, "transient", "intents");
+    const intents = join(root, ".archflow", "runtime", "tasks", taskId, "transient", "intents");
     expect((await lstat(intents)).isDirectory()).toBe(true);
     expect(await readdir(join(root, ".archflow", "tasks", taskId))).toEqual([]);
   });

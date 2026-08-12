@@ -55,7 +55,7 @@ are not listed yet.
 From the repository you want to initialize, run `/archflow-init` in Claude Code or
 `$archflow-init` in Codex. Initialization scaffolds the repository-owned ArchFlow assets and
 project MCP registrations, then reports the host approval/trust steps that still require you.
-It also creates `.archflow/.gitignore` with the single `/work/` rule and diagnoses whether that
+It also creates `.archflow/.gitignore` with the single `/runtime/` rule and diagnoses whether that
 workspace is ignored and free of tracked files. It never edits the project root `.gitignore`.
 Initialization does not create a task, commit changes, or claim that host approval has completed.
 
@@ -143,11 +143,11 @@ See reconciled durable state and exactly one next action for each task.
 
 ## File Structure
 
-ArchFlow keeps tracked workflow authority and ignored local work together under `.archflow/`:
+ArchFlow keeps tracked workflow authority and ignored local runtime data together under `.archflow/`:
 
 ```
 .archflow/
-  .gitignore                         # Contains only: /work/
+  .gitignore                         # Contains only: /runtime/
   config.yaml                       # Repository task-config template
   workflow.yaml                     # Canonical phase graph
   constitution/                     # Repository-owned policy rules
@@ -168,7 +168,7 @@ ArchFlow keeps tracked workflow authority and ignored local work together under 
         initialization.json         # Adopted initialization authority
         results/<digest>.json       # Current immutable result manifests
         decisions/<gate-id>/        # State-referenced requests and decisions
-  work/                             # Entire ignored, reconstructible workspace
+  runtime/                          # Entire ignored, reconstructible workspace
     tasks/my-feature/
       transient/                    # Staged requests, receipts, transaction lock
       cache/                        # Payloads, rendered reviews/gates, verification, imports
@@ -176,7 +176,7 @@ ArchFlow keeps tracked workflow authority and ignored local work together under 
 ```
 
 Durable documents and authority are tracked on the working branch during development to preserve
-the last checked-in workflow boundary across sessions and fresh clones. The ignored `work/` tree is
+the last checked-in workflow boundary across sessions and fresh clones. The ignored `runtime/` tree is
 only a cache and may be regenerated or cleaned with `archflow-local clean --task <id>`. Remove
 `.archflow/` before creating the final product PR, as before.
 

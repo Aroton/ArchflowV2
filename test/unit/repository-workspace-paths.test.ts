@@ -118,8 +118,8 @@ describe.skipIf(!gitAvailable())("task workspace paths", () => {
         value: {
           path_class: pathClass,
           workspaceRelative: value,
-          repositoryRelative: `.archflow/work/tasks/${TASK_ID}/${value}`,
-          absolute: join(root, ".archflow", "work", "tasks", TASK_ID, value),
+          repositoryRelative: `.archflow/runtime/tasks/${TASK_ID}/${value}`,
+          absolute: join(root, ".archflow", "runtime", "tasks", TASK_ID, value),
         },
       });
     }
@@ -130,13 +130,13 @@ describe.skipIf(!gitAvailable())("task workspace paths", () => {
     await expect(resolveTaskWorkspaceRoot({ runner, taskId: TASK_ID, context })).resolves.toEqual({
       schema_version: "1",
       ok: true,
-      value: join(root, ".archflow", "work", "tasks", TASK_ID),
+      value: join(root, ".archflow", "runtime", "tasks", TASK_ID),
     });
   });
 
   it("rejects worktree escapes and sibling-task symlinks with distinct codes", async () => {
     const { parent, root, runner } = await repository();
-    const workspace = join(root, ".archflow", "work", "tasks", TASK_ID);
+    const workspace = join(root, ".archflow", "runtime", "tasks", TASK_ID);
     mkdirSync(join(workspace, "cache", "reviews"), { recursive: true });
 
     const outside = join(parent, "outside");
@@ -153,7 +153,7 @@ describe.skipIf(!gitAvailable())("task workspace paths", () => {
     // The bypassed claim does not match first, so use a classifying leaf symlink for containment.
     expect(escaped.ok).toBe(false);
 
-    const other = join(root, ".archflow", "work", "tasks", "other-task");
+    const other = join(root, ".archflow", "runtime", "tasks", "other-task");
     mkdirSync(join(other, "cache", "reviews"), { recursive: true });
     writeFileSync(join(other, "cache", "reviews", "prd.counter.md"), "other\n");
     rmSync(join(workspace, "cache", "reviews"), { recursive: true });
@@ -181,7 +181,7 @@ describe.skipIf(!gitAvailable())("task workspace paths", () => {
 
   it("authenticates cleanup ancestors but never follows the deletion leaf", async () => {
     const { parent, root, runner } = await repository();
-    const workspace = join(root, ".archflow", "work", "tasks", TASK_ID);
+    const workspace = join(root, ".archflow", "runtime", "tasks", TASK_ID);
     const outside = join(parent, "outside-clean");
     mkdirSync(outside);
     writeFileSync(join(outside, "keep.txt"), "keep\n");
@@ -206,7 +206,7 @@ describe.skipIf(!gitAvailable())("task workspace paths", () => {
 
   it("rejects cleanup beneath a symlinked ancestor in another task", async () => {
     const { root, runner } = await repository();
-    const tasks = join(root, ".archflow", "work", "tasks");
+    const tasks = join(root, ".archflow", "runtime", "tasks");
     const workspace = join(tasks, TASK_ID);
     const other = join(tasks, "other-task");
     mkdirSync(join(workspace, "cache"), { recursive: true });
@@ -224,7 +224,7 @@ describe.skipIf(!gitAvailable())("task workspace paths", () => {
 
   it("rejects a task workspace root substituted with a sibling-task symlink", async () => {
     const { root, runner } = await repository();
-    const tasks = join(root, ".archflow", "work", "tasks");
+    const tasks = join(root, ".archflow", "runtime", "tasks");
     const other = join(tasks, "other-task");
     mkdirSync(join(other, "cache", "reviews"), { recursive: true });
     writeFileSync(join(other, "cache", "reviews", "prd.counter.md"), "other\n");

@@ -548,7 +548,7 @@ export async function buildImplementationOutput(
     : [output.path]))].sort(ordinal) as RepositoryPathClaim[];
   const changed = await readChangedGitPaths(dependencies.runner);
   const scopeSet = new Set<string>(scope);
-  const callerChanges = changed.paths.filter((path) => !path.startsWith(".archflow/work/"));
+  const callerChanges = changed.paths.filter((path) => !path.startsWith(".archflow/runtime/"));
   const undeclaredChanges: UndeclaredChangeReport = Object.freeze({
     scanned: true,
     undeclared_paths: Object.freeze(callerChanges.filter((path) => !scopeSet.has(path)).map(rawGitPath)),
@@ -733,7 +733,7 @@ export async function verifyImplementationManifest(
   const scope = sortedUniquePaths(output);
   const changed = await readChangedGitPaths(runner);
   const scopeSet = new Set<string>(scope);
-  const callerChanges = changed.paths.filter((path) => !path.startsWith(".archflow/work/"));
+  const callerChanges = changed.paths.filter((path) => !path.startsWith(".archflow/runtime/"));
   const undeclaredChanges: UndeclaredChangeReport = {
     scanned: true,
     undeclared_paths: callerChanges.filter((path) => !scopeSet.has(path)).map(rawGitPath),

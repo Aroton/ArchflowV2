@@ -4,11 +4,11 @@
 
 Durable state is ArchFlow's memory and authority, but not every file the workflow uses deserves that status. The repository now separates tracked, reviewable authority from an ignored workspace containing bytes that are transient, reconstructible, or useful only for diagnosis.
 
-## The authority/work split
+## The authority/runtime split
 
 ```text
 .archflow/
-  .gitignore                         # exactly /work/
+  .gitignore                         # exactly /runtime/
   config.yaml
   workflow.yaml
   constitution/
@@ -26,34 +26,34 @@ Durable state is ArchFlow's memory and authority, but not every file the workflo
         request.json
         decision.json
         supplemental-review.json
-  work/tasks/<task>/
+  runtime/tasks/<task>/
     transient/{intents/,.transaction-lock}
     cache/{results/,reviews/,gates/,phases/<n>/verification.txt,imports/}
     diagnostics/attempts/
 ```
 
-The durable side contains human-authored documents, pinned configuration and policy, `state.json`, the adopted initialization artifact, current result manifests, and gate authority still referenced by state. The `work/` side contains staged requests, crash receipts, locks, duplicate payload bytes, rendered evidence and gate interfaces, raw verification transcripts, legacy import staging, and failed-dispatch attempts. `.archflow/.gitignore` ignores that entire tree; initialization checks both that the rule works and that no work path is already tracked, without touching the project root `.gitignore`.
+The durable side contains human-authored documents, pinned configuration and policy, `state.json`, the adopted initialization artifact, current result manifests, and gate authority still referenced by state. The `runtime/` side contains staged requests, crash receipts, locks, duplicate payload bytes, rendered evidence and gate interfaces, raw verification transcripts, legacy import staging, and failed-dispatch attempts. `.archflow/.gitignore` ignores that entire tree; initialization checks both that the rule works and that no runtime path is already tracked, without touching the project root `.gitignore`.
 
-Task isolation applies equally to both roots. A work path is resolved only below `.archflow/work/tasks/<validated-task>` with the same containment, symlink, and cross-task protections used for durable task paths.
+Task isolation applies equally to both roots. A runtime path is resolved only below `.archflow/runtime/tasks/<validated-task>` with the same containment, symlink, and cross-task protections used for durable task paths.
 
 ## Bounded result and decision authority
 
 `state.json` holds identity, position, revision, pinned inputs, current authoritative results, approvals and waivers, at most one open gate, and `last_transition`. A result reference carries its digest, not a caller-authored manifest path; the manifest is derived as `authority/results/<result-digest>.json`.
 
-Only the current result for each `(phase_instance, step)` is retained. Once a state commit replaces it, cleanup removes the superseded manifest and cached payload unless a live durable decision still references that result. Review, triage, and adjudication Markdown are not permanent outputs: their structured evidence lives in the manifest and is rendered into ignored cache when a human or reviewer needs it. Gate requests, human decisions, and supplemental review become immutable authority below `authority/decisions/<gate-id>/` while referenced; the writable gate UI below `work/` is merely a reconstructible interface.
+Only the current result for each `(phase_instance, step)` is retained. Once a state commit replaces it, cleanup removes the superseded manifest and cached payload unless a live durable decision still references that result. Review, triage, and adjudication Markdown are not permanent outputs: their structured evidence lives in the manifest and is rendered into ignored cache when a human or reviewer needs it. Gate requests, human decisions, and supplemental review become immutable authority below `authority/decisions/<gate-id>/` while referenced; the writable gate UI below `runtime/` is merely a reconstructible interface.
 
 The initialization digest is resolvable because the adopted artifact is written once to `authority/initialization.json`. Cleanup audit files, permanent review Markdown, and superseded manifests are neither authority nor supported compatibility inputs and are no longer created.
 
 ## Transactions and exact replay
 
-All state changes still pass through the transaction kernel under a task-local lock and revision compare-and-swap. Before state replacement, request staging and crash receipts live below ignored `work/tasks/<task>/transient/`; they are recovery buffers, not long-lived records.
+All state changes still pass through the transaction kernel under a task-local lock and revision compare-and-swap. Before state replacement, request staging and crash receipts live below ignored `runtime/tasks/<task>/transient/`; they are recovery buffers, not long-lived records.
 
 ```mermaid
 sequenceDiagram
     participant C as Handler
     participant T as Transaction kernel
     participant D as Durable authority
-    participant W as Ignored work
+    participant W as Ignored runtime
     C->>T: request + expected revision
     T->>D: validate state and current authority
     T->>W: stage request, result payload, crash receipt
@@ -68,7 +68,7 @@ Other load-bearing guarantees remain: immutable authority never clobbers, incomp
 
 ## Verification evidence
 
-Raw phase verification is written to `.archflow/work/tasks/<task>/cache/phases/<n>/verification.txt`. `ImplementationOutputV1` requires `verification_evidence: { transcript_digest, byte_count }`, so the manifest and review envelope bind to the exact transcript bytes. The transcript is digest-checked before review and removed only after the workflow advances past the phase. Losing it during an uncommitted active step yields an actionable rerun classification; it does not retroactively invalidate an approved earlier phase.
+Raw phase verification is written to `.archflow/runtime/tasks/<task>/cache/phases/<n>/verification.txt`. `ImplementationOutputV1` requires `verification_evidence: { transcript_digest, byte_count }`, so the manifest and review envelope bind to the exact transcript bytes. The transcript is digest-checked before review and removed only after the workflow advances past the phase. Losing it during an uncommitted active step yields an actionable rerun classification; it does not retroactively invalidate an approved earlier phase.
 
 When a cached result payload is absent, readers recover from structured evidence embedded in its manifest, a verified tracked projection, or its recorded Git blob identity. This is why a fresh clone containing only tracked files can still validate durable results, rebuild gate UI, report status, and derive the next action. The guarantee reaches the last checked-in durable boundary, not uncommitted implementation bytes.
 
@@ -78,10 +78,10 @@ Cleanup runs at explicit lifecycle boundaries:
 
 - after every successful write, remove staged requests, crash receipts, scratch bytes, and superseded unreferenced authority;
 - after phase advancement, remove completed-phase caches, raw verification, rendered reviews, attempts, and gate UI;
-- on completion or abandonment, remove the entire task-specific work directory;
+- on completion or abandonment, remove the entire task-specific runtime directory;
 - before durable commitment, retain recovery buffers needed to arbitrate an interrupted transaction.
 
-A cleanup failure never rolls back committed authority. Full status reports the non-blocking `workspace.cleanup_pending` condition; brief status includes workspace only while it is pending. The next mutation retries cleanup, and `archflow-local clean --task <id>` provides an input-free manual retry that reports removed and retained file/byte counts. It removes only unreferenced authority and stale or reconstructible work.
+A cleanup failure never rolls back committed authority. Full status reports the non-blocking `workspace.cleanup_pending` condition; brief status includes workspace only while it is pending. The next mutation retries cleanup, and `archflow-local clean --task <id>` provides an input-free manual retry that reports removed and retained file/byte counts. It removes only unreferenced authority and stale or reconstructible runtime data.
 
 ## State machine, gates, and Git boundary
 

@@ -53,10 +53,10 @@ describe("projectBriefStatus", () => {
       open_gate: {
         gate_id: "gate-1",
         kind: "artifact-approval",
-        decision_path: ".archflow/work/tasks/brief-task/cache/gates/gate.decision",
+        decision_path: ".archflow/runtime/tasks/brief-task/cache/gates/gate.decision",
         archive_decision_path: ".archflow/tasks/brief-task/authority/decisions/gate-1/decision.json",
         request_path: ".archflow/tasks/brief-task/authority/decisions/gate-1/request.json",
-        gate_counter_review_path: ".archflow/work/tasks/brief-task/cache/reviews/prd.gate-counter.gate-1.md",
+        gate_counter_review_path: ".archflow/runtime/tasks/brief-task/cache/reviews/prd.gate-counter.gate-1.md",
         decision_templates: [
           { decision: "approve", reason: "placeholder body" },
           { decision: "revise", reason: "placeholder body" },

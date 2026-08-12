@@ -297,10 +297,10 @@ export async function computeCallEnvelope(
     ...envelope,
     gate: Object.freeze({
       gate_id: gateId,
-      decision_path: parseRepositoryPathClaim(`.archflow/work/tasks/${services.authority.task_id}/cache/gates/gate.decision`),
+      decision_path: parseRepositoryPathClaim(`.archflow/runtime/tasks/${services.authority.task_id}/cache/gates/gate.decision`),
       archive_decision_path: gateDecisionClaim(gateId),
       request_path: gateRequestClaim(gateId),
-      gate_counter_review_path: parseRepositoryPathClaim(`.archflow/work/tasks/${services.authority.task_id}/${gateCounterReviewClaim(phaseInstance, gateId)}`),
+      gate_counter_review_path: parseRepositoryPathClaim(`.archflow/runtime/tasks/${services.authority.task_id}/${gateCounterReviewClaim(phaseInstance, gateId)}`),
       counter_review_prompt: renderGateCounterPrompt(promptInput),
     }),
   }));

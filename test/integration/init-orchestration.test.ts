@@ -56,21 +56,21 @@ describe("init orchestration", () => {
     expect(() => JSON.stringify(result.value)).not.toThrow();
 
     expect(existsSync(join(repository.path, ".archflow", "workflow.yaml"))).toBe(true);
-    expect(readFileSync(join(repository.path, ".archflow", ".gitignore"), "utf8")).toBe("/work/\n");
-    expect(result.value.assets.work_gitignore).toBe("created");
-    expect(result.value.diagnostics.work_directory).toEqual({
+    expect(readFileSync(join(repository.path, ".archflow", ".gitignore"), "utf8")).toBe("/runtime/\n");
+    expect(result.value.assets.runtime_gitignore).toBe("created");
+    expect(result.value.diagnostics.runtime_directory).toEqual({
       ignored: true,
       tracked_paths: [],
       error: null,
     });
-    const cache = join(repository.path, ".archflow", "work", "tasks", "demo", "cache");
+    const cache = join(repository.path, ".archflow", "runtime", "tasks", "demo", "cache");
     const cached = join(cache, "result.json");
     mkdirSync(cache, { recursive: true });
     writeFileSync(cached, "{}\n");
     const status = repository.git("status", "--short", "--untracked-files=all");
     expect(status).toContain(".archflow/.gitignore");
     expect(status).toContain(".archflow/workflow.yaml");
-    expect(status).not.toContain(".archflow/work/");
+    expect(status).not.toContain(".archflow/runtime/");
     expect(readFileSync(join(repository.path, ".codex", "config.toml"), "utf8")).toContain(
       "[mcp_servers.archflow]",
     );

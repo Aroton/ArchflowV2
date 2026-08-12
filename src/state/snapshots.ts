@@ -331,7 +331,7 @@ export async function restoreSnapshotOutput(input: Readonly<{
     if (manifestMatch === null) {
       return snapshotInvalid(read.value.value.snapshot_digest, "manifest-path-mismatch");
     }
-    const expectedPayloadPath = `.archflow/work/tasks/${manifestMatch[1]}/cache/results/${manifestMatch[2]}/payload/${output.path}`;
+    const expectedPayloadPath = `.archflow/runtime/tasks/${manifestMatch[1]}/cache/results/${manifestMatch[2]}/payload/${output.path}`;
     if (input.payload_target === undefined || input.payload_target.repositoryRelative !== expectedPayloadPath) {
       return snapshotInvalid(read.value.value.snapshot_digest, "payload-path-mismatch");
     }

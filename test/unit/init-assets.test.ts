@@ -27,7 +27,7 @@ describe("repository asset scaffolding", () => {
     expect(first.ok).toBe(true);
     if (!first.ok) return;
     expect(first.value.created).toHaveLength(8);
-    expect(first.value.work_gitignore).toBe("created");
+    expect(first.value.runtime_gitignore).toBe("created");
     expect(first.value.gitattributes_updated).toBe(true);
     expect(readFileSync(join(root, ".archflow", "workflow.yaml"))).toEqual(
       readFileSync(new URL("../../assets/workflow.yaml", import.meta.url)),
@@ -35,7 +35,7 @@ describe("repository asset scaffolding", () => {
     expect(readFileSync(join(root, ".archflow", "config.yaml"))).toEqual(
       readFileSync(new URL("../../assets/config.template.yaml", import.meta.url)),
     );
-    expect(readFileSync(join(root, ".archflow", ".gitignore"), "utf8")).toBe("/work/\n");
+    expect(readFileSync(join(root, ".archflow", ".gitignore"), "utf8")).toBe("/runtime/\n");
     expect(readFileSync(join(root, ".gitattributes"), "utf8")).toBe(
       "* text=auto\n.archflow/** -text merge=binary\n",
     );
@@ -45,7 +45,7 @@ describe("repository asset scaffolding", () => {
     if (!second.ok) return;
     expect(second.value.created).toEqual([]);
     expect(second.value.unchanged).toHaveLength(8);
-    expect(second.value.work_gitignore).toBe("already-present");
+    expect(second.value.runtime_gitignore).toBe("already-present");
     expect(second.value.gitattributes_updated).toBe(false);
     expect(readFileSync(join(root, ".gitattributes"), "utf8").match(/\.archflow\/\*\* -text merge=binary/gu)).toHaveLength(1);
   });
@@ -58,7 +58,7 @@ describe("repository asset scaffolding", () => {
 
     expect(result.ok).toBe(true);
     expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe("human-owned-root-rule\n");
-    expect(readFileSync(join(root, ".archflow", ".gitignore"), "utf8")).toBe("/work/\n");
+    expect(readFileSync(join(root, ".archflow", ".gitignore"), "utf8")).toBe("/runtime/\n");
   });
 
   it("refuses a divergent asset without overwriting it or creating other assets", async () => {

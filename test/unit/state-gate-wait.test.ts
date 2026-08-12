@@ -22,7 +22,7 @@ function resolved(absolute: string, pathClass: "workspace-gate-interface" | "wor
     absolute: absolute as ResolvedTaskWorkspacePath,
     path_class: pathClass,
     workspaceRelative: parseWorkspacePathClaim(suffix),
-    repositoryRelative: parseRepositoryPathClaim(`.archflow/work/tasks/demo/${suffix}`),
+    repositoryRelative: parseRepositoryPathClaim(`.archflow/runtime/tasks/demo/${suffix}`),
   };
 }
 

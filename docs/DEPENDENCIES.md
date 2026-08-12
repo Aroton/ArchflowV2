@@ -54,7 +54,7 @@ Host identity is derived from MCP `clientInfo.name` in `src/contracts/hosts.ts`:
 
 Initialization (`src/init/index.ts` and `src/init/registration.ts`) integrates with both first-party hosts:
 
-Before host registration, `src/init/assets.ts` copies `assets/archflow.gitignore` to `.archflow/.gitignore` byte-for-byte. Its sole `/work/` rule keeps transient/cache/diagnostic bytes out of Git without taking ownership of the project root `.gitignore`; diagnostics use Git itself to verify the ignore match and enumerate any already tracked work paths.
+Before host registration, `src/init/assets.ts` copies `assets/archflow.gitignore` to `.archflow/.gitignore` byte-for-byte. Its sole `/runtime/` rule keeps transient/cache/diagnostic bytes out of Git without taking ownership of the project root `.gitignore`; diagnostics use Git itself to verify the ignore match and enumerate any already tracked runtime paths.
 
 - Claude Code: `claude mcp add --scope project archflow -- archflow-mcp`, followed by `claude mcp get archflow`. The project descriptor is `.mcp.json`; the registered stdio command is `archflow-mcp` with a 3,600,000 ms timeout. Human project approval can remain pending.
 - Codex: ArchFlow atomically maintains only its marked block in `.codex/config.toml`, then checks it with `codex mcp get archflow --json`. The block sets `startup_timeout_sec = 30` and `tool_timeout_sec = 3600`. Repository trust remains a human action; initialization never writes `trust_level`.
@@ -89,7 +89,7 @@ Managed-policy presence is reported from fixed Claude paths under `/etc/claude-c
 
 ## Filesystem, Git, and durable storage
 
-There is no server or cloud database. Durable authority is ordinary tracked repository content under `.archflow/tasks/<task>/`, while transient/cache/diagnostic data is rooted below ignored `.archflow/work/tasks/<task>/`; both path families are defined in `src/state/layout.ts` and resolved with containment, symlink, and task-isolation checks in `src/repository/paths.ts`.
+There is no server or cloud database. Durable authority is ordinary tracked repository content under `.archflow/tasks/<task>/`, while transient/cache/diagnostic data is rooted below ignored `.archflow/runtime/tasks/<task>/`; both path families are defined in `src/state/layout.ts` and resolved with containment, symlink, and task-isolation checks in `src/repository/paths.ts`.
 
 - `src/repository/git.ts` invokes `git` with `execFile`, never a shell. Defaults are an 8 MiB output buffer and 30-second timeout; binary stdin is bounded at 25 MiB. Git must be at least 2.25 and use SHA-1 object format.
 - Repository readers use commands such as `rev-parse`, `rev-list`, `status`, `ls-tree`, `ls-files`, `diff`, `merge-base`, `cat-file`, `hash-object`, and `check-attr`. Absence is accepted only through command-specific exit-code/diagnostic pairs.
@@ -102,7 +102,7 @@ There is no server or cloud database. Durable authority is ordinary tracked repo
 Runtime workflow configuration is file-backed:
 
 - `assets/config.template.yaml` is copied to `.archflow/config.yaml`, then byte-pinned per task at `.archflow/tasks/<task>/config.yaml`.
-- `assets/archflow.gitignore` is copied exactly to `.archflow/.gitignore`; its sole `/work/` rule owns only ArchFlow's nested workspace ignore boundary.
+- `assets/archflow.gitignore` is copied exactly to `.archflow/.gitignore`; its sole `/runtime/` rule owns only ArchFlow's nested workspace ignore boundary.
 - `assets/workflow.yaml` defines the workflow graph; `assets/constitution/` supplies repository-owned policy documents.
 - `src/contracts/config.ts` validates `schema_version: "1"`, role routes, optional phase-kind overrides, and optional positive `max_attempts` (default behavior is three attempts).
 

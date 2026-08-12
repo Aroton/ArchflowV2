@@ -41,12 +41,12 @@ async function taskRoot(taskId: string): Promise<string> {
   roots.push(repository);
   const root = join(repository, ".archflow", "tasks", taskId);
   await mkdir(root, { recursive: true });
-  await mkdir(join(repository, ".archflow", "work", "tasks", taskId, "transient"), { recursive: true });
+  await mkdir(join(repository, ".archflow", "runtime", "tasks", taskId, "transient"), { recursive: true });
   return root;
 }
 
 function workspaceRoot(taskRoot: string): string {
-  return taskRoot.replace("/.archflow/tasks/", "/.archflow/work/tasks/");
+  return taskRoot.replace("/.archflow/tasks/", "/.archflow/runtime/tasks/");
 }
 
 const gitEnvironment: NodeJS.ProcessEnv = {

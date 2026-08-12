@@ -71,7 +71,7 @@ Tasks are isolated from one another.
 `);
   git(root, "add", "--", ".gitattributes", ".archflow/.gitignore", ".archflow/workflow.yaml", ".archflow/constitution", ".archflow/config.yaml");
   git(root, "commit", "-q", "-m", "policy");
-  mkdirSync(join(root, ".archflow", "work", "tasks", task, "transient"), { recursive: true });
+  mkdirSync(join(root, ".archflow", "runtime", "tasks", task, "transient"), { recursive: true });
   return root;
 }
 
@@ -173,7 +173,7 @@ describe("staged-request handoff", () => {
   it("stages, rehydrates, refuses mismatches closed, replays, and keeps maintenance sound", async () => {
     const root = await repository();
     const h = harness(root);
-    const intentsDir = join(root, ".archflow", "work", "tasks", task, "transient", "intents");
+    const intentsDir = join(root, ".archflow", "runtime", "tasks", task, "transient", "intents");
 
     // Initialize keeps its full-payload flow: no staged field, request.input passed verbatim.
     const initComposed = await h.buildRequest({ kind: "initialize" });
@@ -206,7 +206,7 @@ describe("staged-request handoff", () => {
       intent_id: "produce-explicit",
       request_digest: produce.request_digest,
     });
-    expect(produce.staged!.path).toBe(`.archflow/work/tasks/${task}/transient/intents/produce-explicit.request.json`);
+    expect(produce.staged!.path).toBe(`.archflow/runtime/tasks/${task}/transient/intents/produce-explicit.request.json`);
     const stagedFile = join(intentsDir, "produce-explicit.request.json");
     const stagedBytes = readFileSync(stagedFile);
     const stagedRecord = JSON.parse(stagedBytes.toString("utf8")) as {

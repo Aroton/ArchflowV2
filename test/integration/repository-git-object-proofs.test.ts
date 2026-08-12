@@ -35,7 +35,7 @@ afterAll(() => roots.forEach((root) => rmSync(root, { recursive: true, force: tr
 
 function verificationEvidence(root: string, taskId: string): ImplementationOutputV1["verification_evidence"] {
   const bytes = new TextEncoder().encode("$ npm test\nall tests passed\n");
-  const directory = join(root, ".archflow", "work", "tasks", taskId, "cache", "phases", "11");
+  const directory = join(root, ".archflow", "runtime", "tasks", taskId, "cache", "phases", "11");
   mkdirSync(directory, { recursive: true });
   writeFileSync(join(directory, "verification.txt"), bytes);
   return { transcript_digest: sha256Bytes(bytes), byte_count: parseSafeInteger(bytes.byteLength) };

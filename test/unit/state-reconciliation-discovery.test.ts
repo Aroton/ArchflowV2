@@ -35,7 +35,7 @@ async function harness() {
   writeFileSync(join(root, "tracked.txt"), "root\n");
   execFileSync("git", ["add", "--", "tracked.txt"], { cwd: root, env });
   execFileSync("git", ["commit", "-q", "-m", "root"], { cwd: root, env });
-  mkdirSync(join(root, ".archflow", "work", "tasks", TASK, "transient", "intents"), { recursive: true });
+  mkdirSync(join(root, ".archflow", "runtime", "tasks", TASK, "transient", "intents"), { recursive: true });
   const created = await createProductionServices({
     working_directory: root,
     task_id: TASK,

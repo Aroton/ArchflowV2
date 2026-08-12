@@ -140,7 +140,7 @@ describe("bundled legacy upgrade workflow", () => {
     ]));
     expect(initialization.mapping.some((entry) => entry.legacy_path === "phases/phase-3-unlogged-review-log.md")).toBe(false);
     for (const reference of initialization.staged_payload_refs) {
-      expect(readFileSync(join(root, `.archflow/work/tasks/${task}/cache/imports/${initialization.import_digest}/payload/${reference.legacy_path}`)))
+      expect(readFileSync(join(root, `.archflow/runtime/tasks/${task}/cache/imports/${initialization.import_digest}/payload/${reference.legacy_path}`)))
         .toEqual(readFileSync(join(source, reference.legacy_path)));
     }
     expect(JSON.parse(readFileSync(join(root, emitted.manifest_path), "utf8"))).toEqual(initialization);

@@ -146,10 +146,10 @@ describe("local call envelopes", () => {
       request_digest: gate.value.request_digest,
     }));
     expect(gate.value.gate).toMatchObject({
-      decision_path: `.archflow/work/tasks/${task}/cache/gates/gate.decision`,
+      decision_path: `.archflow/runtime/tasks/${task}/cache/gates/gate.decision`,
       archive_decision_path: `authority/decisions/${gate.value.gate.gate_id}/decision.json`,
       request_path: `authority/decisions/${gate.value.gate.gate_id}/request.json`,
-      gate_counter_review_path: `.archflow/work/tasks/${task}/cache/reviews/prd.gate-counter.${gate.value.gate.gate_id}.md`,
+      gate_counter_review_path: `.archflow/runtime/tasks/${task}/cache/reviews/prd.gate-counter.${gate.value.gate.gate_id}.md`,
     });
     for (const binding of [gate.value.gate.gate_id, gate.value.request_digest, gateInput.subject_digest, state.input_fingerprint, currentEvidence.set_digest, "codex", "archflow-local gate-counter"]) {
       expect(gate.value.gate.counter_review_prompt).toContain(binding);
@@ -188,7 +188,7 @@ describe("local call envelopes", () => {
     expect(waiver.ok).toBe(true);
     if (waiver.ok) {
       expect(waiver.value.input_fingerprint).toBe(state.input_fingerprint);
-      expect(waiver.value.gate?.decision_path).toBe(`.archflow/work/tasks/${task}/cache/gates/gate.decision`);
+      expect(waiver.value.gate?.decision_path).toBe(`.archflow/runtime/tasks/${task}/cache/gates/gate.decision`);
       expect(waiver.value.gate?.counter_review_prompt).toContain(originRequest.subject_digest);
       expect(waiver.value.gate?.counter_review_prompt).toContain("retry archflow_waiver once");
       expect(waiver.value.gate?.counter_review_prompt).toContain("same archflow_waiver input");

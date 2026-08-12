@@ -19,7 +19,7 @@ vi.mock("../../src/state/production.js", () => ({
     schema_version: "1",
     ok: true,
     value: {
-      authority: { workspace_root: "/repository/.archflow/work/tasks/local-clean", state: {} },
+      authority: { workspace_root: "/repository/.archflow/runtime/tasks/local-clean", state: {} },
       dependencies: {
         lock: { runExclusive: async (_root: string, work: () => Promise<unknown>) => work() },
         read_state: async () => ({ kind: "canonical", document: { value: { terminal: undefined } } }),

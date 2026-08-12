@@ -164,7 +164,7 @@ async function planCounterReviewCommit(
     })
     : Object.freeze({
       status: "evaluated" as const,
-      path: parseRepositoryPathClaim(`.archflow/work/tasks/${current.value.task_id}/${adjudicationReviewClaim(current.value.phase_instance)}`),
+      path: parseRepositoryPathClaim(`.archflow/runtime/tasks/${current.value.task_id}/${adjudicationReviewClaim(current.value.phase_instance)}`),
       constitution: constitutionEvidence.constitution,
       drift: constitutionEvidence.drift,
       triggers: canonicalRuleRefs([
@@ -173,7 +173,7 @@ async function planCounterReviewCommit(
       ]),
     });
   const success = Object.freeze({
-    path: parseRepositoryPathClaim(`.archflow/work/tasks/${current.value.task_id}/${counterReviewClaim(current.value.phase_instance)}`),
+    path: parseRepositoryPathClaim(`.archflow/runtime/tasks/${current.value.task_id}/${counterReviewClaim(current.value.phase_instance)}`),
     verdict: inputs.review_evidence.verdict,
     blocking_count: inputs.review_evidence.blocking_count,
     constitution: constitutionOutcome,

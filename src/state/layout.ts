@@ -46,14 +46,14 @@ type ResolvedLayoutPath = ResolvedTaskPath | ResolvedTaskWorkspacePath;
 async function ensureWorkspaceRoot(authority: TransactionAuthority): Promise<void> {
   const archflowRoot = join(authority.task_root, "..", "..");
   const fixed = [
-    join(archflowRoot, "work"),
-    join(archflowRoot, "work", "tasks"),
+    join(archflowRoot, "runtime"),
+    join(archflowRoot, "runtime", "tasks"),
     authority.workspace_root,
   ];
   for (const directory of fixed) await ensureRealDirectory(directory as ResolvedLayoutPath);
 }
 
-/** Creates and verifies `work/tasks/<task>/transient/intents/`. */
+/** Creates and verifies `runtime/tasks/<task>/transient/intents/`. */
 export async function ensureIntentDirectory(authority: TransactionAuthority): Promise<void> {
   assertInternalTransactionAuthority(authority);
   try {

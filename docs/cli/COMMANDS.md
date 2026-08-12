@@ -65,14 +65,14 @@ flowchart LR
     J["Judgment only:<br/>findings, dispositions,<br/>rationales, summaries"] --> BR["build-request<br/>kind: initialize | produce | running |<br/>triage | counter-review | gate"]
     DS[("durable state,<br/>pinned config,<br/>retained evidence")] --> BR
     BR --> ENV["call envelope:<br/>fingerprint + request digest"]
-    ENV --> STG["staged request in ignored work:<br/>transient/intents/&lt;intent-id&gt;.request.json"]
+    ENV --> STG["staged request in ignored runtime:<br/>transient/intents/&lt;intent-id&gt;.request.json"]
     ENV --> OUT["staged.reference — four fields<br/>pasted into the MCP call<br/>(request.input is the fallback)"]
 ```
 
 Properties worth knowing:
 
 - Each kind guards the transition with the server's own rule first, so an illegal move fails at compose time with the server's own error, not on the network call.
-- Every kind except `initialize` also **stages** the resolved request below `.archflow/work/tasks/<task>/transient/intents/` (atomically, overwrite-on-recompose) and adds `staged: {path, reference}` to the envelope. The reference — `{schema_version, task_id, intent_id, request_digest}` — is the whole MCP tool input; the server rehydrates the staged bytes and refuses on any digest disagreement, so the multi-kilobyte payload never crosses the model's context. Passing `request.input` verbatim remains the documented fallback.
+- Every kind except `initialize` also **stages** the resolved request below `.archflow/runtime/tasks/<task>/transient/intents/` (atomically, overwrite-on-recompose) and adds `staged: {path, reference}` to the envelope. The reference — `{schema_version, task_id, intent_id, request_digest}` — is the whole MCP tool input; the server rehydrates the staged bytes and refuses on any digest disagreement, so the multi-kilobyte payload never crosses the model's context. Passing `request.input` verbatim remains the documented fallback.
 - `intent_id` is optional: when omitted, the composer generates `<kind>-<UTC stamp>-<4 hex>` and echoes it in the request and reference. An explicit id is only for replaying or resuming an interrupted call.
 - `running` enters a pipeline step; the steps are exactly `produce`, `counter_review`, and `triage`.
 - `triage` enforces exactly one disposition per current finding — unknown IDs, duplicates, and gaps are rejected before the server ever sees them.

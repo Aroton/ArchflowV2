@@ -43,7 +43,7 @@ function workspaceResolved(absolute: string, pathClass: WorkspacePathClass): Res
   return Object.freeze({
     path_class: pathClass,
     workspaceRelative: parseWorkspacePathClaim("transient/intents/target.json"),
-    repositoryRelative: parseRepositoryPathClaim(".archflow/work/tasks/demo/transient/intents/target.json"),
+    repositoryRelative: parseRepositoryPathClaim(".archflow/runtime/tasks/demo/transient/intents/target.json"),
     absolute: absolute as ResolvedTaskWorkspacePath,
   });
 }

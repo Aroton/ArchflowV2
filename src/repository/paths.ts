@@ -46,7 +46,7 @@ declare const resolvedWorkspaceCleanupTargetBrand: unique symbol;
  */
 export type ResolvedTaskPath = string & { readonly [resolvedTaskPathBrand]: true };
 
-/** A lexical claim rooted at `.archflow/work/tasks/<task-id>/`. */
+/** A lexical claim rooted at `.archflow/runtime/tasks/<task-id>/`. */
 export type WorkspacePathClaim = string & { readonly [workspacePathClaimBrand]: true };
 
 /** A workspace path proven contained beneath the active task's ignored workspace. */
@@ -391,7 +391,7 @@ export function parseWorkspacePathClaim(value: unknown): WorkspacePathClaim {
   return parseTaskPathClaim(value) as unknown as WorkspacePathClaim;
 }
 
-/** Classifies a path relative to `.archflow/work/tasks/<task-id>/`. */
+/** Classifies a path relative to `.archflow/runtime/tasks/<task-id>/`. */
 export function classifyWorkspacePath(
   taskId: TaskSlug,
   claim: WorkspacePathClaim,
@@ -632,8 +632,8 @@ const workspaceRepositoryRelative = (
 ): RepositoryPathClaim =>
   parseRepositoryPathClaim(
     suffix === undefined
-      ? `${ARCHFLOW_TREE}/work/tasks/${taskId}`
-      : `${ARCHFLOW_TREE}/work/tasks/${taskId}/${suffix}`,
+      ? `${ARCHFLOW_TREE}/runtime/tasks/${taskId}`
+      : `${ARCHFLOW_TREE}/runtime/tasks/${taskId}/${suffix}`,
   );
 
 /**
@@ -663,11 +663,11 @@ export async function resolveTaskWorkspaceRoot(options: {
   const workspaceRoot = resolvePath(
     runner.location.worktreeRoot,
     ARCHFLOW_TREE,
-    "work",
+    "runtime",
     "tasks",
     taskId,
   );
-  const tasksRoot = resolvePath(runner.location.worktreeRoot, ARCHFLOW_TREE, "work", "tasks");
+  const tasksRoot = resolvePath(runner.location.worktreeRoot, ARCHFLOW_TREE, "runtime", "tasks");
   let realTasksRoot: string;
   let realWorkspaceRoot: string;
   try {
@@ -677,7 +677,7 @@ export async function resolveTaskWorkspaceRoot(options: {
     return fail(ioError(context));
   }
   // Containment alone is insufficient here: a symlink named for this task can resolve to a sibling
-  // that is still beneath `work/tasks`. Require the resolved child identity itself to remain exact.
+  // that is still beneath `runtime/tasks`. Require the resolved child identity itself to remain exact.
   if (relative(realTasksRoot, realWorkspaceRoot) !== taskId) {
     return fail(taskScopeViolation(taskId, "task-state"));
   }
@@ -779,12 +779,12 @@ export async function resolveTaskWorkspaceCleanupTarget(options: {
   }
 
   const worktreeRoot = runner.location.worktreeRoot;
-  const workspaceRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "work", "tasks", taskId);
+  const workspaceRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "runtime", "tasks", taskId);
   const target = resolvePath(worktreeRoot, repositoryRelative);
 
   // Never realpath the leaf: it may itself be a symlink that cleanup can safely unlink. The parent
   // is the complete traversal authority for a leaf deletion. For whole-workspace deletion, the
-  // shared `work/tasks` parent plays the same role.
+  // shared `runtime/tasks` parent plays the same role.
   const parent = dirname(target);
   const parentRepositoryRelative = relative(worktreeRoot, parent);
   const withinWorktree = await containedUnder(worktreeRoot, parentRepositoryRelative);
@@ -803,7 +803,7 @@ export async function resolveTaskWorkspaceCleanupTarget(options: {
   } else {
     // The task workspace is itself the leaf. Authenticate the fixed shared parent and keep the task
     // component lexical, so even a malicious task-root symlink is unlinked rather than followed.
-    const tasksRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "work", "tasks");
+    const tasksRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "runtime", "tasks");
     const tasksParent = await containedUnder(worktreeRoot, relative(worktreeRoot, tasksRoot));
     if (tasksParent.kind === "io") return fail(ioError(context));
     if (tasksParent.kind === "escape") return fail(pathEscape(taskId, "task-state"));

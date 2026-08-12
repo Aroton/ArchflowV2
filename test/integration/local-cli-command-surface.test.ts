@@ -158,7 +158,7 @@ describe("bundled local CLI", () => {
       ...stateWithoutTransition,
       phase_instance: "phase-impl-1", step: "produce", status: "running",
     }).bytes);
-    const verificationPath = join(fixture.root, ".archflow", "work", "tasks", task, "cache", "phases", "1", "verification.txt");
+    const verificationPath = join(fixture.root, ".archflow", "runtime", "tasks", task, "cache", "phases", "1", "verification.txt");
     mkdirSync(dirname(verificationPath), { recursive: true });
     writeFileSync(verificationPath, "npm test: passed\n");
     const implementation = cli(fixture.root, "build-request", {
@@ -235,7 +235,7 @@ describe("bundled local CLI", () => {
     };
     const gate = cli(fixture.root, "envelope", { tool: "archflow_gate", input: gateInput });
     expect(gate).toMatchObject({ status: 0, value: { ok: true, value: { gate: {
-      decision_path: `.archflow/work/tasks/${task}/cache/gates/gate.decision`,
+      decision_path: `.archflow/runtime/tasks/${task}/cache/gates/gate.decision`,
     } } } });
     // Resolution rewrites only the request's own fingerprint: the historical fingerprint a
     // supplemental outcome pins must pass through byte-identical.
@@ -268,7 +268,7 @@ describe("bundled local CLI", () => {
         current_evidence_set_digest: evidence.set_digest, rule, scope },
     } });
     expect(waiver).toMatchObject({ status: 0, value: { ok: true, value: { tool: "archflow_waiver", gate: {
-      decision_path: `.archflow/work/tasks/${task}/cache/gates/gate.decision`,
+      decision_path: `.archflow/runtime/tasks/${task}/cache/gates/gate.decision`,
     } } } });
 
     const status = cli(fixture.root, "status");

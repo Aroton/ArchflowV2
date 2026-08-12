@@ -38293,7 +38293,7 @@ async function resolveTaskRoot(options) {
   return ok(self2.absolute);
 }
 var workspaceRepositoryRelative = (taskId, suffix) => parseRepositoryPathClaim(
-  suffix === void 0 ? `${ARCHFLOW_TREE}/work/tasks/${taskId}` : `${ARCHFLOW_TREE}/work/tasks/${taskId}/${suffix}`
+  suffix === void 0 ? `${ARCHFLOW_TREE}/runtime/tasks/${taskId}` : `${ARCHFLOW_TREE}/runtime/tasks/${taskId}/${suffix}`
 );
 async function resolveTaskWorkspaceRoot(options) {
   const { runner, context: context2 } = options;
@@ -38311,11 +38311,11 @@ async function resolveTaskWorkspaceRoot(options) {
   const workspaceRoot = resolvePath(
     runner.location.worktreeRoot,
     ARCHFLOW_TREE,
-    "work",
+    "runtime",
     "tasks",
     taskId
   );
-  const tasksRoot = resolvePath(runner.location.worktreeRoot, ARCHFLOW_TREE, "work", "tasks");
+  const tasksRoot = resolvePath(runner.location.worktreeRoot, ARCHFLOW_TREE, "runtime", "tasks");
   let realTasksRoot;
   let realWorkspaceRoot;
   try {
@@ -38389,7 +38389,7 @@ async function resolveTaskWorkspaceCleanupTarget(options) {
     return fail2(pathInvalid(context2.task_id, "task-state"));
   }
   const worktreeRoot = runner.location.worktreeRoot;
-  const workspaceRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "work", "tasks", taskId);
+  const workspaceRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "runtime", "tasks", taskId);
   const target2 = resolvePath(worktreeRoot, repositoryRelative);
   const parent = dirname(target2);
   const parentRepositoryRelative = relative(worktreeRoot, parent);
@@ -38406,7 +38406,7 @@ async function resolveTaskWorkspaceCleanupTarget(options) {
       return fail2(taskScopeViolation(taskId, "task-state"));
     }
   } else {
-    const tasksRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "work", "tasks");
+    const tasksRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "runtime", "tasks");
     const tasksParent = await containedUnder(worktreeRoot, relative(worktreeRoot, tasksRoot));
     if (tasksParent.kind === "io") return fail2(ioError(context2));
     if (tasksParent.kind === "escape") return fail2(pathEscape(taskId, "task-state"));
@@ -39161,8 +39161,8 @@ function errnoOf2(error51) {
 async function ensureWorkspaceRoot(authority) {
   const archflowRoot = join2(authority.task_root, "..", "..");
   const fixed = [
-    join2(archflowRoot, "work"),
-    join2(archflowRoot, "work", "tasks"),
+    join2(archflowRoot, "runtime"),
+    join2(archflowRoot, "runtime", "tasks"),
     authority.workspace_root
   ];
   for (const directory of fixed) await ensureRealDirectory(directory);
@@ -46069,7 +46069,7 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
   const scope3 = sortedUniquePaths(output);
   const changed = await readChangedGitPaths(runner);
   const scopeSet = new Set(scope3);
-  const callerChanges = changed.paths.filter((path2) => !path2.startsWith(".archflow/work/"));
+  const callerChanges = changed.paths.filter((path2) => !path2.startsWith(".archflow/runtime/"));
   const undeclaredChanges = {
     scanned: true,
     undeclared_paths: callerChanges.filter((path2) => !scopeSet.has(path2)).map(rawGitPath),
@@ -46402,7 +46402,7 @@ async function restoreSnapshotOutput(input) {
     if (manifestMatch === null) {
       return snapshotInvalid(read.value.value.snapshot_digest, "manifest-path-mismatch");
     }
-    const expectedPayloadPath = `.archflow/work/tasks/${manifestMatch[1]}/cache/results/${manifestMatch[2]}/payload/${output.path}`;
+    const expectedPayloadPath = `.archflow/runtime/tasks/${manifestMatch[1]}/cache/results/${manifestMatch[2]}/payload/${output.path}`;
     if (input.payload_target === void 0 || input.payload_target.repositoryRelative !== expectedPayloadPath) {
       return snapshotInvalid(read.value.value.snapshot_digest, "payload-path-mismatch");
     }
@@ -59278,7 +59278,7 @@ async function resolveIntentTarget(dependencies, request) {
   });
   if (!resolved.ok) return resolved;
   if (resolved.value.path_class !== "workspace-intent") throw new TypeError("intent target has the wrong resolved path class");
-  const expectedClaim = `.archflow/work/tasks/${request.authority.task_id}/${claim}`;
+  const expectedClaim = `.archflow/runtime/tasks/${request.authority.task_id}/${claim}`;
   if (resolved.value.repositoryRelative !== expectedClaim) throw new TypeError("intent target claim mismatch");
   const rel = relative5(request.authority.workspace_root, resolved.value.absolute);
   if (rel === "" || rel === ".." || rel.startsWith("../") || isAbsolute4(rel)) {
@@ -59518,7 +59518,7 @@ function validateInstallationFacts(request, current, identified, nextState, fact
   if (manifest.phase_instance !== nextState.phase_instance || manifest.step !== expectedStep || manifest.input_fingerprint !== identified.input_fingerprint) return stateIssue2(current.value, "result-installation-state-mismatch");
   const expectedManifestPath = `.archflow/tasks/${request.authority.task_id}/authority/results/${facts.prepared.result_digest}.json`;
   if (facts.worktree_root !== authenticatedWorktreeRoot || facts.manifest_target.repositoryRelative !== expectedManifestPath || !targetIsInside(request.authority.task_root, facts.manifest_target)) return issue2("CONTRACT_INVALID", "result-installation-target-mismatch");
-  const payloadRoot = `.archflow/work/tasks/${request.authority.task_id}/cache/results/${facts.prepared.result_digest}/payload/`;
+  const payloadRoot = `.archflow/runtime/tasks/${request.authority.task_id}/cache/results/${facts.prepared.result_digest}/payload/`;
   if (facts.prepared.payloads.some(
     (payload) => !payload.target.repositoryRelative.startsWith(payloadRoot) || !targetIsInside(request.authority.workspace_root, payload.target)
   )) return issue2("CONTRACT_INVALID", "result-installation-payload-target-mismatch");
@@ -61279,7 +61279,7 @@ async function planCounterReviewCommit(inputs, current, call) {
     reason: "no-active-constitution-rules"
   }) : Object.freeze({
     status: "evaluated",
-    path: parseRepositoryPathClaim(`.archflow/work/tasks/${current.value.task_id}/${adjudicationReviewClaim(current.value.phase_instance)}`),
+    path: parseRepositoryPathClaim(`.archflow/runtime/tasks/${current.value.task_id}/${adjudicationReviewClaim(current.value.phase_instance)}`),
     constitution: constitutionEvidence.constitution,
     drift: constitutionEvidence.drift,
     triggers: canonicalRuleRefs([
@@ -61288,7 +61288,7 @@ async function planCounterReviewCommit(inputs, current, call) {
     ])
   });
   const success2 = Object.freeze({
-    path: parseRepositoryPathClaim(`.archflow/work/tasks/${current.value.task_id}/${counterReviewClaim(current.value.phase_instance)}`),
+    path: parseRepositoryPathClaim(`.archflow/runtime/tasks/${current.value.task_id}/${counterReviewClaim(current.value.phase_instance)}`),
     verdict: inputs.review_evidence.verdict,
     blocking_count: inputs.review_evidence.blocking_count,
     constitution: constitutionOutcome,

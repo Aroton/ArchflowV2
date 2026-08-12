@@ -202,7 +202,7 @@ try {
       : atomic.createAtomicWriter();
     const manifestClaim = `.archflow/tasks/${taskId}/authority/results/${resultManifest.digest}.json`;
     const payloadWorkspaceClaim = `cache/results/${resultManifest.digest}/payload/${outputPath}`;
-    const payloadClaim = `.archflow/work/tasks/${taskId}/${payloadWorkspaceClaim}`;
+    const payloadClaim = `.archflow/runtime/tasks/${taskId}/${payloadWorkspaceClaim}`;
     const manifestTarget = { absolute: join(repository, manifestClaim), repositoryRelative: manifestClaim, path_class: "authority-result" };
     const payloadTarget = {
       absolute: join(repository, payloadClaim), repositoryRelative: payloadClaim,

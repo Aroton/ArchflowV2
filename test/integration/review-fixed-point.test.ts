@@ -247,9 +247,9 @@ async function retainedResult(
         `cache/results/${reference.result_digest}/payload/${output.path}`,
       );
       const target = {
-        absolute: join(root, `.archflow/work/tasks/${task}/${workspaceRelative}`) as ResolvedTaskWorkspacePath,
+        absolute: join(root, `.archflow/runtime/tasks/${task}/${workspaceRelative}`) as ResolvedTaskWorkspacePath,
         workspaceRelative,
-        repositoryRelative: parseRepositoryPathClaim(`.archflow/work/tasks/${task}/${workspaceRelative}`),
+        repositoryRelative: parseRepositoryPathClaim(`.archflow/runtime/tasks/${task}/${workspaceRelative}`),
         path_class: "workspace-result-payload",
       } as const satisfies ResolvedWorkspacePath;
       return {
@@ -937,7 +937,7 @@ async function rewrite(
   const payloadWorkspacePath = parseWorkspacePathClaim(
     `cache/results/${manifest.digest}/payload/${outputPath}`,
   );
-  const payloadPath = parseRepositoryPathClaim(`.archflow/work/tasks/${task}/${payloadWorkspacePath}`);
+  const payloadPath = parseRepositoryPathClaim(`.archflow/runtime/tasks/${task}/${payloadWorkspacePath}`);
   const reference: AuthoritativeResultRef = {
     phase_instance: phase,
     step: "produce",

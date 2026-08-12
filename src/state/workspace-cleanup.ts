@@ -380,7 +380,7 @@ export async function cleanTaskWorkspace(
   }
 }
 
-/** Removes all task-local work after terminal authority is durable. */
+/** Removes all task-local runtime data after terminal authority is durable. */
 export async function cleanTerminalTaskWorkspace(
   dependencies: TransactionDependencies,
   authority: TransactionAuthority,

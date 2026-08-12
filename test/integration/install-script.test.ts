@@ -127,7 +127,7 @@ describe("installer", () => {
     expect(await readFile(join(home, "archflow-home", "bundle", "assets", "config.template.yaml"), "utf8"))
       .toBe(await readFile(join(root, "assets", "config.template.yaml"), "utf8"));
     expect(await readFile(join(home, "archflow-home", "bundle", "assets", "archflow.gitignore"), "utf8"))
-      .toBe("/work/\n");
+      .toBe("/runtime/\n");
 
     const handshake = `${JSON.stringify({
       jsonrpc: "2.0", id: 1, method: "initialize",

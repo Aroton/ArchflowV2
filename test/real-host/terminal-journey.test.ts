@@ -647,7 +647,7 @@ describe.skipIf(!enabled)("installed terminal journeys", () => {
     const staged = stagedInitialization(root, task);
     expect(await adopt(root, task, staged, "installed-clean-init"))
       .toMatchObject({ ok: true, value: { revision: 1 } });
-    const orphan = join(root, ".archflow", "work", "tasks", task, "diagnostics", "attempts", "phase-impl-21", "orphan.json");
+    const orphan = join(root, ".archflow", "runtime", "tasks", task, "diagnostics", "attempts", "phase-impl-21", "orphan.json");
     mkdirSync(dirname(orphan), { recursive: true });
     writeFileSync(orphan, "installed orphan attempt\n");
 

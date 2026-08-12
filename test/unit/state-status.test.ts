@@ -161,7 +161,7 @@ describe("computeTaskStatus", () => {
   it("reports cleanup debt as non-blocking derived workspace state", async () => {
     const h = await harness();
     writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state()).bytes);
-    const stale = join(h.root, ".archflow", "work", "tasks", TASK, "cache", "reviews", "old.md");
+    const stale = join(h.root, ".archflow", "runtime", "tasks", TASK, "cache", "reviews", "old.md");
     mkdirSync(join(stale, ".."), { recursive: true });
     writeFileSync(stale, "reconstructible review\n");
     const status = await computeTaskStatus(h.services.dependencies, h.services.authority);
@@ -196,7 +196,7 @@ describe("computeTaskStatus", () => {
         context_digest: active.context_digest, frozen_state_digest: D("c"), opened_at_revision: parseSafeInteger(4),
       },
     })).bytes);
-    const activePath = join(h.root, ".archflow", "work", "tasks", TASK, "cache", "gates", "gate.json");
+    const activePath = join(h.root, ".archflow", "runtime", "tasks", TASK, "cache", "gates", "gate.json");
     mkdirSync(join(activePath, ".."), { recursive: true });
     writeFileSync(activePath, canonicalDocument(active).bytes);
     writeFileSync(h.services.authority.config.absolute, `${configText}max_attempts: 4\n`);
@@ -251,7 +251,7 @@ describe("computeTaskStatus", () => {
         context_digest: active.context_digest, frozen_state_digest: D("c"), opened_at_revision: parseSafeInteger(4),
       },
     })).bytes);
-    const activePath = join(h.root, ".archflow", "work", "tasks", TASK, "cache", "gates", "gate.json");
+    const activePath = join(h.root, ".archflow", "runtime", "tasks", TASK, "cache", "gates", "gate.json");
     mkdirSync(join(activePath, ".."), { recursive: true });
     writeFileSync(activePath, canonicalDocument(active).bytes);
     mkdirSync(join(h.services.authority.task_root, "authority", "decisions", active.gate_id), { recursive: true });
@@ -266,7 +266,7 @@ describe("computeTaskStatus", () => {
       value: {
         open_gate: {
           gate_id: active.gate_id,
-          decision_path: `.archflow/work/tasks/${TASK}/cache/gates/gate.decision`,
+          decision_path: `.archflow/runtime/tasks/${TASK}/cache/gates/gate.decision`,
           archive_decision_path: `.archflow/tasks/${TASK}/authority/decisions/${active.gate_id}/decision.json`,
           request_path: `.archflow/tasks/${TASK}/authority/decisions/${active.gate_id}/request.json`,
         },
@@ -288,7 +288,7 @@ describe("computeTaskStatus", () => {
       value: {
         open_gate: {
           gate_id: active.gate_id,
-          decision_path: `.archflow/work/tasks/${TASK}/cache/gates/gate.decision`,
+          decision_path: `.archflow/runtime/tasks/${TASK}/cache/gates/gate.decision`,
         },
       },
     });

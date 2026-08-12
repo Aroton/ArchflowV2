@@ -356,7 +356,7 @@ async function resolveIntentTarget<K extends ToolName>(
   });
   if (!resolved.ok) return resolved;
   if (resolved.value.path_class !== "workspace-intent") throw new TypeError("intent target has the wrong resolved path class");
-  const expectedClaim = `.archflow/work/tasks/${request.authority.task_id}/${claim}`;
+  const expectedClaim = `.archflow/runtime/tasks/${request.authority.task_id}/${claim}`;
   if (resolved.value.repositoryRelative !== expectedClaim) throw new TypeError("intent target claim mismatch");
   const rel = relative(request.authority.workspace_root, resolved.value.absolute);
   if (rel === "" || rel === ".." || rel.startsWith("../") || isAbsolute(rel)) {
@@ -698,7 +698,7 @@ function validateInstallationFacts<K extends ToolName>(
     !targetIsInside(request.authority.task_root, facts.manifest_target)
   ) return issue("CONTRACT_INVALID", "result-installation-target-mismatch");
   const payloadRoot =
-    `.archflow/work/tasks/${request.authority.task_id}/cache/results/${facts.prepared.result_digest}/payload/`;
+    `.archflow/runtime/tasks/${request.authority.task_id}/cache/results/${facts.prepared.result_digest}/payload/`;
   if (facts.prepared.payloads.some((payload) =>
     !payload.target.repositoryRelative.startsWith(payloadRoot) ||
     !targetIsInside(request.authority.workspace_root, payload.target)

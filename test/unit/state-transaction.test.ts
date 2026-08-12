@@ -260,7 +260,7 @@ function documentResultFixture(h: Harness, bytes: Uint8Array): Readonly<{
   const manifest = canonicalDocument(manifestValue);
   const manifestPath = parseRepositoryPathClaim(`.archflow/tasks/${TASK}/authority/results/${manifest.digest}.json`);
   const payloadRelative = `cache/results/${manifest.digest}/payload/${outputPath}` as WorkspacePathClaim;
-  const payloadPath = parseRepositoryPathClaim(`.archflow/work/tasks/${TASK}/${payloadRelative}`);
+  const payloadPath = parseRepositoryPathClaim(`.archflow/runtime/tasks/${TASK}/${payloadRelative}`);
   return {
     prepared: { manifest, result_digest: manifest.digest, payloads: [{
       path: outputPath, bytes,
@@ -324,7 +324,7 @@ function remanifest(
   );
   const payloads = fixture.prepared.payloads.map((payload) => {
     const payloadRelative = `cache/results/${manifest.digest}/payload/${payload.path}` as WorkspacePathClaim;
-    const payloadPath = parseRepositoryPathClaim(`.archflow/work/tasks/${TASK}/${payloadRelative}`);
+    const payloadPath = parseRepositoryPathClaim(`.archflow/runtime/tasks/${TASK}/${payloadRelative}`);
     return {
       ...payload,
       target: {
@@ -627,7 +627,7 @@ describe("mature state transaction kernel", () => {
       async (current, identified) => {
         const revision = parseSafeInteger(current.value.revision + 1);
         const success = {
-          path: parseRepositoryPathClaim(`.archflow/work/tasks/${TASK}/cache/reviews/${PHASE}.counter.md`),
+          path: parseRepositoryPathClaim(`.archflow/runtime/tasks/${TASK}/cache/reviews/${PHASE}.counter.md`),
           verdict: "pass" as const,
           blocking_count: 0,
           constitution: { status: "not-run" as const, reason: "no-active-constitution-rules" as const },
@@ -786,7 +786,7 @@ describe("mature state transaction kernel", () => {
         arrange: (h) => {
           const original = documentResultFixture(h, new Uint8Array([1]));
           const wrongRelative = `cache/results/${"9".repeat(64)}/payload/unexpected` as WorkspacePathClaim;
-          const wrongPath = parseRepositoryPathClaim(`.archflow/work/tasks/${TASK}/${wrongRelative}`);
+          const wrongPath = parseRepositoryPathClaim(`.archflow/runtime/tasks/${TASK}/${wrongRelative}`);
           return {
             fixture: {
               ...original,

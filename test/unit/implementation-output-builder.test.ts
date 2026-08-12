@@ -81,7 +81,7 @@ describe("implementation-output builder", () => {
       runner: discovered.value, environment: environment.value, task_id: taskId, context,
     });
     if (!authority.ok) throw authority.error;
-    const transcriptPath = join(root, ".archflow", "work", "tasks", taskId, "cache", "phases", "17");
+    const transcriptPath = join(root, ".archflow", "runtime", "tasks", taskId, "cache", "phases", "17");
     mkdirSync(transcriptPath, { recursive: true });
     writeFileSync(join(transcriptPath, "verification.txt"), "npm test\nall passed\n");
     const fingerprint = parseSha256Digest("1".repeat(64));

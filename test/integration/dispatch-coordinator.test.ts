@@ -151,14 +151,14 @@ async function withDispatchEnvironment<T>(
 }
 
 async function attemptRecord(repository: string): Promise<Record<string, unknown>> {
-  const directory = join(repository, ".archflow", "work", "tasks", TASK, "diagnostics", "attempts", PHASE);
+  const directory = join(repository, ".archflow", "runtime", "tasks", TASK, "diagnostics", "attempts", PHASE);
   const names = await readdir(directory);
   expect(names).toHaveLength(1);
   return JSON.parse(await readFile(join(directory, names[0]!), "utf8")) as Record<string, unknown>;
 }
 
 async function attemptsAbsent(repository: string): Promise<void> {
-  await expect(readdir(join(repository, ".archflow", "work", "tasks", TASK, "diagnostics", "attempts")))
+  await expect(readdir(join(repository, ".archflow", "runtime", "tasks", TASK, "diagnostics", "attempts")))
     .rejects.toMatchObject({ code: "ENOENT" });
 }
 

@@ -55,15 +55,15 @@ describe("task workspace cleanup", () => {
     const liveDigest = parseSha256Digest("a".repeat(64));
     const staleDigest = parseSha256Digest("b".repeat(64));
     const taskRoot = join(root, ".archflow", "tasks", taskId);
-    const workRoot = join(root, ".archflow", "work", "tasks", taskId);
+    const runtimeRoot = join(root, ".archflow", "runtime", "tasks", taskId);
     const files = [
-      [join(workRoot, "cache", "results", liveDigest, "payload", "prd.md"), "live payload"],
-      [join(workRoot, "cache", "results", staleDigest, "payload", "prd.md"), "stale payload"],
-      [join(workRoot, "cache", "phases", "1", "verification.txt"), "old verify"],
-      [join(workRoot, "cache", "phases", "2", "verification.txt"), "current verify"],
-      [join(workRoot, "diagnostics", "attempts", "phase-impl-1", "old.json"), "{}"],
-      [join(workRoot, "diagnostics", "attempts", "phase-impl-2", "current.json"), "{}"],
-      [join(workRoot, "cache", "scratch", "stale.tmp"), "scratch"],
+      [join(runtimeRoot, "cache", "results", liveDigest, "payload", "prd.md"), "live payload"],
+      [join(runtimeRoot, "cache", "results", staleDigest, "payload", "prd.md"), "stale payload"],
+      [join(runtimeRoot, "cache", "phases", "1", "verification.txt"), "old verify"],
+      [join(runtimeRoot, "cache", "phases", "2", "verification.txt"), "current verify"],
+      [join(runtimeRoot, "diagnostics", "attempts", "phase-impl-1", "old.json"), "{}"],
+      [join(runtimeRoot, "diagnostics", "attempts", "phase-impl-2", "current.json"), "{}"],
+      [join(runtimeRoot, "cache", "scratch", "stale.tmp"), "scratch"],
       [join(taskRoot, "authority", "results", `${liveDigest}.json`), "{}"],
       [join(taskRoot, "authority", "results", `${staleDigest}.json`), "{}"],
       [join(taskRoot, "authority", "decisions", "live-gate", "request.json"), "{}"],
@@ -98,10 +98,10 @@ describe("task workspace cleanup", () => {
     expect(before).toMatchObject({ ok: true, value: { cleanup_pending: true } });
     const cleaned = await cleanTaskWorkspace(dependencies, authority.value, state);
     expect(cleaned).toMatchObject({ ok: true, value: { cleanup_pending: false } });
-    expect(existsSync(join(workRoot, "cache", "results", liveDigest, "payload", "prd.md"))).toBe(true);
-    expect(existsSync(join(workRoot, "cache", "results", staleDigest))).toBe(false);
-    expect(existsSync(join(workRoot, "cache", "phases", "1"))).toBe(false);
-    expect(existsSync(join(workRoot, "cache", "phases", "2", "verification.txt"))).toBe(true);
+    expect(existsSync(join(runtimeRoot, "cache", "results", liveDigest, "payload", "prd.md"))).toBe(true);
+    expect(existsSync(join(runtimeRoot, "cache", "results", staleDigest))).toBe(false);
+    expect(existsSync(join(runtimeRoot, "cache", "phases", "1"))).toBe(false);
+    expect(existsSync(join(runtimeRoot, "cache", "phases", "2", "verification.txt"))).toBe(true);
     expect(existsSync(join(taskRoot, "authority", "results", `${liveDigest}.json`))).toBe(true);
     expect(existsSync(join(taskRoot, "authority", "results", `${staleDigest}.json`))).toBe(false);
     expect(existsSync(join(taskRoot, "authority", "decisions", "live-gate", "request.json"))).toBe(true);
@@ -109,6 +109,6 @@ describe("task workspace cleanup", () => {
 
     const terminal = await cleanTerminalTaskWorkspace(dependencies, authority.value);
     expect(terminal).toMatchObject({ ok: true, value: { cleanup_pending: false, retained_files: 0 } });
-    expect(existsSync(workRoot)).toBe(false);
+    expect(existsSync(runtimeRoot)).toBe(false);
   });
 });

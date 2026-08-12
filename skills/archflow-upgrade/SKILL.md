@@ -17,7 +17,7 @@ Stop if the helper rejects an unresolved task-local constitution edit or secretl
 
 ## Stage and initialize
 
-Review the selected baselines, exclusion list, staged and unmapped paths, derived mapping, draft sources, and resume phase with the user before initialization. Explain that every selected regular file is staged byte-for-byte below the ignored `.archflow/work/tasks/<task>/cache/imports/` workspace, while an unmapped file remains historical material with no canonical document slot. These staging bytes are disposable; only the adopted initialization authority and later canonical documents survive a fresh clone.
+Review the selected baselines, exclusion list, staged and unmapped paths, derived mapping, draft sources, and resume phase with the user before initialization. Explain that every selected regular file is staged byte-for-byte below the ignored `.archflow/runtime/tasks/<task>/cache/imports/` workspace, while an unmapped file remains historical material with no canonical document slot. These staging bytes are disposable; only the adopted initialization authority and later canonical documents survive a fresh clone.
 
 Pass the returned initialization manifest unchanged to the first `archflow_state` request with `expected_revision: 0`, `phase_instance: "prd"`, `step: "produce"`, and `status: "running"` — the canonical rerun starts at the PRD and the server rejects any other entry point; the resume jump happens only after the migration-audit gate. Use `archflow-local envelope --task <task>` for the complete request and its server-checked fingerprint. A successful initialization establishes only the new destination and its import identity; it does not approve, adopt, or complete any imported work.
 

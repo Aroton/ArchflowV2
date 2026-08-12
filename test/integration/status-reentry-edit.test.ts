@@ -276,7 +276,7 @@ describe("post-triage re-entry edits are expected", () => {
 
       // Rendered reviews are disposable cache. Editing one never creates durable reconciliation
       // drift; it can be regenerated from the structured result authority.
-      const counterReviewPath = join(fixture.root, ".archflow", "work", "tasks", task, "cache", "reviews", "prd.counter.md");
+      const counterReviewPath = join(fixture.root, ".archflow", "runtime", "tasks", task, "cache", "reviews", "prd.counter.md");
       const recordedCounterReview = readFileSync(counterReviewPath);
       writeFileSync(counterReviewPath, "tampered rendered review\n");
       const foreignDrift = await h.status();

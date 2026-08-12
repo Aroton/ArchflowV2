@@ -227,7 +227,7 @@ describe("gate decision interface", () => {
 
       expect(await writeGateDecisionInterface(h.dependencies, h.authority, template)).toMatchObject({
         ok: true,
-        value: { gate_id: active.gate_id, decision_path: ".archflow/work/tasks/task-1/cache/gates/gate.decision" },
+        value: { gate_id: active.gate_id, decision_path: ".archflow/runtime/tasks/task-1/cache/gates/gate.decision" },
       });
       const firstResolution = await resolveDurableGate(h.dependencies, h.authority, active.gate_id, D("2"));
       const resolved = choice === "grant"
@@ -260,7 +260,7 @@ describe("gate decision interface", () => {
     const templates = buildGateDecisionTemplates(h.active);
     const chosen = templates.find((template) => (template as { payload?: { decision?: string } }).payload?.decision === "reject")!;
     writeFileSync(join(h.gateCache, "gate.decision"), canonicalDocument({ invalid: true }).bytes);
-    expect(await writeGateDecisionInterface(h.dependencies, h.authority, chosen)).toMatchObject({ ok: true, value: { gate_id: h.active.gate_id, decision_path: ".archflow/work/tasks/task-1/cache/gates/gate.decision" } });
+    expect(await writeGateDecisionInterface(h.dependencies, h.authority, chosen)).toMatchObject({ ok: true, value: { gate_id: h.active.gate_id, decision_path: ".archflow/runtime/tasks/task-1/cache/gates/gate.decision" } });
     const written = JSON.parse(readFileSync(join(h.gateCache, "gate.decision"), "utf8"));
     expect(written).toMatchObject({ payload: { decision: "reject" }, human_provenance: { channel: "archflow-local", recorded_at: expect.stringMatching(/\.\d{3}Z$/u) } });
     const refusal = await writeGateDecisionInterface(h.dependencies, h.authority, templates[0]!);

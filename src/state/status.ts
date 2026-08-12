@@ -551,10 +551,10 @@ async function gateStatus(
   return Object.freeze({
     gate_id: active.gate_id,
     kind: active.kind,
-    decision_path: `.archflow/work/tasks/${active.task_id}/cache/gates/gate.decision`,
+    decision_path: `.archflow/runtime/tasks/${active.task_id}/cache/gates/gate.decision`,
     archive_decision_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/decision.json`,
     request_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/request.json`,
-    gate_counter_review_path: `.archflow/work/tasks/${active.task_id}/${gateCounterReviewClaim(active.phase_instance, active.gate_id)}`,
+    gate_counter_review_path: `.archflow/runtime/tasks/${active.task_id}/${gateCounterReviewClaim(active.phase_instance, active.gate_id)}`,
     decision_templates: buildGateDecisionTemplates(active),
     counter_review_prompt: renderGateCounterPrompt({
       tool: active.context !== null && typeof active.context === "object" && "origin" in active.context

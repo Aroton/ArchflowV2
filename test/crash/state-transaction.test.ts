@@ -84,7 +84,7 @@ async function fixture(): Promise<Fixture> {
   const taskId = "crash-task" as RepositoryOperationContext["task_id"];
   const taskRoot = join(repository, ".archflow", "tasks", taskId);
   await mkdir(taskRoot, { recursive: true });
-  await mkdir(join(repository, ".archflow", "work", "tasks", taskId, "transient"), { recursive: true });
+  await mkdir(join(repository, ".archflow", "runtime", "tasks", taskId, "transient"), { recursive: true });
   const context: RepositoryOperationContext = {
     task_id: taskId,
     phase_instance: "phase-impl-9" as RepositoryOperationContext["phase_instance"],

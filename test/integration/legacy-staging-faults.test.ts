@@ -171,7 +171,7 @@ describe("legacy staging faults and collisions", () => {
     expect(interrupted).toMatchObject({ ok: false, error: { code: "IO_ERROR" } });
     expect(writes).toBe(2);
     const destination = join(prepared.root, ".archflow", "tasks", "destination");
-    const workspace = join(prepared.root, ".archflow", "work", "tasks", "destination");
+    const workspace = join(prepared.root, ".archflow", "runtime", "tasks", "destination");
     expect(existsSync(join(destination, "state.json"))).toBe(false);
     expect(regularFiles(destination)).toEqual(["config.yaml"]);
     const interruptedFiles = regularFiles(workspace);
@@ -185,7 +185,7 @@ describe("legacy staging faults and collisions", () => {
     expect(existsSync(join(destination, "state.json"))).toBe(false);
     expect(regularFiles(destination)).toEqual(["config.yaml"]);
     expect(regularFiles(workspace)).toEqual(converged.value.staged_paths
-      .map((path) => path.replace(".archflow/work/tasks/destination/", "")).sort());
+      .map((path) => path.replace(".archflow/runtime/tasks/destination/", "")).sort());
     for (const reference of converged.value.initialization.staged_payload_refs) {
       expect(readFileSync(join(
         workspace,
