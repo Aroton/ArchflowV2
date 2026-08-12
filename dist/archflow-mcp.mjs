@@ -36177,14 +36177,14 @@ var GATE_POLICIES = ["never", "always", "on_trigger"];
 var ITERATION_POLICIES = ["per_phase"];
 
 // src/contracts/gates.ts
-var GATE_KINDS = ["artifact-approval", "review-trigger", "material-drift", "adjudication-failure", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"];
+var GATE_KINDS = ["artifact-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"];
 var safeId = safeIdV1Schema;
 var boundedText = external_exports.string().min(1).max(4096).regex(/\S/u);
 var digest = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var safeInteger = external_exports.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 var rule = external_exports.object({ rule_id: safeId, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict();
-var ruleResolution = external_exports.object({ rule, resolution: boundedText }).strict();
 var waiverScope = external_exports.object({ operation: external_exports.enum(["review-trigger", "adjudication-failure"]), boundary: external_exports.enum(["subject", "phase", "task"]) }).strict();
+var eligibleWaiver = external_exports.object({ rule, scope: waiverScope }).strict();
 var authorityLink = external_exports.object({ link_digest: digest, purpose: external_exports.literal("restore-adoption"), proposed_generation_digest: digest, changed_input_fingerprint: digest }).strict();
 var reason = boundedText;
 var decision = (values) => external_exports.object({ decision: external_exports.enum(values), reason }).strict();
@@ -36192,6 +36192,10 @@ var sortedUnique = (items, compare) => items.every((item, index) => index === 0 
 var compareRules = (left, right) => left.rule_id.localeCompare(right.rule_id) || left.rule_version - right.rule_version;
 var canonicalRules = external_exports.array(rule).superRefine((items, context2) => {
   if (!sortedUnique(items, compareRules)) context2.addIssue({ code: "custom", message: "rules must be sorted and unique" });
+});
+var compareEligibleWaivers = (left, right) => compareRules(left.rule, right.rule) || left.scope.operation.localeCompare(right.scope.operation);
+var canonicalEligibleWaivers = external_exports.array(eligibleWaiver).superRefine((items, context2) => {
+  if (!sortedUnique(items, compareEligibleWaivers)) context2.addIssue({ code: "custom", message: "eligible waivers must be sorted and unique by rule and operation" });
 });
 var canonicalStrings = external_exports.array(safeId).superRefine((items, context2) => {
   if (!sortedUnique(items, (a, b) => a.localeCompare(b))) context2.addIssue({ code: "custom", message: "values must be sorted and unique" });
@@ -36201,18 +36205,17 @@ var canonicalDigests = external_exports.array(digest).superRefine((items, contex
 });
 var contexts = {
   "artifact-approval": external_exports.object({ artifact_kind: external_exports.enum(["prd", "design", "phase-design", "phase-implementation"]) }).strict(),
-  "review-trigger": external_exports.object({ matched_rules: canonicalRules, uncertain_rules: canonicalRules, eligible_waiver_rules: canonicalRules, waiver_scope: waiverScope }).strict().superRefine((value, context2) => {
-    if (value.waiver_scope.operation !== "review-trigger") context2.addIssue({ code: "custom", message: "waiver operation must match gate kind" });
-    const available = new Set([...value.matched_rules, ...value.uncertain_rules].map(ruleKey));
-    for (const item of value.eligible_waiver_rules) if (!available.has(ruleKey(item))) context2.addIssue({ code: "custom", message: "eligible waiver rule must be matched or uncertain" });
+  "constitution-review": external_exports.object({ constitution: external_exports.enum(["pass", "fail", "uncertain"]), failed_rules: canonicalRules, uncertain_rules: canonicalRules, matched_trigger_rules: canonicalRules, uncertain_trigger_rules: canonicalRules, eligible_waivers: canonicalEligibleWaivers }).strict().superRefine((value, context2) => {
+    const compliance = new Set([...value.failed_rules, ...value.uncertain_rules].map(ruleKey));
+    const trigger = new Set([...value.matched_trigger_rules, ...value.uncertain_trigger_rules].map(ruleKey));
+    if (compliance.size === 0 && trigger.size === 0) context2.addIssue({ code: "custom", message: "constitution review must identify a rule" });
+    if (value.constitution === "pass" !== (compliance.size === 0)) context2.addIssue({ code: "custom", message: "constitution must be pass exactly when no rule failed or is uncertain" });
+    for (const item of value.eligible_waivers) {
+      const available = item.scope.operation === "adjudication-failure" ? compliance : trigger;
+      if (!available.has(ruleKey(item.rule))) context2.addIssue({ code: "custom", message: "eligible waiver must name a rule on the axis its operation covers" });
+    }
   }),
   "material-drift": external_exports.object({ affected_upstream: external_exports.object({ kind: external_exports.enum(["prd", "architecture", "phase-design", "implementation-result", "review", "adjudication", "constitution", "workflow", "import"]), digest }).strict(), drift: external_exports.literal("material"), affected_claim_ids: canonicalStrings.min(1) }).strict(),
-  "adjudication-failure": external_exports.object({ constitution: external_exports.enum(["fail", "uncertain"]), failed_rules: canonicalRules, uncertain_rules: canonicalRules, eligible_waiver_rules: canonicalRules, waiver_scope: waiverScope }).strict().superRefine((value, context2) => {
-    if (value.waiver_scope.operation !== "adjudication-failure") context2.addIssue({ code: "custom", message: "waiver operation must match gate kind" });
-    const available = new Set([...value.failed_rules, ...value.uncertain_rules].map(ruleKey));
-    for (const item of value.eligible_waiver_rules) if (!available.has(ruleKey(item))) context2.addIssue({ code: "custom", message: "eligible waiver rule must be failed or uncertain" });
-    if (available.size === 0) context2.addIssue({ code: "custom", message: "adjudication failure must identify a rule" });
-  }),
   "attempts-exhausted": external_exports.object({ step: external_exports.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger }).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts"),
   "constitution-edit": external_exports.object({ pinned_constitution_digest: digest, current_constitution_digest: digest, changed_path_class: external_exports.literal("task-branch-constitution") }).strict(),
   "commit-authorization": external_exports.object({ target_ref: boundedText, diff_digest: digest, current_artifact_digests: canonicalDigests.min(1), parent_document_digests: canonicalDigests.min(1) }).strict(),
@@ -36221,9 +36224,8 @@ var contexts = {
 };
 var decisions = {
   "artifact-approval": decision(["approve", "revise", "reject"]),
-  "review-trigger": external_exports.union([decision(["approve", "revise", "reject"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, rationale: boundedText }).strict()]),
+  "constitution-review": external_exports.union([decision(["approve", "revise", "reject"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, operation: external_exports.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "material-drift": decision(["amend-upstream", "revise-current", "reject"]),
-  "adjudication-failure": external_exports.union([external_exports.object({ decision: external_exports.literal("approve"), reason, resolutions: external_exports.array(ruleResolution) }).strict(), decision(["revise", "reject"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, rationale: boundedText }).strict()]),
   "attempts-exhausted": decision(["retry-once", "revise", "abort"]),
   "constitution-edit": decision(["revert-edit", "start-base-amendment", "abort"]),
   "commit-authorization": decision(["authorize-commit", "revise", "abort"]),
@@ -36276,29 +36278,28 @@ var gateContractSchemaDefs = Object.freeze({
   rule,
   rules: canonicalRules,
   waiverScope,
+  eligibleWaiver,
+  eligibleWaivers: canonicalEligibleWaivers,
   authorityLink,
   artifactApprovalContext: contexts["artifact-approval"],
-  reviewTriggerContext: contexts["review-trigger"],
+  constitutionReviewContext: contexts["constitution-review"],
   materialDriftContext: contexts["material-drift"],
-  adjudicationFailureContext: contexts["adjudication-failure"],
   attemptsExhaustedContext: contexts["attempts-exhausted"],
   constitutionEditContext: contexts["constitution-edit"],
   commitAuthorizationContext: contexts["commit-authorization"],
   restoreCollisionContext: contexts["restore-collision"],
   migrationAuditContext: contexts["migration-audit"],
   artifactApprovalDecision: decisions["artifact-approval"],
-  reviewTriggerDecision: decisions["review-trigger"],
+  constitutionReviewDecision: decisions["constitution-review"],
   materialDriftDecision: decisions["material-drift"],
-  adjudicationFailureDecision: decisions["adjudication-failure"],
   attemptsExhaustedDecision: decisions["attempts-exhausted"],
   constitutionEditDecision: decisions["constitution-edit"],
   commitAuthorizationDecision: decisions["commit-authorization"],
   restoreCollisionDecision: decisions["restore-collision"],
   migrationAuditDecision: decisions["migration-audit"],
   artifactApproval: contractArms["artifact-approval"],
-  reviewTrigger: contractArms["review-trigger"],
+  constitutionReview: contractArms["constitution-review"],
   materialDrift: contractArms["material-drift"],
-  adjudicationFailure: contractArms["adjudication-failure"],
   attemptsExhausted: contractArms["attempts-exhausted"],
   constitutionEdit: contractArms["constitution-edit"],
   commitAuthorization: contractArms["commit-authorization"],
@@ -36309,9 +36310,8 @@ var gateRuleVersionRefSchema = rule;
 var gateWaiverScopeSchema = waiverScope;
 var gateDecisionEnvelopeV1Schema = external_exports.discriminatedUnion("kind", [
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("artifact-approval"), payload: decisions["artifact-approval"] }).strict(),
-  external_exports.object({ ...envelopeBase, kind: external_exports.literal("review-trigger"), payload: decisions["review-trigger"] }).strict(),
+  external_exports.object({ ...envelopeBase, kind: external_exports.literal("constitution-review"), payload: decisions["constitution-review"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("material-drift"), payload: decisions["material-drift"] }).strict(),
-  external_exports.object({ ...envelopeBase, kind: external_exports.literal("adjudication-failure"), payload: decisions["adjudication-failure"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("attempts-exhausted"), payload: decisions["attempts-exhausted"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("constitution-edit"), payload: decisions["constitution-edit"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("commit-authorization"), payload: decisions["commit-authorization"] }).strict(),
@@ -36335,20 +36335,9 @@ function validateGateDecision(kind, context2, payload) {
   parseGateContext(kind, context2);
   assertPlainJson(payload, `${kind} gate decision`);
   const parsed = decisions[kind].parse(payload);
-  if (kind === "review-trigger" && parsed.decision === "waiver-requested") {
-    const eligible = context2.eligible_waiver_rules;
-    if (!eligible.some((item) => ruleKey(item) === ruleKey(parsed.rule))) throw new TypeError("waiver-requested rule must be eligible");
-  }
-  if (kind === "adjudication-failure") {
-    const adjudicationContext = context2;
-    const adjudicationPayload = parsed;
-    const eligible = new Set(adjudicationContext.eligible_waiver_rules.map(ruleKey));
-    if (adjudicationPayload.decision === "waiver-requested" && !eligible.has(ruleKey(adjudicationPayload.rule))) throw new TypeError("waiver-requested rule must be eligible");
-    if (adjudicationPayload.decision === "approve") {
-      const required2 = new Set([...adjudicationContext.failed_rules, ...adjudicationContext.uncertain_rules].map(ruleKey).filter((key) => !eligible.has(key)));
-      const actual = adjudicationPayload.resolutions.map((item) => ruleKey(item.rule));
-      if (!sortedUnique(adjudicationPayload.resolutions, (a, b) => compareRules(a.rule, b.rule)) || actual.length !== required2.size || actual.some((key) => !required2.has(key))) throw new TypeError("resolutions must be a sorted exact set of non-waived failed and uncertain rules");
-    }
+  if (kind === "constitution-review" && parsed.decision === "waiver-requested") {
+    const eligible = context2.eligible_waivers;
+    if (!eligible.some((item) => ruleKey(item.rule) === ruleKey(parsed.rule) && item.scope.operation === parsed.operation)) throw new TypeError("waiver-requested rule and operation must be eligible");
   }
   if (kind === "restore-collision" && parsed.decision === "adopt-as-new-generation") {
     const candidate = context2.adoption_candidate;
@@ -37066,29 +37055,16 @@ var CONSTITUTION_RESULTS = ["pass", "fail", "uncertain"];
 var DRIFT_RESULTS = ["aligned", "incidental", "material"];
 var COMPLIANCE_RESULTS = ["pass", "fail", "uncertain"];
 var TRIGGER_RESULTS = ["not-matched", "matched", "uncertain"];
-var MECHANICAL_EVIDENCE_STATES = ["current", "missing", "stale", "unknown", "failed", "digest-mismatch"];
 var nonBlank2 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
 var id4 = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 var digest4 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var taskSlug3 = createTaskSlugV1Schema();
 var ruleVersionSchema = external_exports.object({ rule_id: id4, rule_version: external_exports.number().int().positive().safe() }).strict();
-var mechanicalEvidenceSchema = external_exports.object({
-  mechanism: nonBlank2,
-  state: external_exports.enum(MECHANICAL_EVIDENCE_STATES),
-  subject_digest: digest4.optional(),
-  evidence_digest: digest4.optional(),
-  details: nonBlank2
-}).strict().superRefine((evidence, context2) => {
-  const hasBindings = evidence.subject_digest !== void 0 && evidence.evidence_digest !== void 0;
-  if ((evidence.state === "current" || evidence.state === "stale") && !hasBindings) context2.addIssue({ code: "custom", message: `${evidence.state} evidence requires subject and evidence digests` });
-  if ((evidence.state === "missing" || evidence.state === "unknown") && (evidence.subject_digest !== void 0 || evidence.evidence_digest !== void 0)) context2.addIssue({ code: "custom", message: `${evidence.state} evidence cannot claim digests` });
-});
 var constitutionRuleFindingSchema = ruleVersionSchema.extend({
   compliance: external_exports.enum(COMPLIANCE_RESULTS),
   rationale: nonBlank2,
   trigger: external_exports.enum(TRIGGER_RESULTS),
-  trigger_evidence: nonBlank2,
-  enforced_by: external_exports.array(mechanicalEvidenceSchema)
+  trigger_evidence: nonBlank2
 }).strict();
 var driftFindingSchema = external_exports.object({
   upstream_digest: digest4,
@@ -37134,12 +37110,6 @@ function validateAdjudicationClaims(parsed) {
   assertSortedUnique(parsed.rule_findings.map(ruleKey2), "rule_findings");
   assertSortedUnique(parsed.drift_findings.map((finding) => finding.upstream_digest), "drift_findings");
   if (parsed.drift_findings.length !== parsed.approved_upstream_digests.length || parsed.drift_findings.some((finding, index) => finding.upstream_digest !== parsed.approved_upstream_digests[index])) throw new TypeError("drift_findings must exactly cover approved_upstream_digests");
-  for (const finding of parsed.rule_findings) {
-    for (const evidence of finding.enforced_by) {
-      if (evidence.state === "current" && evidence.subject_digest !== parsed.subject_digest) throw new TypeError(`current mechanical evidence for ${ruleKey2(finding)} binds the wrong subject`);
-      if (evidence.state !== "current" && finding.compliance === "pass") throw new TypeError(`suspect mechanical evidence cannot establish compliance for ${ruleKey2(finding)}`);
-    }
-  }
   const expectedConstitution = parsed.rule_findings.some((finding) => finding.compliance === "fail") ? "fail" : parsed.rule_findings.some((finding) => finding.compliance === "uncertain") ? "uncertain" : "pass";
   if (parsed.constitution !== expectedConstitution) throw new TypeError(`constitution must be ${expectedConstitution}`);
   const expectedDrift = parsed.drift_findings.some((finding) => finding.drift === "material") ? "material" : parsed.drift_findings.some((finding) => finding.drift === "incidental") ? "incidental" : "aligned";
@@ -45293,7 +45263,7 @@ function validateDurableSemantics(subject) {
       }
     } else if (gateDecision.outcome === "waiver-decided") {
       const waiverContext2 = gateRequest.context;
-      if (!("origin" in waiverContext2) || !isDeepStrictEqual4(gateDecision.origin, waiverContext2.origin) || !isDeepStrictEqual4(gateDecision.scope, waiverContext2.origin.scope) || gateDecision.kind !== waiverContext2.origin.scope.operation) {
+      if (!("origin" in waiverContext2) || !isDeepStrictEqual4(gateDecision.origin, waiverContext2.origin) || !isDeepStrictEqual4(gateDecision.scope, waiverContext2.origin.scope) || gateDecision.kind !== "constitution-review") {
         return fail7(contractInvalid(DURABLE_ISSUE_CODES.waiverDecisionOriginMismatch));
       }
     }
@@ -48202,6 +48172,28 @@ var gate_contract_schema_default = {
       ],
       additionalProperties: false
     },
+    eligibleWaiver: {
+      type: "object",
+      properties: {
+        rule: {
+          $ref: "#/$defs/rule"
+        },
+        scope: {
+          $ref: "#/$defs/waiverScope"
+        }
+      },
+      required: [
+        "rule",
+        "scope"
+      ],
+      additionalProperties: false
+    },
+    eligibleWaivers: {
+      type: "array",
+      items: {
+        $ref: "#/$defs/eligibleWaiver"
+      }
+    },
     authorityLink: {
       type: "object",
       properties: {
@@ -48245,27 +48237,40 @@ var gate_contract_schema_default = {
       ],
       additionalProperties: false
     },
-    reviewTriggerContext: {
+    constitutionReviewContext: {
       type: "object",
       properties: {
-        matched_rules: {
+        constitution: {
+          type: "string",
+          enum: [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        failed_rules: {
           $ref: "#/$defs/rules"
         },
         uncertain_rules: {
           $ref: "#/$defs/rules"
         },
-        eligible_waiver_rules: {
+        matched_trigger_rules: {
           $ref: "#/$defs/rules"
         },
-        waiver_scope: {
-          $ref: "#/$defs/waiverScope"
+        uncertain_trigger_rules: {
+          $ref: "#/$defs/rules"
+        },
+        eligible_waivers: {
+          $ref: "#/$defs/eligibleWaivers"
         }
       },
       required: [
-        "matched_rules",
+        "constitution",
+        "failed_rules",
         "uncertain_rules",
-        "eligible_waiver_rules",
-        "waiver_scope"
+        "matched_trigger_rules",
+        "uncertain_trigger_rules",
+        "eligible_waivers"
       ],
       additionalProperties: false
     },
@@ -48315,38 +48320,6 @@ var gate_contract_schema_default = {
         "affected_upstream",
         "drift",
         "affected_claim_ids"
-      ],
-      additionalProperties: false
-    },
-    adjudicationFailureContext: {
-      type: "object",
-      properties: {
-        constitution: {
-          type: "string",
-          enum: [
-            "fail",
-            "uncertain"
-          ]
-        },
-        failed_rules: {
-          $ref: "#/$defs/rules"
-        },
-        uncertain_rules: {
-          $ref: "#/$defs/rules"
-        },
-        eligible_waiver_rules: {
-          $ref: "#/$defs/rules"
-        },
-        waiver_scope: {
-          $ref: "#/$defs/waiverScope"
-        }
-      },
-      required: [
-        "constitution",
-        "failed_rules",
-        "uncertain_rules",
-        "eligible_waiver_rules",
-        "waiver_scope"
       ],
       additionalProperties: false
     },
@@ -48501,7 +48474,7 @@ var gate_contract_schema_default = {
       ],
       additionalProperties: false
     },
-    reviewTriggerDecision: {
+    constitutionReviewDecision: {
       anyOf: [
         {
           type: "object",
@@ -48537,6 +48510,13 @@ var gate_contract_schema_default = {
             rule: {
               $ref: "#/$defs/rule"
             },
+            operation: {
+              type: "string",
+              enum: [
+                "review-trigger",
+                "adjudication-failure"
+              ]
+            },
             rationale: {
               $ref: "#/$defs/text"
             }
@@ -48545,6 +48525,7 @@ var gate_contract_schema_default = {
             "decision",
             "reason",
             "rule",
+            "operation",
             "rationale"
           ],
           additionalProperties: false
@@ -48571,92 +48552,6 @@ var gate_contract_schema_default = {
         "reason"
       ],
       additionalProperties: false
-    },
-    adjudicationFailureDecision: {
-      anyOf: [
-        {
-          type: "object",
-          properties: {
-            decision: {
-              type: "string",
-              const: "approve"
-            },
-            reason: {
-              $ref: "#/$defs/text"
-            },
-            resolutions: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  rule: {
-                    $ref: "#/$defs/rule"
-                  },
-                  resolution: {
-                    $ref: "#/$defs/text"
-                  }
-                },
-                required: [
-                  "rule",
-                  "resolution"
-                ],
-                additionalProperties: false
-              }
-            }
-          },
-          required: [
-            "decision",
-            "reason",
-            "resolutions"
-          ],
-          additionalProperties: false
-        },
-        {
-          type: "object",
-          properties: {
-            decision: {
-              type: "string",
-              enum: [
-                "revise",
-                "reject"
-              ]
-            },
-            reason: {
-              $ref: "#/$defs/text"
-            }
-          },
-          required: [
-            "decision",
-            "reason"
-          ],
-          additionalProperties: false
-        },
-        {
-          type: "object",
-          properties: {
-            decision: {
-              type: "string",
-              const: "waiver-requested"
-            },
-            reason: {
-              $ref: "#/$defs/text"
-            },
-            rule: {
-              $ref: "#/$defs/rule"
-            },
-            rationale: {
-              $ref: "#/$defs/text"
-            }
-          },
-          required: [
-            "decision",
-            "reason",
-            "rule",
-            "rationale"
-          ],
-          additionalProperties: false
-        }
-      ]
     },
     attemptsExhaustedDecision: {
       type: "object",
@@ -48812,18 +48707,18 @@ var gate_contract_schema_default = {
       ],
       additionalProperties: false
     },
-    reviewTrigger: {
+    constitutionReview: {
       type: "object",
       properties: {
         kind: {
           type: "string",
-          const: "review-trigger"
+          const: "constitution-review"
         },
         context: {
-          $ref: "#/$defs/reviewTriggerContext"
+          $ref: "#/$defs/constitutionReviewContext"
         },
         payload: {
-          $ref: "#/$defs/reviewTriggerDecision"
+          $ref: "#/$defs/constitutionReviewDecision"
         }
       },
       required: [
@@ -48845,27 +48740,6 @@ var gate_contract_schema_default = {
         },
         payload: {
           $ref: "#/$defs/materialDriftDecision"
-        }
-      },
-      required: [
-        "kind",
-        "context",
-        "payload"
-      ],
-      additionalProperties: false
-    },
-    adjudicationFailure: {
-      type: "object",
-      properties: {
-        kind: {
-          type: "string",
-          const: "adjudication-failure"
-        },
-        context: {
-          $ref: "#/$defs/adjudicationFailureContext"
-        },
-        payload: {
-          $ref: "#/$defs/adjudicationFailureDecision"
         }
       },
       required: [
@@ -48986,13 +48860,10 @@ var gate_contract_schema_default = {
       $ref: "#/$defs/artifactApproval"
     },
     {
-      $ref: "#/$defs/reviewTrigger"
+      $ref: "#/$defs/constitutionReview"
     },
     {
       $ref: "#/$defs/materialDrift"
-    },
-    {
-      $ref: "#/$defs/adjudicationFailure"
     },
     {
       $ref: "#/$defs/attemptsExhausted"
@@ -49202,10 +49073,10 @@ var gate_decision_schema_default = {
         },
         kind: {
           type: "string",
-          const: "review-trigger"
+          const: "constitution-review"
         },
         payload: {
-          $ref: "urn:archflow:schema:v1:gate-contract#/$defs/reviewTriggerDecision"
+          $ref: "urn:archflow:schema:v1:gate-contract#/$defs/constitutionReviewDecision"
         }
       },
       required: [
@@ -49260,60 +49131,6 @@ var gate_decision_schema_default = {
         },
         payload: {
           $ref: "urn:archflow:schema:v1:gate-contract#/$defs/materialDriftDecision"
-        }
-      },
-      required: [
-        "schema_version",
-        "gate_id",
-        "task_id",
-        "phase_instance",
-        "subject_digest",
-        "context_digest",
-        "human_provenance",
-        "kind",
-        "payload"
-      ],
-      additionalProperties: false
-    },
-    {
-      type: "object",
-      properties: {
-        schema_version: {
-          type: "string",
-          const: "1"
-        },
-        gate_id: {
-          $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-        },
-        task_id: {
-          $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
-        },
-        phase_instance: {
-          type: "string",
-          pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
-        },
-        subject_digest: {
-          $ref: "urn:archflow:schema:v1:gate-contract#/$defs/digest"
-        },
-        context_digest: {
-          $ref: "urn:archflow:schema:v1:gate-contract#/$defs/digest"
-        },
-        human_provenance: {
-          anyOf: [
-            {
-              $ref: "#/$defs/connected"
-            },
-            {
-              $ref: "#/$defs/local"
-            }
-          ]
-        },
-        kind: {
-          type: "string",
-          const: "adjudication-failure"
-        },
-        payload: {
-          $ref: "urn:archflow:schema:v1:gate-contract#/$defs/adjudicationFailureDecision"
         }
       },
       required: [
@@ -50139,9 +49956,8 @@ var mcp_tools_schema_default = {
               kind: {
                 enum: [
                   "artifact-approval",
-                  "review-trigger",
+                  "constitution-review",
                   "material-drift",
-                  "adjudication-failure",
                   "attempts-exhausted",
                   "constitution-edit",
                   "commit-authorization",
@@ -50169,10 +49985,10 @@ var mcp_tools_schema_default = {
                   {
                     properties: {
                       kind: {
-                        const: "review-trigger"
+                        const: "constitution-review"
                       },
                       context: {
-                        $ref: "urn:archflow:schema:v1:gate-contract#/$defs/reviewTrigger/properties/context"
+                        $ref: "urn:archflow:schema:v1:gate-contract#/$defs/constitutionReview/properties/context"
                       }
                     }
                   },
@@ -50183,16 +49999,6 @@ var mcp_tools_schema_default = {
                       },
                       context: {
                         $ref: "urn:archflow:schema:v1:gate-contract#/$defs/materialDrift/properties/context"
-                      }
-                    }
-                  },
-                  {
-                    properties: {
-                      kind: {
-                        const: "adjudication-failure"
-                      },
-                      context: {
-                        $ref: "urn:archflow:schema:v1:gate-contract#/$defs/adjudicationFailure/properties/context"
                       }
                     }
                   },
@@ -50262,9 +50068,8 @@ var mcp_tools_schema_default = {
             type: "string",
             enum: [
               "artifact-approval",
-              "review-trigger",
+              "constitution-review",
               "material-drift",
-              "adjudication-failure",
               "attempts-exhausted",
               "constitution-edit",
               "commit-authorization",
@@ -51047,9 +50852,8 @@ var project_error_schema_default = {
       type: "string",
       enum: [
         "artifact-approval",
-        "review-trigger",
+        "constitution-review",
         "material-drift",
-        "adjudication-failure",
         "attempts-exhausted",
         "constitution-edit",
         "commit-authorization",
@@ -55318,9 +55122,8 @@ var task_state_schema_default = {
       type: "string",
       enum: [
         "artifact-approval",
-        "review-trigger",
+        "constitution-review",
         "material-drift",
-        "adjudication-failure",
         "attempts-exhausted",
         "constitution-edit",
         "commit-authorization",
@@ -56717,33 +56520,6 @@ function boundSubjectNode(property, value, adapter2) {
     maxItems: value.length
   };
 }
-function codexMechanicalSchema(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
-  const mechanical = value;
-  const properties = mechanical.properties;
-  if (properties === null || typeof properties !== "object" || Array.isArray(properties)) return value;
-  const base2 = properties;
-  const branch = (states, digests) => {
-    const selected = {
-      mechanism: base2.mechanism,
-      state: { type: "string", enum: [...states] },
-      ...Object.fromEntries(digests.map((name) => [name, base2[name]])),
-      details: base2.details
-    };
-    return { type: "object", additionalProperties: false, properties: selected, required: Object.keys(selected) };
-  };
-  return {
-    type: "object",
-    anyOf: [
-      branch(["current", "stale"], ["subject_digest", "evidence_digest"]),
-      branch(["missing", "unknown"], []),
-      branch(["failed", "digest-mismatch"], []),
-      branch(["failed", "digest-mismatch"], ["subject_digest"]),
-      branch(["failed", "digest-mismatch"], ["evidence_digest"]),
-      branch(["failed", "digest-mismatch"], ["subject_digest", "evidence_digest"])
-    ]
-  };
-}
 function hostFindingSchema(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
   const finding = value;
@@ -56791,16 +56567,6 @@ function projectCliOutputSchema(outputSchema, resultKind, adapter2, subject) {
       ...root,
       $defs: resultKind === "review" ? { ...common3, finding: hostFindingSchema(common3.finding) } : common3
     };
-  }
-  if (adapter2 === "codex-cli" && resultKind === "adjudication") {
-    const codexDefinitions = root.$defs;
-    if (codexDefinitions !== null && typeof codexDefinitions === "object" && !Array.isArray(codexDefinitions)) {
-      const common3 = codexDefinitions;
-      root = {
-        ...root,
-        $defs: { ...common3, mechanical: codexMechanicalSchema(common3.mechanical) }
-      };
-    }
   }
   const bindingKeys = resultKind === "review" ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family"] : ["task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_evidence_set_digest"];
   if (subject !== void 0) {
@@ -57485,12 +57251,6 @@ function crossCheckRuleFindings(registry2, adjudication, adapter2) {
     if (finding.rule_id !== rule4.id || finding.rule_version !== rule4.version) {
       return invalidOutput("constitution-rule-version", adapter2);
     }
-    const declared = rule4.enforced_by ?? [];
-    const labels = finding.enforced_by.map((entry) => entry.mechanism);
-    if (new Set(labels).size !== labels.length || labels.length !== declared.length || declared.some((label) => !labels.includes(label))) return invalidOutput("constitution-enforcement-labels", adapter2);
-    if (declared.length > 0 && finding.compliance === "pass") {
-      return invalidOutput("constitution-mechanism-pass", adapter2);
-    }
   }
   return adjudication;
 }
@@ -57515,46 +57275,6 @@ var adjudication_schema_default = {
     taskSlug: {
       type: "string",
       pattern: "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
-    },
-    mechanical: {
-      type: "object",
-      properties: {
-        mechanism: {
-          type: "string",
-          minLength: 1,
-          pattern: "\\S"
-        },
-        state: {
-          type: "string",
-          enum: [
-            "current",
-            "missing",
-            "stale",
-            "unknown",
-            "failed",
-            "digest-mismatch"
-          ]
-        },
-        subject_digest: {
-          type: "string",
-          pattern: "^[0-9a-f]{64}$"
-        },
-        evidence_digest: {
-          type: "string",
-          pattern: "^[0-9a-f]{64}$"
-        },
-        details: {
-          type: "string",
-          minLength: 1,
-          pattern: "\\S"
-        }
-      },
-      required: [
-        "mechanism",
-        "state",
-        "details"
-      ],
-      additionalProperties: false
     }
   },
   type: "object",
@@ -57636,12 +57356,6 @@ var adjudication_schema_default = {
             type: "string",
             minLength: 1,
             pattern: "\\S"
-          },
-          enforced_by: {
-            type: "array",
-            items: {
-              $ref: "#/$defs/mechanical"
-            }
           }
         },
         required: [
@@ -57650,8 +57364,7 @@ var adjudication_schema_default = {
           "compliance",
           "rationale",
           "trigger",
-          "trigger_evidence",
-          "enforced_by"
+          "trigger_evidence"
         ],
         additionalProperties: false
       }
@@ -58058,9 +57771,6 @@ function renderTriage(value) {
   for (const disposition of value.dispositions) lines.push("", ...renderDisposition(disposition));
   return linesToBytes(lines);
 }
-function renderMechanicalEvidence(value) {
-  return [`    mechanism: ${visibleJsonString(value.mechanism)}`, `    state: ${canonical(value.state)}`, `    subject_digest: ${optional2(value.subject_digest)}`, `    evidence_digest: ${optional2(value.evidence_digest)}`, prose("details", value.details, "    ")];
-}
 function renderAdjudicationEvidence(value) {
   const evidence = value.evidence;
   const authenticated = authenticQualifiedEvidence(value, "adjudication", evidence.assurance) || authenticVerifiedEvidence(value, { kind: "adjudication", assurance: evidence.assurance });
@@ -58083,8 +57793,7 @@ function renderAdjudicationEvidence(value) {
     ...provenanceMetadata(evidence)
   ]), "", "## Constitution Findings"];
   for (const finding of evidence.rule_findings) {
-    lines.push("", `### Rule ${visibleJsonString(`${finding.rule_id}@${finding.rule_version}`)}`, `compliance: ${canonical(finding.compliance)}`, `trigger: ${canonical(finding.trigger)}`, prose("rationale", finding.rationale), prose("trigger_evidence", finding.trigger_evidence), "  enforced_by:");
-    for (const mechanism of finding.enforced_by) lines.push(...renderMechanicalEvidence(mechanism));
+    lines.push("", `### Rule ${visibleJsonString(`${finding.rule_id}@${finding.rule_version}`)}`, `compliance: ${canonical(finding.compliance)}`, `trigger: ${canonical(finding.trigger)}`, prose("rationale", finding.rationale), prose("trigger_evidence", finding.trigger_evidence));
   }
   lines.push("", "## Drift Findings");
   for (const finding of evidence.drift_findings) lines.push("", `### Upstream ${visibleJsonString(finding.upstream_digest)}`, `drift: ${canonical(finding.drift)}`, `affected_claim_ids: ${canonical(finding.affected_claim_ids)}`, prose("rationale", finding.rationale));
@@ -60192,9 +59901,8 @@ var gateDecisionRecordV1Schema = external_exports.discriminatedUnion("outcome", 
 ]);
 var GATE_REQUEST_DECISIONS = {
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
-  "review-trigger": ["approve", "revise", "reject", "waiver-requested", "cancel"],
+  "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
-  "adjudication-failure": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
   "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
@@ -60225,16 +59933,14 @@ var gateRequestCommon = {
 var gateArm = (kind, context2, decisions2, extra) => external_exports.object({ ...gateRequestCommon, ...extra, kind: external_exports.literal(kind), context: context2, allowed_decisions: decisions2 }).strict();
 var gateArms = (extra) => ({
   artifactApproval: gateArm("artifact-approval", GATE_CONTRACTS["artifact-approval"].context, allowedDecisionTuples["artifact-approval"], extra),
-  reviewTrigger: gateArm("review-trigger", GATE_CONTRACTS["review-trigger"].context, allowedDecisionTuples["review-trigger"], extra),
+  constitutionReview: gateArm("constitution-review", GATE_CONTRACTS["constitution-review"].context, allowedDecisionTuples["constitution-review"], extra),
   materialDrift: gateArm("material-drift", GATE_CONTRACTS["material-drift"].context, allowedDecisionTuples["material-drift"], extra),
-  adjudicationFailure: gateArm("adjudication-failure", GATE_CONTRACTS["adjudication-failure"].context, allowedDecisionTuples["adjudication-failure"], extra),
   attemptsExhausted: gateArm("attempts-exhausted", GATE_CONTRACTS["attempts-exhausted"].context, allowedDecisionTuples["attempts-exhausted"], extra),
   constitutionEdit: gateArm("constitution-edit", GATE_CONTRACTS["constitution-edit"].context, allowedDecisionTuples["constitution-edit"], extra),
   commitAuthorization: gateArm("commit-authorization", GATE_CONTRACTS["commit-authorization"].context, allowedDecisionTuples["commit-authorization"], extra),
   restoreCollision: gateArm("restore-collision", GATE_CONTRACTS["restore-collision"].context, allowedDecisionTuples["restore-collision"], extra),
   migrationAudit: gateArm("migration-audit", GATE_CONTRACTS["migration-audit"].context, allowedDecisionTuples["migration-audit"], extra),
-  reviewWaiver: gateArm("review-trigger", waiverGateContextSchema, waiverDecisionsTuple, extra),
-  adjudicationWaiver: gateArm("adjudication-failure", waiverGateContextSchema, waiverDecisionsTuple, extra)
+  constitutionWaiver: gateArm("constitution-review", waiverGateContextSchema, waiverDecisionsTuple, extra)
 });
 var armUnion = (arms) => external_exports.union(Object.values(arms));
 var gateRequestArms = gateArms({});
@@ -60267,9 +59973,8 @@ var gateRequestSchemaDefs = Object.freeze({
   origin,
   waiverContext: waiverGateContextSchema,
   artifactApprovalDecisions: allowedDecisionTuples["artifact-approval"],
-  reviewTriggerDecisions: allowedDecisionTuples["review-trigger"],
+  constitutionReviewDecisions: allowedDecisionTuples["constitution-review"],
   materialDriftDecisions: allowedDecisionTuples["material-drift"],
-  adjudicationFailureDecisions: allowedDecisionTuples["adjudication-failure"],
   attemptsExhaustedDecisions: allowedDecisionTuples["attempts-exhausted"],
   constitutionEditDecisions: allowedDecisionTuples["constitution-edit"],
   commitAuthorizationDecisions: allowedDecisionTuples["commit-authorization"],
@@ -60280,9 +59985,8 @@ var gateRequestSchemaDefs = Object.freeze({
 });
 var gateRequestSchemaDefOverrides = Object.freeze({
   artifactApprovalDecisions: { const: GATE_REQUEST_DECISIONS["artifact-approval"] },
-  reviewTriggerDecisions: { const: GATE_REQUEST_DECISIONS["review-trigger"] },
+  constitutionReviewDecisions: { const: GATE_REQUEST_DECISIONS["constitution-review"] },
   materialDriftDecisions: { const: GATE_REQUEST_DECISIONS["material-drift"] },
-  adjudicationFailureDecisions: { const: GATE_REQUEST_DECISIONS["adjudication-failure"] },
   attemptsExhaustedDecisions: { const: GATE_REQUEST_DECISIONS["attempts-exhausted"] },
   constitutionEditDecisions: { const: GATE_REQUEST_DECISIONS["constitution-edit"] },
   commitAuthorizationDecisions: { const: GATE_REQUEST_DECISIONS["commit-authorization"] },
@@ -60324,9 +60028,8 @@ import { constants as fsConstants6 } from "node:fs";
 import { isDeepStrictEqual as isDeepStrictEqual8 } from "node:util";
 var DECISIONS = Object.freeze({
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
-  "review-trigger": ["approve", "revise", "reject", "waiver-requested", "cancel"],
+  "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
-  "adjudication-failure": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
   "commit-authorization": ["authorize-commit", "revise", "abort", "cancel"],
@@ -61001,8 +60704,8 @@ function buildAdjudicationEnvelope(value) {
     source_evidence_set_digest: sourceEvidenceSetDigest,
     instructions: {
       rule_coverage: "Return exactly one rule finding for every supplied rule, using its id as rule_id and version as rule_version.",
-      mechanism_evidence: "For a rule with declared enforced_by labels, return uncertain compliance and one unknown-state entry for each declared mechanism. Do not claim current mechanical evidence.",
-      undeclared_mechanisms: "For a rule with no declared enforced_by labels, return an empty enforced_by list."
+      enforcement_context: "A rule's enforced_by labels name where that rule is mechanically enforced in the repository. They are context for your judgment, not evidence you are asked to verify or report on. Judge every rule the same way: from the artifact and the evidence supplied here.",
+      uncertainty: "Report uncertain compliance only when the artifact itself leaves the question genuinely open. Absence of test results, command output, or repository access is expected here and is not by itself a reason to be uncertain."
     },
     subject
   };
@@ -61814,7 +61517,7 @@ async function authenticateWaiverOrigin(dependencies, authority, context2) {
   if (!validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok || decision2.digest !== context2.origin.origin_decision_digest || decision2.value.outcome !== "decided" || decision2.value.envelope.payload.decision !== "waiver-requested") return issue3("CONTRACT_INVALID", void 0, "waiver-origin-decision-invalid");
   const payload = decision2.value.envelope.payload;
   const requestContext = request.value.context;
-  if (!("waiver_scope" in requestContext) || request.value.gate_id !== context2.origin.origin_gate_id || request.value.context_digest !== context2.origin.origin_context_digest || request.value.task_id !== context2.origin.task_id || request.value.phase_instance !== context2.origin.phase_instance || request.value.subject_digest !== context2.origin.subject_digest || request.value.current_evidence.set_digest !== context2.origin.current_evidence_set_digest || !isDeepStrictEqual11(payload.rule, context2.origin.rule) || !isDeepStrictEqual11(requestContext.waiver_scope, context2.origin.scope)) return issue3("CONTRACT_INVALID", void 0, "waiver-origin-binding-invalid");
+  if (!("eligible_waivers" in requestContext) || request.value.gate_id !== context2.origin.origin_gate_id || request.value.context_digest !== context2.origin.origin_context_digest || request.value.task_id !== context2.origin.task_id || request.value.phase_instance !== context2.origin.phase_instance || request.value.subject_digest !== context2.origin.subject_digest || request.value.current_evidence.set_digest !== context2.origin.current_evidence_set_digest || !isDeepStrictEqual11(payload.rule, context2.origin.rule) || payload.operation !== context2.origin.scope.operation || !requestContext.eligible_waivers.some((eligible) => isDeepStrictEqual11(eligible.rule, context2.origin.rule) && isDeepStrictEqual11(eligible.scope, context2.origin.scope))) return issue3("CONTRACT_INVALID", void 0, "waiver-origin-binding-invalid");
   return ok14(void 0);
 }
 async function cleanupResolvedInterfaces(dependencies, authority, request, record2) {
@@ -62116,7 +61819,7 @@ function nextStateForRecord(state, record2, digest12, plannedFinalPhase) {
 function enactsReentry(record2) {
   if (record2.outcome !== "decided") return false;
   const decision2 = record2.envelope.payload.decision;
-  return record2.kind === "review-trigger" && decision2 === "revise" || record2.kind === "adjudication-failure" && decision2 === "revise" || record2.kind === "material-drift" && decision2 === "revise-current" || record2.kind === "attempts-exhausted" && (decision2 === "retry-once" || decision2 === "revise");
+  return record2.kind === "constitution-review" && decision2 === "revise" || record2.kind === "material-drift" && decision2 === "revise-current" || record2.kind === "attempts-exhausted" && (decision2 === "retry-once" || decision2 === "revise");
 }
 function exactOpenGateMatches(state, request) {
   const open5 = state.open_gate;
@@ -63834,7 +63537,8 @@ import { isDeepStrictEqual as isDeepStrictEqual12 } from "node:util";
 var fail26 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function authenticWaiverOriginArchive(request, decision2, origin2) {
   const payload = decision2.value.outcome === "decided" ? decision2.value.envelope.payload : void 0;
-  return request.value.gate_id === origin2.origin_gate_id && request.value.task_id === origin2.task_id && request.value.phase_instance === origin2.phase_instance && request.value.subject_digest === origin2.subject_digest && request.value.context_digest === origin2.origin_context_digest && request.value.current_evidence.set_digest === origin2.current_evidence_set_digest && (request.value.kind === "review-trigger" || request.value.kind === "adjudication-failure") && decision2.digest === origin2.origin_decision_digest && payload?.decision === "waiver-requested" && isDeepStrictEqual12(payload.rule, origin2.rule) && "waiver_scope" in request.value.context && isDeepStrictEqual12(request.value.context.waiver_scope, origin2.scope) && validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok;
+  return request.value.gate_id === origin2.origin_gate_id && request.value.task_id === origin2.task_id && request.value.phase_instance === origin2.phase_instance && request.value.subject_digest === origin2.subject_digest && request.value.context_digest === origin2.origin_context_digest && request.value.current_evidence.set_digest === origin2.current_evidence_set_digest && request.value.kind === "constitution-review" && decision2.digest === origin2.origin_decision_digest && payload?.decision === "waiver-requested" && isDeepStrictEqual12(payload.rule, origin2.rule) && payload.operation === origin2.scope.operation && // The origin gate must actually have offered this rule on this axis.
+  "eligible_waivers" in request.value.context && request.value.context.eligible_waivers.some((eligible) => isDeepStrictEqual12(eligible.rule, origin2.rule) && isDeepStrictEqual12(eligible.scope, origin2.scope)) && validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok;
 }
 async function handleWaiver(call, context2) {
   return mapHandlerErrors(context2.invocation_id, async () => {
@@ -63892,7 +63596,7 @@ async function handleWaiver(call, context2) {
       summary: `Waiver request for ${call.input.origin.rule.rule_id}`,
       subject_digest: call.input.origin.subject_digest,
       current_evidence: originRequest.value.current_evidence,
-      kind: call.input.origin.scope.operation,
+      kind: "constitution-review",
       context: waiverContext2,
       waiver_origin_gate_id: call.input.origin.origin_gate_id,
       ...call.input.supplemental_outcome === void 0 ? {} : {
