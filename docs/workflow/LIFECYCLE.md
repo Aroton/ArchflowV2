@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-08-11 · **Commit:** `56f4d2c` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `skills/`
+**Explored:** 2026-08-12 · **Commit:** `72457b8` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -40,7 +40,7 @@ All task files live under `.archflow/tasks/<task>/`; the only cross-task materia
 
 Every gated stage runs the same evidence pipeline to a fixed point:
 
-1. **produce** — write or revise the artifact. Its SHA-256 becomes the *subject digest*. Self-review happens here, as ordinary orchestrator/sub-agent work on the draft — nothing durable records it; the first recorded review is the adversarial one.
+1. **produce** — write or revise the artifact. Its SHA-256 becomes the *subject digest*. The PRD producer performs one bounded, deterministic author checklist; other phases may use a same-side review sized to their risk. Nothing here becomes review authority — the first recorded review is the server-dispatched opposite-family one.
 2. **counter_review** — one tool call, up to two dispatches, one atomic commit. The server dispatches the *opposite model family* (Claude ⇄ Codex) against a sealed envelope plus a read-only repo checkout at a pinned commit — evidence the producer cannot author. Then, only when the pinned constitution has active rules (the server decides, never the agent), it dispatches a second opposite-family child for the constitution and drift review — sealed envelope, deliberately no checkout. Both results commit in one atomic state transaction; `constitution: {status: "not-run"}` simply means no active rules exist.
 3. **triage** — the producer must disposition **every** rubric finding, one of three ways:
    - **accepted** — the finding demands a substantive fix; the work re-enters produce and all evidence is redone against the new bytes.
@@ -51,9 +51,9 @@ Every gated stage runs the same evidence pipeline to a fixed point:
 
 Editing the artifact changes the subject digest, which invalidates all downstream evidence — the pipeline re-runs until everything agrees about the same bytes. Re-entry is bounded (`max_attempts`, default 3); exhaustion opens an `attempts-exhausted` gate rather than looping forever.
 
-**What actually ends the loop is triage, not the finding count.** The exit condition is `accepted_count === 0` — a plain `accepted` disposition is the only thing that forces another round (`src/review/fixed-point.ts`). A blocking finding that triage *rejects* with a rationale does not continue the loop; `blocker_remains` is computed and reported but routes nothing. That is deliberate: an adversarial reviewer at high effort always has another refinement, so the rubric carries a materiality bar (a blocking finding must name a consequence that survives the artifact's stated non-goals and priority order) and the producer rejects findings that do not clear it. The attempt cap is a thrash backstop, not the primary brake.
+**What actually ends the loop is triage, not the finding count.** The exit condition is `accepted_count === 0` — a plain `accepted` disposition is the only thing that forces another round (`src/review/fixed-point.ts`). A model-labeled blocker that triage rejects does not continue the loop. The producer accepts every material defect and rejects anything that cannot show a concrete downstream consequence. On later rounds the sealed instruction makes remediation verification primary and permits a new issue only when leaving it unchanged is reasonably likely to change behavior, verification, delivery, approval, or important risk.
 
-Because that means artifacts can reach approval with findings the producer judged immaterial, `status.evidence.findings` carries each finding's severity, summary, and recorded disposition, and every gate presents rejected blocking findings as an **Open findings** section beside the existing **Envelope gaps** section. The human sees exactly what was waved through and can disagree — silent dissent would make the materiality bar a way to hide disagreement rather than a way to converge.
+`status.evidence.findings` retains each finding and disposition for audit, but ordinary human approval is not used to triage model polish. Rejected non-material observations stay out of the approval agenda. An envelope gap is disclosed there only when it prevented a material judgment; an `attempts-exhausted` gate instead presents the unresolved material defect and asks whether another revision is warranted.
 
 ### The editorial revision
 

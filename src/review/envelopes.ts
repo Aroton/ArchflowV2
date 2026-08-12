@@ -129,12 +129,12 @@ export type ReviewEnvelopeSeed = Readonly<
 >;
 
 /**
- * The one fixed sentence the envelope adds when a `prior-triage` context entry is pinned. A
- * literal for the same reason as {@link REPOSITORY_VIEW_NOTE}: a variable sentence would reopen
- * the caller-instruction channel this envelope deliberately closes.
+ * The fixed remediation instruction the envelope adds when a `prior-triage` context entry is
+ * pinned. It is a literal for the same reason as {@link REPOSITORY_VIEW_NOTE}: variable prose
+ * would reopen the caller-instruction channel this envelope deliberately closes.
  */
 export const PRIOR_TRIAGE_INSTRUCTION =
-  "Findings already dispositioned in the pinned prior-triage record must not be re-raised in variant form; if a prior disposition looks wrong, challenge it by naming its finding_id instead of rediscovering the same defect class.";
+  "This is a remediation review. First verify that every accepted revision intent in the pinned prior-triage record was carried out without introducing a material defect. Do not re-raise completed or rejected findings in variant form; challenge a prior disposition only by naming its finding_id and showing that the revision intent was not carried out or that the change introduced a material defect. You may report a previously undiscovered issue only when leaving it unchanged is reasonably likely to change a downstream decision, behavior, verification outcome, or important risk. Do not report optional polish, harmless wording refinements, or other non-material observations.";
 
 export type DispatchEnvelope = Readonly<{
   readonly result_kind: "review" | "adjudication";

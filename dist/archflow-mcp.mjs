@@ -60411,7 +60411,7 @@ var PINNED_CONTEXT_KINDS = [
   "repo-map"
 ];
 var REPOSITORY_VIEW_NOTE = "Your working directory is a read-only checkout of the repository at this commit, excluding .archflow/tasks. Use it to verify repository claims; the artifact and pinned context remain the review subject and take precedence on conflict.";
-var PRIOR_TRIAGE_INSTRUCTION = "Findings already dispositioned in the pinned prior-triage record must not be re-raised in variant form; if a prior disposition looks wrong, challenge it by naming its finding_id instead of rediscovering the same defect class.";
+var PRIOR_TRIAGE_INSTRUCTION = "This is a remediation review. First verify that every accepted revision intent in the pinned prior-triage record was carried out without introducing a material defect. Do not re-raise completed or rejected findings in variant form; challenge a prior disposition only by naming its finding_id and showing that the revision intent was not carried out or that the change introduced a material defect. You may report a previously undiscovered issue only when leaving it unchanged is reasonably likely to change a downstream decision, behavior, verification outcome, or important risk. Do not report optional polish, harmless wording refinements, or other non-material observations.";
 var ReviewEnvelopeError = class extends Error {
   project_error;
   /** The serialized size that failed the byte cap, when that is what failed. */
@@ -61048,7 +61048,9 @@ async function priorTriageEvidence(dependencies, state) {
         findingsByRef.set(`${manifest.artifact_digest}:${finding.finding_id}`, {
           severity: finding.severity,
           blocking: finding.blocking,
-          summary: finding.summary
+          summary: finding.summary,
+          evidence: finding.evidence,
+          suggested_resolution: finding.suggested_resolution
         });
       }
     }
@@ -61060,7 +61062,8 @@ async function priorTriageEvidence(dependencies, state) {
       finding_id: disposition.finding_id,
       ...finding ?? {},
       disposition: disposition.disposition,
-      ...typeof recorded.revision_intent === "string" ? { revision_intent: recorded.revision_intent } : typeof recorded.rationale === "string" ? { rationale: recorded.rationale } : {}
+      ...typeof recorded.rationale === "string" ? { rationale: recorded.rationale } : {},
+      ...typeof recorded.revision_intent === "string" ? { revision_intent: recorded.revision_intent } : {}
     };
   });
   const record2 = {

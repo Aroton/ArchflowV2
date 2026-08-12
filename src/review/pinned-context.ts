@@ -473,13 +473,12 @@ async function implementationMechanicalEvidence(
  * unreferenced disk remnants. No retained triage (attempt 1, or a retry that never reached
  * triage) pins nothing: absence is the accurate record, not a gap.
  *
- * Every rendered field restates durable authority: finding severity/summary come from the
- * retained reviewer-authored evidence manifest, dispositions and their recorded
- * revision-intent/rationale from the retained triage manifest. Disposition strings render as-is
- * so a grown triage vocabulary never breaks assembly. A referenced-but-unloadable manifest fails
- * closed like every other restatement of durable authority; a disposition whose finding is not in
- * the retained counter-review evidence (for example a supplemental gate counter-review finding)
- * renders without the unresolvable finding fields rather than inventing them.
+ * Every rendered field restates durable authority: finding severity, summary, evidence, and
+ * suggested resolution come from the retained reviewer-authored evidence manifest; dispositions,
+ * rationales, and revision intents come from retained triage. Disposition strings render as-is so
+ * a grown vocabulary never breaks assembly. A referenced-but-unloadable manifest fails closed;
+ * a disposition whose finding is not in retained counter-review evidence (for example a
+ * supplemental gate finding) renders without the unresolvable fields rather than inventing them.
  */
 export async function priorTriageEvidence(
   dependencies: Pick<TransactionDependencies, "load_retained_result">,
@@ -496,7 +495,13 @@ export async function priorTriageEvidence(
   if (triageSource.artifact_kind !== "triage") {
     return fail(state.phase_instance, "prior-triage-artifact-invalid");
   }
-  const findingsByRef = new Map<string, Readonly<{ severity: string; blocking: boolean; summary: string }>>();
+  const findingsByRef = new Map<string, Readonly<{
+    severity: string;
+    blocking: boolean;
+    summary: string;
+    evidence: string;
+    suggested_resolution: string;
+  }>>();
   const reviewRef = state.authoritative_results.find((candidate) =>
     candidate.phase_instance === state.phase_instance && candidate.step === "counter_review");
   if (reviewRef !== undefined) {
@@ -506,7 +511,11 @@ export async function priorTriageEvidence(
     if (manifest.source_artifact.artifact_kind === "review-evidence") {
       for (const finding of manifest.source_artifact.evidence.findings) {
         findingsByRef.set(`${manifest.artifact_digest}:${finding.finding_id}`, {
-          severity: finding.severity, blocking: finding.blocking, summary: finding.summary,
+          severity: finding.severity,
+          blocking: finding.blocking,
+          summary: finding.summary,
+          evidence: finding.evidence,
+          suggested_resolution: finding.suggested_resolution,
         });
       }
     }
@@ -520,11 +529,10 @@ export async function priorTriageEvidence(
       finding_id: disposition.finding_id,
       ...(finding ?? {}),
       disposition: disposition.disposition as string,
+      ...(typeof recorded.rationale === "string" ? { rationale: recorded.rationale } : {}),
       ...(typeof recorded.revision_intent === "string"
         ? { revision_intent: recorded.revision_intent }
-        : typeof recorded.rationale === "string"
-          ? { rationale: recorded.rationale }
-          : {}),
+        : {}),
     };
   });
   const record = {

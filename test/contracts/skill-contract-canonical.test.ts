@@ -40,20 +40,6 @@ const productionRubricSkills = [
   "archflow-phase-design",
   "archflow-phase-impl",
 ] as const;
-const architectureSubstantiveCalibration = "Report a blocking defect only when it requires producer action, and cite the artifact statement and the pinned or repository evidence it contradicts. The violation must follow from artifact text, pinned evidence, or repository evidence at the pinned commit, never from assumed codebase behavior. A sound artifact is expected to yield zero blocking findings. A blocking finding must also name the concrete consequence of shipping the artifact unchanged, and that consequence must survive the artifact's own stated non-goals and priority order; a residual imperfection the stated scope already excludes is an advisory observation, not a blocker. A challenge to a previously dispositioned finding is blocking only if its recorded revision intent was not carried out or the fix introduced a new defect; a weakness remaining after a fix did what it said it would do is advisory.";
-const substantiveCalibration = {
-  "archflow-prd": "Report a blocking defect only when it requires producer action, and cite the specific artifact statement it contradicts or stated requirement it leaves unmet; citation is necessary but not sufficient. The violation must follow from the artifact's own text, pinned envelope evidence, or repository evidence at the pinned commit, without assuming behavior the artifact does not specify. A sound artifact is expected to yield zero blocking findings; that is successful review, not under-performance. A blocking finding must also name the concrete consequence of shipping the artifact unchanged, and that consequence must survive the artifact's own stated non-goals and priority order; a residual imperfection the stated scope already excludes is an advisory observation, not a blocker. A challenge to a previously dispositioned finding is blocking only if its recorded revision intent was not carried out or the fix introduced a new defect; a weakness remaining after a fix did what it said it would do is advisory.",
-  "archflow-design": architectureSubstantiveCalibration,
-  "archflow-phase-design": architectureSubstantiveCalibration,
-  "archflow-phase-impl": "Report a blocking defect only when it requires producer action, citing the changed bytes and the pinned phase design statement or evidence it violates. The violation must follow from pinned material or repository evidence at the pinned commit, never from assumed behavior of unpinned code. A sound implementation is expected to yield zero blocking findings. A blocking finding must also name the concrete consequence of merging the change as written, and that consequence must survive the phase design's stated non-goals and priority order; a residual imperfection the approved scope already excludes is an advisory observation, not a blocker. A challenge to a previously dispositioned finding is blocking only if its recorded revision intent was not carried out or the fix introduced a new defect; a weakness remaining after a fix did what it said it would do is advisory.",
-} as const;
-const advisoryCalibration = {
-  "archflow-prd": "Use non-blocking findings for completeness suggestions, debatable readings, and observations. Do not inflate them into blockers merely to report them.",
-  "archflow-design": "Use non-blocking findings for completeness suggestions, debatable readings, and observations. Do not inflate them into blockers.",
-  "archflow-phase-design": "Use non-blocking findings for completeness suggestions, debatable readings, and observations. Do not inflate them into blockers.",
-  "archflow-phase-impl": "Use non-blocking findings for completeness suggestions, debatable readings, and observations. Do not inflate them into blockers.",
-} as const;
-const phasePlanSoundnessCalibration = "Each phase is independently verifiable, ordered by dependency, and scoped so its completion is observable. A well-scoped phase is also reviewable in one sealed pass — typically around 10-15 files of hand-written change; a phase expected to exceed that typically warrants splitting at design time or marking which of its outputs are generated rather than hand-written.";
 const taskSpecificCriteria = {
   "archflow-prd": ["ask-fidelity", "proportionality", "testable-requirements", "stated-assumptions"],
   "archflow-design": ["upstream-coverage", "interface-reality", "evidence-completeness", "proportionality", "phase-plan-soundness"],
@@ -116,42 +102,47 @@ describe("canonical skill contracts", () => {
       const rubric = parseRubricV1(JSON.parse(block![1]!));
       const criteria = new Map(rubric.criteria.map((criterion) => [criterion.id, criterion]));
 
-      expect(criteria.get("substantive-correctness")).toEqual({
-        id: "substantive-correctness",
-        text: substantiveCalibration[name],
-        blocking: true,
-      });
-      expect(criteria.get("advisory-observations")).toEqual({
-        id: "advisory-observations",
-        text: advisoryCalibration[name],
-        blocking: false,
-      });
-      expect(criteria.get("substantive-correctness")?.text).toContain("stated non-goals and priority order");
-      expect(criteria.get("substantive-correctness")?.text).toContain("challenge to a previously dispositioned finding");
-      expect(criteria.get("unverifiable-claims")?.text).toContain("do not re-report it");
+      const substantive = criteria.get("substantive-correctness");
+      expect(substantive?.blocking).toBe(true);
+      expect(substantive?.text).toContain("material defect");
+      expect(substantive?.text).toContain("consequence");
+      expect(substantive?.text).toContain("prior-triage");
+      expect(substantive?.text).toContain("accepted revision intents");
+      expect(substantive?.text).toContain("previously undiscovered issue");
+
+      const advisory = criteria.get("advisory-observations");
+      expect(advisory?.blocking).toBe(false);
+      expect(advisory?.text).toContain("Do not report non-material observations");
+      expect(advisory?.text).toContain("return no findings");
+
+      expect(criteria.get("unverifiable-claims")?.text).toContain("material judgment");
+      expect(criteria.get("unverifiable-claims")?.text).toContain("do not re-report one");
       expect(criteria.get("unverifiable-claims")?.blocking).toBe(false);
       expect(criteria.get("unverifiable-claims")?.text).toContain("non-blocking finding");
       expect(criteria.get("unverifiable-claims")?.text).toContain("finding_id beginning unverifiable-");
-      expect(criteria.get("unverifiable-claims")?.text).toContain("read-only repository checkout");
       if (name === "archflow-design" || name === "archflow-phase-design") {
-        expect(criteria.get("phase-plan-soundness")).toEqual({
-          id: "phase-plan-soundness",
-          text: phasePlanSoundnessCalibration,
-          blocking: true,
-        });
+        expect(criteria.get("phase-plan-soundness")?.blocking).toBe(true);
+        expect(criteria.get("phase-plan-soundness")?.text).toContain("materially prevent");
       }
       expect([...criteria.keys()]).toEqual(expect.arrayContaining([...taskSpecificCriteria[name]]));
     }
   });
 
-  it("routes envelope-gap findings through rejection and the human gate in every rubric skill", () => {
+  it("rejects envelope gaps and keeps non-material findings out of human approval", () => {
     for (const name of productionRubricSkills) {
       const source = skill(name);
       expect(source).toContain("`unverifiable-`");
       expect(source).toContain("`envelope-gap: `");
-      expect(source).toContain("Envelope gaps");
-      expect(source).toContain("never accept one");
+      expect(source).toContain("not a backlog-triage meeting");
+      expect(source).toContain("rejected non-material");
     }
+  });
+
+  it("uses one bounded PRD author check before the independent review", () => {
+    const source = skill("archflow-prd");
+    expect(source).toContain("perform one bounded author check");
+    expect(source).not.toContain("spawn a fresh review sub-agent");
+    expect(source).toContain("Do not spawn an additional generative reviewer");
   });
 
   it("keeps the architecture rubric shared and its envelope re-projection digest-stable", () => {

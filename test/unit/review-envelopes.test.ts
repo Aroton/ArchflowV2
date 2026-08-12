@@ -205,6 +205,10 @@ describe("review dispatch envelopes", () => {
     ]);
     expect(visible.context).toEqual([priorTriage]);
     expect(visible.instructions).toEqual({ prior_triage: PRIOR_TRIAGE_INSTRUCTION });
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("This is a remediation review");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("verify that every accepted revision intent");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("previously undiscovered issue");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("Do not report optional polish");
     // The instruction literal and the entry participate in the recorded envelope digest.
     expect(bound.digest).not.toBe(bare.digest);
     expect(bound.digest).toBe(canonicalJsonDigest({

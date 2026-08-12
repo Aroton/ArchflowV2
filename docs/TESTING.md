@@ -1,6 +1,6 @@
 # TESTING
 
-**Explored:** 2026-08-12 · **Commit:** `ae25739` · **Covers:** `test/`, `vitest.config.ts`, `.github/workflows/`
+**Explored:** 2026-08-12 · **Commit:** `72457b8` · **Covers:** `test/`, `vitest.config.ts`, `.github/workflows/`
 
 ## Test runner and configuration
 
@@ -118,6 +118,7 @@ Release validation is implemented by `scripts/release-support.mjs` and front end
 ## Known current limitations and gaps
 
 - **Real-host suites are intentionally outside `npm run check` and CI.** `test/contracts/repository-boundary.test.ts` pins this exclusion. Host/version/provider drift is found only when someone explicitly runs `test:real-host`; the benchmark has a second opt-in.
+- **The recorded review benchmark measures one observation per artifact and direction, not repeat stability.** It cannot establish deterministic verdicts or rounds-to-convergence. The deterministic contract suite instead pins the materiality and remediation instructions; a future opt-in convergence benchmark should repeat identical production envelopes and measure blocker-class agreement and remediation closure.
 - **Operator-level journeys remain separate evidence.** `docs/validation/release-validation.md` records the two full producer journeys (VAL-01) as unexecuted and a complete installed two-phase phase-design/phase-implementation slice (VAL-16) as an accepted gap; the server-absent manual journey it lists as pending (VAL-12) is moot now that degraded mode is read-only. The automated terminal suite proves named slices, not an entire human workflow.
 - **Some real failure classes remain simulated.** The same report records real `TIMEOUT`, `OUTPUT_OVERFLOW`, `RATE_LIMITED`, and logged-out `AUTH_UNAVAILABLE` as fake-only by design (VAL-08), and no observed real host holding a pending gate through its resolved timeout (VAL-09).
 - **Real-host security evidence is bounded.** Fake and real dispatch tests check generated homes, scrubbed environment, canaries, output scanning, and PII omission, but `docs/validation/release-validation.md` explicitly records no OS-enforced containment or proof against repository/global-instruction and persistence-capable-tool access (VAL-07).

@@ -92,10 +92,10 @@
       "size": 1568457
     },
     {
-      "digest": "bd6c02a784d56a0fab658ac1d54dfbb85a727f27c9bbb1ab729b94e35765c9e9",
+      "digest": "553f5c31259132978f7076f58678a378112f636abfa7f3215f489d988375fe63",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 2433583
+      "size": 2434148
     },
     {
       "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
@@ -210,7 +210,7 @@
       "role": "manifest"
     },
     {
-      "digest": "47af69e51f33d9c8a7c6d8516c5cf66f666ecdcfce59ef5528ea49c595a0d499",
+      "digest": "f1b0d5ce3f7a8829e2ef564d4f6d3df0105002ccda88e317d3dc35ad00719095",
       "path": "metafile.json",
       "role": "metafile",
       "size": 318418
@@ -232,7 +232,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "bd6c02a784d56a0fab658ac1d54dfbb85a727f27c9bbb1ab729b94e35765c9e9",
+  "bundle_digest": "553f5c31259132978f7076f58678a378112f636abfa7f3215f489d988375fe63",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -3491,14 +3491,14 @@
       "size": 16698
     },
     {
-      "bytes_in_output": 14075,
-      "digest": "fb06f4322b57f694ca6889084e409e03ac738028be860720f0081a043ac22732",
+      "bytes_in_output": 14527,
+      "digest": "61252d16356ed609e9b5362ed12c488ae523c4a4e2c236a7ab371d23067d7f8f",
       "key": "src/review/envelopes.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/envelopes.ts"
       },
-      "size": 23211
+      "size": 23675
     },
     {
       "bytes_in_output": 12794,
@@ -3521,14 +3521,14 @@
       "size": 6570
     },
     {
-      "bytes_in_output": 15864,
-      "digest": "2ba69e62972d0152b5904ceb20928939b5325dae4fe5bb08f2e8811fe02bb297",
+      "bytes_in_output": 15977,
+      "digest": "bf51247edebe200067c0216eb6360728a4b38e10074d127f8d0d4437af3abdee",
       "key": "src/review/pinned-context.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/pinned-context.ts"
       },
-      "size": 25322
+      "size": 25439
     },
     {
       "bytes_in_output": 11425,
@@ -4797,7 +4797,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "bd6c02a784d56a0fab658ac1d54dfbb85a727f27c9bbb1ab729b94e35765c9e9",
+      "output_digest": "553f5c31259132978f7076f58678a378112f636abfa7f3215f489d988375fe63",
       "output_path": "archflow-mcp.mjs"
     },
     {

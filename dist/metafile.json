@@ -6677,7 +6677,7 @@
       ]
     },
     "src/review/envelopes.ts": {
-      "bytes": 23211,
+      "bytes": 23675,
       "format": "esm",
       "imports": [
         {
@@ -6754,7 +6754,7 @@
       "imports": []
     },
     "src/review/pinned-context.ts": {
-      "bytes": 25322,
+      "bytes": 25439,
       "format": "esm",
       "imports": [
         {
@@ -9878,7 +9878,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2433583,
+      "bytes": 2434148,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -11096,7 +11096,7 @@
           "bytesInOutput": 8570
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 14075
+          "bytesInOutput": 14527
         },
         "src/review/fixed-point.ts": {
           "bytesInOutput": 612
@@ -11105,7 +11105,7 @@
           "bytesInOutput": 4941
         },
         "src/review/pinned-context.ts": {
-          "bytesInOutput": 15864
+          "bytesInOutput": 15977
         },
         "src/state/atomic.ts": {
           "bytesInOutput": 5694

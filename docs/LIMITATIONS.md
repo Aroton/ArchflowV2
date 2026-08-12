@@ -1,10 +1,18 @@
 # LIMITATIONS
 
-**Explored:** 2026-08-10 · **Commit:** `50a218d` · **Covers:** `src/dispatch/`, `src/init/diagnostics.ts`, `src/mcp/`
+**Explored:** 2026-08-12 · **Commit:** `72457b8` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`
 
 ArchFlow is a local developer-workflow prototype, not a security sandbox. The controls below reduce accidental context leakage and constrain ordinary operation, but the listed cases are unsupported because the current implementation cannot prove the claimed boundary. A planted canary not appearing in output is evidence about that run; it is not proof that the child could not read the canary.
 
 These limitations assume a trusted developer account and a filesystem not being changed by a malicious local process. They are acceptable for the prototype's current operating envelope because ArchFlow runs locally for that developer, model output is validated before it becomes evidence, and advancement and approval remain subject to the workflow's durable evidence and human gates. They would not be acceptable as claims of isolation from hostile code, another process running as the same user, or a malicious local user.
+
+## Generative review judgment
+
+**Not deterministic:** A review envelope and its attestation are byte-reproducible, but a fresh Claude or Codex invocation is not guaranteed to return the same findings or verdict for those bytes. Model aliases, provider behavior, managed context, and the model's own search path can change which defect it notices.
+
+**Existing mitigation:** Initial rubrics ask only for defects with a concrete material downstream consequence. When prior triage exists, the sealed instruction makes verification of accepted revision intents the primary task and admits a previously undiscovered issue only when it clears the same materiality bar. Prior-triage now carries the original evidence and suggested resolution together with the producer rationale and revision intent. Non-material suggestions are suppressed rather than deferred to human approval, while the attempt budget and durable human gates remain backstops.
+
+**Why accepted:** The product needs independent semantic judgment, not identical prose from repeated model calls. ArchFlow claims deterministic inputs, provenance, evidence currency, state transitions, and approval authority; it does not claim deterministic model judgment.
 
 ## Adversarial stdio peers at the JSON-RPC layer
 

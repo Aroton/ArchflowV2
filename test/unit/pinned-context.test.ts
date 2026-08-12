@@ -207,9 +207,9 @@ describe("priorTriageEvidence", () => {
       artifact_kind: "review-evidence",
       evidence: {
         findings: [
-          { finding_id: "digest-drift", severity: "blocker", blocking: true, summary: "Digest recomputation skips the slot check." },
-          { finding_id: "naming-nit", severity: "minor", blocking: false, summary: "Rename the helper." },
-          { finding_id: "style-note", severity: "minor", blocking: false, summary: "Editorial wording." },
+          { finding_id: "digest-drift", severity: "blocker", blocking: true, summary: "Digest recomputation skips the slot check.", evidence: "The slot is read after hashing.", suggested_resolution: "Recompute after the slot check." },
+          { finding_id: "naming-nit", severity: "minor", blocking: false, summary: "Rename the helper.", evidence: "The name differs from a convention.", suggested_resolution: "Rename it." },
+          { finding_id: "style-note", severity: "minor", blocking: false, summary: "Editorial wording.", evidence: "The sentence is awkward.", suggested_resolution: "Reword it." },
         ],
       },
     },
@@ -271,17 +271,24 @@ describe("priorTriageEvidence", () => {
       {
         finding_id: "digest-drift", severity: "blocker", blocking: true,
         summary: "Digest recomputation skips the slot check.",
-        disposition: "accepted", revision_intent: "Recompute after the slot check.",
+        evidence: "The slot is read after hashing.",
+        suggested_resolution: "Recompute after the slot check.",
+        disposition: "accepted", rationale: "Real defect.",
+        revision_intent: "Recompute after the slot check.",
       },
       {
         finding_id: "naming-nit", severity: "minor", blocking: false,
         summary: "Rename the helper.",
+        evidence: "The name differs from a convention.",
+        suggested_resolution: "Rename it.",
         disposition: "rejected", rationale: "envelope-gap: name matches the convention.",
       },
       // An unknown disposition string renders as-is; the vocabulary can grow without breaking assembly.
       {
         finding_id: "style-note", severity: "minor", blocking: false,
         summary: "Editorial wording.",
+        evidence: "The sentence is awkward.",
+        suggested_resolution: "Reword it.",
         disposition: "accepted-editorial", rationale: "Wording only.",
       },
       // A finding outside the retained counter-review evidence renders without invented fields.
