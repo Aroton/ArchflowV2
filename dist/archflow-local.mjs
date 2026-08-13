@@ -36337,7 +36337,15 @@ async function buildDesignApprovalInput(dependencies, state, retained, target) {
   if (phase3.kind !== "design" && phase3.kind !== "phase-design") {
     throw new TypeError("design approval requires a design phase");
   }
-  const adjudication = retained.get("adjudicate")?.manifest.source_artifact;
+  const retainedAdjudication = retained.get("adjudicate");
+  const adjudicationArtifact = retainedAdjudication?.manifest.source_artifact;
+  let adjudication;
+  if (retainedAdjudication !== void 0) {
+    if (adjudicationArtifact?.artifact_kind !== "adjudication-evidence") {
+      throw new TypeError("retained adjudication result has the wrong artifact kind");
+    }
+    adjudication = adjudicationArtifact.evidence;
+  }
   const policy = adjudication === void 0 ? Object.freeze({ constitution: "pass", policy_findings: Object.freeze([]), eligible_waivers: Object.freeze([]) }) : designApprovalPolicyContext(adjudication);
   const phaseLabel = phase3.kind === "design" ? "design" : `phase ${String(phase3.phase)} design`;
   return Object.freeze({

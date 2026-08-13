@@ -546,7 +546,15 @@ export async function buildDesignApprovalInput(
   if (phase.kind !== "design" && phase.kind !== "phase-design") {
     throw new TypeError("design approval requires a design phase");
   }
-  const adjudication = retained.get("adjudicate")?.manifest.source_artifact as AdjudicationEvidence | undefined;
+  const retainedAdjudication = retained.get("adjudicate");
+  const adjudicationArtifact = retainedAdjudication?.manifest.source_artifact;
+  let adjudication: AdjudicationEvidence | undefined;
+  if (retainedAdjudication !== undefined) {
+    if (adjudicationArtifact?.artifact_kind !== "adjudication-evidence") {
+      throw new TypeError("retained adjudication result has the wrong artifact kind");
+    }
+    adjudication = adjudicationArtifact.evidence;
+  }
   const policy = adjudication === undefined
     ? Object.freeze({ constitution: "pass" as const, policy_findings: Object.freeze([]), eligible_waivers: Object.freeze([]) })
     : designApprovalPolicyContext(adjudication);

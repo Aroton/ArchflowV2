@@ -102,6 +102,8 @@ The constitution-review child gets a sealed envelope — the artifact, the sorte
 
 The output is cross-checked mechanically: one finding per active rule, in ID order, matching versions.
 
+After triage, status and request construction read the adjudication evidence from its retained `adjudication-evidence` artifact wrapper. The wrapper is durable result metadata, not the evidence itself; approval presentation unwraps it before folding rule findings and never treats the outer artifact as reviewer output.
+
 A rule may also declare `enforced_by` — labels naming where the rule is mechanically enforced in the repository, such as a test suite. These travel to the child as *context for its judgment*, nothing more. They are deliberately not something the reviewer reports back on, and a rule that declares them is judged exactly like a rule that does not.
 
 That was once the opposite, and the reason is worth recording. The reviewer used to be instructed to report a per-mechanism evidence state for each declared label, and forbidden from claiming current mechanical evidence — which it could never have, because the sealed envelope has no field through which such evidence could arrive, for any subject. So a rule declaring `enforced_by` could never be reported `pass`; it was permanently `uncertain`, and every review of every artifact opened a human gate carrying no information. Declaring where a rule is enforced made it strictly impossible to satisfy. The instruction and the mechanism reporting are both gone.

@@ -14,12 +14,14 @@ import { resolvePinnedConstitution } from "../../src/state/constitution.js";
 import { createProductionServices } from "../../src/state/production.js";
 import {
   buildCommitAuthorizationInput,
+  buildDesignApprovalInput,
   computeTaskStatus,
   partitionExpectedReentryEdits,
   resolveStatusEvidenceAssessment,
 } from "../../src/state/status.js";
 import type { ReconciliationFinding } from "../../src/state/reconciliation.js";
 import type { CurrentProduceSubject } from "../../src/state/produce-subject.js";
+import type { RetainedEvidenceSet } from "../../src/state/evidence-results.js";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -139,6 +141,34 @@ describe("computeTaskStatus", () => {
       target_ref_guidance: "Current symbolic branch ref observed from repository authority.",
     });
     expect(input).not.toHaveProperty("rubric_digest");
+  });
+
+  it("unwraps retained adjudication evidence when presenting design approval", async () => {
+    const evidence = {
+      schema_version: "1", task_id: TASK, phase_instance: "phase-design-2", step: "adjudicate",
+      subject_digest: D("1"), input_fingerprint: D("2"), pinned_constitution_digest: D("3"),
+      approved_upstream_digests: [], source_evidence_set_digest: D("4"),
+      rule_findings: [], drift_findings: [], constitution: "pass", drift: "aligned",
+      matched_rule_versions: [], uncertain_rule_versions: [], assurance: "agent-declared",
+      model_family: "unknown", model: "fixture", effort: "unknown",
+    } as const;
+    const retained = new Map([["adjudicate", {
+      manifest: { source_artifact: {
+        schema_version: "1", artifact_kind: "adjudication-evidence", evidence,
+      } },
+    }]]) as unknown as RetainedEvidenceSet;
+    const dependencies = {
+      runner: { runText: async () => "a".repeat(40) },
+    } as unknown as Parameters<typeof buildDesignApprovalInput>[0];
+    const state = {
+      task_id: TASK, phase_instance: "phase-design-2",
+    } as unknown as TaskStateV1;
+
+    const input = await buildDesignApprovalInput(dependencies, state, retained, {
+      value: "refs/heads/feature", guidance: "Current target.",
+    });
+
+    expect(input.context).toMatchObject({ constitution: "pass", policy_findings: [] });
   });
 
   it("reports missing state through the normal result contract", async () => {
