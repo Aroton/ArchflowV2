@@ -8,11 +8,12 @@ This repo contains one portable Agent Skills source of truth in `skills/`. The i
 
 ## Skills
 
-The canonical set contains eight portable skills:
+The canonical set contains nine portable skills:
 
 | Skill | Purpose |
 |---------|---------|
 | `/archflow-init` | Initialize repository assets and project-scoped MCP registrations |
+| `/archflow-constitution` | Explain and configure repository-owned constitution rules |
 | `/archflow-upgrade <legacy-source> <task>` | Stage a legacy task into a distinct canonical task and guide its migration audit |
 | `/archflow-explore` | Explore codebase, produce or refresh the maintained `docs/` documentation set |
 | `/archflow-prd <task>` | Research + create PRD for a task |
@@ -21,7 +22,7 @@ The canonical set contains eight portable skills:
 | `/archflow-phase-impl <task> N` | Implement, verify, review, and commit phase N (fresh session) |
 | `/archflow-status [task]` | Check status and next action |
 
-In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-upgrade`, `$archflow-explore`, `$archflow-prd`, `$archflow-design`, `$archflow-phase-design`, `$archflow-phase-impl`, and `$archflow-status`.
+In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, `$archflow-upgrade`, `$archflow-explore`, `$archflow-prd`, `$archflow-design`, `$archflow-phase-design`, `$archflow-phase-impl`, and `$archflow-status`.
 
 ## How It Works
 
@@ -67,7 +68,7 @@ docs/
   TESTING.md               # test layout and validation matrix
   LIMITATIONS.md           # honest reliability/security boundaries
   workflow/LIFECYCLE.md    # phase graph, pipeline, gates, trust boundaries
-  workflow/SKILLS.md       # the eight skills
+  workflow/SKILLS.md       # the nine skills
   mcp/SERVER.md            # MCP server, four tools, protocol plumbing
   mcp/DISPATCH.md          # child reviewer dispatch, sandbox, repo views
   cli/COMMANDS.md          # archflow-local surface, build-request, degraded mode

@@ -2,13 +2,15 @@
 
 **Explored:** 2026-08-13 · **Commit:** `247df34` · **Covers:** `skills/`, `src/init/`, `assets/`
 
-The eight skills are the human-facing entry points. They are thin judgment and trust-boundary playbooks: the CLI/MCP owns durable state, legal transitions, canonical task resource paths, and immutable review policy. Full status returns those resources and policy so a skill does not need to know how to traverse `.archflow/` or carry rubric JSON. In Codex the same skills are invoked with `$` instead of `/`.
+The nine skills are the human-facing entry points. They are thin judgment and trust-boundary playbooks: the CLI/MCP owns durable state, legal transitions, canonical task resource paths, and immutable review policy. Full status returns those resources and policy so a skill does not need to know how to traverse `.archflow/` or carry rubric JSON. In Codex the same skills are invoked with `$` instead of `/`.
 
 ## The set at a glance
 
 ```mermaid
 flowchart LR
-    Init["/archflow-init<br/>set up repo + hosts"] --> Explore["/archflow-explore<br/>shared context docs"]
+    Init["/archflow-init<br/>set up repo + hosts"] --> Constitution["/archflow-constitution<br/>configure repository policy"]
+    Constitution -.-> Explore["/archflow-explore<br/>shared context docs"]
+    Init --> Explore
     Explore -.-> PRD["/archflow-prd"]
     Init -.-> PRD
     PRD --> Design["/archflow-design"]
@@ -24,6 +26,12 @@ flowchart LR
 Runs `archflow-local init` from the repo root and translates its report into a short human summary rather than relaying JSON or internal paths. Init scaffolds `.archflow/` (workflow.yaml, constitution, config.yaml, and the nested `.gitignore` whose only rule is `/runtime/`), appends `.archflow/** -text merge=binary` to `.gitattributes` (this is what makes digests stable across platforms), and registers the MCP server with both hosts — a project-scoped `.mcp.json` entry for Claude Code, a fenced managed block in `.codex/config.toml` for Codex. It reports whether the nested ignore file was created or already present and diagnoses that runtime data is ignored and contains no tracked paths; it never edits the root `.gitignore`.
 
 Three things it deliberately never does: overwrite a diverged file (it refuses with `scaffold-diverged`), claim it passed a host's human approval/trust step (Claude approval and Codex repo trust are always the human's), or create task state or commits. **The human's commit of the scaffolded files is the policy approval** — that commit becomes each task's `policy_base_commit`.
+
+## archflow-constitution
+
+Explains and configures the repository-owned policy rules in `.archflow/constitution/`; it adds no CLI or server surface. Each numbered Markdown file is one rule with a stable ID, positive version, active or deprecated status, optional human-gate trigger, optional real enforcement mechanisms, and normative prose. The skill keeps rules focused on durable trust and engineering constraints rather than task requirements, style preferences, or model workarounds.
+
+Rule IDs are append-only. Any content, status, trigger, or enforcement change increments the version; deprecation replaces deletion, and deprecated IDs cannot be reactivated. The skill shows the resulting diff but never commits without separate explicit approval. Policy is best changed on the repository's policy/base branch before affected tasks begin: active tasks keep their immutable pinned constitution, and a task-branch edit is surfaced as a constitution-edit gate rather than silently changing its authority.
 
 ## archflow-explore
 

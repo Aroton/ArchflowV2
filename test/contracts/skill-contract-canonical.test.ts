@@ -21,6 +21,7 @@ const skillNames = [
   "archflow-phase-design",
   "archflow-phase-impl",
   "archflow-status",
+  "archflow-constitution",
 ] as const;
 const normalPhaseSkills = [
   "archflow-prd",
@@ -90,6 +91,16 @@ describe("canonical skill contracts", () => {
       expect(source).not.toContain('"kind":"counter-review","rubric"');
       expect(source).not.toContain('kind: "interface"');
     }
+  });
+
+  it("keeps constitution configuration documentation-only and preserves policy evolution", () => {
+    const source = skill("archflow-constitution");
+    expect(source).toContain("`.archflow/constitution/`");
+    expect(source).toContain("increment");
+    expect(source).toContain("never delete an ID");
+    expect(source.toLowerCase()).toContain("never claim that an existing task adopted the new rule");
+    expect(source).not.toContain("archflow-local");
+    expect(source).not.toContain("archflow_");
   });
 
   it("keeps workflow paths status-owned while preserving ordinary repository exploration", () => {
