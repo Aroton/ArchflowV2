@@ -94,12 +94,16 @@ type HostObservation = Readonly<{
   stderr: string;
 }>;
 
-async function attemptRecord(root: string, taskId: string): Promise<Readonly<{ bytes: Buffer; value: Record<string, unknown> }>> {
-  const directory = join(root, ".archflow", "tasks", taskId, "attempts", "prd");
-  const names = await readdir(directory);
-  expect(names).toHaveLength(1);
-  const bytes = await readFile(join(directory, names[0]!));
-  return { bytes, value: JSON.parse(decoder.decode(bytes)) as Record<string, unknown> };
+async function attemptRecords(root: string, taskId: string): Promise<readonly Readonly<{ bytes: Buffer; value: Record<string, unknown> }>[]> {
+  const directory = join(root, ".archflow", "runtime", "tasks", taskId, "diagnostics", "attempts", "prd");
+  const names = await readdir(directory).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+  return Promise.all(names.map(async (name) => {
+    const bytes = await readFile(join(directory, name));
+    return { bytes, value: JSON.parse(decoder.decode(bytes)) as Record<string, unknown> };
+  }));
 }
 
 async function withObservedHost<T>(command: "claude" | "codex", work: (read: () => Promise<HostObservation>) => Promise<T>): Promise<T> {
@@ -242,24 +246,22 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
         const result = await withObservedHost(command, async (readObservation) => {
           try {
             const succeeded = await serializeDispatch(() => dispatch(route, envelope, reviewOutputSchema as PlainJsonValue));
-            const [observation, attempt] = await Promise.all([
-              readObservation(), attemptRecord(workspace.root, workspace.taskId),
+            const [observation, attempts] = await Promise.all([
+              readObservation(), attemptRecords(workspace.root, workspace.taskId),
             ]);
             expect(observation.wrapper_pid).not.toBe(process.pid);
             expect(observation.child_pid).not.toBe(process.pid);
-            expect(attempt.value).toMatchObject({
-              status: "succeeded",
-              adapter: route.adapter,
-              cli_version: succeeded.cli_version,
-            });
+            expect(attempts).toEqual([]);
             for (const sentinel of SENTINELS) {
               expect(Buffer.from(`${observation.stdout}\n${observation.stderr}`).includes(Buffer.from(sentinel))).toBe(false);
             }
-            return { succeeded, observation, attempt };
+            return { succeeded, observation };
           } catch (error) {
-            const [observation, attempt] = await Promise.all([
-              readObservation(), attemptRecord(workspace.root, workspace.taskId),
+            const [observation, attempts] = await Promise.all([
+              readObservation(), attemptRecords(workspace.root, workspace.taskId),
             ]);
+            expect(attempts).toHaveLength(1);
+            const attempt = attempts[0]!;
             expect(observation.wrapper_pid).not.toBe(process.pid);
             expect(observation.child_pid).not.toBe(process.pid);
             expect(attempt.value).toMatchObject({
@@ -298,7 +300,6 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
         const returnedAndPersisted = Buffer.concat([
           Buffer.from(result.succeeded.extracted_output_bytes),
           Buffer.from(JSON.stringify(observed.evidence)),
-          result.attempt.bytes,
           Buffer.from(result.observation.stdout),
           Buffer.from(result.observation.stderr),
         ]);
@@ -377,19 +378,19 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
           try {
             const succeeded = await serializeDispatch(() =>
               dispatch(route, envelope, adjudicationOutputSchema as PlainJsonValue));
-            const [observation, attempt] = await Promise.all([
-              readObservation(), attemptRecord(workspace.root, workspace.taskId),
+            const [observation, attempts] = await Promise.all([
+              readObservation(), attemptRecords(workspace.root, workspace.taskId),
             ]);
             expect(observation.wrapper_pid).not.toBe(process.pid);
             expect(observation.child_pid).not.toBe(process.pid);
-            expect(attempt.value).toMatchObject({
-              status: "succeeded", adapter: route.adapter, cli_version: succeeded.cli_version,
-            });
-            return { succeeded, observation, attempt };
+            expect(attempts).toEqual([]);
+            return { succeeded, observation };
           } catch (error) {
-            const [observation, attempt] = await Promise.all([
-              readObservation(), attemptRecord(workspace.root, workspace.taskId),
+            const [observation, attempts] = await Promise.all([
+              readObservation(), attemptRecords(workspace.root, workspace.taskId),
             ]);
+            expect(attempts).toHaveLength(1);
+            const attempt = attempts[0]!;
             expect(attempt.value).toMatchObject({
               status: "failed", adapter: route.adapter,
               cli_version: expect.stringMatching(/^\d+\.\d+\.\d+$/u),
@@ -425,7 +426,6 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
         const returnedAndPersisted = Buffer.concat([
           Buffer.from(result.succeeded.extracted_output_bytes),
           Buffer.from(JSON.stringify(observed.evidence)),
-          result.attempt.bytes,
           Buffer.from(result.observation.stdout),
           Buffer.from(result.observation.stderr),
         ]);

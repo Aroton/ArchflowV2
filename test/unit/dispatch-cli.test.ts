@@ -61,6 +61,11 @@ function adjudicationSubject(upstreamDigests: readonly string[]): Record<string,
   return { ...subject, approved_upstream_digests: [...upstreamDigests] } as Record<string, PlainJsonValue>;
 }
 
+function adjudicationOutput(value: Record<string, unknown> = structuredClone(validAdjudication)): Record<string, unknown> {
+  const { constitution: _constitution, drift: _drift, matched_rule_versions: _matched, uncertain_rule_versions: _uncertain, ...output } = value;
+  return output;
+}
+
 function projectError(call: () => unknown): CliAdapterError["project_error"] {
   try { call(); } catch (error) {
     expect(error).toBeInstanceOf(CliAdapterError);
@@ -225,6 +230,10 @@ describe("CLI invocation construction", () => {
       additionalProperties: false,
       required: adjudicationSchema.required,
     });
+    const properties = parsed.properties as Record<string, unknown>;
+    for (const derived of ["constitution", "drift", "matched_rule_versions", "uncertain_rule_versions"]) {
+      expect(properties).not.toHaveProperty(derived);
+    }
     if (id === "codex-cli") {
       expect(invocation.argv[invocation.argv.indexOf("--output-schema") + 1]).toMatch(/adjudication\.schema\.json$/u);
       // The codex state-branch expansion existed only for per-mechanism evidence, which findings
@@ -298,11 +307,11 @@ describe("CLI invocation construction", () => {
     expect(properties.subject_digest).toEqual({ const: validAdjudication.subject_digest, type: "string" });
 
     const validateProjected = createJsonSchemaValidator<Record<string, unknown>>(projected);
-    const empty = structuredClone(validAdjudication) as Record<string, unknown>;
+    const empty = adjudicationOutput();
     empty.approved_upstream_digests = [];
     empty.drift_findings = [];
     expect(() => validateProjected.assert(empty, "empty upstream binding")).not.toThrow();
-    expect(() => validateProjected.assert(validAdjudication, "non-empty upstream")).toThrow();
+    expect(() => validateProjected.assert(adjudicationOutput(), "non-empty upstream")).toThrow();
   });
 
   it("binds a non-empty upstream set to its exact members and cardinality", () => {
@@ -323,11 +332,11 @@ describe("CLI invocation construction", () => {
     });
 
     const validateProjected = createJsonSchemaValidator<Record<string, unknown>>(projected);
-    expect(() => validateProjected.assert(validAdjudication, "exact upstream set")).not.toThrow();
-    const foreign = structuredClone(validAdjudication) as Record<string, unknown>;
+    expect(() => validateProjected.assert(adjudicationOutput(), "exact upstream set")).not.toThrow();
+    const foreign = adjudicationOutput();
     foreign.approved_upstream_digests = ["f".repeat(64)];
     expect(() => validateProjected.assert(foreign, "foreign upstream digest")).toThrow();
-    const extra = structuredClone(validAdjudication) as Record<string, unknown>;
+    const extra = adjudicationOutput();
     extra.approved_upstream_digests = [...bound, ...bound];
     expect(() => validateProjected.assert(extra, "extra upstream digest")).toThrow();
   });
@@ -389,11 +398,10 @@ describe("CLI invocation construction", () => {
 
     const projectedAdjudication = projectCliOutputSchema(adjudicationSchema as PlainJsonValue, "adjudication", "claude-cli");
     const validateProjectedAdjudication = createJsonSchemaValidator<Record<string, unknown>>(projectedAdjudication as Record<string, unknown>);
-    // The projected host schema drops the semantic keywords, so a roll-up that contradicts its own
-    // rule findings passes the child's structural check and is caught only by the Zod authority.
-    const invalidAdjudication = structuredClone(validAdjudication) as Record<string, unknown>;
-    const ruleFindings = invalidAdjudication.rule_findings as Array<Record<string, unknown>>;
-    ruleFindings[0]!.compliance = "fail";
+    // The projected host schema carries shape, while exact upstream coverage remains a local
+    // semantic invariant checked before any evidence can be attested.
+    const invalidAdjudication = adjudicationOutput();
+    invalidAdjudication.drift_findings = [];
     expect(() => validateProjectedAdjudication.assert(invalidAdjudication, "projected adjudication")).not.toThrow();
     expect(() => parseAndDeriveAdjudication(invalidAdjudication)).toThrow();
   });

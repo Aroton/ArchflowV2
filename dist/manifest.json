@@ -86,16 +86,16 @@
   ],
   "artifacts": [
     {
-      "digest": "b56e00d2530107d8253d8b3e0d7eae7f4f3c545bf9eea9a97834ef92e3c0f6b5",
+      "digest": "54af78cb22f48082c6732687d81014c5f3222f5575b658b398cfea6bd433eac6",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 1603033
+      "size": 1603710
     },
     {
-      "digest": "485f2547d9cfc1244e30a0af687f5d5d066af740633cab0b3e493f0349d37686",
+      "digest": "8d63e25f068b1511ea3eb4952fae2a32a312c630a476ec81ab51d235e0aa695c",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 2458714
+      "size": 2458039
     },
     {
       "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
@@ -210,7 +210,7 @@
       "role": "manifest"
     },
     {
-      "digest": "a167aa6b27529bf4ea119bb2c4be1d478b5062691c7a693c74975412813ca9ed",
+      "digest": "6dacc4ba253a1797c68200d0df5f534dfc2a2cc13f7cf9696b67e1b6b0413d80",
       "path": "metafile.json",
       "role": "metafile",
       "size": 312510
@@ -232,7 +232,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "485f2547d9cfc1244e30a0af687f5d5d066af740633cab0b3e493f0349d37686",
+  "bundle_digest": "8d63e25f068b1511ea3eb4952fae2a32a312c630a476ec81ab51d235e0aa695c",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -2491,14 +2491,14 @@
       "size": 4498
     },
     {
-      "bytes_in_output": 12896,
-      "digest": "2bfe6c4b7459cb34a6f910f0ab839f79c07d15af83ca441a00ba7dae25952abb",
+      "bytes_in_output": 14250,
+      "digest": "5dd8f2990db948b3ab70f60ea4f80b6929a390182c2ec6065986b705eed62c9b",
       "key": "src/contracts/adjudication.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/adjudication.ts"
       },
-      "size": 10007
+      "size": 10720
     },
     {
       "bytes_in_output": 5632,
@@ -2781,14 +2781,14 @@
       "size": 1260
     },
     {
-      "bytes_in_output": 4947,
-      "digest": "b9df5316f5192fde878ad2f261638cdeb6cd95624e6131d80aedeca290c6443a",
+      "bytes_in_output": 3595,
+      "digest": "2c7bdf785961c6b3920f6771550b0c88a049853306cabe2a141056898b61e909",
       "key": "src/contracts/schemas/v1/adjudication.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/adjudication.schema.json"
       },
-      "size": 5156
+      "size": 3736
     },
     {
       "bytes_in_output": 2369,
@@ -4747,7 +4747,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "485f2547d9cfc1244e30a0af687f5d5d066af740633cab0b3e493f0349d37686",
+      "output_digest": "8d63e25f068b1511ea3eb4952fae2a32a312c630a476ec81ab51d235e0aa695c",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -5038,7 +5038,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "b56e00d2530107d8253d8b3e0d7eae7f4f3c545bf9eea9a97834ef92e3c0f6b5",
+      "output_digest": "54af78cb22f48082c6732687d81014c5f3222f5575b658b398cfea6bd433eac6",
       "output_path": "archflow-local.mjs"
     }
   ],

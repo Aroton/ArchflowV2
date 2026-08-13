@@ -536,13 +536,10 @@ else {
     approved_upstream_digests: subject.approved_upstream_digests,
     source_evidence_set_digest: subject.source_evidence_set_digest,
     rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
-      compliance: rule.enforced_by.length === 0 ? "pass" : "uncertain",
+      compliance: "pass",
       rationale: "Checked retained implementation evidence.",
-      trigger: "not-matched", trigger_evidence: "No review trigger matched.",
-      enforced_by: rule.enforced_by.map((mechanism) => ({ mechanism, state: "unknown", details: "No mechanical result supplied." })) })),
-    drift_findings: subject.approved_upstream_digests.map((upstream_digest) => ({ upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift found." })), constitution: envelope.rules.some((rule) => rule.enforced_by.length > 0) ? "uncertain" : "pass",
-    drift: "aligned", matched_rule_versions: [],
-    uncertain_rule_versions: []
+      trigger: "not-matched", trigger_evidence: "No review trigger matched." })),
+    drift_findings: subject.approved_upstream_digests.map((upstream_digest) => ({ upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift found." }))
   };
   await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');

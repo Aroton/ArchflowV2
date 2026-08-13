@@ -5,6 +5,10 @@ import { rawReviewSchema, reviewEvidenceSchema } from "../../src/contracts/revie
 import { assertZodAgreement, createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 const json = async (url: URL) => JSON.parse(await readFile(url, "utf8")) as unknown;
+const adjudicationOutput = (value: unknown): unknown => {
+  const { constitution: _constitution, drift: _drift, matched_rule_versions: _matched, uncertain_rule_versions: _uncertain, ...output } = value as Record<string, unknown>;
+  return output;
+};
 const schema = async (name: string) => await json(new URL(`../../src/contracts/schemas/v1/${name}.schema.json`, import.meta.url)) as object;
 /** The generated evidence documents reference the raw review and adjudication documents by URI. */
 const referenceStems = ["primitives", "path-claim", "review", "adjudication"] as const;
@@ -12,7 +16,7 @@ const validator = async (name: string) =>
   createJsonSchemaValidator(await schema(name), await Promise.all(referenceStems.filter((stem) => stem !== name).map(schema)));
 describe("review and adjudication schema agreement", () => {
   it("accepts the same review corpus without mutation", async () => { const value = await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)); const before = structuredClone(value); expect(assertZodAgreement(value, await validator("review"), rawReviewSchema)).toBe(value); expect(value).toEqual(before); });
-  it("accepts the same adjudication corpus without mutation", async () => { const value = await json(new URL("../fixtures/contracts/adjudication/valid.json", import.meta.url)); const before = structuredClone(value); expect(assertZodAgreement(value, await validator("adjudication"), rawAdjudicationSchema)).toBe(value); expect(value).toEqual(before); });
+  it("accepts the reduced adjudication output without mutation", async () => { const value = adjudicationOutput(await json(new URL("../fixtures/contracts/adjudication/valid.json", import.meta.url))); const before = structuredClone(value); expect(assertZodAgreement(value, await validator("adjudication"), rawAdjudicationSchema)).toEqual(value); expect(value).toEqual(before); });
   it("rejects closed-shape substitutions", async () => { const value = await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)) as Record<string, unknown>; const reviewValidator = await validator("review"); expect(() => assertZodAgreement({ ...value, authority: true }, reviewValidator, rawReviewSchema)).toThrow(); });
 
   it("agrees across every evidence variant without mutation", async () => {

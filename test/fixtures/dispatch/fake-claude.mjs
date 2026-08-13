@@ -14,7 +14,9 @@ async function corpusOutput(selection) {
   ));
   const entry = corpus.scenarios.find((candidate) => candidate.name === name);
   if (entry === undefined) throw new Error(`unknown corpus scenario: ${selection.trim()}`);
-  return entry.output;
+  if (entry.output.step !== "adjudicate") return entry.output;
+  const { constitution, drift, matched_rule_versions, uncertain_rule_versions, ...output } = entry.output;
+  return output;
 }
 
 if (argv.length === 1 && argv[0] === "--version") {

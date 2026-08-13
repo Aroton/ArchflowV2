@@ -23490,14 +23490,10 @@ var rawAdjudicationSchema = external_exports.object({
   approved_upstream_digests: external_exports.array(digest3),
   source_evidence_set_digest: digest3,
   rule_findings: external_exports.array(constitutionRuleFindingSchema),
-  drift_findings: external_exports.array(driftFindingSchema),
-  constitution: external_exports.enum(CONSTITUTION_RESULTS),
-  drift: external_exports.enum(DRIFT_RESULTS),
-  matched_rule_versions: external_exports.array(ruleVersionSchema),
-  uncertain_rule_versions: external_exports.array(ruleVersionSchema)
+  drift_findings: external_exports.array(driftFindingSchema)
 }).strict().superRefine((adjudication, context2) => {
   try {
-    validateAdjudicationClaims(adjudication);
+    validateAdjudicationFindings(adjudication);
   } catch (error51) {
     context2.addIssue({ code: "custom", message: error51 instanceof Error ? error51.message : "invalid adjudication semantics" });
   }
@@ -23509,36 +23505,50 @@ function assertSortedUnique(values, label) {
 function sameRuleSet(actual, expected) {
   return actual.length === expected.length && actual.every((rule4, index) => ruleKey2(rule4) === ruleKey2(expected[index]));
 }
-function validateAdjudicationClaims(parsed) {
+function validateAdjudicationFindings(parsed) {
   assertSortedUnique(parsed.approved_upstream_digests, "approved_upstream_digests");
   assertSortedUnique(parsed.rule_findings.map(ruleKey2), "rule_findings");
   assertSortedUnique(parsed.drift_findings.map((finding) => finding.upstream_digest), "drift_findings");
   if (parsed.drift_findings.length !== parsed.approved_upstream_digests.length || parsed.drift_findings.some((finding, index) => finding.upstream_digest !== parsed.approved_upstream_digests[index])) throw new TypeError("drift_findings must exactly cover approved_upstream_digests");
+}
+function deriveAdjudicationSummaries(parsed) {
   const expectedConstitution = parsed.rule_findings.some((finding) => finding.compliance === "fail") ? "fail" : parsed.rule_findings.some((finding) => finding.compliance === "uncertain") ? "uncertain" : "pass";
-  if (parsed.constitution !== expectedConstitution) throw new TypeError(`constitution must be ${expectedConstitution}`);
   const expectedDrift = parsed.drift_findings.some((finding) => finding.drift === "material") ? "material" : parsed.drift_findings.some((finding) => finding.drift === "incidental") ? "incidental" : "aligned";
-  if (parsed.drift !== expectedDrift) throw new TypeError(`drift must be ${expectedDrift}`);
   const matched = parsed.rule_findings.filter((finding) => finding.trigger === "matched").map(({ rule_id, rule_version }) => ({ rule_id, rule_version }));
   const uncertain = parsed.rule_findings.filter((finding) => finding.trigger === "uncertain").map(({ rule_id, rule_version }) => ({ rule_id, rule_version }));
-  if (!sameRuleSet(parsed.matched_rule_versions, matched)) throw new TypeError("matched_rule_versions contradict rule findings");
-  if (!sameRuleSet(parsed.uncertain_rule_versions, uncertain)) throw new TypeError("uncertain_rule_versions contradict rule findings");
+  return {
+    constitution: expectedConstitution,
+    drift: expectedDrift,
+    matched_rule_versions: matched,
+    uncertain_rule_versions: uncertain
+  };
 }
+var derivedAdjudicationSchema = rawAdjudicationSchema.safeExtend({
+  constitution: external_exports.enum(CONSTITUTION_RESULTS),
+  drift: external_exports.enum(DRIFT_RESULTS),
+  matched_rule_versions: external_exports.array(ruleVersionSchema),
+  uncertain_rule_versions: external_exports.array(ruleVersionSchema)
+}).strict().superRefine((adjudication, context2) => {
+  const expected = deriveAdjudicationSummaries(adjudication);
+  if (adjudication.constitution !== expected.constitution) context2.addIssue({ code: "custom", path: ["constitution"], message: `constitution must be ${expected.constitution}` });
+  if (adjudication.drift !== expected.drift) context2.addIssue({ code: "custom", path: ["drift"], message: `drift must be ${expected.drift}` });
+  if (!sameRuleSet(adjudication.matched_rule_versions, expected.matched_rule_versions)) context2.addIssue({ code: "custom", path: ["matched_rule_versions"], message: "matched_rule_versions contradict rule findings" });
+  if (!sameRuleSet(adjudication.uncertain_rule_versions, expected.uncertain_rule_versions)) context2.addIssue({ code: "custom", path: ["uncertain_rule_versions"], message: "uncertain_rule_versions contradict rule findings" });
+});
 function parseAndDeriveAdjudication(value) {
   assertPlainJson(value, "adjudication");
   const parsed = rawAdjudicationSchema.parse(value);
-  validateAdjudicationClaims(parsed);
-  return parsed;
+  validateAdjudicationFindings(parsed);
+  return { ...parsed, ...deriveAdjudicationSummaries(parsed) };
 }
-var provenanceBase2 = rawAdjudicationSchema.safeExtend({ model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]), model: nonBlank2, effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")]) });
+var provenanceBase2 = derivedAdjudicationSchema.safeExtend({ model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]), model: nonBlank2, effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")]) });
 var agentSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("agent-declared") }).strict();
 var serverSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("server-attested"), adapter: external_exports.enum(ADAPTER_IDS), cli_version: nonBlank2, model_family: external_exports.enum(MODEL_FAMILIES), effort: external_exports.enum(EFFORT_VALUES), invocation_id: id2, envelope_input_digest: digest3, observed_output_digest: digest3, result_id: id2 }).strict();
 var degradedSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank2 }).strict();
 var adjudicationEvidenceSchema = external_exports.discriminatedUnion("assurance", [agentSchema, serverSchema, degradedSchema]);
 function parseAdjudicationEvidence(value) {
   assertPlainJson(value, "adjudication evidence");
-  const parsed = adjudicationEvidenceSchema.parse(value);
-  validateAdjudicationClaims(parsed);
-  return parsed;
+  return adjudicationEvidenceSchema.parse(value);
 }
 
 // src/contracts/trust.ts

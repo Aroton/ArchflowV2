@@ -27,6 +27,10 @@ const FIXTURE_DIR = new URL("../fixtures/contracts/", import.meta.url);
 
 const schema = (stem: string): object => JSON.parse(readFileSync(new URL(`${stem}.schema.json`, SCHEMA_DIR), "utf8")) as object;
 const fixture = (name: string): unknown => JSON.parse(readFileSync(new URL(`${name}.json`, FIXTURE_DIR), "utf8"));
+const adjudicationOutput = (value: unknown): Record<string, unknown> => {
+  const { constitution: _constitution, drift: _drift, matched_rule_versions: _matched, uncertain_rule_versions: _uncertain, ...output } = value as Record<string, unknown>;
+  return output;
+};
 
 const MCP_REFERENCE_STEMS = [
   "primitives", "project-error", "rubric", "path-claim", "evidence-slots",
@@ -65,8 +69,11 @@ const CASES: readonly KeywordCase[] = [
     json: adjudicationValidator,
     zod: rawAdjudicationSchema,
     jsonKeywordRetired: true,
-    valid: fixture("adjudication/valid"),
-    invalid: [["a constitution rollup contradicting rule findings", fixture("adjudication/invalid-constitution-rollup-mismatch")]],
+    valid: adjudicationOutput(fixture("adjudication/valid")),
+    invalid: [["duplicate rule findings", (() => {
+      const value = adjudicationOutput(fixture("adjudication/valid"));
+      return { ...value, rule_findings: [...value.rule_findings as unknown[], ...value.rule_findings as unknown[]] };
+    })()]],
   },
   {
     keyword: "x-archflow-mcp-semantics on the gate input",

@@ -137,66 +137,6 @@
         ],
         "additionalProperties": false
       }
-    },
-    "constitution": {
-      "type": "string",
-      "enum": [
-        "pass",
-        "fail",
-        "uncertain"
-      ]
-    },
-    "drift": {
-      "type": "string",
-      "enum": [
-        "aligned",
-        "incidental",
-        "material"
-      ]
-    },
-    "matched_rule_versions": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "rule_id": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-          },
-          "rule_version": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991
-          }
-        },
-        "required": [
-          "rule_id",
-          "rule_version"
-        ],
-        "additionalProperties": false
-      }
-    },
-    "uncertain_rule_versions": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "rule_id": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-          },
-          "rule_version": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991
-          }
-        },
-        "required": [
-          "rule_id",
-          "rule_version"
-        ],
-        "additionalProperties": false
-      }
     }
   },
   "required": [
@@ -210,11 +150,7 @@
     "approved_upstream_digests",
     "source_evidence_set_digest",
     "rule_findings",
-    "drift_findings",
-    "constitution",
-    "drift",
-    "matched_rule_versions",
-    "uncertain_rule_versions"
+    "drift_findings"
   ],
   "additionalProperties": false
 }

@@ -190,12 +190,7 @@ else {
         ? "The artifact describes reading another task's files."
         : "No review trigger matched." })),
     drift_findings: subject.approved_upstream_digests.map((upstream_digest) => ({
-      upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift found." })),
-    constitution: "pass", drift: "aligned",
-    matched_rule_versions: trigger === "matched"
-      ? envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version }))
-      : [],
-    uncertain_rule_versions: []
+      upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift found." }))
   };
   await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');

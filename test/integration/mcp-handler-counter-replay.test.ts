@@ -190,8 +190,7 @@ else {
       compliance: "pass", rationale: "Checked the sealed envelope.",
       trigger: "not-matched", trigger_evidence: "No review trigger matched." })),
     drift_findings: subject.approved_upstream_digests.map((upstream_digest) => ({
-      upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift found." })),
-    constitution: "pass", drift: "aligned", matched_rule_versions: [], uncertain_rule_versions: []
+      upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift found." }))
   };
   await appendFile(${JSON.stringify(countPath)}, "call\\n");
   await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import adjudicationSchema from "../../src/contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
 import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
-import { parseAndDeriveAdjudication } from "../../src/contracts/adjudication.js";
+import { parseAdjudicationEvidence, parseAndDeriveAdjudication } from "../../src/contracts/adjudication.js";
 import {
   parseConstitutionRuleV1,
   type ConstitutionRegistry,
@@ -65,6 +65,11 @@ async function adjudicationCorpus(): Promise<AdjudicationCorpus> {
   return JSON.parse(
     await readFile(corpus("adjudication-scenarios.json"), "utf8"),
   ) as AdjudicationCorpus;
+}
+
+function adjudicationOutput(value: Record<string, unknown>): Record<string, unknown> {
+  const { constitution: _constitution, drift: _drift, matched_rule_versions: _matched, uncertain_rule_versions: _uncertain, ...output } = value;
+  return output;
 }
 
 function registryFor(
@@ -281,21 +286,15 @@ describe("deterministic fake-CLI review corpus", () => {
     }
   });
 
-  it("rejects a child contradiction before any attested observation can be returned", async () => {
+  it("rejects a contradiction in complete durable evidence", async () => {
     const entries = await scenarios<AdjudicationScenario>("adjudication-scenarios.json");
     for (const scenario of entries.filter((entry) => entry.expected_parser === "invalid")) {
-      const extracted = await dispatchScenario(
-        "codex",
-        `corpus:adjudication-scenarios.json#${scenario.name}`,
-        "adjudication",
-      );
-      expect(() => mintAdjudicationObservation({
-        subject: adjudicationSubject(scenario.output),
-        adapter: "codex-cli",
-        cli_version: "0.146.0",
-        route: route("codex"),
-        envelope_input_digest: parseSha256Digest("d".repeat(64)),
-        extracted_output_bytes: extracted,
+      expect(() => parseAdjudicationEvidence({
+        ...scenario.output,
+        assurance: "agent-declared",
+        model_family: "unknown",
+        model: "unknown",
+        effort: "unknown",
       })).toThrow(/contradict/i);
     }
   });
@@ -308,7 +307,7 @@ describe("deterministic fake-CLI review corpus", () => {
       "missing-rule-finding",
     ]);
     for (const scenario of malformed) {
-      const parsed = parseAndDeriveAdjudication(scenario.output);
+      const parsed = parseAndDeriveAdjudication(adjudicationOutput(scenario.output));
       try {
         crossCheckRuleFindings(registryFor(document, scenario), parsed, "codex-cli");
         throw new Error("expected registry cross-check rejection");

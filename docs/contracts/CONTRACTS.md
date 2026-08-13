@@ -1,6 +1,6 @@
 # contracts/CONTRACTS
 
-**Explored:** 2026-08-13 · **Commit:** `247df34` · **Covers:** `src/contracts/`
+**Explored:** 2026-08-13 · **Commit:** `66c4c9b` · **Covers:** `src/contracts/`
 
 `src/contracts/` is the bottom layer: ~40 modules plus 32 JSON Schemas that define what a valid thing looks like and how to prove a thing is what it claims. Everything else imports from here; nothing here imports back out.
 
@@ -49,6 +49,8 @@ The Zod parsers are the single runtime shape authority. Of the 35 committed sche
 Why generate at all? The schemas are the *published* contract — something a third-party tool can compile with a stock draft-2020-12 validator. Generation ends the era of dual authorities: shapes used to exist as hand-written JSON Schema *plus* a Zod mirror, with `assertZodAgreement` proving the two matched.
 
 The custom `x-archflow-*` keywords mostly retired with that flip. Rules that used to live in Ajv keyword callbacks — set ordering and uniqueness (`x-archflow-sorted-unique`, `x-archflow-sorted-unique-by`, `x-archflow-unique-by`), UTF-8 byte caps and NFC form (`x-archflow-max-utf8-bytes`, `x-archflow-nfc` outside `project-error`), and review, adjudication, gate, human-revision, and result-expectation semantics — now live only as Zod `.refine()`/`superRefine` logic in each shape's source, proven by negative fixtures; the generated documents simply omit the keyword and are deliberately weaker there. Three survivals: the generated `mcp-tools` document re-emits `x-archflow-mcp-semantics` on its root via `.meta` (so external validators keep the cross-field input rules), the generated `project-error` document keeps the byte/NFC pair on its hand-authored path-claim def and sorted-unique markers on its two offending-paths lists, and the hand-written release manifest keeps its set keywords. A per-def `overrides` hook in the manifest hand-authors emissions Zod cannot render faithfully. Tests compile the committed documents through `test/helpers/json-schema.ts`, a dev-only strict Ajv that registers exactly the surviving keywords.
+
+Adjudication has deliberately different provider and durable shapes. The child returns the bound identity plus its independent `rule_findings` and `drift_findings`; it cannot return the four redundant summaries. After strict parsing, the server folds those findings into `constitution`, `drift`, `matched_rule_versions`, and `uncertain_rule_versions`, then mints the unchanged complete evidence document. The observation digest still names the exact reduced bytes the child returned. Persisted evidence remains strict about all four summaries, so stored or imported evidence cannot contradict its findings.
 
 ## Design rules that follow from this layer
 

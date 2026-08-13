@@ -718,10 +718,6 @@ function constitutionPlan(
             trigger_evidence: "No review trigger matched.",
           })),
           drift_findings: [],
-          constitution: "pass",
-          drift: "aligned",
-          matched_rule_versions: [],
-          uncertain_rule_versions: [],
         } as never),
       };
     },

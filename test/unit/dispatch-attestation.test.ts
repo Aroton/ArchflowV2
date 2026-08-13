@@ -81,10 +81,6 @@ const rawAdjudication = (value: AdjudicationSubject): Record<string, unknown> =>
     affected_claim_ids: [],
     rationale: "The approved upstream remains aligned.",
   }],
-  constitution: "pass",
-  drift: "aligned",
-  matched_rule_versions: [],
-  uncertain_rule_versions: [],
 });
 
 const routeFor = (family: "claude" | "codex"): DispatchRoute => family === "claude"
@@ -232,6 +228,10 @@ describe("adjudication observation attestation mint", () => {
     expect(result.evidence).toMatchObject({
       assurance: "server-attested",
       model_family: "codex",
+      constitution: "pass",
+      drift: "aligned",
+      matched_rule_versions: [],
+      uncertain_rule_versions: [],
       observed_output_digest: createHash("sha256").update(output).digest("hex"),
     });
 

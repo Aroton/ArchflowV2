@@ -39,13 +39,13 @@ export type RawAdjudication = {
   readonly source_evidence_set_digest: Sha256Digest;
   readonly rule_findings: readonly ConstitutionRuleFinding[];
   readonly drift_findings: readonly DriftFinding[];
+};
+export type DerivedAdjudication = RawAdjudication & {
   readonly constitution: ConstitutionResult;
   readonly drift: DriftResult;
   readonly matched_rule_versions: readonly RuleVersionRef[];
   readonly uncertain_rule_versions: readonly RuleVersionRef[];
 };
-/** Semantically checked adjudication data. This type intentionally carries no authority brand. */
-export type DerivedAdjudication = RawAdjudication;
 
 const nonBlank = z.string().min(1).regex(/\S/, "must contain a non-whitespace character");
 const id = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
@@ -75,10 +75,8 @@ export const rawAdjudicationSchema = z.object({
   step: z.literal("adjudicate"), subject_digest: digest, input_fingerprint: digest,
   pinned_constitution_digest: digest, approved_upstream_digests: z.array(digest), source_evidence_set_digest: digest,
   rule_findings: z.array(constitutionRuleFindingSchema), drift_findings: z.array(driftFindingSchema),
-  constitution: z.enum(CONSTITUTION_RESULTS), drift: z.enum(DRIFT_RESULTS),
-  matched_rule_versions: z.array(ruleVersionSchema), uncertain_rule_versions: z.array(ruleVersionSchema),
 }).strict().superRefine((adjudication, context) => {
-  try { validateAdjudicationClaims(adjudication); }
+  try { validateAdjudicationFindings(adjudication); }
   catch (error) { context.addIssue({ code: "custom", message: error instanceof Error ? error.message : "invalid adjudication semantics" }); }
 });
 
@@ -90,20 +88,36 @@ function sameRuleSet(actual: readonly RuleVersionRef[], expected: readonly RuleV
   return actual.length === expected.length && actual.every((rule, index) => ruleKey(rule) === ruleKey(expected[index]!));
 }
 
-function validateAdjudicationClaims(parsed: RawAdjudication): void {
+function validateAdjudicationFindings(parsed: RawAdjudication): void {
   assertSortedUnique(parsed.approved_upstream_digests, "approved_upstream_digests");
   assertSortedUnique(parsed.rule_findings.map(ruleKey), "rule_findings");
   assertSortedUnique(parsed.drift_findings.map((finding) => finding.upstream_digest), "drift_findings");
   if (parsed.drift_findings.length !== parsed.approved_upstream_digests.length || parsed.drift_findings.some((finding, index) => finding.upstream_digest !== parsed.approved_upstream_digests[index])) throw new TypeError("drift_findings must exactly cover approved_upstream_digests");
+}
+
+function deriveAdjudicationSummaries(parsed: RawAdjudication): Pick<DerivedAdjudication, "constitution" | "drift" | "matched_rule_versions" | "uncertain_rule_versions"> {
   const expectedConstitution: ConstitutionResult = parsed.rule_findings.some((finding) => finding.compliance === "fail") ? "fail" : parsed.rule_findings.some((finding) => finding.compliance === "uncertain") ? "uncertain" : "pass";
-  if (parsed.constitution !== expectedConstitution) throw new TypeError(`constitution must be ${expectedConstitution}`);
   const expectedDrift: DriftResult = parsed.drift_findings.some((finding) => finding.drift === "material") ? "material" : parsed.drift_findings.some((finding) => finding.drift === "incidental") ? "incidental" : "aligned";
-  if (parsed.drift !== expectedDrift) throw new TypeError(`drift must be ${expectedDrift}`);
   const matched = parsed.rule_findings.filter((finding) => finding.trigger === "matched").map(({ rule_id, rule_version }) => ({ rule_id, rule_version }));
   const uncertain = parsed.rule_findings.filter((finding) => finding.trigger === "uncertain").map(({ rule_id, rule_version }) => ({ rule_id, rule_version }));
-  if (!sameRuleSet(parsed.matched_rule_versions, matched)) throw new TypeError("matched_rule_versions contradict rule findings");
-  if (!sameRuleSet(parsed.uncertain_rule_versions, uncertain)) throw new TypeError("uncertain_rule_versions contradict rule findings");
+  return {
+    constitution: expectedConstitution,
+    drift: expectedDrift,
+    matched_rule_versions: matched,
+    uncertain_rule_versions: uncertain,
+  };
 }
+
+const derivedAdjudicationSchema = rawAdjudicationSchema.safeExtend({
+  constitution: z.enum(CONSTITUTION_RESULTS), drift: z.enum(DRIFT_RESULTS),
+  matched_rule_versions: z.array(ruleVersionSchema), uncertain_rule_versions: z.array(ruleVersionSchema),
+}).strict().superRefine((adjudication, context) => {
+  const expected = deriveAdjudicationSummaries(adjudication);
+  if (adjudication.constitution !== expected.constitution) context.addIssue({ code: "custom", path: ["constitution"], message: `constitution must be ${expected.constitution}` });
+  if (adjudication.drift !== expected.drift) context.addIssue({ code: "custom", path: ["drift"], message: `drift must be ${expected.drift}` });
+  if (!sameRuleSet(adjudication.matched_rule_versions, expected.matched_rule_versions)) context.addIssue({ code: "custom", path: ["matched_rule_versions"], message: "matched_rule_versions contradict rule findings" });
+  if (!sameRuleSet(adjudication.uncertain_rule_versions, expected.uncertain_rule_versions)) context.addIssue({ code: "custom", path: ["uncertain_rule_versions"], message: "uncertain_rule_versions contradict rule findings" });
+});
 
 /**
  * The generated `adjudication.schema.json` `$defs` layout. The def name is load-bearing:
@@ -118,8 +132,8 @@ export const adjudicationDocumentDefs = {
 export function parseAndDeriveAdjudication(value: unknown): DerivedAdjudication {
   assertPlainJson(value, "adjudication");
   const parsed = rawAdjudicationSchema.parse(value);
-  validateAdjudicationClaims(parsed);
-  return parsed;
+  validateAdjudicationFindings(parsed);
+  return { ...parsed, ...deriveAdjudicationSummaries(parsed) };
 }
 
 type AdjudicationProvenanceBase = DerivedAdjudication & { readonly model_family: ModelFamily | "unknown"; readonly model: string; readonly effort: (typeof EFFORT_VALUES)[number] | "unknown" };
@@ -128,12 +142,12 @@ export type ServerAttestedAdjudication = Omit<AdjudicationProvenanceBase, "model
 export type DegradedAdjudication = AdjudicationProvenanceBase & { readonly assurance: "degraded"; readonly reason: string };
 export type AdjudicationEvidence = AgentDeclaredAdjudication | ServerAttestedAdjudication | DegradedAdjudication;
 
-const provenanceBase = rawAdjudicationSchema.safeExtend({ model_family: z.union([z.enum(MODEL_FAMILIES), z.literal("unknown")]), model: nonBlank, effort: z.union([z.enum(EFFORT_VALUES), z.literal("unknown")]) });
+const provenanceBase = derivedAdjudicationSchema.safeExtend({ model_family: z.union([z.enum(MODEL_FAMILIES), z.literal("unknown")]), model: nonBlank, effort: z.union([z.enum(EFFORT_VALUES), z.literal("unknown")]) });
 const agentSchema = provenanceBase.safeExtend({ assurance: z.literal("agent-declared") }).strict();
 const serverSchema = provenanceBase.safeExtend({ assurance: z.literal("server-attested"), adapter: z.enum(ADAPTER_IDS), cli_version: nonBlank, model_family: z.enum(MODEL_FAMILIES), effort: z.enum(EFFORT_VALUES), invocation_id: id, envelope_input_digest: digest, observed_output_digest: digest, result_id: id }).strict();
 const degradedSchema = provenanceBase.safeExtend({ assurance: z.literal("degraded"), reason: nonBlank }).strict();
 export const adjudicationEvidenceSchema = z.discriminatedUnion("assurance", [agentSchema, serverSchema, degradedSchema]);
-export function parseAdjudicationEvidence(value: unknown): AdjudicationEvidence { assertPlainJson(value, "adjudication evidence"); const parsed = adjudicationEvidenceSchema.parse(value); validateAdjudicationClaims(parsed); return parsed; }
+export function parseAdjudicationEvidence(value: unknown): AdjudicationEvidence { assertPlainJson(value, "adjudication evidence"); return adjudicationEvidenceSchema.parse(value); }
 export function parseReferencedAdjudicationEvidence(value: unknown): ReferencedEvidence<AdjudicationEvidence> {
   assertPlainJson(value, "referenced adjudication evidence");
   const wrapper = z.object({ evidence_digest: digest, evidence: z.unknown() }).strict().parse(value);
