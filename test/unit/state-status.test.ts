@@ -93,6 +93,41 @@ describe("partitionExpectedReentryEdits", () => {
     expect(outside.remaining).toEqual([finding]);
     expect(outside.expected_reentry_edits).toEqual([]);
   });
+
+  it("treats historical projection drift as active initial-production work", () => {
+    const historical = {
+      kind: "projection-mismatch", path: "src/shared.ts", recorded_digest: D("a"),
+      next_action: "restore-or-record-new-transition",
+    } as unknown as ReconciliationFinding;
+    const receipt = {
+      kind: "receipt-only", request_digest: D("b"), receipt_digest: D("c"),
+      next_action: "resume-exact-intent",
+    } as unknown as ReconciliationFinding;
+
+    const during = partitionExpectedReentryEdits(
+      [historical, receipt], undefined, undefined, { step: "produce", status: "running" },
+    );
+
+    expect(during.remaining).toEqual([receipt]);
+    expect(during.expected_reentry_edits).toEqual(["src/shared.ts"]);
+  });
+
+  it("keeps historical projection drift blocking before and after produce", () => {
+    const finding = {
+      kind: "projection-mismatch", path: "src/shared.ts", recorded_digest: D("a"),
+      next_action: "restore-or-record-new-transition",
+    } as unknown as ReconciliationFinding;
+
+    for (const state of [
+      { step: "triage", status: "succeeded" },
+      { step: "produce", status: "succeeded" },
+      { step: "counter_review", status: "running" },
+    ] as const) {
+      const result = partitionExpectedReentryEdits([finding], undefined, undefined, state);
+      expect(result.remaining, `${state.step}:${state.status}`).toEqual([finding]);
+      expect(result.expected_reentry_edits, `${state.step}:${state.status}`).toEqual([]);
+    }
+  });
 });
 
 describe("computeTaskStatus", () => {

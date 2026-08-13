@@ -36165,17 +36165,18 @@ function projectBriefStatus(full) {
   });
 }
 function partitionExpectedReentryEdits(findings, assessment, produceSubject, state) {
-  const editAuthorized = assessment?.reentry_required === true || assessment?.editorial_revision_required === true || state.step === "produce" && state.status !== "succeeded";
-  if (!editAuthorized || produceSubject === void 0) {
+  const activeProduce = state.step === "produce" && state.status !== "succeeded";
+  const editAuthorized = assessment?.reentry_required === true || assessment?.editorial_revision_required === true || activeProduce;
+  if (!editAuthorized) {
     return Object.freeze({ remaining: findings, expected_reentry_edits: Object.freeze([]) });
   }
-  const producePaths = new Set(
+  const producePaths = produceSubject === void 0 ? void 0 : new Set(
     produceSubject.retained.prepared.manifest.value.projections.map((projection) => projection.path)
   );
   const remaining = [];
   const expected = [];
   for (const finding of findings) {
-    if (finding.kind === "projection-mismatch" && producePaths.has(finding.path)) {
+    if (finding.kind === "projection-mismatch" && (activeProduce || producePaths?.has(finding.path) === true)) {
       expected.push(finding.path);
     } else {
       remaining.push(finding);

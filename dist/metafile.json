@@ -8127,7 +8127,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 53793,
+      "bytes": 53642,
       "format": "esm",
       "imports": [
         {
@@ -8488,7 +8488,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1604571,
+      "bytes": 1604647,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -9679,7 +9679,7 @@
           "bytesInOutput": 1353
         },
         "src/state/status.ts": {
-          "bytesInOutput": 34184
+          "bytesInOutput": 34260
         },
         "src/state/transitions.ts": {
           "bytesInOutput": 982

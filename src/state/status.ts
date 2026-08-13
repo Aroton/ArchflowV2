@@ -115,9 +115,10 @@ export type ApprovalIssue = Readonly<{
 
 /**
  * The reconciliation report status publishes: raw reconciliation truth minus any drift the
- * current fixed-point re-entry authorizes. `archflow-local reconcile` keeps reporting the
- * unfiltered result; only status — which alone can see the re-entry assessment — reclassifies.
- * Suppressed paths stay visible in `expected_reentry_edits`, so the report never hides drift.
+ * current produce write window authorizes. `archflow-local reconcile` keeps reporting the
+ * unfiltered result; only status — which alone can see durable pipeline position and re-entry
+ * assessment — reclassifies. Suppressed paths stay visible in `expected_reentry_edits`, so the
+ * report never hides drift.
  */
 export type StatusReconciliation = ReconciliationResult & Readonly<{
   expected_reentry_edits?: readonly ProjectionDigestRef["path"][];
@@ -272,17 +273,13 @@ export function projectBriefStatus(full: TaskStatusV1): BriefTaskStatusV1 {
 /**
  * Splits reconciliation findings into drift the current re-entry authorizes and everything else.
  *
- * A finding is an expected re-entry edit only when the fixed point authorizes revising the
- * produce artifact (`assessment.reentry_required` — accepted triage findings or a stale
- * adjudication — or `assessment.editorial_revision_required`, the evidence-preserving editorial
- * re-entry), or a produce re-entry is already durably recorded (`state` sits at produce
- * running/failed — the running entry itself is the declaration of intent, covering both the
- * fixed-point re-entries above once entered and the author-initiated new-information door from
- * any succeeded step), the finding is a `projection-mismatch`, and
- * the drifted path is one of the retained produce manifest's own projection paths. The last
- * test is deliberately broad: if a produce manifest ever projects more than the document
- * itself, every one of its projections becomes edit-tolerated during re-entry. Any other path
- * or finding kind keeps blocking exactly as before.
+ * Before a produce entry exists, fixed-point re-entry authorization tolerates only edits to the
+ * retained current-phase produce projections. Once state durably sits at produce running/failed,
+ * the write window itself authorizes implementation work: every projection mismatch is expected,
+ * including edits to files projected by an earlier phase when the current phase has no produce
+ * result yet. The terminal produce builder, not reconciliation, then seals the declared outputs,
+ * base commit, index/worktree identities, undeclared-change report, and exact bytes. Receipt and
+ * gate findings remain blocking throughout, and projection drift is strict again after produce.
  */
 export function partitionExpectedReentryEdits(
   findings: readonly ReconciliationFinding[],
@@ -293,19 +290,22 @@ export function partitionExpectedReentryEdits(
   remaining: readonly ReconciliationFinding[];
   expected_reentry_edits: readonly ProjectionDigestRef["path"][];
 }> {
+  const activeProduce = state.step === "produce" && state.status !== "succeeded";
   const editAuthorized = assessment?.reentry_required === true ||
     assessment?.editorial_revision_required === true ||
-    (state.step === "produce" && state.status !== "succeeded");
-  if (!editAuthorized || produceSubject === undefined) {
+    activeProduce;
+  if (!editAuthorized) {
     return Object.freeze({ remaining: findings, expected_reentry_edits: Object.freeze([]) });
   }
-  const producePaths = new Set<string>(
-    produceSubject.retained.prepared.manifest.value.projections.map((projection) => projection.path),
-  );
+  const producePaths = produceSubject === undefined
+    ? undefined
+    : new Set<string>(
+        produceSubject.retained.prepared.manifest.value.projections.map((projection) => projection.path),
+      );
   const remaining: ReconciliationFinding[] = [];
   const expected: ProjectionDigestRef["path"][] = [];
   for (const finding of findings) {
-    if (finding.kind === "projection-mismatch" && producePaths.has(finding.path)) {
+    if (finding.kind === "projection-mismatch" && (activeProduce || producePaths?.has(finding.path) === true)) {
       expected.push(finding.path);
     } else {
       remaining.push(finding);
@@ -674,7 +674,7 @@ export async function computeTaskStatus(
       reconciliationBlockers = discovered.value.blocking_reasons ?? Object.freeze([]);
       blockers.push(...reconciliationBlockers);
       // Finding kinds join `blockers` only after the fixed-point assessment below exists, so
-      // expected re-entry edits can be recognized before they are treated as blocking drift.
+      // expected produce-window edits can be recognized before they are treated as blocking drift.
     } else {
       blockers.push("reconciliation-unavailable");
     }
