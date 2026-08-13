@@ -1,14 +1,15 @@
 import { isDeepStrictEqual } from "node:util";
 
 import type { DurableArtifact } from "../contracts/durable.js";
-import type { AuthoritativeResultRef, TaskStateV1 } from "../contracts/durable-state.js";
+import type { AuthoritativeResultRef, HumanRevisionRecord, TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
-import type { SafeInteger, Sha256Digest } from "../contracts/evidence.js";
+import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
 import { decodePhaseInstance, encodePhaseInstance, parsePositiveSafePhaseNumber } from "../contracts/phase-instance.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import { assertPlainJson } from "../contracts/plain-json.js";
 import { WORKFLOW_V1 } from "../contracts/workflow.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
+import type { HumanRevisionDeclaration } from "../contracts/mcp-tools.js";
 import {
   assertAuthenticatedGateApproval,
   type AuthenticatedGateApproval,
@@ -40,6 +41,10 @@ export type TransitionPlanInput = Readonly<{
   authenticated_gate_approvals?: readonly AuthenticatedGateApproval[];
   commit_observed?: boolean;
   legacy_resume_phase?: PhaseInstanceId;
+  human_revision?: HumanRevisionDeclaration;
+  resulting_subject_digest?: Sha256Digest;
+  /** Internal gate boundary: human-requested bytes begin without consuming a review attempt. */
+  human_revision_reentry?: boolean;
 }>;
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
@@ -153,7 +158,9 @@ function legalMovement(input: TransitionPlanInput): boolean {
     // Author-initiated produce re-entry from any succeeded pipeline step (attempt + 1): the
     // triage case is the accepted-finding re-entry, the produce/counter_review cases are the
     // sanctioned new-information door — downstream evidence simply goes stale.
-    return target.attempt === current.attempt + 1;
+    return input.human_revision_reentry === true
+      ? target.attempt === current.attempt
+      : target.attempt === current.attempt + 1;
   }
   const steps = pipeline(current.phase_instance);
   const index = steps.indexOf(current.step);
@@ -229,6 +236,21 @@ function constitutionReferenceMatches(input: TransitionPlanInput): boolean {
     reference.step === "adjudicate" &&
     reference.phase_instance === input.target.phase_instance &&
     reference.input_fingerprint === input.recomputed_input_fingerprint;
+}
+
+function pendingHumanRevisionMatches(input: TransitionPlanInput): boolean {
+  const pending = input.current.pending_human_revision;
+  const declaration = input.human_revision;
+  if (pending === undefined) return declaration === undefined;
+  if (input.current.phase_instance !== input.target.phase_instance ||
+      input.current.step !== "produce" || input.target.step !== "produce") return false;
+  if (input.current.attempt !== pending.attempt) return false;
+  if (input.target.status !== "succeeded") return declaration === undefined;
+  if (declaration === undefined || input.result_reference === undefined ||
+      input.resulting_subject_digest === undefined ||
+      input.resulting_subject_digest === pending.predecessor_subject_digest) return false;
+  return pending.evidence.every((expected) => input.current.authoritative_results.some((observed) =>
+    isDeepStrictEqual(expected, observed)));
 }
 
 function withResultReference(
@@ -313,23 +335,66 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     !legalMovement(input) ||
     !artifactMatches(input) ||
     !resultReferenceMatches(input) ||
-    !constitutionReferenceMatches(input)
+    !constitutionReferenceMatches(input) ||
+    !pendingHumanRevisionMatches(input)
   ) {
     return invalid(input, from, to);
   }
 
-  const { revision: _revision, last_transition: _transition, ...preserved } = input.current;
+  const {
+    revision: _revision,
+    last_transition: _transition,
+    pending_human_revision: pendingHumanRevision,
+    ...preserved
+  } = input.current;
+  const completingHumanRevision = pendingHumanRevision !== undefined &&
+    input.target.step === "produce" && input.target.status === "succeeded";
+  const significantHumanRevision = completingHumanRevision && input.human_revision?.classification === "significant";
+  const currentReferences = significantHumanRevision
+    ? preserved.authoritative_results.filter((entry) =>
+        entry.phase_instance !== input.target.phase_instance ||
+        (entry.step !== "counter_review" && entry.step !== "adjudicate" && entry.step !== "triage"))
+    : preserved.authoritative_results;
+  const authoritativeResults = withResultReference(
+    withResultReference(currentReferences, input.result_reference),
+    input.constitution_result_reference,
+  );
+  let humanRevisionHistory = preserved.human_revision_history;
+  if (completingHumanRevision) {
+    const declaration = input.human_revision!;
+    const record: HumanRevisionRecord = Object.freeze({
+      phase_instance: input.target.phase_instance,
+      gate_id: pendingHumanRevision.gate_id,
+      gate_kind: pendingHumanRevision.gate_kind,
+      predecessor_subject_digest: pendingHumanRevision.predecessor_subject_digest,
+      predecessor_input_fingerprint: pendingHumanRevision.predecessor_input_fingerprint,
+      resulting_subject_digest: input.resulting_subject_digest!,
+      resulting_result_digest: input.result_reference!.result_digest,
+      classification: declaration.classification,
+      rationale: declaration.rationale,
+      ...(declaration.user_override === undefined ? {} : { user_override: declaration.user_override }),
+      previous_attempt: pendingHumanRevision.attempt,
+      resulting_attempt: declaration.classification === "significant"
+        ? parseSafeInteger(1)
+        : pendingHumanRevision.attempt,
+      evidence: pendingHumanRevision.evidence,
+    });
+    humanRevisionHistory = Object.freeze(
+      [...(humanRevisionHistory ?? []), record].sort((left, right) => left.gate_id.localeCompare(right.gate_id)),
+    );
+  }
   const draft: NextStateDraft = Object.freeze({
     ...preserved,
     phase_instance: input.target.phase_instance,
     step: input.target.step,
     status: input.target.status,
-    attempt: input.target.attempt,
+    attempt: significantHumanRevision ? parseSafeInteger(1) : input.target.attempt,
     input_fingerprint: input.target.input_fingerprint,
-    authoritative_results: withResultReference(
-      withResultReference(preserved.authoritative_results, input.result_reference),
-      input.constitution_result_reference,
-    ),
+    authoritative_results: authoritativeResults,
+    ...(humanRevisionHistory === undefined ? {} : { human_revision_history: humanRevisionHistory }),
+    ...(!completingHumanRevision && pendingHumanRevision !== undefined
+      ? { pending_human_revision: pendingHumanRevision }
+      : {}),
   });
   if (
     input.result_reference === undefined &&

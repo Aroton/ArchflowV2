@@ -49,7 +49,7 @@ Every gated stage runs the same evidence pipeline to a fixed point:
 
    The constitution verdict is never triaged: a failing or uncertain rule, a matched `review_trigger`, or material drift opens a human gate *after* triage, through the ordinary gate flow — status derives the pending gate and `build-request` (kind `"gate"`) composes the complete request mechanically; the human decides at the gate. One counter-review yields at most one constitution decision: compliance and trigger are separate judgments about the same rules that usually share a root cause, so a single `constitution-review` gate discloses both axes rather than asking twice about one rule.
 
-Editing the artifact changes the subject digest, which invalidates all downstream evidence — the pipeline re-runs until everything agrees about the same bytes. Re-entry is bounded (`max_attempts`, default 3); exhaustion opens an `attempts-exhausted` gate rather than looping forever.
+Editing the artifact changes the subject digest, which normally invalidates all downstream evidence — the pipeline re-runs until everything agrees about the same bytes. Re-entry is bounded (`max_attempts`, default 3); exhaustion opens an `attempts-exhausted` gate rather than looping forever. A significant human revision begins a new cycle at attempt 1, so exhaustion counts only attempts since the latest such revision.
 
 **What actually ends the loop is triage, not the finding count.** The exit condition is `accepted_count === 0` — a plain `accepted` disposition is the only thing that forces another round (`src/review/fixed-point.ts`). A model-labeled blocker that triage rejects does not continue the loop. The producer accepts every material defect and rejects anything that cannot show a concrete downstream consequence. On later rounds the sealed instruction makes remediation verification primary and permits a new issue only when leaving it unchanged is reasonably likely to change behavior, verification, delivery, approval, or important risk.
 
@@ -60,6 +60,12 @@ Editing the artifact changes the subject digest, which invalidates all downstrea
 When a round's only accepted findings are `accepted-editorial`, the producer applies exactly the recorded revision intents and records produce again — and **nothing re-runs**. The revised artifact declares a server-validated, strictly one-hop `editorial_predecessor` link — `{subject_digest, input_fingerprint, triage_result_digest}` naming the exact reviewed bytes, their inputs, and the triage round that authorized the hop. The retained reviews *and* the constitution verdict stay bound to the declared predecessor for that one hop, and the eventual human gate presents the predecessor→final diff with an explicit disclosure that the evidence evaluated the predecessor bytes. A plain `accepted` disposition anywhere in the round still forces full re-entry — the editorial path exists only for rounds that are editorial through and through.
 
 An editorial round consumes an attempt slot like any other re-entry. That is deliberate: if editorial rounds push a task to its attempt cap, the `attempts-exhausted` gate's retry decision is the intended recovery, keeping the human in the loop rather than letting cosmetic churn extend the loop silently.
+
+### Human revisions after a gate
+
+When the human requests changes at a gate, the producer applies them and classifies the actual diff, explaining the result in plain language. A **simple** revision is strictly typo, formatting, comment, or wording-only work that changes no meaning, behavior, scope, interface, trust boundary, input, verification claim, or parent document. It keeps the attempt count and may retain the predecessor's review and constitution evidence for one hop, but the exact small diff is shown and the final bytes always return to the human for approval. A **significant** revision is anything else; uncertainty defaults to significant. It archives old evidence as history, resets the attempt counter to 1, and automatically dispatches a fresh rubric review and constitution review before another gate. The human may override the producer's classification in either direction, and the override is durable.
+
+This replaces the former supplemental gate-review loop. There is no optional review after a gate: the ordinary opposite-client review is automatic before it, and repeats automatically only when a significant human change makes the prior judgment stale.
 
 ### The transition edges, precisely
 
@@ -88,6 +94,8 @@ Every gate is a durable pair of canonical documents (request + decision record) 
 
 - **Supersession**: if the subject changes while a gate is open, the gate returns `GATE_SUPERSEDED` and approves nothing — the work re-enters the pipeline and a fresh gate opens.
 - **Re-verification**: later code never trusts a recorded approval reference alone; it re-reads and re-validates the underlying documents.
+
+The machine bindings above are audit authority, not the default human interface. The server also derives a reconstructible conversational presentation: a title, summary, direct question, relevant evidence, and labeled choices with consequences. Skills show that presentation and hide identifiers, digests, JSON, internal paths, and protocol codes unless the human asks for diagnostics.
 
 ## Hard trust boundaries
 

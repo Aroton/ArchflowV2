@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import { rawAdjudicationSchema } from "../../src/contracts/adjudication.js";
 import { gateInputSchema, resultExpectationDataSchema, waiverInputSchema } from "../../src/contracts/mcp-tools.js";
 import { rawReviewSchema } from "../../src/contracts/review.js";
-import { supplementalReviewOutcomeSchema } from "../../src/contracts/supplemental.js";
 import {
   assertZodAgreement,
   createJsonSchemaValidator,
@@ -30,7 +29,7 @@ const schema = (stem: string): object => JSON.parse(readFileSync(new URL(`${stem
 const fixture = (name: string): unknown => JSON.parse(readFileSync(new URL(`${name}.json`, FIXTURE_DIR), "utf8"));
 
 const MCP_REFERENCE_STEMS = [
-  "supplemental-review", "primitives", "project-error", "rubric", "path-claim", "evidence-slots",
+  "primitives", "project-error", "rubric", "path-claim", "evidence-slots",
   "gate-contract", "gate-decision", "durable-primitives", "task-state", "task-initialization",
   "legacy-import-initialization", "document-artifact", "implementation-output", "secret-scan-result",
   "review", "review-evidence", "adjudication", "triage",
@@ -39,7 +38,6 @@ const MCP_REFERENCE_STEMS = [
 const sharedReferences = [schema("primitives"), schema("path-claim")];
 const reviewValidator = createJsonSchemaValidator<unknown>(schema("review"), sharedReferences);
 const adjudicationValidator = createJsonSchemaValidator<unknown>(schema("adjudication"), sharedReferences);
-const supplementalValidator = createJsonSchemaValidator<unknown>(schema("supplemental-review"), sharedReferences);
 const mcpValidator = createJsonSchemaValidator<unknown>(schema("mcp-tools"), MCP_REFERENCE_STEMS.map(schema));
 const expectationValidator = createJsonSchemaValidator<unknown>(schema("result-expectation"), [schema("mcp-tools"), ...MCP_REFERENCE_STEMS.map(schema)]);
 
@@ -69,14 +67,6 @@ const CASES: readonly KeywordCase[] = [
     jsonKeywordRetired: true,
     valid: fixture("adjudication/valid"),
     invalid: [["a constitution rollup contradicting rule findings", fixture("adjudication/invalid-constitution-rollup-mismatch")]],
-  },
-  {
-    keyword: "x-archflow-supplemental-semantics",
-    json: supplementalValidator,
-    zod: supplementalReviewOutcomeSchema,
-    jsonKeywordRetired: true,
-    valid: fixture("supplemental/supersede-valid"),
-    invalid: [["a supersession whose old subject is not the reviewed subject", fixture("supplemental/invalid-supersede-subject-mismatch")]],
   },
   {
     keyword: "x-archflow-mcp-semantics on the gate input",

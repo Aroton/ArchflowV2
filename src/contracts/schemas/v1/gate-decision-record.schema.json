@@ -2,12 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:archflow:schema:v1:gate-decision-record",
   "$defs": {
-    "supplemental": {
-      "type": "array",
-      "items": {
-        "$ref": "urn:archflow:schema:v1:supplemental-review"
-      }
-    },
     "provenance": {
       "anyOf": [
         {
@@ -56,9 +50,6 @@
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },
-        "supplemental": {
-          "$ref": "#/$defs/supplemental"
-        },
         "outcome": {
           "type": "string",
           "const": "decided"
@@ -75,7 +66,6 @@
         "kind",
         "subject_digest",
         "context_digest",
-        "supplemental",
         "outcome",
         "envelope"
       ],
@@ -119,9 +109,6 @@
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },
-        "supplemental": {
-          "$ref": "#/$defs/supplemental"
-        },
         "outcome": {
           "type": "string",
           "const": "waiver-decided"
@@ -153,7 +140,6 @@
         "kind",
         "subject_digest",
         "context_digest",
-        "supplemental",
         "outcome",
         "granted",
         "scope",
@@ -201,9 +187,6 @@
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },
-        "supplemental": {
-          "$ref": "#/$defs/supplemental"
-        },
         "outcome": {
           "type": "string",
           "const": "cancelled"
@@ -226,73 +209,9 @@
         "kind",
         "subject_digest",
         "context_digest",
-        "supplemental",
         "outcome",
         "reason",
         "human_provenance"
-      ],
-      "additionalProperties": false
-    },
-    "superseded": {
-      "type": "object",
-      "properties": {
-        "schema_version": {
-          "type": "string",
-          "const": "1"
-        },
-        "gate_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-        },
-        "task_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
-        },
-        "phase_instance": {
-          "type": "string",
-          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
-        },
-        "kind": {
-          "type": "string",
-          "enum": [
-            "artifact-approval",
-            "constitution-review",
-            "material-drift",
-            "attempts-exhausted",
-            "constitution-edit",
-            "commit-authorization",
-            "restore-collision",
-            "migration-audit"
-          ]
-        },
-        "subject_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "context_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "supplemental": {
-          "$ref": "#/$defs/supplemental"
-        },
-        "outcome": {
-          "type": "string",
-          "const": "superseded"
-        },
-        "supersession": {
-          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/supersession"
-        }
-      },
-      "required": [
-        "schema_version",
-        "gate_id",
-        "task_id",
-        "phase_instance",
-        "kind",
-        "subject_digest",
-        "context_digest",
-        "supplemental",
-        "outcome",
-        "supersession"
       ],
       "additionalProperties": false
     }
@@ -306,9 +225,6 @@
     },
     {
       "$ref": "#/$defs/cancelled"
-    },
-    {
-      "$ref": "#/$defs/superseded"
     }
   ]
 }

@@ -84,7 +84,7 @@ describe("canonical skill contracts", () => {
       expect(source).toContain("`resources`");
       expect(source).toContain("{role,path,access}");
       expect(source).toContain('`{"kind":"counter-review"}`');
-      expect(source).toContain('`{"kind":"choice","choice":<decision>,"reason":<human reason>}`');
+      expect(source).toContain("`archflow-local decide --task <task>`");
       expect(source).not.toContain("## Stable rubric");
       expect(source).not.toContain('"criteria":[');
       expect(source).not.toContain('"kind":"counter-review","rubric"');
@@ -109,6 +109,34 @@ describe("canonical skill contracts", () => {
       expect(source).toContain("`envelope-gap: `");
       expect(source).toContain("not a backlog-triage meeting");
       expect(source).toContain("rejected non-material");
+    }
+  });
+
+  it("keeps human gates conversational and machine bindings diagnostic-only", () => {
+    const all = skillNames.map(skill).join("\n");
+    for (const name of productionRubricSkills) {
+      const source = skill(name);
+      expect(source).toContain("conversational");
+      expect(source).toContain("ask one direct question");
+      expect(source).toContain("unless the user explicitly asks for diagnostics or audit detail");
+      expect(source).toContain("there is no optional");
+    }
+    expect(skill("archflow-status")).toContain("Do not expose the gate ID");
+    expect(skill("archflow-init")).toContain("Do not relay raw output");
+    expect(all).not.toContain("archflow-local gate-counter");
+    expect(all).not.toContain("SUPPLEMENTAL_REVIEW_REQUIRED");
+    expect(all).not.toContain("supplemental_outcome");
+  });
+
+  it("classifies human revisions and restarts significant review cycles", () => {
+    for (const name of productionRubricSkills) {
+      const source = skill(name);
+      expect(source).toContain("A **simple** revision");
+      expect(source).toContain("approval of the final bytes");
+      expect(source).toContain("A **significant** revision");
+      expect(source).toContain("resets the attempt count to 1");
+      expect(source).toContain("automatically runs a fresh opposite-client counter-review plus constitution review");
+      expect(source).toContain("override it in either direction");
     }
   });
 

@@ -15,7 +15,7 @@ archflow-local <command> [--task <task>] [--input <json-file>] [--brief]
 - Payload commands read JSON from `--input <file>`, or stdin when `--input` is omitted. If stdin is a TTY and no `--input` was given, the command fails immediately rather than hanging.
 - Input-free commands (`status`, `manual-status`, `init`, `clean`) never read stdin at all.
 - Full `status` publishes the phase's canonical `resources` (`role`, repository-relative `path`, and `access`) plus its server-owned `review_policy`. Agents consume these entries instead of rediscovering `.archflow/` layout or copying review policy from a skill.
-- `--brief` (status only) projects the routine-loop view from the same computed status: position, blockers, open-gate and reconciliation summaries, constitution digest with active rule ids, and the identity of the one `next_action` — with no rule text, request body, guidance prose, counter-review prompt, or decision-template bodies. Workspace state appears only when `cleanup_pending` is true (`projectBriefStatus` in `src/state/status.ts`).
+- `--brief` (status only) projects the routine-loop view from the same computed status: position, blockers, a conversational open-gate summary, reconciliation, and one next action. It omits rule text, request bodies, decision payloads, IDs, digests, internal paths, and protocol codes unless diagnostic output is explicitly requested. Workspace state appears only when `cleanup_pending` is true (`projectBriefStatus` in `src/state/status.ts`).
 - Output is always canonical JSON on stdout. **Failures exit nonzero**: any result carrying `{"ok": false, ...}` also exits 1, so shell-level checks and the JSON agree; the JSON body remains the authority for structured details.
 - `--help` is generated from the same command table that drives dispatch (`LOCAL_COMMAND_CONTRACTS` in `src/local/commands.ts`), so help can't drift from behavior.
 
@@ -49,8 +49,7 @@ archflow-local <command> [--task <task>] [--input <json-file>] [--brief]
 | Command | Purpose |
 |---|---|
 | `snapshot` / `restore` | Install / read back a content-addressed retained result |
-| `decide` | Record a human choice as `{"kind":"choice","choice":…,"reason":…}`. The helper binds it to the live server-owned gate template; waiver requests and restore adoption also accept the human-authored rationale/selectors they inherently require. The old full `kind: "interface"` form remains accepted for compatibility. |
-| `gate-counter` | Ingest an elected gate counter-review after verifying it binds the archived gate request field-for-field |
+| `decide` | Record a server-issued choice token plus the human's reason. The helper resolves the live gate bindings internally; waiver requests and restore adoption also accept the rationale/selectors they inherently require. |
 | `clean` | Remove only unreferenced authority plus stale or reconstructible work; reports removed/retained file and byte counts |
 | `reconcile` | Compare recorded projections against what's on disk |
 | `upgrade` | Stage a legacy task into a fresh canonical task (see `../workflow/SKILLS.md`) |
@@ -84,7 +83,7 @@ Properties worth knowing:
 
 ## Two things called "envelope"
 
-`src/local/call-envelope.ts` produces the **call envelope**: the authentication wrapper around one outgoing MCP call. It resolves the input fingerprint internally (running it over its own output is a fixed point — idempotent), substitutes it into exactly the two places the contracts bind it, and computes the request digest. For gate/waiver calls it also derives the gate ID, file paths, and a ready-to-run counter-review recipe for the human's second terminal.
+`src/local/call-envelope.ts` produces the **call envelope**: the authentication wrapper around one outgoing MCP call. It resolves the input fingerprint internally (running it over its own output is a fixed point — idempotent), substitutes it into exactly the two places the contracts bind it, and computes the request digest. For gate and waiver calls it also derives the internal bindings used to reconstruct the conversational human presentation. There is no second-terminal or optional gate-review recipe.
 
 This is **unrelated** to `src/review/envelopes.ts` (the sealed evidence package sent to a child reviewer — see `../review/COUNTER-REVIEW.md`). The shared name is a known collision; a rename is on the simplification list.
 

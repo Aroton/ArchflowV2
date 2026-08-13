@@ -105,10 +105,6 @@ export function authorityDecisionRecordClaim(gateId: PathSafeId): TaskPathClaim 
   return parseTaskPathClaim(`authority/decisions/${gateId}/decision.json`);
 }
 
-export function authoritySupplementalReviewClaim(gateId: PathSafeId): TaskPathClaim {
-  return parseTaskPathClaim(`authority/decisions/${gateId}/supplemental-review.json`);
-}
-
 /** Total constructor: a path is branded as Git's output without asserting anything about it. */
 export function rawGitPath(value: string): RawGitPath {
   return value as RawGitPath;

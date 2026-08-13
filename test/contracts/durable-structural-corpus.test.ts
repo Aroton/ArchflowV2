@@ -224,6 +224,46 @@ const taskStateTwoWaivers: JsonObject = at(taskState.sample, "waivers", (value) 
   ...items(value),
 ]);
 
+const retainedCounter = (taskState.sample.authoritative_results as JsonObject[]).find((reference) =>
+  reference.phase_instance === "phase-impl-1" && reference.step === "counter_review")!;
+const revisionEvidence = [{
+  ...retainedCounter,
+  step: "adjudicate",
+  result_digest: "8".repeat(64),
+  result_id: "phase-impl-1:adjudicate:1",
+}, retainedCounter];
+const revisionRecord = (gateId: string, fill: string): JsonObject => ({
+  phase_instance: "phase-impl-1",
+  gate_id: gateId,
+  gate_kind: "constitution-review",
+  predecessor_subject_digest: fill.repeat(64),
+  predecessor_input_fingerprint: "8".repeat(64),
+  resulting_subject_digest: "9".repeat(64),
+  resulting_result_digest: fill === "1" ? "a".repeat(64) : "b".repeat(64),
+  classification: "simple",
+  rationale: "Wording only.",
+  previous_attempt: 2,
+  resulting_attempt: 2,
+  evidence: revisionEvidence,
+});
+const { open_gate: _revisionOpenGate, ...taskStateWithoutOpenGate } = taskState.sample;
+const taskStateRevisionCollections: JsonObject = {
+  ...taskStateWithoutOpenGate,
+  step: "produce",
+  status: "running",
+  attempt: 2,
+  pending_human_revision: {
+    gate_id: "gate-pending",
+    gate_kind: "constitution-review",
+    predecessor_subject_digest: "c".repeat(64),
+    predecessor_input_fingerprint: "8".repeat(64),
+    requested_at_revision: 7,
+    attempt: 2,
+    evidence: revisionEvidence,
+  },
+  human_revision_history: [revisionRecord("gate-a", "1"), revisionRecord("gate-b", "2")],
+};
+
 /**
  * Every declared set in the phase, with the shape whose fixture carries it. This list is asserted
  * below to be exactly the set of arrays these schemas declare — the design is explicit that
@@ -234,6 +274,9 @@ const DECLARED_SETS: readonly { readonly shape: string; readonly path: string; r
   { shape: "task-state", path: "authoritative_results" },
   { shape: "task-state", path: "approvals" },
   { shape: "task-state", path: "waivers", base: taskStateTwoWaivers },
+  { shape: "task-state", path: "pending_human_revision.evidence", base: taskStateRevisionCollections },
+  { shape: "task-state", path: "human_revision_history", base: taskStateRevisionCollections },
+  { shape: "task-state", path: "human_revision_history.0.evidence", base: taskStateRevisionCollections },
   { shape: "legacy-import-initialization", path: "mapping" },
   { shape: "legacy-import-initialization", path: "staged_payload_refs" },
   { shape: "document-artifact", path: "declared_inputs" },
@@ -270,7 +313,7 @@ describe("durable set ordering and uniqueness are structural", () => {
 /**
  * The sweep. Generation retired the ordering keywords, so no array-shaped subschema may carry one
  * any more — the ordering authority is the Zod refinement exercised above — and the set of arrays
- * must still be exactly the twelve collections above: nothing new, nothing untested.
+ * must still be exactly the declared collections above: nothing new, nothing untested.
  */
 const SCHEMA_FILES: readonly { readonly name: string; readonly schema: object }[] = [
   { name: "durable-primitives", schema: durablePrimitivesSchema },
@@ -312,7 +355,7 @@ describe("no array in this phase is exempt from set ordering", () => {
     expect(carrying.map((entry) => entry.location)).toStrictEqual([]);
   });
 
-  it("the arrays the schemas declare are exactly the twelve collections under test", () => {
+  it("the arrays the schemas declare are exactly the collections under test", () => {
     expect(collectArraySubschemas().map((entry) => entry.location).sort()).toStrictEqual(
       [
         "durable-primitives/$defs/snapshotAccounting/properties/counted_entries",
@@ -325,8 +368,11 @@ describe("no array in this phase is exempt from set ordering", () => {
         "legacy-import-initialization/properties/mapping",
         "legacy-import-initialization/properties/staged_payload_refs",
         "task-state/$defs/plainJson/anyOf/4",
+        "task-state/$defs/humanRevisionRecord/properties/evidence",
+        "task-state/$defs/pendingHumanRevision/properties/evidence",
         "task-state/properties/approvals",
         "task-state/properties/authoritative_results",
+        "task-state/properties/human_revision_history",
         "task-state/properties/waivers",
       ].sort()
     );

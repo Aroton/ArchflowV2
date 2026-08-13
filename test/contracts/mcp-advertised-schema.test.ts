@@ -48,7 +48,6 @@ const schemaDocumentPaths = [
 const validatingKeywordCoverage = {
   "x-archflow-max-utf8-bytes": ["path-utf8-input", "path-utf8-output", "project-error-path-utf8"],
   "x-archflow-mcp-semantics": [
-    "mcp-current-evidence",
     "mcp-waiver-origin-task",
     "gate-constitution-rule-order",
     "gate-constitution-eligible-axis",
@@ -121,7 +120,6 @@ const RULE_B = Object.freeze({ rule_id: "Rule:B", rule_version: 1 });
 const PROVENANCE = Object.freeze({ schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "Decision:1", helper_invocation_id: "Helper:1", recorded_at: "2026-07-27T12:00:00.000Z" });
 const COMMON = Object.freeze({ schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: D("a") });
 const COUNTER = Object.freeze({ role: "counter-review", evidence_digest: D("2"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" });
-const GATE_COUNTER = Object.freeze({ role: "gate-counter-review", evidence_digest: D("1"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-1" });
 const CURRENT_EVIDENCE = Object.freeze({ set_digest: D("3"), slots: [COUNTER] });
 const AUTHORITY = Object.freeze({ link_digest: D("4"), purpose: "restore-adoption", proposed_generation_digest: D("5"), changed_input_fingerprint: D("6") });
 const SCOPE = Object.freeze({ operation: "review-trigger", boundary: "subject" });
@@ -175,7 +173,7 @@ function materialize(entry: CorpusCase): MaterializedCase {
       return { value: { ...stateCall("succeeded"), artifact } };
     }
     case "waiver-origin-task": return { value: { ...waiverCall(), task_id: "other" } };
-    case "current-evidence": return { value: { ...artifactGateCall, current_evidence: { ...CURRENT_EVIDENCE, slots: [COUNTER, { ...GATE_COUNTER, evidence_digest: COUNTER.evidence_digest }] } } };
+    case "current-evidence": return { value: { ...artifactGateCall, current_evidence: { ...CURRENT_EVIDENCE, set_digest: D("0") } } };
     case "constitution-rule-order": return { value: gateCall("constitution-review", { ...constitutionContext(), matched_trigger_rules: [RULE_B, RULE_A], failed_rules: [], constitution: "pass", eligible_waivers: [] }) };
     // A rule offered a waiver on an axis it does not appear on.
     case "constitution-eligible-axis": return { value: gateCall("constitution-review", { ...constitutionContext(), matched_trigger_rules: [], eligible_waivers: [{ rule: RULE_A, scope: SCOPE }] }) };

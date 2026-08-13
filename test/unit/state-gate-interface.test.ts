@@ -21,6 +21,7 @@ import { createAtomicWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import {
   buildGateDecisionTemplates,
+  buildHumanGatePresentation,
   openDurableGate,
   resolveDurableGate,
   runDurableGate,
@@ -71,7 +72,7 @@ function activeGate(entry: (typeof CASES)[number], suffix: string): ActiveGateV1
     schema_version: "1", gate_id: `gate-${suffix}`, intent_id: `intent-${suffix}`, request_digest: D("f"), task_id: "task-1",
     phase_instance: "phase-impl-2", summary: "Human decision", subject_digest: D("c"), context_digest: contextDigest,
     current_evidence: evidence, kind: entry.kind, context: entry.context, allowed_decisions: entry.allowed,
-    opened_at_revision: 5, status: "awaiting-human", supplemental: [], decision_template: {
+    opened_at_revision: 5, status: "awaiting-human", decision_template: {
       schema_version: "1", gate_id: `gate-${suffix}`, task_id: "task-1", phase_instance: "phase-impl-2", kind: entry.kind,
       subject_digest: D("c"), context_digest: contextDigest, required_fields: ["payload", "human_provenance"],
       cancellation_fields: ["cancelled", "reason", "human_provenance"],
@@ -149,7 +150,7 @@ function convertToWaiverGate(h: Harness): Readonly<{ active: ActiveGateV1; origi
       required_fields: ["granted", "scope", "origin", "notes", "human_provenance"],
     },
   });
-  const { status: _status, decision_template: _template, supplemental: _supplemental, ...request } = active;
+  const { status: _status, decision_template: _template, ...request } = active;
   writeFileSync(
     join(h.taskRoot, "authority", "decisions", h.active.gate_id, "request.json"),
     canonicalDocument(parseGateRequest(request)).bytes,
@@ -169,6 +170,60 @@ function withProvenance(template: PlainJsonValue): PlainJsonValue {
 }
 
 describe("gate decision interface", () => {
+  it("presents every gate as a conversational choice while keeping bindings internal", () => {
+    for (const [index, entry] of CASES.entries()) {
+      const active = activeGate(entry, `presentation-${index}`);
+      const presentation = buildHumanGatePresentation(active);
+      expect(presentation.summary, entry.kind).toBe("Human decision");
+      expect(presentation.title, entry.kind).toMatch(/^[A-Z][^_]+$/u);
+      expect(presentation.question, entry.kind).toContain("briefly explain why");
+      expect(presentation.options, entry.kind).toHaveLength(buildGateDecisionTemplates(active).length);
+      expect(presentation.options.every((option) => option.label.length > 0 && option.consequence.length > 0), entry.kind).toBe(true);
+      for (const option of presentation.options) {
+        expect(() => selectGateDecisionTemplate(active, {
+          choice: option.token,
+          reason: "A human supplied this explanation.",
+        }), `${entry.kind}: ${option.token}`).not.toThrow();
+      }
+
+      const serialized = JSON.stringify(presentation);
+      expect(serialized, entry.kind).not.toContain(active.gate_id);
+      expect(serialized, entry.kind).not.toContain(active.subject_digest);
+      expect(serialized, entry.kind).not.toContain(active.context_digest);
+      expect(serialized, entry.kind).not.toContain("decision_template");
+    }
+  });
+
+  it("resolves server-issued presentation tokens without copied selectors or rationale", () => {
+    const constitutionReview = activeGate(CASES[1], "presented-waiver");
+    const presentation = buildHumanGatePresentation(constitutionReview);
+    const requested = presentation.options.find((option) => option.token === "request-exception-2");
+    expect(requested).toMatchObject({ label: "Request an exception for rule-b" });
+    expect(selectGateDecisionTemplate(constitutionReview, {
+      choice: requested!.token,
+      reason: "This work is intentionally outside that rule for this one review.",
+    })).toMatchObject({
+      payload: {
+        decision: "waiver-requested",
+        rule: RULE_B,
+        operation: "adjudication-failure",
+        rationale: "This work is intentionally outside that rule for this one review.",
+      },
+    });
+
+    const collision = activeGate(CASES[6], "presented-collision");
+    expect(selectGateDecisionTemplate(collision, {
+      choice: "keep-current-version",
+      reason: "The workspace version contains the intended recovery edits.",
+    })).toMatchObject({
+      payload: {
+        decision: "adopt-as-new-generation",
+        rationale: "The workspace version contains the intended recovery edits.",
+        adoption_authority: AUTHORITY_LINK,
+      },
+    });
+  });
+
   it("binds judgment-only choices to server-owned gate state", () => {
     const active = activeGate(CASES[0], "choice");
     expect(selectGateDecisionTemplate(active, { choice: "reject", reason: "The acceptance evidence is incomplete." })).toEqual({

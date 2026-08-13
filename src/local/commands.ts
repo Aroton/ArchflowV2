@@ -11,12 +11,7 @@ import { renderReviewEvidence } from "../contracts/renderers.js";
 import { parseReviewEvidence } from "../contracts/review.js";
 import { parseAdjudicationEvidence } from "../contracts/adjudication.js";
 import { parseTriageCandidate } from "../contracts/triage.js";
-import { parseSupplementalReviewRecord } from "../contracts/supplemental-record.js";
 import {
-  gateCounterReviewClaim,
-  gateRequestClaim,
-  gateSupplementalReviewClaim,
-  openResolved,
   parseWorkspacePathClaim,
   resolveTaskPath,
   resolveTaskWorkspacePath,
@@ -24,15 +19,12 @@ import {
   type ResolvedTaskPath,
 } from "../repository/paths.js";
 import { writeGateDecisionChoice, writeGateDecisionInterface } from "../state/gates.js";
-import { ensureDecisionDirectory, ensureWorkspaceProjectionParent } from "../state/layout.js";
 import { ensurePayloadParent, ensureResultDirectory } from "../state/layout.js";
 import { createProductionServices } from "../state/production.js";
 import { computeTaskStatus, projectBriefStatus } from "../state/status.js";
 import { installSnapshot, prepareSnapshot, restoreSnapshotOutput } from "../state/snapshots.js";
 import { reconcileCurrentAuthority } from "../state/reconciliation.js";
 import type { ProjectResult } from "../contracts/errors.js";
-import type { GateRequestV1 } from "../contracts/durable-gate.js";
-import type { SupplementalReviewRecordV1 } from "../contracts/supplemental-record.js";
 import { runInit } from "../init/index.js";
 import { stageLegacyUpgrade } from "../init/legacy-upgrade.js";
 import { BUILD_REQUEST_KINDS, runBuildRequest } from "./build-request.js";
@@ -42,7 +34,7 @@ import { cleanTaskWorkspace, cleanTerminalTaskWorkspace } from "../state/workspa
 
 export const LOCAL_COMMANDS = Object.freeze([
   "validate", "hash", "render", "snapshot", "restore", "clean", "decide",
-  "gate-counter", "status", "reconcile", "init", "envelope", "build-request",
+  "status", "reconcile", "init", "envelope", "build-request",
   "manual-status", "upgrade",
 ] as const);
 export type LocalCommand = typeof LOCAL_COMMANDS[number];
@@ -59,8 +51,7 @@ export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommand
   snapshot: { payload: '{"manifest":<result manifest>,"payloads":[...],"retained_task_bytes":<n>}', task: "required" },
   restore: { payload: '{"result_digest":<sha256>,"output_path":<path>}', task: "required" },
   clean: { payload: null, task: "required" },
-  decide: { payload: '{"kind":"choice","choice":<decision>,"reason":<human reason>,"rationale"?:<human rationale>,"rule"?:<waiver rule>,"operation"?:<waiver operation>} (legacy interface payload remains accepted)', task: "required" },
-  "gate-counter": { payload: "<supplemental review record from the counter-review recipe>", task: "required" },
+  decide: { payload: '{"kind":"choice","choice":<presentation option token>,"reason":<human reason>} (legacy interface payload remains accepted)', task: "required" },
   status: { payload: null, task: "required" },
   reconcile: { payload: '{"recorded_projections":[...],"current_projections":[...],"active_heads":{...}}', task: "required" },
   init: { payload: null, task: "ignored" },
@@ -100,7 +91,6 @@ function validateArtifact(value: Record<string, PlainJsonValue>): PlainJsonValue
     case "result-manifest": return parseResultManifest(artifact);
     case "gate-request": return parseGateRequest(artifact);
     case "gate-decision": return parseGateDecisionRecord(artifact);
-    case "supplemental-review": return parseSupplementalReviewRecord(artifact);
     case "review": return parseReviewEvidence(artifact);
     case "adjudication": return parseAdjudicationEvidence(artifact);
     case "triage": return parseTriageCandidate(artifact);
@@ -108,24 +98,6 @@ function validateArtifact(value: Record<string, PlainJsonValue>): PlainJsonValue
     case "implementation-output": return parseImplementationOutput(artifact);
     default: throw new TypeError("validate input.kind is not supported");
   }
-}
-
-export function assertGateCounterRequestBinding(
-  record: SupplementalReviewRecordV1,
-  request: GateRequestV1,
-  currentInputFingerprint: string | undefined,
-): void {
-  const producerFamilies = new Set(request.current_evidence.slots.map((slot) => slot.producer_family));
-  if (
-    record.review.assurance !== "degraded" ||
-    record.request_digest !== request.request_digest ||
-    record.task_id !== request.task_id || record.phase_instance !== request.phase_instance ||
-    record.kind !== request.kind || record.subject_digest !== request.subject_digest ||
-    record.context_digest !== request.context_digest ||
-    record.current_evidence_set_digest !== request.current_evidence.set_digest ||
-    record.input_fingerprint !== currentInputFingerprint ||
-    producerFamilies.size !== 1 || !producerFamilies.has(record.review.producer_family)
-  ) throw new TypeError("gate-counter record does not bind the archived request");
 }
 
 async function services(input: CommandInput) {
@@ -172,41 +144,6 @@ async function render(input: CommandInput): Promise<PlainJsonValue | ProjectResu
   const verified = createVerifiedEvidenceReference(evidence as never);
   const bytes = value.kind === "review" ? renderReviewEvidence(verified as never) : (await import("../contracts/renderers.js")).renderAdjudicationEvidence(verified as never);
   return { markdown: new TextDecoder().decode(bytes), digest: sha256Bytes(bytes) };
-}
-
-async function gateCounter(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
-  const record = parseSupplementalReviewRecord(requireValue(input));
-  if (input.task_id !== record.task_id) throw new TypeError("gate-counter task does not match --task");
-  const created = await services(input);
-  if (!created.ok) return created;
-  const { authority, dependencies, runner } = created.value;
-  const requestTarget = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateRequestClaim(record.gate_id), expectedClass: "authority-decision", context: authority.context });
-  if (!requestTarget.ok) return requestTarget;
-  const requestHandle = await openResolved(requestTarget.value.absolute, 0);
-  let request;
-  try {
-    request = parseGateRequest(JSON.parse((await requestHandle.readFile()).toString("utf8")));
-  } finally { await requestHandle.close(); }
-  assertGateCounterRequestBinding(record, request, created.value.state?.value.input_fingerprint);
-  await ensureDecisionDirectory(authority, record.gate_id);
-  const reviewProjection = renderReviewEvidence(createVerifiedEvidenceReference(record.review));
-  if (sha256Bytes(reviewProjection) !== record.projection_digest) throw new TypeError("gate-counter projection digest differs");
-  const retained = await resolveTaskPath({ runner, taskId: authority.task_id, claim: gateSupplementalReviewClaim(record.gate_id), expectedClass: "authority-decision", context: authority.context });
-  if (!retained.ok) return retained;
-  const document = canonicalDocument(record);
-  const installation = await dependencies.atomic.createExclusive(retained.value, document.bytes);
-  if (installation === "exists") {
-    const handle = await openResolved(retained.value.absolute, 0);
-    try {
-      if (!Buffer.from(await handle.readFile()).equals(Buffer.from(document.bytes))) throw new TypeError("gate-counter retained record disagrees");
-    } finally { await handle.close(); }
-  }
-  const projection = await resolveTaskWorkspacePath({ runner, taskId: authority.task_id, claim: gateCounterReviewClaim(record.phase_instance, record.gate_id), expectedClass: "workspace-review", context: authority.context });
-  if (!projection.ok) return projection;
-  if (dependencies.projection_writer === undefined) throw new TypeError("projection writer is unavailable");
-  await ensureWorkspaceProjectionParent(authority, projection.value.absolute);
-  await dependencies.projection_writer.replaceRegular(projection.value, reviewProjection, false);
-  return { record_digest: document.digest, projection_digest: record.projection_digest, installation };
 }
 
 async function clean(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
@@ -337,7 +274,7 @@ async function reconcile(input: CommandInput): Promise<PlainJsonValue | ProjectR
 
 const LOCAL_COMMAND_HANDLERS: Readonly<Record<LocalCommand, (input: CommandInput) => Promise<PlainJsonValue | ProjectResult<unknown>>>> = Object.freeze({
   validate, hash, render, snapshot, restore, clean, decide,
-  "gate-counter": gateCounter, status, reconcile, init, envelope,
+  status, reconcile, init, envelope,
   "build-request": buildRequest, "manual-status": manualStatus, upgrade,
 });
 

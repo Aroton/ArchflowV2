@@ -13,9 +13,7 @@ import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-in
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import type { ReviewEvidence } from "../contracts/review.js";
 import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
-import type { SupplementalReviewOutcome, SupplementalReviewRef } from "../contracts/supplemental.js";
 import { resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
-import { renderGateCounterPrompt } from "../local/call-envelope.js";
 import { selectAdjudicationGates } from "../review/adjudication.js";
 import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS, waiverInForce, type EvidenceAssessment } from "../review/fixed-point.js";
 import { canonicalRubricForPhaseKind, type CanonicalRubric } from "../review/rubrics.js";
@@ -27,7 +25,11 @@ import { assertInternalTransactionAuthority, createInternalTransactionAuthority 
 import { resolvePinnedConstitution, type ResolvedConstitution } from "./constitution.js";
 import { deriveCurrentEvidenceSet, loadRetainedEvidence, type RetainedEvidenceSet } from "./evidence-results.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "./gate-approvals.js";
-import { buildGateDecisionTemplates } from "./gate-decision-interface.js";
+import {
+  buildGateDecisionTemplates,
+  buildHumanGatePresentation,
+  type HumanGatePresentation,
+} from "./gate-decision-interface.js";
 import { activeProjection, type GateLifecycleDependencies } from "./gate-core.js";
 import { deriveNextAction, type NextAction } from "./next-action.js";
 import { buildNextActionRequest } from "./request-templates.js";
@@ -43,13 +45,7 @@ import {
   type ReconciliationFinding,
   type ReconciliationResult,
 } from "./reconciliation.js";
-import {
-  gateCounterReviewClaim,
-  gateRequestClaim,
-  parseWorkspacePathClaim,
-  resolveTaskPath,
-  resolveTaskWorkspacePath,
-} from "../repository/paths.js";
+import { gateRequestClaim, parseWorkspacePathClaim, resolveTaskPath, resolveTaskWorkspacePath } from "../repository/paths.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 
@@ -101,18 +97,9 @@ type OpenGateStatus = Readonly<{
   decision_path: string;
   archive_decision_path: string;
   request_path: string;
-  gate_counter_review_path: string;
   decision_templates: readonly PlainJsonValue[];
-  counter_review_prompt: string;
-  supplemental_outcomes: readonly SupplementalReviewOutcome[];
-  supplemental_supersession?: Readonly<{
-    action: "supersede";
-    review: SupplementalReviewRef;
-    accepted_triage_digest: Sha256Digest;
-    old_subject_digest: Sha256Digest;
-    new_subject_digest_from: "envelope.artifact_digest";
-    reason: string;
-  }>;
+  /** The default human-facing rendering. Binding templates and ids are diagnostic detail only. */
+  presentation: HumanGatePresentation;
 }>;
 
 /**
@@ -209,12 +196,7 @@ export type BriefTaskStatusV1 = Readonly<{
   status?: TaskStateV1["status"];
   attempt?: number;
   blocking_reasons: readonly string[];
-  open_gate?: Readonly<{
-    gate_id: PathSafeId;
-    kind: ActiveGateV1["kind"];
-    decision_template_names: readonly string[];
-  }>;
-  open_gate_id?: PathSafeId;
+  open_gate?: HumanGatePresentation;
   reconciliation?: Readonly<{
     classification: ReconciliationResult["classification"];
     findings: readonly Readonly<{ kind: string; path?: string }>[];
@@ -225,22 +207,12 @@ export type BriefTaskStatusV1 = Readonly<{
   }>;
   /** Included in the routine view only when cleanup work remains. */
   workspace?: WorkspaceCleanupReport;
-  next_action: Omit<NextAction, "request" | "guidance">;
+  next_action: Omit<NextAction, "request" | "guidance" | "gate_id">;
 }>;
 
-/** Names one decision template by its selective fields without carrying its body. */
-function decisionTemplateName(template: PlainJsonValue): string {
-  if (template === null || typeof template !== "object" || Array.isArray(template)) return "unknown";
-  const value = template as Record<string, PlainJsonValue>;
-  if (value.cancelled === true) return "cancel";
-  if (typeof value.granted === "boolean") return value.granted ? "waiver-grant" : "waiver-deny";
-  if (typeof value.decision === "string") return value.decision;
-  return "unknown";
-}
-
 /** Keep routing identity in brief status without carrying request templates or their prose. */
-function projectBriefNextAction(next: NextAction): Omit<NextAction, "request" | "guidance"> {
-  const { request: _request, guidance: _guidance, ...identity } = next;
+function projectBriefNextAction(next: NextAction): Omit<NextAction, "request" | "guidance" | "gate_id"> {
+  const { request: _request, guidance: _guidance, gate_id: _gateId, ...identity } = next;
   return Object.freeze(identity);
 }
 
@@ -256,13 +228,8 @@ export function projectBriefStatus(full: TaskStatusV1): BriefTaskStatusV1 {
     ...(full.attempt === undefined ? {} : { attempt: full.attempt }),
     blocking_reasons: full.blocking_reasons,
     ...(full.open_gate === undefined ? {} : {
-      open_gate: Object.freeze({
-        gate_id: full.open_gate.gate_id,
-        kind: full.open_gate.kind,
-        decision_template_names: Object.freeze(full.open_gate.decision_templates.map(decisionTemplateName)),
-      }),
+      open_gate: full.open_gate.presentation,
     }),
-    ...(full.open_gate_id === undefined ? {} : { open_gate_id: full.open_gate_id }),
     ...(full.reconciliation === undefined || full.reconciliation.findings.length === 0 ? {} : {
       reconciliation: Object.freeze({
         classification: full.reconciliation.classification,
@@ -458,132 +425,15 @@ export function pendingAdjudicationGate(
   return pendingAdjudicationGates(state, constitution, retained, authenticated)[0];
 }
 
-function supplementalReviewRef(
-  active: ActiveGateV1,
-  inputFingerprint: Sha256Digest,
-  evidence: ReviewEvidence,
-): SupplementalReviewRef {
-  if (evidence.model_family !== "claude" && evidence.model_family !== "codex") {
-    throw new TypeError("supplemental reviewer family is unavailable");
-  }
-  return Object.freeze({
-    prior_gate_id: active.gate_id,
-    task_id: active.task_id,
-    phase_instance: active.phase_instance,
-    subject_digest: active.subject_digest,
-    input_fingerprint: inputFingerprint,
-    evidence_slot: Object.freeze({
-      role: "gate-counter-review",
-      evidence_digest: canonicalJsonDigest(evidence),
-      assurance: "degraded",
-      producer_family: evidence.producer_family,
-      reviewer_family: evidence.model_family,
-      independence: "opposite-family",
-      gate_id: active.gate_id,
-    }),
-  });
-}
-
-async function supplementalOutcomeTemplates(
-  dependencies: GateLifecycleDependencies,
-  authority: TransactionAuthority,
-  active: ActiveGateV1,
-  inputFingerprint: Sha256Digest,
-  currentSubjectDigest?: Sha256Digest,
-): Promise<Readonly<{
-  outcomes: readonly SupplementalReviewOutcome[];
-  supersession?: NonNullable<OpenGateStatus["supplemental_supersession"]>;
-}>> {
-  const gate = Object.freeze({
-    prior_gate_id: active.gate_id,
-    task_id: active.task_id,
-    phase_instance: active.phase_instance,
-    subject_digest: active.subject_digest,
-    input_fingerprint: inputFingerprint,
-  });
-  const outcomes: SupplementalReviewOutcome[] = [Object.freeze({
-    action: "decline",
-    gate,
-    reason: "Human explicitly declined the optional gate counter-review.",
-  })];
-  if (dependencies.resolve_supplemental_review === undefined) return Object.freeze({ outcomes: Object.freeze(outcomes) });
-  const retained = await dependencies.resolve_supplemental_review({ authority, request: active });
-  if (!retained.ok) return Object.freeze({ outcomes: Object.freeze(outcomes) });
-  let review: SupplementalReviewRef;
-  try {
-    review = supplementalReviewRef(active, inputFingerprint, retained.value.evidence);
-  } catch {
-    return Object.freeze({ outcomes: Object.freeze(outcomes) });
-  }
-  const ingested = active.supplemental.some((entry) => entry.action === "ingest" && entry.review.evidence_slot.evidence_digest === review.evidence_slot.evidence_digest);
-  if (!ingested) {
-    outcomes.push(Object.freeze({
-      action: "ingest", review,
-      reason: "Install the retained supplemental gate counter-review for human triage.",
-    }));
-    return Object.freeze({ outcomes: Object.freeze(outcomes) });
-  }
-  if (retained.value.triage_outcome === "no-change" && retained.value.triage_digest !== undefined) {
-    outcomes.push(Object.freeze({
-      action: "triage-no-change", review, triage_digest: retained.value.triage_digest,
-      reason: "Human triaged the retained supplemental review with no accepted artifact change.",
-    }));
-  } else if (retained.value.triage_outcome === "accepted-change" && retained.value.triage_digest !== undefined) {
-    const facts = Object.freeze({
-      action: "supersede", review,
-      accepted_triage_digest: retained.value.triage_digest,
-      old_subject_digest: active.subject_digest,
-      new_subject_digest_from: "envelope.artifact_digest",
-      reason: "Human accepted supplemental triage and revised the bound subject.",
-    } as const);
-    if (currentSubjectDigest !== undefined && currentSubjectDigest !== active.subject_digest) {
-      outcomes.push(Object.freeze({
-        action: "supersede", review,
-        accepted_triage_digest: retained.value.triage_digest,
-        old_subject_digest: active.subject_digest,
-        new_subject_digest: currentSubjectDigest,
-        reason: facts.reason,
-      }));
-    }
-    return Object.freeze({ outcomes: Object.freeze(outcomes), supersession: facts });
-  }
-  return Object.freeze({ outcomes: Object.freeze(outcomes) });
-}
-
-async function gateStatus(
-  dependencies: GateLifecycleDependencies,
-  authority: TransactionAuthority,
-  active: ActiveGateV1,
-  inputFingerprint: Sha256Digest,
-  currentSubjectDigest?: Sha256Digest,
-): Promise<OpenGateStatus> {
-  const supplemental = await supplementalOutcomeTemplates(
-    dependencies, authority, active, inputFingerprint, currentSubjectDigest,
-  );
+function gateStatus(active: ActiveGateV1): OpenGateStatus {
   return Object.freeze({
     gate_id: active.gate_id,
     kind: active.kind,
     decision_path: `.archflow/runtime/tasks/${active.task_id}/cache/gates/gate.decision`,
     archive_decision_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/decision.json`,
     request_path: `.archflow/tasks/${active.task_id}/authority/decisions/${active.gate_id}/request.json`,
-    gate_counter_review_path: `.archflow/runtime/tasks/${active.task_id}/${gateCounterReviewClaim(active.phase_instance, active.gate_id)}`,
     decision_templates: buildGateDecisionTemplates(active),
-    counter_review_prompt: renderGateCounterPrompt({
-      tool: active.context !== null && typeof active.context === "object" && "origin" in active.context
-        ? "archflow_waiver"
-        : "archflow_gate",
-      gate_id: active.gate_id,
-      request_digest: active.request_digest,
-      task_id: active.task_id,
-      phase_instance: active.phase_instance,
-      kind: active.kind,
-      subject_digest: active.subject_digest,
-      context_digest: active.context_digest,
-      input_fingerprint: inputFingerprint,
-      current_evidence: active.current_evidence,
-    }),
-    supplemental_outcomes: supplemental.outcomes,
-    ...(supplemental.supersession === undefined ? {} : { supplemental_supersession: supplemental.supersession }),
+    presentation: buildHumanGatePresentation(active),
   });
 }
 
@@ -826,6 +676,25 @@ export async function computeTaskStatus(
   const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document"
     ? produceSubject.artifact.editorial_predecessor
     : undefined;
+  const currentProduceReference = state.authoritative_results.find((reference) =>
+    reference.phase_instance === state.phase_instance && reference.step === "produce");
+  const simpleHumanRevision = currentProduceReference === undefined
+    ? undefined
+    : [...(state.human_revision_history ?? [])].reverse().find((revision) =>
+        revision.phase_instance === state.phase_instance &&
+        revision.classification === "simple" &&
+        revision.resulting_result_digest === currentProduceReference.result_digest);
+  const reviewPredecessor = declaredPredecessor === undefined
+    ? simpleHumanRevision === undefined
+      ? undefined
+      : Object.freeze({
+          subject_digest: simpleHumanRevision.predecessor_subject_digest,
+          input_fingerprint: simpleHumanRevision.predecessor_input_fingerprint,
+        })
+    : Object.freeze({
+        subject_digest: declaredPredecessor.subject_digest,
+        input_fingerprint: declaredPredecessor.input_fingerprint,
+      });
   let assessment: EvidenceAssessment | undefined;
   if (constitution !== undefined && subjectDigest !== undefined) {
     try {
@@ -836,12 +705,7 @@ export async function computeTaskStatus(
         subject_digest: subjectDigest,
         input_fingerprint: state.input_fingerprint,
         constitution,
-        ...(declaredPredecessor === undefined ? {} : {
-          editorial_predecessor: Object.freeze({
-            subject_digest: declaredPredecessor.subject_digest,
-            input_fingerprint: declaredPredecessor.input_fingerprint,
-          }),
-        }),
+        ...(reviewPredecessor === undefined ? {} : { review_predecessor: reviewPredecessor }),
         approved_upstream_digests: approvedUpstreamDigests,
         authenticated_gate_approvals: authenticatedApprovals,
         ...(parsedConfig?.max_attempts === undefined ? {} : { max_attempts: parsedConfig.max_attempts }),
@@ -947,8 +811,6 @@ export async function computeTaskStatus(
     blockers.push("gate-decision-required");
     try {
       const request = await readArchivedGateRequest(dependencies, authority, state.open_gate.gate_id);
-      // Preserve an in-progress supplemental ledger when the disposable projection is valid, but
-      // never require that projection to reconstruct the base gate after a fresh clone.
       activeGate = await readActiveGateProjection(dependencies, authority) ??
         (request === undefined ? undefined : parseActiveGate(activeProjection(request)));
       const stateBindingMatches = activeGate !== undefined &&
@@ -970,9 +832,7 @@ export async function computeTaskStatus(
         blockers.push("active-gate-mismatch");
         gateBindingBlocker = "active-gate-mismatch";
       } else {
-        openGate = await gateStatus(
-          dependencies, authority, activeGate, state.input_fingerprint, subjectDigest,
-        );
+        openGate = gateStatus(activeGate);
       }
     } catch {
       blockers.push("active-gate-invalid");
@@ -995,9 +855,6 @@ export async function computeTaskStatus(
       ...reconciliationBlockers,
       ...(gateBindingBlocker === undefined ? [] : [gateBindingBlocker]),
     ]),
-    ...(activeGate === undefined ? {} : {
-      untriaged_supplemental_review: activeGate.supplemental.some((item) => item.action === "ingest"),
-    }),
     ...(assessment === undefined ? {} : { assessment }),
     evidence_available: evidence.available,
     ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),

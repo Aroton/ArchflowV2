@@ -155,7 +155,6 @@ describe("the ID vocabularies are usable as single path components", () => {
           ]),
           ["authority-decision", `authority/decisions/${id}/request.json`],
           ["authority-decision", `authority/decisions/${id}/decision.json`],
-          ["authority-decision", `authority/decisions/${id}/supplemental-review.json`],
           ["authority-result", `authority/results/${"a".repeat(64)}.json`],
           ["task-config", "config.yaml"]
         ];

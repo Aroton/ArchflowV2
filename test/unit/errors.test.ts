@@ -6,7 +6,7 @@ const D = "a".repeat(64);
 
 describe("error registries", () => {
   it("are exhaustive, separate, and recursively immutable at definition boundaries", () => {
-    expect(Object.keys(PROJECT_ERROR_DEFINITIONS)).toHaveLength(57);
+    expect(Object.keys(PROJECT_ERROR_DEFINITIONS)).toHaveLength(55);
     expect(Object.keys(PROTOCOL_ERROR_DEFINITIONS)).toEqual(["TOOL_NOT_FOUND", "TOOL_DISABLED", "UNSUPPORTED_PROTOCOL", "INITIALIZATION_REPEATED"]);
     expect(Object.keys(PROJECT_ERROR_DEFINITIONS).some((code) => Object.hasOwn(PROTOCOL_ERROR_DEFINITIONS, code))).toBe(false);
     expect(Object.isFrozen(PROJECT_ERROR_DEFINITIONS)).toBe(true);
@@ -64,30 +64,6 @@ describe("error registries", () => {
     expect([gate.owner, gate.retryable, gate.next_action]).toEqual(["gate", false, "restart-gate-flow"]);
   });
 
-  it("classifies a durable gate supersession with its subject transition", () => {
-    const error = createProjectError("GATE_SUPERSEDED", {
-      gate_id: "gate-1",
-      old_subject_digest: D,
-      new_subject_digest: "b".repeat(64),
-    });
-    expect(error).toEqual({
-      schema_version: "1",
-      code: "GATE_SUPERSEDED",
-      owner: "gate",
-      retryable: false,
-      diagnostic: {
-        template_id: "GATE_SUPERSEDED",
-        parameters: {
-          gate_id: "gate-1",
-          old_subject_digest: D,
-          new_subject_digest: "b".repeat(64),
-        },
-      },
-      next_action: "retry-with-superseding-subject",
-    });
-    expect(parseProjectError(error)).toBe(error);
-  });
-
   it("retightens task and gate identifiers and the offending-path frame in error parameters", () => {
     for (const taskId of ["Task_1", "Task:1", "TASK-1"]) {
       expect(() => createProjectError("TASK_INVALID", { task_id: taskId as never, issue_code: "archflow-tree-mode-illegal" })).toThrow();
@@ -95,7 +71,6 @@ describe("error registries", () => {
     }
     for (const gateId of ["Gate:1", "gate:1"]) {
       expect(() => createProjectError("GATE_ACTIVE", { gate_id: gateId as never, gate_kind: "artifact-approval" })).toThrow();
-      expect(() => createProjectError("SUPPLEMENTAL_REVIEW_REQUIRED", { gate_id: gateId as never, evidence_digest: D })).toThrow();
     }
     expect(createProjectError("PATH_ESCAPE", { task_id: "task-1" as never, path_class: "authority-result" }).diagnostic.parameters.path_class).toBe("authority-result");
     expect(() => createProjectError("PATH_ESCAPE", { task_id: "task-1" as never, path_class: "not-a-class" as never })).toThrow();

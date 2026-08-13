@@ -151,9 +151,6 @@ function qualifyAndRender(value: EvidenceResultValue): Readonly<{
 }> {
   if (value.kind === "review") {
     const verified = createVerifiedEvidenceReference(value.evidence);
-    if (verified.evidence.role === "gate-counter-review") {
-      throw new TypeError("gate-counter-review evidence requires the gate-owned retention route");
-    }
     return Object.freeze({
       artifact: Object.freeze({
         schema_version: "1",

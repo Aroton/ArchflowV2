@@ -92,7 +92,6 @@ describe("deriveNextAction", () => {
       ...reconciliationCases.map(([finding, code]) => [code, input({ reconciliation_findings: [finding] })] as const),
       ["restore-pinned-config", input({ config_verified: false })],
       ["resolve-open-gate", input({ state: state({ open_gate: gate }) })],
-      ["triage-supplemental-review", input({ state: state({ open_gate: gate }), untriaged_supplemental_review: true })],
       ["run-step", input({ assessment: assessment("triage") })],
       ["open-gate", input({ assessment: assessment("advance") })],
       ["commit-phase", input({ assessment: assessment("advance"), authenticated_approvals: [{ gate_kind: "commit-authorization", subject_digest: D("a") }] })],

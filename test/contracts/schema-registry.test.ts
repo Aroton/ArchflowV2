@@ -32,8 +32,6 @@ const SCHEMA_FILES = {
   adjudicationEvidence: "adjudication-evidence",
   evidenceSlots: "evidence-slots",
   triage: "triage",
-  supplementalReview: "supplemental-review",
-  supplementalReviewRecord: "supplemental-review-record",
   gateContract: "gate-contract",
   gateDecision: "gate-decision",
   gateRequest: "gate-request",
@@ -62,11 +60,11 @@ const loadSchema = async (name: string): Promise<Record<string, unknown>> =>
   JSON.parse(await readFile(new URL(`${name}.schema.json`, SCHEMA_DIR), "utf8")) as Record<string, unknown>;
 
 describe("SCHEMA_IDS registry", () => {
-  it("is a bijection with the schema directory at 34 ids", async () => {
+  it("is a bijection with the schema directory at 32 ids", async () => {
     const files = (await readdir(SCHEMA_DIR)).filter((name) => name.endsWith(".schema.json")).sort();
-    expect(Object.keys(SCHEMA_IDS)).toHaveLength(34);
-    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(34);
-    expect(files).toHaveLength(34);
+    expect(Object.keys(SCHEMA_IDS)).toHaveLength(32);
+    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(32);
+    expect(files).toHaveLength(32);
     expect(files).toEqual(Object.values(SCHEMA_FILES).map((stem) => `${stem}.schema.json`).sort());
     expect(Object.keys(SCHEMA_IDS).sort()).toEqual(Object.keys(SCHEMA_FILES).sort());
   });
@@ -99,7 +97,7 @@ describe("SCHEMA_IDS registry", () => {
 
     const allStems = Object.values(SCHEMA_FILES).sort();
     expect([...generated, ...HAND_WRITTEN_SCHEMA_FILES].sort()).toEqual(allStems);
-    expect(generated).toHaveLength(33);
+    expect(generated).toHaveLength(31);
   });
 
   it("enforces composite disposition identities through the Zod triage authority", async () => {

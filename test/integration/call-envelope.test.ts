@@ -12,8 +12,7 @@ import { computeGateContextDigest, computeGateId } from "../../src/contracts/fin
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { stageTaskInitialization } from "../../src/init/task-initialization.js";
-import { LOCAL_COMMANDS } from "../../src/local/commands.js";
-import { computeCallEnvelope, renderGateCounterPrompt } from "../../src/local/call-envelope.js";
+import { computeCallEnvelope } from "../../src/local/call-envelope.js";
 import { runStateInitialization } from "../../src/state/initialization.js";
 import { createProductionServices } from "../../src/state/production.js";
 
@@ -53,7 +52,7 @@ async function repository() {
 }
 
 describe("local call envelopes", () => {
-  it("shares revision-0 identification, covers every tool branch, and binds gate paths and prompts", async () => {
+  it("shares revision-0 identification, covers every tool branch, and binds gate paths", async () => {
     const fixture = await repository();
     const bootstrap = await createProductionServices({
       working_directory: fixture.root,
@@ -152,11 +151,7 @@ describe("local call envelopes", () => {
       decision_path: `.archflow/runtime/tasks/${task}/cache/gates/gate.decision`,
       archive_decision_path: `authority/decisions/${gate.value.gate.gate_id}/decision.json`,
       request_path: `authority/decisions/${gate.value.gate.gate_id}/request.json`,
-      gate_counter_review_path: `.archflow/runtime/tasks/${task}/cache/reviews/prd.gate-counter.${gate.value.gate.gate_id}.md`,
     });
-    for (const binding of [gate.value.gate.gate_id, gate.value.request_digest, gateInput.subject_digest, state.input_fingerprint, currentEvidence.set_digest, "codex", "archflow-local gate-counter"]) {
-      expect(gate.value.gate.counter_review_prompt).toContain(binding);
-    }
 
     const originGateId = "origin-gate";
     const rule = { rule_id: "review-rule", rule_version: 1 };
@@ -192,38 +187,6 @@ describe("local call envelopes", () => {
     if (waiver.ok) {
       expect(waiver.value.input_fingerprint).toBe(state.input_fingerprint);
       expect(waiver.value.gate?.decision_path).toBe(`.archflow/runtime/tasks/${task}/cache/gates/gate.decision`);
-      expect(waiver.value.gate?.counter_review_prompt).toContain(originRequest.subject_digest);
-      expect(waiver.value.gate?.counter_review_prompt).toContain("retry archflow_waiver once");
-      expect(waiver.value.gate?.counter_review_prompt).toContain("same archflow_waiver input");
-    }
-  });
-
-  it("the counter-review recipe names only published local commands", () => {
-    // The recipe is the one interface a human counter-reviewer follows; every archflow-local
-    // invocation it prescribes must exist on the current command surface, so a retired command
-    // can never survive inside the rendered hand-off.
-    const prompt = renderGateCounterPrompt({
-      tool: "archflow_gate",
-      gate_id: "gate-recipe-commands" as never,
-      request_digest: D("1"),
-      task_id: task,
-      phase_instance: "prd" as never,
-      kind: "artifact-approval",
-      subject_digest: D("2"),
-      context_digest: D("3"),
-      input_fingerprint: D("4"),
-      current_evidence: {
-        set_digest: D("5"),
-        slots: [{
-          role: "counter-review", evidence_digest: D("6"), assurance: "server-attested",
-          producer_family: "claude", reviewer_family: "codex", independence: "opposite-family",
-        }],
-      } as never,
-    });
-    const named = [...prompt.matchAll(/archflow-local\s+([a-z][a-z-]*)/gu)].map((match) => match[1]!);
-    expect(named.length).toBeGreaterThan(0);
-    for (const name of named) {
-      expect(LOCAL_COMMANDS as readonly string[], `recipe names unpublished command ${name}`).toContain(name);
     }
   });
 });

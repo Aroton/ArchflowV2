@@ -35,7 +35,6 @@ const GATE_REFERENCE_STEMS = [
   "gate-contract",
   "gate-decision",
   "evidence-slots",
-  "supplemental-review",
   "gate-request",
   "gate-decision-record",
 ] as const;
@@ -100,7 +99,6 @@ const armActiveGate = (arm: (typeof ARM_SAMPLES)[number]): JsonObject => ({
     required_fields: arm.waiver ? ["granted", "scope", "origin", "notes", "human_provenance"] : ["payload", "human_provenance"],
     cancellation_fields: ["cancelled", "reason", "human_provenance"],
   },
-  supplemental: [],
 });
 
 type GateRoot = {
@@ -152,8 +150,7 @@ describe("the gate roots validate under the Zod authority", () => {
 
 /**
  * Generation retired `x-archflow-nfc` and `x-archflow-max-utf8-bytes` from `path-claim`, the
- * supplemental-semantics keyword from `supplemental-review`, and the ledger's structural
- * supersession exclusion, so the compiled validators now accept all four; the Zod schemas behind
+ * so the compiled validators accept both path violations; the Zod schemas behind
  * `parseGateRequest` and `parseActiveGate` are the surviving authority.
  */
 describe("negatives under retired keyword-backed rules are rejected by the Zod authority", () => {
@@ -170,26 +167,6 @@ describe("negatives under retired keyword-backed rules are rejected by the Zod a
     expect(gateRequestV1Schema.safeParse(sample).success).toBe(false);
   });
 
-  it("rejects a supplemental slot bound to a different gate", () => {
-    const sample = fixture("active-gate.invalid-supplemental-slot-binding");
-    expect(activeGateValidator.validate(sample)).toBe(true);
-    expect(activeGateV1Schema.safeParse(sample).success).toBe(false);
-  });
-
-  it("rejects a supersession entry in the supplemental ledger", () => {
-    const sample = fixture("active-gate.valid");
-    const review = ((sample.supplemental as JsonObject[])[0] as JsonObject).review as JsonObject;
-    sample.supplemental = [{
-      action: "supersede",
-      review,
-      accepted_triage_digest: d("8"),
-      old_subject_digest: review.subject_digest,
-      new_subject_digest: d("9"),
-      reason: "Triage accepted a superseding subject",
-    }];
-    expect(activeGateValidator.validate(sample)).toBe(true);
-    expect(activeGateV1Schema.safeParse(sample).success).toBe(false);
-  });
 });
 
 /**

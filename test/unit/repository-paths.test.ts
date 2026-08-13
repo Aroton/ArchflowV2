@@ -37,10 +37,8 @@ import {
   classifyTaskPath,
   classifyWorkspacePath,
   counterReviewClaim,
-  gateCounterReviewClaim,
   gateDecisionClaim,
   gateRequestClaim,
-  gateSupplementalReviewClaim,
   openResolved,
   resolveRepositoryPath,
   resolveTaskRoot,
@@ -52,13 +50,11 @@ import {
 const TASK_ID = parseTaskSlug("demo-task");
 
 describe("gate path constructors", () => {
-  it("constructs deterministic decision and gate-counter claims", () => {
+  it("constructs deterministic decision claims", () => {
     const gateId = parsePathSafeId("gate-1");
     const phase = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(6) });
     expect(gateRequestClaim(gateId)).toBe("authority/decisions/gate-1/request.json");
     expect(gateDecisionClaim(gateId)).toBe("authority/decisions/gate-1/decision.json");
-    expect(gateSupplementalReviewClaim(gateId)).toBe("authority/decisions/gate-1/supplemental-review.json");
-    expect(gateCounterReviewClaim(phase, gateId)).toBe("cache/reviews/phase-impl-6.gate-counter.gate-1.md");
   });
 
   it("constructs every fixed-point review projection and round-trips the review classifier", () => {
@@ -193,7 +189,6 @@ const TASK_SAMPLES: readonly TaskSample[] = [
     claims: [
       "authority/decisions/gate-1/request.json",
       "authority/decisions/gate-1/decision.json",
-      "authority/decisions/gate-1/supplemental-review.json",
     ],
   },
 ];

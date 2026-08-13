@@ -33,31 +33,9 @@ export async function handleGate(
       current_evidence: call.input.current_evidence,
       kind: call.input.kind,
       context: call.input.context,
-      ...(call.input.supersedes === undefined ? {} : { supersedes: call.input.supersedes }),
-      ...(call.input.supplemental_outcome === undefined ? {} : {
-        supplemental_outcome: call.input.supplemental_outcome,
-      }),
       signal: context.signal,
     });
     if (!outcome.ok) return outcome;
-    if ("record" in outcome.value && outcome.value.record.value.outcome === "superseded") {
-      const supplemental = call.input.supplemental_outcome;
-      if (
-        supplemental?.action !== "supersede" ||
-        outcome.value.record.value.gate_id !== supplemental.review.prior_gate_id ||
-        outcome.value.record.value.supersession.old_subject_digest !== supplemental.old_subject_digest
-      ) {
-        return fail(createProjectError("STATE_INVALID", {
-          phase_instance: call.input.phase_instance,
-          issue_code: "gate-supersession-caller-binding-invalid",
-        }));
-      }
-      return fail(createProjectError("GATE_SUPERSEDED", {
-        gate_id: outcome.value.record.value.gate_id,
-        old_subject_digest: outcome.value.record.value.supersession.old_subject_digest,
-        new_subject_digest: supplemental.new_subject_digest,
-      }));
-    }
     if (!("record" in outcome.value) || outcome.value.record.value.outcome !== "decided") {
       return fail(createProjectError("STATE_INVALID", {
         phase_instance: call.input.phase_instance,

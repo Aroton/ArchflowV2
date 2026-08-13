@@ -7,15 +7,10 @@ export const GATE_POLL_INTERVAL_MS = 500;
 
 export type GateWaitOutcome =
   | Readonly<{ kind: "interface" }>
-  | Readonly<{ kind: "supplemental" }>
   | Readonly<{ kind: "aborted" }>;
 
 export type GateWaitInput = Readonly<{
   decision_path: ResolvedWorkspacePath;
-  supplemental?: Readonly<{
-    path: ResolvedWorkspacePath;
-    already_recorded: boolean;
-  }>;
   signal: AbortSignal;
 }>;
 
@@ -56,20 +51,8 @@ export async function waitForGateInterface(input: GateWaitInput): Promise<GateWa
   if (input.decision_path.path_class !== "workspace-gate-interface") {
     throw new TypeError("gate wait decision path must be a gate-interface");
   }
-  if (input.supplemental !== undefined && input.supplemental.path.path_class !== "workspace-review") {
-    throw new TypeError("gate wait supplemental path must be a review");
-  }
-
   for (;;) {
     if (input.signal.aborted) return Object.freeze({ kind: "aborted" });
-    if (input.supplemental !== undefined) {
-      const complete = await isCompleteRegularProjection(input.supplemental.path);
-      if (complete && !input.supplemental.already_recorded) {
-        // Markdown is deliberately only a wake-up signal. The gate service resolves
-        // authenticated canonical evidence before using or reporting its digest.
-        return Object.freeze({ kind: "supplemental" });
-      }
-    }
     if (await isCompleteRegularProjection(input.decision_path)) {
       return Object.freeze({ kind: "interface" });
     }

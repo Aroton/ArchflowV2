@@ -129,4 +129,59 @@ describe("task state contract", () => {
       open_gate: { ...(state.open_gate as Record<string, unknown>), waiver_origin_gate_id: "gate-origin" },
     }), JSON.stringify(validator.validate.errors)).toBe(true);
   });
+
+  it("validates pending and completed human revision authority", async () => {
+    const state = await validState();
+    const evidence = (state.authoritative_results as Record<string, unknown>[]).filter((entry) =>
+      entry.phase_instance === "phase-impl-1" && entry.step !== "produce");
+    const pending = {
+      gate_id: "gate-human-revision",
+      gate_kind: "constitution-review",
+      predecessor_subject_digest: "1".repeat(64),
+      predecessor_input_fingerprint: "4".repeat(64),
+      requested_at_revision: 7,
+      attempt: 2,
+      evidence,
+    };
+    const pendingResult = taskStateV1Schema.safeParse({
+      ...state,
+      step: "produce",
+      status: "running",
+      attempt: 2,
+      open_gate: undefined,
+      pending_human_revision: pending,
+    });
+    expect(pendingResult.success, pendingResult.success ? undefined : JSON.stringify(pendingResult.error.issues)).toBe(true);
+    const history = [{
+      phase_instance: "phase-impl-1",
+      gate_id: pending.gate_id,
+      gate_kind: pending.gate_kind,
+      predecessor_subject_digest: pending.predecessor_subject_digest,
+      predecessor_input_fingerprint: pending.predecessor_input_fingerprint,
+      resulting_subject_digest: "2".repeat(64),
+      resulting_result_digest: "3".repeat(64),
+      classification: "significant",
+      rationale: "The human changed behavior and verification.",
+      user_override: {
+        agent_classification: "simple",
+        rationale: "The human requested a full fresh review.",
+      },
+      previous_attempt: 3,
+      resulting_attempt: 1,
+      evidence,
+    }];
+    const historyResult = taskStateV1Schema.safeParse({ ...state, human_revision_history: history });
+    expect(historyResult.success, historyResult.success ? undefined : JSON.stringify(historyResult.error.issues)).toBe(true);
+    expect(taskStateV1Schema.safeParse({
+      ...state,
+      human_revision_history: [{ ...history[0], resulting_attempt: 2 }],
+    }).success).toBe(false);
+    expect(taskStateV1Schema.safeParse({
+      ...state,
+      human_revision_history: [{
+        ...history[0], classification: "simple", resulting_attempt: 3,
+        user_override: { agent_classification: "simple", rationale: "Not an override." },
+      }],
+    }).success).toBe(false);
+  });
 });

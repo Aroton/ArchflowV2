@@ -21,11 +21,6 @@
       }
     ]
   },
-  "supersedes": {
-    "superseded_gate_id": "gate-0",
-    "accepted_triage_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-    "old_subject_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-  },
   "kind": "constitution-review",
   "context": {
     "constitution": "pass",
@@ -86,27 +81,5 @@
       "reason",
       "human_provenance"
     ]
-  },
-  "supplemental": [
-    {
-      "action": "ingest",
-      "reason": "Human requested a supplemental gate counter-review",
-      "review": {
-        "prior_gate_id": "gate-0",
-        "task_id": "task-1",
-        "phase_instance": "phase-impl-2",
-        "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "input_fingerprint": "6666666666666666666666666666666666666666666666666666666666666666",
-        "evidence_slot": {
-          "role": "gate-counter-review",
-          "evidence_digest": "7777777777777777777777777777777777777777777777777777777777777777",
-          "assurance": "server-attested",
-          "producer_family": "claude",
-          "reviewer_family": "codex",
-          "independence": "opposite-family",
-          "gate_id": "gate-0"
-        }
-      }
-    }
-  ]
+  }
 }

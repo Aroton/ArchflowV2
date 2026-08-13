@@ -102,9 +102,6 @@ export async function handleWaiver(
       kind: "constitution-review",
       context: waiverContext,
       waiver_origin_gate_id: call.input.origin.origin_gate_id,
-      ...(call.input.supplemental_outcome === undefined ? {} : {
-        supplemental_outcome: call.input.supplemental_outcome,
-      }),
       signal: context.signal,
     });
     if (!resolved.ok) return resolved;

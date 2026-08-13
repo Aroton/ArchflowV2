@@ -37,6 +37,7 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
           status: call.input.status,
           artifact_kind: call.input.artifact.artifact_kind,
           artifact_digest: canonicalJsonDigest(call.input.artifact),
+          ...(call.input.human_revision === undefined ? {} : { human_revision: call.input.human_revision }),
         },
       };
     case "archflow_counter_review":
@@ -47,7 +48,6 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
         summary: call.input.summary,
         subject_digest: call.input.subject_digest,
         current_evidence: call.input.current_evidence,
-        ...(call.input.supersedes === undefined ? {} : { supersedes: call.input.supersedes }),
         kind: call.input.kind,
         context: call.input.context,
       };

@@ -498,7 +498,7 @@ async function implementationMechanicalEvidence(
  * rationales, and revision intents come from retained triage. Disposition strings render as-is so
  * a grown vocabulary never breaks assembly. A referenced-but-unloadable manifest fails closed;
  * a disposition whose finding is not in retained counter-review evidence (for example a
- * supplemental gate finding) renders without the unresolvable fields rather than inventing them.
+ * finding from an older evidence shape) renders without unresolvable fields rather than inventing them.
  */
 export async function priorTriageEvidence(
   dependencies: Pick<TransactionDependencies, "load_retained_result">,

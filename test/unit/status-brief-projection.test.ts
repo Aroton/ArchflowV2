@@ -70,17 +70,17 @@ describe("projectBriefStatus", () => {
     expect(JSON.stringify(brief)).not.toContain("Verbose rubric text");
     expect(brief.next_action.code).toBe("resolve-open-gate");
     expect(brief.next_action).toMatchObject({
-      gate_id: "gate-1",
       gate_kind: "artifact-approval",
       human_required: true,
     });
+    expect(brief.next_action).not.toHaveProperty("gate_id");
     expect(brief.next_action).not.toHaveProperty("request");
     expect(brief.next_action).not.toHaveProperty("guidance");
     expect(JSON.stringify(brief)).not.toContain("placeholder request body");
     expect(JSON.stringify(brief)).not.toContain("Verbose generated guidance");
   });
 
-  it("names an open gate's kind and decision templates without their bodies", () => {
+  it("projects only an open gate's conversational presentation", () => {
     const brief = projectBriefStatus(fullStatus({
       open_gate_id: "gate-1",
       open_gate: {
@@ -89,7 +89,6 @@ describe("projectBriefStatus", () => {
         decision_path: ".archflow/runtime/tasks/brief-task/cache/gates/gate.decision",
         archive_decision_path: ".archflow/tasks/brief-task/authority/decisions/gate-1/decision.json",
         request_path: ".archflow/tasks/brief-task/authority/decisions/gate-1/request.json",
-        gate_counter_review_path: ".archflow/runtime/tasks/brief-task/cache/reviews/prd.gate-counter.gate-1.md",
         decision_templates: [
           { decision: "approve", reason: "placeholder body" },
           { decision: "revise", reason: "placeholder body" },
@@ -98,20 +97,33 @@ describe("projectBriefStatus", () => {
           { granted: true, notes: "placeholder body" },
           { granted: false, notes: "placeholder body" },
         ],
-        counter_review_prompt: "A three-kilobyte rendered prompt that must never appear in brief output.",
-        supplemental_outcomes: [],
+        presentation: {
+          title: "Review the finished work",
+          summary: "The implementation is ready for your review.",
+          question: "Does this work meet your expectations? Choose an option and briefly explain why.",
+          options: [
+            { token: "approve", label: "Approve and continue", consequence: "Continue the workflow." },
+            { token: "request-changes", label: "Request changes", consequence: "Return the work for revision." },
+          ],
+        },
       },
     }));
     expect(brief.open_gate).toEqual({
-      gate_id: "gate-1",
-      kind: "artifact-approval",
-      decision_template_names: ["approve", "revise", "waiver-requested", "cancel", "waiver-grant", "waiver-deny"],
+      title: "Review the finished work",
+      summary: "The implementation is ready for your review.",
+      question: "Does this work meet your expectations? Choose an option and briefly explain why.",
+      options: [
+        { token: "approve", label: "Approve and continue", consequence: "Continue the workflow." },
+        { token: "request-changes", label: "Request changes", consequence: "Return the work for revision." },
+      ],
     });
-    expect(brief.open_gate_id).toBe("gate-1");
+    expect(brief).not.toHaveProperty("open_gate_id");
+    expect(brief.next_action).not.toHaveProperty("gate_id");
     const serialized = JSON.stringify(brief);
     expect(serialized).not.toContain("counter_review_prompt");
     expect(serialized).not.toContain("rendered prompt");
     expect(serialized).not.toContain("placeholder body");
+    expect(serialized).not.toContain("gate-1");
   });
 
   it("keeps reconciliation findings as kinds and paths only, and drops the empty case", () => {

@@ -255,6 +255,7 @@ describe("durable gate decisions", () => {
       runner: runnerResult.value, environment: git.value, atomic: createAtomicWriter(), lock: createTaskLock(),
       read_state: readTaskState, read_config: readTaskConfig, read_receipt: readIntentReceipt,
       resolve_input_fingerprint: async () => ({ schema_version: "1" as const, ok: true as const, value: {} as InputFingerprintSubject }),
+      resolve_gate_reentry_fingerprint: async () => ({ schema_version: "1" as const, ok: true as const, value: inputFingerprint }),
       load_retained_result: async () => ({ schema_version: "1" as const, ok: true as const, value: retained as never }),
     };
     const resultReference = (resultId: string, phaseInstance: TaskStateV1["phase_instance"], artifactDigest: ReturnType<typeof D>) => ({
@@ -328,15 +329,15 @@ describe("durable gate decisions", () => {
         const archive = join(taskRoot, "authority", "decisions", gate, "decision.json");
         expect(existsSync(archive)).toBe(false);
         // The rejected approval remains a correctable human interface, not a server-owned archive
-        // that requires manual deletion. Exercise the ordinary revise escape path on the same gate.
+        // that requires manual deletion. Exercise the ordinary reject escape path on the same gate.
         writeFileSync(join(gateWorkspace, "gate.decision"), canonicalDocument({
           schema_version: "1", gate_id: gate, task_id: "task-1", phase_instance: current.phase_instance,
           kind, subject_digest: subjectDigest, context_digest: contextDigest, human_provenance: {
             ...provenance, decision_event_id: `decision-${sequence}-revised`, helper_invocation_id: `helper-${sequence}-revised`,
-          }, payload: { decision: "revise", reason: "Correct the malformed phase plan" },
+          }, payload: { decision: "reject", reason: "Reject the malformed phase plan" },
         }).bytes);
         const recovered = await runDurableGate(dependencies, { ...base, signal: new AbortController().signal });
-        expect(recovered).toMatchObject({ ok: true, value: { effect: "retry", replayed: false } });
+        expect(recovered, JSON.stringify(recovered)).toMatchObject({ ok: true, value: { effect: "non-advancing", replayed: false } });
         if (!recovered.ok || !("state" in recovered.value)) throw new Error("corrected gate did not resolve");
         current = recovered.value.state.value;
         expect(existsSync(archive)).toBe(true);

@@ -197,7 +197,7 @@ describe("computeTaskStatus", () => {
         { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       ] },
       kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"],
-      opened_at_revision: 4, status: "awaiting-human", supplemental: [],
+      opened_at_revision: 4, status: "awaiting-human",
       decision_template: {
         schema_version: "1", gate_id: "gate-status", task_id: TASK, phase_instance: PHASE,
         kind: "artifact-approval", subject_digest: D("8"), context_digest: computeGateContextDigest("artifact-approval", context),
@@ -238,7 +238,7 @@ describe("computeTaskStatus", () => {
     if (gateBlocked.ok) expect(gateBlocked.value).not.toHaveProperty("open_gate");
   });
 
-  it("reports a superseding gate with its complete human-resolution interface", async () => {
+  it("reports an open gate with its conversational human-resolution interface", async () => {
     const h = await harness();
     const context = { artifact_kind: "phase-implementation" } as const;
     const active = parseActiveGate({
@@ -248,16 +248,15 @@ describe("computeTaskStatus", () => {
       current_evidence: { set_digest: D("9"), slots: [
         { role: "counter-review", evidence_digest: D("b"), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
       ] },
-      supersedes: { superseded_gate_id: "gate-original", accepted_triage_digest: D("d"), old_subject_digest: D("e") },
       kind: "artifact-approval", context, allowed_decisions: ["approve", "revise", "reject", "cancel"],
-      opened_at_revision: 4, status: "awaiting-human", supplemental: [],
+      opened_at_revision: 4, status: "awaiting-human",
       decision_template: {
         schema_version: "1", gate_id: "gate-superseding", task_id: TASK, phase_instance: PHASE,
         kind: "artifact-approval", subject_digest: D("8"), context_digest: computeGateContextDigest("artifact-approval", context),
         required_fields: ["payload", "human_provenance"], cancellation_fields: ["cancelled", "reason", "human_provenance"],
       },
     });
-    const { status: _status, supplemental: _supplemental, decision_template: _template, ...requestFields } = active;
+    const { status: _status, decision_template: _template, ...requestFields } = active;
     const request = parseGateRequest(requestFields);
     writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state({
       open_gate: {
@@ -287,13 +286,14 @@ describe("computeTaskStatus", () => {
         next_action: { code: "resolve-open-gate", gate_id: active.gate_id, human_required: true },
       },
     });
-    if (!status.ok || status.value.open_gate === undefined) throw new Error("superseding gate status unavailable");
+    if (!status.ok || status.value.open_gate === undefined) throw new Error("gate status unavailable");
     expect(status.value.blocking_reasons).not.toContain("active-gate-mismatch");
     expect(status.value.open_gate.decision_templates.length).toBeGreaterThan(1);
-    expect(status.value.open_gate.gate_counter_review_path).toContain(active.gate_id);
-    expect(status.value.open_gate.counter_review_prompt).toContain("Perform an optional independent counter-review");
-    expect(status.value.open_gate.counter_review_prompt).toContain(active.gate_id);
-    expect(status.value.open_gate.counter_review_prompt).toContain(active.request_digest);
+    expect(status.value.open_gate.presentation).toMatchObject({
+      summary: "Approve revised implementation",
+      question: expect.any(String),
+      options: expect.arrayContaining([expect.objectContaining({ label: "Approve and continue" })]),
+    });
 
     rmSync(activePath);
     const reconstructed = await computeTaskStatus(h.services.dependencies, h.services.authority);

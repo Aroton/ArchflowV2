@@ -5,7 +5,6 @@ import { createProjectError } from "../../src/contracts/errors.js";
 import { parsePathSafeId, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { bindParsedToolCallRequest, correlateProjectResult, createInternalResultExpectation, parseToolCall, TOOL_DEFINITIONS, validateProjectFailureStructure, validateProjectResultStructure, type CommonToolInput, type CounterReviewInput, type GateInput, type ResultIdentityPayload, type StateInput, type WaiverDecisionBinding, type WaiverInput } from "../../src/contracts/mcp-tools.js";
 import type { GateDecisionEnvelopeBase } from "../../src/contracts/gates.js";
-import type { GateSupersessionRef, SupplementalGateRef } from "../../src/contracts/supplemental.js";
 import type { PathSafeId, TaskSlug } from "../../src/contracts/evidence.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { TOOL_NAMES } from "../../src/contracts/tool-names.js";
@@ -78,6 +77,47 @@ describe("correlated MCP tool contracts", () => {
     expect(triage.input.artifact?.artifact_kind).toBe("triage");
     expect(() => parseToolCall("archflow_state", { ...stateInput, artifact: null })).toThrow();
     expect(() => parseToolCall("archflow_state", { ...stateInput, artifact: { ...taskInitialization, artifact_kind: "unknown" } })).toThrow();
+  });
+  it("accepts a bounded human-revision classification only on a succeeded produce result", () => {
+    const simple = parseToolCall("archflow_state", {
+      ...stateInput,
+      human_revision: { classification: "simple", rationale: "Only explanatory wording changed." },
+    });
+    expect(simple.input.human_revision).toEqual({
+      classification: "simple",
+      rationale: "Only explanatory wording changed.",
+    });
+    const overridden = parseToolCall("archflow_state", {
+      ...stateInput,
+      human_revision: {
+        classification: "significant",
+        rationale: "The behavior and verification changed.",
+        user_override: { agent_classification: "simple", rationale: "I want a full fresh review." },
+      },
+    });
+    expect(overridden.input.human_revision?.user_override?.agent_classification).toBe("simple");
+    const overriddenSimple = parseToolCall("archflow_state", {
+      ...stateInput,
+      human_revision: {
+        classification: "simple",
+        rationale: "The user confirmed the change is wording-only.",
+        user_override: { agent_classification: "significant", rationale: "Preserve the current review." },
+      },
+    });
+    expect(overriddenSimple.input.human_revision?.user_override?.agent_classification).toBe("significant");
+    expect(() => parseToolCall("archflow_state", {
+      ...stateInput,
+      status: "running",
+      human_revision: { classification: "simple", rationale: "Too early." },
+    })).toThrow();
+    expect(() => parseToolCall("archflow_state", {
+      ...stateInput,
+      human_revision: {
+        classification: "simple",
+        rationale: "No actual override.",
+        user_override: { agent_classification: "simple", rationale: "Same value." },
+      },
+    })).toThrow();
   });
   it("checks direct state request/result equalities", () => {
     const call = bindParsedToolCallRequest(parseToolCall("archflow_state", stateInput), parseSha256Digest("b".repeat(64)));
@@ -182,11 +222,10 @@ describe("correlated MCP tool contracts", () => {
   it("uses the authoritative exact current-evidence tuple parser for gates", () => {
     const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
     const gateCounter = { role: "gate-counter-review", evidence_digest: "1".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-1" };
-    const base = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: digest, current_evidence: { set_digest: "3".repeat(64), slots: [counter, gateCounter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } };
+    const base = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, phase_instance: "phase-impl-2", summary: "Review", subject_digest: digest, current_evidence: { set_digest: "3".repeat(64), slots: [counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } };
     expect(parseToolCall("archflow_gate", base).input.task_id).toBe("task-1");
-    expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [gateCounter, counter] } })).toThrow();
-    expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [counter, { ...gateCounter, evidence_digest: counter.evidence_digest }] } })).toThrow();
-    expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [counter, { ...gateCounter, reviewer_family: "claude" }] } })).toThrow();
+    expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [counter, gateCounter] } })).toThrow();
+    expect(() => parseToolCall("archflow_gate", { ...base, current_evidence: { ...base.current_evidence, slots: [gateCounter] } })).toThrow();
   });
 
   it("revalidates gate success decisions against the authentic call context", () => {
@@ -288,9 +327,7 @@ describe("correlated MCP tool contracts", () => {
     const input = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: digest, origin, rationale: "Needed" };
     expect(() => parseToolCall("archflow_waiver", { ...input, task_id: "other" })).toThrow(/task_id/);
     const call = parseToolCall("archflow_waiver", input);
-    const supplemental = { action: "decline", gate: { prior_gate_id: "gate-2", task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), input_fingerprint: digest }, reason: "Proceed without optional review" } as const;
-    expect(parseToolCall("archflow_waiver", { ...input, supplemental_outcome: supplemental }).input.supplemental_outcome).toEqual(supplemental);
-    expect(() => parseToolCall("archflow_waiver", { ...input, supplemental_outcome: { ...supplemental, action: "unknown" } })).toThrow();
+    expect(() => parseToolCall("archflow_waiver", { ...input, obsolete_extra: {} })).toThrow();
     const success = { origin_gate_id: "gate-1", waiver_gate_id: "gate-2", task_id: "task-1", rule_id: "Rule:1", rule_version: 1, subject_digest: "3".repeat(64), current_evidence_set_digest: "4".repeat(64), scope: origin.scope, human_provenance: { schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local", decision_event_id: "Decision:1", helper_invocation_id: "Helper:1", recorded_at: "2026-07-27T12:00:00.000Z" }, granted: false, notes: "Denied", revision: 1 };
     expect(validateProjectResultStructure(call, { schema_version: "1", ok: true, value: success }).ok).toBe(true);
     expect(() => validateProjectResultStructure(call, { schema_version: "1", ok: true, value: { ...success, human_provenance: { ...success.human_provenance, recorded_at: "2026-07-27T12:00:00Z" } } })).toThrow();
@@ -360,15 +397,9 @@ describe("retightened boundary identifiers", () => {
     const envelopeGate: GateDecisionEnvelopeBase["gate_id"] = "gate-1";
     // @ts-expect-error a plain string is not a validated task slug
     const envelopeTask: GateDecisionEnvelopeBase["task_id"] = "task-1";
-    // @ts-expect-error a plain string is not a validated path-safe identifier
-    const supersededGate: GateSupersessionRef["superseded_gate_id"] = "gate-1";
-    // @ts-expect-error a plain string is not a validated path-safe identifier
-    const priorGate: SupplementalGateRef["prior_gate_id"] = "gate-1";
-    // @ts-expect-error a plain string is not a validated task slug
-    const supplementalTask: SupplementalGateRef["task_id"] = "task-1";
     // rule_id is deliberately unchanged: it is not a path segment and keeps the broad grammar.
     const ruleId: WaiverDecisionBinding["rule_id"] = "Rule:1";
 
-    expect([commonTask, commonIntent, stateTask, counterTask, gateTask, waiverTask, identityTask, identityIntent, bindingOrigin, bindingWaiver, bindingTask, envelopeGate, envelopeTask, supersededGate, priorGate, supplementalTask, ruleId]).toHaveLength(17);
+    expect([commonTask, commonIntent, stateTask, counterTask, gateTask, waiverTask, identityTask, identityIntent, bindingOrigin, bindingWaiver, bindingTask, envelopeGate, envelopeTask, ruleId]).toHaveLength(14);
   });
 });

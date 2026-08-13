@@ -93,8 +93,7 @@ function phaseForLegacyDestination(
     if (!Number.isSafeInteger(phase)) return undefined;
     return `${document[2] === "design" ? "phase-design" : "phase-impl"}-${phase}` as PhaseInstanceId;
   }
-  const review = /^reviews\/(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)\.(?:self|counter|triage|adjudication)\.md$/u.exec(relativePath) ??
-    /^reviews\/(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)\.gate-counter\.[a-z0-9][a-z0-9-]*\.md$/u.exec(relativePath);
+  const review = /^reviews\/(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)\.(?:self|counter|triage|adjudication)\.md$/u.exec(relativePath);
   if (review === null) return undefined;
   try {
     decodePhaseInstance(review[1]);

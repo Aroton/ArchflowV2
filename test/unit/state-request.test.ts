@@ -83,7 +83,6 @@ function selectorFixtures(): readonly SelectorFixture[] {
     { call: parseToolCall("archflow_state", raw.archflow_state), operation: "record-state-boundary", operation_fields: { phase_instance: phase, step: "produce", status: "succeeded" } },
     { call: parseToolCall("archflow_counter_review", raw.archflow_counter_review), operation: "counter-review", operation_fields: { artifact_path: "phases/9/result.md" } },
     { call: parseToolCall("archflow_gate", raw.archflow_gate), operation: "gate", operation_fields: { phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } } },
-    { call: parseToolCall("archflow_gate", { ...raw.archflow_gate, supersedes: { superseded_gate_id: "gate-0", accepted_triage_digest: "9".repeat(64), old_subject_digest: "a".repeat(64) } }), operation: "gate", operation_fields: { phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, supersedes: { superseded_gate_id: "gate-0", accepted_triage_digest: "9".repeat(64), old_subject_digest: "a".repeat(64) }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } } },
     { call: parseToolCall("archflow_waiver", raw.archflow_waiver), operation: "waiver", operation_fields: { origin: waiverOrigin, rationale: "A bounded exception is required" } },
   ] as readonly SelectorFixture[];
 }
@@ -111,7 +110,7 @@ describe("internal transaction request identity", () => {
     expect(authority.config.path_class).toBe("task-config");
   });
 
-  it("selects every tool's exact operation literal and fields, including both gate shapes", () => {
+  it("selects every tool's exact operation literal and fields", () => {
     for (const fixture of selectorFixtures()) {
       const identified = identifyTransactionRequest(fixture.call, authority, fingerprint);
       const subject = {
@@ -127,21 +126,6 @@ describe("internal transaction request identity", () => {
       expect(identified.input_fingerprint).toBe(fingerprint);
       expect(identified.request_digest, fixture.call.name).toBe(computeRequestDigest(subject));
     }
-  });
-
-  it("keeps waiver supplemental retry metadata outside the stable request digest", () => {
-    const raw = rawInputs().archflow_waiver;
-    const gate = { prior_gate_id: "waiver-gate", task_id: taskId, phase_instance: phase, subject_digest: waiverOrigin.subject_digest, input_fingerprint: raw.input_fingerprint } as const;
-    const first = identifyTransactionRequest(parseToolCall("archflow_waiver", {
-      ...raw, supplemental_outcome: { action: "decline", gate, reason: "Declined optional review" },
-    }), authority, fingerprint);
-    const second = identifyTransactionRequest(parseToolCall("archflow_waiver", {
-      ...raw, supplemental_outcome: { action: "decline", gate, reason: "Declined after reconsideration" },
-    }), authority, fingerprint);
-    expect(second.request_digest).toBe(first.request_digest);
-    expect(first.request_digest).toBe(identifyTransactionRequest(
-      parseToolCall("archflow_waiver", raw), authority, fingerprint,
-    ).request_digest);
   });
 
   it("selects every artifact operation and binds the exact canonical artifact digest", () => {

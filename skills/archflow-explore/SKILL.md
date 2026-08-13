@@ -35,13 +35,15 @@ Exploration is bulk reading, and the reading belongs in sub-agent contexts, not 
 
 After the fan-out, write or update `docs/OVERVIEW.md` yourself as the synthesis pass: the system map, how the sections connect, and cross-links to every page.
 
+All correspondence with the user, especially review and commit gates, is conversational and human-readable. Lead with what changed, why it matters, and the decision needed. Do not dump IDs, digests, JSON, internal workflow paths, or protocol codes unless the user explicitly asks for diagnostics or audit detail.
+
 ## CLAUDE.md pointer
 
 The documentation set only stays current if the repository's instructions say so. Ensure the target repository's `CLAUDE.md` (or equivalent) lists the maintained pages and states the rule: *when a change alters behavior a caps-named page describes, update that page in the same change.* Draft the addition and present it at the review gate below — never edit `CLAUDE.md` without the user's approval.
 
 ## Review and commit
 
-Summarize the findings and present the written pages for review, together with any proposed `CLAUDE.md` addition. Stop. Apply requested changes and re-present until the user explicitly approves. Only then stage the documentation (and the approved `CLAUDE.md` edit) and commit with:
+Summarize the findings and present the written pages for review, together with any proposed `CLAUDE.md` addition. Ask plainly whether the user approves them or wants changes, then stop. Apply requested changes and re-present the meaningful differences until the user explicitly approves. Only then stage the documentation (and the approved `CLAUDE.md` edit) and commit with:
 
 ```text
 Archflow: Explore Codebase Docs

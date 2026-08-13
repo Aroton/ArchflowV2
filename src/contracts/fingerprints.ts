@@ -58,6 +58,7 @@ export type PinnedConstitutionFile = Readonly<{
 export type StateArtifactOperationFields = Pick<StateInput, "phase_instance" | "step" | "status"> & {
   readonly artifact_kind: NonNullable<StateInput["artifact"]>["artifact_kind"];
   readonly artifact_digest: Sha256Digest;
+  readonly human_revision?: NonNullable<StateInput["human_revision"]>;
 };
 
 export type RequestDigestSubject = RequestDigestCommon & ({
@@ -75,7 +76,7 @@ export type RequestDigestSubject = RequestDigestCommon & ({
 } | {
   readonly tool: "archflow_gate";
   readonly operation: "gate";
-  readonly operation_fields: Pick<GateInput, "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "supersedes" | "kind" | "context">;
+  readonly operation_fields: Pick<GateInput, "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "kind" | "context">;
 } | {
   readonly tool: "archflow_waiver";
   readonly operation: "waiver";
@@ -83,10 +84,10 @@ export type RequestDigestSubject = RequestDigestCommon & ({
 });
 
 type SelectorKeys = {
-  readonly archflow_state: "phase_instance" | "step" | "status" | "artifact";
+  readonly archflow_state: "phase_instance" | "step" | "status" | "artifact" | "human_revision";
   readonly archflow_counter_review: "artifact_path";
-  readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "supersedes" | "supplemental_outcome" | "kind" | "context";
-  readonly archflow_waiver: "origin" | "rationale" | "supplemental_outcome";
+  readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "kind" | "context";
+  readonly archflow_waiver: "origin" | "rationale";
 };
 type ExactSelectorCoverage = {
   readonly [K in ToolName]: Exclude<keyof ToolInput<K>, keyof CommonToolInput> extends SelectorKeys[K]
@@ -222,13 +223,16 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
       if (operationForKind[artifactFields.artifact_kind] !== subject.operation) {
         throw new TypeError("invalid archflow_state operation for artifact_kind");
       }
-      exactFields(artifactFields, ["phase_instance", "step", "status", "artifact_kind", "artifact_digest"]);
+      const expected = ["phase_instance", "step", "status", "artifact_kind", "artifact_digest"];
+      if (artifactFields.human_revision !== undefined) expected.push("human_revision");
+      exactFields(artifactFields, expected);
       return {
         phase_instance: artifactFields.phase_instance,
         step: artifactFields.step,
         status: artifactFields.status,
         artifact_kind: artifactFields.artifact_kind,
         artifact_digest: artifactFields.artifact_digest,
+        ...(artifactFields.human_revision === undefined ? {} : { human_revision: artifactFields.human_revision as unknown as PlainJsonValue }),
       };
     }
     case "archflow_counter_review": {
@@ -241,7 +245,6 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
       const fields = (subject as Extract<RequestDigestSubject, { tool: "archflow_gate" }>).operation_fields;
       if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
       const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context"];
-      if (fields.supersedes !== undefined) expected.push("supersedes");
       exactFields(fields, expected);
       const selected = {
         phase_instance: fields.phase_instance,
@@ -250,7 +253,6 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
         current_evidence: fields.current_evidence as unknown as PlainJsonValue,
         kind: fields.kind,
         context: fields.context as unknown as PlainJsonValue,
-        ...(fields.supersedes === undefined ? {} : { supersedes: fields.supersedes as unknown as PlainJsonValue }),
       } satisfies PlainJsonObject;
       return selected as PlainJsonObject;
     }

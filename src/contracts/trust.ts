@@ -3,8 +3,8 @@ import { z } from "zod";
 
 import type { AdjudicationEvidence, DegradedAdjudication, AgentDeclaredAdjudication, ServerAttestedAdjudication } from "./adjudication.js";
 import { adjudicationEvidenceSchema, parseAndDeriveAdjudication, parseReferencedAdjudicationEvidence } from "./adjudication.js";
-import type { PathSafeId, ReferencedEvidence, Sha256Digest, TaskSlug } from "./evidence.js";
-import { parseSha256Digest, pathSafeIdV1Schema, taskSlugV1Schema } from "./evidence.js";
+import type { ReferencedEvidence, Sha256Digest, TaskSlug } from "./evidence.js";
+import { parseSha256Digest, taskSlugV1Schema } from "./evidence.js";
 import {
   authenticAuthorityLink,
   authenticCurrentReviewSetAuthority,
@@ -33,7 +33,7 @@ export interface EvidenceValueByKindAndAssurance {
   readonly adjudication: { readonly "agent-declared": AgentDeclaredAdjudication; readonly "server-attested": ServerAttestedAdjudication; readonly degraded: DegradedAdjudication };
 }
 export interface EvidenceRoleByKind { readonly review: ReviewRole; readonly adjudication: "adjudication" }
-export interface ObservationRoleByKind { readonly review: "counter-review" | "gate-counter-review"; readonly adjudication: "adjudication" }
+export interface ObservationRoleByKind { readonly review: "counter-review"; readonly adjudication: "adjudication" }
 
 export interface ObservationBindingBase<K extends EvidenceKind> {
   readonly kind: K;
@@ -52,7 +52,7 @@ export interface ObservationBindingBase<K extends EvidenceKind> {
   readonly effort: (typeof EFFORT_VALUES)[number];
 }
 export interface ObservationBindingByKind {
-  readonly review: ObservationBindingBase<"review"> & ({ readonly role: "counter-review" } | { readonly role: "gate-counter-review"; readonly gate_id: PathSafeId }) & { readonly rubric_digest: Sha256Digest; readonly producer_family: ModelFamily };
+  readonly review: ObservationBindingBase<"review"> & { readonly role: "counter-review"; readonly rubric_digest: Sha256Digest; readonly producer_family: ModelFamily };
   readonly adjudication: ObservationBindingBase<"adjudication"> & { readonly pinned_constitution_digest: Sha256Digest; readonly approved_upstream_digests: readonly Sha256Digest[]; readonly source_evidence_set_digest: Sha256Digest };
 }
 export type ObservationCapability<K extends EvidenceKind> = { readonly kind: K; readonly [observationCapabilityBrand]: ObservationBindingByKind[K] };
@@ -123,15 +123,13 @@ export interface ServerAuthorityReferences { readonly kind: "server"; readonly i
 export interface AgentDeclaredAuthorityReferences { readonly kind: "agent-declared"; readonly result_id: string; readonly result_digest: Sha256Digest; readonly state_revision: number }
 export interface DegradedAuthorityReferences { readonly kind: "degraded"; readonly checkpoint_digest: Sha256Digest; readonly checkpoint_revision: number }
 export interface AuthorityReferencesByAssurance { readonly "agent-declared": AgentDeclaredAuthorityReferences; readonly "server-attested": ServerAuthorityReferences; readonly degraded: DegradedAuthorityReferences }
-export interface AuthorityLinkBase<K extends EvidenceKind, A extends Assurance> { readonly schema_version: "1"; readonly evidence_kind: K; readonly assurance: A; readonly role: EvidenceRoleByKind[K]; readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest; readonly evidence_digest: Sha256Digest; readonly gate_id?: PathSafeId; readonly authority: AuthorityReferencesByAssurance[A] }
+export interface AuthorityLinkBase<K extends EvidenceKind, A extends Assurance> { readonly schema_version: "1"; readonly evidence_kind: K; readonly assurance: A; readonly role: EvidenceRoleByKind[K]; readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest; readonly evidence_digest: Sha256Digest; readonly authority: AuthorityReferencesByAssurance[A] }
 export type AuthorityLinkData<K extends EvidenceKind = EvidenceKind, A extends Assurance = Assurance> = { readonly [P in K]: { readonly [Q in A]: AuthorityLinkBase<P, Q> }[A] }[K];
 export type AuthorityLink<K extends EvidenceKind = EvidenceKind, A extends Assurance = Assurance> = { readonly [P in K]: { readonly [Q in A]: AuthorityLinkBase<P, Q> & { readonly [authorityLinkBrand]: `${P}:${Q}` } }[A] }[K];
 export type VerifiedReferencedEvidence<K extends EvidenceKind = EvidenceKind, A extends Assurance = Assurance> = { readonly [P in K]: { readonly [Q in A]: ReferencedEvidence<EvidenceValueByKindAndAssurance[P][Q]> & { readonly [verifiedReferencedEvidenceBrand]: `${P}:${Q}` } }[A] }[K];
 
-export type ReviewEvidenceSlot =
-  | Readonly<{ role: "counter-review"; evidence_digest: Sha256Digest; assurance: "server-attested" | "degraded"; producer_family: ModelFamily; reviewer_family: ModelFamily; independence: "opposite-family" }>
-  | Readonly<{ role: "gate-counter-review"; evidence_digest: Sha256Digest; assurance: "server-attested" | "degraded"; producer_family: ModelFamily; reviewer_family: ModelFamily; independence: "opposite-family"; gate_id: PathSafeId }>;
-export type RequiredReviewSlots = readonly [Extract<ReviewEvidenceSlot, { role: "counter-review" }>] | readonly [Extract<ReviewEvidenceSlot, { role: "counter-review" }>, Extract<ReviewEvidenceSlot, { role: "gate-counter-review" }>];
+export type ReviewEvidenceSlot = Readonly<{ role: "counter-review"; evidence_digest: Sha256Digest; assurance: "server-attested" | "degraded"; producer_family: ModelFamily; reviewer_family: ModelFamily; independence: "opposite-family" }>;
+export type RequiredReviewSlots = readonly [ReviewEvidenceSlot];
 export interface CurrentReviewSetAuthority { readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly input_fingerprint: Sha256Digest; readonly slots: RequiredReviewSlots; readonly [currentReviewSetAuthorityBrand]: true }
 export type CurrentEvidenceSetRef = { readonly set_digest: Sha256Digest; readonly slots: RequiredReviewSlots };
 
@@ -144,19 +142,16 @@ const agentAuthoritySchema = z.object({ kind: z.literal("agent-declared"), resul
 const serverAuthoritySchema = z.object({ kind: z.literal("server"), invocation_id: idSchema, result_id: idSchema, receipt_id: idSchema, state_revision: safeInteger, envelope_input_digest: digestSchema, observed_output_digest: digestSchema, result_digest: digestSchema }).strict();
 const degradedAuthoritySchema = z.object({ kind: z.literal("degraded"), checkpoint_digest: digestSchema, checkpoint_revision: safeInteger }).strict();
 const authorityReferencesSchema = z.discriminatedUnion("kind", [agentAuthoritySchema, serverAuthoritySchema, degradedAuthoritySchema]);
-export const authorityLinkDataSchema = z.object({ schema_version: z.literal("1"), evidence_kind: z.enum(["review", "adjudication"]), assurance: z.enum(["agent-declared", "server-attested", "degraded"]), role: z.enum(["counter-review", "gate-counter-review", "adjudication"]), task_id: taskSlugV1Schema, phase_instance: phaseSchema, subject_digest: digestSchema, input_fingerprint: digestSchema, evidence_digest: digestSchema, gate_id: pathSafeIdV1Schema.optional(), authority: authorityReferencesSchema }).strict().superRefine((link, context) => {
+export const authorityLinkDataSchema = z.object({ schema_version: z.literal("1"), evidence_kind: z.enum(["review", "adjudication"]), assurance: z.enum(["agent-declared", "server-attested", "degraded"]), role: z.enum(["counter-review", "adjudication"]), task_id: taskSlugV1Schema, phase_instance: phaseSchema, subject_digest: digestSchema, input_fingerprint: digestSchema, evidence_digest: digestSchema, authority: authorityReferencesSchema }).strict().superRefine((link, context) => {
   if ((link.evidence_kind === "adjudication") !== (link.role === "adjudication")) context.addIssue({ code: "custom", path: ["role"], message: "role must match evidence kind" });
   const expectedAuthorityKind = link.assurance === "server-attested" ? "server" : link.assurance;
   if (link.authority.kind !== expectedAuthorityKind) context.addIssue({ code: "custom", path: ["authority", "kind"], message: "authority references must match assurance" });
-  if ((link.role === "gate-counter-review") !== (link.gate_id !== undefined)) context.addIssue({ code: "custom", path: ["gate_id"], message: "gate_id is required only for gate-counter-review authority" });
 });
 const slotBase = { evidence_digest: digestSchema, producer_family: familySchema, reviewer_family: familySchema };
 export const counterSlotSchema = z.object({ ...slotBase, role: z.literal("counter-review"), assurance: z.enum(["server-attested", "degraded"]), independence: z.literal("opposite-family") }).strict().superRefine((slot, context) => { if (slot.producer_family === slot.reviewer_family) context.addIssue({ code: "custom", message: "counter-review families must differ" }); });
-export const gateCounterSlotSchema = z.object({ ...slotBase, role: z.literal("gate-counter-review"), assurance: z.enum(["server-attested", "degraded"]), independence: z.literal("opposite-family"), gate_id: pathSafeIdV1Schema }).strict().superRefine((slot, context) => { if (slot.producer_family === slot.reviewer_family) context.addIssue({ code: "custom", message: "gate-counter-review families must differ" }); });
-/** The two slot layouts, named so `evidence-slots.schema.json` can register and emit each arm. */
+/** The one required opposite-family review slot. */
 export const counterOnlySlotsSchema = z.tuple([counterSlotSchema]);
-export const counterWithGateCounterSlotsSchema = z.tuple([counterSlotSchema, gateCounterSlotSchema]);
-export const requiredReviewSlotsSchema = z.union([counterOnlySlotsSchema, counterWithGateCounterSlotsSchema]).superRefine((slots, context) => {
+export const requiredReviewSlotsSchema = counterOnlySlotsSchema.superRefine((slots, context) => {
   try { validateSlots(slots); } catch (error) { context.addIssue({ code: "custom", message: error instanceof Error ? error.message : "invalid review slots" }); }
 });
 export const currentEvidenceSetRefSchema = z.object({ set_digest: digestSchema, slots: requiredReviewSlotsSchema }).strict();
@@ -199,7 +194,6 @@ function assertLinkMatches<K extends EvidenceKind, A extends Assurance>(kind: K,
   const phaseInstance = encodePhaseInstance(decodePhaseInstance(evidence.phase_instance));
   if (link.evidence_kind !== kind || link.assurance !== evidence.assurance || link.evidence_digest !== value.evidence_digest || link.task_id !== evidence.task_id || link.phase_instance !== phaseInstance || link.subject_digest !== evidence.subject_digest || link.input_fingerprint !== evidence.input_fingerprint) throw new TypeError("authority link does not match verified evidence");
   if (link.role !== (kind === "review" ? (evidence as ReviewEvidence).role : "adjudication")) throw new TypeError("authority role does not match evidence");
-  if ((link.role === "gate-counter-review") !== (link.gate_id !== undefined)) throw new TypeError("authority gate binding does not match role");
   if (evidence.assurance === "server-attested") {
     if (link.authority.kind !== "server"
       || link.authority.invocation_id !== evidence.invocation_id
@@ -211,7 +205,7 @@ function assertLinkMatches<K extends EvidenceKind, A extends Assurance>(kind: K,
   }
 }
 function validateSlots(slots: readonly ReviewEvidenceSlot[]): asserts slots is RequiredReviewSlots {
-  if ((slots.length !== 1 && slots.length !== 2) || slots[0]?.role !== "counter-review" || (slots.length === 2 && slots[1]?.role !== "gate-counter-review")) throw new TypeError("review slots must use canonical role order");
+  if (slots.length !== 1 || slots[0]?.role !== "counter-review") throw new TypeError("review slots must contain exactly the counter-review");
   for (const slot of slots) {
     if (slot.independence !== "opposite-family" || slot.producer_family === slot.reviewer_family) throw new TypeError("invalid opposite-family review slot");
   }
@@ -252,7 +246,7 @@ export const authorityQualifier: AuthorityQualifier = Object.freeze({
     if (reviews.length !== authority.slots.length) throw new TypeError("reviews must exactly cover required slots");
     authority.slots.forEach((slot, index) => {
       const review = reviews[index];
-      if (review === undefined || !authenticQualifiedEvidence(review, "review") || !authenticQualifiedEvidence(review, "review", review.evidence.assurance) || review.evidence_digest !== slot.evidence_digest || review.evidence.role !== slot.role || review.evidence.assurance !== slot.assurance || review.evidence.producer_family !== slot.producer_family || review.evidence.model_family !== slot.reviewer_family || review.authority.task_id !== authority.task_id || review.authority.phase_instance !== authority.phase_instance || review.authority.subject_digest !== authority.subject_digest || review.authority.input_fingerprint !== authority.input_fingerprint || (slot.role === "gate-counter-review" && review.authority.gate_id !== slot.gate_id)) throw new TypeError(`review does not match slot ${index}`);
+      if (review === undefined || !authenticQualifiedEvidence(review, "review") || !authenticQualifiedEvidence(review, "review", review.evidence.assurance) || review.evidence_digest !== slot.evidence_digest || review.evidence.role !== slot.role || review.evidence.assurance !== slot.assurance || review.evidence.producer_family !== slot.producer_family || review.evidence.model_family !== slot.reviewer_family || review.authority.task_id !== authority.task_id || review.authority.phase_instance !== authority.phase_instance || review.authority.subject_digest !== authority.subject_digest || review.authority.input_fingerprint !== authority.input_fingerprint) throw new TypeError(`review does not match slot ${index}`);
     });
     const current = Object.freeze({ task_id: authority.task_id, phase_instance: authority.phase_instance, subject_digest: authority.subject_digest, input_fingerprint: authority.input_fingerprint, current_evidence_set: currentEvidenceSetRef(authority.slots), reviews: Object.freeze([...reviews]) });
     registerCurrentReviewSet(current);

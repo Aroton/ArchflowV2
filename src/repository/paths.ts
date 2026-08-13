@@ -118,10 +118,6 @@ export function gateDecisionClaim(gateId: PathSafeId): TaskPathClaim {
   return parseTaskPathClaim(`authority/decisions/${gateId}/decision.json`);
 }
 
-export function gateSupplementalReviewClaim(gateId: PathSafeId): TaskPathClaim {
-  return parseTaskPathClaim(`authority/decisions/${gateId}/supplemental-review.json`);
-}
-
 export function initializationAuthorityClaim(): TaskPathClaim {
   return parseTaskPathClaim("authority/initialization.json");
 }
@@ -154,15 +150,6 @@ export function triageReviewClaim(phaseInstance: PhaseInstanceId): WorkspacePath
 
 export function adjudicationReviewClaim(phaseInstance: PhaseInstanceId): WorkspacePathClaim {
   return parseWorkspacePathClaim(`cache/reviews/${phaseInstance}.adjudication.md`);
-}
-
-export function gateCounterReviewClaim(
-  phaseInstance: PhaseInstanceId,
-  gateId: PathSafeId,
-): WorkspacePathClaim {
-  return parseWorkspacePathClaim(
-    `cache/reviews/${phaseInstance}.gate-counter.${gateId}.md`,
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +192,7 @@ const anchored = (body: string): RegExp => new RegExp(`^${body}$`, "u");
  * | `document`          | `prd.md` \| `design.md` \| `phases/<n>/design.md` \| `phases/<n>/impl-notes.md`             | positive phase number           |
  * | `authority-initialization` | `authority/initialization.json`                                                   | —                               |
  * | `authority-result`  | `authority/results/<result-digest>.json`                                                   | result digest                   |
- * | `authority-decision`| `authority/decisions/<gate-id>/{request,decision,supplemental-review}.json`                  | gate ID                         |
+ * | `authority-decision`| `authority/decisions/<gate-id>/{request,decision}.json`                                     | gate ID                         |
  */
 const TASK_CLASS_RULES: readonly ClassRule<TaskPathClass>[] = [
   { path_class: "task-config", pattern: anchored("config\\.yaml") },
@@ -228,7 +215,7 @@ const TASK_CLASS_RULES: readonly ClassRule<TaskPathClass>[] = [
   {
     path_class: "authority-decision",
     pattern: anchored(
-      `authority/decisions/${PATH_SAFE_ID}/(?:request|decision|supplemental-review)\\.json`,
+      `authority/decisions/${PATH_SAFE_ID}/(?:request|decision)\\.json`,
     ),
   },
 ];
@@ -255,8 +242,7 @@ const WORKSPACE_CLASS_RULES: readonly ClassRule<WorkspacePathClass>[] = [
   {
     path_class: "workspace-review",
     pattern: anchored(
-      `cache/reviews/${PHASE_INSTANCE}\\.(?:counter|triage|adjudication)\\.md` +
-        `|cache/reviews/${PHASE_INSTANCE}\\.gate-counter\\.${PATH_SAFE_ID}\\.md`,
+      `cache/reviews/${PHASE_INSTANCE}\\.(?:counter|triage|adjudication)\\.md`,
     ),
   },
   {

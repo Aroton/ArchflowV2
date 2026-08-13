@@ -17,7 +17,6 @@ import {
   authorityDecisionRequestClaim,
   authorityInitializationClaim,
   authorityResultClaim,
-  authoritySupplementalReviewClaim,
   parsePathClass,
 } from "../../src/contracts/path-claims.js";
 import stateFixture from "../fixtures/contracts/durable/task-state.valid.json" with { type: "json" };
@@ -31,7 +30,6 @@ describe("durable authority contracts", () => {
     expect(authorityResultClaim(digest)).toBe(`authority/results/${digest}.json`);
     expect(authorityDecisionRequestClaim(gate)).toBe("authority/decisions/gate-1/request.json");
     expect(authorityDecisionRecordClaim(gate)).toBe("authority/decisions/gate-1/decision.json");
-    expect(authoritySupplementalReviewClaim(gate)).toBe("authority/decisions/gate-1/supplemental-review.json");
   });
 
   it("does not expose ignored workspace categories as durable path classes", () => {

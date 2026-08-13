@@ -55,6 +55,12 @@ export type EvidenceSubject = Readonly<{
    * re-runs nothing; the gate summary discloses that the evidence evaluated the predecessor bytes.
    */
   editorial_predecessor?: EditorialPredecessorPair;
+  /**
+   * One-hop predecessor selected by durable revision authority. A simple human revision uses the
+   * same evidence-preservation rule for documents and implementation outputs; significant
+   * revisions never carry this pair.
+   */
+  review_predecessor?: EditorialPredecessorPair;
   approved_upstream_digests?: readonly Sha256Digest[];
   authenticated_gate_approvals?: readonly AuthenticatedGateApproval[];
   max_attempts?: number;
@@ -109,7 +115,7 @@ function boundToDeclaredPredecessor(
   bound: Readonly<{ subject_digest: Sha256Digest; input_fingerprint: Sha256Digest }>,
   subject: EvidenceSubject,
 ): boolean {
-  const predecessor = subject.editorial_predecessor;
+  const predecessor = subject.review_predecessor ?? subject.editorial_predecessor;
   return predecessor !== undefined &&
     bound.subject_digest === predecessor.subject_digest &&
     bound.input_fingerprint === predecessor.input_fingerprint;
@@ -153,9 +159,9 @@ function currentFor(
   if (step === "counter_review") return reviews !== undefined;
   const entry = retained.get(step);
   const evidence = entry === undefined ? undefined : evidencePayload(entry.manifest);
-  // Triage and constitution evidence may be bound to the declared editorial predecessor (one
-  // hop): the constitution review is dispatched with the counter-review, so both stay bound to
-  // the same bytes and an editorial revision re-runs neither.
+  // Triage and constitution evidence may be bound to the authenticated one-hop predecessor. The
+  // constitution review is dispatched with the counter-review, so an editorial or simple human
+  // revision re-runs neither; a significant revision supplies no predecessor and resets both.
   if (!subjectCurrent(evidence, subject, true) || reviews === undefined) return false;
   if (step === "triage") {
     const triage = evidence as TriageCandidate;

@@ -32,7 +32,7 @@ Agent-facing shapes existed as JSON Schema *and* a Zod mirror, with `assertZodAg
 
 ### 5. Four CLI commands overlap `build-request` — resolved 2026-08-11
 
-`task-init`, `build-document`, and `build-implementation-output` were each mostly subsumed by a `build-request` kind; their last remaining callers went away with the degraded-mode retirement (#1) and a phase-impl skill update, and all three are retired. `hash` stays — the gate-counter recipe's printed instructions still use it.
+`task-init`, `build-document`, and `build-implementation-output` were each mostly subsumed by a `build-request` kind; their last remaining callers went away with the degraded-mode retirement (#1) and a phase-impl skill update, and all three are retired. `hash` stays as a low-level diagnostic tool; the optional gate-counter recipe that once depended on it has been removed.
 
 ### 6. `fixed-point.ts` gate satisfaction — resolved 2026-08-11
 

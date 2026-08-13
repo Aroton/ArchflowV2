@@ -103,17 +103,6 @@ const gateInputEmission: GeneratedDefOverride = {
         summary: { $ref: "#/$defs/text" },
         subject_digest: { $ref: "#/$defs/digest" },
         current_evidence: { $ref: "#/$defs/currentEvidence" },
-        supersedes: {
-          type: "object",
-          additionalProperties: false,
-          required: ["superseded_gate_id", "accepted_triage_digest", "old_subject_digest"],
-          properties: {
-            superseded_gate_id: { $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId" },
-            accepted_triage_digest: { $ref: "#/$defs/digest" },
-            old_subject_digest: { $ref: "#/$defs/digest" },
-          },
-        },
-        supplemental_outcome: { $ref: "urn:archflow:schema:v1:supplemental-review" },
         kind: {
           enum: [
             "artifact-approval",

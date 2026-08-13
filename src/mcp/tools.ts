@@ -11,7 +11,6 @@ import primitivesSchema from "../contracts/schemas/v1/primitives.schema.json" wi
 import projectErrorSchema from "../contracts/schemas/v1/project-error.schema.json" with { type: "json" };
 import rubricSchema from "../contracts/schemas/v1/rubric.schema.json" with { type: "json" };
 import secretScanResultSchema from "../contracts/schemas/v1/secret-scan-result.schema.json" with { type: "json" };
-import supplementalReviewSchema from "../contracts/schemas/v1/supplemental-review.schema.json" with { type: "json" };
 import taskInitializationSchema from "../contracts/schemas/v1/task-initialization.schema.json" with { type: "json" };
 import taskStateSchema from "../contracts/schemas/v1/task-state.schema.json" with { type: "json" };
 import triageSchema from "../contracts/schemas/v1/triage.schema.json" with { type: "json" };
@@ -36,7 +35,6 @@ const schemaDocuments = Object.freeze([
   Object.freeze({ key: "rubric", id: "urn:archflow:schema:v1:rubric", schema: rubricSchema }),
   Object.freeze({ key: "gate-contract", id: "urn:archflow:schema:v1:gate-contract", schema: gateContractSchema }),
   Object.freeze({ key: "gate-decision", id: "urn:archflow:schema:v1:gate-decision", schema: gateDecisionSchema }),
-  Object.freeze({ key: "supplemental-review", id: "urn:archflow:schema:v1:supplemental-review", schema: supplementalReviewSchema }),
   Object.freeze({ key: "project-error", id: "urn:archflow:schema:v1:project-error", schema: projectErrorSchema }),
   Object.freeze({ key: "durable-primitives", id: "urn:archflow:schema:v1:durable-primitives", schema: durablePrimitivesSchema }),
   Object.freeze({ key: "task-state", id: "urn:archflow:schema:v1:task-state", schema: taskStateSchema }),

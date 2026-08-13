@@ -7,7 +7,6 @@ import {
   type ActiveGateV1,
   type GateDecisionRecordV1,
   type GateRequestV1,
-  type SupplementalLedger,
   type WaiverGateContext,
 } from "../contracts/durable-gate.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
@@ -24,8 +23,6 @@ import {
   type WaiverScope,
 } from "../contracts/gates.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
-import type { ReviewEvidence } from "../contracts/review.js";
-import type { GateSupersessionRef, SupplementalReviewOutcome } from "../contracts/supplemental.js";
 import {
   gateDecisionClaim,
   gateRequestClaim,
@@ -71,18 +68,6 @@ export type GateReentryFingerprintResolver = (
 export type GateLifecycleDependencies = Readonly<TransactionDependencies & {
   gate_secret_scanner?: SecretScanner;
   resolve_gate_reentry_fingerprint?: GateReentryFingerprintResolver;
-  resolve_supplemental_review?: (
-    input: Readonly<{
-      authority: TransactionAuthority;
-      request: GateRequestV1;
-      outcome?: Exclude<SupplementalReviewOutcome, { action: "decline" }>;
-    }>,
-  ) => Promise<ProjectResult<Readonly<{
-    evidence: ReviewEvidence;
-    gate_id: PathSafeId;
-    triage_digest?: Sha256Digest;
-    triage_outcome?: "no-change" | "accepted-change";
-  }>>>;
 }>;
 export type GateApprovalLoaderDependencies = Pick<
   GateLifecycleDependencies,
@@ -100,9 +85,7 @@ export type GateOpenInput = Readonly<{
   current_evidence: GateRequestV1["current_evidence"];
   kind: GateKind;
   context: GateRequestV1["context"];
-  supersedes?: GateSupersessionRef;
   waiver_origin_gate_id?: PathSafeId;
-  supplemental_outcome?: SupplementalReviewOutcome;
 }>;
 export type GateOpenResult = Readonly<{
   gate_id: PathSafeId;
@@ -181,10 +164,6 @@ export async function readCanonical<T extends PlainJsonValue>(
   }
 }
 
-export function supplementalGate(outcome: SupplementalReviewOutcome): Readonly<{ prior_gate_id: PathSafeId; task_id: GateRequestV1["task_id"]; phase_instance: string; subject_digest: Sha256Digest; input_fingerprint: Sha256Digest }> {
-  return (outcome.action === "decline" ? outcome.gate : outcome.review) as Readonly<{ prior_gate_id: PathSafeId; task_id: GateRequestV1["task_id"]; phase_instance: string; subject_digest: Sha256Digest; input_fingerprint: Sha256Digest }>;
-}
-
 export function stateWithOpen(state: TaskStateV1, request: Pick<GateRequestV1, "gate_id" | "kind" | "subject_digest" | "context_digest" | "context">): CanonicalDocument<TaskStateV1> {
   const { last_transition: _transition, open_gate: _open, ...base } = state;
   const revision = parseSafeInteger(state.revision + 1);
@@ -220,7 +199,6 @@ export function activeProjection(request: GateRequestV1): ActiveGateV1 {
         : ["granted", "scope", "origin", "notes", "human_provenance"],
       cancellation_fields: ["cancelled", "reason", "human_provenance"],
     },
-    supplemental: [],
   } as unknown as ActiveGateV1;
 }
 
@@ -259,22 +237,22 @@ type CancelInterface = Readonly<{
   context_digest: Sha256Digest; cancelled: true; reason: string; human_provenance: HumanDecisionProvenance;
 }>;
 
-export function parseInterface(value: unknown, request: GateRequestV1, supplemental: SupplementalLedger = []): GateDecisionRecordV1 {
+export function parseInterface(value: unknown, request: GateRequestV1): GateDecisionRecordV1 {
   assertPlainJson(value, "gate decision interface");
   if (value !== null && typeof value === "object" && "cancelled" in value) {
     const candidate = value as unknown as CancelInterface;
     if (candidate.cancelled !== true || candidate.gate_id !== request.gate_id || candidate.task_id !== request.task_id || candidate.phase_instance !== request.phase_instance || candidate.subject_digest !== request.subject_digest || candidate.context_digest !== request.context_digest) throw new TypeError("cancellation does not bind request");
-    return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, supplemental, outcome: "cancelled", reason: candidate.reason, human_provenance: candidate.human_provenance });
+    return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, outcome: "cancelled", reason: candidate.reason, human_provenance: candidate.human_provenance });
   }
   if (request.context !== null && typeof request.context === "object" && "origin" in request.context) {
     const candidate = value as unknown as WaiverInterface;
     const context = request.context as WaiverGateContext;
     if (candidate.gate_id !== request.gate_id || candidate.task_id !== request.task_id || candidate.phase_instance !== request.phase_instance || candidate.subject_digest !== request.subject_digest || candidate.context_digest !== request.context_digest || !isDeepStrictEqual(candidate.origin, context.origin) || !isDeepStrictEqual(candidate.scope, context.origin.scope)) throw new TypeError("waiver decision does not bind origin");
-    return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, supplemental, outcome: "waiver-decided", granted: candidate.granted, scope: candidate.scope, origin: candidate.origin, notes: candidate.notes, human_provenance: candidate.human_provenance });
+    return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, outcome: "waiver-decided", granted: candidate.granted, scope: candidate.scope, origin: candidate.origin, notes: candidate.notes, human_provenance: candidate.human_provenance });
   }
   const envelope = parseGateDecisionEnvelope(value);
   bindEnvelope(request, envelope);
-  return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, supplemental, outcome: "decided", envelope });
+  return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, outcome: "decided", envelope });
 }
 
 export async function stateOrFailure(

@@ -259,7 +259,7 @@ describe("priorTriageEvidence", () => {
           { review_evidence_digest: REVIEW_DIGEST, finding_id: "digest-drift", disposition: "accepted", rationale: "Real defect.", revision_intent: "Recompute after the slot check." },
           { review_evidence_digest: REVIEW_DIGEST, finding_id: "naming-nit", disposition: "rejected", rationale: "envelope-gap: name matches the convention.", evidence: "See CLAUDE.md." },
           { review_evidence_digest: REVIEW_DIGEST, finding_id: "style-note", disposition: "accepted-editorial", rationale: "Wording only." },
-          { review_evidence_digest: digest("9"), finding_id: "gate-extra", disposition: "rejected", rationale: "From a supplemental review." },
+          { review_evidence_digest: digest("9"), finding_id: "older-extra", disposition: "rejected", rationale: "From older review evidence." },
         ])),
         counter_review: installation(reviewManifest),
       }),
@@ -302,7 +302,7 @@ describe("priorTriageEvidence", () => {
         disposition: "accepted-editorial", rationale: "Wording only.",
       },
       // A finding outside the retained counter-review evidence renders without invented fields.
-      { finding_id: "gate-extra", disposition: "rejected", rationale: "From a supplemental review." },
+      { finding_id: "older-extra", disposition: "rejected", rationale: "From older review evidence." },
     ]);
   });
 

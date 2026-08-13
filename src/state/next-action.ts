@@ -20,7 +20,6 @@ export type NextActionCode =
   | "restore-pinned-config"
   | "open-gate"
   | "resolve-open-gate"
-  | "triage-supplemental-review"
   | "run-step"
   | "commit-phase"
   | "advance-phase"
@@ -72,7 +71,6 @@ export type NextActionInput = Readonly<{
   config_verified?: boolean;
   reconciliation_findings?: readonly ReconciliationFinding[];
   reconciliation_blocking_reasons?: readonly string[];
-  untriaged_supplemental_review?: boolean;
   assessment?: EvidenceAssessment;
   evidence_available?: boolean;
   subject_digest?: Sha256Digest;
@@ -188,15 +186,10 @@ export function deriveNextAction(input: NextActionInput): NextAction {
     );
   }
   if (state.open_gate !== undefined) {
-    return input.untriaged_supplemental_review === true
-      ? action("triage-supplemental-review", "Triage the retained supplemental gate review.", true, state, {
-          gate_id: state.open_gate.gate_id,
-          gate_kind: state.open_gate.gate_kind,
-        })
-      : action("resolve-open-gate", "Resolve the currently open human gate.", true, state, {
-          gate_id: state.open_gate.gate_id,
-          gate_kind: state.open_gate.gate_kind,
-        });
+    return action("resolve-open-gate", "Resolve the currently open human gate.", true, state, {
+      gate_id: state.open_gate.gate_id,
+      gate_kind: state.open_gate.gate_kind,
+    });
   }
   const currentProduce = state.authoritative_results.some((reference) =>
     reference.phase_instance === state.phase_instance && reference.step === "produce");

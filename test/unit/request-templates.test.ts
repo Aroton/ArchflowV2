@@ -216,7 +216,7 @@ describe("next-action request templates", () => {
   });
 
   it("emits nothing for actions that already have a surface or are pure human judgment", () => {
-    for (const code of ["resolve-open-gate", "triage-supplemental-review", "advance-phase", "commit-phase", "complete-task", "task-complete", "inspect-state"] as const) {
+    for (const code of ["resolve-open-gate", "advance-phase", "commit-phase", "complete-task", "task-complete", "inspect-state"] as const) {
       expect(buildNextActionRequest(action({ code }), { task_id: taskId, state: stateAt("prd") })).toBeUndefined();
     }
     expect(buildNextActionRequest(action({ code: "run-step", step: "produce" }), { task_id: taskId })).toBeUndefined();

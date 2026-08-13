@@ -128,16 +128,6 @@
     "runtime": false
   },
   {
-    "label": "runtime-only-current-evidence-duplicate-digest",
-    "tool": "archflow_gate",
-    "member": "input",
-    "classification": "runtime-semantic",
-    "semantic_category": "mcp-current-evidence",
-    "materialization": "current-evidence",
-    "portable": true,
-    "runtime": false
-  },
-  {
     "label": "runtime-only-constitution-rule-order",
     "tool": "archflow_gate",
     "member": "input",

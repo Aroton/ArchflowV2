@@ -5,7 +5,7 @@
  * Two of the step's invariants are deliberately **not** repeated here because they already have
  * dedicated owners: the `SCHEMA_IDS`/`SCHEMA_FILES` bijection, plus each `$id` compiling against all
  * others, is `test/contracts/schema-registry.test.ts`; the 52-project-code and 56-row error counts
- * are `test/unit/errors.test.ts` and `test/contracts/gate-error-supplemental-exhaustive.test.ts`.
+ * are `test/unit/errors.test.ts` and `test/contracts/gate-error-schema-agreement.test.ts`.
  */
 
 import { readFileSync, readdirSync } from "node:fs";

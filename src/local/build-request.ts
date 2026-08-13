@@ -45,6 +45,7 @@ const PAYLOAD_SHAPE =
   `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},` +
   '"step"?:<pipeline step for kind running>,' +
   '"document"?:{...},"implementation"?:{...},' +
+  '"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},' +
   '"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],' +
   '"summary"?:<gate summary text>}';
 
@@ -185,6 +186,16 @@ async function composeProduce(
         })) as unknown as PlainJsonValue;
   }
 
+  let humanRevision: PlainJsonValue | undefined;
+  if (state.pending_human_revision !== undefined) {
+    if (snapshot.human_revision === undefined) {
+      throw new TypeError("this produce result completes a human-requested revision; human_revision classification and rationale are required");
+    }
+    humanRevision = structuredClone(record(snapshot.human_revision, "build-request human revision")) as PlainJsonValue;
+  } else if (snapshot.human_revision !== undefined) {
+    throw new TypeError("human_revision is accepted only while durable state has a pending human-requested revision");
+  }
+
   return computeCallEnvelope(services, {
     tool: "archflow_state",
     input: {
@@ -193,6 +204,7 @@ async function composeProduce(
       step: "produce",
       status: "succeeded",
       artifact,
+      ...(humanRevision === undefined ? {} : { human_revision: humanRevision }),
     },
   });
 }

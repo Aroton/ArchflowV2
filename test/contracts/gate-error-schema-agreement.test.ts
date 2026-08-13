@@ -7,17 +7,14 @@ import projectErrorSchema from "../../src/contracts/schemas/v1/project-error.sch
 import protocolErrorSchema from "../../src/contracts/schemas/v1/protocol-error.schema.json" with { type: "json" };
 import primitivesSchema from "../../src/contracts/schemas/v1/primitives.schema.json" with { type: "json" };
 import pathClaimSchema from "../../src/contracts/schemas/v1/path-claim.schema.json" with { type: "json" };
-import supplementalSchema from "../../src/contracts/schemas/v1/supplemental-review.schema.json" with { type: "json" };
 import { createProjectError, createProtocolError, parseProjectError } from "../../src/contracts/errors.js";
 import { parseGateContract } from "../../src/contracts/gates.js";
-import { parseSupplementalReviewOutcome } from "../../src/contracts/supplemental.js";
 
 const D = "a".repeat(64);
 const gateValidator = createJsonSchemaValidator(gateContractSchema, [primitivesSchema, pathClaimSchema]);
 const decisionValidator = createJsonSchemaValidator(gateDecisionSchema, [primitivesSchema, pathClaimSchema, gateContractSchema]);
 const projectValidator = createJsonSchemaValidator(projectErrorSchema);
 const protocolValidator = createJsonSchemaValidator(protocolErrorSchema);
-const supplementalValidator = createJsonSchemaValidator(supplementalSchema, [primitivesSchema]);
 
 describe("gate and error JSON Schema authority", () => {
   it("accepts a correlated gate contract and rejects cross-kind/unknown fields", () => {
@@ -36,19 +33,6 @@ describe("gate and error JSON Schema authority", () => {
       { kind: "constitution-review", context: { constitution: "pass", failed_rules: [{ rule_id: "rule", rule_version: 1 }], uncertain_rules: [], matched_trigger_rules: [], uncertain_trigger_rules: [], eligible_waivers: [] }, payload: { decision: "approve", reason: "Handled" } }
     ];
     for (const value of invalid) { expect(gateValidator.validate(value)).toBe(true); expect(() => parseGateContract(value)).toThrow(); }
-  });
-
-  it("enforces supplemental gate and subject correlations in the Zod authority", () => {
-    const review = { prior_gate_id: "gate-1", task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: D, input_fingerprint: D, evidence_slot: { role: "gate-counter-review", evidence_digest: "b".repeat(64), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-1" } };
-    const valid = { action: "supersede", review, accepted_triage_digest: D, old_subject_digest: D, new_subject_digest: "c".repeat(64), reason: "Revise" };
-    expect(supplementalValidator.validate(valid)).toBe(true);
-    expect(parseSupplementalReviewOutcome(valid).action).toBe("supersede");
-    // Generation retired `x-archflow-supplemental-semantics`, so the compiled document accepts
-    // these correlation violations; `parseSupplementalReviewOutcome` is the surviving authority.
-    for (const value of [{ ...valid, review: { ...review, evidence_slot: { ...review.evidence_slot, gate_id: "gate-2" } } }, { ...valid, new_subject_digest: D }, { ...valid, old_subject_digest: "d".repeat(64) }]) {
-      expect(supplementalValidator.validate(value)).toBe(true);
-      expect(() => parseSupplementalReviewOutcome(value)).toThrow();
-    }
   });
 
   it("accepts a closed kind-correlated decision envelope", () => {

@@ -25,7 +25,6 @@ Durable state is ArchFlow's memory and authority, but not every file the workflo
       decisions/<gate-id>/
         request.json
         decision.json
-        supplemental-review.json
   runtime/tasks/<task>/
     transient/{intents/,.transaction-lock}
     cache/{results/,reviews/,gates/,phases/<n>/verification.txt,imports/}
@@ -40,7 +39,7 @@ Task isolation applies equally to both roots. A runtime path is resolved only be
 
 `state.json` holds identity, position, revision, pinned inputs, current authoritative results, approvals and waivers, at most one open gate, and `last_transition`. A result reference carries its digest, not a caller-authored manifest path; the manifest is derived as `authority/results/<result-digest>.json`.
 
-Only the current result for each `(phase_instance, step)` is retained. Once a state commit replaces it, cleanup removes the superseded manifest and cached payload unless a live durable decision still references that result. Review, triage, and adjudication Markdown are not permanent outputs: their structured evidence lives in the manifest and is rendered into ignored cache when a human or reviewer needs it. Gate requests, human decisions, and supplemental review become immutable authority below `authority/decisions/<gate-id>/` while referenced; the writable gate UI below `runtime/` is merely a reconstructible interface.
+Only the current result for each `(phase_instance, step)` is retained. Once a state commit replaces it, cleanup removes the superseded manifest and cached payload unless a live durable decision still references that result. Review, triage, and adjudication Markdown are not permanent outputs: their structured evidence lives in the manifest and is rendered into ignored cache when a human or reviewer needs it. Gate requests, human decisions, and any resulting human-revision reference become immutable authority below `authority/decisions/<gate-id>/` while referenced; the writable gate UI below `runtime/` is merely a reconstructible interface.
 
 The initialization digest is resolvable because the adopted artifact is written once to `authority/initialization.json`. Cleanup audit files, permanent review Markdown, and superseded manifests are neither authority nor supported compatibility inputs and are no longer created.
 
@@ -87,7 +86,9 @@ A cleanup failure never rolls back committed authority. Full status reports the 
 
 The pipeline remains `produce → counter_review → triage`; accepted findings return to produce, and successful triage advances only after required human gates. No code is written before phase-design approval, and no commit is made before a durable commit-authorization decision plus the separate explicit Git confirmation.
 
-Gate UI is disposable: it is reconstructed from the durable request, and resolution archives the human decision before deleting the UI. A missing or corrupt projection can remove convenience but cannot strand authenticated authority.
+Gate UI is disposable: it is reconstructed from the durable request, and resolution archives the human decision before deleting the UI. Its normal projection is conversational—title, summary, question, evidence, and labeled choices—while IDs, hashes, JSON, paths, and codes remain available only for diagnostics. A missing or corrupt projection can remove convenience but cannot strand authenticated authority.
+
+When a human asks for changes, durable state records the resulting classification and reason. A simple, meaning-preserving revision retains review evidence for one predecessor hop and keeps the attempt count, but never inherits approval. A significant revision archives the former evidence, resets the attempt count to 1, and makes fresh counter-review and constitution review the next automatic work. The human can override either classification; the recorded override, not the producer's initial suggestion, is authoritative.
 
 ArchFlow's durable files are committed only on the task's working branch for resumability and are removed before the final product PR. Git supplies transport and history, not a distributed lock. A fresh clone recovers the last committed durable boundary; moving uncommitted cache or implementation bytes between machines is outside that promise.
 

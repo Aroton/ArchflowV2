@@ -17,7 +17,7 @@ The canonical set contains eight portable skills:
 | `/archflow-explore` | Explore codebase, produce or refresh the maintained `docs/` documentation set |
 | `/archflow-prd <task>` | Research + create PRD for a task |
 | `/archflow-design <task>` | Design architecture + phases for a task |
-| `/archflow-phase-design <task> N` | Design phase N, sub-agent review, counter-review prompt |
+| `/archflow-phase-design <task> N` | Design phase N and run its automatic counter-review |
 | `/archflow-phase-impl <task> N` | Implement, verify, review, and commit phase N (fresh session) |
 | `/archflow-status [task]` | Check status and next action |
 
@@ -110,7 +110,8 @@ Hard rules — human trust boundaries, never soften:
 
 - Never commit or pass a review gate without explicit user approval.
 - Never write code before phase-design approval.
-- Every human review gate offers a ready-to-run counter-review prompt for the other client; whether to run it is the human's decision, never the agent's to skip offering or to fake.
+- The opposite-client counter-review runs automatically before a human gate. There is no optional review at the end of a gate. A significant human revision starts a fresh automatic review cycle; a simple wording or formatting revision may reuse the prior review for one hop but still requires approval of the final bytes.
+- All correspondence at a human gate is conversational and human-readable. Explain what needs attention, why it matters, and the available choices in plain language. Keep gate IDs, digests, JSON, internal paths, protocol codes, and other mechanical bindings out of the default response; show them only when the user explicitly asks for diagnostics or audit detail.
 - Phase state machine: no doc → DESIGNED → IN PROGRESS → COMPLETE.
 - Task isolation: tasks never read each other's files.
 - Parent docs (design.md, prd.md) are updated when implementation deviates — the plan must always reflect reality.

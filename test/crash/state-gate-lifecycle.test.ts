@@ -225,7 +225,7 @@ describe("gate process and SIGKILL boundaries", { timeout: 20_000 }, () => {
     ["reentry", "revise", 2],
     ["exhaustion", "retry-once", 3],
   ] as const)(
-    "resumes an already archived %s decision onto exactly one enacted retry",
+    "resumes an already archived %s decision onto exactly one enacted re-entry",
     async (kind, choice, attempt) => {
       const input = await fixture(`gate-crash-${kind}`);
       const before = await readTaskState(input.authority.state);
@@ -255,7 +255,7 @@ describe("gate process and SIGKILL boundaries", { timeout: 20_000 }, () => {
           value: {
             step: "produce",
             status: "running",
-            attempt: attempt + 1,
+            attempt: choice === "retry-once" ? attempt + 1 : attempt,
             input_fingerprint: D("e"),
           },
         },

@@ -19,14 +19,10 @@ import { phaseInstanceIdV1Schema, phaseInstanceV1Schema, positiveSafePhaseNumber
 import { rawReviewSchema, reviewDocumentDefs, reviewEvidenceSchema } from "../review.js";
 import { rubricV1Schema } from "../rubric.js";
 import { secretFindingV1Schema, secretScanResultV1Schema } from "../secret-scan.js";
-import { supplementalGateRefSchema, supplementalReviewOutcomeSchema, supplementalReviewRefSchema } from "../supplemental.js";
-import { supplementalReviewRecordV1Schema } from "../supplemental-record.js";
 import { triageCandidateSchema } from "../triage.js";
 import {
   counterOnlySlotsSchema,
   counterSlotSchema,
-  counterWithGateCounterSlotsSchema,
-  gateCounterSlotSchema,
   requiredReviewSlotsSchema,
 } from "../trust.js";
 import { SCHEMA_IDS } from "../versions.js";
@@ -59,7 +55,7 @@ const pinnedWorkflowPhases = {
 } as const;
 
 /**
- * Emitted verbatim for the two slot-tuple arms: Zod tuple emission drops the exact-length bounds
+ * Emitted verbatim because Zod tuple emission drops the exact-length bounds
  * (`minItems`/`maxItems`), and the gate documents that reference this schema still validate
  * through Ajv, so the bounds must stay in the published document.
  */
@@ -69,18 +65,11 @@ const counterOnlySlots = {
   minItems: 1,
   maxItems: 1,
 } as const;
-const counterWithGateCounterSlots = {
-  type: "array",
-  prefixItems: [{ $ref: "#/$defs/counter" }, { $ref: "#/$defs/gateCounter" }],
-  minItems: 2,
-  maxItems: 2,
-} as const;
-
 /**
  * Leaf shapes — the schemas with no durable-state, gate, error, or MCP-envelope role: primitives,
  * path-claim, evidence-slots, rubric, triage, config, workflow, constitution-rule, phase-instance,
- * review, review-evidence, adjudication, adjudication-evidence, secret-scan-result,
- * supplemental-review, supplemental-review-record, and result-expectation. Documents join this
+ * review, review-evidence, adjudication, adjudication-evidence, secret-scan-result, and
+ * result-expectation. Documents join this
  * list as their runtime authority flips from Ajv to their Zod source.
  */
 export const leafSchemaGroup: SchemaGenerationGroup = {
@@ -185,13 +174,10 @@ export const leafSchemaGroup: SchemaGenerationGroup = {
       root: requiredReviewSlotsSchema,
       defs: {
         counter: counterSlotSchema,
-        gateCounter: gateCounterSlotSchema,
         counterOnly: counterOnlySlotsSchema,
-        counterWithGateCounter: counterWithGateCounterSlotsSchema,
       },
       overrides: {
         counterOnly: counterOnlySlots,
-        counterWithGateCounter: counterWithGateCounterSlots,
       },
       migrated: true,
     },
@@ -206,22 +192,6 @@ export const leafSchemaGroup: SchemaGenerationGroup = {
       id: SCHEMA_IDS.secretScanResult,
       root: secretScanResultV1Schema,
       defs: { finding: secretFindingV1Schema },
-      migrated: true,
-    },
-    {
-      file: "supplemental-review",
-      id: SCHEMA_IDS.supplementalReview,
-      root: supplementalReviewOutcomeSchema,
-      defs: {
-        gate: supplementalGateRefSchema,
-        review: supplementalReviewRefSchema,
-      },
-      migrated: true,
-    },
-    {
-      file: "supplemental-review-record",
-      id: SCHEMA_IDS.supplementalReviewRecord,
-      root: supplementalReviewRecordV1Schema,
       migrated: true,
     },
     {

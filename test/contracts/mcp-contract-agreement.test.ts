@@ -33,7 +33,7 @@ describe("MCP contract schema agreement", () => {
 
   it("compiles every exact tool input fragment and agrees on closed state fixtures", async () => {
     const mcp = await load("../../src/contracts/schemas/v1/mcp-tools.schema.json") as { $defs: Record<string, { input: object }> };
-    const references = [await load("../../src/contracts/schemas/v1/supplemental-review.schema.json"), await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
+    const references = [await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
     const valid = await load("../fixtures/contracts/mcp-tools/state-valid.json");
     const invalid = await load("../fixtures/contracts/mcp-tools/state-invalid-artifact.json");
     const state = createJsonSchemaValidator(mcp, references);
@@ -46,7 +46,7 @@ describe("MCP contract schema agreement", () => {
 
   it("admits the staged-reference arm of every tool input union in both authorities", async () => {
     const mcp = await load("../../src/contracts/schemas/v1/mcp-tools.schema.json") as { $defs: Record<string, { input: object }> };
-    const references = [await load("../../src/contracts/schemas/v1/supplemental-review.schema.json"), await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
+    const references = [await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
     const reference = { schema_version: "1", task_id: "task-1", intent_id: "produce-20260810T120000-ab12", request_digest: "b".repeat(64) };
     const fullState = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: "a".repeat(64), phase_instance: "phase-impl-2", step: "produce", status: "running" };
     for (const tool of TOOL_NAMES) {
@@ -69,7 +69,7 @@ describe("MCP contract schema agreement", () => {
 
   it("keeps waiver success rule versions within the shared positive safe-integer bounds", async () => {
     const mcp = await load("../../src/contracts/schemas/v1/mcp-tools.schema.json") as { $defs: Record<string, { result?: object }> };
-    const references = [await load("../../src/contracts/schemas/v1/supplemental-review.schema.json"), await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
+    const references = [await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
     const normative = createJsonSchemaValidator({ $schema: "https://json-schema.org/draft/2020-12/schema", ...mcp.$defs.archflow_waiver!.result, $defs: mcp.$defs }, references);
     const advertisedSchema = ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === "archflow_waiver")!.outputSchema;
     const advertised = createJsonSchemaValidator(advertisedSchema);
@@ -96,7 +96,7 @@ describe("MCP contract schema agreement", () => {
   it("compiles the closed correlated result-expectation union", async () => {
     const mcp = await load("../../src/contracts/schemas/v1/mcp-tools.schema.json");
     const expectation = await load("../../src/contracts/schemas/v1/result-expectation.schema.json");
-    const references = [mcp, await load("../../src/contracts/schemas/v1/supplemental-review.schema.json"), await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
+    const references = [mcp, await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
     const validator = createJsonSchemaValidator(expectation, references);
     const value = { schema_version: "1", tool: "archflow_state", task_id: "task-1", intent_id: "intent-1", input_fingerprint: "a".repeat(64), request_digest: "b".repeat(64), result_id: "result-1", resulting_revision: 3, success: { path: "phases/2/result.json", revision: 3, status: "succeeded" } };
     expect(validator.assert(value)).toBe(value);
@@ -112,13 +112,12 @@ describe("MCP contract schema agreement", () => {
 
   it("agrees on exact gate tuples, authoritative contexts, and path bytes", async () => {
     const mcp = await load("../../src/contracts/schemas/v1/mcp-tools.schema.json");
-    const references = [await load("../../src/contracts/schemas/v1/supplemental-review.schema.json"), await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
+    const references = [await load("../../src/contracts/schemas/v1/primitives.schema.json"), await load("../../src/contracts/schemas/v1/project-error.schema.json"), await load("../../src/contracts/schemas/v1/rubric.schema.json"), await load("../../src/contracts/schemas/v1/path-claim.schema.json"), await load("../../src/contracts/schemas/v1/evidence-slots.schema.json"), await load("../../src/contracts/schemas/v1/gate-contract.schema.json"), await load("../../src/contracts/schemas/v1/gate-decision.schema.json"), ...(await durableReferences())];
     const validator = createJsonSchemaValidator(mcp, references);
     const counter = { role: "counter-review", evidence_digest: "2".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" };
-    const gateCounter = { role: "gate-counter-review", evidence_digest: "1".repeat(64), assurance: "server-attested", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-1" };
-    const gate = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: "a".repeat(64), phase_instance: "phase-impl-2", summary: "Review", subject_digest: "a".repeat(64), current_evidence: { set_digest: "3".repeat(64), slots: [counter, gateCounter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } };
+    const gate = { schema_version: "1", task_id: "task-1", intent_id: "intent-1", expected_revision: 0, input_fingerprint: "a".repeat(64), phase_instance: "phase-impl-2", summary: "Review", subject_digest: "a".repeat(64), current_evidence: { set_digest: "3".repeat(64), slots: [counter] }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } };
     expect(validator.validate(gate)).toBe(true);
-    for (const invalid of [{ ...gate, current_evidence: { ...gate.current_evidence, slots: [gateCounter, counter] } }, { ...gate, current_evidence: { ...gate.current_evidence, slots: [counter, { ...gateCounter, evidence_digest: counter.evidence_digest }] } }, { ...gate, kind: "attempts-exhausted", context: { step: "produce", attempts: 1, maximum_attempts: 2 } }]) {
+    for (const invalid of [{ ...gate, current_evidence: { ...gate.current_evidence, slots: [] } }, { ...gate, current_evidence: { ...gate.current_evidence, slots: [counter, counter] } }, { ...gate, kind: "attempts-exhausted", context: { step: "produce", attempts: 1, maximum_attempts: 2 } }]) {
       expect(validator.validate(invalid)).toBe(false);
       expect(() => parseToolCall("archflow_gate", invalid)).toThrow();
     }
@@ -142,10 +141,9 @@ describe("MCP contract schema agreement", () => {
       ["archflow_waiver", { ...common, origin: waiverOrigin, rationale: "Needed" }]
     ] as const;
     for (const [name, input] of examples) { expect(validator.validate(input), name).toBe(true); expect(parseToolCall(name, input).name).toBe(name); }
-    const waiverSupplemental = { action: "decline", gate: { prior_gate_id: "waiver-gate", task_id: "task-1", phase_instance: "phase-impl-2", subject_digest: "3".repeat(64), input_fingerprint: "a".repeat(64) }, reason: "Declined optional review" };
-    const waiverRetry = { ...examples[3][1], supplemental_outcome: waiverSupplemental };
-    expect(validator.validate(waiverRetry)).toBe(true);
-    expect(parseToolCall("archflow_waiver", waiverRetry).input.supplemental_outcome).toEqual(waiverSupplemental);
+    const obsoleteWaiverRetry = { ...examples[3][1], supplemental_outcome: {} };
+    expect(validator.validate(obsoleteWaiverRetry)).toBe(false);
+    expect(() => parseToolCall("archflow_waiver", obsoleteWaiverRetry)).toThrow();
     const wrongWaiver = { ...examples[3][1], task_id: "other" };
     expect(validator.validate(wrongWaiver)).toBe(false);
     expect(() => parseToolCall("archflow_waiver", wrongWaiver)).toThrow();

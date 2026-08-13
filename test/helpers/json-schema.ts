@@ -69,7 +69,7 @@ function hasGateContextSemantics(kind: unknown, contextValue: unknown): boolean 
 function hasExactCurrentEvidence(value: unknown): boolean {
   const current = record(value); if (current === undefined || !Array.isArray(current.slots)) return false;
   const slots = current.slots.map(record); if (slots.some((slot) => slot === undefined) || (slots.length !== 1 && slots.length !== 2)) return false;
-  if (slots[0]!.role !== "counter-review" || (slots.length === 2 && slots[1]!.role !== "gate-counter-review")) return false;
+  if (slots.length !== 1 || slots[0]!.role !== "counter-review") return false;
   if (slots.some((slot) => slot!.producer_family === slot!.reviewer_family)) return false;
   return new Set(slots.map((slot) => slot!.evidence_digest)).size === slots.length;
 }

@@ -235,6 +235,20 @@ describe("review services", () => {
     expect(rewrite.reentry_required).toBe(true);
   });
 
+  it("preserves review currency for one simple human-revision hop and resets significant changes", () => {
+    const predecessorEvidence = retained(D("8"), D("2"));
+    const simple = assessCurrentEvidence(state({ attempt: 3, input_fingerprint: D("9") }), predecessorEvidence, {
+      subject_digest: D("a"), input_fingerprint: D("9"), constitution, max_attempts: 3,
+      review_predecessor: { subject_digest: D("8"), input_fingerprint: D("2") },
+    });
+    expect(simple).toMatchObject({ next: "advance", exhausted: false });
+
+    const significant = assessCurrentEvidence(state({ attempt: 1, input_fingerprint: D("9") }), new Map(), {
+      subject_digest: D("a"), input_fingerprint: D("9"), constitution, max_attempts: 3,
+    });
+    expect(significant).toMatchObject({ next: "counter_review", exhausted: false });
+  });
+
   it("never exhausts on an editorial revision, even at the final attempt slot", () => {
     // The shared movement rule makes the editorial produce re-entry consume a durable attempt
     // slot (attempt + 1); the fixed point stays honest by evaluating exhaustion only at demanded
@@ -382,7 +396,6 @@ describe("review services", () => {
 
   it.each([
     ["same family as its producer", { model_family: "claude" as const }],
-    ["wrong role", { role: "gate-counter-review" as const }],
   ])("rejects a retained counter-review that is %s", (_label, change) => {
     const changed = new Map(retained());
     const entry = changed.get("counter_review")!;

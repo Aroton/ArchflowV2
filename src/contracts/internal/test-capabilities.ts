@@ -122,9 +122,6 @@ export function createTransactionAuthorityLink<K extends EvidenceKind, A extends
   ) {
     throw new TypeError("transaction outcome does not authenticate the retained evidence result");
   }
-  if (evidence.step !== "adjudicate" && evidence.role === "gate-counter-review") {
-    throw new TypeError("gate-counter-review authority requires a gate-owned constructor");
-  }
   const phaseInstance = encodePhaseInstance(decodePhaseInstance(evidence.phase_instance));
   const authority = evidence.assurance === "server-attested"
     ? {

@@ -79,6 +79,52 @@ export type OpenGateRef = {
   readonly opened_at_revision: SafeInteger;
 };
 
+export const HUMAN_REVISION_CLASSIFICATIONS = ["simple", "significant"] as const;
+export type HumanRevisionClassification = (typeof HUMAN_REVISION_CLASSIFICATIONS)[number];
+export const HUMAN_REVISION_GATE_KINDS = [
+  "artifact-approval", "constitution-review", "material-drift", "attempts-exhausted",
+  "commit-authorization", "migration-audit",
+] as const satisfies readonly GateKind[];
+
+/**
+ * A human gate has requested changed bytes, but the producer has not recorded those bytes yet.
+ * The evidence snapshot is captured at the gate boundary so the later classification cannot
+ * silently preserve or archive a different review cycle.
+ */
+export type PendingHumanRevision = {
+  readonly gate_id: PathSafeId;
+  readonly gate_kind: GateKind;
+  readonly predecessor_subject_digest: Sha256Digest;
+  readonly predecessor_input_fingerprint: Sha256Digest;
+  readonly requested_at_revision: SafeInteger;
+  readonly attempt: SafeInteger;
+  readonly evidence: readonly AuthoritativeResultRef[];
+};
+
+/** Records the user's explicit override of the producer's initial complexity judgment. */
+export type HumanRevisionOverride = {
+  readonly agent_classification: HumanRevisionClassification;
+  readonly rationale: string;
+};
+
+/** Durable history for a completed human-requested revision. */
+export type HumanRevisionRecord = {
+  readonly phase_instance: PhaseInstanceId;
+  readonly gate_id: PathSafeId;
+  readonly gate_kind: GateKind;
+  readonly predecessor_subject_digest: Sha256Digest;
+  readonly predecessor_input_fingerprint: Sha256Digest;
+  readonly resulting_subject_digest: Sha256Digest;
+  readonly resulting_result_digest: Sha256Digest;
+  readonly classification: HumanRevisionClassification;
+  readonly rationale: string;
+  readonly user_override?: HumanRevisionOverride;
+  readonly previous_attempt: SafeInteger;
+  readonly resulting_attempt: SafeInteger;
+  /** Preserved for a simple revision and archived out of the current set for a significant one. */
+  readonly evidence: readonly AuthoritativeResultRef[];
+};
+
 /**
  * `expires` is the const `"task-complete"` — the narrowest representation of the only expiry this
  * project has. That is a *format* decision. Phase 12 records waiver scope; Phase 14 owns expiry
@@ -172,6 +218,8 @@ export type TaskStateV1 = {
    * when this may be set, cleared, or superseded. Phase 7 owns only the shape.
    */
   readonly open_gate?: OpenGateRef;
+  readonly pending_human_revision?: PendingHumanRevision;
+  readonly human_revision_history?: readonly HumanRevisionRecord[];
   readonly last_transition?: LastTransition;
   readonly terminal?: TerminalState;
 };
@@ -239,6 +287,61 @@ export const openGateRefV1Schema = z.object({
   opened_at_revision: positiveSafeInteger,
 }).strict();
 
+export const humanRevisionClassificationV1Schema = z.enum(HUMAN_REVISION_CLASSIFICATIONS);
+
+export const humanRevisionOverrideV1Schema = z.object({
+  agent_classification: humanRevisionClassificationV1Schema,
+  rationale: z.string().min(1).max(4096).regex(/\S/u),
+}).strict();
+
+const humanRevisionEvidenceV1Schema = z.array(authoritativeResultRefV1Schema)
+  .refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "human revision evidence must be sorted by (phase_instance, step) with no duplicates")
+  .refine((items) => items.every((reference) =>
+    reference.step === "counter_review" || reference.step === "adjudicate" || reference.step === "triage"),
+  "human revision evidence must contain review, constitution, or triage results");
+
+export const pendingHumanRevisionV1Schema = z.object({
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: z.enum(HUMAN_REVISION_GATE_KINDS),
+  predecessor_subject_digest: sha256Digest,
+  predecessor_input_fingerprint: sha256Digest,
+  requested_at_revision: positiveSafeInteger,
+  attempt: positiveSafeInteger,
+  evidence: humanRevisionEvidenceV1Schema,
+}).strict() as unknown as z.ZodType<PendingHumanRevision>;
+
+export const humanRevisionRecordV1Schema = z.object({
+  phase_instance: phaseInstanceIdV1Schema,
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: z.enum(HUMAN_REVISION_GATE_KINDS),
+  predecessor_subject_digest: sha256Digest,
+  predecessor_input_fingerprint: sha256Digest,
+  resulting_subject_digest: sha256Digest,
+  resulting_result_digest: sha256Digest,
+  classification: humanRevisionClassificationV1Schema,
+  rationale: z.string().min(1).max(4096).regex(/\S/u),
+  user_override: humanRevisionOverrideV1Schema.optional(),
+  previous_attempt: positiveSafeInteger,
+  resulting_attempt: positiveSafeInteger,
+  evidence: humanRevisionEvidenceV1Schema,
+}).strict().superRefine((record, context) => {
+  if (record.user_override?.agent_classification === record.classification) {
+    context.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
+  }
+  if (record.classification === "simple" && record.previous_attempt !== record.resulting_attempt) {
+    context.addIssue({ code: "custom", path: ["resulting_attempt"], message: "a simple revision preserves its attempt" });
+  }
+  if (record.classification === "significant" && record.resulting_attempt !== 1) {
+    context.addIssue({ code: "custom", path: ["resulting_attempt"], message: "a significant revision resets to attempt 1" });
+  }
+  if (record.predecessor_subject_digest === record.resulting_subject_digest) {
+    context.addIssue({ code: "custom", path: ["resulting_subject_digest"], message: "a human revision must change the subject" });
+  }
+  if (record.evidence.some((reference) => reference.phase_instance !== record.phase_instance)) {
+    context.addIssue({ code: "custom", path: ["evidence"], message: "human revision evidence must belong to its phase" });
+  }
+}) as unknown as z.ZodType<HumanRevisionRecord>;
+
 /** Recursive JSON value used by `lastTransitionV1Schema`; overridden during JSON Schema emission. */
 export const lastTransitionOutcomeV1Schema = z.json();
 
@@ -285,6 +388,19 @@ export const taskStateV1Schema = z.object({
     .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "waivers must be sorted by gate_id with no duplicates"),
   planned_final_phase: positiveSafeInteger.optional(),
   open_gate: openGateRefV1Schema.optional(),
+  pending_human_revision: pendingHumanRevisionV1Schema.optional(),
+  human_revision_history: z.array(humanRevisionRecordV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates")
+    .optional(),
   last_transition: lastTransitionV1Schema.optional(),
   terminal: z.enum(TERMINAL_STATES).optional(),
-}).strict() as unknown as z.ZodType<TaskStateV1>;
+}).strict().superRefine((state, context) => {
+  const pending = state.pending_human_revision;
+  if (pending === undefined) return;
+  if (state.open_gate !== undefined || state.terminal !== undefined || state.step !== "produce" ||
+      state.status === "succeeded" || state.attempt !== pending.attempt ||
+      pending.requested_at_revision > state.revision ||
+      pending.evidence.some((reference) => reference.phase_instance !== state.phase_instance)) {
+    context.addIssue({ code: "custom", path: ["pending_human_revision"], message: "pending human revision does not match its active produce state" });
+  }
+}) as unknown as z.ZodType<TaskStateV1>;

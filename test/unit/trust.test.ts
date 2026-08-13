@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
-import { parsePathSafeId, parseSha256Digest, parseTaskSlug, type PathSafeId } from "../../src/contracts/evidence.js";
+import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import {
   createTestAuthorityLink,
   createTestCurrentReviewSetAuthority,
@@ -18,40 +18,37 @@ import {
   type AuthorityLinkData,
   type ObservationBindingByKind,
   type QualifiedReviewEvidence,
-  type ReviewEvidenceSlot,
 } from "../../src/contracts/trust.js";
 
 const digest = (character: string) => parseSha256Digest(character.repeat(64));
 const phase = encodePhaseInstance({ kind: "phase-impl", phase: 2 as never });
 const TASK = parseTaskSlug("mcp-integration");
-const GATE_1 = parsePathSafeId("gate-1");
 
 async function rawReview(): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(new URL("../fixtures/contracts/review/valid.json", import.meta.url), "utf8")) as Record<string, unknown>;
 }
 
-const degradedReview = (role: "counter-review" | "gate-counter-review" = "counter-review"): DegradedReview => ({
-  schema_version: "1", task_id: TASK, phase_instance: phase, step: "counter_review", role,
+const degradedReview = (): DegradedReview => ({
+  schema_version: "1", task_id: TASK, phase_instance: phase, step: "counter_review", role: "counter-review",
   subject_digest: digest("a"), input_fingerprint: digest("b"), rubric_digest: digest("c"), producer_family: "claude",
   findings: [{ finding_id: "unsafe-path", severity: "blocker", blocking: true, summary: "Path is unsafe.", evidence: "The path escapes its task.", suggested_resolution: "Reject traversal." }],
   matched_rule_versions: [{ rule_id: "safe-paths", rule_version: 2 }], verdict: "fail", blocking_count: 1,
   assurance: "degraded", model_family: "codex", model: "unknown", effort: "unknown", reason: "Manual fallback.",
 });
 
-function degradedLink(evidence: DegradedReview, evidenceDigest = digest("9"), gateId?: PathSafeId): AuthorityLinkData<"review", "degraded"> {
+function degradedLink(evidence: DegradedReview, evidenceDigest = digest("9")): AuthorityLinkData<"review", "degraded"> {
   return {
     schema_version: "1", evidence_kind: "review", assurance: "degraded", role: evidence.role,
     task_id: evidence.task_id, phase_instance: phase, subject_digest: evidence.subject_digest,
     input_fingerprint: evidence.input_fingerprint, evidence_digest: evidenceDigest,
-    ...(gateId === undefined ? {} : { gate_id: gateId }),
     authority: { kind: "degraded", checkpoint_digest: digest("8"), checkpoint_revision: 1 },
   };
 }
 
-function qualifyDegraded(role: "counter-review" | "gate-counter-review" = "counter-review", gateId?: PathSafeId, evidenceDigest = digest("9")): QualifiedReviewEvidence {
-  const evidence = degradedReview(role);
+function qualifyDegraded(evidenceDigest = digest("9")): QualifiedReviewEvidence {
+  const evidence = degradedReview();
   const verified = createTestVerifiedReferencedEvidence<"review", "degraded">("review", { evidence_digest: evidenceDigest, evidence });
-  return authorityQualifier.qualifyReview(createTestAuthorityLink(degradedLink(evidence, evidenceDigest, gateId)), verified);
+  return authorityQualifier.qualifyReview(createTestAuthorityLink(degradedLink(evidence, evidenceDigest)), verified);
 }
 
 describe("invocation-scoped observation trust", () => {
@@ -113,37 +110,26 @@ describe("identity-backed authority", () => {
     }
   });
 
-  it("requires authentic qualified reviews and exact gate identity for current sets", () => {
-    const gateReview = qualifyDegraded("gate-counter-review", GATE_1, digest("3"));
+  it("requires authentic qualified reviews and the exact current set", () => {
     const counter = qualifyDegraded();
     const slots = [
       { role: "counter-review", evidence_digest: digest("9"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
-      { role: "gate-counter-review", evidence_digest: digest("3"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "gate-2" },
-    ] as unknown as readonly ReviewEvidenceSlot[];
-    const wrongGateAuthority = createTestCurrentReviewSetAuthority({ task_id: TASK, phase_instance: phase, subject_digest: digest("a"), input_fingerprint: digest("b"), slots: slots as never });
-    expect(() => authorityQualifier.currentReviews(wrongGateAuthority, [counter, gateReview])).toThrow(/slot 1|unique/);
-    expect(() => authorityQualifier.currentReviews({ ...wrongGateAuthority } as never, [counter, gateReview])).toThrow(/authority/);
-    expect(() => authorityQualifier.currentReviews(wrongGateAuthority, [{ ...counter } as never, gateReview])).toThrow(/slot 0/);
+    ] as const;
+    const authority = createTestCurrentReviewSetAuthority({ task_id: TASK, phase_instance: phase, subject_digest: digest("a"), input_fingerprint: digest("b"), slots });
+    expect(authorityQualifier.currentReviews(authority, [counter]).reviews).toHaveLength(1);
+    expect(() => authorityQualifier.currentReviews({ ...authority } as never, [counter])).toThrow(/authority/);
+    expect(() => authorityQualifier.currentReviews(authority, [{ ...counter } as never])).toThrow(/slot 0/);
   });
 
-  it("requires gate identity exactly on gate-counter authority links", () => {
-    const gate = degradedLink(degradedReview("gate-counter-review"), digest("3"), GATE_1);
-    expect(parseAuthorityLinkData(gate).gate_id).toBe("gate-1");
-    const { gate_id: _omitted, ...missingGate } = gate;
-    expect(() => parseAuthorityLinkData(missingGate)).toThrow(/gate_id/);
-    expect(() => parseAuthorityLinkData({ ...degradedLink(degradedReview()), gate_id: GATE_1 })).toThrow(/gate_id/);
-  });
-
-  it("rejects the previously legal broad task and gate identifiers on authority links and slots", () => {
-    const gate = degradedLink(degradedReview("gate-counter-review"), digest("3"), GATE_1);
-    for (const gateId of ["Gate:1", "gate:1"]) expect(() => parseAuthorityLinkData({ ...gate, gate_id: gateId })).toThrow();
-    for (const taskId of ["Task_1", "Task:1", "TASK-1"]) expect(() => parseAuthorityLinkData({ ...gate, task_id: taskId })).toThrow();
+  it("rejects broad task identifiers on authority links and extra review slots", () => {
+    const link = degradedLink(degradedReview(), digest("3"));
+    for (const taskId of ["Task_1", "Task:1", "TASK-1"]) expect(() => parseAuthorityLinkData({ ...link, task_id: taskId })).toThrow();
     // invocation_id, result_id, and receipt_id are deliberately unchanged.
-    expect(parseAuthorityLinkData({ ...gate, authority: { kind: "degraded", checkpoint_digest: digest("8"), checkpoint_revision: 1 } }).task_id).toBe("mcp-integration");
+    expect(parseAuthorityLinkData({ ...link, authority: { kind: "degraded", checkpoint_digest: digest("8"), checkpoint_revision: 1 } }).task_id).toBe("mcp-integration");
     const slot = { role: "gate-counter-review", evidence_digest: digest("3"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family", gate_id: "Gate:1" };
     expect(() => parseRequiredReviewSlots([
       { role: "counter-review", evidence_digest: digest("2"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex", independence: "opposite-family" },
-      slot
+      slot,
     ])).toThrow();
   });
 });

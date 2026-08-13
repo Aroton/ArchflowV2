@@ -10,7 +10,7 @@ describe("gate catalogue", () => {
     expect(GATE_KINDS).toEqual(["artifact-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"]);
   });
 
-  it("keeps cancellation and supplemental outcomes outside decisions", () => {
+  it("keeps cancellation outside decisions", () => {
     expect(() => validateGateDecision("artifact-approval", { artifact_kind: "prd" }, { decision: "approve", reason: "Ready" })).not.toThrow();
     expect(() => validateGateDecision("artifact-approval", { artifact_kind: "prd" }, { decision: "cancelled", reason: "No" } as never)).toThrow();
     expect(() => validateGateDecision("artifact-approval", { artifact_kind: "prd" }, { action: "decline", reason: "No" } as never)).toThrow();

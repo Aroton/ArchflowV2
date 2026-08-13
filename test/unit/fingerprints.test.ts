@@ -95,7 +95,6 @@ const requestSubjects = {
   archflow_state: { ...requestCommon, tool: "archflow_state", operation: "record-state-boundary", operation_fields: { phase_instance: phaseInstance, step: "produce", status: "succeeded" } },
   archflow_counter_review: { ...requestCommon, tool: "archflow_counter_review", operation: "counter-review", operation_fields: { artifact_path: "phases/9/result.md" } },
   archflow_gate: { ...requestCommon, tool: "archflow_gate", operation: "gate", operation_fields: { phase_instance: phaseInstance, summary: "Approve implementation", subject_digest: digest("7"), current_evidence: requestEvidence, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } } },
-  archflow_gate_supersedes: { ...requestCommon, tool: "archflow_gate", operation: "gate", operation_fields: { phase_instance: phaseInstance, summary: "Approve implementation", subject_digest: digest("7"), current_evidence: requestEvidence, supersedes: { superseded_gate_id: "gate-0", accepted_triage_digest: digest("9"), old_subject_digest: digest("a") }, kind: "artifact-approval", context: { artifact_kind: "phase-implementation" } } },
   archflow_waiver: { ...requestCommon, tool: "archflow_waiver", operation: "waiver", operation_fields: { origin: requestOrigin, rationale: "A bounded exception is required" } },
 } as unknown as Readonly<Record<string, RequestDigestSubject>>;
 
@@ -155,12 +154,11 @@ describe("computePinnedConstitutionDigest", () => {
 });
 
 describe("computeRequestDigest", () => {
-  it("pins stable golden digests for every closed selector and both gate shapes", () => {
+  it("pins stable golden digests for every closed selector", () => {
     expect(Object.fromEntries(Object.entries(requestSubjects).map(([name, value]) => [name, computeRequestDigest(value)]))).toEqual({
       archflow_state: "9e18ce122452f01f99faa4f2b1f2c99364c580049e1cd5296bd295d37b0f7217",
       archflow_counter_review: "f00c61cf8fb83a4d1fab1f0cddf81036e9027c019f4c0285740896db73e6b57c",
       archflow_gate: "2ad726edb2b970f1066e49ddb7c60518fe15c41b28d254fc51df9a30ea2af399",
-      archflow_gate_supersedes: "123fe3b33c3ef1250316af54ee1085f7d55153823527607b21a90ddf2fb06255",
       archflow_waiver: "c1baf879238bc647da60c3ec7cf8655c844d986a79e25306388450a1260e3f38",
     });
   });
@@ -180,7 +178,6 @@ describe("computeRequestDigest", () => {
         { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, summary: "Revise implementation" } },
         { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, subject_digest: digest("0") } },
         { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, current_evidence: { ...requestEvidence, set_digest: digest("0") } } },
-        requestSubjects.archflow_gate_supersedes!,
         { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, kind: "commit-authorization" } },
         { ...requestSubjects.archflow_gate!, operation_fields: { ...requestSubjects.archflow_gate!.operation_fields, context: { artifact_kind: "phase-design" } } },
       ] as unknown as RequestDigestSubject[],
@@ -242,7 +239,7 @@ describe("computeRequestDigest", () => {
     };
     const retry = {
       ...first,
-      // A retry after SUPPLEMENTAL_REVIEW_REQUIRED refreshes exactly these and nothing else.
+      // A retry may refresh transport metadata without changing the semantic request.
       expected_revision: 9,
       timestamp: "2026-07-28T00:05:00.000Z",
       attempt: 4,

@@ -249,7 +249,7 @@ describe("CLI invocation construction", () => {
     });
     expect(properties).toMatchObject({
       step: { const: "counter_review" },
-      role: { type: "string", enum: ["counter-review", "gate-counter-review"] },
+      role: { type: "string", enum: ["counter-review"] },
     });
     const definitions = projected.$defs as Record<string, Record<string, unknown>>;
     expect(definitions.taskSlug).toMatchObject({

@@ -225,21 +225,12 @@ describe("bundled local CLI", () => {
       ...common, intent_id: "gate-cli", phase_instance: "prd", summary: "Approve PRD",
       subject_digest: digest("d"), current_evidence: evidence, kind: "artifact-approval",
       context: { artifact_kind: "prd" },
-      supplemental_outcome: {
-        action: "decline",
-        gate: { prior_gate_id: "prior-gate", task_id: task, phase_instance: "prd",
-          subject_digest: digest("d"), input_fingerprint: digest("9") },
-        reason: "Human explicitly declined the optional gate counter-review.",
-      },
     };
     const gate = cli(fixture.root, "envelope", { tool: "archflow_gate", input: gateInput });
     expect(gate).toMatchObject({ status: 0, value: { ok: true, value: { gate: {
       decision_path: `.archflow/runtime/tasks/${task}/cache/gates/gate.decision`,
     } } } });
-    // Resolution rewrites only the request's own fingerprint: the historical fingerprint a
-    // supplemental outcome pins must pass through byte-identical.
     expect(gate.value.value.request.input.input_fingerprint).toBe(gate.value.value.input_fingerprint);
-    expect(gate.value.value.request.input.supplemental_outcome.gate.input_fingerprint).toBe(digest("9"));
     expect(gate.value.value.gate.gate_id).toBe(computeGateId({
       task_identity_digest: production.value.authority.task_identity_digest,
       intent_id: gateInput.intent_id as never,

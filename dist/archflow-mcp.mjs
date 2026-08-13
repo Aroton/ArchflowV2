@@ -36068,8 +36068,8 @@ function encodePhaseInstance(value) {
       return value.kind;
     case "phase-design":
     case "phase-impl": {
-      const phase4 = parsePositiveSafePhaseNumber(value.phase);
-      return `${value.kind}-${phase4}`;
+      const phase3 = parsePositiveSafePhaseNumber(value.phase);
+      return `${value.kind}-${phase3}`;
     }
   }
 }
@@ -36079,8 +36079,8 @@ function decodePhaseInstance(value) {
   if (typeof value !== "string") throw new TypeError("phase instance must be a canonical string");
   const match = ITERATED_PHASE.exec(value);
   if (match === null) throw new TypeError("phase instance must use a canonical phase encoding");
-  const phase4 = parsePositiveSafePhaseNumber(Number(match[2]));
-  return match[1] === "phase-design" ? { kind: "phase-design", phase: phase4 } : { kind: "phase-impl", phase: phase4 };
+  const phase3 = parsePositiveSafePhaseNumber(Number(match[2]));
+  return match[1] === "phase-design" ? { kind: "phase-design", phase: phase3 } : { kind: "phase-impl", phase: phase3 };
 }
 var phaseInstanceIdV1Schema = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((value) => {
   try {
@@ -36419,7 +36419,6 @@ var PROJECT_PARAMETER_SCHEMAS = {
   TRANSITION_INVALID: object2({ phase_instance: phaseInstance, from: code, to: code }),
   INPUT_FINGERPRINT_MISMATCH: digestsParams,
   STATE_CONFLICT: object2({ expected_revision: integer2, observed_revision: integer2 }),
-  SUPPLEMENTAL_REVIEW_REQUIRED: object2({ gate_id: pathSafeId, evidence_digest: digest2 }),
   INTENT_MISMATCH: digestsParams,
   INTENT_NOT_CURRENT: object2({ intent_id: pathSafeId, receipt_revision: integer2, current_revision: integer2 }),
   STAGED_REQUEST_NOT_FOUND: object2({ task_id: taskSlug, intent_id: pathSafeId }),
@@ -36432,7 +36431,6 @@ var PROJECT_PARAMETER_SCHEMAS = {
   GATE_ACTIVE: gateParams,
   GATE_DECISION_INVALID: object2({ gate_id: pathSafeId, gate_kind: gateKind, issue_code: code }),
   GATE_CANCELLED: gateParams,
-  GATE_SUPERSEDED: object2({ gate_id: pathSafeId, old_subject_digest: digest2, new_subject_digest: digest2 }),
   UNSUPPORTED_HOST: object2({ host: id }),
   UNSUPPORTED_MODEL: object2({ model: id }),
   FAMILY_MISMATCH: object2({ expected_family: family, observed_family: family }),
@@ -36498,7 +36496,6 @@ var PROJECT_ERROR_DEFINITIONS = Object.freeze({
   TRANSITION_INVALID: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.TRANSITION_INVALID, "select-valid-transition", "project"),
   INPUT_FINGERPRINT_MISMATCH: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.INPUT_FINGERPRINT_MISMATCH, "create-fresh-intent", "project"),
   STATE_CONFLICT: defineError("state", true, PROJECT_PARAMETER_SCHEMAS.STATE_CONFLICT, "reread-and-retry-intent", "project"),
-  SUPPLEMENTAL_REVIEW_REQUIRED: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.SUPPLEMENTAL_REVIEW_REQUIRED, "triage-supplemental-review", "project"),
   INTENT_MISMATCH: defineError("intent", false, PROJECT_PARAMETER_SCHEMAS.INTENT_MISMATCH, "create-fresh-intent", "project"),
   INTENT_NOT_CURRENT: defineError("intent", false, PROJECT_PARAMETER_SCHEMAS.INTENT_NOT_CURRENT, "inspect-current-state", "project"),
   STAGED_REQUEST_NOT_FOUND: defineError("intent", false, PROJECT_PARAMETER_SCHEMAS.STAGED_REQUEST_NOT_FOUND, "stage-request-with-build-request", "project"),
@@ -36511,7 +36508,6 @@ var PROJECT_ERROR_DEFINITIONS = Object.freeze({
   GATE_ACTIVE: defineError("gate", false, PROJECT_PARAMETER_SCHEMAS.GATE_ACTIVE, "resolve-recorded-gate", "project"),
   GATE_DECISION_INVALID: defineError("gate", false, PROJECT_PARAMETER_SCHEMAS.GATE_DECISION_INVALID, "record-valid-gate-decision", "project"),
   GATE_CANCELLED: defineError("gate", false, PROJECT_PARAMETER_SCHEMAS.GATE_CANCELLED, "restart-gate-flow", "project"),
-  GATE_SUPERSEDED: defineError("gate", false, PROJECT_PARAMETER_SCHEMAS.GATE_SUPERSEDED, "retry-with-superseding-subject", "project"),
   UNSUPPORTED_HOST: defineError("routing", false, PROJECT_PARAMETER_SCHEMAS.UNSUPPORTED_HOST, "select-supported-host", "project"),
   UNSUPPORTED_MODEL: defineError("routing", false, PROJECT_PARAMETER_SCHEMAS.UNSUPPORTED_MODEL, "select-supported-model", "project"),
   FAMILY_MISMATCH: defineError("routing", false, PROJECT_PARAMETER_SCHEMAS.FAMILY_MISMATCH, "select-correct-family", "project"),
@@ -36936,7 +36932,7 @@ import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
 
 // src/contracts/review.ts
 var REVIEW_VERDICTS = ["pass", "advisory", "fail"];
-var REVIEW_ROLES = ["counter-review", "gate-counter-review"];
+var REVIEW_ROLES = ["counter-review"];
 var REVIEW_FINDING_SEVERITIES = ["blocker", "major", "minor"];
 var MODEL_FAMILIES = ["claude", "codex"];
 var ADAPTER_IDS = ["claude-cli", "codex-cli"];
@@ -37458,31 +37454,152 @@ var taskInitializationV1Schema = external_exports.object({
   canonical_paths: canonicalTaskPathsV1Schema
 }).strict();
 
-// src/contracts/supplemental.ts
-var digest5 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var nonBlank3 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
-var family2 = external_exports.enum(["claude", "codex"]);
-var phase = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
-var gateShape = { prior_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, phase_instance: phase, subject_digest: digest5, input_fingerprint: digest5 };
-var supplementalGateRefSchema = external_exports.object(gateShape).strict();
-var gateCounterSlotSchema = external_exports.object({ role: external_exports.literal("gate-counter-review"), evidence_digest: digest5, assurance: external_exports.enum(["server-attested", "degraded"]), producer_family: family2, reviewer_family: family2, independence: external_exports.literal("opposite-family"), gate_id: pathSafeIdV1Schema }).strict().superRefine((slot, context2) => {
-  if (slot.producer_family === slot.reviewer_family) context2.addIssue({ code: "custom", message: "gate counter-review must be opposite-family" });
+// src/contracts/durable-state.ts
+var STEP_STATUSES = ["running", "succeeded", "failed"];
+var TERMINAL_STATES = ["complete", "abandoned"];
+var HUMAN_REVISION_CLASSIFICATIONS = ["simple", "significant"];
+var HUMAN_REVISION_GATE_KINDS = [
+  "artifact-approval",
+  "constitution-review",
+  "material-drift",
+  "attempts-exhausted",
+  "commit-authorization",
+  "migration-audit"
+];
+var sha256Digest5 = sha256DigestV1Schema;
+var stepStatusV1Schema = external_exports.enum(STEP_STATUSES);
+var gateKindV1Schema = external_exports.enum(GATE_KINDS);
+var positiveSafeInteger = external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+var authoritativeResultRefV1Schema = external_exports.object({
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  result_digest: sha256Digest5,
+  result_id: safeIdV1Schema,
+  input_fingerprint: sha256Digest5
+}).strict();
+var approvalRefV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: gateKindV1Schema,
+  subject_digest: sha256Digest5,
+  decision_digest: sha256Digest5,
+  resolved_at_revision: positiveSafeInteger
+}).strict();
+var waiverRefV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  rule_id: safeIdV1Schema,
+  rule_version: positiveSafeInteger,
+  subject_digest: sha256Digest5,
+  scope: external_exports.object({
+    operation: external_exports.enum(["review-trigger", "adjudication-failure"]),
+    boundary: external_exports.enum(["subject", "phase", "task"])
+  }).strict(),
+  granted: external_exports.boolean(),
+  expires: external_exports.literal("task-complete"),
+  granted_at_revision: positiveSafeInteger
+}).strict();
+var openGateRefV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: gateKindV1Schema,
+  subject_digest: sha256Digest5,
+  context_digest: sha256Digest5,
+  frozen_state_digest: sha256Digest5,
+  waiver_origin_gate_id: pathSafeIdV1Schema.optional(),
+  opened_at_revision: positiveSafeInteger
+}).strict();
+var humanRevisionClassificationV1Schema = external_exports.enum(HUMAN_REVISION_CLASSIFICATIONS);
+var humanRevisionOverrideV1Schema = external_exports.object({
+  agent_classification: humanRevisionClassificationV1Schema,
+  rationale: external_exports.string().min(1).max(4096).regex(/\S/u)
+}).strict();
+var humanRevisionEvidenceV1Schema = external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "human revision evidence must be sorted by (phase_instance, step) with no duplicates").refine(
+  (items) => items.every((reference) => reference.step === "counter_review" || reference.step === "adjudicate" || reference.step === "triage"),
+  "human revision evidence must contain review, constitution, or triage results"
+);
+var pendingHumanRevisionV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: external_exports.enum(HUMAN_REVISION_GATE_KINDS),
+  predecessor_subject_digest: sha256Digest5,
+  predecessor_input_fingerprint: sha256Digest5,
+  requested_at_revision: positiveSafeInteger,
+  attempt: positiveSafeInteger,
+  evidence: humanRevisionEvidenceV1Schema
+}).strict();
+var humanRevisionRecordV1Schema = external_exports.object({
+  phase_instance: phaseInstanceIdV1Schema,
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: external_exports.enum(HUMAN_REVISION_GATE_KINDS),
+  predecessor_subject_digest: sha256Digest5,
+  predecessor_input_fingerprint: sha256Digest5,
+  resulting_subject_digest: sha256Digest5,
+  resulting_result_digest: sha256Digest5,
+  classification: humanRevisionClassificationV1Schema,
+  rationale: external_exports.string().min(1).max(4096).regex(/\S/u),
+  user_override: humanRevisionOverrideV1Schema.optional(),
+  previous_attempt: positiveSafeInteger,
+  resulting_attempt: positiveSafeInteger,
+  evidence: humanRevisionEvidenceV1Schema
+}).strict().superRefine((record2, context2) => {
+  if (record2.user_override?.agent_classification === record2.classification) {
+    context2.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
+  }
+  if (record2.classification === "simple" && record2.previous_attempt !== record2.resulting_attempt) {
+    context2.addIssue({ code: "custom", path: ["resulting_attempt"], message: "a simple revision preserves its attempt" });
+  }
+  if (record2.classification === "significant" && record2.resulting_attempt !== 1) {
+    context2.addIssue({ code: "custom", path: ["resulting_attempt"], message: "a significant revision resets to attempt 1" });
+  }
+  if (record2.predecessor_subject_digest === record2.resulting_subject_digest) {
+    context2.addIssue({ code: "custom", path: ["resulting_subject_digest"], message: "a human revision must change the subject" });
+  }
+  if (record2.evidence.some((reference) => reference.phase_instance !== record2.phase_instance)) {
+    context2.addIssue({ code: "custom", path: ["evidence"], message: "human revision evidence must belong to its phase" });
+  }
 });
-var supplementalReviewRefSchema = external_exports.object({ ...gateShape, evidence_slot: gateCounterSlotSchema }).strict().superRefine((review, context2) => {
-  if (review.evidence_slot.gate_id !== review.prior_gate_id) context2.addIssue({ code: "custom", path: ["evidence_slot", "gate_id"], message: "gate-counter slot must bind prior_gate_id" });
+var lastTransitionOutcomeV1Schema = external_exports.json();
+var lastTransitionV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  tool: external_exports.enum(TOOL_NAMES),
+  operation: safeCodeV1Schema,
+  intent_id: pathSafeIdV1Schema,
+  request_digest: sha256Digest5,
+  input_fingerprint: sha256Digest5,
+  result_id: safeIdV1Schema,
+  outcome: lastTransitionOutcomeV1Schema,
+  outcome_digest: sha256Digest5,
+  prior_revision: safeIntegerV1Schema,
+  resulting_revision: positiveSafeInteger
+}).strict();
+var taskStateV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  task_id: taskSlugV1Schema,
+  repository_identity_digest: sha256Digest5,
+  revision: positiveSafeInteger,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  status: stepStatusV1Schema,
+  attempt: positiveSafeInteger,
+  input_fingerprint: sha256Digest5,
+  initialization_digest: sha256Digest5,
+  config_digest: sha256Digest5,
+  workflow_digest: sha256Digest5,
+  constitution_digest: sha256Digest5,
+  policy_base_commit: gitOidV1Schema,
+  authoritative_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "authoritative_results must be sorted by (phase_instance, step) with no duplicates"),
+  approvals: external_exports.array(approvalRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "approvals must be sorted by gate_id with no duplicates"),
+  waivers: external_exports.array(waiverRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "waivers must be sorted by gate_id with no duplicates"),
+  planned_final_phase: positiveSafeInteger.optional(),
+  open_gate: openGateRefV1Schema.optional(),
+  pending_human_revision: pendingHumanRevisionV1Schema.optional(),
+  human_revision_history: external_exports.array(humanRevisionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates").optional(),
+  last_transition: lastTransitionV1Schema.optional(),
+  terminal: external_exports.enum(TERMINAL_STATES).optional()
+}).strict().superRefine((state, context2) => {
+  const pending = state.pending_human_revision;
+  if (pending === void 0) return;
+  if (state.open_gate !== void 0 || state.terminal !== void 0 || state.step !== "produce" || state.status === "succeeded" || state.attempt !== pending.attempt || pending.requested_at_revision > state.revision || pending.evidence.some((reference) => reference.phase_instance !== state.phase_instance)) {
+    context2.addIssue({ code: "custom", path: ["pending_human_revision"], message: "pending human revision does not match its active produce state" });
+  }
 });
-var decline = external_exports.object({ action: external_exports.literal("decline"), gate: supplementalGateRefSchema, reason: nonBlank3 }).strict();
-var ingest = external_exports.object({ action: external_exports.literal("ingest"), review: supplementalReviewRefSchema, reason: nonBlank3 }).strict();
-var noChange = external_exports.object({ action: external_exports.literal("triage-no-change"), review: supplementalReviewRefSchema, triage_digest: digest5, reason: nonBlank3 }).strict();
-var supersede = external_exports.object({ action: external_exports.literal("supersede"), review: supplementalReviewRefSchema, accepted_triage_digest: digest5, old_subject_digest: digest5, new_subject_digest: digest5, reason: nonBlank3 }).strict().superRefine((outcome, context2) => {
-  if (outcome.old_subject_digest !== outcome.review.subject_digest) context2.addIssue({ code: "custom", path: ["old_subject_digest"], message: "old subject must match supplemental review subject" });
-  if (outcome.new_subject_digest === outcome.old_subject_digest) context2.addIssue({ code: "custom", path: ["new_subject_digest"], message: "new subject must differ" });
-});
-var supplementalReviewOutcomeSchema = external_exports.discriminatedUnion("action", [decline, ingest, noChange, supersede]);
-function parseSupplementalReviewOutcome(value) {
-  assertPlainJson(value, "supplemental review outcome");
-  return supplementalReviewOutcomeSchema.parse(value);
-}
 
 // src/contracts/trust.ts
 import { createHash as createHash2 } from "node:crypto";
@@ -37555,9 +37672,9 @@ function decodeJson(bytes) {
 }
 var digestBytes = (bytes) => parseSha256Digest(createHash2("sha256").update(bytes).digest("hex"));
 var copiedBytes = (bytes) => Uint8Array.from(bytes);
-function assertAdapterFamily(adapter2, family3) {
+function assertAdapterFamily(adapter2, family2) {
   const expected = adapter2 === "claude-cli" ? "claude" : "codex";
-  if (family3 !== expected) throw new TypeError("adapter and model family do not match");
+  if (family2 !== expected) throw new TypeError("adapter and model family do not match");
 }
 function createObservation(binding, bytes, rawOutputDigest) {
   const storedBytes = copiedBytes(bytes);
@@ -37602,22 +37719,17 @@ var agentAuthoritySchema = external_exports.object({ kind: external_exports.lite
 var serverAuthoritySchema = external_exports.object({ kind: external_exports.literal("server"), invocation_id: idSchema, result_id: idSchema, receipt_id: idSchema, state_revision: safeInteger5, envelope_input_digest: digestSchema, observed_output_digest: digestSchema, result_digest: digestSchema }).strict();
 var degradedAuthoritySchema = external_exports.object({ kind: external_exports.literal("degraded"), checkpoint_digest: digestSchema, checkpoint_revision: safeInteger5 }).strict();
 var authorityReferencesSchema = external_exports.discriminatedUnion("kind", [agentAuthoritySchema, serverAuthoritySchema, degradedAuthoritySchema]);
-var authorityLinkDataSchema = external_exports.object({ schema_version: external_exports.literal("1"), evidence_kind: external_exports.enum(["review", "adjudication"]), assurance: external_exports.enum(["agent-declared", "server-attested", "degraded"]), role: external_exports.enum(["counter-review", "gate-counter-review", "adjudication"]), task_id: taskSlugV1Schema, phase_instance: phaseSchema, subject_digest: digestSchema, input_fingerprint: digestSchema, evidence_digest: digestSchema, gate_id: pathSafeIdV1Schema.optional(), authority: authorityReferencesSchema }).strict().superRefine((link2, context2) => {
+var authorityLinkDataSchema = external_exports.object({ schema_version: external_exports.literal("1"), evidence_kind: external_exports.enum(["review", "adjudication"]), assurance: external_exports.enum(["agent-declared", "server-attested", "degraded"]), role: external_exports.enum(["counter-review", "adjudication"]), task_id: taskSlugV1Schema, phase_instance: phaseSchema, subject_digest: digestSchema, input_fingerprint: digestSchema, evidence_digest: digestSchema, authority: authorityReferencesSchema }).strict().superRefine((link2, context2) => {
   if (link2.evidence_kind === "adjudication" !== (link2.role === "adjudication")) context2.addIssue({ code: "custom", path: ["role"], message: "role must match evidence kind" });
   const expectedAuthorityKind = link2.assurance === "server-attested" ? "server" : link2.assurance;
   if (link2.authority.kind !== expectedAuthorityKind) context2.addIssue({ code: "custom", path: ["authority", "kind"], message: "authority references must match assurance" });
-  if (link2.role === "gate-counter-review" !== (link2.gate_id !== void 0)) context2.addIssue({ code: "custom", path: ["gate_id"], message: "gate_id is required only for gate-counter-review authority" });
 });
 var slotBase = { evidence_digest: digestSchema, producer_family: familySchema, reviewer_family: familySchema };
 var counterSlotSchema = external_exports.object({ ...slotBase, role: external_exports.literal("counter-review"), assurance: external_exports.enum(["server-attested", "degraded"]), independence: external_exports.literal("opposite-family") }).strict().superRefine((slot, context2) => {
   if (slot.producer_family === slot.reviewer_family) context2.addIssue({ code: "custom", message: "counter-review families must differ" });
 });
-var gateCounterSlotSchema2 = external_exports.object({ ...slotBase, role: external_exports.literal("gate-counter-review"), assurance: external_exports.enum(["server-attested", "degraded"]), independence: external_exports.literal("opposite-family"), gate_id: pathSafeIdV1Schema }).strict().superRefine((slot, context2) => {
-  if (slot.producer_family === slot.reviewer_family) context2.addIssue({ code: "custom", message: "gate-counter-review families must differ" });
-});
 var counterOnlySlotsSchema = external_exports.tuple([counterSlotSchema]);
-var counterWithGateCounterSlotsSchema = external_exports.tuple([counterSlotSchema, gateCounterSlotSchema2]);
-var requiredReviewSlotsSchema = external_exports.union([counterOnlySlotsSchema, counterWithGateCounterSlotsSchema]).superRefine((slots, context2) => {
+var requiredReviewSlotsSchema = counterOnlySlotsSchema.superRefine((slots, context2) => {
   try {
     validateSlots(slots);
   } catch (error51) {
@@ -37653,7 +37765,6 @@ function assertLinkMatches(kind, link2, value) {
   const phaseInstance4 = encodePhaseInstance(decodePhaseInstance(evidence.phase_instance));
   if (link2.evidence_kind !== kind || link2.assurance !== evidence.assurance || link2.evidence_digest !== value.evidence_digest || link2.task_id !== evidence.task_id || link2.phase_instance !== phaseInstance4 || link2.subject_digest !== evidence.subject_digest || link2.input_fingerprint !== evidence.input_fingerprint) throw new TypeError("authority link does not match verified evidence");
   if (link2.role !== (kind === "review" ? evidence.role : "adjudication")) throw new TypeError("authority role does not match evidence");
-  if (link2.role === "gate-counter-review" !== (link2.gate_id !== void 0)) throw new TypeError("authority gate binding does not match role");
   if (evidence.assurance === "server-attested") {
     if (link2.authority.kind !== "server" || link2.authority.invocation_id !== evidence.invocation_id || link2.authority.result_id !== evidence.result_id || link2.authority.envelope_input_digest !== evidence.envelope_input_digest || link2.authority.observed_output_digest !== evidence.observed_output_digest) {
       throw new TypeError("server authority provenance does not match evidence");
@@ -37661,7 +37772,7 @@ function assertLinkMatches(kind, link2, value) {
   }
 }
 function validateSlots(slots) {
-  if (slots.length !== 1 && slots.length !== 2 || slots[0]?.role !== "counter-review" || slots.length === 2 && slots[1]?.role !== "gate-counter-review") throw new TypeError("review slots must use canonical role order");
+  if (slots.length !== 1 || slots[0]?.role !== "counter-review") throw new TypeError("review slots must contain exactly the counter-review");
   for (const slot of slots) {
     if (slot.independence !== "opposite-family" || slot.producer_family === slot.reviewer_family) throw new TypeError("invalid opposite-family review slot");
   }
@@ -37696,7 +37807,7 @@ var authorityQualifier = Object.freeze({
     if (reviews.length !== authority.slots.length) throw new TypeError("reviews must exactly cover required slots");
     authority.slots.forEach((slot, index) => {
       const review = reviews[index];
-      if (review === void 0 || !authenticQualifiedEvidence(review, "review") || !authenticQualifiedEvidence(review, "review", review.evidence.assurance) || review.evidence_digest !== slot.evidence_digest || review.evidence.role !== slot.role || review.evidence.assurance !== slot.assurance || review.evidence.producer_family !== slot.producer_family || review.evidence.model_family !== slot.reviewer_family || review.authority.task_id !== authority.task_id || review.authority.phase_instance !== authority.phase_instance || review.authority.subject_digest !== authority.subject_digest || review.authority.input_fingerprint !== authority.input_fingerprint || slot.role === "gate-counter-review" && review.authority.gate_id !== slot.gate_id) throw new TypeError(`review does not match slot ${index}`);
+      if (review === void 0 || !authenticQualifiedEvidence(review, "review") || !authenticQualifiedEvidence(review, "review", review.evidence.assurance) || review.evidence_digest !== slot.evidence_digest || review.evidence.role !== slot.role || review.evidence.assurance !== slot.assurance || review.evidence.producer_family !== slot.producer_family || review.evidence.model_family !== slot.reviewer_family || review.authority.task_id !== authority.task_id || review.authority.phase_instance !== authority.phase_instance || review.authority.subject_digest !== authority.subject_digest || review.authority.input_fingerprint !== authority.input_fingerprint) throw new TypeError(`review does not match slot ${index}`);
     });
     const current = Object.freeze({ task_id: authority.task_id, phase_instance: authority.phase_instance, subject_digest: authority.subject_digest, input_fingerprint: authority.input_fingerprint, current_evidence_set: currentEvidenceSetRef(authority.slots), reviews: Object.freeze([...reviews]) });
     registerCurrentReviewSet(current);
@@ -37706,22 +37817,22 @@ var authorityQualifier = Object.freeze({
 
 // src/contracts/triage.ts
 var id5 = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
-var digest6 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var nonBlank4 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
-var findingRefShape = { review_evidence_digest: digest6, finding_id: id5 };
-var acceptedDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("accepted"), rationale: nonBlank4, revision_intent: nonBlank4 }).strict();
-var acceptedEditorialDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("accepted-editorial"), rationale: nonBlank4, revision_intent: nonBlank4 }).strict();
-var rejectedDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("rejected"), rationale: nonBlank4, evidence: nonBlank4 }).strict();
+var digest5 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var nonBlank3 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
+var findingRefShape = { review_evidence_digest: digest5, finding_id: id5 };
+var acceptedDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("accepted"), rationale: nonBlank3, revision_intent: nonBlank3 }).strict();
+var acceptedEditorialDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("accepted-editorial"), rationale: nonBlank3, revision_intent: nonBlank3 }).strict();
+var rejectedDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("rejected"), rationale: nonBlank3, evidence: nonBlank3 }).strict();
 var triageDispositionSchema = external_exports.discriminatedUnion("disposition", [acceptedDispositionSchema, acceptedEditorialDispositionSchema, rejectedDispositionSchema]);
 var triageCandidateSchema = external_exports.object({
   schema_version: external_exports.literal("1"),
   task_id: taskSlugV1Schema,
   phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
   step: external_exports.literal("triage"),
-  subject_digest: digest6,
-  input_fingerprint: digest6,
-  current_evidence_set_digest: digest6,
-  source_evidence_digests: external_exports.array(digest6),
+  subject_digest: digest5,
+  input_fingerprint: digest5,
+  current_evidence_set_digest: digest5,
+  source_evidence_digests: external_exports.array(digest5),
   dispositions: external_exports.array(triageDispositionSchema),
   accepted_count: external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   rejected_count: external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
@@ -37788,11 +37899,11 @@ var parsedCalls = /* @__PURE__ */ new WeakSet();
 var structuralResults = /* @__PURE__ */ new WeakSet();
 var resultExpectations = /* @__PURE__ */ new WeakSet();
 var requestDigests = /* @__PURE__ */ new WeakMap();
-var digest7 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var digest6 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var safeId2 = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
 var text2 = external_exports.string().min(1).max(4096).regex(/\S/u);
 var safeInteger6 = external_exports.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-var phase2 = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((v) => {
+var phase = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((v) => {
   try {
     decodePhaseInstance(v);
     return true;
@@ -37803,7 +37914,7 @@ var phase2 = external_exports.string().regex(/^(?:prd|design|phase-(?:design|imp
 var rule2 = external_exports.object({ rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict();
 var scope = external_exports.object({ operation: external_exports.enum(["review-trigger", "adjudication-failure"]), boundary: external_exports.enum(["subject", "phase", "task"]) }).strict();
 var provenance = humanDecisionProvenanceV1Schema.clone(humanDecisionProvenanceV1Schema.def);
-var common2 = { schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger6, input_fingerprint: digest7 };
+var common2 = { schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger6, input_fingerprint: digest6 };
 var def = (name) => Object.freeze({ name, input_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/input`, result_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/result` });
 var TOOL_DEFINITIONS = Object.freeze({ archflow_state: def("archflow_state"), archflow_counter_review: def("archflow_counter_review"), archflow_gate: def("archflow_gate"), archflow_waiver: def("archflow_waiver") });
 var durableArtifact = external_exports.union([
@@ -37817,11 +37928,26 @@ var durableArtifact = external_exports.union([
     evidence: triageCandidateSchema
   }).strict()
 ]);
-var stateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, step: external_exports.enum(["produce", "counter_review", "triage"]), status: external_exports.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
-var stagedReferenceInput = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest7 }).strict();
+var humanRevisionDeclarationSchema = external_exports.object({
+  classification: external_exports.enum(HUMAN_REVISION_CLASSIFICATIONS),
+  rationale: text2,
+  user_override: external_exports.object({
+    agent_classification: external_exports.enum(HUMAN_REVISION_CLASSIFICATIONS),
+    rationale: text2
+  }).strict().optional()
+}).strict().superRefine((revision, context2) => {
+  if (revision.user_override?.agent_classification === revision.classification) {
+    context2.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
+  }
+});
+var stateInputSchema = external_exports.object({ ...common2, phase_instance: phase, step: external_exports.enum(["produce", "counter_review", "triage"]), status: external_exports.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional(), human_revision: humanRevisionDeclarationSchema.optional() }).strict().superRefine((input, context2) => {
+  if (input.human_revision !== void 0 && (input.step !== "produce" || input.status !== "succeeded")) {
+    context2.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
+  }
+});
+var stagedReferenceInput = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, request_digest: digest6 }).strict();
 var counterReviewInputSchema = external_exports.object({ ...common2, artifact_path: taskPathClaimV1Schema }).strict();
-var supersedes = external_exports.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest7, old_subject_digest: digest7 }).strict();
-var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, summary: text2, subject_digest: digest7, current_evidence: external_exports.unknown(), supersedes: supersedes.optional(), supplemental_outcome: supplementalReviewOutcomeSchema.optional(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown() }).strict().superRefine((input, context2) => {
+var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase, summary: text2, subject_digest: digest6, current_evidence: external_exports.unknown(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown() }).strict().superRefine((input, context2) => {
   try {
     parseGateContext(input.kind, input.context);
   } catch (error51) {
@@ -37833,19 +37959,15 @@ var gateInputSchema = external_exports.object({ ...common2, phase_instance: phas
     context2.addIssue({ code: "custom", path: ["current_evidence"], message: error51 instanceof Error ? error51.message : "invalid current evidence" });
   }
 });
-var waiverOrigin = external_exports.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest7, origin_context_digest: digest7, task_id: taskSlugV1Schema, phase_instance: phase2, subject_digest: digest7, current_evidence_set_digest: digest7, rule: rule2, scope }).strict();
-var waiverInputSchema = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text2, supplemental_outcome: supplementalReviewOutcomeSchema.optional() }).strict().superRefine((input, context2) => {
+var waiverOrigin = external_exports.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest6, origin_context_digest: digest6, task_id: taskSlugV1Schema, phase_instance: phase, subject_digest: digest6, current_evidence_set_digest: digest6, rule: rule2, scope }).strict();
+var waiverInputSchema = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text2 }).strict().superRefine((input, context2) => {
   if (input.task_id !== input.origin.task_id) context2.addIssue({ code: "custom", path: ["task_id"], message: "waiver task_id must match origin task_id" });
 });
 function inputFor(name, value) {
   const parsed = name === "archflow_state" ? stateInputSchema.parse(value) : name === "archflow_counter_review" ? counterReviewInputSchema.parse(value) : name === "archflow_waiver" ? waiverInputSchema.parse(value) : gateInputSchema.parse(value);
   if (name === "archflow_gate") {
     const v = parsed;
-    return { ...v, current_evidence: parseCurrentEvidenceSetRef(v.current_evidence), ...v.supplemental_outcome === void 0 ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) } };
-  }
-  if (name === "archflow_waiver") {
-    const v = parsed;
-    return { ...v, ...v.supplemental_outcome === void 0 ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) } };
+    return { ...v, current_evidence: parseCurrentEvidenceSetRef(v.current_evidence) };
   }
   return parsed;
 }
@@ -37885,12 +38007,12 @@ function classifyToolCallInput(name, value) {
 }
 function bindParsedToolCallRequest(call, requestDigest) {
   if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required");
-  digest7.parse(requestDigest);
+  digest6.parse(requestDigest);
   requestDigests.set(call, requestDigest);
   return call;
 }
 var toolSuccessSchemas = {
-  archflow_state: external_exports.object({ path: taskPathClaimV1Schema, revision: safeInteger6, status: external_exports.enum(["running", "succeeded", "failed"]), request_digest: digest7.optional() }).strict(),
+  archflow_state: external_exports.object({ path: taskPathClaimV1Schema, revision: safeInteger6, status: external_exports.enum(["running", "succeeded", "failed"]), request_digest: digest6.optional() }).strict(),
   archflow_counter_review: external_exports.object({
     path: repositoryPathClaimV1Schema,
     verdict: external_exports.enum(["pass", "advisory", "fail"]),
@@ -37900,17 +38022,17 @@ var toolSuccessSchemas = {
       external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict()
     ]),
     revision: safeInteger6,
-    request_digest: digest7.optional()
+    request_digest: digest6.optional()
   }).strict(),
-  archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: gateDecisionEnvelopeV1Schema, notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict(),
-  archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope, human_provenance: provenance, granted: external_exports.literal(false), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict()])
+  archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: gateDecisionEnvelopeV1Schema, notes: text2, revision: safeInteger6, request_digest: digest6.optional() }).strict(),
+  archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest6, current_evidence_set_digest: digest6, scope, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text2, revision: safeInteger6, request_digest: digest6.optional() }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest6, current_evidence_set_digest: digest6, scope, human_provenance: provenance, granted: external_exports.literal(false), notes: text2, revision: safeInteger6, request_digest: digest6.optional() }).strict()])
 };
 var mcpToolsSchemaDefs = Object.freeze({
-  digest: digest7,
+  digest: digest6,
   id: safeId2,
   text: text2,
   integer: safeInteger6,
-  phase: phase2,
+  phase,
   durableArtifact,
   rule: rule2,
   scope,
@@ -37970,7 +38092,7 @@ function validateProjectFailureStructure(name, value) {
   structuralResults.add(branded);
   return branded;
 }
-var resultExpectationDataSchema = external_exports.object({ schema_version: external_exports.literal("1"), tool: external_exports.enum(TOOL_NAMES), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, input_fingerprint: digest7, request_digest: digest7, result_id: safeId2, resulting_revision: safeInteger6, success: external_exports.unknown() }).strict().superRefine((expectation, context2) => {
+var resultExpectationDataSchema = external_exports.object({ schema_version: external_exports.literal("1"), tool: external_exports.enum(TOOL_NAMES), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, input_fingerprint: digest6, request_digest: digest6, result_id: safeId2, resulting_revision: safeInteger6, success: external_exports.unknown() }).strict().superRefine((expectation, context2) => {
   const success2 = toolSuccessSchemas[expectation.tool].safeParse(expectation.success);
   if (!success2.success) {
     context2.addIssue({ code: "custom", path: ["success"], message: `invalid ${expectation.tool} success value` });
@@ -38022,9 +38144,6 @@ function stagedRequestClaim(intentId) {
 function gateDecisionClaim(gateId) {
   return parseTaskPathClaim(`authority/decisions/${gateId}/decision.json`);
 }
-function gateSupplementalReviewClaim(gateId) {
-  return parseTaskPathClaim(`authority/decisions/${gateId}/supplemental-review.json`);
-}
 function initializationAuthorityClaim() {
   return parseTaskPathClaim("authority/initialization.json");
 }
@@ -38037,11 +38156,11 @@ function resultAuthorityClaim(resultDigest) {
 function intentReceiptClaim(intentId) {
   return parseWorkspacePathClaim(`transient/intents/${intentId}.json`);
 }
-function verificationTranscriptClaim(phase4) {
-  if (!Number.isSafeInteger(phase4) || phase4 < 1) {
+function verificationTranscriptClaim(phase3) {
+  if (!Number.isSafeInteger(phase3) || phase3 < 1) {
     throw new TypeError("phase must be a positive safe integer");
   }
-  return parseWorkspacePathClaim(`cache/phases/${phase4}/verification.txt`);
+  return parseWorkspacePathClaim(`cache/phases/${phase3}/verification.txt`);
 }
 function counterReviewClaim(phaseInstance4) {
   return parseWorkspacePathClaim(`cache/reviews/${phaseInstance4}.counter.md`);
@@ -38051,11 +38170,6 @@ function triageReviewClaim(phaseInstance4) {
 }
 function adjudicationReviewClaim(phaseInstance4) {
   return parseWorkspacePathClaim(`cache/reviews/${phaseInstance4}.adjudication.md`);
-}
-function gateCounterReviewClaim(phaseInstance4, gateId) {
-  return parseWorkspacePathClaim(
-    `cache/reviews/${phaseInstance4}.gate-counter.${gateId}.md`
-  );
 }
 var PATH_SAFE_ID = "[A-Za-z0-9][A-Za-z0-9._-]{0,127}";
 var SHA256 = "[0-9a-f]{64}";
@@ -38083,7 +38197,7 @@ var TASK_CLASS_RULES = [
   {
     path_class: "authority-decision",
     pattern: anchored(
-      `authority/decisions/${PATH_SAFE_ID}/(?:request|decision|supplemental-review)\\.json`
+      `authority/decisions/${PATH_SAFE_ID}/(?:request|decision)\\.json`
     )
   }
 ];
@@ -38104,7 +38218,7 @@ var WORKSPACE_CLASS_RULES = [
   {
     path_class: "workspace-review",
     pattern: anchored(
-      `cache/reviews/${PHASE_INSTANCE}\\.(?:counter|triage|adjudication)\\.md|cache/reviews/${PHASE_INSTANCE}\\.gate-counter\\.${PATH_SAFE_ID}\\.md`
+      `cache/reviews/${PHASE_INSTANCE}\\.(?:counter|triage|adjudication)\\.md`
     )
   },
   {
@@ -38994,7 +39108,7 @@ async function resolveRepositoryIdentity(runner, environment, context2) {
     });
     const rootCommits = output.split("\n").filter((line) => line !== "").map((line) => parseGitOid(line)).sort(ordinal2);
     if (rootCommits.length === 0) return fail4(repositoryNotFound(runner));
-    const digest12 = sha256Bytes(
+    const digest10 = sha256Bytes(
       canonicalJsonBytes({
         object_format: environment.object_format,
         root_commits: rootCommits.map((oid) => oid)
@@ -39005,7 +39119,7 @@ async function resolveRepositoryIdentity(runner, environment, context2) {
         schema_version: "1",
         object_format: environment.object_format,
         root_commits: Object.freeze(rootCommits),
-        digest: digest12
+        digest: digest10
       })
     );
   } catch (error51) {
@@ -39223,23 +39337,23 @@ async function ensureAuthorityDirectory(authority) {
   assertInternalTransactionAuthority(authority);
   await ensureRealDirectory(join2(authority.task_root, "authority"));
 }
-async function ensureResultDirectory(authority, digest12) {
+async function ensureResultDirectory(authority, digest10) {
   assertInternalTransactionAuthority(authority);
-  if (!/^[0-9a-f]{64}$/u.test(digest12)) throw new TypeError("result digest must be lowercase SHA-256");
+  if (!/^[0-9a-f]{64}$/u.test(digest10)) throw new TypeError("result digest must be lowercase SHA-256");
   await ensureAuthorityDirectory(authority);
   await ensureRealDirectory(join2(authority.task_root, "authority", "results"));
   await ensureWorkspaceRoot(authority);
-  const parts = ["cache", "results", digest12, "payload"];
+  const parts = ["cache", "results", digest10, "payload"];
   let current = authority.workspace_root;
   for (const part of parts) {
     current = join2(current, part);
     await ensureRealDirectory(current);
   }
 }
-async function ensurePayloadParent(authority, digest12, target2) {
+async function ensurePayloadParent(authority, digest10, target2) {
   assertInternalTransactionAuthority(authority);
-  if (!/^[0-9a-f]{64}$/u.test(digest12)) throw new TypeError("result digest must be lowercase SHA-256");
-  const root = join2(authority.workspace_root, "cache", "results", digest12, "payload");
+  if (!/^[0-9a-f]{64}$/u.test(digest10)) throw new TypeError("result digest must be lowercase SHA-256");
+  const root = join2(authority.workspace_root, "cache", "results", digest10, "payload");
   const parent = join2(target2, "..");
   const rel = relative2(root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) throw new TypeError("payload parent escaped result directory");
@@ -39354,13 +39468,16 @@ function closedOperationFields(subject) {
       if (operationForKind[artifactFields.artifact_kind] !== subject.operation) {
         throw new TypeError("invalid archflow_state operation for artifact_kind");
       }
-      exactFields(artifactFields, ["phase_instance", "step", "status", "artifact_kind", "artifact_digest"]);
+      const expected = ["phase_instance", "step", "status", "artifact_kind", "artifact_digest"];
+      if (artifactFields.human_revision !== void 0) expected.push("human_revision");
+      exactFields(artifactFields, expected);
       return {
         phase_instance: artifactFields.phase_instance,
         step: artifactFields.step,
         status: artifactFields.status,
         artifact_kind: artifactFields.artifact_kind,
-        artifact_digest: artifactFields.artifact_digest
+        artifact_digest: artifactFields.artifact_digest,
+        ...artifactFields.human_revision === void 0 ? {} : { human_revision: artifactFields.human_revision }
       };
     }
     case "archflow_counter_review": {
@@ -39373,7 +39490,6 @@ function closedOperationFields(subject) {
       const fields = subject.operation_fields;
       if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
       const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context"];
-      if (fields.supersedes !== void 0) expected.push("supersedes");
       exactFields(fields, expected);
       const selected = {
         phase_instance: fields.phase_instance,
@@ -39381,8 +39497,7 @@ function closedOperationFields(subject) {
         subject_digest: fields.subject_digest,
         current_evidence: fields.current_evidence,
         kind: fields.kind,
-        context: fields.context,
-        ...fields.supersedes === void 0 ? {} : { supersedes: fields.supersedes }
+        context: fields.context
       };
       return selected;
     }
@@ -39424,56 +39539,6 @@ function computeGateId(subject) {
 function computeGateContextDigest(kind, context2) {
   const snapshot = materialize(context2, "gate context digest subject");
   return kind === "waiver" ? canonicalJsonDigest({ schema_version: "1", digest_kind: "waiver-context", ...snapshot }) : canonicalJsonDigest({ schema_version: "1", digest_kind: "gate-context", kind, context: snapshot });
-}
-
-// src/contracts/supplemental-record.ts
-var digest8 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var supplementalReviewRecordV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  gate_id: pathSafeIdV1Schema,
-  request_digest: digest8,
-  task_id: taskSlugV1Schema,
-  phase_instance: phaseInstanceIdV1Schema,
-  kind: external_exports.enum(GATE_KINDS),
-  subject_digest: digest8,
-  context_digest: digest8,
-  input_fingerprint: digest8,
-  current_evidence_set_digest: digest8,
-  evidence_digest: digest8,
-  projection_digest: digest8,
-  review: reviewEvidenceSchema,
-  triage_digest: digest8,
-  triage: triageCandidateSchema,
-  outcome: external_exports.enum(["no-change", "accepted-change"])
-}).strict();
-function deepFreezeJson2(value) {
-  if (value !== null && typeof value === "object") {
-    for (const nested of Object.values(value)) deepFreezeJson2(nested);
-    Object.freeze(value);
-  }
-  return value;
-}
-function parseSupplementalReviewRecord(value) {
-  assertPlainJson(value, "supplemental review record");
-  const parsed = deepFreezeJson2(supplementalReviewRecordV1Schema.parse(value));
-  if (parsed.review.assurance !== "degraded" || parsed.review.role !== "gate-counter-review" || parsed.review.step !== "counter_review" || parsed.review.producer_family === parsed.review.model_family) throw new TypeError("supplemental review must be degraded opposite-family gate evidence");
-  if (canonicalJsonDigest(parsed.review) !== parsed.evidence_digest) {
-    throw new TypeError("supplemental evidence digest does not match review");
-  }
-  if (canonicalJsonDigest(parsed.triage) !== parsed.triage_digest) {
-    throw new TypeError("supplemental triage digest does not match triage");
-  }
-  if (parsed.review.task_id !== parsed.task_id || parsed.review.phase_instance !== parsed.phase_instance || parsed.review.subject_digest !== parsed.subject_digest || parsed.review.input_fingerprint !== parsed.input_fingerprint || parsed.triage.task_id !== parsed.task_id || parsed.triage.phase_instance !== parsed.phase_instance || parsed.triage.subject_digest !== parsed.subject_digest || parsed.triage.input_fingerprint !== parsed.input_fingerprint || parsed.triage.current_evidence_set_digest !== parsed.current_evidence_set_digest || parsed.triage.source_evidence_digests.length !== 1 || parsed.triage.source_evidence_digests[0] !== parsed.evidence_digest) throw new TypeError("supplemental review and triage bindings disagree");
-  const expected = new Set(parsed.review.findings.map((finding) => finding.finding_id));
-  const actual = /* @__PURE__ */ new Set();
-  for (const disposition of parsed.triage.dispositions) {
-    if (disposition.review_evidence_digest !== parsed.evidence_digest || !expected.has(disposition.finding_id) || actual.has(disposition.finding_id)) throw new TypeError("supplemental triage contains a foreign or duplicate finding");
-    actual.add(disposition.finding_id);
-  }
-  if (actual.size !== expected.size) throw new TypeError("supplemental triage must exactly cover every finding");
-  const accepted = parsed.triage.dispositions.filter((item) => item.disposition === "accepted").length;
-  if (parsed.triage.accepted_count !== accepted || parsed.triage.rejected_count !== parsed.triage.dispositions.length - accepted || parsed.outcome !== (accepted === 0 ? "no-change" : "accepted-change")) throw new TypeError("supplemental triage outcome is contradictory");
-  return parsed;
 }
 
 // src/state/atomic.ts
@@ -39775,9 +39840,9 @@ function phaseInstance3(call, context2) {
     }
   }
 }
-function rubricDigest(call, phase4) {
+function rubricDigest(call, phase3) {
   const reviewCycle = call.name === "archflow_counter_review" || call.name === "archflow_state" && (call.input.step === "counter_review" || call.input.step === "triage");
-  return reviewCycle ? canonicalRubricForPhaseKind(decodePhaseInstance(phase4).kind).rubric_digest : canonicalJsonDigest({});
+  return reviewCycle ? canonicalRubricForPhaseKind(decodePhaseInstance(phase3).kind).rubric_digest : canonicalJsonDigest({});
 }
 function createInternalInputFingerprintResolver(input) {
   return async (context2) => {
@@ -40233,87 +40298,6 @@ function parseConfigV1(value) {
 function parseConfigYaml(source, label = "config.yaml") {
   return parseConfigV1(parseSingleYamlDocument(source, label));
 }
-
-// src/contracts/durable-state.ts
-var STEP_STATUSES = ["running", "succeeded", "failed"];
-var TERMINAL_STATES = ["complete", "abandoned"];
-var sha256Digest5 = sha256DigestV1Schema;
-var stepStatusV1Schema = external_exports.enum(STEP_STATUSES);
-var gateKindV1Schema = external_exports.enum(GATE_KINDS);
-var positiveSafeInteger = external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
-var authoritativeResultRefV1Schema = external_exports.object({
-  phase_instance: phaseInstanceIdV1Schema,
-  step: external_exports.enum(PIPELINE_STEPS),
-  result_digest: sha256Digest5,
-  result_id: safeIdV1Schema,
-  input_fingerprint: sha256Digest5
-}).strict();
-var approvalRefV1Schema = external_exports.object({
-  gate_id: pathSafeIdV1Schema,
-  gate_kind: gateKindV1Schema,
-  subject_digest: sha256Digest5,
-  decision_digest: sha256Digest5,
-  resolved_at_revision: positiveSafeInteger
-}).strict();
-var waiverRefV1Schema = external_exports.object({
-  gate_id: pathSafeIdV1Schema,
-  rule_id: safeIdV1Schema,
-  rule_version: positiveSafeInteger,
-  subject_digest: sha256Digest5,
-  scope: external_exports.object({
-    operation: external_exports.enum(["review-trigger", "adjudication-failure"]),
-    boundary: external_exports.enum(["subject", "phase", "task"])
-  }).strict(),
-  granted: external_exports.boolean(),
-  expires: external_exports.literal("task-complete"),
-  granted_at_revision: positiveSafeInteger
-}).strict();
-var openGateRefV1Schema = external_exports.object({
-  gate_id: pathSafeIdV1Schema,
-  gate_kind: gateKindV1Schema,
-  subject_digest: sha256Digest5,
-  context_digest: sha256Digest5,
-  frozen_state_digest: sha256Digest5,
-  waiver_origin_gate_id: pathSafeIdV1Schema.optional(),
-  opened_at_revision: positiveSafeInteger
-}).strict();
-var lastTransitionOutcomeV1Schema = external_exports.json();
-var lastTransitionV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  tool: external_exports.enum(TOOL_NAMES),
-  operation: safeCodeV1Schema,
-  intent_id: pathSafeIdV1Schema,
-  request_digest: sha256Digest5,
-  input_fingerprint: sha256Digest5,
-  result_id: safeIdV1Schema,
-  outcome: lastTransitionOutcomeV1Schema,
-  outcome_digest: sha256Digest5,
-  prior_revision: safeIntegerV1Schema,
-  resulting_revision: positiveSafeInteger
-}).strict();
-var taskStateV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  task_id: taskSlugV1Schema,
-  repository_identity_digest: sha256Digest5,
-  revision: positiveSafeInteger,
-  phase_instance: phaseInstanceIdV1Schema,
-  step: external_exports.enum(PIPELINE_STEPS),
-  status: stepStatusV1Schema,
-  attempt: positiveSafeInteger,
-  input_fingerprint: sha256Digest5,
-  initialization_digest: sha256Digest5,
-  config_digest: sha256Digest5,
-  workflow_digest: sha256Digest5,
-  constitution_digest: sha256Digest5,
-  policy_base_commit: gitOidV1Schema,
-  authoritative_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "authoritative_results must be sorted by (phase_instance, step) with no duplicates"),
-  approvals: external_exports.array(approvalRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "approvals must be sorted by gate_id with no duplicates"),
-  waivers: external_exports.array(waiverRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "waivers must be sorted by gate_id with no duplicates"),
-  planned_final_phase: positiveSafeInteger.optional(),
-  open_gate: openGateRefV1Schema.optional(),
-  last_transition: lastTransitionV1Schema.optional(),
-  terminal: external_exports.enum(TERMINAL_STATES).optional()
-}).strict();
 
 // src/contracts/durable-intent.ts
 var sha256Digest6 = sha256DigestV1Schema;
@@ -43096,8 +43080,8 @@ function parsePkcs12(buf) {
       throw new Error("PKCS12: unexpected MAC algorithm parameters");
     }
   }
-  const digest12 = readTlv(digestInfo.content, alg.end);
-  expectTag(digest12, TAG_OCTET_STRING, "digest OCTET STRING");
+  const digest10 = readTlv(digestInfo.content, alg.end);
+  expectTag(digest10, TAG_OCTET_STRING, "digest OCTET STRING");
   const salt = readTlv(macData.content, digestInfo.end);
   expectTag(salt, TAG_OCTET_STRING, "macSalt OCTET STRING");
   let iterations = 1;
@@ -43112,7 +43096,7 @@ function parsePkcs12(buf) {
     authSafe: authSafeOctet.content,
     macHash,
     macSalt: salt.content,
-    macDigest: digest12.content,
+    macDigest: digest10.content,
     iterations
   };
 }
@@ -43121,7 +43105,7 @@ function toBufferSource(data) {
   copy2.set(data);
   return copy2;
 }
-async function digest9(hash2, data) {
+async function digest7(hash2, data) {
   return new Uint8Array(await globalThis.crypto.subtle.digest(hash2.name, toBufferSource(data)));
 }
 function padToMultipleOf(src, blockSize) {
@@ -43155,9 +43139,9 @@ async function deriveMacKey(hash2, password, salt, iterations) {
   DI.set(D, 0);
   DI.set(S, D.length);
   DI.set(P, D.length + S.length);
-  let A = await digest9(hash2, DI);
+  let A = await digest7(hash2, DI);
   for (let i = 1; i < iterations; i++) {
-    A = await digest9(hash2, A);
+    A = await digest7(hash2, A);
   }
   return A.subarray(0, u);
 }
@@ -45404,9 +45388,9 @@ function ownEnumerableDataField(document2, field, label) {
 }
 function materialize2(document2, label) {
   const value = ownDataField(document2, "value", label);
-  const digest12 = ownDataField(document2, "digest", label);
+  const digest10 = ownDataField(document2, "digest", label);
   assertPlainJson(value, `${label} value`);
-  return { value: structuredClone(value), digest: digest12 };
+  return { value: structuredClone(value), digest: digest10 };
 }
 function stateInvalid(state, issue_code) {
   return createProjectError("STATE_INVALID", { phase_instance: state.phase_instance, issue_code });
@@ -46268,8 +46252,8 @@ function deriveDeclaredSnapshotDigest(outputs, projections) {
   }
   return deriveSnapshotDigest([...entries.values()]);
 }
-function snapshotInvalid(digest12, issue_code) {
-  return fail9(createProjectError("SNAPSHOT_INVALID", { snapshot_digest: digest12, issue_code }));
+function snapshotInvalid(digest10, issue_code) {
+  return fail9(createProjectError("SNAPSHOT_INVALID", { snapshot_digest: digest10, issue_code }));
 }
 function ownEnumerableData2(value, key) {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
@@ -46707,11 +46691,11 @@ async function rollback(writer, applied, collisionPath) {
 // src/state/production.ts
 var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail10 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-function context(input, phase4, attempt) {
-  return Object.freeze({ task_id: input.task_id, phase_instance: phase4, operation: input.operation, attempt });
+function context(input, phase3, attempt) {
+  return Object.freeze({ task_id: input.task_id, phase_instance: phase3, operation: input.operation, attempt });
 }
-function stateFailure(phase4, issue4) {
-  return fail10(createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code: issue4 }));
+function stateFailure(phase3, issue4) {
+  return fail10(createProjectError("STATE_INVALID", { phase_instance: phase3, issue_code: issue4 }));
 }
 async function resolvePath6(runner, authority, claim, expectedClass) {
   return resolveTaskPath({
@@ -46925,7 +46909,11 @@ async function createProductionServices(input) {
       const current = await readTaskState(authority.state);
       if (current.kind !== "canonical") return parseSafeInteger(0);
       let total = 0;
-      for (const reference of current.document.value.authoritative_results) {
+      const retainedReferences = [
+        ...current.document.value.authoritative_results,
+        ...(current.document.value.human_revision_history ?? []).flatMap((revision) => revision.evidence)
+      ].filter((reference, index, references) => references.findIndex((candidate) => candidate.result_digest === reference.result_digest) === index);
+      for (const reference of retainedReferences) {
         if (reference.result_digest === excluded?.result_digest) continue;
         const retained = await readRetainedResult(discovered.value, authority, reference);
         if (!retained.ok) throw new TypeError("retained result accounting is unavailable");
@@ -46956,36 +46944,6 @@ async function createProductionServices(input) {
         context: authority.context
       });
       return subject.ok ? ok8(computeInputFingerprint(subject.value)) : subject;
-    },
-    resolve_supplemental_review: async ({ request }) => {
-      const target2 = await resolvePath6(
-        discovered.value,
-        authority,
-        gateSupplementalReviewClaim(request.gate_id),
-        "authority-decision"
-      );
-      if (!target2.ok) return target2;
-      let handle;
-      try {
-        handle = await openResolved(target2.value.absolute, 0);
-        const document2 = parseCanonicalDocument(
-          new Uint8Array(await handle.readFile()),
-          "supplemental review record"
-        );
-        const record2 = parseSupplementalReviewRecord(document2.value);
-        const producerFamilies = new Set(request.current_evidence.slots.map((slot) => slot.producer_family));
-        if (record2.gate_id !== request.gate_id || record2.request_digest !== request.request_digest || record2.task_id !== request.task_id || record2.phase_instance !== request.phase_instance || record2.kind !== request.kind || record2.subject_digest !== request.subject_digest || record2.context_digest !== request.context_digest || record2.current_evidence_set_digest !== request.current_evidence.set_digest || producerFamilies.size !== 1 || !producerFamilies.has(record2.review.producer_family) || record2.review.model_family === record2.review.producer_family || canonicalJsonDigest(record2.review) !== record2.evidence_digest) return stateFailure(authority.context.phase_instance, "supplemental-review-authority-invalid");
-        return ok8(Object.freeze({
-          evidence: record2.review,
-          gate_id: record2.gate_id,
-          triage_digest: record2.triage_digest,
-          triage_outcome: record2.outcome
-        }));
-      } catch {
-        return stateFailure(authority.context.phase_instance, "supplemental-review-authority-invalid");
-      } finally {
-        await handle?.close().catch(() => void 0);
-      }
     }
   });
   return ok8(Object.freeze({
@@ -47025,7 +46983,8 @@ function subjectFor(call, authority, inputFingerprint) {
           step: call.input.step,
           status: call.input.status,
           artifact_kind: call.input.artifact.artifact_kind,
-          artifact_digest: canonicalJsonDigest(call.input.artifact)
+          artifact_digest: canonicalJsonDigest(call.input.artifact),
+          ...call.input.human_revision === void 0 ? {} : { human_revision: call.input.human_revision }
         }
       };
     case "archflow_counter_review":
@@ -47036,7 +46995,6 @@ function subjectFor(call, authority, inputFingerprint) {
         summary: call.input.summary,
         subject_digest: call.input.subject_digest,
         current_evidence: call.input.current_evidence,
-        ...call.input.supersedes === void 0 ? {} : { supersedes: call.input.supersedes },
         kind: call.input.kind,
         context: call.input.context
       };
@@ -47062,11 +47020,11 @@ function identifyTransactionRequest(call, authority, recomputedInputFingerprint)
 }
 
 // src/state/staged-requests.ts
-var digest10 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var digest8 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var stagedRecordSchema = external_exports.object({
   schema_version: external_exports.literal("1"),
   request: external_exports.object({ tool: external_exports.enum(TOOL_NAMES), input: external_exports.unknown() }).strict(),
-  request_digest: digest10
+  request_digest: digest8
 }).strict();
 var ok9 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail11 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
@@ -47393,57 +47351,6 @@ var evidence_slots_schema_default = {
       ],
       additionalProperties: false
     },
-    gateCounter: {
-      type: "object",
-      properties: {
-        evidence_digest: {
-          type: "string",
-          pattern: "^[0-9a-f]{64}$"
-        },
-        producer_family: {
-          type: "string",
-          enum: [
-            "claude",
-            "codex"
-          ]
-        },
-        reviewer_family: {
-          type: "string",
-          enum: [
-            "claude",
-            "codex"
-          ]
-        },
-        role: {
-          type: "string",
-          const: "gate-counter-review"
-        },
-        assurance: {
-          type: "string",
-          enum: [
-            "server-attested",
-            "degraded"
-          ]
-        },
-        independence: {
-          type: "string",
-          const: "opposite-family"
-        },
-        gate_id: {
-          $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-        }
-      },
-      required: [
-        "evidence_digest",
-        "producer_family",
-        "reviewer_family",
-        "role",
-        "assurance",
-        "independence",
-        "gate_id"
-      ],
-      additionalProperties: false
-    },
     counterOnly: {
       type: "array",
       prefixItems: [
@@ -47453,29 +47360,9 @@ var evidence_slots_schema_default = {
       ],
       minItems: 1,
       maxItems: 1
-    },
-    counterWithGateCounter: {
-      type: "array",
-      prefixItems: [
-        {
-          $ref: "#/$defs/counter"
-        },
-        {
-          $ref: "#/$defs/gateCounter"
-        }
-      ],
-      minItems: 2,
-      maxItems: 2
     }
   },
-  anyOf: [
-    {
-      $ref: "#/$defs/counterOnly"
-    },
-    {
-      $ref: "#/$defs/counterWithGateCounter"
-    }
-  ]
+  $ref: "#/$defs/counterOnly"
 };
 
 // src/contracts/schemas/v1/document-artifact.schema.json
@@ -49957,6 +49844,46 @@ var mcp_tools_schema_default = {
               },
               artifact: {
                 $ref: "#/$defs/durableArtifact"
+              },
+              human_revision: {
+                type: "object",
+                properties: {
+                  classification: {
+                    type: "string",
+                    enum: [
+                      "simple",
+                      "significant"
+                    ]
+                  },
+                  rationale: {
+                    $ref: "#/$defs/text"
+                  },
+                  user_override: {
+                    type: "object",
+                    properties: {
+                      agent_classification: {
+                        type: "string",
+                        enum: [
+                          "simple",
+                          "significant"
+                        ]
+                      },
+                      rationale: {
+                        $ref: "#/$defs/text"
+                      }
+                    },
+                    required: [
+                      "agent_classification",
+                      "rationale"
+                    ],
+                    additionalProperties: false
+                  }
+                },
+                required: [
+                  "classification",
+                  "rationale"
+                ],
+                additionalProperties: false
               }
             },
             required: [
@@ -50249,29 +50176,6 @@ var mcp_tools_schema_default = {
               current_evidence: {
                 $ref: "#/$defs/currentEvidence"
               },
-              supersedes: {
-                type: "object",
-                additionalProperties: false,
-                required: [
-                  "superseded_gate_id",
-                  "accepted_triage_digest",
-                  "old_subject_digest"
-                ],
-                properties: {
-                  superseded_gate_id: {
-                    $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-                  },
-                  accepted_triage_digest: {
-                    $ref: "#/$defs/digest"
-                  },
-                  old_subject_digest: {
-                    $ref: "#/$defs/digest"
-                  }
-                }
-              },
-              supplemental_outcome: {
-                $ref: "urn:archflow:schema:v1:supplemental-review"
-              },
               kind: {
                 enum: [
                   "artifact-approval",
@@ -50515,9 +50419,6 @@ var mcp_tools_schema_default = {
               },
               rationale: {
                 $ref: "#/$defs/text"
-              },
-              supplemental_outcome: {
-                $ref: "urn:archflow:schema:v1:supplemental-review"
               }
             },
             required: [
@@ -52886,70 +52787,6 @@ var project_error_schema_default = {
       ],
       additionalProperties: false
     },
-    E_SUPPLEMENTAL_REVIEW_REQUIRED: {
-      type: "object",
-      properties: {
-        schema_version: {
-          type: "string",
-          const: "1"
-        },
-        code: {
-          type: "string",
-          const: "SUPPLEMENTAL_REVIEW_REQUIRED"
-        },
-        owner: {
-          type: "string",
-          const: "state"
-        },
-        retryable: {
-          type: "boolean",
-          const: false
-        },
-        diagnostic: {
-          type: "object",
-          properties: {
-            template_id: {
-              type: "string",
-              const: "SUPPLEMENTAL_REVIEW_REQUIRED"
-            },
-            parameters: {
-              type: "object",
-              properties: {
-                gate_id: {
-                  $ref: "#/$defs/pathSafeId"
-                },
-                evidence_digest: {
-                  $ref: "#/$defs/digest"
-                }
-              },
-              required: [
-                "gate_id",
-                "evidence_digest"
-              ],
-              additionalProperties: false
-            }
-          },
-          required: [
-            "template_id",
-            "parameters"
-          ],
-          additionalProperties: false
-        },
-        next_action: {
-          type: "string",
-          const: "triage-supplemental-review"
-        }
-      },
-      required: [
-        "schema_version",
-        "code",
-        "owner",
-        "retryable",
-        "diagnostic",
-        "next_action"
-      ],
-      additionalProperties: false
-    },
     E_INTENT_MISMATCH: {
       type: "object",
       properties: {
@@ -53702,74 +53539,6 @@ var project_error_schema_default = {
         next_action: {
           type: "string",
           const: "restart-gate-flow"
-        }
-      },
-      required: [
-        "schema_version",
-        "code",
-        "owner",
-        "retryable",
-        "diagnostic",
-        "next_action"
-      ],
-      additionalProperties: false
-    },
-    E_GATE_SUPERSEDED: {
-      type: "object",
-      properties: {
-        schema_version: {
-          type: "string",
-          const: "1"
-        },
-        code: {
-          type: "string",
-          const: "GATE_SUPERSEDED"
-        },
-        owner: {
-          type: "string",
-          const: "gate"
-        },
-        retryable: {
-          type: "boolean",
-          const: false
-        },
-        diagnostic: {
-          type: "object",
-          properties: {
-            template_id: {
-              type: "string",
-              const: "GATE_SUPERSEDED"
-            },
-            parameters: {
-              type: "object",
-              properties: {
-                gate_id: {
-                  $ref: "#/$defs/pathSafeId"
-                },
-                old_subject_digest: {
-                  $ref: "#/$defs/digest"
-                },
-                new_subject_digest: {
-                  $ref: "#/$defs/digest"
-                }
-              },
-              required: [
-                "gate_id",
-                "old_subject_digest",
-                "new_subject_digest"
-              ],
-              additionalProperties: false
-            }
-          },
-          required: [
-            "template_id",
-            "parameters"
-          ],
-          additionalProperties: false
-        },
-        next_action: {
-          type: "string",
-          const: "retry-with-superseding-subject"
         }
       },
       required: [
@@ -54851,9 +54620,6 @@ var project_error_schema_default = {
       $ref: "#/$defs/E_STATE_CONFLICT"
     },
     {
-      $ref: "#/$defs/E_SUPPLEMENTAL_REVIEW_REQUIRED"
-    },
-    {
       $ref: "#/$defs/E_INTENT_MISMATCH"
     },
     {
@@ -54888,9 +54654,6 @@ var project_error_schema_default = {
     },
     {
       $ref: "#/$defs/E_GATE_CANCELLED"
-    },
-    {
-      $ref: "#/$defs/E_GATE_SUPERSEDED"
     },
     {
       $ref: "#/$defs/E_UNSUPPORTED_HOST"
@@ -55131,242 +54894,6 @@ var secret_scan_result_schema_default = {
       required: [
         "schema_version",
         "outcome",
-        "reason"
-      ],
-      additionalProperties: false
-    }
-  ]
-};
-
-// src/contracts/schemas/v1/supplemental-review.schema.json
-var supplemental_review_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:supplemental-review",
-  $defs: {
-    gate: {
-      type: "object",
-      properties: {
-        prior_gate_id: {
-          $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-        },
-        task_id: {
-          $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
-        },
-        phase_instance: {
-          type: "string",
-          pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
-        },
-        subject_digest: {
-          type: "string",
-          pattern: "^[0-9a-f]{64}$"
-        },
-        input_fingerprint: {
-          type: "string",
-          pattern: "^[0-9a-f]{64}$"
-        }
-      },
-      required: [
-        "prior_gate_id",
-        "task_id",
-        "phase_instance",
-        "subject_digest",
-        "input_fingerprint"
-      ],
-      additionalProperties: false
-    },
-    review: {
-      type: "object",
-      properties: {
-        prior_gate_id: {
-          $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-        },
-        task_id: {
-          $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
-        },
-        phase_instance: {
-          type: "string",
-          pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
-        },
-        subject_digest: {
-          type: "string",
-          pattern: "^[0-9a-f]{64}$"
-        },
-        input_fingerprint: {
-          type: "string",
-          pattern: "^[0-9a-f]{64}$"
-        },
-        evidence_slot: {
-          type: "object",
-          properties: {
-            role: {
-              type: "string",
-              const: "gate-counter-review"
-            },
-            evidence_digest: {
-              type: "string",
-              pattern: "^[0-9a-f]{64}$"
-            },
-            assurance: {
-              type: "string",
-              enum: [
-                "server-attested",
-                "degraded"
-              ]
-            },
-            producer_family: {
-              type: "string",
-              enum: [
-                "claude",
-                "codex"
-              ]
-            },
-            reviewer_family: {
-              type: "string",
-              enum: [
-                "claude",
-                "codex"
-              ]
-            },
-            independence: {
-              type: "string",
-              const: "opposite-family"
-            },
-            gate_id: {
-              $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-            }
-          },
-          required: [
-            "role",
-            "evidence_digest",
-            "assurance",
-            "producer_family",
-            "reviewer_family",
-            "independence",
-            "gate_id"
-          ],
-          additionalProperties: false
-        }
-      },
-      required: [
-        "prior_gate_id",
-        "task_id",
-        "phase_instance",
-        "subject_digest",
-        "input_fingerprint",
-        "evidence_slot"
-      ],
-      additionalProperties: false
-    }
-  },
-  oneOf: [
-    {
-      type: "object",
-      properties: {
-        action: {
-          type: "string",
-          const: "decline"
-        },
-        gate: {
-          $ref: "#/$defs/gate"
-        },
-        reason: {
-          type: "string",
-          minLength: 1,
-          pattern: "\\S"
-        }
-      },
-      required: [
-        "action",
-        "gate",
-        "reason"
-      ],
-      additionalProperties: false
-    },
-    {
-      type: "object",
-      properties: {
-        action: {
-          type: "string",
-          const: "ingest"
-        },
-        review: {
-          $ref: "#/$defs/review"
-        },
-        reason: {
-          type: "string",
-          minLength: 1,
-          pattern: "\\S"
-        }
-      },
-      required: [
-        "action",
-        "review",
-        "reason"
-      ],
-      additionalProperties: false
-    },
-    {
-      type: "object",
-      properties: {
-        action: {
-          type: "string",
-          const: "triage-no-change"
-        },
-        review: {
-          $ref: "#/$defs/review"
-        },
-        triage_digest: {
-          type: "string",
-          pattern: "^[0-9a-f]{64}$"
-        },
-        reason: {
-          type: "string",
-          minLength: 1,
-          pattern: "\\S"
-        }
-      },
-      required: [
-        "action",
-        "review",
-        "triage_digest",
-        "reason"
-      ],
-      additionalProperties: false
-    },
-    {
-      type: "object",
-      properties: {
-        action: {
-          type: "string",
-          const: "supersede"
-        },
-        review: {
-          $ref: "#/$defs/review"
-        },
-        accepted_triage_digest: {
-          type: "string",
-          pattern: "^[0-9a-f]{64}$"
-        },
-        old_subject_digest: {
-          type: "string",
-          pattern: "^[0-9a-f]{64}$"
-        },
-        new_subject_digest: {
-          type: "string",
-          pattern: "^[0-9a-f]{64}$"
-        },
-        reason: {
-          type: "string",
-          minLength: 1,
-          pattern: "\\S"
-        }
-      },
-      required: [
-        "action",
-        "review",
-        "accepted_triage_digest",
-        "old_subject_digest",
-        "new_subject_digest",
         "reason"
       ],
       additionalProperties: false
@@ -55622,6 +55149,160 @@ var task_state_schema_default = {
       ],
       additionalProperties: false
     },
+    humanRevisionClassification: {
+      type: "string",
+      enum: [
+        "simple",
+        "significant"
+      ]
+    },
+    humanRevisionOverride: {
+      type: "object",
+      properties: {
+        agent_classification: {
+          $ref: "#/$defs/humanRevisionClassification"
+        },
+        rationale: {
+          type: "string",
+          minLength: 1,
+          maxLength: 4096,
+          pattern: "\\S"
+        }
+      },
+      required: [
+        "agent_classification",
+        "rationale"
+      ],
+      additionalProperties: false
+    },
+    pendingHumanRevision: {
+      type: "object",
+      properties: {
+        gate_id: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        gate_kind: {
+          type: "string",
+          enum: [
+            "artifact-approval",
+            "constitution-review",
+            "material-drift",
+            "attempts-exhausted",
+            "commit-authorization",
+            "migration-audit"
+          ]
+        },
+        predecessor_subject_digest: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        predecessor_input_fingerprint: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        requested_at_revision: {
+          type: "integer",
+          minimum: 1,
+          maximum: 9007199254740991
+        },
+        attempt: {
+          type: "integer",
+          minimum: 1,
+          maximum: 9007199254740991
+        },
+        evidence: {
+          type: "array",
+          items: {
+            $ref: "#/$defs/authoritativeResultRef"
+          }
+        }
+      },
+      required: [
+        "gate_id",
+        "gate_kind",
+        "predecessor_subject_digest",
+        "predecessor_input_fingerprint",
+        "requested_at_revision",
+        "attempt",
+        "evidence"
+      ],
+      additionalProperties: false
+    },
+    humanRevisionRecord: {
+      type: "object",
+      properties: {
+        phase_instance: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+        },
+        gate_id: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        gate_kind: {
+          type: "string",
+          enum: [
+            "artifact-approval",
+            "constitution-review",
+            "material-drift",
+            "attempts-exhausted",
+            "commit-authorization",
+            "migration-audit"
+          ]
+        },
+        predecessor_subject_digest: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        predecessor_input_fingerprint: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        resulting_subject_digest: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        resulting_result_digest: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        classification: {
+          $ref: "#/$defs/humanRevisionClassification"
+        },
+        rationale: {
+          type: "string",
+          minLength: 1,
+          maxLength: 4096,
+          pattern: "\\S"
+        },
+        user_override: {
+          $ref: "#/$defs/humanRevisionOverride"
+        },
+        previous_attempt: {
+          type: "integer",
+          minimum: 1,
+          maximum: 9007199254740991
+        },
+        resulting_attempt: {
+          type: "integer",
+          minimum: 1,
+          maximum: 9007199254740991
+        },
+        evidence: {
+          type: "array",
+          items: {
+            $ref: "#/$defs/authoritativeResultRef"
+          }
+        }
+      },
+      required: [
+        "phase_instance",
+        "gate_id",
+        "gate_kind",
+        "predecessor_subject_digest",
+        "predecessor_input_fingerprint",
+        "resulting_subject_digest",
+        "resulting_result_digest",
+        "classification",
+        "rationale",
+        "previous_attempt",
+        "resulting_attempt",
+        "evidence"
+      ],
+      additionalProperties: false
+    },
     lastTransition: {
       type: "object",
       properties: {
@@ -55792,6 +55473,15 @@ var task_state_schema_default = {
     },
     open_gate: {
       $ref: "#/$defs/openGateRef"
+    },
+    pending_human_revision: {
+      $ref: "#/$defs/pendingHumanRevision"
+    },
+    human_revision_history: {
+      type: "array",
+      items: {
+        $ref: "#/$defs/humanRevisionRecord"
+      }
     },
     last_transition: {
       $ref: "#/$defs/lastTransition"
@@ -56021,7 +55711,6 @@ var schemaDocuments = Object.freeze([
   Object.freeze({ key: "rubric", id: "urn:archflow:schema:v1:rubric", schema: rubric_schema_default }),
   Object.freeze({ key: "gate-contract", id: "urn:archflow:schema:v1:gate-contract", schema: gate_contract_schema_default }),
   Object.freeze({ key: "gate-decision", id: "urn:archflow:schema:v1:gate-decision", schema: gate_decision_schema_default }),
-  Object.freeze({ key: "supplemental-review", id: "urn:archflow:schema:v1:supplemental-review", schema: supplemental_review_schema_default }),
   Object.freeze({ key: "project-error", id: "urn:archflow:schema:v1:project-error", schema: project_error_schema_default }),
   Object.freeze({ key: "durable-primitives", id: "urn:archflow:schema:v1:durable-primitives", schema: durable_primitives_schema_default }),
   Object.freeze({ key: "task-state", id: "urn:archflow:schema:v1:task-state", schema: task_state_schema_default }),
@@ -57921,8 +57610,7 @@ var review_schema_default = {
     role: {
       type: "string",
       enum: [
-        "counter-review",
-        "gate-counter-review"
+        "counter-review"
       ]
     },
     subject_digest: {
@@ -58017,8 +57705,8 @@ function deriveModelFamily(model) {
   if (model.startsWith("gpt-")) return "codex";
   return fail14(createProjectError("CONFIG_MODEL_UNSUPPORTED", { model }));
 }
-function adapterForFamily(family3) {
-  return family3 === "claude" ? "claude-cli" : "codex-cli";
+function adapterForFamily(family2) {
+  return family2 === "claude" ? "claude-cli" : "codex-cli";
 }
 var SUPPORTED_EFFORTS = Object.freeze({
   "claude-cli": /* @__PURE__ */ new Set(["low", "medium", "high", "xhigh", "max"]),
@@ -58038,15 +57726,15 @@ function resolveDispatchRoute(config2, phaseKind2, role, producer_family) {
   if (!safeIdV1Schema.safeParse(configured.model).success) {
     return fail14(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }
-  const family3 = deriveModelFamily(configured.model);
-  const adapter2 = adapterForFamily(family3);
-  assertAdapterFamily(adapter2, family3);
+  const family2 = deriveModelFamily(configured.model);
+  const adapter2 = adapterForFamily(family2);
+  assertAdapterFamily(adapter2, family2);
   assertSupportedEffort(adapter2, configured.effort);
-  if ((role === "counter-reviewer" || role === "adjudicator") && family3 === producer_family) {
+  if ((role === "counter-reviewer" || role === "adjudicator") && family2 === producer_family) {
     const expected_family = producer_family === "claude" ? "codex" : "claude";
-    return fail14(createProjectError("FAMILY_MISMATCH", { expected_family, observed_family: family3 }));
+    return fail14(createProjectError("FAMILY_MISMATCH", { expected_family, observed_family: family2 }));
   }
-  return Object.freeze({ adapter: adapter2, family: family3, model: configured.model, effort: configured.effort });
+  return Object.freeze({ adapter: adapter2, family: family2, model: configured.model, effort: configured.effort });
 }
 
 // src/contracts/renderers.ts
@@ -58399,19 +58087,19 @@ function formatUnifiedHunks(beforeText, afterText, contextLines = DIFF_CONTEXT_L
 // src/state/produce-subject.ts
 var fatalUtf8 = new TextDecoder("utf-8", { fatal: true });
 function expectedProduceUpstreamBindings(state) {
-  const phase4 = decodePhaseInstance(state.phase_instance);
-  if (phase4.kind === "prd") return Object.freeze([]);
-  if (phase4.kind === "design") return Object.freeze([
+  const phase3 = decodePhaseInstance(state.phase_instance);
+  if (phase3.kind === "prd") return Object.freeze([]);
+  if (phase3.kind === "design") return Object.freeze([
     Object.freeze({ phase_instance: encodePhaseInstance({ kind: "prd" }), path: parseTaskPathClaim("prd.md"), artifact_kind: "prd" })
   ]);
-  if (phase4.kind === "phase-design") return Object.freeze([
+  if (phase3.kind === "phase-design") return Object.freeze([
     Object.freeze({ phase_instance: encodePhaseInstance({ kind: "design" }), path: parseTaskPathClaim("design.md"), artifact_kind: "design" }),
     Object.freeze({ phase_instance: encodePhaseInstance({ kind: "prd" }), path: parseTaskPathClaim("prd.md"), artifact_kind: "prd" })
   ]);
   return Object.freeze([
     Object.freeze({
-      phase_instance: encodePhaseInstance({ kind: "phase-design", phase: phase4.phase }),
-      path: parseTaskPathClaim(`phases/${String(phase4.phase)}/design.md`),
+      phase_instance: encodePhaseInstance({ kind: "phase-design", phase: phase3.phase }),
+      path: parseTaskPathClaim(`phases/${String(phase3.phase)}/design.md`),
       artifact_kind: "phase-design"
     }),
     Object.freeze({ phase_instance: encodePhaseInstance({ kind: "design" }), path: parseTaskPathClaim("design.md"), artifact_kind: "design" })
@@ -58438,10 +58126,10 @@ async function loadProduceUpstreamSubject(dependencies, state, binding) {
     value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, retained: retained.value })
   });
 }
-var fail16 = (phase4, issue_code) => Object.freeze({
+var fail16 = (phase3, issue_code) => Object.freeze({
   schema_version: "1",
   ok: false,
-  error: createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code })
+  error: createProjectError("STATE_INVALID", { phase_instance: phase3, issue_code })
 });
 async function loadCurrentProduceSubject(dependencies, state) {
   const reference = state.authoritative_results.find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "produce");
@@ -58480,11 +58168,11 @@ async function readProduceProjection(runner, authority, subject, artifactPath) {
   } catch {
     return fail16(authority.context.phase_instance, "produce-projection-unavailable");
   }
-  const digest12 = sha256Bytes(bytes);
-  if (digest12 !== projection.content_digest) {
+  const digest10 = sha256Bytes(bytes);
+  if (digest10 !== projection.content_digest) {
     return fail16(authority.context.phase_instance, "produce-projection-not-current");
   }
-  return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ bytes, digest: digest12 }) });
+  return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ bytes, digest: digest10 }) });
 }
 function reviewChangeSide(desired, embed) {
   if (desired.state === "absent") return Object.freeze({ state: "absent" });
@@ -58569,9 +58257,6 @@ var ok11 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function qualifyAndRender(value) {
   if (value.kind === "review") {
     const verified = createVerifiedEvidenceReference(value.evidence);
-    if (verified.evidence.role === "gate-counter-review") {
-      throw new TypeError("gate-counter-review evidence requires the gate-owned retention route");
-    }
     return Object.freeze({
       artifact: Object.freeze({
         schema_version: "1",
@@ -58820,7 +58505,7 @@ function retainedEditorialTriage(retained) {
   } catch {
     return void 0;
   }
-  if (triage.subject_digest !== derived.subject_digest || triage.input_fingerprint !== derived.input_fingerprint || triage.current_evidence_set_digest !== derived.current_evidence_set.set_digest || triage.source_evidence_digests.length !== derived.current_evidence_set.slots.length || triage.source_evidence_digests.some((digest12, index) => digest12 !== derived.current_evidence_set.slots[index].evidence_digest)) return void 0;
+  if (triage.subject_digest !== derived.subject_digest || triage.input_fingerprint !== derived.input_fingerprint || triage.current_evidence_set_digest !== derived.current_evidence_set.set_digest || triage.source_evidence_digests.length !== derived.current_evidence_set.slots.length || triage.source_evidence_digests.some((digest10, index) => digest10 !== derived.current_evidence_set.slots[index].evidence_digest)) return void 0;
   return Object.freeze({ triage, triage_result_digest: entry.reference.result_digest });
 }
 async function validateEditorialPredecessorDeclaration(dependencies, state, artifact) {
@@ -58972,8 +58657,8 @@ async function shouldRetainWorkspaceEntry(entry, state, decisionProtectedResults
   const currentPhase = phaseNumber(state.phase_instance);
   if (currentPhase !== void 0 && entry.relative.startsWith(`cache/phases/${currentPhase}/`)) return true;
   if (entry.relative.startsWith("cache/results/")) {
-    const digest12 = entry.relative.split("/")[2];
-    return decisionProtectedResults.has(digest12 ?? "") || state.authoritative_results.some((reference) => reference.result_digest === digest12 && reference.phase_instance === state.phase_instance);
+    const digest10 = entry.relative.split("/")[2];
+    return decisionProtectedResults.has(digest10 ?? "") || state.authoritative_results.some((reference) => reference.result_digest === digest10 && reference.phase_instance === state.phase_instance) || (state.human_revision_history ?? []).some((revision) => revision.evidence.some((reference) => reference.result_digest === digest10));
   }
   return false;
 }
@@ -59007,23 +58692,26 @@ async function decisionProtectedAuthorityResults(authority) {
   const protectedResults = /* @__PURE__ */ new Set();
   const pattern = /\b[0-9a-f]{64}\b/gu;
   for (const file2 of files) {
-    const digest12 = /^([0-9a-f]{64})\.json$/u.exec(file2.relative)?.[1];
-    if (digest12 === void 0) continue;
+    const digest10 = /^([0-9a-f]{64})\.json$/u.exec(file2.relative)?.[1];
+    if (digest10 === void 0) continue;
     const text4 = await readFile5(file2.absolute, "utf8").catch(() => void 0);
     if (text4 === void 0) {
-      protectedResults.add(digest12);
+      protectedResults.add(digest10);
       continue;
     }
-    const manifestDigests = /* @__PURE__ */ new Set([digest12, ...[...text4.matchAll(pattern)].map((match) => match[0])]);
+    const manifestDigests = /* @__PURE__ */ new Set([digest10, ...[...text4.matchAll(pattern)].map((match) => match[0])]);
     if ([...manifestDigests].some((candidate) => decisionDigests.has(candidate))) {
-      protectedResults.add(digest12);
+      protectedResults.add(digest10);
     }
   }
   return protectedResults;
 }
 async function unreferencedAuthorityResults(authority, state, decisionProtectedResults) {
   const root = join7(authority.task_root, "authority", "results");
-  const live = new Set(state.authoritative_results.map((reference) => reference.result_digest));
+  const live = /* @__PURE__ */ new Set([
+    ...state.authoritative_results.map((reference) => reference.result_digest),
+    ...(state.human_revision_history ?? []).flatMap((revision) => revision.evidence.map((reference) => reference.result_digest))
+  ]);
   if (decisionProtectedResults.has("*")) return Object.freeze([]);
   let files;
   try {
@@ -59032,8 +58720,8 @@ async function unreferencedAuthorityResults(authority, state, decisionProtectedR
     return Object.freeze([]);
   }
   return Object.freeze(files.filter((file2) => {
-    const digest12 = /^([0-9a-f]{64})\.json$/u.exec(file2.relative)?.[1];
-    return digest12 !== void 0 && !live.has(digest12) && !decisionProtectedResults.has(digest12);
+    const digest10 = /^([0-9a-f]{64})\.json$/u.exec(file2.relative)?.[1];
+    return digest10 !== void 0 && !live.has(digest10) && !decisionProtectedResults.has(digest10);
   }));
 }
 async function unreferencedAuthorityDecisions(authority, state) {
@@ -59053,6 +58741,8 @@ async function unreferencedAuthorityDecisions(authority, state) {
     ...state.approvals.map((entry) => entry.gate_id),
     ...state.waivers.map((entry) => entry.gate_id),
     ...openGateIds,
+    ...state.pending_human_revision === void 0 ? [] : [state.pending_human_revision.gate_id],
+    ...(state.human_revision_history ?? []).map((entry) => entry.gate_id),
     ...state.last_transition !== void 0 && known.has(state.last_transition.result_id) ? [state.last_transition.result_id] : []
   ]);
   let changed = true;
@@ -60077,30 +59767,24 @@ function sameJson(left, right) {
 import { isDeepStrictEqual as isDeepStrictEqual9 } from "node:util";
 
 // src/contracts/durable-gate.ts
-var digest11 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var digest9 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var pathSafeId2 = pathSafeIdV1Schema;
 var taskSlug4 = taskSlugV1Schema;
-var phase3 = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
+var phase2 = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
 var text3 = external_exports.string().min(1).max(4096).regex(/\S/u);
 var rule3 = gateRuleVersionRefSchema;
 var scope2 = gateWaiverScopeSchema;
-var origin = external_exports.object({ origin_gate_id: pathSafeId2, origin_decision_digest: digest11, origin_context_digest: digest11, task_id: taskSlug4, phase_instance: phase3, subject_digest: digest11, current_evidence_set_digest: digest11, rule: rule3, scope: scope2 }).strict();
-var supersession = external_exports.object({ superseded_gate_id: pathSafeId2, accepted_triage_digest: digest11, old_subject_digest: digest11 }).strict();
-var supplemental = external_exports.array(supplementalReviewOutcomeSchema).superRefine((entries, context2) => {
-  if (entries.some((entry) => entry.action === "supersede")) context2.addIssue({ code: "custom", message: "supplemental ledger cannot contain supersession" });
-});
-var base = { schema_version: external_exports.literal("1"), gate_id: pathSafeId2, task_id: taskSlug4, phase_instance: phase3, kind: external_exports.enum(GATE_KINDS), subject_digest: digest11, context_digest: digest11, supplemental };
+var origin = external_exports.object({ origin_gate_id: pathSafeId2, origin_decision_digest: digest9, origin_context_digest: digest9, task_id: taskSlug4, phase_instance: phase2, subject_digest: digest9, current_evidence_set_digest: digest9, rule: rule3, scope: scope2 }).strict();
+var base = { schema_version: external_exports.literal("1"), gate_id: pathSafeId2, task_id: taskSlug4, phase_instance: phase2, kind: external_exports.enum(GATE_KINDS), subject_digest: digest9, context_digest: digest9 };
 var decisionRecordArms = {
   decided: external_exports.object({ ...base, outcome: external_exports.literal("decided"), envelope: gateDecisionEnvelopeV1Schema }).strict(),
   waiverDecided: external_exports.object({ ...base, outcome: external_exports.literal("waiver-decided"), granted: external_exports.boolean(), scope: scope2, origin, notes: text3, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
-  cancelled: external_exports.object({ ...base, outcome: external_exports.literal("cancelled"), reason: text3, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
-  superseded: external_exports.object({ ...base, outcome: external_exports.literal("superseded"), supersession }).strict()
+  cancelled: external_exports.object({ ...base, outcome: external_exports.literal("cancelled"), reason: text3, human_provenance: humanDecisionProvenanceV1Schema }).strict()
 };
 var gateDecisionRecordV1Schema = external_exports.discriminatedUnion("outcome", [
   decisionRecordArms.decided,
   decisionRecordArms.waiverDecided,
-  decisionRecordArms.cancelled,
-  decisionRecordArms.superseded
+  decisionRecordArms.cancelled
 ]);
 var GATE_REQUEST_DECISIONS = {
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
@@ -60123,14 +59807,13 @@ var gateRequestCommon = {
   schema_version: external_exports.literal("1"),
   gate_id: pathSafeId2,
   intent_id: pathSafeId2,
-  request_digest: digest11,
+  request_digest: digest9,
   task_id: taskSlug4,
-  phase_instance: phase3,
+  phase_instance: phase2,
   summary: text3,
-  subject_digest: digest11,
-  context_digest: digest11,
+  subject_digest: digest9,
+  context_digest: digest9,
   current_evidence: currentEvidenceSetRefSchema,
-  supersedes: supersession.optional(),
   opened_at_revision: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
 };
 var gateArm = (kind, context2, decisions2, extra) => external_exports.object({ ...gateRequestCommon, ...extra, kind: external_exports.literal(kind), context: context2, allowed_decisions: decisions2 }).strict();
@@ -60158,21 +59841,19 @@ var gateDecisionTemplateV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   gate_id: pathSafeId2,
   task_id: taskSlug4,
-  phase_instance: phase3,
+  phase_instance: phase2,
   kind: external_exports.enum(GATE_KINDS),
-  subject_digest: digest11,
-  context_digest: digest11,
+  subject_digest: digest9,
+  context_digest: digest9,
   required_fields: external_exports.union([payloadRequiredFieldsTuple, waiverRequiredFieldsTuple]),
   cancellation_fields: cancellationFieldsTuple
 }).strict();
 var activeGateV1Schema = armUnion(gateArms({
   status: external_exports.literal("awaiting-human"),
-  decision_template: gateDecisionTemplateV1Schema,
-  supplemental
+  decision_template: gateDecisionTemplateV1Schema
 }));
 var gateRequestSchemaDefs = Object.freeze({
   currentEvidence: currentEvidenceSetRefSchema,
-  supersession,
   origin,
   waiverContext: waiverGateContextSchema,
   artifactApprovalDecisions: allowedDecisionTuples["artifact-approval"],
@@ -60198,7 +59879,6 @@ var gateRequestSchemaDefOverrides = Object.freeze({
   waiverDecisions: { const: WAIVER_DECISIONS }
 });
 var gateDecisionRecordSchemaDefs = Object.freeze({
-  supplemental,
   provenance: humanDecisionProvenanceV1Schema,
   ...decisionRecordArms
 });
@@ -60282,9 +59962,6 @@ async function readCanonical(path2, label, parse3) {
     await handle?.close().catch(() => void 0);
   }
 }
-function supplementalGate(outcome) {
-  return outcome.action === "decline" ? outcome.gate : outcome.review;
-}
 function stateWithOpen(state, request) {
   const { last_transition: _transition, open_gate: _open, ...base2 } = state;
   const revision = parseSafeInteger(state.revision + 1);
@@ -60318,8 +59995,7 @@ function activeProjection(request) {
       context_digest: request.context_digest,
       required_fields: waiver === void 0 ? ["payload", "human_provenance"] : ["granted", "scope", "origin", "notes", "human_provenance"],
       cancellation_fields: ["cancelled", "reason", "human_provenance"]
-    },
-    supplemental: []
+    }
   };
 }
 function waiverContext(value) {
@@ -60341,22 +60017,22 @@ function bindEnvelope(request, envelope) {
   }
   validateGateDecision(request.kind, request.context, envelope.payload);
 }
-function parseInterface(value, request, supplemental2 = []) {
+function parseInterface(value, request) {
   assertPlainJson(value, "gate decision interface");
   if (value !== null && typeof value === "object" && "cancelled" in value) {
     const candidate = value;
     if (candidate.cancelled !== true || candidate.gate_id !== request.gate_id || candidate.task_id !== request.task_id || candidate.phase_instance !== request.phase_instance || candidate.subject_digest !== request.subject_digest || candidate.context_digest !== request.context_digest) throw new TypeError("cancellation does not bind request");
-    return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, supplemental: supplemental2, outcome: "cancelled", reason: candidate.reason, human_provenance: candidate.human_provenance });
+    return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, outcome: "cancelled", reason: candidate.reason, human_provenance: candidate.human_provenance });
   }
   if (request.context !== null && typeof request.context === "object" && "origin" in request.context) {
     const candidate = value;
     const context2 = request.context;
     if (candidate.gate_id !== request.gate_id || candidate.task_id !== request.task_id || candidate.phase_instance !== request.phase_instance || candidate.subject_digest !== request.subject_digest || candidate.context_digest !== request.context_digest || !isDeepStrictEqual8(candidate.origin, context2.origin) || !isDeepStrictEqual8(candidate.scope, context2.origin.scope)) throw new TypeError("waiver decision does not bind origin");
-    return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, supplemental: supplemental2, outcome: "waiver-decided", granted: candidate.granted, scope: candidate.scope, origin: candidate.origin, notes: candidate.notes, human_provenance: candidate.human_provenance });
+    return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, outcome: "waiver-decided", granted: candidate.granted, scope: candidate.scope, origin: candidate.origin, notes: candidate.notes, human_provenance: candidate.human_provenance });
   }
   const envelope = parseGateDecisionEnvelope(value);
   bindEnvelope(request, envelope);
-  return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, supplemental: supplemental2, outcome: "decided", envelope });
+  return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, outcome: "decided", envelope });
 }
 async function stateOrFailure(dependencies, authority) {
   const read = await dependencies.read_state(authority.state);
@@ -60462,7 +60138,7 @@ function phaseKind(instance) {
 }
 function pipeline(instance) {
   const kind = phaseKind(instance);
-  const configured = WORKFLOW_V1.phases.find((phase4) => phase4.id === kind);
+  const configured = WORKFLOW_V1.phases.find((phase3) => phase3.id === kind);
   if (configured === void 0) throw new TypeError("phase instance is absent from the fixed workflow");
   return configured.pipeline;
 }
@@ -60504,7 +60180,7 @@ function legalMovement(input) {
   }
   if (current.status !== "succeeded" || target2.status !== "running") return false;
   if (target2.phase_instance === current.phase_instance && target2.step === "produce") {
-    return target2.attempt === current.attempt + 1;
+    return input.human_revision_reentry === true ? target2.attempt === current.attempt : target2.attempt === current.attempt + 1;
   }
   const steps = pipeline(current.phase_instance);
   const index = steps.indexOf(current.step);
@@ -60548,6 +60224,16 @@ function constitutionReferenceMatches(input) {
   if (reference === void 0) return true;
   return input.target.status === "succeeded" && input.target.step === "counter_review" && reference.step === "adjudicate" && reference.phase_instance === input.target.phase_instance && reference.input_fingerprint === input.recomputed_input_fingerprint;
 }
+function pendingHumanRevisionMatches(input) {
+  const pending = input.current.pending_human_revision;
+  const declaration = input.human_revision;
+  if (pending === void 0) return declaration === void 0;
+  if (input.current.phase_instance !== input.target.phase_instance || input.current.step !== "produce" || input.target.step !== "produce") return false;
+  if (input.current.attempt !== pending.attempt) return false;
+  if (input.target.status !== "succeeded") return declaration === void 0;
+  if (declaration === void 0 || input.result_reference === void 0 || input.resulting_subject_digest === void 0 || input.resulting_subject_digest === pending.predecessor_subject_digest) return false;
+  return pending.evidence.every((expected) => input.current.authoritative_results.some((observed) => isDeepStrictEqual10(expected, observed)));
+}
 function withResultReference(current, reference) {
   if (reference === void 0) return current;
   const next = current.filter((entry) => entry.phase_instance !== reference.phase_instance || entry.step !== reference.step);
@@ -60588,21 +60274,54 @@ function planStateTransition(value) {
     return ok15(Object.freeze({ ...preserved2, terminal: "complete" }));
   }
   if (decodedCurrent.kind === "phase-impl" && input.current.step === "triage" && input.current.status === "succeeded" && input.target.phase_instance !== input.current.phase_instance && !committedOutput) return invalid(input, from, to);
-  if (!legalMovement(input) || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input)) {
+  if (!legalMovement(input) || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input) || !pendingHumanRevisionMatches(input)) {
     return invalid(input, from, to);
   }
-  const { revision: _revision, last_transition: _transition, ...preserved } = input.current;
+  const {
+    revision: _revision,
+    last_transition: _transition,
+    pending_human_revision: pendingHumanRevision,
+    ...preserved
+  } = input.current;
+  const completingHumanRevision = pendingHumanRevision !== void 0 && input.target.step === "produce" && input.target.status === "succeeded";
+  const significantHumanRevision = completingHumanRevision && input.human_revision?.classification === "significant";
+  const currentReferences = significantHumanRevision ? preserved.authoritative_results.filter((entry) => entry.phase_instance !== input.target.phase_instance || entry.step !== "counter_review" && entry.step !== "adjudicate" && entry.step !== "triage") : preserved.authoritative_results;
+  const authoritativeResults = withResultReference(
+    withResultReference(currentReferences, input.result_reference),
+    input.constitution_result_reference
+  );
+  let humanRevisionHistory = preserved.human_revision_history;
+  if (completingHumanRevision) {
+    const declaration = input.human_revision;
+    const record2 = Object.freeze({
+      phase_instance: input.target.phase_instance,
+      gate_id: pendingHumanRevision.gate_id,
+      gate_kind: pendingHumanRevision.gate_kind,
+      predecessor_subject_digest: pendingHumanRevision.predecessor_subject_digest,
+      predecessor_input_fingerprint: pendingHumanRevision.predecessor_input_fingerprint,
+      resulting_subject_digest: input.resulting_subject_digest,
+      resulting_result_digest: input.result_reference.result_digest,
+      classification: declaration.classification,
+      rationale: declaration.rationale,
+      ...declaration.user_override === void 0 ? {} : { user_override: declaration.user_override },
+      previous_attempt: pendingHumanRevision.attempt,
+      resulting_attempt: declaration.classification === "significant" ? parseSafeInteger(1) : pendingHumanRevision.attempt,
+      evidence: pendingHumanRevision.evidence
+    });
+    humanRevisionHistory = Object.freeze(
+      [...humanRevisionHistory ?? [], record2].sort((left, right) => left.gate_id.localeCompare(right.gate_id))
+    );
+  }
   const draft = Object.freeze({
     ...preserved,
     phase_instance: input.target.phase_instance,
     step: input.target.step,
     status: input.target.status,
-    attempt: input.target.attempt,
+    attempt: significantHumanRevision ? parseSafeInteger(1) : input.target.attempt,
     input_fingerprint: input.target.input_fingerprint,
-    authoritative_results: withResultReference(
-      withResultReference(preserved.authoritative_results, input.result_reference),
-      input.constitution_result_reference
-    )
+    authoritative_results: authoritativeResults,
+    ...humanRevisionHistory === void 0 ? {} : { human_revision_history: humanRevisionHistory },
+    ...!completingHumanRevision && pendingHumanRevision !== void 0 ? { pending_human_revision: pendingHumanRevision } : {}
   });
   if (input.result_reference === void 0 && input.constitution_result_reference === void 0 && !isDeepStrictEqual10(draft.authoritative_results, input.current.authoritative_results)) {
     throw new TypeError("transition planning changed authoritative results");
@@ -60707,7 +60426,7 @@ function validateAdjudicationSubject(value) {
     throw new TypeError("adjudication subject must bind the adjudication step");
   }
   const approvedUpstreamDigests = value.approved_upstream_digests.map(parseSha256Digest);
-  if (new Set(approvedUpstreamDigests).size !== approvedUpstreamDigests.length || approvedUpstreamDigests.some((digest12, index) => index > 0 && approvedUpstreamDigests[index - 1] >= digest12)) {
+  if (new Set(approvedUpstreamDigests).size !== approvedUpstreamDigests.length || approvedUpstreamDigests.some((digest10, index) => index > 0 && approvedUpstreamDigests[index - 1] >= digest10)) {
     throw new TypeError("approved_upstream_digests must be sorted and unique");
   }
   return {
@@ -60834,7 +60553,7 @@ function validateUpstreams(values) {
     return { upstream_digest: parseSha256Digest(value.upstream_digest), artifact: value.artifact };
   });
   const digests = upstreams.map((upstream) => upstream.upstream_digest);
-  if (new Set(digests).size !== digests.length || digests.some((digest12, index) => index > 0 && digests[index - 1] >= digest12)) {
+  if (new Set(digests).size !== digests.length || digests.some((digest10, index) => index > 0 && digests[index - 1] >= digest10)) {
     throw new TypeError("approved upstreams must be sorted and unique");
   }
   return upstreams;
@@ -60848,11 +60567,11 @@ function finishEnvelope(resultKind, envelope, digestKind) {
       bytes.byteLength
     );
   }
-  const digest12 = canonicalJsonDigest({
+  const digest10 = canonicalJsonDigest({
     ...envelope,
     digest_kind: digestKind
   });
-  return Object.freeze({ result_kind: resultKind, bytes, digest: digest12, byte_count: bytes.byteLength });
+  return Object.freeze({ result_kind: resultKind, bytes, digest: digest10, byte_count: bytes.byteLength });
 }
 function buildReviewEnvelope(value) {
   const snapshot = materialize3(value);
@@ -60904,7 +60623,7 @@ function buildAdjudicationEnvelope(value) {
     throw new TypeError("source_evidence_set_digest must match the adjudication subject");
   }
   const upstreamDigests = approvedUpstreams.map((upstream) => upstream.upstream_digest);
-  if (upstreamDigests.length !== subject.approved_upstream_digests.length || upstreamDigests.some((digest12, index) => digest12 !== subject.approved_upstream_digests[index])) {
+  if (upstreamDigests.length !== subject.approved_upstream_digests.length || upstreamDigests.some((digest10, index) => digest10 !== subject.approved_upstream_digests[index])) {
     throw new TypeError("approved upstreams must match the adjudication subject");
   }
   const envelope = {
@@ -60975,12 +60694,12 @@ function excerptContextEntry(kind, label, bytes) {
     total_byte_count: bytes.byteLength
   });
 }
-function omittedForCap(entry, digest12) {
+function omittedForCap(entry, digest10) {
   return Object.freeze({
     kind: entry.kind,
     label: entry.label,
     status: "omitted-cap",
-    content_digest: digest12,
+    content_digest: digest10,
     note: "omitted to fit the review envelope byte cap; the digest still names the exact evidence bytes"
   });
 }
@@ -61003,16 +60722,16 @@ function buildReviewEnvelopeWithCap(input) {
   }
 }
 var ok16 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail19 = (phase4, issue_code) => Object.freeze({
+var fail19 = (phase3, issue_code) => Object.freeze({
   schema_version: "1",
   ok: false,
-  error: createProjectError("STATE_INVALID", { phase_instance: phase4, issue_code })
+  error: createProjectError("STATE_INVALID", { phase_instance: phase3, issue_code })
 });
 async function assembleReviewContext(input) {
-  const phase4 = decodePhaseInstance(input.state.phase_instance);
+  const phase3 = decodePhaseInstance(input.state.phase_instance);
   const priorTriage = await priorTriageEvidence(input.dependencies, input.state);
   if (!priorTriage.ok) return priorTriage;
-  if (phase4.kind !== "prd") {
+  if (phase3.kind !== "prd") {
     const upstreams = await assembleUpstreamContext(input);
     if (!upstreams.ok) return upstreams;
     let mechanical;
@@ -61163,13 +60882,13 @@ async function documentMechanicalEvidence(runner, artifactText) {
 }
 async function verificationTranscriptEvidence(runner, authority, state, subject) {
   if (subject.artifact.artifact_kind !== "implementation-output") return Object.freeze([]);
-  const phase4 = decodePhaseInstance(state.phase_instance);
-  if (phase4.kind !== "phase-impl") return Object.freeze([]);
-  const displayPath = `cache/phases/${String(phase4.phase)}/verification.txt`;
+  const phase3 = decodePhaseInstance(state.phase_instance);
+  if (phase3.kind !== "phase-impl") return Object.freeze([]);
+  const displayPath = `cache/phases/${String(phase3.phase)}/verification.txt`;
   const resolved = await resolveTaskWorkspacePath({
     runner,
     taskId: state.task_id,
-    claim: verificationTranscriptClaim(phase4.phase),
+    claim: verificationTranscriptClaim(phase3.phase),
     expectedClass: "workspace-verification-transcript",
     context: authority.context
   });
@@ -61570,9 +61289,9 @@ function requireApprovedUpstreamDigests(approvals, upstreamDigests) {
   if (new Set(sorted).size !== sorted.length) {
     throw new TypeError("approved upstream digests must be unique");
   }
-  for (const digest12 of sorted) {
-    if (!approvals.some((approval) => approval.gate_kind === "artifact-approval" && approval.subject_digest === digest12)) {
-      throw new TypeError(`upstream ${digest12} lacks current artifact approval`);
+  for (const digest10 of sorted) {
+    if (!approvals.some((approval) => approval.gate_kind === "artifact-approval" && approval.subject_digest === digest10)) {
+      throw new TypeError(`upstream ${digest10} lacks current artifact approval`);
     }
   }
   return Object.freeze(sorted);
@@ -61619,17 +61338,8 @@ async function waitForGateInterface(input) {
   if (input.decision_path.path_class !== "workspace-gate-interface") {
     throw new TypeError("gate wait decision path must be a gate-interface");
   }
-  if (input.supplemental !== void 0 && input.supplemental.path.path_class !== "workspace-review") {
-    throw new TypeError("gate wait supplemental path must be a review");
-  }
   for (; ; ) {
     if (input.signal.aborted) return Object.freeze({ kind: "aborted" });
-    if (input.supplemental !== void 0) {
-      const complete = await isCompleteRegularProjection(input.supplemental.path);
-      if (complete && !input.supplemental.already_recorded) {
-        return Object.freeze({ kind: "supplemental" });
-      }
-    }
     if (await isCompleteRegularProjection(input.decision_path)) {
       return Object.freeze({ kind: "interface" });
     }
@@ -61693,7 +61403,7 @@ function plannedFinalPhaseFromDesign(bytes) {
     throw new TypeError("approved design requires an exact phase plan or the open-ended marker");
   }
   const phases = exactHeadings.map((heading) => Number(exactHeading.exec(heading)[1]));
-  if (phases.some((phase4) => !Number.isSafeInteger(phase4)) || phases.some((phase4, index) => phase4 !== index + 1)) {
+  if (phases.some((phase3) => !Number.isSafeInteger(phase3)) || phases.some((phase3, index) => phase3 !== index + 1)) {
     throw new TypeError("approved design phase headings are not consecutive from phase 1");
   }
   return phases.length;
@@ -61719,6 +61429,60 @@ async function loadApprovedDesignFinalPhase(dependencies, current, record2) {
     return issue3("STATE_INVALID", current, "approved-design-phase-count-invalid");
   }
 }
+
+// src/state/gate-decision-interface.ts
+var PRESENTATION_COPY = Object.freeze({
+  "artifact-approval": Object.freeze({
+    title: "Review the finished work",
+    question: "Does this work meet your expectations, or would you like it changed?"
+  }),
+  "constitution-review": Object.freeze({
+    title: "Review the policy findings",
+    question: "How would you like to handle the policy review?"
+  }),
+  "material-drift": Object.freeze({
+    title: "Choose how to handle a material change",
+    question: "Should the earlier plan change, should the current work change, or should this version stop?"
+  }),
+  "attempts-exhausted": Object.freeze({
+    title: "Automated review needs your direction",
+    question: "The review did not converge within its normal attempts. What would you like to do next?"
+  }),
+  "constitution-edit": Object.freeze({
+    title: "Review a project policy change",
+    question: "Should the policy edit be undone, moved into the project baseline, or abandoned?"
+  }),
+  "commit-authorization": Object.freeze({
+    title: "Authorize the commit",
+    question: "Do you authorize committing the reviewed changes, or should they be revised first?"
+  }),
+  "restore-collision": Object.freeze({
+    title: "Resolve a workspace conflict",
+    question: "Should ArchFlow restore the saved version, keep the current version, or stop?"
+  }),
+  "migration-audit": Object.freeze({
+    title: "Review the imported task",
+    question: "Is the imported task accurate enough to accept, or should it be revised?"
+  })
+});
+var OPTION_COPY = Object.freeze({
+  approve: Object.freeze({ token: "approve", label: "Approve and continue", consequence: "Accept this review result and continue the workflow." }),
+  revise: Object.freeze({ token: "request-changes", label: "Request changes", consequence: "Return the work for revision. Significant changes will receive a fresh independent review." }),
+  reject: Object.freeze({ token: "reject", label: "Reject this version", consequence: "Do not approve this version; the workflow will not advance." }),
+  "amend-upstream": Object.freeze({ token: "update-earlier-work", label: "Update the earlier work", consequence: "Return to the affected earlier artifact and bring the plan back in line with reality." }),
+  "revise-current": Object.freeze({ token: "change-current-work", label: "Change the current work", consequence: "Keep the earlier plan and revise the current artifact to match it." }),
+  "retry-once": Object.freeze({ token: "try-review-again", label: "Try the review once more", consequence: "Allow one more automated review attempt without changing the work first." }),
+  abort: Object.freeze({ token: "stop-work", label: "Stop this work", consequence: "End this workflow path without approval." }),
+  "revert-edit": Object.freeze({ token: "undo-policy-change", label: "Undo the policy edit", consequence: "Restore the policy version this task originally reviewed against." }),
+  "start-base-amendment": Object.freeze({ token: "update-project-policy", label: "Update the project policy", consequence: "Move the policy change into the project baseline before continuing this task." }),
+  "authorize-commit": Object.freeze({ token: "authorize-commit", label: "Authorize the commit", consequence: "Permit ArchFlow to commit the exact reviewed changes after the required final confirmation." }),
+  "discard-and-restore": Object.freeze({ token: "restore-saved-version", label: "Restore the saved version", consequence: "Discard the conflicting workspace copy and reconstruct it from durable authority." }),
+  "adopt-as-new-generation": Object.freeze({ token: "keep-current-version", label: "Keep the current version", consequence: "Treat the current workspace copy as a new generation of the artifact." }),
+  "accept-import-audit": Object.freeze({ token: "accept-import", label: "Accept the import", consequence: "Confirm that the imported task faithfully represents the legacy source and continue." }),
+  cancel: Object.freeze({ token: "cancel", label: "Cancel this decision", consequence: "Close this decision without approving anything; the workflow will remain stopped here." }),
+  "waiver-grant": Object.freeze({ token: "grant-exception", label: "Grant the exception", consequence: "Allow the narrowly scoped policy exception recorded in this request." }),
+  "waiver-deny": Object.freeze({ token: "deny-exception", label: "Deny the exception", consequence: "Keep the policy requirement in force and do not advance under this exception." })
+});
 
 // src/state/gates.ts
 async function cleanupCommittedGateWorkspace(dependencies, authority, state) {
@@ -61766,7 +61530,7 @@ async function cleanupResolvedInterfaces(dependencies, authority, request, recor
       const projected = await readCanonical(decision2.value, "gate decision interface", (value) => value);
       if (projected !== "missing" && projected !== "invalid") {
         try {
-          const bound = parseInterface(projected.value, request, record2.supplemental);
+          const bound = parseInterface(projected.value, request);
           if (canonicalJsonDigest(bound) === canonicalJsonDigest(record2)) await dependencies.atomic.removeGateInterface(decision2.value);
         } catch {
         }
@@ -61776,48 +61540,6 @@ async function cleanupResolvedInterfaces(dependencies, authority, request, recor
   } catch (error51) {
     return error51 instanceof TaskLockError ? io3(authority, `gate-cleanup-lock-${error51.stage}`) : io3(authority, "gate-cleanup");
   }
-}
-async function currentSupplementalLedger(dependencies, authority, request, inputFingerprint, callerOutcome) {
-  const target2 = await resolvePath7(dependencies, authority, "gate.json", "workspace-gate-interface");
-  if (!target2.ok) return void 0;
-  const projected = await readCanonical(target2.value, "active gate", parseActiveGate);
-  const active = projected === "missing" || projected === "invalid" ? parseActiveGate(activeProjection(request)) : projected.value;
-  const candidates = callerOutcome === void 0 || callerOutcome.action === "supersede" || active.supplemental.some((entry) => isDeepStrictEqual11(entry, callerOutcome)) ? active.supplemental : [...active.supplemental, callerOutcome];
-  const derived = [];
-  for (const entry of candidates) {
-    if (callerOutcome === void 0 || !isDeepStrictEqual11(entry, callerOutcome)) continue;
-    const binding = supplementalGate(entry);
-    if (binding.prior_gate_id !== request.gate_id || binding.task_id !== request.task_id || binding.phase_instance !== request.phase_instance || binding.subject_digest !== request.subject_digest || binding.input_fingerprint !== inputFingerprint) continue;
-    if (entry.action === "decline") {
-      derived.push(entry);
-      continue;
-    }
-    if (!await authenticSupplementalReview(
-      dependencies,
-      authority,
-      request,
-      inputFingerprint,
-      entry
-    )) continue;
-    derived.push(entry);
-  }
-  return Object.freeze(derived);
-}
-async function authenticSupplementalReview(dependencies, authority, request, inputFingerprint, outcome) {
-  const resolver = dependencies.resolve_supplemental_review;
-  if (resolver === void 0) return false;
-  const resolved = await resolver({ authority, request, outcome });
-  if (!resolved.ok) return false;
-  let evidence;
-  try {
-    evidence = parseReviewEvidence(structuredClone(resolved.value.evidence));
-  } catch {
-    return false;
-  }
-  const slot = outcome.review.evidence_slot;
-  const producerFamilies = new Set(request.current_evidence.slots.map((candidate) => candidate.producer_family));
-  const triageAuthentic = outcome.action === "ingest" || resolved.value.triage_digest === (outcome.action === "triage-no-change" ? outcome.triage_digest : outcome.accepted_triage_digest) && resolved.value.triage_outcome === (outcome.action === "triage-no-change" ? "no-change" : "accepted-change");
-  return triageAuthentic && resolved.value.gate_id === request.gate_id && slot.gate_id === request.gate_id && canonicalJsonDigest(evidence) === slot.evidence_digest && evidence.role === "gate-counter-review" && evidence.task_id === request.task_id && evidence.phase_instance === request.phase_instance && evidence.subject_digest === request.subject_digest && evidence.input_fingerprint === inputFingerprint && evidence.assurance === "degraded" && producerFamilies.size === 1 && producerFamilies.has(evidence.producer_family) && evidence.model_family !== evidence.producer_family && evidence.assurance === slot.assurance && evidence.producer_family === slot.producer_family && evidence.model_family === slot.reviewer_family;
 }
 async function openDurableGate(dependencies, input) {
   assertInternalTransactionAuthority(input.authority, { runner: dependencies.runner, environment: dependencies.environment });
@@ -61858,7 +61580,7 @@ async function openDurableGate(dependencies, input) {
           const transition = current.value.last_transition;
           const expectedTool = archived.value.outcome === "waiver-decided" ? "archflow_waiver" : "archflow_gate";
           const expectedOperation = archived.value.outcome === "waiver-decided" ? "waiver" : "gate";
-          const expectedOutcome = archived.value.outcome === "cancelled" || archived.value.outcome === "superseded" ? void 0 : receiptOutcome(archived.value, current.value.revision);
+          const expectedOutcome = archived.value.outcome === "cancelled" ? void 0 : receiptOutcome(archived.value, current.value.revision);
           if (expectedOutcome === void 0 || transition.tool !== expectedTool || transition.operation !== expectedOperation || transition.request_digest !== requestRead.value.request_digest || transition.input_fingerprint !== input.input_fingerprint || String(transition.result_id) !== String(archived.value.gate_id) || transition.resulting_revision !== current.value.revision || transition.prior_revision + 1 !== transition.resulting_revision || !isDeepStrictEqual11(transition.outcome, expectedOutcome) || transition.outcome_digest !== intentOutcomeDigest(expectedOutcome)) {
             return issue3("STATE_INVALID", current.value, "gate-replay-transition-invalid");
           }
@@ -61896,44 +61618,9 @@ async function openDurableGate(dependencies, input) {
         const gateJson2 = await resolvePath7(dependencies, input.authority, "gate.json", "workspace-gate-interface");
         if (!gateJson2.ok) return gateJson2;
         const projected = await readCanonical(gateJson2.value, "active gate", parseActiveGate);
-        let active = projected === "missing" || projected === "invalid" ? parseActiveGate(activeProjection(activeRequest.value)) : projected.value;
         if (projected === "missing" || projected === "invalid") {
           await ensureWorkspaceProjectionParent(input.authority, gateJson2.value.absolute);
-          await dependencies.atomic.replace(gateJson2.value, canonicalDocument(active).bytes);
-        }
-        if (input.supplemental_outcome !== void 0) {
-          const supplemental2 = parseSupplementalReviewOutcome(input.supplemental_outcome);
-          const binding = supplementalGate(supplemental2);
-          if (binding.prior_gate_id !== gateId || binding.task_id !== input.authority.task_id || binding.phase_instance !== input.phase_instance || binding.subject_digest !== input.subject_digest || binding.input_fingerprint !== input.input_fingerprint) return issue3("CONTRACT_INVALID", void 0, "supplemental-gate-binding-invalid");
-          if (supplemental2.action !== "decline") {
-            const resolvedReview = await resolveTaskWorkspacePath({ runner: dependencies.runner, taskId: input.authority.task_id, claim: gateCounterReviewClaim(input.phase_instance, gateId), expectedClass: "workspace-review", context: input.authority.context });
-            if (!resolvedReview.ok) return resolvedReview;
-            if (!await authenticSupplementalReview(
-              dependencies,
-              input.authority,
-              activeRequest.value,
-              input.input_fingerprint,
-              supplemental2
-            )) return issue3("STATE_INVALID", current.value, "supplemental-review-authority-invalid");
-          }
-          if (supplemental2.action === "supersede") {
-            const ledger2 = await currentSupplementalLedger(dependencies, input.authority, activeRequest.value, input.input_fingerprint, supplemental2);
-            if (ledger2 === void 0) return issue3("STATE_INVALID", current.value, "supplemental-ledger-invalid");
-            const record2 = parseGateDecisionRecord({ schema_version: "1", gate_id: gateId, task_id: input.authority.task_id, phase_instance: input.phase_instance, kind: input.kind, subject_digest: input.subject_digest, context_digest: activeRequest.value.context_digest, supplemental: ledger2, outcome: "superseded", supersession: { superseded_gate_id: gateId, accepted_triage_digest: supplemental2.accepted_triage_digest, old_subject_digest: supplemental2.old_subject_digest } });
-            const document2 = canonicalDocument(record2);
-            const archivePath = await resolvePath7(dependencies, input.authority, gateDecisionClaim(gateId), "authority-decision");
-            if (!archivePath.ok) return archivePath;
-            if (await dependencies.atomic.createExclusive(archivePath.value, document2.bytes) !== "created") return issue3("STATE_INVALID", current.value, "gate-supersession-race");
-            const final = nextStateForRecord(current.value, record2, document2.digest);
-            await dependencies.atomic.replace(input.authority.state, final.bytes);
-            await dependencies.atomic.removeGateInterface(gateJson2.value);
-            await cleanupCommittedGateWorkspace(dependencies, input.authority, final.value);
-            return ok14({ gate_id: gateId, state: final, request: activeRequest, replay: document2 });
-          }
-          const ledger = active.supplemental.some((entry) => isDeepStrictEqual11(entry, supplemental2)) ? active.supplemental : [...active.supplemental, supplemental2];
-          active = parseActiveGate({ ...active, supplemental: ledger });
-          await ensureWorkspaceProjectionParent(input.authority, gateJson2.value.absolute);
-          await dependencies.atomic.replace(gateJson2.value, canonicalDocument(active).bytes);
+          await dependencies.atomic.replace(gateJson2.value, canonicalDocument(parseActiveGate(activeProjection(activeRequest.value))).bytes);
         }
         return ok14({ gate_id: gateId, state: current, request: activeRequest });
       }
@@ -61996,7 +61683,6 @@ async function openDurableGate(dependencies, input) {
         subject_digest: input.subject_digest,
         context_digest: contextDigest,
         current_evidence: input.current_evidence,
-        ...input.supersedes === void 0 ? {} : { supersedes: input.supersedes },
         kind: input.kind,
         context: input.context,
         allowed_decisions: waiver === void 0 ? DECISIONS[input.kind] : ["grant", "deny", "cancel"],
@@ -62035,12 +61721,12 @@ async function openDurableGate(dependencies, input) {
     return error51 instanceof TaskLockError ? io3(input.authority, `gate-lock-${error51.stage}`) : io3(input.authority, "gate-open");
   }
 }
-function nextStateForRecord(state, record2, digest12, plannedFinalPhase) {
+function nextStateForRecord(state, record2, digest10, plannedFinalPhase) {
   const revision = parseSafeInteger(state.revision + 1);
   const approvals = [...state.approvals];
   const waivers = [...state.waivers];
   if (record2.outcome === "decided" && gateDecisionEffect(record2.envelope.payload) === "advance") {
-    approvals.push({ gate_id: record2.gate_id, gate_kind: record2.kind, subject_digest: record2.subject_digest, decision_digest: digest12, resolved_at_revision: revision });
+    approvals.push({ gate_id: record2.gate_id, gate_kind: record2.kind, subject_digest: record2.subject_digest, decision_digest: digest10, resolved_at_revision: revision });
     approvals.sort((a, b) => a.gate_id.localeCompare(b.gate_id));
   }
   if (record2.outcome === "waiver-decided") {
@@ -62055,7 +61741,12 @@ function nextStateForRecord(state, record2, digest12, plannedFinalPhase) {
 function enactsReentry(record2) {
   if (record2.outcome !== "decided") return false;
   const decision2 = record2.envelope.payload.decision;
-  return record2.kind === "constitution-review" && decision2 === "revise" || record2.kind === "material-drift" && decision2 === "revise-current" || record2.kind === "attempts-exhausted" && (decision2 === "retry-once" || decision2 === "revise");
+  return record2.kind === "artifact-approval" && decision2 === "revise" || record2.kind === "constitution-review" && decision2 === "revise" || record2.kind === "material-drift" && decision2 === "revise-current" || record2.kind === "attempts-exhausted" && (decision2 === "retry-once" || decision2 === "revise") || record2.kind === "commit-authorization" && decision2 === "revise" || record2.kind === "migration-audit" && decision2 === "revise";
+}
+function beginsHumanRevision(record2) {
+  if (record2.outcome !== "decided") return false;
+  const decision2 = record2.envelope.payload.decision;
+  return record2.kind === "artifact-approval" && decision2 === "revise" || record2.kind === "constitution-review" && decision2 === "revise" || record2.kind === "material-drift" && decision2 === "revise-current" || record2.kind === "attempts-exhausted" && decision2 === "revise" || record2.kind === "commit-authorization" && decision2 === "revise" || record2.kind === "migration-audit" && decision2 === "revise";
 }
 function exactOpenGateMatches(state, request) {
   const open5 = state.open_gate;
@@ -62088,28 +61779,42 @@ async function planGateAuthorizedReentry(dependencies, authority, current, reque
       phase_instance: current.value.phase_instance,
       step: "produce",
       status: "running",
-      attempt: parseSafeInteger(current.value.attempt + 1),
+      attempt: beginsHumanRevision(record2) ? current.value.attempt : parseSafeInteger(current.value.attempt + 1),
       input_fingerprint: fingerprint.value
     },
-    recomputed_input_fingerprint: fingerprint.value
+    recomputed_input_fingerprint: fingerprint.value,
+    human_revision_reentry: beginsHumanRevision(record2)
   });
   if (!transition.ok) return transition;
+  const revision = parseSafeInteger(current.value.revision + 1);
+  const evidence = current.value.authoritative_results.filter((entry) => entry.phase_instance === current.value.phase_instance && (entry.step === "counter_review" || entry.step === "adjudicate" || entry.step === "triage"));
   return ok14(canonicalDocument({
     ...transition.value,
-    revision: parseSafeInteger(current.value.revision + 1)
+    revision,
+    ...beginsHumanRevision(record2) ? {
+      pending_human_revision: {
+        gate_id: record2.gate_id,
+        gate_kind: record2.kind,
+        predecessor_subject_digest: record2.subject_digest,
+        predecessor_input_fingerprint: current.value.input_fingerprint,
+        requested_at_revision: revision,
+        attempt: current.value.attempt,
+        evidence
+      }
+    } : {}
   }));
 }
-async function closedStateForRecord(dependencies, authority, current, request, record2, digest12) {
+async function closedStateForRecord(dependencies, authority, current, request, record2, digest10) {
   if (enactsReentry(record2)) {
     return planGateAuthorizedReentry(dependencies, authority, current, request, record2);
   }
   const plannedFinalPhase = await loadApprovedDesignFinalPhase(dependencies, current.value, record2);
-  return plannedFinalPhase.ok ? ok14(nextStateForRecord(current.value, record2, digest12, plannedFinalPhase.value)) : plannedFinalPhase;
+  return plannedFinalPhase.ok ? ok14(nextStateForRecord(current.value, record2, digest10, plannedFinalPhase.value)) : plannedFinalPhase;
 }
 async function validateCompletedReentry(dependencies, authority, current, request, record2) {
   if (!enactsReentry(record2) || current.value.revision <= request.opened_at_revision) return issue3("STATE_INVALID", current.value, "gate-reentry-replay-state-mismatch");
   if (current.value.revision > request.opened_at_revision + 1) return ok14(void 0);
-  if (current.value.phase_instance !== request.phase_instance || current.value.step !== "produce" || current.value.status !== "running" || request.kind === "attempts-exhausted" && current.value.attempt !== request.context.attempts + 1) return issue3("STATE_INVALID", current.value, "gate-reentry-replay-state-mismatch");
+  if (current.value.phase_instance !== request.phase_instance || current.value.step !== "produce" || current.value.status !== "running" || request.kind === "attempts-exhausted" && current.value.attempt !== (beginsHumanRevision(record2) ? request.context.attempts : request.context.attempts + 1) || beginsHumanRevision(record2) && (current.value.pending_human_revision?.gate_id !== record2.gate_id || current.value.pending_human_revision.attempt !== current.value.attempt)) return issue3("STATE_INVALID", current.value, "gate-reentry-replay-state-mismatch");
   if (dependencies.resolve_gate_reentry_fingerprint === void 0) {
     return issue3("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");
   }
@@ -62149,7 +61854,7 @@ function receiptOutcome(record2, revision) {
   throw new TypeError("non-success gate record has no receipt outcome");
 }
 function withGateTransition(authority, request, record2, predecessor, prepared, inputFingerprint) {
-  if (record2.outcome === "cancelled" || record2.outcome === "superseded") return ok14(prepared);
+  if (record2.outcome === "cancelled") return ok14(prepared);
   const outcome = receiptOutcome(record2, prepared.value.revision);
   const transition = {
     schema_version: "1",
@@ -62224,7 +61929,7 @@ async function installReceipt(dependencies, authority, request, record2, predece
   }
   return ok14({ receipt, final });
 }
-async function resolveDurableGate(dependencies, authority, gateId, inputFingerprint, supplementalOutcome) {
+async function resolveDurableGate(dependencies, authority, gateId, inputFingerprint) {
   assertInternalTransactionAuthority(authority, { runner: dependencies.runner, environment: dependencies.environment });
   try {
     await ensureIntentDirectory(authority);
@@ -62287,7 +61992,7 @@ async function resolveDurableGate(dependencies, authority, gateId, inputFingerpr
           const projected = await readCanonical(decisionInterface.value, "gate decision interface", (value) => value);
           if (projected !== "missing" && projected !== "invalid") {
             try {
-              const bound = parseInterface(projected.value, request.value, archived.value.supplemental);
+              const bound = parseInterface(projected.value, request.value);
               if (canonicalJsonDigest(bound) === archived.digest) await dependencies.atomic.removeGateInterface(decisionInterface.value);
             } catch {
             }
@@ -62303,10 +62008,8 @@ async function resolveDurableGate(dependencies, authority, gateId, inputFingerpr
       const raw = await readCanonical(interfacePath.value, "gate decision interface", (value) => value);
       if (raw === "missing" || raw === "invalid") return fail18(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request.value.kind, issue_code: raw === "missing" ? "decision-missing" : "decision-noncanonical" }));
       let record2;
-      const ledger = await currentSupplementalLedger(dependencies, authority, request.value, inputFingerprint ?? current.value.input_fingerprint, supplementalOutcome);
-      if (ledger === void 0) return issue3("STATE_INVALID", current.value, "active-gate-interface-invalid");
       try {
-        record2 = parseInterface(raw.value, request.value, ledger);
+        record2 = parseInterface(raw.value, request.value);
       } catch {
         return fail18(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request.value.kind, issue_code: "decision-binding-invalid" }));
       }
@@ -62358,46 +62061,20 @@ async function runDurableGate(dependencies, input) {
       if (opened.value.replay.value.outcome === "cancelled") return fail18(createProjectError("GATE_CANCELLED", { gate_id: opened.value.gate_id, gate_kind: opened.value.replay.value.kind }));
       return ok14({ state: opened.value.state, record: opened.value.replay, effect, replayed: true });
     }
-    return earnsReceipt(opened.value.replay.value) ? resolveAdvancingGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint, input.supplemental_outcome) : resolveDurableGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint, input.supplemental_outcome);
+    return earnsReceipt(opened.value.replay.value) ? resolveAdvancingGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint) : resolveDurableGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint);
   }
   const decision2 = await resolvePath7(dependencies, input.authority, "gate.decision", "workspace-gate-interface");
   if (!decision2.ok) return decision2;
-  const review = await resolveTaskWorkspacePath({ runner: dependencies.runner, taskId: input.authority.task_id, claim: gateCounterReviewClaim(input.phase_instance, opened.value.gate_id), expectedClass: "workspace-review", context: input.authority.context });
-  if (!review.ok) return review;
-  const authenticatedLedger = await currentSupplementalLedger(dependencies, input.authority, opened.value.request.value, input.input_fingerprint, input.supplemental_outcome);
-  if (authenticatedLedger === void 0) return issue3("STATE_INVALID", opened.value.state.value, "supplemental-ledger-invalid");
-  const recorded = authenticatedLedger.length !== 0;
   const wait = await waitForGateInterface({
     decision_path: decision2.value,
-    supplemental: { path: review.value, already_recorded: recorded },
     signal: input.signal
   });
   if (wait.kind === "aborted") return fail18(createProjectError("CANCELLED", { source: "client", attempt: input.authority.context.attempt }));
-  if (wait.kind === "supplemental") {
-    const resolver = dependencies.resolve_supplemental_review;
-    if (resolver === void 0) return issue3("STATE_INVALID", opened.value.state.value, "supplemental-review-authority-unavailable");
-    const resolved2 = await resolver({
-      authority: input.authority,
-      request: opened.value.request.value
-    });
-    if (!resolved2.ok) return resolved2;
-    let evidence;
-    try {
-      evidence = parseReviewEvidence(structuredClone(resolved2.value.evidence));
-    } catch {
-      return issue3("STATE_INVALID", opened.value.state.value, "supplemental-review-authority-invalid");
-    }
-    if (resolved2.value.gate_id !== opened.value.gate_id || evidence.role !== "gate-counter-review" || evidence.task_id !== opened.value.request.value.task_id || evidence.phase_instance !== opened.value.request.value.phase_instance || evidence.subject_digest !== opened.value.request.value.subject_digest || evidence.input_fingerprint !== input.input_fingerprint || evidence.assurance !== "degraded" || evidence.model_family === evidence.producer_family || new Set(opened.value.request.value.current_evidence.slots.map((slot) => slot.producer_family)).size !== 1 || opened.value.request.value.current_evidence.slots.some((slot) => slot.producer_family !== evidence.producer_family)) return issue3("STATE_INVALID", opened.value.state.value, "supplemental-review-authority-invalid");
-    return fail18(createProjectError("SUPPLEMENTAL_REVIEW_REQUIRED", {
-      gate_id: opened.value.gate_id,
-      evidence_digest: canonicalJsonDigest(evidence)
-    }));
-  }
-  const resolved = await resolveDurableGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint, input.supplemental_outcome);
+  const resolved = await resolveDurableGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint);
   if (resolved.ok || resolved.error.code !== "STATE_INVALID") return resolved;
-  return resolveAdvancingGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint, input.supplemental_outcome);
+  return resolveAdvancingGate(dependencies, input.authority, opened.value.gate_id, input.input_fingerprint);
 }
-async function resolveAdvancingGate(dependencies, authority, gateId, inputFingerprint, supplementalOutcome) {
+async function resolveAdvancingGate(dependencies, authority, gateId, inputFingerprint) {
   try {
     await ensureIntentDirectory(authority);
     return await dependencies.lock.runExclusive(authority.workspace_root, async () => {
@@ -62422,10 +62099,8 @@ async function resolveAdvancingGate(dependencies, authority, gateId, inputFinger
         const raw = await readCanonical(interfacePath.value, "gate decision interface", (value) => value);
         if (raw === "missing" || raw === "invalid") return fail18(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request.value.kind, issue_code: "decision-invalid" }));
         let record2;
-        const ledger = await currentSupplementalLedger(dependencies, authority, request.value, inputFingerprint, supplementalOutcome);
-        if (ledger === void 0) return issue3("STATE_INVALID", current.value, "active-gate-interface-invalid");
         try {
-          record2 = parseInterface(raw.value, request.value, ledger);
+          record2 = parseInterface(raw.value, request.value);
         } catch {
           return fail18(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request.value.kind, issue_code: "decision-binding-invalid" }));
         }
@@ -62981,27 +62656,9 @@ async function handleGate(call, context2) {
       current_evidence: call.input.current_evidence,
       kind: call.input.kind,
       context: call.input.context,
-      ...call.input.supersedes === void 0 ? {} : { supersedes: call.input.supersedes },
-      ...call.input.supplemental_outcome === void 0 ? {} : {
-        supplemental_outcome: call.input.supplemental_outcome
-      },
       signal: context2.signal
     });
     if (!outcome.ok) return outcome;
-    if ("record" in outcome.value && outcome.value.record.value.outcome === "superseded") {
-      const supplemental2 = call.input.supplemental_outcome;
-      if (supplemental2?.action !== "supersede" || outcome.value.record.value.gate_id !== supplemental2.review.prior_gate_id || outcome.value.record.value.supersession.old_subject_digest !== supplemental2.old_subject_digest) {
-        return fail22(createProjectError("STATE_INVALID", {
-          phase_instance: call.input.phase_instance,
-          issue_code: "gate-supersession-caller-binding-invalid"
-        }));
-      }
-      return fail22(createProjectError("GATE_SUPERSEDED", {
-        gate_id: outcome.value.record.value.gate_id,
-        old_subject_digest: outcome.value.record.value.supersession.old_subject_digest,
-        new_subject_digest: supplemental2.new_subject_digest
-      }));
-    }
     if (!("record" in outcome.value) || outcome.value.record.value.outcome !== "decided") {
       return fail22(createProjectError("STATE_INVALID", {
         phase_instance: call.input.phase_instance,
@@ -63049,11 +62706,11 @@ function phaseForLegacyDestination(taskId, destinationPath) {
   }
   const document2 = /^phases\/([1-9][0-9]*)\/(design|impl-notes)\.md$/u.exec(relativePath);
   if (document2 !== null) {
-    const phase4 = Number(document2[1]);
-    if (!Number.isSafeInteger(phase4)) return void 0;
-    return `${document2[2] === "design" ? "phase-design" : "phase-impl"}-${phase4}`;
+    const phase3 = Number(document2[1]);
+    if (!Number.isSafeInteger(phase3)) return void 0;
+    return `${document2[2] === "design" ? "phase-design" : "phase-impl"}-${phase3}`;
   }
-  const review = /^reviews\/(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)\.(?:self|counter|triage|adjudication)\.md$/u.exec(relativePath) ?? /^reviews\/(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)\.gate-counter\.[a-z0-9][a-z0-9-]*\.md$/u.exec(relativePath);
+  const review = /^reviews\/(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)\.(?:self|counter|triage|adjudication)\.md$/u.exec(relativePath);
   if (review === null) return void 0;
   try {
     decodePhaseInstance(review[1]);
@@ -63834,9 +63491,13 @@ async function handleState(call, context2) {
           recomputed_input_fingerprint: call.input.input_fingerprint,
           ...artifact === void 0 ? {} : { artifact },
           ...preparedResult === void 0 ? {} : { result_reference: preparedResult.reference },
+          ...preparedResult === void 0 ? {} : {
+            resulting_subject_digest: preparedResult.prepared.manifest.value.artifact_digest
+          },
           ...completionSubjectDigest === void 0 ? {} : { completion_subject_digest: completionSubjectDigest },
           commit_observed: commitObserved,
           ...legacyResumePhase === void 0 ? {} : { legacy_resume_phase: legacyResumePhase },
+          ...call.input.human_revision === void 0 ? {} : { human_revision: call.input.human_revision },
           ...authenticatedGateApprovals2.length === 0 ? {} : {
             authenticated_gate_approvals: authenticatedGateApprovals2
           }
@@ -63925,9 +63586,6 @@ async function handleWaiver(call, context2) {
       kind: "constitution-review",
       context: waiverContext2,
       waiver_origin_gate_id: call.input.origin.origin_gate_id,
-      ...call.input.supplemental_outcome === void 0 ? {} : {
-        supplemental_outcome: call.input.supplemental_outcome
-      },
       signal: context2.signal
     });
     if (!resolved.ok) return resolved;

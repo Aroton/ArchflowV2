@@ -18,8 +18,6 @@ export * from "./review.js";
 export * from "./adjudication.js";
 export * from "./trust.js";
 export * from "./triage.js";
-export * from "./supplemental.js";
-export * from "./supplemental-record.js";
 export * from "./renderers.js";
 export type { RuleVersionRef } from "./gates.js";
 export * from "./gates.js";
@@ -52,6 +50,7 @@ export type {
   CounterReviewSuccess,
   GateInput,
   GateSuccess,
+  HumanRevisionDeclaration,
   ParsedToolCall,
   ParsedToolInput,
   ResultExpectation,

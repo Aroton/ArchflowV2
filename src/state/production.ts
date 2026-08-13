@@ -1,4 +1,4 @@
-import { canonicalJsonDigest, parseCanonicalDocument, sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
+import { sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
 import { lstat, readFile, readlink } from "node:fs/promises";
 import type { BlobIdentity, OutputEntry } from "../contracts/durable-primitives.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
@@ -9,13 +9,10 @@ import { parseToolCall } from "../contracts/mcp-tools.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim, type RepositoryPathClaim } from "../contracts/path-claims.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { SecretScanner } from "../contracts/secret-scan.js";
-import { parseSupplementalReviewRecord } from "../contracts/supplemental-record.js";
 import type { GitEnvironment, RepositoryOperationContext } from "../repository/git.js";
 import { createGitRunner, preflightGit, readGitBlobBytes, readGitBlobProjectedBytes } from "../repository/git.js";
 import { discoverWorktree, type RootBoundGitRunner } from "../repository/identity.js";
 import {
-  gateSupplementalReviewClaim,
-  openResolved,
   parseWorkspacePathClaim,
   resolveDeclaredOutputPath,
   resolveRepositoryPath,
@@ -320,7 +317,12 @@ export async function createProductionServices(input: ProductionInput): Promise<
       const current = await readTaskState(authority.state);
       if (current.kind !== "canonical") return parseSafeInteger(0);
       let total = 0;
-      for (const reference of current.document.value.authoritative_results) {
+      const retainedReferences = [
+        ...current.document.value.authoritative_results,
+        ...(current.document.value.human_revision_history ?? []).flatMap((revision) => revision.evidence),
+      ].filter((reference, index, references) => references.findIndex((candidate) =>
+        candidate.result_digest === reference.result_digest) === index);
+      for (const reference of retainedReferences) {
         if (reference.result_digest === excluded?.result_digest) continue;
         const retained = await readRetainedResult(discovered.value, authority, reference);
         if (!retained.ok) throw new TypeError("retained result accounting is unavailable");
@@ -351,49 +353,6 @@ export async function createProductionServices(input: ProductionInput): Promise<
         context: authority.context,
       });
       return subject.ok ? ok(computeInputFingerprint(subject.value)) : subject;
-    },
-    resolve_supplemental_review: async ({ request }) => {
-      const target = await resolvePath(
-        discovered.value,
-        authority,
-        gateSupplementalReviewClaim(request.gate_id),
-        "authority-decision",
-      );
-      if (!target.ok) return target;
-      let handle;
-      try {
-        handle = await openResolved(target.value.absolute, 0);
-        const document = parseCanonicalDocument(
-          new Uint8Array(await handle.readFile()),
-          "supplemental review record",
-        );
-        const record = parseSupplementalReviewRecord(document.value);
-        const producerFamilies = new Set(request.current_evidence.slots.map((slot) => slot.producer_family));
-        if (
-          record.gate_id !== request.gate_id ||
-          record.request_digest !== request.request_digest ||
-          record.task_id !== request.task_id ||
-          record.phase_instance !== request.phase_instance ||
-          record.kind !== request.kind ||
-          record.subject_digest !== request.subject_digest ||
-          record.context_digest !== request.context_digest ||
-          record.current_evidence_set_digest !== request.current_evidence.set_digest ||
-          producerFamilies.size !== 1 ||
-          !producerFamilies.has(record.review.producer_family) ||
-          record.review.model_family === record.review.producer_family ||
-          canonicalJsonDigest(record.review) !== record.evidence_digest
-        ) return stateFailure(authority.context.phase_instance, "supplemental-review-authority-invalid");
-        return ok(Object.freeze({
-          evidence: record.review,
-          gate_id: record.gate_id,
-          triage_digest: record.triage_digest,
-          triage_outcome: record.outcome,
-        }));
-      } catch {
-        return stateFailure(authority.context.phase_instance, "supplemental-review-authority-invalid");
-      } finally {
-        await handle?.close().catch(() => undefined);
-      }
     },
   });
   return ok(Object.freeze({

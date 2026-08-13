@@ -22,8 +22,7 @@
         "role": {
           "type": "string",
           "enum": [
-            "counter-review",
-            "gate-counter-review"
+            "counter-review"
           ]
         },
         "subject_digest": {
@@ -177,8 +176,7 @@
         "role": {
           "type": "string",
           "enum": [
-            "counter-review",
-            "gate-counter-review"
+            "counter-review"
           ]
         },
         "subject_digest": {

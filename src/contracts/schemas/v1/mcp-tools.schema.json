@@ -212,6 +212,46 @@
               },
               "artifact": {
                 "$ref": "#/$defs/durableArtifact"
+              },
+              "human_revision": {
+                "type": "object",
+                "properties": {
+                  "classification": {
+                    "type": "string",
+                    "enum": [
+                      "simple",
+                      "significant"
+                    ]
+                  },
+                  "rationale": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "user_override": {
+                    "type": "object",
+                    "properties": {
+                      "agent_classification": {
+                        "type": "string",
+                        "enum": [
+                          "simple",
+                          "significant"
+                        ]
+                      },
+                      "rationale": {
+                        "$ref": "#/$defs/text"
+                      }
+                    },
+                    "required": [
+                      "agent_classification",
+                      "rationale"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "classification",
+                  "rationale"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -504,29 +544,6 @@
               "current_evidence": {
                 "$ref": "#/$defs/currentEvidence"
               },
-              "supersedes": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "superseded_gate_id",
-                  "accepted_triage_digest",
-                  "old_subject_digest"
-                ],
-                "properties": {
-                  "superseded_gate_id": {
-                    "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-                  },
-                  "accepted_triage_digest": {
-                    "$ref": "#/$defs/digest"
-                  },
-                  "old_subject_digest": {
-                    "$ref": "#/$defs/digest"
-                  }
-                }
-              },
-              "supplemental_outcome": {
-                "$ref": "urn:archflow:schema:v1:supplemental-review"
-              },
               "kind": {
                 "enum": [
                   "artifact-approval",
@@ -770,9 +787,6 @@
               },
               "rationale": {
                 "$ref": "#/$defs/text"
-              },
-              "supplemental_outcome": {
-                "$ref": "urn:archflow:schema:v1:supplemental-review"
               }
             },
             "required": [

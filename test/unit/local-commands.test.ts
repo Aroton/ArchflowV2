@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
-import { LOCAL_COMMANDS, assertGateCounterRequestBinding, runLocalCommand } from "../../src/local/commands.js";
+import { LOCAL_COMMANDS, runLocalCommand } from "../../src/local/commands.js";
 
 describe("archflow-local pure adapters", () => {
-  it("publishes exactly the fifteen local commands", () => {
+  it("publishes exactly the fourteen local commands", () => {
     expect([...LOCAL_COMMANDS].sort()).toEqual([
-      "build-request", "clean", "decide", "envelope", "gate-counter", "hash", "init",
+      "build-request", "clean", "decide", "envelope", "hash", "init",
       "manual-status", "reconcile", "render", "restore", "snapshot", "status", "upgrade", "validate",
     ]);
   });
@@ -33,20 +33,4 @@ describe("archflow-local pure adapters", () => {
     })).rejects.toThrow(/not supported/u);
   });
 
-  it("rejects forged gate bindings and non-degraded helper evidence", () => {
-    const request = {
-      request_digest: "a".repeat(64), task_id: "task", phase_instance: "phase-impl-1",
-      kind: "review-trigger", subject_digest: "b".repeat(64), context_digest: "c".repeat(64),
-      current_evidence: { set_digest: "d".repeat(64), slots: [{ producer_family: "claude" }, { producer_family: "claude" }] },
-    } as never;
-    const record: Record<string, unknown> = {
-      request_digest: "a".repeat(64), task_id: "task", phase_instance: "phase-impl-1",
-      kind: "review-trigger", subject_digest: "b".repeat(64), context_digest: "c".repeat(64),
-      current_evidence_set_digest: "d".repeat(64), input_fingerprint: "e".repeat(64),
-      review: { assurance: "degraded", producer_family: "claude" },
-    };
-    expect(() => assertGateCounterRequestBinding(record as never, request, "e".repeat(64))).not.toThrow();
-    expect(() => assertGateCounterRequestBinding({ ...record, context_digest: "f".repeat(64) } as never, request, "e".repeat(64))).toThrow(/archived request/u);
-    expect(() => assertGateCounterRequestBinding({ ...record, review: { assurance: "server-attested", producer_family: "claude" } } as never, request, "e".repeat(64))).toThrow(/archived request/u);
-  });
 });

@@ -1777,70 +1777,6 @@
       ],
       "additionalProperties": false
     },
-    "E_SUPPLEMENTAL_REVIEW_REQUIRED": {
-      "type": "object",
-      "properties": {
-        "schema_version": {
-          "type": "string",
-          "const": "1"
-        },
-        "code": {
-          "type": "string",
-          "const": "SUPPLEMENTAL_REVIEW_REQUIRED"
-        },
-        "owner": {
-          "type": "string",
-          "const": "state"
-        },
-        "retryable": {
-          "type": "boolean",
-          "const": false
-        },
-        "diagnostic": {
-          "type": "object",
-          "properties": {
-            "template_id": {
-              "type": "string",
-              "const": "SUPPLEMENTAL_REVIEW_REQUIRED"
-            },
-            "parameters": {
-              "type": "object",
-              "properties": {
-                "gate_id": {
-                  "$ref": "#/$defs/pathSafeId"
-                },
-                "evidence_digest": {
-                  "$ref": "#/$defs/digest"
-                }
-              },
-              "required": [
-                "gate_id",
-                "evidence_digest"
-              ],
-              "additionalProperties": false
-            }
-          },
-          "required": [
-            "template_id",
-            "parameters"
-          ],
-          "additionalProperties": false
-        },
-        "next_action": {
-          "type": "string",
-          "const": "triage-supplemental-review"
-        }
-      },
-      "required": [
-        "schema_version",
-        "code",
-        "owner",
-        "retryable",
-        "diagnostic",
-        "next_action"
-      ],
-      "additionalProperties": false
-    },
     "E_INTENT_MISMATCH": {
       "type": "object",
       "properties": {
@@ -2593,74 +2529,6 @@
         "next_action": {
           "type": "string",
           "const": "restart-gate-flow"
-        }
-      },
-      "required": [
-        "schema_version",
-        "code",
-        "owner",
-        "retryable",
-        "diagnostic",
-        "next_action"
-      ],
-      "additionalProperties": false
-    },
-    "E_GATE_SUPERSEDED": {
-      "type": "object",
-      "properties": {
-        "schema_version": {
-          "type": "string",
-          "const": "1"
-        },
-        "code": {
-          "type": "string",
-          "const": "GATE_SUPERSEDED"
-        },
-        "owner": {
-          "type": "string",
-          "const": "gate"
-        },
-        "retryable": {
-          "type": "boolean",
-          "const": false
-        },
-        "diagnostic": {
-          "type": "object",
-          "properties": {
-            "template_id": {
-              "type": "string",
-              "const": "GATE_SUPERSEDED"
-            },
-            "parameters": {
-              "type": "object",
-              "properties": {
-                "gate_id": {
-                  "$ref": "#/$defs/pathSafeId"
-                },
-                "old_subject_digest": {
-                  "$ref": "#/$defs/digest"
-                },
-                "new_subject_digest": {
-                  "$ref": "#/$defs/digest"
-                }
-              },
-              "required": [
-                "gate_id",
-                "old_subject_digest",
-                "new_subject_digest"
-              ],
-              "additionalProperties": false
-            }
-          },
-          "required": [
-            "template_id",
-            "parameters"
-          ],
-          "additionalProperties": false
-        },
-        "next_action": {
-          "type": "string",
-          "const": "retry-with-superseding-subject"
         }
       },
       "required": [
@@ -3742,9 +3610,6 @@
       "$ref": "#/$defs/E_STATE_CONFLICT"
     },
     {
-      "$ref": "#/$defs/E_SUPPLEMENTAL_REVIEW_REQUIRED"
-    },
-    {
       "$ref": "#/$defs/E_INTENT_MISMATCH"
     },
     {
@@ -3779,9 +3644,6 @@
     },
     {
       "$ref": "#/$defs/E_GATE_CANCELLED"
-    },
-    {
-      "$ref": "#/$defs/E_GATE_SUPERSEDED"
     },
     {
       "$ref": "#/$defs/E_UNSUPPORTED_HOST"

@@ -258,9 +258,13 @@ export async function handleState(
           recomputed_input_fingerprint: call.input.input_fingerprint,
           ...(artifact === undefined ? {} : { artifact }),
           ...(preparedResult === undefined ? {} : { result_reference: preparedResult.reference }),
+          ...(preparedResult === undefined ? {} : {
+            resulting_subject_digest: preparedResult.prepared.manifest.value.artifact_digest,
+          }),
           ...(completionSubjectDigest === undefined ? {} : { completion_subject_digest: completionSubjectDigest }),
           commit_observed: commitObserved,
           ...(legacyResumePhase === undefined ? {} : { legacy_resume_phase: legacyResumePhase }),
+          ...(call.input.human_revision === undefined ? {} : { human_revision: call.input.human_revision }),
           ...(authenticatedGateApprovals.length === 0 ? {} : {
             authenticated_gate_approvals: authenticatedGateApprovals,
           }),

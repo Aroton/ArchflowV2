@@ -132,9 +132,6 @@
         "current_evidence": {
           "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
         },
-        "supersedes": {
-          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/supersession"
-        },
         "opened_at_revision": {
           "type": "integer",
           "minimum": 1,
@@ -146,9 +143,6 @@
         },
         "decision_template": {
           "$ref": "#/$defs/decisionTemplate"
-        },
-        "supplemental": {
-          "$ref": "urn:archflow:schema:v1:gate-decision-record#/$defs/supplemental"
         },
         "kind": {
           "type": "string",
@@ -175,7 +169,6 @@
         "opened_at_revision",
         "status",
         "decision_template",
-        "supplemental",
         "kind",
         "context",
         "allowed_decisions"
@@ -223,9 +216,6 @@
         "current_evidence": {
           "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
         },
-        "supersedes": {
-          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/supersession"
-        },
         "opened_at_revision": {
           "type": "integer",
           "minimum": 1,
@@ -237,9 +227,6 @@
         },
         "decision_template": {
           "$ref": "#/$defs/decisionTemplate"
-        },
-        "supplemental": {
-          "$ref": "urn:archflow:schema:v1:gate-decision-record#/$defs/supplemental"
         },
         "kind": {
           "type": "string",
@@ -266,7 +253,6 @@
         "opened_at_revision",
         "status",
         "decision_template",
-        "supplemental",
         "kind",
         "context",
         "allowed_decisions"
@@ -314,9 +300,6 @@
         "current_evidence": {
           "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
         },
-        "supersedes": {
-          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/supersession"
-        },
         "opened_at_revision": {
           "type": "integer",
           "minimum": 1,
@@ -328,9 +311,6 @@
         },
         "decision_template": {
           "$ref": "#/$defs/decisionTemplate"
-        },
-        "supplemental": {
-          "$ref": "urn:archflow:schema:v1:gate-decision-record#/$defs/supplemental"
         },
         "kind": {
           "type": "string",
@@ -357,7 +337,6 @@
         "opened_at_revision",
         "status",
         "decision_template",
-        "supplemental",
         "kind",
         "context",
         "allowed_decisions"
@@ -405,9 +384,6 @@
         "current_evidence": {
           "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
         },
-        "supersedes": {
-          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/supersession"
-        },
         "opened_at_revision": {
           "type": "integer",
           "minimum": 1,
@@ -419,9 +395,6 @@
         },
         "decision_template": {
           "$ref": "#/$defs/decisionTemplate"
-        },
-        "supplemental": {
-          "$ref": "urn:archflow:schema:v1:gate-decision-record#/$defs/supplemental"
         },
         "kind": {
           "type": "string",
@@ -448,7 +421,6 @@
         "opened_at_revision",
         "status",
         "decision_template",
-        "supplemental",
         "kind",
         "context",
         "allowed_decisions"
@@ -496,9 +468,6 @@
         "current_evidence": {
           "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
         },
-        "supersedes": {
-          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/supersession"
-        },
         "opened_at_revision": {
           "type": "integer",
           "minimum": 1,
@@ -510,9 +479,6 @@
         },
         "decision_template": {
           "$ref": "#/$defs/decisionTemplate"
-        },
-        "supplemental": {
-          "$ref": "urn:archflow:schema:v1:gate-decision-record#/$defs/supplemental"
         },
         "kind": {
           "type": "string",
@@ -539,7 +505,6 @@
         "opened_at_revision",
         "status",
         "decision_template",
-        "supplemental",
         "kind",
         "context",
         "allowed_decisions"
@@ -587,9 +552,6 @@
         "current_evidence": {
           "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
         },
-        "supersedes": {
-          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/supersession"
-        },
         "opened_at_revision": {
           "type": "integer",
           "minimum": 1,
@@ -601,9 +563,6 @@
         },
         "decision_template": {
           "$ref": "#/$defs/decisionTemplate"
-        },
-        "supplemental": {
-          "$ref": "urn:archflow:schema:v1:gate-decision-record#/$defs/supplemental"
         },
         "kind": {
           "type": "string",
@@ -630,7 +589,6 @@
         "opened_at_revision",
         "status",
         "decision_template",
-        "supplemental",
         "kind",
         "context",
         "allowed_decisions"
@@ -678,9 +636,6 @@
         "current_evidence": {
           "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
         },
-        "supersedes": {
-          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/supersession"
-        },
         "opened_at_revision": {
           "type": "integer",
           "minimum": 1,
@@ -692,9 +647,6 @@
         },
         "decision_template": {
           "$ref": "#/$defs/decisionTemplate"
-        },
-        "supplemental": {
-          "$ref": "urn:archflow:schema:v1:gate-decision-record#/$defs/supplemental"
         },
         "kind": {
           "type": "string",
@@ -721,7 +673,6 @@
         "opened_at_revision",
         "status",
         "decision_template",
-        "supplemental",
         "kind",
         "context",
         "allowed_decisions"
@@ -769,9 +720,6 @@
         "current_evidence": {
           "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
         },
-        "supersedes": {
-          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/supersession"
-        },
         "opened_at_revision": {
           "type": "integer",
           "minimum": 1,
@@ -783,9 +731,6 @@
         },
         "decision_template": {
           "$ref": "#/$defs/decisionTemplate"
-        },
-        "supplemental": {
-          "$ref": "urn:archflow:schema:v1:gate-decision-record#/$defs/supplemental"
         },
         "kind": {
           "type": "string",
@@ -812,7 +757,6 @@
         "opened_at_revision",
         "status",
         "decision_template",
-        "supplemental",
         "kind",
         "context",
         "allowed_decisions"
@@ -860,9 +804,6 @@
         "current_evidence": {
           "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
         },
-        "supersedes": {
-          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/supersession"
-        },
         "opened_at_revision": {
           "type": "integer",
           "minimum": 1,
@@ -874,9 +815,6 @@
         },
         "decision_template": {
           "$ref": "#/$defs/decisionTemplate"
-        },
-        "supplemental": {
-          "$ref": "urn:archflow:schema:v1:gate-decision-record#/$defs/supplemental"
         },
         "kind": {
           "type": "string",
@@ -903,7 +841,6 @@
         "opened_at_revision",
         "status",
         "decision_template",
-        "supplemental",
         "kind",
         "context",
         "allowed_decisions"

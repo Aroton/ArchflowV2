@@ -19,28 +19,6 @@
       ],
       "additionalProperties": false
     },
-    "supersession": {
-      "type": "object",
-      "properties": {
-        "superseded_gate_id": {
-          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
-        },
-        "accepted_triage_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "old_subject_digest": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        }
-      },
-      "required": [
-        "superseded_gate_id",
-        "accepted_triage_digest",
-        "old_subject_digest"
-      ],
-      "additionalProperties": false
-    },
     "origin": {
       "type": "object",
       "properties": {
@@ -222,9 +200,6 @@
         "current_evidence": {
           "$ref": "#/$defs/currentEvidence"
         },
-        "supersedes": {
-          "$ref": "#/$defs/supersession"
-        },
         "opened_at_revision": {
           "type": "integer",
           "minimum": 1,
@@ -299,9 +274,6 @@
         },
         "current_evidence": {
           "$ref": "#/$defs/currentEvidence"
-        },
-        "supersedes": {
-          "$ref": "#/$defs/supersession"
         },
         "opened_at_revision": {
           "type": "integer",
@@ -378,9 +350,6 @@
         "current_evidence": {
           "$ref": "#/$defs/currentEvidence"
         },
-        "supersedes": {
-          "$ref": "#/$defs/supersession"
-        },
         "opened_at_revision": {
           "type": "integer",
           "minimum": 1,
@@ -455,9 +424,6 @@
         },
         "current_evidence": {
           "$ref": "#/$defs/currentEvidence"
-        },
-        "supersedes": {
-          "$ref": "#/$defs/supersession"
         },
         "opened_at_revision": {
           "type": "integer",
@@ -534,9 +500,6 @@
         "current_evidence": {
           "$ref": "#/$defs/currentEvidence"
         },
-        "supersedes": {
-          "$ref": "#/$defs/supersession"
-        },
         "opened_at_revision": {
           "type": "integer",
           "minimum": 1,
@@ -611,9 +574,6 @@
         },
         "current_evidence": {
           "$ref": "#/$defs/currentEvidence"
-        },
-        "supersedes": {
-          "$ref": "#/$defs/supersession"
         },
         "opened_at_revision": {
           "type": "integer",
@@ -690,9 +650,6 @@
         "current_evidence": {
           "$ref": "#/$defs/currentEvidence"
         },
-        "supersedes": {
-          "$ref": "#/$defs/supersession"
-        },
         "opened_at_revision": {
           "type": "integer",
           "minimum": 1,
@@ -768,9 +725,6 @@
         "current_evidence": {
           "$ref": "#/$defs/currentEvidence"
         },
-        "supersedes": {
-          "$ref": "#/$defs/supersession"
-        },
         "opened_at_revision": {
           "type": "integer",
           "minimum": 1,
@@ -845,9 +799,6 @@
         },
         "current_evidence": {
           "$ref": "#/$defs/currentEvidence"
-        },
-        "supersedes": {
-          "$ref": "#/$defs/supersession"
         },
         "opened_at_revision": {
           "type": "integer",

@@ -18,7 +18,7 @@ describe("handler authority checks", () => {
     } as never);
     const decision = canonicalDocument({
       schema_version: "1", gate_id: "origin-gate", task_id: "task-1", phase_instance: "phase-impl-15",
-      kind: "review-trigger", subject_digest: D("2"), context_digest: D("3"), supplemental: [], outcome: "decided",
+      kind: "review-trigger", subject_digest: D("2"), context_digest: D("3"), outcome: "decided",
       envelope: { schema_version: "1", gate_id: "origin-gate", task_id: "task-1", phase_instance: "phase-impl-15",
         kind: "review-trigger", subject_digest: D("2"), context_digest: D("3"),
         payload: { decision: "waiver-requested", rule, reason: "Request narrow waiver" },

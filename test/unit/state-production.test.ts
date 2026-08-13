@@ -95,7 +95,7 @@ describe("production dependency assembly", () => {
     expect(resolved.value.dependencies).toMatchObject({
       read_state: expect.any(Function), read_config: expect.any(Function), read_receipt: expect.any(Function),
       read_retained_task_bytes: expect.any(Function), load_retained_result: expect.any(Function),
-      resolve_gate_reentry_fingerprint: expect.any(Function), resolve_supplemental_review: expect.any(Function),
+      resolve_gate_reentry_fingerprint: expect.any(Function),
     });
   });
 

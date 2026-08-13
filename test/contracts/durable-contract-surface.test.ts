@@ -358,11 +358,11 @@ describe("the pinned $def inventory resolves", () => {
   });
 });
 
-describe("registry invariants after supplemental review registration", () => {
-  it("SCHEMA_IDS holds 34 entries in exact bijection with the schema directory", () => {
-    expect(Object.keys(SCHEMA_IDS)).toHaveLength(34);
-    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(34);
-    expect(schemaFileNames()).toHaveLength(34);
+describe("schema registry invariants", () => {
+  it("SCHEMA_IDS holds 32 entries in exact bijection with the schema directory", () => {
+    expect(Object.keys(SCHEMA_IDS)).toHaveLength(32);
+    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(32);
+    expect(schemaFileNames()).toHaveLength(32);
 
     const idsInFiles = [...ALL_SCHEMAS.values()].map((document) => document.$id as string).sort();
     expect(idsInFiles).toEqual([...Object.values(SCHEMA_IDS)].sort());

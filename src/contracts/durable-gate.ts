@@ -20,14 +20,6 @@ import {
 import { currentEvidenceSetRefSchema, type CurrentEvidenceSetRef } from "./trust.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson } from "./plain-json.js";
-import {
-  supplementalReviewOutcomeSchema,
-  type GateSupersessionRef,
-  type SupplementalReviewOutcome,
-} from "./supplemental.js";
-
-export type SupplementalLedgerEntry = Exclude<SupplementalReviewOutcome, { readonly action: "supersede" }>;
-export type SupplementalLedger = readonly SupplementalLedgerEntry[];
 export type WaiverGateContext = { readonly origin: WaiverOriginRef; readonly rationale: string };
 
 type GateRequestCommon = {
@@ -41,7 +33,6 @@ type GateRequestCommon = {
   readonly subject_digest: Sha256Digest;
   readonly context_digest: Sha256Digest;
   readonly current_evidence: CurrentEvidenceSetRef;
-  readonly supersedes?: GateSupersessionRef;
   readonly opened_at_revision: SafeInteger;
 };
 
@@ -61,14 +52,12 @@ type GateDecisionRecordCommon = {
   readonly kind: GateKind;
   readonly subject_digest: Sha256Digest;
   readonly context_digest: Sha256Digest;
-  readonly supplemental: SupplementalLedger;
 };
 
 export type GateDecisionRecordV1 = GateDecisionRecordCommon & (
   | { readonly outcome: "decided"; readonly envelope: GateDecisionEnvelope }
   | { readonly outcome: "waiver-decided"; readonly granted: boolean; readonly scope: WaiverScope; readonly origin: WaiverOriginRef; readonly notes: string; readonly human_provenance: HumanDecisionProvenance }
   | { readonly outcome: "cancelled"; readonly reason: string; readonly human_provenance: HumanDecisionProvenance }
-  | { readonly outcome: "superseded"; readonly supersession: GateSupersessionRef }
 );
 
 export type GateDecisionTemplateV1 = {
@@ -88,7 +77,6 @@ export type GateDecisionTemplateV1 = {
 export type ActiveGateV1 = GateRequestV1 & {
   readonly status: "awaiting-human";
   readonly decision_template: GateDecisionTemplateV1;
-  readonly supplemental: SupplementalLedger;
 };
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -99,24 +87,18 @@ const text = z.string().min(1).max(4096).regex(/\S/u);
 const rule = gateRuleVersionRefSchema;
 const scope = gateWaiverScopeSchema;
 const origin = z.object({ origin_gate_id: pathSafeId, origin_decision_digest: digest, origin_context_digest: digest, task_id: taskSlug, phase_instance: phase, subject_digest: digest, current_evidence_set_digest: digest, rule, scope }).strict();
-const supersession = z.object({ superseded_gate_id: pathSafeId, accepted_triage_digest: digest, old_subject_digest: digest }).strict();
-const supplemental = z.array(supplementalReviewOutcomeSchema).superRefine((entries, context) => {
-  if (entries.some((entry) => entry.action === "supersede")) context.addIssue({ code: "custom", message: "supplemental ledger cannot contain supersession" });
-});
-const base = { schema_version: z.literal("1"), gate_id: pathSafeId, task_id: taskSlug, phase_instance: phase, kind: z.enum(GATE_KINDS), subject_digest: digest, context_digest: digest, supplemental } as const;
+const base = { schema_version: z.literal("1"), gate_id: pathSafeId, task_id: taskSlug, phase_instance: phase, kind: z.enum(GATE_KINDS), subject_digest: digest, context_digest: digest } as const;
 
 const decisionRecordArms = {
   decided: z.object({ ...base, outcome: z.literal("decided"), envelope: gateDecisionEnvelopeV1Schema }).strict(),
   waiverDecided: z.object({ ...base, outcome: z.literal("waiver-decided"), granted: z.boolean(), scope, origin, notes: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
   cancelled: z.object({ ...base, outcome: z.literal("cancelled"), reason: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
-  superseded: z.object({ ...base, outcome: z.literal("superseded"), supersession }).strict(),
 } as const;
 
 export const gateDecisionRecordV1Schema = z.discriminatedUnion("outcome", [
   decisionRecordArms.decided,
   decisionRecordArms.waiverDecided,
   decisionRecordArms.cancelled,
-  decisionRecordArms.superseded,
 ]) as unknown as z.ZodType<GateDecisionRecordV1>;
 
 /**
@@ -163,7 +145,6 @@ const gateRequestCommon = {
   subject_digest: digest,
   context_digest: digest,
   current_evidence: currentEvidenceSetRefSchema,
-  supersedes: supersession.optional(),
   opened_at_revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
 } as const;
 
@@ -220,18 +201,14 @@ const gateDecisionTemplateV1Schema = z.object({
 export const activeGateV1Schema = armUnion(gateArms({
   status: z.literal("awaiting-human"),
   decision_template: gateDecisionTemplateV1Schema,
-  supplemental,
 })) as unknown as z.ZodType<ActiveGateV1>;
 
 /**
  * The generated `$defs` layouts, keyed by committed def name. The arms are the union options above,
- * registered so each document root emits `$ref`s instead of nine inline copies; `supplemental`
- * lives with the decision record and the active gate reaches it cross-file, exactly as the
- * committed schemas always did.
+ * registered so each document root emits `$ref`s instead of nine inline copies.
  */
 export const gateRequestSchemaDefs: Readonly<Record<string, z.ZodType>> = Object.freeze({
   currentEvidence: currentEvidenceSetRefSchema,
-  supersession,
   origin,
   waiverContext: waiverGateContextSchema,
   artifactApprovalDecisions: allowedDecisionTuples["artifact-approval"],
@@ -264,7 +241,6 @@ export const gateRequestSchemaDefOverrides: Readonly<Record<string, Readonly<Rec
 });
 
 export const gateDecisionRecordSchemaDefs: Readonly<Record<string, z.ZodType>> = Object.freeze({
-  supplemental,
   provenance: humanDecisionProvenanceV1Schema,
   ...decisionRecordArms,
 });

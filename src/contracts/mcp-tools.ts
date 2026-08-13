@@ -7,13 +7,13 @@ import { legacyImportInitializationV1Schema } from "./durable-legacy-import.js";
 import type { TriageArtifactV1 } from "./durable-result-manifest.js";
 import { taskInitializationV1Schema } from "./durable-task-initialization.js";
 import type { DurableArtifact } from "./durable.js";
+import { HUMAN_REVISION_CLASSIFICATIONS, type HumanRevisionClassification, type HumanRevisionOverride } from "./durable-state.js";
 import { parseProjectError, type ProjectResult } from "./errors.js";
 import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type Sha256Digest, type TaskSlug } from "./evidence.js";
 import { GATE_KINDS, gateDecisionEnvelopeV1Schema, humanDecisionProvenanceV1Schema, parseGateContext, parseGateDecisionEnvelope, validateGateDecision, type GateContext, type GateDecisionEnvelope, type GateKind, type HumanDecisionProvenance, type RuleVersionRef, type WaiverOriginRef, type WaiverScope } from "./gates.js";
 import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { repositoryPathClaimV1Schema, taskPathClaimV1Schema, type RepositoryPathClaim, type TaskPathClaim } from "./path-claims.js";
-import { parseSupplementalReviewOutcome, supplementalReviewOutcomeSchema, type GateSupersessionRef, type SupplementalReviewOutcome } from "./supplemental.js";
 import { TOOL_NAMES, type ToolName } from "./tool-names.js";
 import { parseCurrentEvidenceSetRef, type CurrentEvidenceSetRef } from "./trust.js";
 import { triageCandidateSchema } from "./triage.js";
@@ -39,7 +39,12 @@ const provenance = humanDecisionProvenanceV1Schema.clone(humanDecisionProvenance
 const common = { schema_version: z.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger, input_fingerprint: digest } as const;
 
 export type CommonToolInput = { readonly schema_version: "1"; readonly task_id: TaskSlug; readonly intent_id: PathSafeId; readonly expected_revision: number; readonly input_fingerprint: Sha256Digest };
-export type StateInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "counter_review" | "triage"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact };
+export type HumanRevisionDeclaration = {
+  readonly classification: HumanRevisionClassification;
+  readonly rationale: string;
+  readonly user_override?: HumanRevisionOverride;
+};
+export type StateInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "counter_review" | "triage"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact; readonly human_revision?: HumanRevisionDeclaration };
 // Every success value optionally echoes the request_digest the server recorded for the call, so
 // a client can compare one string against its envelope output to prove the arguments arrived
 // untranscribed. Optional in the contract because receipts recorded before the echo existed must
@@ -55,9 +60,9 @@ export type CounterReviewConstitutionOutcome =
   | Readonly<{ status: "evaluated"; path: RepositoryPathClaim; constitution: ConstitutionResult; drift: DriftResult; triggers: readonly RuleVersionRef[] }>
   | Readonly<{ status: "not-run"; reason: "no-active-constitution-rules" }>;
 export interface CounterReviewSuccess { readonly path: RepositoryPathClaim; readonly verdict: "pass" | "advisory" | "fail"; readonly blocking_count: number; readonly constitution: CounterReviewConstitutionOutcome; readonly revision: number; readonly request_digest?: Sha256Digest }
-export type GateInput = { readonly [K in GateKind]: CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly summary: string; readonly subject_digest: Sha256Digest; readonly current_evidence: CurrentEvidenceSetRef; readonly supersedes?: GateSupersessionRef; readonly supplemental_outcome?: SupplementalReviewOutcome; readonly kind: K; readonly context: GateContext<K> } }[GateKind];
+export type GateInput = { readonly [K in GateKind]: CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly summary: string; readonly subject_digest: Sha256Digest; readonly current_evidence: CurrentEvidenceSetRef; readonly kind: K; readonly context: GateContext<K> } }[GateKind];
 export type GateSuccess = { readonly [K in GateKind]: { readonly kind: K; readonly decision: GateDecisionEnvelope<K>; readonly notes: string; readonly revision: number; readonly request_digest?: Sha256Digest } }[GateKind];
-export interface WaiverInput extends CommonToolInput { readonly origin: WaiverOriginRef; readonly rationale: string; readonly supplemental_outcome?: SupplementalReviewOutcome }
+export interface WaiverInput extends CommonToolInput { readonly origin: WaiverOriginRef; readonly rationale: string }
 export interface WaiverDecisionBinding { readonly origin_gate_id: PathSafeId; readonly waiver_gate_id: PathSafeId; readonly task_id: TaskSlug; readonly rule_id: string; readonly rule_version: number; readonly subject_digest: Sha256Digest; readonly current_evidence_set_digest: Sha256Digest; readonly scope: WaiverScope; readonly human_provenance: HumanDecisionProvenance }
 export type WaiverSuccess = (WaiverDecisionBinding & { readonly granted: true; readonly expires: "task-complete"; readonly notes: string; readonly revision: number; readonly request_digest?: Sha256Digest }) | (WaiverDecisionBinding & { readonly granted: false; readonly notes: string; readonly revision: number; readonly request_digest?: Sha256Digest });
 export interface ToolContract<Input, Success> { readonly input: Input; readonly success: Success }
@@ -82,7 +87,23 @@ const durableArtifact = z.union([
     evidence: triageCandidateSchema,
   }).strict() as z.ZodType<TriageArtifactV1>,
 ]) as unknown as z.ZodType<DurableArtifact>;
-export const stateInputSchema = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "counter_review", "triage"]), status: z.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional() }).strict();
+const humanRevisionDeclarationSchema = z.object({
+  classification: z.enum(HUMAN_REVISION_CLASSIFICATIONS),
+  rationale: text,
+  user_override: z.object({
+    agent_classification: z.enum(HUMAN_REVISION_CLASSIFICATIONS),
+    rationale: text,
+  }).strict().optional(),
+}).strict().superRefine((revision, context) => {
+  if (revision.user_override?.agent_classification === revision.classification) {
+    context.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
+  }
+});
+export const stateInputSchema = z.object({ ...common, phase_instance: phase, step: z.enum(["produce", "counter_review", "triage"]), status: z.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional(), human_revision: humanRevisionDeclarationSchema.optional() }).strict().superRefine((input, context) => {
+  if (input.human_revision !== undefined && (input.step !== "produce" || input.status !== "succeeded")) {
+    context.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
+  }
+});
 /**
  * The staged-request reference arm shared by every tool input union. It is structurally disjoint
  * from every full-payload arm: strictness rejects any full payload (extra fields), and every full
@@ -97,23 +118,18 @@ export function parseStagedRequestReference(value: unknown): StagedRequestRefere
   return deepFreeze(stagedReferenceInput.parse(structuredClone(value))) as StagedRequestReference;
 }
 export const counterReviewInputSchema = z.object({ ...common, artifact_path: taskPathClaimV1Schema }).strict();
-const supersedes = z.object({ superseded_gate_id: pathSafeIdV1Schema, accepted_triage_digest: digest, old_subject_digest: digest }).strict();
-export const gateInputSchema = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), supersedes: supersedes.optional(), supplemental_outcome: supplementalReviewOutcomeSchema.optional(), kind: z.enum(GATE_KINDS), context: z.unknown() }).strict().superRefine((input, context) => {
+export const gateInputSchema = z.object({ ...common, phase_instance: phase, summary: text, subject_digest: digest, current_evidence: z.unknown(), kind: z.enum(GATE_KINDS), context: z.unknown() }).strict().superRefine((input, context) => {
   try { parseGateContext(input.kind, input.context); } catch (error) { context.addIssue({ code: "custom", path: ["context"], message: error instanceof Error ? error.message : "invalid gate context" }); }
   try { parseCurrentEvidenceSetRef(input.current_evidence); } catch (error) { context.addIssue({ code: "custom", path: ["current_evidence"], message: error instanceof Error ? error.message : "invalid current evidence" }); }
 });
 const waiverOrigin = z.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest, origin_context_digest: digest, task_id: taskSlugV1Schema, phase_instance: phase, subject_digest: digest, current_evidence_set_digest: digest, rule, scope }).strict();
-export const waiverInputSchema = z.object({ ...common, origin: waiverOrigin, rationale: text, supplemental_outcome: supplementalReviewOutcomeSchema.optional() }).strict().superRefine((input, context) => {
+export const waiverInputSchema = z.object({ ...common, origin: waiverOrigin, rationale: text }).strict().superRefine((input, context) => {
   if (input.task_id !== input.origin.task_id) context.addIssue({ code: "custom", path: ["task_id"], message: "waiver task_id must match origin task_id" });
 });
 
 function inputFor<K extends ToolName>(name: K, value: unknown): ToolInput<K> {
   const parsed = name === "archflow_state" ? stateInputSchema.parse(value) : name === "archflow_counter_review" ? counterReviewInputSchema.parse(value) : name === "archflow_waiver" ? waiverInputSchema.parse(value) : gateInputSchema.parse(value);
-  if (name === "archflow_gate") { const v = parsed as z.infer<typeof gateInputSchema>; return { ...v, current_evidence: parseCurrentEvidenceSetRef(v.current_evidence), ...(v.supplemental_outcome === undefined ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) }) } as ToolInput<K>; }
-  if (name === "archflow_waiver") {
-    const v = parsed as z.infer<typeof waiverInputSchema>;
-    return { ...v, ...(v.supplemental_outcome === undefined ? {} : { supplemental_outcome: parseSupplementalReviewOutcome(v.supplemental_outcome) }) } as ToolInput<K>;
-  }
+  if (name === "archflow_gate") { const v = parsed as z.infer<typeof gateInputSchema>; return { ...v, current_evidence: parseCurrentEvidenceSetRef(v.current_evidence) } as ToolInput<K>; }
   return parsed as ToolInput<K>;
 }
 function deepFreeze<T>(value: T): T {

@@ -199,6 +199,139 @@ describe("planStateTransition", () => {
     }
   });
 
+  it("preserves one-hop review evidence and the attempt for a simple human revision", () => {
+    const phaseInstance = phase("phase-design", 2);
+    const evidence = (["adjudicate", "counter_review", "triage"] as const).map((step, index) => ({
+      phase_instance: phaseInstance,
+      step,
+      result_digest: D(String(index + 3)),
+      result_id: parseSafeId(`old-${step}`),
+      input_fingerprint: D("7"),
+    }));
+    const oldProduce = {
+      phase_instance: phaseInstance,
+      step: "produce" as const,
+      result_digest: D("2"),
+      result_id: parseSafeId("old-produce"),
+      input_fingerprint: D("7"),
+    };
+    const current = state({
+      phase_instance: phaseInstance,
+      attempt: parseSafeInteger(3),
+      authoritative_results: [...evidence, oldProduce].sort((a, b) => a.step.localeCompare(b.step)),
+      pending_human_revision: {
+        gate_id: parsePathSafeId("human-revise"),
+        gate_kind: "artifact-approval",
+        predecessor_subject_digest: D("a"),
+        predecessor_input_fingerprint: D("7"),
+        requested_at_revision: parseSafeInteger(4),
+        attempt: parseSafeInteger(3),
+        evidence,
+      },
+    });
+    const artifact = {
+      artifact_kind: "document", task_id: current.task_id, phase_instance: phaseInstance,
+      step: "produce", input_fingerprint: D("8"),
+    } as never;
+    const replacement = {
+      ...oldProduce,
+      result_digest: D("b"),
+      result_id: parseSafeId("new-produce"),
+      input_fingerprint: D("8"),
+    };
+    const result = planStateTransition({
+      current,
+      target: { phase_instance: phaseInstance, step: "produce", status: "succeeded", attempt: parseSafeInteger(3), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"), artifact, result_reference: replacement,
+      resulting_subject_digest: D("c"),
+      human_revision: { classification: "simple", rationale: "Wording only." },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.attempt).toBe(3);
+    expect(result.value.pending_human_revision).toBeUndefined();
+    expect(result.value.authoritative_results).toEqual([...evidence, replacement].sort((a, b) => a.step.localeCompare(b.step)));
+    expect(result.value.human_revision_history?.at(-1)).toMatchObject({
+      classification: "simple", previous_attempt: 3, resulting_attempt: 3, evidence,
+    });
+  });
+
+  it("archives old evidence and resets to attempt 1 for a significant human revision", () => {
+    const phaseInstance = phase("phase-design", 2);
+    const evidence = (["adjudicate", "counter_review", "triage"] as const).map((step, index) => ({
+      phase_instance: phaseInstance,
+      step,
+      result_digest: D(String(index + 3)),
+      result_id: parseSafeId(`old-${step}`),
+      input_fingerprint: D("7"),
+    }));
+    const oldProduce = {
+      phase_instance: phaseInstance, step: "produce" as const, result_digest: D("2"),
+      result_id: parseSafeId("old-produce"), input_fingerprint: D("7"),
+    };
+    const current = state({
+      phase_instance: phaseInstance, attempt: parseSafeInteger(3),
+      authoritative_results: [...evidence, oldProduce].sort((a, b) => a.step.localeCompare(b.step)),
+      pending_human_revision: {
+        gate_id: parsePathSafeId("human-revise"), gate_kind: "attempts-exhausted",
+        predecessor_subject_digest: D("a"), requested_at_revision: parseSafeInteger(4),
+        predecessor_input_fingerprint: D("7"),
+        attempt: parseSafeInteger(3), evidence,
+      },
+    });
+    const artifact = {
+      artifact_kind: "document", task_id: current.task_id, phase_instance: phaseInstance,
+      step: "produce", input_fingerprint: D("8"),
+    } as never;
+    const replacement = {
+      ...oldProduce, result_digest: D("b"), result_id: parseSafeId("new-produce"), input_fingerprint: D("8"),
+    };
+    const result = planStateTransition({
+      current,
+      target: { phase_instance: phaseInstance, step: "produce", status: "succeeded", attempt: parseSafeInteger(3), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"), artifact, result_reference: replacement,
+      resulting_subject_digest: D("c"),
+      human_revision: {
+        classification: "significant", rationale: "The scope changed.",
+        user_override: { agent_classification: "simple", rationale: "Require a fresh review." },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.attempt).toBe(1);
+    expect(result.value.authoritative_results).toEqual([replacement]);
+    expect(result.value.human_revision_history?.at(-1)).toMatchObject({
+      classification: "significant", previous_attempt: 3, resulting_attempt: 1,
+      user_override: { agent_classification: "simple" }, evidence,
+    });
+  });
+
+  it("requires the classification when pending human revision bytes are recorded", () => {
+    const current = state({
+      attempt: parseSafeInteger(2),
+      pending_human_revision: {
+        gate_id: parsePathSafeId("human-revise"), gate_kind: "constitution-review",
+        predecessor_subject_digest: D("a"), requested_at_revision: parseSafeInteger(4),
+        predecessor_input_fingerprint: D("7"),
+        attempt: parseSafeInteger(2), evidence: [],
+      },
+    });
+    const artifact = {
+      artifact_kind: "document", task_id: current.task_id, phase_instance: current.phase_instance,
+      step: "produce", input_fingerprint: D("8"),
+    } as never;
+    const reference = {
+      phase_instance: current.phase_instance, step: "produce" as const, result_digest: D("b"),
+      result_id: parseSafeId("new-produce"), input_fingerprint: D("8"),
+    };
+    const result = planStateTransition({
+      current,
+      target: { phase_instance: current.phase_instance, step: "produce", status: "succeeded", attempt: parseSafeInteger(2), input_fingerprint: D("8") },
+      recomputed_input_fingerprint: D("8"), artifact, result_reference: reference,
+    });
+    expect(result).toMatchObject({ ok: false, error: { code: "TRANSITION_INVALID" } });
+  });
+
   it("rejects any movement into the retired adjudicate position", () => {
     const current = state({ status: "succeeded", attempt: parseSafeInteger(2) });
     const entry = planStateTransition({
