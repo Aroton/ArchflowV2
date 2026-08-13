@@ -228,7 +228,50 @@ describe("deriveNextAction", () => {
       state: state({ phase_instance: phaseDesign(2) }),
       assessment: assessment("advance"),
       authenticated_approvals: [{ gate_kind: "artifact-approval", subject_digest: D("a") }],
-    }))).toMatchObject({ code: "advance-phase", human_required: false });
+    }))).toMatchObject({
+      code: "advance-phase",
+      human_required: false,
+      phase_instance: phaseDesign(2),
+      target_phase_instance: implementation(2),
+      skill: "archflow-phase-impl",
+      skill_args: ["2"],
+    });
+  });
+
+  it("routes every phase handoff to the destination skill and arguments", () => {
+    const approved = [{ gate_kind: "artifact-approval" as const, subject_digest: D("a") }];
+    const committed = [{ gate_kind: "commit-authorization" as const, subject_digest: D("a") }];
+    const cases = [
+      ["prd", "design", "archflow-design", []],
+      ["design", phaseDesign(1), "archflow-phase-design", ["1"]],
+      [phaseDesign(3), implementation(3), "archflow-phase-impl", ["3"]],
+      [implementation(3), phaseDesign(4), "archflow-phase-design", ["4"]],
+    ] as const;
+    for (const [current, target, skill, skillArgs] of cases) {
+      const isImpl = String(current).startsWith("phase-impl-");
+      expect(deriveNextAction(input({
+        state: state({ phase_instance: current as TaskStateV1["phase_instance"] }),
+        assessment: assessment("advance"),
+        authenticated_approvals: isImpl ? committed : approved,
+        ...(isImpl ? { commit_observed: true } : {}),
+      }))).toMatchObject({
+        code: "advance-phase",
+        phase_instance: current,
+        target_phase_instance: target,
+        skill,
+        skill_args: skillArgs,
+      });
+    }
+  });
+
+  it("fails closed when a non-final maximum phase has no representable successor", () => {
+    const maximum = implementation(Number.MAX_SAFE_INTEGER);
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: maximum }),
+      assessment: assessment("advance"),
+      authenticated_approvals: [{ gate_kind: "commit-authorization", subject_digest: D("a") }],
+      commit_observed: true,
+    }))).toMatchObject({ code: "inspect-state", human_required: true, phase_instance: maximum });
   });
 
   it("requires an observed authorized commit before advancing or completing", () => {
@@ -243,6 +286,9 @@ describe("deriveNextAction", () => {
     }))).toMatchObject({
       code: "complete-task",
       detail: "Record that the final planned implementation phase is committed.",
+      target_phase_instance: implementation(2),
+      skill: "archflow-phase-impl",
+      skill_args: ["2"],
     });
     expect(deriveNextAction(input({
       state: state({ phase_instance: implementation(1), planned_final_phase: parseSafeInteger(2) }),

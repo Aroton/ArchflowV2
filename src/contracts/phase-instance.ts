@@ -61,6 +61,30 @@ export function decodePhaseInstance(value: unknown): PhaseInstance {
 }
 
 /**
+ * The canonical fixed-workflow successor for one phase instance. The final representable
+ * implementation phase has no successor: incrementing it would leave the positive-safe-integer
+ * contract, so callers must handle `undefined` rather than manufacturing an invalid phase ID.
+ */
+export function nextPhaseInstance(instance: PhaseInstanceId): PhaseInstanceId | undefined {
+  const decoded = decodePhaseInstance(instance);
+  switch (decoded.kind) {
+    case "prd":
+      return encodePhaseInstance({ kind: "design" });
+    case "design":
+      return encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(1) });
+    case "phase-design":
+      return encodePhaseInstance({ kind: "phase-impl", phase: decoded.phase });
+    case "phase-impl":
+      return decoded.phase === Number.MAX_SAFE_INTEGER
+        ? undefined
+        : encodePhaseInstance({
+            kind: "phase-design",
+            phase: parsePositiveSafePhaseNumber(decoded.phase + 1),
+          });
+  }
+}
+
+/**
  * The shared authority for the phase-instance *string*. The `.regex()` carries
  * `primitives.schema.json#/$defs/phaseInstanceId` verbatim, so a generated schema emits the same
  * `pattern`. The refine delegates to `decodePhaseInstance` rather than copying `ITERATED_PHASE`

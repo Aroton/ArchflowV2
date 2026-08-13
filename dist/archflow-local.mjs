@@ -23059,6 +23059,22 @@ function decodePhaseInstance(value) {
   const phase3 = parsePositiveSafePhaseNumber(Number(match[2]));
   return match[1] === "phase-design" ? { kind: "phase-design", phase: phase3 } : { kind: "phase-impl", phase: phase3 };
 }
+function nextPhaseInstance(instance) {
+  const decoded = decodePhaseInstance(instance);
+  switch (decoded.kind) {
+    case "prd":
+      return encodePhaseInstance({ kind: "design" });
+    case "design":
+      return encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(1) });
+    case "phase-design":
+      return encodePhaseInstance({ kind: "phase-impl", phase: decoded.phase });
+    case "phase-impl":
+      return decoded.phase === Number.MAX_SAFE_INTEGER ? void 0 : encodePhaseInstance({
+        kind: "phase-design",
+        phase: parsePositiveSafePhaseNumber(decoded.phase + 1)
+      });
+  }
+}
 var phaseInstanceIdV1Schema = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((value) => {
   try {
     decodePhaseInstance(value);
@@ -35180,9 +35196,30 @@ function advanceAction(input, state) {
     );
   }
   if (phase3.kind === "phase-impl" && state.planned_final_phase !== void 0 && Number(phase3.phase) === Number(state.planned_final_phase)) {
-    return action("complete-task", "Record that the final planned implementation phase is committed.", false, state);
+    return action("complete-task", "Record that the final planned implementation phase is committed.", false, state, {
+      target_phase_instance: state.phase_instance,
+      skill_args: Object.freeze([String(phase3.phase)])
+    });
   }
-  return action("advance-phase", "Advance to the next phase in the fixed workflow.", false, state);
+  const target = nextPhaseInstance(state.phase_instance);
+  if (target === void 0) {
+    return action(
+      "inspect-state",
+      "Inspect the phase plan: the current phase has no representable fixed-workflow successor.",
+      true,
+      state
+    );
+  }
+  const targetPhase = decodePhaseInstance(target);
+  const targetSkill = WORKFLOW_V1.phases.find((candidate) => candidate.id === targetPhase.kind)?.skill;
+  if (targetSkill === void 0) {
+    return action("inspect-state", "Inspect the fixed workflow: the successor phase has no skill.", true, state);
+  }
+  return action("advance-phase", "Advance to the next phase in the fixed workflow.", false, state, {
+    target_phase_instance: target,
+    skill: targetSkill,
+    skill_args: targetPhase.kind === "phase-design" || targetPhase.kind === "phase-impl" ? Object.freeze([String(targetPhase.phase)]) : Object.freeze([])
+  });
 }
 function deriveNextAction(input) {
   const state = input.state;
@@ -35471,6 +35508,17 @@ function buildNextActionRequest(next, facts) {
       "archflow_state",
       next.editorial_revision === true && step === "produce" ? 'This is the running entry for the editorial produce re-entry: apply exactly the accepted editorial revision intents to the artifact \u2014 nothing else \u2014 then record the terminal produce result with archflow-local build-request (kind "produce"), which attaches the editorial predecessor link from durable authority. Nothing is re-run: the retained reviews and constitution verdict stay bound to the declared predecessor for this one hop.' : `This is the running entry for the ${step} step; the terminal write that follows the work carries the step artifact and a succeeded or failed status.`
     ));
+  }
+  if (next.code === "advance-phase" || next.code === "complete-task") {
+    const target = next.target_phase_instance;
+    if (target === void 0) return void 0;
+    const completing = next.code === "complete-task";
+    return request("archflow_state", {
+      ...mechanicalPrefix(facts.task_id, state),
+      phase_instance: target,
+      step: completing ? state.step : "produce",
+      status: completing ? state.status : "running"
+    }, `Pipe {"kind":"advance"} to archflow-local build-request --task ${facts.task_id}; it recomputes full durable status, permits only the exact pending ${next.code} action, resolves the destination fingerprint, and returns the staged archflow_state request.`);
   }
   if (next.code === "open-gate") {
     if (next.gate_kind === "commit-authorization" && facts.commit_authorization !== void 0) {
@@ -38764,7 +38812,8 @@ var BUILD_REQUEST_KINDS = Object.freeze([
   "running",
   "triage",
   "counter-review",
-  "gate"
+  "gate",
+  "advance"
 ]);
 var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"summary"?:<gate summary text>}`;
 function record2(value, name) {
@@ -39104,6 +39153,24 @@ async function composeGate(services2, state, intentId, snapshot2) {
   }
   return computeCallEnvelope(services2, { tool: "archflow_gate", input });
 }
+async function composeAdvance(services2, state, intentId) {
+  const computed = await computeTaskStatus(services2.dependencies, services2.authority);
+  if (!computed.ok) return computed;
+  const next = computed.value.next_action;
+  if (next.code !== "advance-phase" && next.code !== "complete-task" || next.target_phase_instance === void 0 || computed.value.revision !== state.revision) {
+    return transitionInvalid(state, "advance");
+  }
+  const completing = next.code === "complete-task";
+  return computeCallEnvelope(services2, {
+    tool: "archflow_state",
+    input: {
+      ...mechanicalInput(services2, state, intentId),
+      phase_instance: next.target_phase_instance,
+      step: completing ? state.step : "produce",
+      status: completing ? state.status : "running"
+    }
+  });
+}
 function generateIntentId(kind) {
   const stamp = (/* @__PURE__ */ new Date()).toISOString().replaceAll("-", "").replaceAll(":", "").slice(0, 15);
   const random = randomUUID4().replaceAll("-", "").slice(0, 4);
@@ -39146,6 +39213,8 @@ async function runBuildRequest(services2, value) {
       return withStagedRequest(services2, intentId, await composeCounterReview(services2, state, intentId, snapshot2));
     case "gate":
       return withStagedRequest(services2, intentId, await composeGate(services2, state, intentId, snapshot2));
+    case "advance":
+      return withStagedRequest(services2, intentId, await composeAdvance(services2, state, intentId));
     default:
       throw new TypeError(`build-request kind ${JSON.stringify(kind)} is not recognized; expected ${PAYLOAD_SHAPE}`);
   }
@@ -39193,6 +39262,7 @@ async function classifyWorkflowStatus(input) {
   const status2 = await computeTaskStatus(created.value.dependencies, created.value.authority);
   if (!status2.ok) return status2;
   const derived = status2.value.next_action;
+  const command = derived.skill === void 0 ? "archflow-status" : [`$${derived.skill}`, input.task_id, ...derived.skill_args ?? []].join(" ");
   return ok23(Object.freeze({
     mode: "normal",
     task_status: status2.value,
@@ -39200,7 +39270,7 @@ async function classifyWorkflowStatus(input) {
       derived.code,
       derived.detail,
       derived.human_required,
-      derived.skill === void 0 ? "archflow-status" : `$${derived.skill}`,
+      command,
       structuredClone(derived)
     )
   }));
@@ -39235,7 +39305,7 @@ var LOCAL_COMMAND_CONTRACTS = Object.freeze({
   reconcile: { payload: '{"recorded_projections":[...],"current_projections":[...],"active_heads":{...}}', task: "required" },
   init: { payload: null, task: "ignored" },
   envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
-  "build-request": { payload: `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},...kind facts: none (initialize/counter-review), "step" (running), "document"/"implementation" (produce), "dispositions":[...] (triage), "summary" (gate)}`, task: "required" },
+  "build-request": { payload: `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},...kind facts: none (initialize/counter-review/advance), "step" (running), "document"/"implementation" (produce), "dispositions":[...] (triage), "summary" (gate)}`, task: "required" },
   "manual-status": { payload: null, task: "required" },
   upgrade: { payload: "<legacy staging descriptor>", task: "optional" }
 });

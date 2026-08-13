@@ -35,6 +35,7 @@ describe("status classification", () => {
     expect(result.value.task_status).toMatchObject({ task_id: workspace.taskId });
     // Exactly one server-derived next action, mirrored from the computed task status.
     expect(result.value.next_action).toMatchObject({ code: result.value.task_status.next_action.code });
+    expect(result.value.next_action.command).toBe(`$archflow-prd ${workspace.taskId}`);
   });
 
   it("status classification reports read-only wait guidance when durable state is absent", async () => {

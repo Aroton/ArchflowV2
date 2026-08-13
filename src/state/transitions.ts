@@ -4,7 +4,7 @@ import type { DurableArtifact } from "../contracts/durable.js";
 import type { AuthoritativeResultRef, HumanRevisionRecord, TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
-import { decodePhaseInstance, encodePhaseInstance, parsePositiveSafePhaseNumber } from "../contracts/phase-instance.js";
+import { decodePhaseInstance, nextPhaseInstance } from "../contracts/phase-instance.js";
 import type { PhaseInstanceId } from "../contracts/phase-instance.js";
 import { assertPlainJson } from "../contracts/plain-json.js";
 import { WORKFLOW_V1 } from "../contracts/workflow.js";
@@ -83,20 +83,33 @@ function pipeline(instance: TaskStateV1["phase_instance"]): readonly PipelineSte
   return configured.pipeline;
 }
 
-function nextPhase(instance: TaskStateV1["phase_instance"]): TaskStateV1["phase_instance"] | undefined {
-  const decoded = decodePhaseInstance(instance);
-  switch (decoded.kind) {
-    case "prd": return encodePhaseInstance({ kind: "design" });
-    case "design": return encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(1) });
-    case "phase-design": return encodePhaseInstance({ kind: "phase-impl", phase: decoded.phase });
-    case "phase-impl":
-      if (decoded.phase === Number.MAX_SAFE_INTEGER) return undefined;
-      return encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(decoded.phase + 1) });
-  }
-}
-
 function sameSubject(current: TaskStateV1, target: TransitionTarget): boolean {
   return current.phase_instance === target.phase_instance && current.step === target.step;
+}
+
+function artifactApprovalKind(
+  instance: TaskStateV1["phase_instance"],
+): "prd" | "design" | "phase-design" | undefined {
+  const kind = decodePhaseInstance(instance).kind;
+  return kind === "phase-impl" ? undefined : kind;
+}
+
+function hasAuthenticatedArtifactApproval(input: TransitionPlanInput): boolean {
+  const artifactKind = artifactApprovalKind(input.current.phase_instance);
+  if (artifactKind === undefined || input.completion_subject_digest === undefined) return false;
+  for (const authenticated of input.authenticated_gate_approvals ?? []) {
+    assertAuthenticatedGateApproval(authenticated);
+    if (
+      authenticated.approval.gate_kind === "artifact-approval" &&
+      authenticated.approval.subject_digest === input.completion_subject_digest &&
+      authenticated.request.kind === "artifact-approval" &&
+      authenticated.request.phase_instance === input.current.phase_instance &&
+      authenticated.request.subject_digest === input.completion_subject_digest &&
+      authenticated.request.context.artifact_kind === artifactKind &&
+      authenticated.decision.envelope.payload.decision === "approve"
+    ) return true;
+  }
+  return false;
 }
 
 /**
@@ -174,10 +187,10 @@ function legalMovement(input: TransitionPlanInput): boolean {
     current.phase_instance === "design" &&
     target.step === "produce" &&
     target.attempt === 1 &&
-    target.phase_instance !== nextPhase(current.phase_instance) &&
+    target.phase_instance !== nextPhaseInstance(current.phase_instance) &&
     hasAuthenticatedMigrationAudit(input)
   ) return true;
-  const following = nextPhase(current.phase_instance);
+  const following = nextPhaseInstance(current.phase_instance);
   return following !== undefined &&
     target.phase_instance === following &&
     target.step === pipeline(following)[0] &&
@@ -311,6 +324,7 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
   }
   const committedOutput = hasAuthenticatedCommittedOutput(input);
   const decodedCurrent = decodePhaseInstance(input.current.phase_instance);
+  const crossesPhase = input.target.phase_instance !== input.current.phase_instance;
   const completesFinalPhase = committedOutput &&
     decodedCurrent.kind === "phase-impl" &&
     input.current.planned_final_phase !== undefined &&
@@ -330,6 +344,11 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     input.current.status === "succeeded" &&
     input.target.phase_instance !== input.current.phase_instance &&
     !committedOutput
+  ) return invalid(input, from, to);
+  if (
+    decodedCurrent.kind !== "phase-impl" &&
+    crossesPhase &&
+    !hasAuthenticatedArtifactApproval(input)
   ) return invalid(input, from, to);
   if (
     !legalMovement(input) ||

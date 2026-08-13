@@ -20,6 +20,8 @@ flowchart LR
 
 One nuance the YAML alone doesn't show: `gate: on_trigger` refers only to the gates the constitution verdict can demand (derived after triage). The phase skills impose an additional mandatory human gate on top — phase-design always opens an `artifact-approval` gate, and phase-impl always opens a `commit-authorization` gate (`src/local/build-request.ts` picks the kind from the phase). In practice **every phase ends at a human decision.**
 
+That decision does not silently rewrite the phase. Approval commits first; the active producer then automatically composes the server-derived `advance` operation and re-runs status until the successor or terminal state is durable. This separation preserves replay and auditability without leaving a customer action gap. If a session stops between the two commits, status recommends the exact destination skill and arguments, and that invocation can complete only its authenticated immediate-predecessor hand-off.
+
 The workflow file's bytes are digest-pinned into each task at creation, so changing the graph mid-task is detectable, not silently applied. Tasks pinned to the retired four-step workflow digest (the one with a separate `adjudicate` step) are invalidated — status reports `restore-pinned-config` — and either restart or go through `archflow-upgrade`; there is no migration.
 
 ## What each stage produces
@@ -73,7 +75,7 @@ Beyond the forward hand-off (each succeeded step to its successor, same attempt)
 
 - **any-succeeded step → produce-running (attempt + 1)** — the "new information" door. From triage this is the accepted-finding (or editorial) re-entry; from a succeeded produce or counter_review it is the author withdrawing to incorporate new information. Downstream evidence simply goes stale and is redone — except on the one-hop editorial path, where retained evidence stays bound to the declared predecessor. Because re-entry is sanctioned, the artifact drifting on disk while state sits at produce running (or failed) is an *expected re-entry edit*, not material drift.
 
-The phase-completion signal fires from **triage-succeeded**: once triage closes the fixed point (and any post-triage gates resolve), the phase can advance — for phase-impl that is what arms the commit-authorization flow, and the legacy-import design jump fires from the same point.
+The phase-completion signal fires from **triage-succeeded**: once triage closes the fixed point (and any post-triage gates resolve), the phase can advance — for phase-impl that is what arms the commit-authorization flow, and the legacy-import design jump fires from the same point. `advance-phase` and `complete-task` are executable actions, not reports: `build-request` kind `advance` recomputes status, derives the successor, and stages the existing `archflow_state` operation. At PRD, design, and phase-design boundaries that operation also re-verifies an authenticated artifact approval bound to the current produce result; it fails closed for missing, stale, or mismatched approval.
 
 ## Gates: where humans decide
 

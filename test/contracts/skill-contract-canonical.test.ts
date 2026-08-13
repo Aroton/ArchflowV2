@@ -168,6 +168,36 @@ describe("canonical skill contracts", () => {
     }
   });
 
+  it("makes every producer execute and verify the server-derived phase hand-off", () => {
+    for (const name of productionRubricSkills) {
+      const source = skill(name);
+      expect(source).toContain('next_action.code: "advance-phase"');
+      expect(source).toContain('`"complete-task"`');
+      expect(source).toContain('`{"kind":"advance"}`');
+      expect(source).toContain("call `archflow_state` with the returned `staged.reference`");
+      expect(source).toContain("Re-run status");
+      expect(source).toContain("do not return until durable status");
+    }
+  });
+
+  it("limits destination-skill hand-off recovery to the exact server-derived target", () => {
+    for (const name of ["archflow-design", "archflow-phase-design", "archflow-phase-impl"] as const) {
+      const source = skill(name);
+      expect(source).toContain("immediate predecessor hand-off");
+      expect(source).toContain("`target_phase_instance`");
+      expect(source).toContain("`skill_args`");
+      expect(source).toContain("otherwise refuse the wrong phase");
+    }
+  });
+
+  it("renders pending hand-offs from the exact server-derived destination command", () => {
+    const source = skill("archflow-status");
+    expect(source).toContain("exact server-derived destination command");
+    expect(source).toContain("`next_action.skill`");
+    expect(source).toContain("`next_action.skill_args`");
+    expect(source).toContain("never substitute the current phase's skill");
+  });
+
   it("admits every canonical task document path used by the skills", () => {
     const admitted = [
       "prd.md",

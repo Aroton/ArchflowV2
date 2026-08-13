@@ -3,6 +3,7 @@ import {
   decodePhaseInstance,
   encodePhaseInstance,
   parsePositiveSafePhaseNumber,
+  nextPhaseInstance,
   type PhaseInstance,
   type PhaseInstanceId,
   type PositiveSafePhaseNumber
@@ -23,6 +24,23 @@ describe("phase instance codec", () => {
 
   it.each([1, 2, Number.MAX_SAFE_INTEGER])("accepts positive safe phase number %s", (value) => {
     expect(parsePositiveSafePhaseNumber(value)).toBe(value);
+  });
+
+  it("maps every fixed-workflow phase to its canonical successor", () => {
+    expect(nextPhaseInstance(encodePhaseInstance({ kind: "prd" }))).toBe("design");
+    expect(nextPhaseInstance(encodePhaseInstance({ kind: "design" }))).toBe("phase-design-1");
+    expect(nextPhaseInstance(encodePhaseInstance({
+      kind: "phase-design", phase: parsePositiveSafePhaseNumber(7)
+    }))).toBe("phase-impl-7");
+    expect(nextPhaseInstance(encodePhaseInstance({
+      kind: "phase-impl", phase: parsePositiveSafePhaseNumber(7)
+    }))).toBe("phase-design-8");
+  });
+
+  it("returns no successor instead of overflowing the phase-number contract", () => {
+    expect(nextPhaseInstance(encodePhaseInstance({
+      kind: "phase-impl", phase: parsePositiveSafePhaseNumber(Number.MAX_SAFE_INTEGER)
+    }))).toBeUndefined();
   });
 
   it("decodes the parent contract's canonical hyphenated examples directly", () => {

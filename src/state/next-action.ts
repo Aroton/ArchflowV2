@@ -1,7 +1,7 @@
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { GateKind } from "../contracts/gates.js";
 import type { PathSafeId, Sha256Digest } from "../contracts/evidence.js";
-import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
+import { decodePhaseInstance, nextPhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import type { ToolName } from "../contracts/tool-names.js";
 import { WORKFLOW_V1 } from "../contracts/workflow.js";
@@ -43,8 +43,12 @@ export type NextAction = Readonly<{
   detail: string;
   human_required: boolean;
   phase_instance?: PhaseInstanceId;
+  /** The durable phase the action enters; distinct from `phase_instance`, which is current truth. */
+  target_phase_instance?: PhaseInstanceId;
   step?: PipelineStep;
   skill?: string;
+  /** Phase-specific arguments for `skill`; callers prepend the task id. */
+  skill_args?: readonly string[];
   gate_id?: PathSafeId;
   gate_kind?: GateKind;
   /**
@@ -144,9 +148,32 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
     state.planned_final_phase !== undefined &&
     Number(phase.phase) === Number(state.planned_final_phase)
   ) {
-    return action("complete-task", "Record that the final planned implementation phase is committed.", false, state);
+    return action("complete-task", "Record that the final planned implementation phase is committed.", false, state, {
+      target_phase_instance: state.phase_instance,
+      skill_args: Object.freeze([String(phase.phase)]),
+    });
   }
-  return action("advance-phase", "Advance to the next phase in the fixed workflow.", false, state);
+  const target = nextPhaseInstance(state.phase_instance);
+  if (target === undefined) {
+    return action(
+      "inspect-state",
+      "Inspect the phase plan: the current phase has no representable fixed-workflow successor.",
+      true,
+      state,
+    );
+  }
+  const targetPhase = decodePhaseInstance(target);
+  const targetSkill = WORKFLOW_V1.phases.find((candidate) => candidate.id === targetPhase.kind)?.skill;
+  if (targetSkill === undefined) {
+    return action("inspect-state", "Inspect the fixed workflow: the successor phase has no skill.", true, state);
+  }
+  return action("advance-phase", "Advance to the next phase in the fixed workflow.", false, state, {
+    target_phase_instance: target,
+    skill: targetSkill,
+    skill_args: targetPhase.kind === "phase-design" || targetPhase.kind === "phase-impl"
+      ? Object.freeze([String(targetPhase.phase)])
+      : Object.freeze([]),
+  });
 }
 
 /** Derives exactly one legal next action from already-authenticated status facts. Pure and I/O-free. */

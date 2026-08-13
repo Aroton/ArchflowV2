@@ -4283,7 +4283,7 @@
       ]
     },
     "src/contracts/phase-instance.ts": {
-      "bytes": 3692,
+      "bytes": 4695,
       "format": "esm",
       "imports": [
         {
@@ -5184,7 +5184,7 @@
       ]
     },
     "src/local/build-request.ts": {
-      "bytes": 24192,
+      "bytes": 25545,
       "format": "esm",
       "imports": [
         {
@@ -5356,7 +5356,7 @@
       ]
     },
     "src/local/commands.ts": {
-      "bytes": 16141,
+      "bytes": 16149,
       "format": "esm",
       "imports": [
         {
@@ -5533,7 +5533,7 @@
       ]
     },
     "src/local/status-classification.ts": {
-      "bytes": 3033,
+      "bytes": 3126,
       "format": "esm",
       "imports": [
         {
@@ -5887,7 +5887,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 13607,
+      "bytes": 14175,
       "format": "esm",
       "imports": [
         {
@@ -7594,7 +7594,7 @@
       ]
     },
     "src/state/next-action.ts": {
-      "bytes": 10405,
+      "bytes": 11600,
       "format": "esm",
       "imports": [
         {
@@ -7907,7 +7907,7 @@
       ]
     },
     "src/state/request-templates.ts": {
-      "bytes": 12965,
+      "bytes": 13675,
       "format": "esm",
       "imports": [
         {
@@ -8379,7 +8379,7 @@
       ]
     },
     "src/state/transitions.ts": {
-      "bytes": 19207,
+      "bytes": 19925,
       "format": "esm",
       "imports": [
         {
@@ -8468,7 +8468,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1580403,
+      "bytes": 1583655,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -9467,7 +9467,7 @@
           "bytesInOutput": 3184
         },
         "src/contracts/phase-instance.ts": {
-          "bytesInOutput": 2078
+          "bytesInOutput": 2706
         },
         "src/contracts/plain-json.ts": {
           "bytesInOutput": 3790
@@ -9539,19 +9539,19 @@
           "bytesInOutput": 5013
         },
         "src/local/build-request.ts": {
-          "bytesInOutput": 17423
+          "bytesInOutput": 18353
         },
         "src/local/call-envelope.ts": {
           "bytesInOutput": 4571
         },
         "src/local/commands.ts": {
-          "bytesInOutput": 12003
+          "bytesInOutput": 12011
         },
         "src/local/main.ts": {
           "bytesInOutput": 3612
         },
         "src/local/status-classification.ts": {
-          "bytesInOutput": 1897
+          "bytesInOutput": 1980
         },
         "src/repository/attributes.ts": {
           "bytesInOutput": 667
@@ -9623,7 +9623,7 @@
           "bytesInOutput": 2300
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 6028
+          "bytesInOutput": 6929
         },
         "src/state/phase-documents.ts": {
           "bytesInOutput": 4246
@@ -9644,7 +9644,7 @@
           "bytesInOutput": 5856
         },
         "src/state/request-templates.ts": {
-          "bytesInOutput": 8758
+          "bytesInOutput": 9460
         },
         "src/state/request.ts": {
           "bytesInOutput": 2827
@@ -9670,7 +9670,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2439022,
+      "bytes": 2440719,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -10673,7 +10673,7 @@
           "bytesInOutput": 3251
         },
         "src/contracts/phase-instance.ts": {
-          "bytesInOutput": 2078
+          "bytesInOutput": 2706
         },
         "src/contracts/plain-json.ts": {
           "bytesInOutput": 3790
@@ -10814,7 +10814,7 @@
           "bytesInOutput": 10505
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 10744
+          "bytesInOutput": 11191
         },
         "src/mcp/handlers/waiver.ts": {
           "bytesInOutput": 5611
@@ -10946,7 +10946,7 @@
           "bytesInOutput": 42839
         },
         "src/state/transitions.ts": {
-          "bytesInOutput": 13410
+          "bytesInOutput": 14032
         },
         "src/state/workspace-cleanup.ts": {
           "bytesInOutput": 13458

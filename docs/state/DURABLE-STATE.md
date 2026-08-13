@@ -84,7 +84,9 @@ A cleanup failure never rolls back committed authority. Full status reports the 
 
 ## State machine, gates, and Git boundary
 
-The pipeline remains `produce → counter_review → triage`; accepted findings return to produce, and successful triage advances only after required human gates. No code is written before phase-design approval, and no commit is made before a durable commit-authorization decision plus the separate explicit Git confirmation.
+The pipeline remains `produce → counter_review → triage`; accepted findings return to produce, and successful triage advances only after required human gates. Gate resolution and phase advancement are separate state commits: after approval, status exposes one successor and the producer composes a judgment-free `advance` request, calls `archflow_state`, and verifies the new position. If the producer session ended in between, the exact destination skill may make the same call when status authenticates its target phase and arguments. No code is written before phase-design approval, and no commit is made before a durable commit-authorization decision plus the separate explicit Git confirmation.
+
+Document boundaries fail closed. A transition out of `prd`, `design`, or `phase-design-N` re-reads an authenticated `artifact-approval` and requires it to name the current produce result and subject bytes; absent, stale, wrong-subject, or fabricated approval cannot advance. Phase implementation keeps its stronger Git boundary: commit authorization plus observed committed outputs. The hand-off reuses existing state operations and documents, so the durable shape is unchanged and existing approved-but-not-advanced tasks require no schema migration or manual repair.
 
 Gate UI is disposable: it is reconstructed from the durable request, and resolution archives the human decision before deleting the UI. Its normal projection is conversational—title, summary, question, evidence, and labeled choices—while IDs, hashes, JSON, paths, and codes remain available only for diagnostics. A missing or corrupt projection can remove convenience but cannot strand authenticated authority.
 

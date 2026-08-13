@@ -161,6 +161,18 @@ export function buildNextActionRequest(next: NextAction, facts: NextActionReques
     ));
   }
 
+  if (next.code === "advance-phase" || next.code === "complete-task") {
+    const target = next.target_phase_instance;
+    if (target === undefined) return undefined;
+    const completing = next.code === "complete-task";
+    return request("archflow_state", {
+      ...mechanicalPrefix(facts.task_id, state),
+      phase_instance: target,
+      step: completing ? state.step : "produce",
+      status: completing ? state.status : "running",
+    }, `Pipe {"kind":"advance"} to archflow-local build-request --task ${facts.task_id}; it recomputes full durable status, permits only the exact pending ${next.code} action, resolves the destination fingerprint, and returns the staged archflow_state request.`);
+  }
+
   if (next.code === "open-gate") {
     if (next.gate_kind === "commit-authorization" && facts.commit_authorization !== undefined) {
       const authorization = facts.commit_authorization;

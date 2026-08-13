@@ -62,7 +62,7 @@ So `build-request` inverts the contract: **the caller supplies only judgment; th
 
 ```mermaid
 flowchart LR
-    J["Judgment only:<br/>findings, dispositions,<br/>rationales, summaries"] --> BR["build-request<br/>kind: initialize | produce | running |<br/>triage | counter-review | gate"]
+    J["Judgment only:<br/>findings, dispositions,<br/>rationales, summaries"] --> BR["build-request<br/>kind: initialize | produce | running | advance |<br/>triage | counter-review | gate"]
     DS[("durable state,<br/>pinned config,<br/>retained evidence")] --> BR
     BR --> ENV["call envelope:<br/>fingerprint + request digest"]
     ENV --> STG["staged request in ignored runtime:<br/>transient/intents/&lt;intent-id&gt;.request.json"]
@@ -75,11 +75,14 @@ Properties worth knowing:
 - Every kind except `initialize` also **stages** the resolved request below `.archflow/runtime/tasks/<task>/transient/intents/` (atomically, overwrite-on-recompose) and adds `staged: {path, reference}` to the envelope. The reference — `{schema_version, task_id, intent_id, request_digest}` — is the whole MCP tool input; the server rehydrates the staged bytes and refuses on any digest disagreement, so the multi-kilobyte payload never crosses the model's context. Passing `request.input` verbatim remains the documented fallback.
 - `intent_id` is optional: when omitted, the composer generates `<kind>-<UTC stamp>-<4 hex>` and echoes it in the request and reference. An explicit id is only for replaying or resuming an interrupted call.
 - `running` enters a pipeline step; the steps are exactly `produce`, `counter_review`, and `triage`.
+- `advance` is judgment-free. It composes only when fresh status says `advance-phase` or `complete-task`, derives the exact successor operation, and stages an `archflow_state` request. At document boundaries the server re-verifies that the current produced bytes have authenticated artifact approval. Producer skills invoke it automatically after the gate; the destination skill may invoke it as crash recovery only when status's target phase, skill, and arguments exactly match that invocation.
 - `counter-review` takes no rubric or artifact-path facts. The composer derives the artifact path from the durable phase, and the server selects the immutable rubric for that phase kind.
 - `triage` enforces exactly one disposition per current finding — unknown IDs, duplicates, and gaps are rejected before the server ever sees them.
 - `gate` composes a pending constitution gate (`constitution-review`, `material-drift`, derived by the server after triage) mechanically from retained adjudication evidence — kind, subject, and context all derived; otherwise it picks the kind from the phase (`phase-impl` → `commit-authorization`, else `artifact-approval`). Either way the author writes only the summary.
 - `initialize` is the documented exception: the only composer that writes (it must stage the task before a fingerprint can resolve), legal only before durable state exists. Its envelope carries **no** `staged` block — there is no durable task directory yet to hold a staged file — so the create-task call is the one place `request.input` is passed verbatim by design, as typed JSON (`artifact` an object, `expected_revision` the number `0`).
 - A contract test pins that every prefill the server emits maps onto a composer kind — "the one door" is literally true, not aspirational.
+
+For a pending hand-off, `next_action` keeps `phase_instance` honest as the current durable predecessor while adding the derived `target_phase_instance` and exact `skill_args`. Human-facing status renders the destination command from `next_action.skill` plus those arguments; it never routes the user back to the skill that already finished. These are status/composer additions only. The durable state and MCP tool schemas do not change, so no task migration is required.
 
 ## Two things called "envelope"
 

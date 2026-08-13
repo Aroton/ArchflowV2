@@ -36082,6 +36082,22 @@ function decodePhaseInstance(value) {
   const phase3 = parsePositiveSafePhaseNumber(Number(match[2]));
   return match[1] === "phase-design" ? { kind: "phase-design", phase: phase3 } : { kind: "phase-impl", phase: phase3 };
 }
+function nextPhaseInstance(instance) {
+  const decoded = decodePhaseInstance(instance);
+  switch (decoded.kind) {
+    case "prd":
+      return encodePhaseInstance({ kind: "design" });
+    case "design":
+      return encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(1) });
+    case "phase-design":
+      return encodePhaseInstance({ kind: "phase-impl", phase: decoded.phase });
+    case "phase-impl":
+      return decoded.phase === Number.MAX_SAFE_INTEGER ? void 0 : encodePhaseInstance({
+        kind: "phase-design",
+        phase: parsePositiveSafePhaseNumber(decoded.phase + 1)
+      });
+  }
+}
 var phaseInstanceIdV1Schema = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((value) => {
   try {
     decodePhaseInstance(value);
@@ -60142,22 +60158,21 @@ function pipeline(instance) {
   if (configured === void 0) throw new TypeError("phase instance is absent from the fixed workflow");
   return configured.pipeline;
 }
-function nextPhase(instance) {
-  const decoded = decodePhaseInstance(instance);
-  switch (decoded.kind) {
-    case "prd":
-      return encodePhaseInstance({ kind: "design" });
-    case "design":
-      return encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(1) });
-    case "phase-design":
-      return encodePhaseInstance({ kind: "phase-impl", phase: decoded.phase });
-    case "phase-impl":
-      if (decoded.phase === Number.MAX_SAFE_INTEGER) return void 0;
-      return encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(decoded.phase + 1) });
-  }
-}
 function sameSubject(current, target2) {
   return current.phase_instance === target2.phase_instance && current.step === target2.step;
+}
+function artifactApprovalKind(instance) {
+  const kind = decodePhaseInstance(instance).kind;
+  return kind === "phase-impl" ? void 0 : kind;
+}
+function hasAuthenticatedArtifactApproval(input) {
+  const artifactKind = artifactApprovalKind(input.current.phase_instance);
+  if (artifactKind === void 0 || input.completion_subject_digest === void 0) return false;
+  for (const authenticated of input.authenticated_gate_approvals ?? []) {
+    assertAuthenticatedGateApproval(authenticated);
+    if (authenticated.approval.gate_kind === "artifact-approval" && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.request.kind === "artifact-approval" && authenticated.request.phase_instance === input.current.phase_instance && authenticated.request.subject_digest === input.completion_subject_digest && authenticated.request.context.artifact_kind === artifactKind && authenticated.decision.envelope.payload.decision === "approve") return true;
+  }
+  return false;
 }
 function hasAuthenticatedMigrationAudit(input) {
   if (input.legacy_resume_phase === void 0 || input.target.phase_instance !== input.legacy_resume_phase) return false;
@@ -60188,8 +60203,8 @@ function legalMovement(input) {
   if (index + 1 < steps.length) {
     return target2.phase_instance === current.phase_instance && target2.step === steps[index + 1] && target2.attempt === current.attempt;
   }
-  if (current.phase_instance === "design" && target2.step === "produce" && target2.attempt === 1 && target2.phase_instance !== nextPhase(current.phase_instance) && hasAuthenticatedMigrationAudit(input)) return true;
-  const following = nextPhase(current.phase_instance);
+  if (current.phase_instance === "design" && target2.step === "produce" && target2.attempt === 1 && target2.phase_instance !== nextPhaseInstance(current.phase_instance) && hasAuthenticatedMigrationAudit(input)) return true;
+  const following = nextPhaseInstance(current.phase_instance);
   return following !== void 0 && target2.phase_instance === following && target2.step === pipeline(following)[0] && target2.attempt === 1;
 }
 function artifactMatches(input) {
@@ -60268,12 +60283,14 @@ function planStateTransition(value) {
   }
   const committedOutput = hasAuthenticatedCommittedOutput(input);
   const decodedCurrent = decodePhaseInstance(input.current.phase_instance);
+  const crossesPhase = input.target.phase_instance !== input.current.phase_instance;
   const completesFinalPhase = committedOutput && decodedCurrent.kind === "phase-impl" && input.current.planned_final_phase !== void 0 && Number(decodedCurrent.phase) === Number(input.current.planned_final_phase) && input.target.phase_instance === input.current.phase_instance && input.target.step === input.current.step && input.target.status === input.current.status && input.target.attempt === input.current.attempt && input.target.input_fingerprint === input.current.input_fingerprint;
   if (completesFinalPhase) {
     const { revision: _revision2, last_transition: _transition2, ...preserved2 } = input.current;
     return ok15(Object.freeze({ ...preserved2, terminal: "complete" }));
   }
   if (decodedCurrent.kind === "phase-impl" && input.current.step === "triage" && input.current.status === "succeeded" && input.target.phase_instance !== input.current.phase_instance && !committedOutput) return invalid(input, from, to);
+  if (decodedCurrent.kind !== "phase-impl" && crossesPhase && !hasAuthenticatedArtifactApproval(input)) return invalid(input, from, to);
   if (!legalMovement(input) || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input) || !pendingHumanRevisionMatches(input)) {
     return invalid(input, from, to);
   }
@@ -63420,36 +63437,51 @@ async function handleState(call, context2) {
         let commitObserved = false;
         let legacyResumePhase;
         const authenticatedGateApprovals2 = [];
-        const completionSignal = artifact === void 0 && decodePhaseInstance(current.value.phase_instance).kind === "phase-impl" && current.value.step === "triage" && current.value.status === "succeeded";
-        if (completionSignal) {
-          const reference = current.value.authoritative_results.find((entry) => entry.phase_instance === current.value.phase_instance && entry.step === "produce");
-          const loader = services.dependencies.load_retained_result;
-          if (reference !== void 0 && loader !== void 0) {
-            const retained = await loader(reference);
-            if (!retained.ok) return retained;
-            completionSubjectDigest = retained.value.prepared.manifest.value.artifact_digest;
-            for (const approval of current.value.approvals) {
-              if (approval.gate_kind !== "commit-authorization" || approval.subject_digest !== completionSubjectDigest) continue;
-              const loaded = await loadAuthenticatedGateApproval(
-                services.dependencies,
-                services.authority,
-                approval
-              );
-              if (!loaded.ok) return loaded;
-              authenticatedGateApprovals2.push(loaded.value);
-            }
-            const source = retained.value.prepared.manifest.value.source_artifact;
-            if (source.artifact_kind === "implementation-output") {
-              for (const authenticated of authenticatedGateApprovals2) {
-                if (authenticated.request.kind !== "commit-authorization") continue;
-                if (await implementationOutputCommittedAtCurrentTarget(
-                  services.runner,
-                  source,
-                  authenticated.request.context.target_ref
-                )) {
-                  commitObserved = true;
-                  break;
-                }
+        const decodedCurrent = decodePhaseInstance(current.value.phase_instance);
+        const crossesPhase = call.input.phase_instance !== current.value.phase_instance;
+        const completionSignal = artifact === void 0 && decodedCurrent.kind === "phase-impl" && current.value.step === "triage" && current.value.status === "succeeded";
+        const artifactPhaseExitSignal = artifact === void 0 && crossesPhase && decodedCurrent.kind !== "phase-impl";
+        let currentProduce;
+        if (completionSignal || artifactPhaseExitSignal) {
+          const loadedProduce = await loadCurrentProduceSubject(services.dependencies, current.value);
+          if (!loadedProduce.ok) return loadedProduce;
+          currentProduce = loadedProduce.value;
+          completionSubjectDigest = currentProduce.artifact_digest;
+        }
+        if (artifactPhaseExitSignal) {
+          for (const approval of current.value.approvals) {
+            if (approval.gate_kind !== "artifact-approval" || approval.subject_digest !== completionSubjectDigest) continue;
+            const loaded = await loadAuthenticatedGateApproval(
+              services.dependencies,
+              services.authority,
+              approval
+            );
+            if (!loaded.ok) return loaded;
+            authenticatedGateApprovals2.push(loaded.value);
+          }
+        }
+        if (completionSignal && currentProduce !== void 0) {
+          for (const approval of current.value.approvals) {
+            if (approval.gate_kind !== "commit-authorization" || approval.subject_digest !== completionSubjectDigest) continue;
+            const loaded = await loadAuthenticatedGateApproval(
+              services.dependencies,
+              services.authority,
+              approval
+            );
+            if (!loaded.ok) return loaded;
+            authenticatedGateApprovals2.push(loaded.value);
+          }
+          const source = currentProduce.artifact;
+          if (source.artifact_kind === "implementation-output") {
+            for (const authenticated of authenticatedGateApprovals2) {
+              if (authenticated.request.kind !== "commit-authorization") continue;
+              if (await implementationOutputCommittedAtCurrentTarget(
+                services.runner,
+                source,
+                authenticated.request.context.target_ref
+              )) {
+                commitObserved = true;
+                break;
               }
             }
           }
@@ -63465,10 +63497,8 @@ async function handleState(call, context2) {
           if (!resolved.ok) return resolved;
           legacyResumePhase = resolved.value;
           if (legacyResumePhase !== void 0) {
-            const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
-            if (!produce.ok) return produce;
             for (const approval of current.value.approvals) {
-              if (approval.gate_kind !== "migration-audit" || approval.subject_digest !== produce.value.artifact_digest) continue;
+              if (approval.gate_kind !== "migration-audit" || approval.subject_digest !== completionSubjectDigest) continue;
               const loaded = await loadAuthenticatedGateApproval(
                 services.dependencies,
                 services.authority,

@@ -20,7 +20,7 @@ import {
 } from "../../state/evidence-results.js";
 import { runStateInitialization } from "../../state/initialization.js";
 import { identifyTransactionRequest } from "../../state/request.js";
-import { loadCurrentProduceSubject } from "../../state/produce-subject.js";
+import { loadCurrentProduceSubject, type CurrentProduceSubject } from "../../state/produce-subject.js";
 import { implementationOutputCommittedAtCurrentTarget } from "../../state/implementation-manifest.js";
 import { decodePhaseInstance } from "../../contracts/phase-instance.js";
 import {
@@ -170,39 +170,58 @@ export async function handleState(
         let commitObserved = false;
         let legacyResumePhase;
         const authenticatedGateApprovals: AuthenticatedGateApproval[] = [];
+        const decodedCurrent = decodePhaseInstance(current.value.phase_instance);
+        const crossesPhase = call.input.phase_instance !== current.value.phase_instance;
         const completionSignal =
           artifact === undefined &&
-          decodePhaseInstance(current.value.phase_instance).kind === "phase-impl" &&
+          decodedCurrent.kind === "phase-impl" &&
           current.value.step === "triage" &&
           current.value.status === "succeeded";
-        if (completionSignal) {
-          const reference = current.value.authoritative_results.find((entry) =>
-            entry.phase_instance === current.value.phase_instance && entry.step === "produce");
-          const loader = services.dependencies.load_retained_result;
-          if (reference !== undefined && loader !== undefined) {
-            const retained = await loader(reference);
-            if (!retained.ok) return retained;
-            completionSubjectDigest = retained.value.prepared.manifest.value.artifact_digest;
-            for (const approval of current.value.approvals) {
-              if (approval.gate_kind !== "commit-authorization" || approval.subject_digest !== completionSubjectDigest) continue;
-              const loaded = await loadAuthenticatedGateApproval(
-                services.dependencies, services.authority, approval,
-              );
-              if (!loaded.ok) return loaded;
-              authenticatedGateApprovals.push(loaded.value);
-            }
-            const source = retained.value.prepared.manifest.value.source_artifact;
-            if (source.artifact_kind === "implementation-output") {
-              for (const authenticated of authenticatedGateApprovals) {
-                if (authenticated.request.kind !== "commit-authorization") continue;
-                if (await implementationOutputCommittedAtCurrentTarget(
-                  services.runner,
-                  source,
-                  authenticated.request.context.target_ref,
-                )) {
-                  commitObserved = true;
-                  break;
-                }
+        const artifactPhaseExitSignal =
+          artifact === undefined && crossesPhase && decodedCurrent.kind !== "phase-impl";
+        let currentProduce: CurrentProduceSubject | undefined;
+        if (completionSignal || artifactPhaseExitSignal) {
+          const loadedProduce = await loadCurrentProduceSubject(services.dependencies, current.value);
+          if (!loadedProduce.ok) return loadedProduce;
+          currentProduce = loadedProduce.value;
+          completionSubjectDigest = currentProduce.artifact_digest;
+        }
+        if (artifactPhaseExitSignal) {
+          for (const approval of current.value.approvals) {
+            if (
+              approval.gate_kind !== "artifact-approval" ||
+              approval.subject_digest !== completionSubjectDigest
+            ) continue;
+            const loaded = await loadAuthenticatedGateApproval(
+              services.dependencies, services.authority, approval,
+            );
+            if (!loaded.ok) return loaded;
+            authenticatedGateApprovals.push(loaded.value);
+          }
+        }
+        if (completionSignal && currentProduce !== undefined) {
+          for (const approval of current.value.approvals) {
+            if (
+              approval.gate_kind !== "commit-authorization" ||
+              approval.subject_digest !== completionSubjectDigest
+            ) continue;
+            const loaded = await loadAuthenticatedGateApproval(
+              services.dependencies, services.authority, approval,
+            );
+            if (!loaded.ok) return loaded;
+            authenticatedGateApprovals.push(loaded.value);
+          }
+          const source = currentProduce.artifact;
+          if (source.artifact_kind === "implementation-output") {
+            for (const authenticated of authenticatedGateApprovals) {
+              if (authenticated.request.kind !== "commit-authorization") continue;
+              if (await implementationOutputCommittedAtCurrentTarget(
+                services.runner,
+                source,
+                authenticated.request.context.target_ref,
+              )) {
+                commitObserved = true;
+                break;
               }
             }
           }
@@ -224,12 +243,10 @@ export async function handleState(
           if (!resolved.ok) return resolved;
           legacyResumePhase = resolved.value;
           if (legacyResumePhase !== undefined) {
-            const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
-            if (!produce.ok) return produce;
             for (const approval of current.value.approvals) {
               if (
                 approval.gate_kind !== "migration-audit" ||
-                approval.subject_digest !== produce.value.artifact_digest
+                approval.subject_digest !== completionSubjectDigest
               ) continue;
               const loaded = await loadAuthenticatedGateApproval(
                 services.dependencies,

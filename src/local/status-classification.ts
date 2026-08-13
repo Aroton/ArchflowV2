@@ -67,6 +67,9 @@ export async function classifyWorkflowStatus(input: ClassifyWorkflowStatusInput)
   const status = await computeTaskStatus(created.value.dependencies, created.value.authority);
   if (!status.ok) return status;
   const derived = status.value.next_action;
+  const command = derived.skill === undefined
+    ? "archflow-status"
+    : [`$${derived.skill}`, input.task_id, ...(derived.skill_args ?? [])].join(" ");
   return ok(Object.freeze({
     mode: "normal" as const,
     task_status: status.value,
@@ -74,7 +77,7 @@ export async function classifyWorkflowStatus(input: ClassifyWorkflowStatusInput)
       derived.code,
       derived.detail,
       derived.human_required,
-      derived.skill === undefined ? "archflow-status" : `$${derived.skill}`,
+      command,
       structuredClone(derived) as PlainJsonValue,
     ),
   }));

@@ -25,7 +25,7 @@ import type { ProductionServices } from "../state/production.js";
 import { resolvePinnedConstitution } from "../state/constitution.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "../state/gate-approvals.js";
 import { APPROVAL_ARTIFACT_KINDS } from "../state/request-templates.js";
-import { buildCommitAuthorizationInput, currentTargetRef, pendingAdjudicationGate } from "../state/status.js";
+import { buildCommitAuthorizationInput, computeTaskStatus, currentTargetRef, pendingAdjudicationGate } from "../state/status.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "../state/transitions.js";
 import { writeStagedRequest } from "../state/staged-requests.js";
@@ -37,7 +37,7 @@ const fail = <T = never>(error: ProjectError): ProjectResult<T> =>
 
 export const BUILD_REQUEST_KINDS = Object.freeze([
   "initialize", "produce", "running", "triage",
-  "counter-review", "gate",
+  "counter-review", "gate", "advance",
 ] as const);
 export type BuildRequestKind = typeof BUILD_REQUEST_KINDS[number];
 
@@ -458,6 +458,37 @@ async function composeGate(
 }
 
 /**
+ * Composes the judgment-free phase handoff from freshly recomputed durable status. Status is
+ * deliberately recomputed here rather than trusting the caller's earlier projection: a replay,
+ * concurrent gate resolution, or prior successful handoff must make this request refuse before
+ * it is staged.
+ */
+async function composeAdvance(
+  services: ProductionServices,
+  state: TaskStateV1,
+  intentId: string,
+): Promise<ProjectResult<CallEnvelope>> {
+  const computed = await computeTaskStatus(services.dependencies, services.authority);
+  if (!computed.ok) return computed;
+  const next = computed.value.next_action;
+  if ((next.code !== "advance-phase" && next.code !== "complete-task") ||
+      next.target_phase_instance === undefined ||
+      computed.value.revision !== state.revision) {
+    return transitionInvalid(state, "advance");
+  }
+  const completing = next.code === "complete-task";
+  return computeCallEnvelope(services, {
+    tool: "archflow_state",
+    input: {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: next.target_phase_instance,
+      step: completing ? state.step : "produce",
+      status: completing ? state.status : "running",
+    },
+  });
+}
+
+/**
  * Composes a complete, fingerprint-resolved tool request from durable state plus the caller's
  * judgment content. Every kind derives its mechanical fields — phase, revision, digests, slot
  * order, provenance, counts — from the same authorities the server checks against, guards the
@@ -535,6 +566,7 @@ export async function runBuildRequest(
     case "triage": return withStagedRequest(services, intentId, await composeTriage(services, state, intentId, snapshot));
     case "counter-review": return withStagedRequest(services, intentId, await composeCounterReview(services, state, intentId, snapshot));
     case "gate": return withStagedRequest(services, intentId, await composeGate(services, state, intentId, snapshot));
+    case "advance": return withStagedRequest(services, intentId, await composeAdvance(services, state, intentId));
     default:
       throw new TypeError(`build-request kind ${JSON.stringify(kind)} is not recognized; expected ${PAYLOAD_SHAPE}`);
   }

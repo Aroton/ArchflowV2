@@ -94,14 +94,14 @@ describe("planStateTransition", () => {
     expect(replaced.ok && replaced.value.authoritative_results).toEqual([replacement]);
   });
 
-  it("moves only through the fixed pipeline and fixed phase sequence", () => {
+  it("requires authenticated artifact approval before moving to the fixed phase successor", () => {
     const current = state({ status: "succeeded", step: "triage", attempt: parseSafeInteger(3) });
     const result = planStateTransition({
       current,
       target: { phase_instance: phase("phase-impl", 2), step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: D("8") },
       recomputed_input_fingerprint: D("8"),
     });
-    expect(result.ok).toBe(true);
+    expect(result).toMatchObject({ ok: false, error: { code: "TRANSITION_INVALID" } });
 
     const skipped = planStateTransition({
       current,
@@ -111,7 +111,7 @@ describe("planStateTransition", () => {
     expect(skipped.ok ? undefined : skipped.error.code).toBe("TRANSITION_INVALID");
   });
 
-  it("keeps the ordinary design successor available when a later legacy resume phase exists", () => {
+  it("does not let legacy resume metadata bypass ordinary design approval", () => {
     const current = state({
       phase_instance: parsePhaseInstanceId("design"),
       status: "succeeded",
@@ -130,7 +130,7 @@ describe("planStateTransition", () => {
       recomputed_input_fingerprint: D("8"),
       legacy_resume_phase: phase("phase-design", 4),
     });
-    expect(result.ok).toBe(true);
+    expect(result).toMatchObject({ ok: false, error: { code: "TRANSITION_INVALID" } });
   });
 
   it("does not advance an implementation phase until its authorized commit is observed", () => {

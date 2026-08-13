@@ -6,7 +6,7 @@
  * TRANSITION_INVALID or INPUT_FINGERPRINT_MISMATCH.
  */
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -21,6 +21,7 @@ import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 import { stageTaskInitialization } from "../../src/init/task-initialization.js";
 import { runBuildRequest } from "../../src/local/build-request.js";
 import { computeCallEnvelope, type CallEnvelope } from "../../src/local/call-envelope.js";
+import { runLocalCommand } from "../../src/local/commands.js";
 import { createToolHandlers } from "../../src/mcp/handlers/index.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
 import { createProductionServices } from "../../src/state/production.js";
@@ -218,6 +219,67 @@ function derivedRequest(status: TaskStatusV1): RequestShape {
   return structuredClone(status.next_action.request) as unknown as RequestShape;
 }
 
+async function approveComposedGate(
+  root: string,
+  h: ReturnType<typeof harness>,
+  gate: CallEnvelope,
+): Promise<void> {
+  const pending = h.invoke(gate.request.tool, gate.request.input);
+  let opened = false;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const status = await h.status();
+    if (status.open_gate !== undefined) {
+      opened = true;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  expect(opened, "the composed gate should become visible before its invocation returns").toBe(true);
+  const decision = await runLocalCommand({
+    command: "decide",
+    working_directory: root,
+    task_id: task,
+    value: { kind: "choice", choice: "approve", reason: "Approve the reviewed artifact." },
+  });
+  expect(decision).toMatchObject({ ok: true });
+  await pending;
+}
+
+async function completeDocumentPhase(
+  root: string,
+  h: ReturnType<typeof harness>,
+  label: string,
+  artifactPath: string,
+  contents: string,
+): Promise<void> {
+  writeFileSync(join(root, ".archflow", "tasks", task, artifactPath), contents);
+  const produced = await h.buildRequest({ intent_id: `${label}-produce`, kind: "produce" });
+  await h.invoke(produced.request.tool, produced.staged?.reference ?? produced.request.input);
+  const counterEntry = await h.buildRequest({ intent_id: `${label}-counter-entry`, kind: "running", step: "counter_review" });
+  await h.invoke(counterEntry.request.tool, counterEntry.staged?.reference ?? counterEntry.request.input);
+  const counter = await h.buildRequest({ intent_id: `${label}-counter`, kind: "counter-review" });
+  await h.invoke(counter.request.tool, counter.staged?.reference ?? counter.request.input);
+  const triageEntry = await h.buildRequest({ intent_id: `${label}-triage-entry`, kind: "running", step: "triage" });
+  await h.invoke(triageEntry.request.tool, triageEntry.staged?.reference ?? triageEntry.request.input);
+  const triage = await h.buildRequest({
+    intent_id: `${label}-triage`,
+    kind: "triage",
+    dispositions: [{
+      finding_id: "requirement-untestable",
+      disposition: "rejected",
+      rationale: "The artifact names observable behavior.",
+      evidence: `${artifactPath} contains the reviewed behavior.`,
+    }],
+  });
+  await h.invoke(triage.request.tool, triage.staged?.reference ?? triage.request.input);
+  const gate = await h.buildRequest({
+    intent_id: `${label}-gate`,
+    kind: "gate",
+    summary: `${label} is ready for approval.`,
+  });
+  await approveComposedGate(root, h, gate);
+}
+
 describe("status-derived requests execute against the real handlers", () => {
   it("drives the PRD phase from create-task into counter-review using only derived requests", async () => {
     const fixture = await repository();
@@ -402,6 +464,95 @@ describe("status-derived requests execute against the real handlers", () => {
         current_evidence: { slots: readonly { evidence_digest: string }[] };
       }).current_evidence.slots.map((slot) => slot.evidence_digest);
       expect(gateEvidence).toEqual(slots);
+    } finally {
+      stub.restore();
+    }
+  }, TIMEOUT);
+
+  it("advances an approved design into phase-design-1 through the public composer", async () => {
+    const fixture = await repository();
+    const h = harness(fixture.root, "claude");
+    const stub = installReviewerStub(fixture.root);
+    try {
+      const initialized = await h.buildRequest({ intent_id: "handoff-initialize", kind: "initialize" });
+      await h.invoke(initialized.request.tool, initialized.request.input);
+      writeFileSync(join(fixture.root, ".archflow", "tasks", task, "ask.md"), "Fix the approved-design handoff.\n");
+
+      await completeDocumentPhase(
+        fixture.root,
+        h,
+        "handoff-prd",
+        "prd.md",
+        "# PRD\n\nAfter design approval, the workflow advances to phase design.\n",
+      );
+      const prdAdvance = await h.buildRequest({ intent_id: "handoff-prd-advance", kind: "advance" });
+      await h.invoke(prdAdvance.request.tool, prdAdvance.staged?.reference ?? prdAdvance.request.input);
+
+      await completeDocumentPhase(
+        fixture.root,
+        h,
+        "handoff-design",
+        "design.md",
+        "# Design\n\nAdvance through the existing state transition.\n\n### Phase 1: Implement the handoff\n",
+      );
+
+      const approved = await h.status();
+      expect(approved).toMatchObject({
+        phase_instance: "design",
+        step: "triage",
+        status: "succeeded",
+        blocking_reasons: [],
+        reconciliation: { findings: [] },
+        evidence: { assessment: { next: "advance" } },
+        next_action: {
+          code: "advance-phase",
+          target_phase_instance: "phase-design-1",
+          skill: "archflow-phase-design",
+          skill_args: ["1"],
+          request: {
+            tool: "archflow_state",
+            input: { phase_instance: "phase-design-1", step: "produce", status: "running" },
+          },
+        },
+      });
+      const approvedRevision = approved.revision;
+      expect(approvedRevision).toBeDefined();
+
+      const manual = await runLocalCommand({
+        command: "manual-status",
+        working_directory: fixture.root,
+        task_id: task,
+      });
+      expect(manual).toMatchObject({
+        ok: true,
+        value: { next_action: { command: `$archflow-phase-design ${task} 1` } },
+      });
+
+      const advance = await h.buildRequest({ intent_id: "handoff-design-advance", kind: "advance" });
+      expect(advance.staged?.reference).toBeDefined();
+      expect(advance.request.input).toMatchObject({
+        expected_revision: approvedRevision,
+        phase_instance: "phase-design-1",
+        step: "produce",
+        status: "running",
+      });
+      await h.invoke(advance.request.tool, advance.staged?.reference ?? advance.request.input);
+
+      const advanced = await h.status();
+      expect(advanced).toMatchObject({
+        revision: (approvedRevision as number) + 1,
+        phase_instance: "phase-design-1",
+        step: "produce",
+        status: "running",
+        next_action: { code: "run-step", step: "produce", skill: "archflow-phase-design" },
+      });
+      const durable = JSON.parse(readFileSync(
+        join(fixture.root, ".archflow", "tasks", task, "state.json"),
+        "utf8",
+      )) as { planned_final_phase?: number };
+      expect(durable.planned_final_phase).toBe(1);
+      expect(await h.buildRequestError({ intent_id: "handoff-repeat", kind: "advance" }))
+        .toBe("TRANSITION_INVALID");
     } finally {
       stub.restore();
     }

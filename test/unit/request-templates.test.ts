@@ -216,10 +216,33 @@ describe("next-action request templates", () => {
   });
 
   it("emits nothing for actions that already have a surface or are pure human judgment", () => {
-    for (const code of ["resolve-open-gate", "advance-phase", "commit-phase", "complete-task", "task-complete", "inspect-state"] as const) {
+    for (const code of ["resolve-open-gate", "commit-phase", "task-complete", "inspect-state"] as const) {
       expect(buildNextActionRequest(action({ code }), { task_id: taskId, state: stateAt("prd") })).toBeUndefined();
     }
     expect(buildNextActionRequest(action({ code: "run-step", step: "produce" }), { task_id: taskId })).toBeUndefined();
+  });
+
+  it("prefills executable phase advancement and terminal completion requests", () => {
+    const advance = buildNextActionRequest(
+      action({ code: "advance-phase", target_phase_instance: "phase-design-1" as never }),
+      { task_id: taskId, state: stateAt("design", "triage", "succeeded") },
+    );
+    expect(advance?.request).toMatchObject({
+      tool: "archflow_state",
+      input: {
+        phase_instance: "phase-design-1", step: "produce", status: "running",
+        expected_revision: 7, input_fingerprint: fingerprintSentinel,
+      },
+    });
+    expect(advance?.guidance).toContain('{"kind":"advance"}');
+
+    const complete = buildNextActionRequest(
+      action({ code: "complete-task", target_phase_instance: "phase-impl-2" as never }),
+      { task_id: taskId, state: stateAt("phase-impl-2", "triage", "succeeded") },
+    );
+    expect(complete?.request.input).toMatchObject({
+      phase_instance: "phase-impl-2", step: "triage", status: "succeeded",
+    });
   });
 });
 
@@ -295,6 +318,7 @@ describe("run-step template legality", () => {
         case "archflow_counter_review": return "counter-review";
         case "archflow_gate": return "gate";
         case "archflow_state":
+          if (code === "advance-phase" || code === "complete-task") return "advance";
           if (input.status === "running") return "running";
           if (input.status === "succeeded" && input.step === "produce") return "produce";
           if (input.status === "succeeded" && input.step === "triage") return "triage";
@@ -339,6 +363,11 @@ describe("run-step template legality", () => {
       },
     );
     if (commitGate !== undefined) emitted.push(["open-gate", commitGate]);
+    const advance = buildNextActionRequest(
+      action({ code: "advance-phase", target_phase_instance: "design" as never }),
+      { task_id: taskId, state: stateAt("prd", "triage", "succeeded") },
+    );
+    if (advance !== undefined) emitted.push(["advance-phase", advance]);
 
     // The sweep must actually cover every prefill family, or the invariant proves nothing.
     expect(emitted.length).toBeGreaterThanOrEqual(10);
