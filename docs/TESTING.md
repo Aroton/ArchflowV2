@@ -50,7 +50,7 @@ Integration tests assemble production services around real temporary repositorie
 - Repository initialization, project registration, installer behavior, local CLI command/payload/stdin discipline, and legacy upgrade/fault recovery (`init-orchestration.test.ts`, `init-registration.test.ts`, `install-script.test.ts`, `local-cli-stdin-discipline.test.ts`, `legacy-staging-faults.test.ts`).
 - Offline release behavior (`release-offline.test.ts`).
 
-Representative failure coverage includes exact-replay versus stale-CAS behavior, two-process same-task races, non-plain handler output, illegal constitution changes, process cancellation, leaked plumbing bytes, registration collisions, interrupted legacy staging, dirty worktrees, and input-free CLI commands with stdin deliberately held open.
+Representative boundary coverage includes exact-replay versus stale-CAS behavior, two-process same-task races, non-plain handler output, immutable pinned-policy review despite task-branch constitution edits, process cancellation, leaked plumbing bytes, registration collisions, interrupted legacy staging, dirty worktrees, and input-free CLI commands with stdin deliberately held open.
 
 ### Crash: `test/crash/` (3 files)
 

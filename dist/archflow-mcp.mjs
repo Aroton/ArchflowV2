@@ -36144,10 +36144,6 @@ function userAskClaim() {
 function rawGitPath(value) {
   return value;
 }
-function tryRepositoryPathClaim(value) {
-  const result = repositoryPathClaimV1Schema.safeParse(value);
-  return result.success ? result.data : void 0;
-}
 var TASK_PATH_CLASSES = [
   "task-config",
   "task-state",
@@ -38796,7 +38792,6 @@ var HASH_OBJECT_OPERATION = "git-hash-object";
 var ANCESTOR_OPERATION = "git-ancestor";
 var TREE_ENTRY_OPERATION = "git-tree-entry";
 var TREE_LIST_OPERATION = "git-tree-list";
-var TREE_DIFF_OPERATION = "git-tree-diff-paths";
 var HEAD_COMMIT_OPERATION = "git-head-commit";
 var OBJECT_SIZE_OPERATION = "git-object-size";
 var OBJECT_READ_OPERATION = "git-object-read";
@@ -38907,22 +38902,6 @@ async function readCommitTreeEntries(runner, commit, directory) {
   });
   entries.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
   return Object.freeze(entries);
-}
-async function readCommitRangeChangedPaths(runner, baseCommit, directory) {
-  const prefix = directory.endsWith("/") ? directory : `${directory}/`;
-  const fields = await runner.runNulFields({
-    argv: ["diff", "--name-only", "-z", `${baseCommit}..HEAD`, "--", prefix],
-    operation: TREE_DIFF_OPERATION
-  });
-  if (fields.length > MAX_COMMIT_TREE_ENTRIES) {
-    throw new TypeError("git diff exceeded the bounded changed-path limit");
-  }
-  const unique = [...new Set(fields)];
-  if (unique.some((path2) => !path2.startsWith(prefix))) {
-    throw new TypeError("git diff returned a path outside the requested directory");
-  }
-  unique.sort();
-  return Object.freeze(unique);
 }
 async function readCommitTreePathListing(runner, commit, directories) {
   const prefixes = [...new Set(directories)].map((directory) => directory === "" || directory === "." ? "." : directory.endsWith("/") ? directory : `${directory}/`);
@@ -40103,44 +40082,6 @@ async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
     }
     if (error51 instanceof TypeError || error51 instanceof RangeError) {
       return fail5(invalidPolicyBase(policyBaseCommit));
-    }
-    throw error51;
-  }
-}
-async function detectTaskLocalConstitutionEdit(runner, policyBaseCommit, pinnedConstitutionDigest, context2) {
-  try {
-    const uncommitted = await readChangedGitPaths(runner);
-    const committed2 = await readCommitRangeChangedPaths(
-      runner,
-      policyBaseCommit,
-      CONSTITUTION_DIRECTORY
-    );
-    const candidates = new Set(committed2);
-    for (const path2 of uncommitted.paths) {
-      if (path2.startsWith(`${CONSTITUTION_DIRECTORY}/`)) candidates.add(path2);
-    }
-    if (candidates.size === 0) return ok4(void 0);
-    for (const value of candidates) {
-      const claim = tryRepositoryPathClaim(rawGitPath(value));
-      if (claim === void 0) continue;
-      const resolved = await resolveRepositoryPath({
-        runner,
-        claim,
-        expectedClass: "task-branch-constitution",
-        context: context2
-      });
-      if (!resolved.ok) return resolved;
-    }
-    const head = parseGitOid(await readHeadCommit(runner));
-    const currentFiles = await readConstitutionTreeFiles(runner, head);
-    return ok4(Object.freeze({
-      pinned_constitution_digest: pinnedConstitutionDigest,
-      current_constitution_digest: computePinnedConstitutionDigest(currentFiles),
-      changed_path_class: "task-branch-constitution"
-    }));
-  } catch (error51) {
-    if (error51 instanceof GitInvocationError) {
-      return fail5(projectErrorForGitFailure(error51, runner, context2));
     }
     throw error51;
   }
@@ -62797,67 +62738,6 @@ async function handleCounterReview(call, context2) {
     );
     if (!constitution.ok) return constitution;
     const activeRules = [...constitution.value.rules.values()].some((rule4) => rule4.status === "active");
-    const edited = await detectTaskLocalConstitutionEdit(
-      services.runner,
-      state.value.policy_base_commit,
-      state.value.constitution_digest,
-      services.authority.context
-    );
-    if (!edited.ok) return edited;
-    if (edited.value !== void 0) {
-      let retainedReviews;
-      try {
-        const loaded = await loadCurrentReviewSet(
-          { read_state: services.dependencies.read_state, load_retained_result: services.dependencies.load_retained_result },
-          services.authority,
-          state.value.phase_instance
-        );
-        retainedReviews = loaded.ok ? loaded.value : void 0;
-      } catch {
-        retainedReviews = void 0;
-      }
-      if (retainedReviews === void 0) {
-        return fail21(createProjectError("STATE_INVALID", {
-          phase_instance: state.value.phase_instance,
-          issue_code: "constitution-edited-on-task-branch"
-        }));
-      }
-      const gateIntent = stableId("constitution-edit-gate", {
-        schema_version: "1",
-        task_identity_digest: services.authority.task_identity_digest,
-        counter_review_intent: call.input.intent_id,
-        kind: "constitution-edit",
-        subject_digest: produce.value.artifact_digest,
-        context: edited.value
-      });
-      const requestDigest = canonicalJsonDigest({
-        schema_version: "1",
-        operation: "constitution-edit-gate",
-        intent_id: gateIntent,
-        task_identity_digest: services.authority.task_identity_digest,
-        kind: "constitution-edit",
-        subject_digest: produce.value.artifact_digest,
-        context: edited.value
-      });
-      const opened = await openDurableGate(services.dependencies, {
-        authority: services.authority,
-        expected_revision: state.value.revision,
-        intent_id: parsePathSafeId(gateIntent),
-        request_digest: requestDigest,
-        input_fingerprint: state.value.input_fingerprint,
-        phase_instance: state.value.phase_instance,
-        summary: "Resolve constitution-edit before review can run",
-        subject_digest: produce.value.artifact_digest,
-        kind: "constitution-edit",
-        context: edited.value,
-        current_evidence: retainedReviews.current_evidence_set
-      });
-      if (!opened.ok) return opened;
-      return fail21(createProjectError("GATE_ACTIVE", {
-        gate_id: opened.value.gate_id,
-        gate_kind: "constitution-edit"
-      }));
-    }
     const retainedBytes = services.dependencies.read_retained_task_bytes;
     if (retainedBytes === void 0) throw new TypeError("retained byte accounting is unavailable");
     const canonicalRubric2 = canonicalRubricForPhaseKind(

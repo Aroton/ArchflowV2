@@ -5590,7 +5590,7 @@
       "imports": []
     },
     "src/mcp/handlers/counter-review.ts": {
-      "bytes": 20039,
+      "bytes": 17190,
       "format": "esm",
       "imports": [
         {
@@ -9690,7 +9690,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2458227,
+      "bytes": 2453488,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -10690,7 +10690,7 @@
           "bytesInOutput": 15734
         },
         "src/contracts/path-claims.ts": {
-          "bytesInOutput": 3251
+          "bytesInOutput": 3097
         },
         "src/contracts/phase-instance.ts": {
           "bytesInOutput": 2706
@@ -10813,7 +10813,7 @@
           "bytesInOutput": 2638
         },
         "src/mcp/handlers/counter-review.ts": {
-          "bytesInOutput": 14243
+          "bytesInOutput": 11824
         },
         "src/mcp/handlers/errors.ts": {
           "bytesInOutput": 908
@@ -10858,7 +10858,7 @@
           "bytesInOutput": 2364
         },
         "src/repository/git.ts": {
-          "bytesInOutput": 15810
+          "bytesInOutput": 15081
         },
         "src/repository/identity.ts": {
           "bytesInOutput": 5762
@@ -10897,7 +10897,7 @@
           "bytesInOutput": 2725
         },
         "src/state/constitution.ts": {
-          "bytesInOutput": 4799
+          "bytesInOutput": 3362
         },
         "src/state/evidence-results.ts": {
           "bytesInOutput": 14948

@@ -311,6 +311,39 @@ describe("counter-review pinned context integration", () => {
     expect(envelope.subject).toMatchObject({ attempt: 1 });
   });
 
+  it("reviews against pinned policy when the task branch commits a constitution edit", async () => {
+    const h = await fixture({ phase: "prd", declareAsk: true });
+    activateFixtureCli(h);
+    h.repository.write(".archflow/constitution/00-process.md", `---
+id: process
+version: 2
+status: active
+review_trigger: The task branch proposes a future policy change.
+---
+Future tasks should use this revised policy.
+`);
+    h.repository.git("add", "--", ".archflow/constitution/00-process.md");
+    h.repository.git("commit", "-m", "revise future policy");
+
+    const boundary = createToolBoundary(createToolHandlers());
+    const result = await boundary.invoke(
+      "archflow_counter_review",
+      h.args,
+      h.invocation("task-branch-policy-edit"),
+    );
+    expect(result).toMatchObject({
+      kind: "project-result",
+      result: { schema_version: "1", ok: true, value: {
+        verdict: "pass",
+        constitution: { status: "not-run", reason: "no-active-constitution-rules" },
+      } },
+    });
+    expect(capturedEnvelope(h.envelopePath).workspace).toMatchObject({
+      kind: "read-only-repository-checkout",
+      commit: h.repository.git("rev-parse", "HEAD"),
+    });
+  });
+
   it("routes the reviewer checkout to the implementation base commit, not HEAD", async () => {
     const base = parseGitOid("ab".repeat(20));
     await expect(resolveRepositoryViewCommit(

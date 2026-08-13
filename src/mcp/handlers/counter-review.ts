@@ -2,7 +2,6 @@ import { canonicalJsonDigest, sha256Bytes } from "../../contracts/canonical.js";
 import type { InvocationContext } from "../../contracts/contexts.js";
 import { createProjectError, type ProjectResult } from "../../contracts/errors.js";
 import {
-  parsePathSafeId,
   parseSafeId,
   parseSafeInteger,
   type SafeId,
@@ -28,17 +27,13 @@ import {
 } from "../../review/envelopes.js";
 import { requireApprovedUpstreamDigests } from "../../review/fixed-point.js";
 import { assembleReviewContext } from "../../review/pinned-context.js";
+import { resolvePinnedConstitution } from "../../state/constitution.js";
 import {
-  detectTaskLocalConstitutionEdit,
-  resolvePinnedConstitution,
-} from "../../state/constitution.js";
-import {
-  loadCurrentReviewSet,
   prepareEvidenceResult,
   type EvidenceResultValue,
   type PreparedEvidenceResult,
 } from "../../state/evidence-results.js";
-import { loadAuthenticatedGateApproval, openDurableGate } from "../../state/gates.js";
+import { loadAuthenticatedGateApproval } from "../../state/gates.js";
 import {
   expectedProduceUpstreamBindings,
   loadCurrentProduceSubject,
@@ -269,58 +264,6 @@ export async function handleCounterReview(
     if (!constitution.ok) return constitution;
     const activeRules = [...constitution.value.rules.values()]
       .some((rule) => rule.status === "active");
-
-    // Adjudicating against edited rules is meaningless, so a task-branch constitution edit
-    // short-circuits before any dispatch. With retained review evidence the durable
-    // constitution-edit gate opens as before; on a first round with no evidence set to bind, the
-    // same stop is a plain error — every decision the gate offers (revert, base amendment,
-    // abort) is equally available to the human either way.
-    const edited = await detectTaskLocalConstitutionEdit(
-      services.runner, state.value.policy_base_commit, state.value.constitution_digest, services.authority.context,
-    );
-    if (!edited.ok) return edited;
-    if (edited.value !== undefined) {
-      let retainedReviews;
-      try {
-        const loaded = await loadCurrentReviewSet(
-          { read_state: services.dependencies.read_state, load_retained_result: services.dependencies.load_retained_result! },
-          services.authority,
-          state.value.phase_instance,
-        );
-        retainedReviews = loaded.ok ? loaded.value : undefined;
-      } catch {
-        retainedReviews = undefined;
-      }
-      if (retainedReviews === undefined) {
-        return fail(createProjectError("STATE_INVALID", {
-          phase_instance: state.value.phase_instance,
-          issue_code: "constitution-edited-on-task-branch",
-        }));
-      }
-      const gateIntent = stableId("constitution-edit-gate", {
-        schema_version: "1", task_identity_digest: services.authority.task_identity_digest,
-        counter_review_intent: call.input.intent_id,
-        kind: "constitution-edit", subject_digest: produce.value.artifact_digest, context: edited.value,
-      });
-      const requestDigest = canonicalJsonDigest({
-        schema_version: "1", operation: "constitution-edit-gate", intent_id: gateIntent,
-        task_identity_digest: services.authority.task_identity_digest, kind: "constitution-edit",
-        subject_digest: produce.value.artifact_digest, context: edited.value,
-      });
-      const opened = await openDurableGate(services.dependencies, {
-        authority: services.authority, expected_revision: state.value.revision,
-        intent_id: parsePathSafeId(gateIntent), request_digest: requestDigest,
-        input_fingerprint: state.value.input_fingerprint,
-        phase_instance: state.value.phase_instance,
-        summary: "Resolve constitution-edit before review can run",
-        subject_digest: produce.value.artifact_digest, kind: "constitution-edit", context: edited.value,
-        current_evidence: retainedReviews.current_evidence_set,
-      });
-      if (!opened.ok) return opened;
-      return fail(createProjectError("GATE_ACTIVE", {
-        gate_id: opened.value.gate_id, gate_kind: "constitution-edit",
-      }));
-    }
 
     const retainedBytes = services.dependencies.read_retained_task_bytes;
     if (retainedBytes === undefined) throw new TypeError("retained byte accounting is unavailable");

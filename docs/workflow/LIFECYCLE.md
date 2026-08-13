@@ -89,7 +89,7 @@ Nine gate kinds exist (`src/contracts/gates.ts`):
 | `constitution-review` | the constitution review found a rule `fail`/`uncertain`, or a rule's `review_trigger` matched, or both (derived after triage; one gate discloses both axes and offers a waiver per rule *and* axis) |
 | `material-drift` | an approved upstream document drifted materially (derived after triage) |
 | `attempts-exhausted` | the produce/review loop hit its attempt cap (status prefills its request; `build-request` composes only the approval kinds, so complete it through `archflow-local envelope`) |
-| `constitution-edit` | a task branch tried to amend its own governing constitution (detected at counter-review time; on the first round, with no retained review set to bind, this is a plain `constitution-edited-on-task-branch` error instead) |
+| `constitution-edit` | legacy compatibility for previously opened policy-edit gates; current counter-review does not emit this gate because task policy is already pinned immutably |
 | `restore-collision` | a drift repair would overwrite conflicting bytes |
 | `migration-audit` | a legacy import is ready for its guarded resume jump |
 

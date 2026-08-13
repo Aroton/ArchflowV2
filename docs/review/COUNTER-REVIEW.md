@@ -96,7 +96,7 @@ Each numbered Markdown file in `.archflow/constitution/` is exactly one rule: fr
 - **`task-and-evidence-isolation`** — tasks are isolated; stale, mismatched, cross-task, or partial evidence fails closed.
 - **`honest-human-centered-outcomes`** — failures and dead ends stay visible non-success states with a safe next action, never silently bypassed.
 
-A task cannot amend its own governing constitution: a task-branch edit detected at counter-review time opens a `constitution-edit` gate when a retained review set exists to bind, and on the first round — when there is nothing to bind — fails with a plain `STATE_INVALID` `constitution-edited-on-task-branch` error. Either way the review never dispatches against edited rules.
+A task-branch constitution edit does not change the rules governing that task. Counter-review continues against the immutable constitution pinned at task initialization; mutable or later committed policy bytes are never substituted into the constitution envelope. The policy edit may travel as an ordinary reviewed implementation output and becomes available to future tasks only when their approved policy base includes it.
 
 The constitution-review child gets a sealed envelope — the artifact, the sorted active rules, the approved upstream documents, and fixed instructions — and deliberately **no repository checkout**: it judges exactly the sealed evidence. Before dispatching, the server is unusually strict: durable state, the pinned constitution digest, the authenticated review set, and the phase-appropriate durable approval for every declared upstream (`artifact-approval` for PRD, `design-approval` for current design documents, with legacy design archives still accepted) must all agree, or nothing is dispatched.
 

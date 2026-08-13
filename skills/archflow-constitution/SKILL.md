@@ -45,6 +45,6 @@ After editing, inspect the complete rule set for duplicate IDs, invalid filename
 
 ## Preserve policy authority
 
-Prefer constitution maintenance on the repository's policy or base branch before starting affected tasks. Existing tasks remain governed by their pinned policy-base commit; changing worktree files does not silently repin them. A constitution edit on an active task branch is detected as a policy change and can stop review at a constitution-edit gate. Never claim that an existing task adopted the new rule merely because the file changed.
+Prefer constitution maintenance on the repository's policy or base branch before starting affected tasks. A task branch may also carry a constitution change as an ordinary reviewed output, but the active task remains governed by its pinned policy-base commit; changing or committing worktree policy does not silently repin it. Treat that edit as policy for future tasks after it reaches their approved base. Never claim that an existing task adopted the new rule merely because the file changed.
 
 Do not create task state, resolve gates, commit, or push as part of configuration unless the user separately authorizes those actions. Before any commit, summarize the rules added, revised, or deprecated and obtain explicit approval for the exact change.
