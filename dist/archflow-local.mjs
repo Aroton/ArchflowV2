@@ -23479,7 +23479,7 @@ var driftFindingSchema = external_exports.object({
   if (finding.drift === "aligned" !== (finding.affected_claim_ids.length === 0)) context2.addIssue({ code: "custom", path: ["affected_claim_ids"], message: "aligned drift has no affected claims; other drift must identify claims" });
   if (new Set(finding.affected_claim_ids).size !== finding.affected_claim_ids.length) context2.addIssue({ code: "custom", path: ["affected_claim_ids"], message: "duplicate affected claim" });
 });
-var rawAdjudicationSchema = external_exports.object({
+var rawAdjudicationTransportSchema = external_exports.object({
   schema_version: external_exports.literal("1"),
   task_id: taskSlug2,
   phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
@@ -23491,7 +23491,8 @@ var rawAdjudicationSchema = external_exports.object({
   source_evidence_set_digest: digest3,
   rule_findings: external_exports.array(constitutionRuleFindingSchema),
   drift_findings: external_exports.array(driftFindingSchema)
-}).strict().superRefine((adjudication, context2) => {
+}).strict();
+var rawAdjudicationSchema = rawAdjudicationTransportSchema.superRefine((adjudication, context2) => {
   try {
     validateAdjudicationFindings(adjudication);
   } catch (error51) {
@@ -23510,6 +23511,14 @@ function validateAdjudicationFindings(parsed) {
   assertSortedUnique(parsed.rule_findings.map(ruleKey2), "rule_findings");
   assertSortedUnique(parsed.drift_findings.map((finding) => finding.upstream_digest), "drift_findings");
   if (parsed.drift_findings.length !== parsed.approved_upstream_digests.length || parsed.drift_findings.some((finding, index) => finding.upstream_digest !== parsed.approved_upstream_digests[index])) throw new TypeError("drift_findings must exactly cover approved_upstream_digests");
+}
+function canonicalizeAdjudicationFindings(parsed) {
+  return {
+    ...parsed,
+    approved_upstream_digests: [...parsed.approved_upstream_digests].sort(),
+    rule_findings: [...parsed.rule_findings].sort((left, right) => ruleKey2(left).localeCompare(ruleKey2(right))),
+    drift_findings: [...parsed.drift_findings].sort((left, right) => left.upstream_digest.localeCompare(right.upstream_digest))
+  };
 }
 function deriveAdjudicationSummaries(parsed) {
   const expectedConstitution = parsed.rule_findings.some((finding) => finding.compliance === "fail") ? "fail" : parsed.rule_findings.some((finding) => finding.compliance === "uncertain") ? "uncertain" : "pass";
@@ -23537,7 +23546,7 @@ var derivedAdjudicationSchema = rawAdjudicationSchema.safeExtend({
 });
 function parseAndDeriveAdjudication(value) {
   assertPlainJson(value, "adjudication");
-  const parsed = rawAdjudicationSchema.parse(value);
+  const parsed = canonicalizeAdjudicationFindings(rawAdjudicationTransportSchema.parse(value));
   validateAdjudicationFindings(parsed);
   return { ...parsed, ...deriveAdjudicationSummaries(parsed) };
 }

@@ -3461,7 +3461,7 @@
       ]
     },
     "src/contracts/adjudication.ts": {
-      "bytes": 10720,
+      "bytes": 11353,
       "format": "esm",
       "imports": [
         {
@@ -6436,7 +6436,7 @@
       ]
     },
     "src/review/counter-review.ts": {
-      "bytes": 16810,
+      "bytes": 17890,
       "format": "esm",
       "imports": [
         {
@@ -6533,7 +6533,7 @@
       ]
     },
     "src/review/envelopes.ts": {
-      "bytes": 23675,
+      "bytes": 24045,
       "format": "esm",
       "imports": [
         {
@@ -8488,7 +8488,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1603710,
+      "bytes": 1604227,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -9421,7 +9421,7 @@
           "bytesInOutput": 4611
         },
         "src/contracts/adjudication.ts": {
-          "bytesInOutput": 7125
+          "bytesInOutput": 7642
         },
         "src/contracts/canonical.ts": {
           "bytesInOutput": 2816
@@ -9690,7 +9690,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2453488,
+      "bytes": 2455328,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -10621,7 +10621,7 @@
           "bytesInOutput": 4611
         },
         "src/contracts/adjudication.ts": {
-          "bytesInOutput": 7125
+          "bytesInOutput": 7642
         },
         "src/contracts/canonical.ts": {
           "bytesInOutput": 2816
@@ -10873,10 +10873,10 @@
           "bytesInOutput": 1886
         },
         "src/review/counter-review.ts": {
-          "bytesInOutput": 8669
+          "bytesInOutput": 9622
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 14527
+          "bytesInOutput": 14897
         },
         "src/review/fixed-point.ts": {
           "bytesInOutput": 658

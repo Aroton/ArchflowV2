@@ -37176,7 +37176,7 @@ var driftFindingSchema = external_exports.object({
   if (finding.drift === "aligned" !== (finding.affected_claim_ids.length === 0)) context2.addIssue({ code: "custom", path: ["affected_claim_ids"], message: "aligned drift has no affected claims; other drift must identify claims" });
   if (new Set(finding.affected_claim_ids).size !== finding.affected_claim_ids.length) context2.addIssue({ code: "custom", path: ["affected_claim_ids"], message: "duplicate affected claim" });
 });
-var rawAdjudicationSchema = external_exports.object({
+var rawAdjudicationTransportSchema = external_exports.object({
   schema_version: external_exports.literal("1"),
   task_id: taskSlug3,
   phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
@@ -37188,7 +37188,8 @@ var rawAdjudicationSchema = external_exports.object({
   source_evidence_set_digest: digest4,
   rule_findings: external_exports.array(constitutionRuleFindingSchema),
   drift_findings: external_exports.array(driftFindingSchema)
-}).strict().superRefine((adjudication, context2) => {
+}).strict();
+var rawAdjudicationSchema = rawAdjudicationTransportSchema.superRefine((adjudication, context2) => {
   try {
     validateAdjudicationFindings(adjudication);
   } catch (error51) {
@@ -37207,6 +37208,14 @@ function validateAdjudicationFindings(parsed) {
   assertSortedUnique(parsed.rule_findings.map(ruleKey2), "rule_findings");
   assertSortedUnique(parsed.drift_findings.map((finding) => finding.upstream_digest), "drift_findings");
   if (parsed.drift_findings.length !== parsed.approved_upstream_digests.length || parsed.drift_findings.some((finding, index) => finding.upstream_digest !== parsed.approved_upstream_digests[index])) throw new TypeError("drift_findings must exactly cover approved_upstream_digests");
+}
+function canonicalizeAdjudicationFindings(parsed) {
+  return {
+    ...parsed,
+    approved_upstream_digests: [...parsed.approved_upstream_digests].sort(),
+    rule_findings: [...parsed.rule_findings].sort((left, right) => ruleKey2(left).localeCompare(ruleKey2(right))),
+    drift_findings: [...parsed.drift_findings].sort((left, right) => left.upstream_digest.localeCompare(right.upstream_digest))
+  };
 }
 function deriveAdjudicationSummaries(parsed) {
   const expectedConstitution = parsed.rule_findings.some((finding) => finding.compliance === "fail") ? "fail" : parsed.rule_findings.some((finding) => finding.compliance === "uncertain") ? "uncertain" : "pass";
@@ -37234,7 +37243,7 @@ var derivedAdjudicationSchema = rawAdjudicationSchema.safeExtend({
 });
 function parseAndDeriveAdjudication(value) {
   assertPlainJson(value, "adjudication");
-  const parsed = rawAdjudicationSchema.parse(value);
+  const parsed = canonicalizeAdjudicationFindings(rawAdjudicationTransportSchema.parse(value));
   validateAdjudicationFindings(parsed);
   return { ...parsed, ...deriveAdjudicationSummaries(parsed) };
 }
@@ -60915,7 +60924,8 @@ function buildAdjudicationEnvelope(value) {
     approved_upstreams: approvedUpstreams,
     source_evidence_set_digest: sourceEvidenceSetDigest,
     instructions: {
-      rule_coverage: "Return exactly one rule finding for every supplied rule, using its id as rule_id and version as rule_version.",
+      rule_coverage: "Return exactly one rule finding for every supplied rule, using its id as rule_id and version as rule_version. Do not omit, duplicate, or invent rules.",
+      drift_coverage: "Return exactly one drift finding for every supplied approved upstream, using its upstream_digest. Do not omit, duplicate, or invent upstreams. Use drift=aligned with an empty affected_claim_ids array when no approved claim is affected; otherwise name every affected claim using lowercase kebab-case IDs.",
       enforcement_context: "A rule's enforced_by labels name where that rule is mechanically enforced in the repository. They are context for your judgment, not evidence you are asked to verify or report on. Judge every rule the same way: from the artifact and the evidence supplied here.",
       uncertainty: "Report uncertain compliance only when the artifact itself leaves the question genuinely open. Absence of test results, command output, or repository access is expected here and is not by itself a reason to be uncertain."
     },
@@ -61340,6 +61350,16 @@ function dropCandidateIndex(context2) {
 }
 
 // src/review/counter-review.ts
+function adjudicationOutputIssueCode(error51) {
+  if (error51 instanceof SyntaxError) return "adjudication-json-invalid";
+  const issueMessages = error51 !== null && typeof error51 === "object" && "issues" in error51 && Array.isArray(error51.issues) ? error51.issues.flatMap((issue4) => issue4 !== null && typeof issue4 === "object" && "message" in issue4 && typeof issue4.message === "string" ? [issue4.message] : []) : [];
+  const message = [...issueMessages, error51 instanceof Error ? error51.message : ""].join(" | ");
+  if (/exactly cover approved_upstream_digests/u.test(message)) return "adjudication-upstream-coverage";
+  if (/must be sorted and unique/u.test(message)) return "adjudication-finding-duplicate";
+  if (/Unrecognized key/u.test(message)) return "adjudication-unexpected-fields";
+  if (/does not match observation capability/u.test(message)) return "adjudication-binding-mismatch";
+  return "adjudication-schema-invalid";
+}
 async function planCounterReviewCommit(inputs, current, call) {
   const constitutionEvidence = inputs.constitution_evidence;
   const revision = parseSafeInteger(current.value.revision + 1);
@@ -61502,7 +61522,7 @@ async function runCounterReview(dependencies, input) {
         error: error51 instanceof AdjudicationServiceError ? error51.project_error : createProjectError("MODEL_OUTPUT_INVALID", {
           adapter: constitutionRoute.adapter,
           attempt: 1,
-          issue_code: "adjudication-output-invalid"
+          issue_code: adjudicationOutputIssueCode(error51)
         })
       };
     }

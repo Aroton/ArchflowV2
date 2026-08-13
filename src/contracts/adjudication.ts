@@ -69,13 +69,15 @@ const driftFindingSchema = z.object({
   if (new Set(finding.affected_claim_ids).size !== finding.affected_claim_ids.length) context.addIssue({ code: "custom", path: ["affected_claim_ids"], message: "duplicate affected claim" });
 });
 
-export const rawAdjudicationSchema = z.object({
+const rawAdjudicationTransportSchema = z.object({
   schema_version: z.literal("1"), task_id: taskSlug,
   phase_instance: z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
   step: z.literal("adjudicate"), subject_digest: digest, input_fingerprint: digest,
   pinned_constitution_digest: digest, approved_upstream_digests: z.array(digest), source_evidence_set_digest: digest,
   rule_findings: z.array(constitutionRuleFindingSchema), drift_findings: z.array(driftFindingSchema),
-}).strict().superRefine((adjudication, context) => {
+}).strict();
+
+export const rawAdjudicationSchema = rawAdjudicationTransportSchema.superRefine((adjudication, context) => {
   try { validateAdjudicationFindings(adjudication); }
   catch (error) { context.addIssue({ code: "custom", message: error instanceof Error ? error.message : "invalid adjudication semantics" }); }
 });
@@ -93,6 +95,16 @@ function validateAdjudicationFindings(parsed: RawAdjudication): void {
   assertSortedUnique(parsed.rule_findings.map(ruleKey), "rule_findings");
   assertSortedUnique(parsed.drift_findings.map((finding) => finding.upstream_digest), "drift_findings");
   if (parsed.drift_findings.length !== parsed.approved_upstream_digests.length || parsed.drift_findings.some((finding, index) => finding.upstream_digest !== parsed.approved_upstream_digests[index])) throw new TypeError("drift_findings must exactly cover approved_upstream_digests");
+}
+
+/** Model output uses arrays for sets; canonical evidence owns their order. */
+function canonicalizeAdjudicationFindings(parsed: RawAdjudication): RawAdjudication {
+  return {
+    ...parsed,
+    approved_upstream_digests: [...parsed.approved_upstream_digests].sort(),
+    rule_findings: [...parsed.rule_findings].sort((left, right) => ruleKey(left).localeCompare(ruleKey(right))),
+    drift_findings: [...parsed.drift_findings].sort((left, right) => left.upstream_digest.localeCompare(right.upstream_digest)),
+  };
 }
 
 function deriveAdjudicationSummaries(parsed: RawAdjudication): Pick<DerivedAdjudication, "constitution" | "drift" | "matched_rule_versions" | "uncertain_rule_versions"> {
@@ -131,7 +143,7 @@ export const adjudicationDocumentDefs = {
 
 export function parseAndDeriveAdjudication(value: unknown): DerivedAdjudication {
   assertPlainJson(value, "adjudication");
-  const parsed = rawAdjudicationSchema.parse(value);
+  const parsed = canonicalizeAdjudicationFindings(rawAdjudicationTransportSchema.parse(value));
   validateAdjudicationFindings(parsed);
   return { ...parsed, ...deriveAdjudicationSummaries(parsed) };
 }

@@ -513,7 +513,8 @@ export function buildAdjudicationEnvelope(value: AdjudicationEnvelopeInput): Dis
     approved_upstreams: approvedUpstreams,
     source_evidence_set_digest: sourceEvidenceSetDigest,
     instructions: {
-      rule_coverage: "Return exactly one rule finding for every supplied rule, using its id as rule_id and version as rule_version.",
+      rule_coverage: "Return exactly one rule finding for every supplied rule, using its id as rule_id and version as rule_version. Do not omit, duplicate, or invent rules.",
+      drift_coverage: "Return exactly one drift finding for every supplied approved upstream, using its upstream_digest. Do not omit, duplicate, or invent upstreams. Use drift=aligned with an empty affected_claim_ids array when no approved claim is affected; otherwise name every affected claim using lowercase kebab-case IDs.",
       enforcement_context: "A rule's enforced_by labels name where that rule is mechanically enforced in the repository. They are context for your judgment, not evidence you are asked to verify or report on. Judge every rule the same way: from the artifact and the evidence supplied here.",
       uncertainty: "Report uncertain compliance only when the artifact itself leaves the question genuinely open. Absence of test results, command output, or repository access is expected here and is not by itself a reason to be uncertain.",
     },

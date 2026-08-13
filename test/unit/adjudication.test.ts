@@ -49,6 +49,30 @@ describe("adjudication semantics", () => {
     expect(() => parseAndDeriveAdjudication({ ...value, rule_findings: [...findings(value), ...findings(value)] })).toThrow(/sorted and unique/u);
   });
 
+  it("canonicalizes harmless model-authored set ordering", async () => {
+    const value = output(await valid());
+    const upstreamA = "a".repeat(64);
+    const upstreamB = "b".repeat(64);
+    const baseRule = structuredClone(findings(value)[0]!);
+    const baseDrift = structuredClone((value.drift_findings as Array<Record<string, unknown>>)[0]!);
+    const derived = parseAndDeriveAdjudication({
+      ...value,
+      approved_upstream_digests: [upstreamB, upstreamA],
+      rule_findings: [
+        { ...baseRule, rule_id: "zeta-rule", rule_version: 1 },
+        { ...baseRule, rule_id: "alpha-rule", rule_version: 2 },
+      ],
+      drift_findings: [
+        { ...baseDrift, upstream_digest: upstreamB },
+        { ...baseDrift, upstream_digest: upstreamA },
+      ],
+    });
+
+    expect(derived.approved_upstream_digests).toEqual([upstreamA, upstreamB]);
+    expect(derived.rule_findings.map((finding) => finding.rule_id)).toEqual(["alpha-rule", "zeta-rule"]);
+    expect(derived.drift_findings.map((finding) => finding.upstream_digest)).toEqual([upstreamA, upstreamB]);
+  });
+
   // A rule's enforced_by labels are reviewer context that never reaches a finding. Reinstating a
   // per-mechanism attestation is what once made such a rule permanently uncertain.
   it("refuses a per-mechanism attestation on a rule finding", async () => { const value = output(await valid()); const finding = { ...structuredClone(findings(value)[0]!), enforced_by: [{ mechanism: "path-contract", state: "unknown", details: "Not current." }] }; expect(() => parseAndDeriveAdjudication({ ...value, rule_findings: [finding] })).toThrow(); });

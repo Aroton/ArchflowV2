@@ -63,6 +63,23 @@ export type CounterReviewDispatchResult = Readonly<{
   extracted_output_bytes: Uint8Array;
 }>;
 
+/** Reduces parser detail to a stable, non-content-bearing diagnostic safe for project errors. */
+export function adjudicationOutputIssueCode(error: unknown): string {
+  if (error instanceof SyntaxError) return "adjudication-json-invalid";
+  const issueMessages = error !== null && typeof error === "object" && "issues" in error && Array.isArray(error.issues)
+    ? error.issues.flatMap((issue) =>
+      issue !== null && typeof issue === "object" && "message" in issue && typeof issue.message === "string"
+        ? [issue.message]
+        : [])
+    : [];
+  const message = [...issueMessages, error instanceof Error ? error.message : ""].join(" | ");
+  if (/exactly cover approved_upstream_digests/u.test(message)) return "adjudication-upstream-coverage";
+  if (/must be sorted and unique/u.test(message)) return "adjudication-finding-duplicate";
+  if (/Unrecognized key/u.test(message)) return "adjudication-unexpected-fields";
+  if (/does not match observation capability/u.test(message)) return "adjudication-binding-mismatch";
+  return "adjudication-schema-invalid";
+}
+
 export type RunCounterReviewDependencies = Readonly<{
   transaction: TransactionDependencies;
   dispatch: (
@@ -349,7 +366,7 @@ export async function runCounterReview(
           : createProjectError("MODEL_OUTPUT_INVALID", {
             adapter: constitutionRoute.adapter,
             attempt: 1,
-            issue_code: "adjudication-output-invalid",
+            issue_code: adjudicationOutputIssueCode(error),
           }),
       };
     }
