@@ -1,10 +1,15 @@
 import { parseCanonicalDocument } from "../../contracts/canonical.js";
 import type { InvocationContext } from "../../contracts/contexts.js";
 import { createProjectError, type ProjectResult } from "../../contracts/errors.js";
-import { parseGateDecisionRecord, parseGateRequest, type WaiverGateContext } from "../../contracts/durable-gate.js";
+import {
+  parseArchivedGateDecisionRecord,
+  parseArchivedGateRequest,
+  type ArchivedGateDecisionRecordV1,
+  type ArchivedGateRequestV1,
+  type WaiverGateContext,
+} from "../../contracts/durable-gate.js";
 import { validateDurableSemantics } from "../../contracts/durable.js";
 import type { CanonicalDocument } from "../../contracts/canonical.js";
-import type { GateDecisionRecordV1, GateRequestV1 } from "../../contracts/durable-gate.js";
 import type { WaiverOriginRef } from "../../contracts/gates.js";
 import { isDeepStrictEqual } from "node:util";
 import type { ParsedToolCall, ToolSuccess } from "../../contracts/mcp-tools.js";
@@ -18,8 +23,8 @@ const fail = <T>(error: ReturnType<typeof createProjectError>): ProjectResult<T>
   Object.freeze({ schema_version: "1", ok: false, error });
 
 export function authenticWaiverOriginArchive(
-  request: CanonicalDocument<GateRequestV1>,
-  decision: CanonicalDocument<GateDecisionRecordV1>,
+  request: CanonicalDocument<ArchivedGateRequestV1>,
+  decision: CanonicalDocument<ArchivedGateDecisionRecordV1>,
   origin: WaiverOriginRef,
 ): boolean {
   const payload = decision.value.outcome === "decided" ? decision.value.envelope.payload : undefined;
@@ -73,13 +78,13 @@ export async function handleWaiver(
         new Uint8Array(await handle.readFile().finally(() => handle.close())),
         "waiver origin gate request",
       );
-      originRequest = Object.freeze({ ...originRequest, value: parseGateRequest(originRequest.value) });
+      originRequest = Object.freeze({ ...originRequest, value: parseArchivedGateRequest(originRequest.value) });
       const decisionHandle = await openResolved(decisionTarget.value.absolute, 0);
       originDecision = parseCanonicalDocument(
         new Uint8Array(await decisionHandle.readFile().finally(() => decisionHandle.close())),
         "waiver origin gate decision",
       );
-      originDecision = Object.freeze({ ...originDecision, value: parseGateDecisionRecord(originDecision.value) });
+      originDecision = Object.freeze({ ...originDecision, value: parseArchivedGateDecisionRecord(originDecision.value) });
     } catch {
       return fail(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-request-invalid" }));
     }

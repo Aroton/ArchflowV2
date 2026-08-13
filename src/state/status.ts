@@ -6,7 +6,7 @@ import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
 import { parseConfigYaml } from "../contracts/config.js";
 import { parseActiveGate, parseGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
-import type { ProjectResult } from "../contracts/errors.js";
+import type { ProjectError, ProjectResult } from "../contracts/errors.js";
 import { computeGateContextDigest, verifyPinnedConfig } from "../contracts/fingerprints.js";
 import type { PathSafeId, Sha256Digest, TaskSlug } from "../contracts/evidence.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
@@ -102,6 +102,15 @@ type OpenGateStatus = Readonly<{
   presentation: HumanGatePresentation;
 }>;
 
+export type ApprovalIssue = Readonly<{
+  gate_id: PathSafeId;
+  gate_kind: TaskStateV1["approvals"][number]["gate_kind"];
+  error: ProjectError | Readonly<{
+    code: "APPROVAL_LOAD_EXCEPTION";
+    message: string;
+  }>;
+}>;
+
 /**
  * The reconciliation report status publishes: raw reconciliation truth minus any drift the
  * current fixed-point re-entry authorizes. `archflow-local reconcile` keeps reporting the
@@ -160,6 +169,8 @@ export type TaskStatusV1 = Readonly<{
     }>[];
   }>;
   open_gate?: OpenGateStatus;
+  /** Exact approval archive failures for diagnostics; intentionally omitted from brief status. */
+  approval_issues?: readonly ApprovalIssue[];
   reconciliation?: StatusReconciliation;
   evidence?: StatusEvidence;
   /**
@@ -371,6 +382,26 @@ async function currentApprovedUpstreams(
     digests.push(loaded.value.artifact_digest);
   }
   return Object.freeze(digests.sort());
+}
+
+export async function resolveStatusEvidenceAssessment(
+  loadApprovedUpstreams: () => Promise<readonly Sha256Digest[]>,
+  assess: (approvedUpstreamDigests: readonly Sha256Digest[]) => EvidenceAssessment,
+): Promise<Readonly<{
+  assessment?: EvidenceAssessment;
+  blocking_reason?: "approved-upstream-authority-unavailable" | "fixed-point-disagreement";
+}>> {
+  let approvedUpstreamDigests: readonly Sha256Digest[];
+  try {
+    approvedUpstreamDigests = await loadApprovedUpstreams();
+  } catch {
+    return Object.freeze({ blocking_reason: "approved-upstream-authority-unavailable" });
+  }
+  try {
+    return Object.freeze({ assessment: assess(approvedUpstreamDigests) });
+  } catch {
+    return Object.freeze({ blocking_reason: "fixed-point-disagreement" });
+  }
 }
 
 /**
@@ -634,8 +665,12 @@ export async function computeTaskStatus(
     }
   }
 
-  const authenticatedApprovals = [];
-  const approvalFacts = [];
+  const authenticatedApprovals: AuthenticatedGateApproval[] = [];
+  const approvalFacts: Array<Readonly<{
+    gate_kind: TaskStateV1["approvals"][number]["gate_kind"];
+    subject_digest: Sha256Digest;
+  }>> = [];
+  const approvalIssues: ApprovalIssue[] = [];
   for (const approval of state.approvals) {
     try {
       const loaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
@@ -643,10 +678,25 @@ export async function computeTaskStatus(
         authenticatedApprovals.push(loaded.value);
         approvalFacts.push(Object.freeze({ gate_kind: approval.gate_kind, subject_digest: approval.subject_digest }));
       } else {
-        blockers.push(`approval-${approval.gate_id}-unavailable`);
+        blockers.push("approval-authority-unavailable");
+        approvalIssues.push(Object.freeze({
+          gate_id: approval.gate_id,
+          gate_kind: approval.gate_kind,
+          error: loaded.error,
+        }));
       }
-    } catch {
-      blockers.push(`approval-${approval.gate_id}-unavailable`);
+    } catch (error) {
+      blockers.push("approval-authority-unavailable");
+      approvalIssues.push(Object.freeze({
+        gate_id: approval.gate_id,
+        gate_kind: approval.gate_kind,
+        error: Object.freeze({
+          code: "APPROVAL_LOAD_EXCEPTION" as const,
+          message: error instanceof Error && error.message !== ""
+            ? error.message.slice(0, 256)
+            : "Unexpected failure while loading approval authority.",
+        }),
+      }));
     }
   }
 
@@ -697,11 +747,9 @@ export async function computeTaskStatus(
       });
   let assessment: EvidenceAssessment | undefined;
   if (constitution !== undefined && subjectDigest !== undefined) {
-    try {
-      const approvedUpstreamDigests = await currentApprovedUpstreams(
-        dependencies, state, authenticatedApprovals,
-      );
-      assessment = assessCurrentEvidence(state, retained, {
+    const resolvedAssessment = await resolveStatusEvidenceAssessment(
+      () => currentApprovedUpstreams(dependencies, state, authenticatedApprovals),
+      (approvedUpstreamDigests) => assessCurrentEvidence(state, retained, {
         subject_digest: subjectDigest,
         input_fingerprint: state.input_fingerprint,
         constitution,
@@ -709,10 +757,10 @@ export async function computeTaskStatus(
         approved_upstream_digests: approvedUpstreamDigests,
         authenticated_gate_approvals: authenticatedApprovals,
         ...(parsedConfig?.max_attempts === undefined ? {} : { max_attempts: parsedConfig.max_attempts }),
-      });
-    } catch {
-      blockers.push("fixed-point-disagreement");
-    }
+      }),
+    );
+    assessment = resolvedAssessment.assessment;
+    if (resolvedAssessment.blocking_reason !== undefined) blockers.push(resolvedAssessment.blocking_reason);
   }
 
   let editorialRevision: TaskStatusV1["editorial_revision"];
@@ -928,6 +976,7 @@ export async function computeTaskStatus(
     ...(constitutionStatus === undefined ? {} : { constitution: constitutionStatus }),
     ...(state.open_gate === undefined ? {} : { open_gate_id: state.open_gate.gate_id }),
     ...(openGate === undefined ? {} : { open_gate: openGate }),
+    ...(approvalIssues.length === 0 ? {} : { approval_issues: Object.freeze(approvalIssues) }),
     ...(statusReconciliation === undefined ? {} : { reconciliation: statusReconciliation }),
     evidence,
     ...(editorialRevision === undefined ? {} : { editorial_revision: editorialRevision }),

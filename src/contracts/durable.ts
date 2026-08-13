@@ -11,7 +11,11 @@ import type { LegacyImportInitializationV1 } from "./durable-legacy-import.js";
 import type { IntentReceiptV1 } from "./durable-intent.js";
 import type { TaskStateV1 } from "./durable-state.js";
 import type { TaskInitializationV1 } from "./durable-task-initialization.js";
-import type { GateDecisionRecordV1, GateRequestV1, WaiverGateContext } from "./durable-gate.js";
+import type {
+  ArchivedGateDecisionRecordV1,
+  ArchivedGateRequestV1,
+  WaiverGateContext,
+} from "./durable-gate.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "./errors.js";
 import { validateGateDecision, type GateContext, type GateKind } from "./gates.js";
 import type { Sha256Digest } from "./evidence.js";
@@ -46,8 +50,8 @@ export type DurableSemanticSubject = {
   readonly state?: CanonicalDocument<TaskStateV1>;
   readonly artifact?: CanonicalDocument<DurableArtifact>;
   readonly result_manifest?: CanonicalDocument<ResultManifestV1>;
-  readonly gate_request?: CanonicalDocument<GateRequestV1>;
-  readonly gate_decision?: CanonicalDocument<GateDecisionRecordV1>;
+  readonly gate_request?: CanonicalDocument<ArchivedGateRequestV1>;
+  readonly gate_decision?: CanonicalDocument<ArchivedGateDecisionRecordV1>;
   readonly intent_relation?: DurableIntentRelation;
 };
 
@@ -342,8 +346,8 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
     resultManifestDocument === undefined
       ? undefined
       : materialize<ResultManifestV1>(resultManifestDocument, "durable result manifest document");
-  const gateRequestSlot = gateRequestDocument === undefined ? undefined : materialize<GateRequestV1>(gateRequestDocument, "durable gate request document");
-  const gateDecisionSlot = gateDecisionDocument === undefined ? undefined : materialize<GateDecisionRecordV1>(gateDecisionDocument, "durable gate decision document");
+  const gateRequestSlot = gateRequestDocument === undefined ? undefined : materialize<ArchivedGateRequestV1>(gateRequestDocument, "durable gate request document");
+  const gateDecisionSlot = gateDecisionDocument === undefined ? undefined : materialize<ArchivedGateDecisionRecordV1>(gateDecisionDocument, "durable gate decision document");
 
   let relation: { readonly mode: "prepared" | "committed"; readonly state: Materialized<TaskStateV1>; readonly receipt: Materialized<IntentReceiptV1> } | undefined;
   if (relationValue !== undefined) {

@@ -157,8 +157,27 @@ describe("durable gate decisions", () => {
     const loaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) throw new Error("approval authentication failed");
+
+    // A prior V1 writer included a strictly validated supplemental ledger in every immutable
+    // decision. Preserve those exact archive bytes and their digest rather than requiring state
+    // surgery after an ArchFlow upgrade.
+    const archivedDecisionPath = join(taskRoot, "authority", "decisions", lifecycleGate, "decision.json");
+    const archivedDecision = JSON.parse(readFileSync(archivedDecisionPath, "utf8")) as Record<string, unknown>;
+    const legacyDecision = canonicalDocument({ ...archivedDecision, supplemental: [] } as never);
+    writeFileSync(archivedDecisionPath, legacyDecision.bytes);
+    const legacyApproval = { ...approval, decision_digest: legacyDecision.digest };
+    writeFileSync(join(taskRoot, "state.json"), canonicalDocument({
+      ...resolvedState.document.value,
+      approvals: resolvedState.document.value.approvals.map((entry) =>
+        entry.gate_id === lifecycleGate ? legacyApproval : entry),
+    }).bytes);
+    const legacyLoaded = await loadAuthenticatedGateApproval(dependencies, authority, legacyApproval);
+    expect(legacyLoaded).toMatchObject({
+      ok: true,
+      value: { decision: { supplemental: [], outcome: "decided" } },
+    });
     expect(await loadAuthenticatedGateApproval(dependencies, authority, {
-      ...approval, decision_digest: D("0"),
+      ...legacyApproval, decision_digest: D("0"),
     })).toMatchObject({
       ok: false,
       error: { code: "STATE_INVALID" },

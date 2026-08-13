@@ -1,6 +1,11 @@
 import { isDeepStrictEqual } from "node:util";
 
-import { parseGateDecisionRecord, parseGateRequest, type GateDecisionRecordV1, type GateRequestV1 } from "../contracts/durable-gate.js";
+import {
+  parseArchivedGateDecisionRecord,
+  parseArchivedGateRequest,
+  type ArchivedGateDecisionRecordV1,
+  type ArchivedGateRequestV1,
+} from "../contracts/durable-gate.js";
 import type { ApprovalRef } from "../contracts/durable-state.js";
 import { validateDurableSemantics } from "../contracts/durable.js";
 import type { ProjectResult } from "../contracts/errors.js";
@@ -29,8 +34,8 @@ const authenticatedGateApprovalBrand: unique symbol = Symbol("AuthenticatedGateA
  */
 export type AuthenticatedGateApproval = Readonly<{
   approval: ApprovalRef;
-  request: GateRequestV1;
-  decision: Extract<GateDecisionRecordV1, { readonly outcome: "decided" }>;
+  request: ArchivedGateRequestV1;
+  decision: Extract<ArchivedGateDecisionRecordV1, { readonly outcome: "decided" }>;
 }> & { readonly [authenticatedGateApprovalBrand]: true };
 
 export function assertAuthenticatedGateApproval(
@@ -85,11 +90,11 @@ export async function loadAuthenticatedGateApproval(
   );
   if (!requestPath.ok) return requestPath;
   if (!decisionPath.ok) return decisionPath;
-  const request = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+  const request = await readCanonical(requestPath.value, "gate request", parseArchivedGateRequest);
   const decision = await readCanonical(
     decisionPath.value,
     "gate decision record",
-    parseGateDecisionRecord,
+    parseArchivedGateDecisionRecord,
   );
   if (request === "missing" || request === "invalid") {
     return issue("STATE_INVALID", current.value.value, "gate-approval-request-invalid");

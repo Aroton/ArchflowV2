@@ -22,6 +22,40 @@ import type { PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson } from "./plain-json.js";
 export type WaiverGateContext = { readonly origin: WaiverOriginRef; readonly rationale: string };
 
+/**
+ * Retired V1 fields remain readable because gate archives are immutable human authority. They
+ * are deliberately absent from the current writer types below: compatibility is a read concern,
+ * not permission for new calls to revive the former supplemental-review workflow.
+ */
+export type LegacyGateSupersessionRefV1 = {
+  readonly superseded_gate_id: PathSafeId;
+  readonly accepted_triage_digest: Sha256Digest;
+  readonly old_subject_digest: Sha256Digest;
+};
+export type LegacySupplementalGateRefV1 = {
+  readonly prior_gate_id: PathSafeId;
+  readonly task_id: TaskSlug;
+  readonly phase_instance: PhaseInstanceId;
+  readonly subject_digest: Sha256Digest;
+  readonly input_fingerprint: Sha256Digest;
+};
+export type LegacySupplementalReviewRefV1 = LegacySupplementalGateRefV1 & {
+  readonly evidence_slot: Readonly<{
+    readonly role: "gate-counter-review";
+    readonly evidence_digest: Sha256Digest;
+    readonly assurance: "server-attested" | "degraded";
+    readonly producer_family: "claude" | "codex";
+    readonly reviewer_family: "claude" | "codex";
+    readonly independence: "opposite-family";
+    readonly gate_id: PathSafeId;
+  }>;
+};
+export type LegacySupplementalLedgerEntryV1 =
+  | Readonly<{ readonly action: "decline"; readonly gate: LegacySupplementalGateRefV1; readonly reason: string }>
+  | Readonly<{ readonly action: "ingest"; readonly review: LegacySupplementalReviewRefV1; readonly reason: string }>
+  | Readonly<{ readonly action: "triage-no-change"; readonly review: LegacySupplementalReviewRefV1; readonly triage_digest: Sha256Digest; readonly reason: string }>;
+export type LegacySupplementalLedgerV1 = readonly LegacySupplementalLedgerEntryV1[];
+
 type GateRequestCommon = {
   readonly schema_version: "1";
   readonly gate_id: PathSafeId;
@@ -44,6 +78,10 @@ export type GateRequestV1 = {
   };
 }[GateKind];
 
+export type ArchivedGateRequestV1 = GateRequestV1 | (GateRequestV1 & {
+  readonly supersedes: LegacyGateSupersessionRefV1;
+});
+
 type GateDecisionRecordCommon = {
   readonly schema_version: "1";
   readonly gate_id: PathSafeId;
@@ -59,6 +97,16 @@ export type GateDecisionRecordV1 = GateDecisionRecordCommon & (
   | { readonly outcome: "waiver-decided"; readonly granted: boolean; readonly scope: WaiverScope; readonly origin: WaiverOriginRef; readonly notes: string; readonly human_provenance: HumanDecisionProvenance }
   | { readonly outcome: "cancelled"; readonly reason: string; readonly human_provenance: HumanDecisionProvenance }
 );
+
+type LegacyGateDecisionRecordCommonV1 = GateDecisionRecordCommon & {
+  readonly supplemental: LegacySupplementalLedgerV1;
+};
+export type ArchivedGateDecisionRecordV1 = GateDecisionRecordV1 | (LegacyGateDecisionRecordCommonV1 & (
+  | { readonly outcome: "decided"; readonly envelope: GateDecisionEnvelope }
+  | { readonly outcome: "waiver-decided"; readonly granted: boolean; readonly scope: WaiverScope; readonly origin: WaiverOriginRef; readonly notes: string; readonly human_provenance: HumanDecisionProvenance }
+  | { readonly outcome: "cancelled"; readonly reason: string; readonly human_provenance: HumanDecisionProvenance }
+  | { readonly outcome: "superseded"; readonly supersession: LegacyGateSupersessionRefV1 }
+));
 
 export type GateDecisionTemplateV1 = {
   readonly schema_version: "1";
@@ -87,6 +135,32 @@ const text = z.string().min(1).max(4096).regex(/\S/u);
 const rule = gateRuleVersionRefSchema;
 const scope = gateWaiverScopeSchema;
 const origin = z.object({ origin_gate_id: pathSafeId, origin_decision_digest: digest, origin_context_digest: digest, task_id: taskSlug, phase_instance: phase, subject_digest: digest, current_evidence_set_digest: digest, rule, scope }).strict();
+const legacySupersession = z.object({ superseded_gate_id: pathSafeId, accepted_triage_digest: digest, old_subject_digest: digest }).strict();
+const legacySupplementalGate = z.object({ prior_gate_id: pathSafeId, task_id: taskSlug, phase_instance: phase, subject_digest: digest, input_fingerprint: digest }).strict();
+const legacySupplementalSlot = z.object({
+  role: z.literal("gate-counter-review"), evidence_digest: digest,
+  assurance: z.enum(["server-attested", "degraded"]),
+  producer_family: z.enum(["claude", "codex"]), reviewer_family: z.enum(["claude", "codex"]),
+  independence: z.literal("opposite-family"), gate_id: pathSafeId,
+}).strict().superRefine((slot, context) => {
+  if (slot.producer_family === slot.reviewer_family) {
+    context.addIssue({ code: "custom", message: "gate counter-review must be opposite-family" });
+  }
+});
+const legacySupplementalReview = z.object({
+  prior_gate_id: pathSafeId, task_id: taskSlug, phase_instance: phase,
+  subject_digest: digest, input_fingerprint: digest, evidence_slot: legacySupplementalSlot,
+}).strict().superRefine((review, context) => {
+  if (review.evidence_slot.gate_id !== review.prior_gate_id) {
+    context.addIssue({ code: "custom", path: ["evidence_slot", "gate_id"], message: "gate-counter slot must bind prior_gate_id" });
+  }
+});
+const legacySupplementalReason = z.string().min(1).regex(/\S/u);
+const legacySupplemental = z.array(z.discriminatedUnion("action", [
+  z.object({ action: z.literal("decline"), gate: legacySupplementalGate, reason: legacySupplementalReason }).strict(),
+  z.object({ action: z.literal("ingest"), review: legacySupplementalReview, reason: legacySupplementalReason }).strict(),
+  z.object({ action: z.literal("triage-no-change"), review: legacySupplementalReview, triage_digest: digest, reason: legacySupplementalReason }).strict(),
+]));
 const base = { schema_version: z.literal("1"), gate_id: pathSafeId, task_id: taskSlug, phase_instance: phase, kind: z.enum(GATE_KINDS), subject_digest: digest, context_digest: digest } as const;
 
 const decisionRecordArms = {
@@ -100,6 +174,14 @@ export const gateDecisionRecordV1Schema = z.discriminatedUnion("outcome", [
   decisionRecordArms.waiverDecided,
   decisionRecordArms.cancelled,
 ]) as unknown as z.ZodType<GateDecisionRecordV1>;
+
+const legacyDecisionBase = { ...base, supplemental: legacySupplemental } as const;
+const legacyDecisionRecordV1Schema = z.discriminatedUnion("outcome", [
+  z.object({ ...legacyDecisionBase, outcome: z.literal("decided"), envelope: gateDecisionEnvelopeV1Schema }).strict(),
+  z.object({ ...legacyDecisionBase, outcome: z.literal("waiver-decided"), granted: z.boolean(), scope, origin, notes: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
+  z.object({ ...legacyDecisionBase, outcome: z.literal("cancelled"), reason: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
+  z.object({ ...legacyDecisionBase, outcome: z.literal("superseded"), supersession: legacySupersession }).strict(),
+]);
 
 /**
  * The per-kind decision vocabularies pinned as `const` arrays by `gate-request.schema.json`; order
@@ -177,6 +259,7 @@ const armUnion = (arms: Record<string, z.ZodType>) =>
 const gateRequestArms = gateArms({});
 
 export const gateRequestV1Schema = armUnion(gateRequestArms) as unknown as z.ZodType<GateRequestV1>;
+const legacyGateRequestV1Schema = armUnion(gateArms({ supersedes: legacySupersession }));
 
 const PAYLOAD_REQUIRED_FIELDS = ["payload", "human_provenance"] as const;
 const WAIVER_REQUIRED_FIELDS = ["granted", "scope", "origin", "notes", "human_provenance"] as const;
@@ -266,6 +349,20 @@ export function parseGateRequest(value: unknown): GateRequestV1 {
 export function parseGateDecisionRecord(value: unknown): GateDecisionRecordV1 {
   assertPlainJson(value, "gate decision record");
   return gateDecisionRecordV1Schema.parse(value);
+}
+
+/** Strictly reads either current V1 bytes or the retired, still-authoritative V1 archive shape. */
+export function parseArchivedGateRequest(value: unknown): ArchivedGateRequestV1 {
+  assertPlainJson(value, "archived gate request");
+  const current = gateRequestV1Schema.safeParse(value);
+  return (current.success ? current.data : legacyGateRequestV1Schema.parse(value)) as ArchivedGateRequestV1;
+}
+
+/** Strictly reads retired supplemental ledgers without filtering or changing their digest. */
+export function parseArchivedGateDecisionRecord(value: unknown): ArchivedGateDecisionRecordV1 {
+  assertPlainJson(value, "archived gate decision record");
+  const current = gateDecisionRecordV1Schema.safeParse(value);
+  return (current.success ? current.data : legacyDecisionRecordV1Schema.parse(value)) as ArchivedGateDecisionRecordV1;
 }
 
 export function parseActiveGate(value: unknown): ActiveGateV1 {

@@ -3617,7 +3617,7 @@
       ]
     },
     "src/contracts/durable-gate.ts": {
-      "bytes": 13875,
+      "bytes": 19903,
       "format": "esm",
       "imports": [
         {
@@ -3970,7 +3970,7 @@
       ]
     },
     "src/contracts/durable.ts": {
-      "bytes": 44783,
+      "bytes": 44838,
       "format": "esm",
       "imports": [
         {
@@ -5983,7 +5983,7 @@
       ]
     },
     "src/mcp/handlers/waiver.ts": {
-      "bytes": 7050,
+      "bytes": 7080,
       "format": "esm",
       "imports": [
         {
@@ -6979,7 +6979,7 @@
       ]
     },
     "src/state/gate-approvals.ts": {
-      "bytes": 5360,
+      "bytes": 5433,
       "format": "esm",
       "imports": [
         {
@@ -7178,7 +7178,7 @@
       ]
     },
     "src/state/gates.ts": {
-      "bytes": 57653,
+      "bytes": 57732,
       "format": "esm",
       "imports": [
         {
@@ -8117,7 +8117,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 47278,
+      "bytes": 49397,
       "format": "esm",
       "imports": [
         {
@@ -8420,7 +8420,7 @@
       ]
     },
     "src/state/workspace-cleanup.ts": {
-      "bytes": 17977,
+      "bytes": 18480,
       "format": "esm",
       "imports": [
         {
@@ -8440,8 +8440,18 @@
         },
         {
           "kind": "import-statement",
+          "original": "../contracts/durable.js",
+          "path": "src/contracts/durable.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "../contracts/durable-intent.js",
           "path": "src/contracts/durable-intent.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/durable-result-manifest.js",
+          "path": "src/contracts/durable-result-manifest.ts"
         },
         {
           "kind": "import-statement",
@@ -8468,7 +8478,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1583655,
+      "bytes": 1588591,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -9416,7 +9426,7 @@
           "bytesInOutput": 1203
         },
         "src/contracts/durable-gate.ts": {
-          "bytesInOutput": 8416
+          "bytesInOutput": 11979
         },
         "src/contracts/durable-implementation-output.ts": {
           "bytesInOutput": 2484
@@ -9599,7 +9609,7 @@
           "bytesInOutput": 2794
         },
         "src/state/gate-approvals.ts": {
-          "bytesInOutput": 3492
+          "bytesInOutput": 3508
         },
         "src/state/gate-core.ts": {
           "bytesInOutput": 6681
@@ -9659,18 +9669,18 @@
           "bytesInOutput": 1353
         },
         "src/state/status.ts": {
-          "bytesInOutput": 29514
+          "bytesInOutput": 30728
         },
         "src/state/transitions.ts": {
           "bytesInOutput": 982
         },
         "src/state/workspace-cleanup.ts": {
-          "bytesInOutput": 15305
+          "bytesInOutput": 15448
         }
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2440719,
+      "bytes": 2444489,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -10619,7 +10629,7 @@
           "bytesInOutput": 1066
         },
         "src/contracts/durable-gate.ts": {
-          "bytesInOutput": 8449
+          "bytesInOutput": 12028
         },
         "src/contracts/durable-implementation-output.ts": {
           "bytesInOutput": 2335
@@ -10817,7 +10827,7 @@
           "bytesInOutput": 11191
         },
         "src/mcp/handlers/waiver.ts": {
-          "bytesInOutput": 5611
+          "bytesInOutput": 5627
         },
         "src/mcp/process-runner.ts": {
           "bytesInOutput": 3941
@@ -10889,7 +10899,7 @@
           "bytesInOutput": 2794
         },
         "src/state/gate-approvals.ts": {
-          "bytesInOutput": 3484
+          "bytesInOutput": 3500
         },
         "src/state/gate-core.ts": {
           "bytesInOutput": 7666
@@ -10901,7 +10911,7 @@
           "bytesInOutput": 1655
         },
         "src/state/gates.ts": {
-          "bytesInOutput": 49816
+          "bytesInOutput": 49832
         },
         "src/state/implementation-manifest.ts": {
           "bytesInOutput": 16846
@@ -10949,7 +10959,7 @@
           "bytesInOutput": 14032
         },
         "src/state/workspace-cleanup.ts": {
-          "bytesInOutput": 13458
+          "bytesInOutput": 13601
         }
       }
     }

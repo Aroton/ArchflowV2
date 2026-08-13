@@ -3,6 +3,8 @@ import { isDeepStrictEqual } from "node:util";
 import { canonicalDocument, canonicalJsonDigest, type CanonicalDocument } from "../contracts/canonical.js";
 import {
   parseActiveGate,
+  parseArchivedGateDecisionRecord,
+  parseArchivedGateRequest,
   parseGateDecisionRecord,
   parseGateRequest,
   type GateDecisionRecordV1,
@@ -106,8 +108,8 @@ async function authenticateWaiverOrigin(
   const decisionPath = await resolvePath(dependencies, authority, gateDecisionClaim(context.origin.origin_gate_id), "authority-decision");
   if (!requestPath.ok) return requestPath;
   if (!decisionPath.ok) return decisionPath;
-  const request = await readCanonical(requestPath.value, "waiver origin request", parseGateRequest);
-  const decision = await readCanonical(decisionPath.value, "waiver origin decision", parseGateDecisionRecord);
+  const request = await readCanonical(requestPath.value, "waiver origin request", parseArchivedGateRequest);
+  const decision = await readCanonical(decisionPath.value, "waiver origin decision", parseArchivedGateDecisionRecord);
   if (request === "missing" || request === "invalid" || decision === "missing" || decision === "invalid") return issue("CONTRACT_INVALID", undefined, "waiver-origin-archive-invalid");
   if (!validateDurableSemantics({ gate_request: request, gate_decision: decision }).ok || decision.digest !== context.origin.origin_decision_digest || decision.value.outcome !== "decided" || decision.value.envelope.payload.decision !== "waiver-requested") return issue("CONTRACT_INVALID", undefined, "waiver-origin-decision-invalid");
   const payload = decision.value.envelope.payload as Extract<typeof decision.value.envelope.payload, { decision: "waiver-requested" }>;

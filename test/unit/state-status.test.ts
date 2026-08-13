@@ -8,11 +8,16 @@ import { afterEach, describe, expect, it } from "vitest";
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
 import { parseActiveGate, parseGateRequest } from "../../src/contracts/durable-gate.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
-import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parsePathSafeId, parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
 import { resolvePinnedConstitution } from "../../src/state/constitution.js";
 import { createProductionServices } from "../../src/state/production.js";
-import { buildCommitAuthorizationInput, computeTaskStatus, partitionExpectedReentryEdits } from "../../src/state/status.js";
+import {
+  buildCommitAuthorizationInput,
+  computeTaskStatus,
+  partitionExpectedReentryEdits,
+  resolveStatusEvidenceAssessment,
+} from "../../src/state/status.js";
 import type { ReconciliationFinding } from "../../src/state/reconciliation.js";
 import type { CurrentProduceSubject } from "../../src/state/produce-subject.js";
 
@@ -89,6 +94,20 @@ describe("partitionExpectedReentryEdits", () => {
 });
 
 describe("computeTaskStatus", () => {
+  it("distinguishes unavailable upstream approval authority from fixed-point disagreement", async () => {
+    const upstreamFailure = await resolveStatusEvidenceAssessment(
+      async () => { throw new TypeError("upstream approval is unavailable"); },
+      () => { throw new Error("must not assess without upstream authority"); },
+    );
+    expect(upstreamFailure).toEqual({ blocking_reason: "approved-upstream-authority-unavailable" });
+
+    const fixedPointFailure = await resolveStatusEvidenceAssessment(
+      async () => [D("a")],
+      () => { throw new TypeError("evidence bindings disagree"); },
+    );
+    expect(fixedPointFailure).toEqual({ blocking_reason: "fixed-point-disagreement" });
+  });
+
   it("materializes sorted retained commit-authorization resume facts without a rubric digest", () => {
     const evidence = {
       set_digest: D("8"),
@@ -184,6 +203,39 @@ describe("computeTaskStatus", () => {
       value: { workspace: { cleanup_pending: true, removed_files: 0, removed_bytes: 0 } },
     });
     if (status.ok) expect(status.value.blocking_reasons).not.toContain("workspace.cleanup_pending");
+  });
+
+  it("reports exact approval load errors in full status with an aggregate blocker", async () => {
+    const h = await harness();
+    const gateId = parsePathSafeId("missing-approval-archive");
+    writeFileSync(h.services.authority.state.absolute, canonicalDocument(h.state({
+      approvals: [{
+        gate_id: gateId,
+        gate_kind: "artifact-approval",
+        subject_digest: D("6"),
+        decision_digest: D("7"),
+        resolved_at_revision: parseSafeInteger(3),
+      }],
+    })).bytes);
+
+    const status = await computeTaskStatus(h.services.dependencies, h.services.authority);
+    expect(status).toMatchObject({
+      ok: true,
+      value: {
+        blocking_reasons: expect.arrayContaining(["approval-authority-unavailable"]),
+        approval_issues: [{
+          gate_id: gateId,
+          gate_kind: "artifact-approval",
+          error: {
+            code: "STATE_INVALID",
+            diagnostic: { parameters: { issue_code: "gate-approval-request-invalid" } },
+            next_action: "repair-state",
+          },
+        }],
+      },
+    });
+    if (!status.ok) return;
+    expect(status.value.blocking_reasons).not.toContain(`approval-${gateId}-unavailable`);
   });
 
   it("degrades config and missing gate archive disagreements without throwing", async () => {

@@ -58706,17 +58706,24 @@ async function decisionProtectedAuthorityResults(authority) {
   }
   if (decisionDigests.has("*") || files.some((file2) => file2.symlink)) return /* @__PURE__ */ new Set(["*"]);
   const protectedResults = /* @__PURE__ */ new Set();
-  const pattern = /\b[0-9a-f]{64}\b/gu;
   for (const file2 of files) {
     const digest10 = /^([0-9a-f]{64})\.json$/u.exec(file2.relative)?.[1];
     if (digest10 === void 0) continue;
-    const text4 = await readFile5(file2.absolute, "utf8").catch(() => void 0);
-    if (text4 === void 0) {
-      protectedResults.add(digest10);
-      continue;
-    }
-    const manifestDigests = /* @__PURE__ */ new Set([digest10, ...[...text4.matchAll(pattern)].map((match) => match[0])]);
-    if ([...manifestDigests].some((candidate) => decisionDigests.has(candidate))) {
+    try {
+      const document2 = parseCanonicalDocument(
+        await readFile5(file2.absolute),
+        "result manifest"
+      );
+      const manifest = parseResultManifest(document2.value);
+      const semantics = validateDurableSemantics({ result_manifest: document2 });
+      if (document2.digest !== digest10 || !semantics.ok) {
+        protectedResults.add(digest10);
+        continue;
+      }
+      if (decisionDigests.has(digest10) || decisionDigests.has(manifest.artifact_digest)) {
+        protectedResults.add(digest10);
+      }
+    } catch {
       protectedResults.add(digest10);
     }
   }
@@ -59791,6 +59798,39 @@ var text3 = external_exports.string().min(1).max(4096).regex(/\S/u);
 var rule3 = gateRuleVersionRefSchema;
 var scope2 = gateWaiverScopeSchema;
 var origin = external_exports.object({ origin_gate_id: pathSafeId2, origin_decision_digest: digest9, origin_context_digest: digest9, task_id: taskSlug4, phase_instance: phase2, subject_digest: digest9, current_evidence_set_digest: digest9, rule: rule3, scope: scope2 }).strict();
+var legacySupersession = external_exports.object({ superseded_gate_id: pathSafeId2, accepted_triage_digest: digest9, old_subject_digest: digest9 }).strict();
+var legacySupplementalGate = external_exports.object({ prior_gate_id: pathSafeId2, task_id: taskSlug4, phase_instance: phase2, subject_digest: digest9, input_fingerprint: digest9 }).strict();
+var legacySupplementalSlot = external_exports.object({
+  role: external_exports.literal("gate-counter-review"),
+  evidence_digest: digest9,
+  assurance: external_exports.enum(["server-attested", "degraded"]),
+  producer_family: external_exports.enum(["claude", "codex"]),
+  reviewer_family: external_exports.enum(["claude", "codex"]),
+  independence: external_exports.literal("opposite-family"),
+  gate_id: pathSafeId2
+}).strict().superRefine((slot, context2) => {
+  if (slot.producer_family === slot.reviewer_family) {
+    context2.addIssue({ code: "custom", message: "gate counter-review must be opposite-family" });
+  }
+});
+var legacySupplementalReview = external_exports.object({
+  prior_gate_id: pathSafeId2,
+  task_id: taskSlug4,
+  phase_instance: phase2,
+  subject_digest: digest9,
+  input_fingerprint: digest9,
+  evidence_slot: legacySupplementalSlot
+}).strict().superRefine((review, context2) => {
+  if (review.evidence_slot.gate_id !== review.prior_gate_id) {
+    context2.addIssue({ code: "custom", path: ["evidence_slot", "gate_id"], message: "gate-counter slot must bind prior_gate_id" });
+  }
+});
+var legacySupplementalReason = external_exports.string().min(1).regex(/\S/u);
+var legacySupplemental = external_exports.array(external_exports.discriminatedUnion("action", [
+  external_exports.object({ action: external_exports.literal("decline"), gate: legacySupplementalGate, reason: legacySupplementalReason }).strict(),
+  external_exports.object({ action: external_exports.literal("ingest"), review: legacySupplementalReview, reason: legacySupplementalReason }).strict(),
+  external_exports.object({ action: external_exports.literal("triage-no-change"), review: legacySupplementalReview, triage_digest: digest9, reason: legacySupplementalReason }).strict()
+]));
 var base = { schema_version: external_exports.literal("1"), gate_id: pathSafeId2, task_id: taskSlug4, phase_instance: phase2, kind: external_exports.enum(GATE_KINDS), subject_digest: digest9, context_digest: digest9 };
 var decisionRecordArms = {
   decided: external_exports.object({ ...base, outcome: external_exports.literal("decided"), envelope: gateDecisionEnvelopeV1Schema }).strict(),
@@ -59801,6 +59841,13 @@ var gateDecisionRecordV1Schema = external_exports.discriminatedUnion("outcome", 
   decisionRecordArms.decided,
   decisionRecordArms.waiverDecided,
   decisionRecordArms.cancelled
+]);
+var legacyDecisionBase = { ...base, supplemental: legacySupplemental };
+var legacyDecisionRecordV1Schema = external_exports.discriminatedUnion("outcome", [
+  external_exports.object({ ...legacyDecisionBase, outcome: external_exports.literal("decided"), envelope: gateDecisionEnvelopeV1Schema }).strict(),
+  external_exports.object({ ...legacyDecisionBase, outcome: external_exports.literal("waiver-decided"), granted: external_exports.boolean(), scope: scope2, origin, notes: text3, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
+  external_exports.object({ ...legacyDecisionBase, outcome: external_exports.literal("cancelled"), reason: text3, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
+  external_exports.object({ ...legacyDecisionBase, outcome: external_exports.literal("superseded"), supersession: legacySupersession }).strict()
 ]);
 var GATE_REQUEST_DECISIONS = {
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
@@ -59847,6 +59894,7 @@ var gateArms = (extra) => ({
 var armUnion = (arms) => external_exports.union(Object.values(arms));
 var gateRequestArms = gateArms({});
 var gateRequestV1Schema = armUnion(gateRequestArms);
+var legacyGateRequestV1Schema = armUnion(gateArms({ supersedes: legacySupersession }));
 var PAYLOAD_REQUIRED_FIELDS = ["payload", "human_provenance"];
 var WAIVER_REQUIRED_FIELDS = ["granted", "scope", "origin", "notes", "human_provenance"];
 var CANCELLATION_FIELDS = ["cancelled", "reason", "human_provenance"];
@@ -59916,6 +59964,16 @@ function parseGateRequest(value) {
 function parseGateDecisionRecord(value) {
   assertPlainJson(value, "gate decision record");
   return gateDecisionRecordV1Schema.parse(value);
+}
+function parseArchivedGateRequest(value) {
+  assertPlainJson(value, "archived gate request");
+  const current = gateRequestV1Schema.safeParse(value);
+  return current.success ? current.data : legacyGateRequestV1Schema.parse(value);
+}
+function parseArchivedGateDecisionRecord(value) {
+  assertPlainJson(value, "archived gate decision record");
+  const current = gateDecisionRecordV1Schema.safeParse(value);
+  return current.success ? current.data : legacyDecisionRecordV1Schema.parse(value);
 }
 function parseActiveGate(value) {
   assertPlainJson(value, "active gate");
@@ -60094,11 +60152,11 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
   );
   if (!requestPath.ok) return requestPath;
   if (!decisionPath.ok) return decisionPath;
-  const request = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+  const request = await readCanonical(requestPath.value, "gate request", parseArchivedGateRequest);
   const decision2 = await readCanonical(
     decisionPath.value,
     "gate decision record",
-    parseGateDecisionRecord
+    parseArchivedGateDecisionRecord
   );
   if (request === "missing" || request === "invalid") {
     return issue3("STATE_INVALID", current.value.value, "gate-approval-request-invalid");
@@ -61523,8 +61581,8 @@ async function authenticateWaiverOrigin(dependencies, authority, context2) {
   const decisionPath = await resolvePath7(dependencies, authority, gateDecisionClaim(context2.origin.origin_gate_id), "authority-decision");
   if (!requestPath.ok) return requestPath;
   if (!decisionPath.ok) return decisionPath;
-  const request = await readCanonical(requestPath.value, "waiver origin request", parseGateRequest);
-  const decision2 = await readCanonical(decisionPath.value, "waiver origin decision", parseGateDecisionRecord);
+  const request = await readCanonical(requestPath.value, "waiver origin request", parseArchivedGateRequest);
+  const decision2 = await readCanonical(decisionPath.value, "waiver origin decision", parseArchivedGateDecisionRecord);
   if (request === "missing" || request === "invalid" || decision2 === "missing" || decision2 === "invalid") return issue3("CONTRACT_INVALID", void 0, "waiver-origin-archive-invalid");
   if (!validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok || decision2.digest !== context2.origin.origin_decision_digest || decision2.value.outcome !== "decided" || decision2.value.envelope.payload.decision !== "waiver-requested") return issue3("CONTRACT_INVALID", void 0, "waiver-origin-decision-invalid");
   const payload = decision2.value.envelope.payload;
@@ -63588,13 +63646,13 @@ async function handleWaiver(call, context2) {
         new Uint8Array(await handle.readFile().finally(() => handle.close())),
         "waiver origin gate request"
       );
-      originRequest = Object.freeze({ ...originRequest, value: parseGateRequest(originRequest.value) });
+      originRequest = Object.freeze({ ...originRequest, value: parseArchivedGateRequest(originRequest.value) });
       const decisionHandle = await openResolved(decisionTarget.value.absolute, 0);
       originDecision = parseCanonicalDocument(
         new Uint8Array(await decisionHandle.readFile().finally(() => decisionHandle.close())),
         "waiver origin gate decision"
       );
-      originDecision = Object.freeze({ ...originDecision, value: parseGateDecisionRecord(originDecision.value) });
+      originDecision = Object.freeze({ ...originDecision, value: parseArchivedGateDecisionRecord(originDecision.value) });
     } catch {
       return fail25(createProjectError("CONTRACT_INVALID", { issue_code: "waiver-origin-request-invalid" }));
     }

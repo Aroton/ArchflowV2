@@ -23681,6 +23681,39 @@ var text = external_exports.string().min(1).max(4096).regex(/\S/u);
 var rule2 = gateRuleVersionRefSchema;
 var scope = gateWaiverScopeSchema;
 var origin = external_exports.object({ origin_gate_id: pathSafeId, origin_decision_digest: digest4, origin_context_digest: digest4, task_id: taskSlug3, phase_instance: phase, subject_digest: digest4, current_evidence_set_digest: digest4, rule: rule2, scope }).strict();
+var legacySupersession = external_exports.object({ superseded_gate_id: pathSafeId, accepted_triage_digest: digest4, old_subject_digest: digest4 }).strict();
+var legacySupplementalGate = external_exports.object({ prior_gate_id: pathSafeId, task_id: taskSlug3, phase_instance: phase, subject_digest: digest4, input_fingerprint: digest4 }).strict();
+var legacySupplementalSlot = external_exports.object({
+  role: external_exports.literal("gate-counter-review"),
+  evidence_digest: digest4,
+  assurance: external_exports.enum(["server-attested", "degraded"]),
+  producer_family: external_exports.enum(["claude", "codex"]),
+  reviewer_family: external_exports.enum(["claude", "codex"]),
+  independence: external_exports.literal("opposite-family"),
+  gate_id: pathSafeId
+}).strict().superRefine((slot, context2) => {
+  if (slot.producer_family === slot.reviewer_family) {
+    context2.addIssue({ code: "custom", message: "gate counter-review must be opposite-family" });
+  }
+});
+var legacySupplementalReview = external_exports.object({
+  prior_gate_id: pathSafeId,
+  task_id: taskSlug3,
+  phase_instance: phase,
+  subject_digest: digest4,
+  input_fingerprint: digest4,
+  evidence_slot: legacySupplementalSlot
+}).strict().superRefine((review, context2) => {
+  if (review.evidence_slot.gate_id !== review.prior_gate_id) {
+    context2.addIssue({ code: "custom", path: ["evidence_slot", "gate_id"], message: "gate-counter slot must bind prior_gate_id" });
+  }
+});
+var legacySupplementalReason = external_exports.string().min(1).regex(/\S/u);
+var legacySupplemental = external_exports.array(external_exports.discriminatedUnion("action", [
+  external_exports.object({ action: external_exports.literal("decline"), gate: legacySupplementalGate, reason: legacySupplementalReason }).strict(),
+  external_exports.object({ action: external_exports.literal("ingest"), review: legacySupplementalReview, reason: legacySupplementalReason }).strict(),
+  external_exports.object({ action: external_exports.literal("triage-no-change"), review: legacySupplementalReview, triage_digest: digest4, reason: legacySupplementalReason }).strict()
+]));
 var base = { schema_version: external_exports.literal("1"), gate_id: pathSafeId, task_id: taskSlug3, phase_instance: phase, kind: external_exports.enum(GATE_KINDS), subject_digest: digest4, context_digest: digest4 };
 var decisionRecordArms = {
   decided: external_exports.object({ ...base, outcome: external_exports.literal("decided"), envelope: gateDecisionEnvelopeV1Schema }).strict(),
@@ -23691,6 +23724,13 @@ var gateDecisionRecordV1Schema = external_exports.discriminatedUnion("outcome", 
   decisionRecordArms.decided,
   decisionRecordArms.waiverDecided,
   decisionRecordArms.cancelled
+]);
+var legacyDecisionBase = { ...base, supplemental: legacySupplemental };
+var legacyDecisionRecordV1Schema = external_exports.discriminatedUnion("outcome", [
+  external_exports.object({ ...legacyDecisionBase, outcome: external_exports.literal("decided"), envelope: gateDecisionEnvelopeV1Schema }).strict(),
+  external_exports.object({ ...legacyDecisionBase, outcome: external_exports.literal("waiver-decided"), granted: external_exports.boolean(), scope, origin, notes: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
+  external_exports.object({ ...legacyDecisionBase, outcome: external_exports.literal("cancelled"), reason: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
+  external_exports.object({ ...legacyDecisionBase, outcome: external_exports.literal("superseded"), supersession: legacySupersession }).strict()
 ]);
 var GATE_REQUEST_DECISIONS = {
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
@@ -23737,6 +23777,7 @@ var gateArms = (extra) => ({
 var armUnion = (arms) => external_exports.union(Object.values(arms));
 var gateRequestArms = gateArms({});
 var gateRequestV1Schema = armUnion(gateRequestArms);
+var legacyGateRequestV1Schema = armUnion(gateArms({ supersedes: legacySupersession }));
 var PAYLOAD_REQUIRED_FIELDS = ["payload", "human_provenance"];
 var WAIVER_REQUIRED_FIELDS = ["granted", "scope", "origin", "notes", "human_provenance"];
 var CANCELLATION_FIELDS = ["cancelled", "reason", "human_provenance"];
@@ -23806,6 +23847,16 @@ function parseGateRequest(value) {
 function parseGateDecisionRecord(value) {
   assertPlainJson(value, "gate decision record");
   return gateDecisionRecordV1Schema.parse(value);
+}
+function parseArchivedGateRequest(value) {
+  assertPlainJson(value, "archived gate request");
+  const current = gateRequestV1Schema.safeParse(value);
+  return current.success ? current.data : legacyGateRequestV1Schema.parse(value);
+}
+function parseArchivedGateDecisionRecord(value) {
+  assertPlainJson(value, "archived gate decision record");
+  const current = gateDecisionRecordV1Schema.safeParse(value);
+  return current.success ? current.data : legacyDecisionRecordV1Schema.parse(value);
 }
 function parseActiveGate(value) {
   assertPlainJson(value, "active gate");
@@ -32678,11 +32729,11 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
   );
   if (!requestPath.ok) return requestPath;
   if (!decisionPath.ok) return decisionPath;
-  const request2 = await readCanonical(requestPath.value, "gate request", parseGateRequest);
+  const request2 = await readCanonical(requestPath.value, "gate request", parseArchivedGateRequest);
   const decision3 = await readCanonical(
     decisionPath.value,
     "gate decision record",
-    parseGateDecisionRecord
+    parseArchivedGateDecisionRecord
   );
   if (request2 === "missing" || request2 === "invalid") {
     return issue2("STATE_INVALID", current.value.value, "gate-approval-request-invalid");
@@ -32848,17 +32899,24 @@ async function decisionProtectedAuthorityResults(authority) {
   }
   if (decisionDigests.has("*") || files.some((file2) => file2.symlink)) return /* @__PURE__ */ new Set(["*"]);
   const protectedResults = /* @__PURE__ */ new Set();
-  const pattern = /\b[0-9a-f]{64}\b/gu;
   for (const file2 of files) {
     const digest10 = /^([0-9a-f]{64})\.json$/u.exec(file2.relative)?.[1];
     if (digest10 === void 0) continue;
-    const text3 = await readFile2(file2.absolute, "utf8").catch(() => void 0);
-    if (text3 === void 0) {
-      protectedResults.add(digest10);
-      continue;
-    }
-    const manifestDigests = /* @__PURE__ */ new Set([digest10, ...[...text3.matchAll(pattern)].map((match) => match[0])]);
-    if ([...manifestDigests].some((candidate) => decisionDigests.has(candidate))) {
+    try {
+      const document2 = parseCanonicalDocument(
+        await readFile2(file2.absolute),
+        "result manifest"
+      );
+      const manifest = parseResultManifest(document2.value);
+      const semantics = validateDurableSemantics({ result_manifest: document2 });
+      if (document2.digest !== digest10 || !semantics.ok) {
+        protectedResults.add(digest10);
+        continue;
+      }
+      if (decisionDigests.has(digest10) || decisionDigests.has(manifest.artifact_digest)) {
+        protectedResults.add(digest10);
+      }
+    } catch {
       protectedResults.add(digest10);
     }
   }
@@ -35995,6 +36053,19 @@ async function currentApprovedUpstreams(dependencies, state, authenticated) {
   }
   return Object.freeze(digests.sort());
 }
+async function resolveStatusEvidenceAssessment(loadApprovedUpstreams, assess) {
+  let approvedUpstreamDigests;
+  try {
+    approvedUpstreamDigests = await loadApprovedUpstreams();
+  } catch {
+    return Object.freeze({ blocking_reason: "approved-upstream-authority-unavailable" });
+  }
+  try {
+    return Object.freeze({ assessment: assess(approvedUpstreamDigests) });
+  } catch {
+    return Object.freeze({ blocking_reason: "fixed-point-disagreement" });
+  }
+}
 function pendingAdjudicationGates(state, constitution, retained, authenticated) {
   const source = retained.get("adjudicate")?.manifest.source_artifact;
   if (source?.artifact_kind !== "adjudication-evidence") return [];
@@ -36195,6 +36266,7 @@ async function computeTaskStatus(dependencies, authority) {
   }
   const authenticatedApprovals = [];
   const approvalFacts = [];
+  const approvalIssues = [];
   for (const approval of state.approvals) {
     try {
       const loaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
@@ -36202,10 +36274,23 @@ async function computeTaskStatus(dependencies, authority) {
         authenticatedApprovals.push(loaded.value);
         approvalFacts.push(Object.freeze({ gate_kind: approval.gate_kind, subject_digest: approval.subject_digest }));
       } else {
-        blockers.push(`approval-${approval.gate_id}-unavailable`);
+        blockers.push("approval-authority-unavailable");
+        approvalIssues.push(Object.freeze({
+          gate_id: approval.gate_id,
+          gate_kind: approval.gate_kind,
+          error: loaded.error
+        }));
       }
-    } catch {
-      blockers.push(`approval-${approval.gate_id}-unavailable`);
+    } catch (error51) {
+      blockers.push("approval-authority-unavailable");
+      approvalIssues.push(Object.freeze({
+        gate_id: approval.gate_id,
+        gate_kind: approval.gate_kind,
+        error: Object.freeze({
+          code: "APPROVAL_LOAD_EXCEPTION",
+          message: error51 instanceof Error && error51.message !== "" ? error51.message.slice(0, 256) : "Unexpected failure while loading approval authority."
+        })
+      }));
     }
   }
   let commitObserved = false;
@@ -36238,13 +36323,9 @@ async function computeTaskStatus(dependencies, authority) {
   });
   let assessment;
   if (constitution !== void 0 && subjectDigest !== void 0) {
-    try {
-      const approvedUpstreamDigests = await currentApprovedUpstreams(
-        dependencies,
-        state,
-        authenticatedApprovals
-      );
-      assessment = assessCurrentEvidence(state, retained, {
+    const resolvedAssessment = await resolveStatusEvidenceAssessment(
+      () => currentApprovedUpstreams(dependencies, state, authenticatedApprovals),
+      (approvedUpstreamDigests) => assessCurrentEvidence(state, retained, {
         subject_digest: subjectDigest,
         input_fingerprint: state.input_fingerprint,
         constitution,
@@ -36252,10 +36333,10 @@ async function computeTaskStatus(dependencies, authority) {
         approved_upstream_digests: approvedUpstreamDigests,
         authenticated_gate_approvals: authenticatedApprovals,
         ...parsedConfig?.max_attempts === void 0 ? {} : { max_attempts: parsedConfig.max_attempts }
-      });
-    } catch {
-      blockers.push("fixed-point-disagreement");
-    }
+      })
+    );
+    assessment = resolvedAssessment.assessment;
+    if (resolvedAssessment.blocking_reason !== void 0) blockers.push(resolvedAssessment.blocking_reason);
   }
   let editorialRevision;
   if (declaredPredecessor !== void 0) {
@@ -36440,6 +36521,7 @@ async function computeTaskStatus(dependencies, authority) {
     ...constitutionStatus === void 0 ? {} : { constitution: constitutionStatus },
     ...state.open_gate === void 0 ? {} : { open_gate_id: state.open_gate.gate_id },
     ...openGate === void 0 ? {} : { open_gate: openGate },
+    ...approvalIssues.length === 0 ? {} : { approval_issues: Object.freeze(approvalIssues) },
     ...statusReconciliation === void 0 ? {} : { reconciliation: statusReconciliation },
     evidence,
     ...editorialRevision === void 0 ? {} : { editorial_revision: editorialRevision },

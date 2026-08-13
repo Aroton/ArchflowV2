@@ -1,0 +1,31 @@
+{
+  "context_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "envelope": {
+    "context_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "gate_id": "gate-legacy-2",
+    "human_provenance": {
+      "actor_class": "human", "assurance": "declared-local-trace", "channel": "archflow-local",
+      "decision_event_id": "decision-legacy-2", "helper_invocation_id": "helper-legacy-2",
+      "recorded_at": "2026-07-30T12:00:00.000Z", "schema_version": "1"
+    },
+    "kind": "artifact-approval",
+    "payload": { "decision": "approve", "reason": "Approved after supplemental review" },
+    "phase_instance": "phase-impl-2", "schema_version": "1",
+    "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "task_id": "task-1"
+  },
+  "gate_id": "gate-legacy-2", "kind": "artifact-approval", "outcome": "decided",
+  "phase_instance": "phase-impl-2", "schema_version": "1",
+  "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "supplemental": [{
+    "action": "decline",
+    "gate": {
+      "input_fingerprint": "3333333333333333333333333333333333333333333333333333333333333333",
+      "phase_instance": "phase-impl-2", "prior_gate_id": "gate-legacy-2",
+      "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "task_id": "task-1"
+    },
+    "reason": "No additional review needed"
+  }],
+  "task_id": "task-1"
+}

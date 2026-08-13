@@ -2,7 +2,9 @@ import { lstat, readFile, readdir, rm, rmdir, stat, unlink } from "node:fs/promi
 import { basename, dirname, join, relative, sep } from "node:path";
 
 import { parseCanonicalDocument } from "../contracts/canonical.js";
+import { validateDurableSemantics } from "../contracts/durable.js";
 import { parseIntentReceipt } from "../contracts/durable-intent.js";
+import { parseResultManifest, type ResultManifestV1 } from "../contracts/durable-result-manifest.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
 import type { ProjectResult } from "../contracts/errors.js";
@@ -154,19 +156,28 @@ async function decisionProtectedAuthorityResults(
   }
   if (decisionDigests.has("*") || files.some((file) => file.symlink)) return new Set(["*"]);
   const protectedResults = new Set<string>();
-  const pattern = /\b[0-9a-f]{64}\b/gu;
   for (const file of files) {
     const digest = /^([0-9a-f]{64})\.json$/u.exec(file.relative)?.[1];
     if (digest === undefined) continue;
-    const text = await readFile(file.absolute, "utf8").catch(() => undefined);
-    // A malformed or unreadable authority manifest fails toward retention. A gate commonly binds
-    // the embedded artifact digest rather than the manifest's own content address, so scan both.
-    if (text === undefined) {
-      protectedResults.add(digest);
-      continue;
-    }
-    const manifestDigests = new Set([digest, ...[...text.matchAll(pattern)].map((match) => match[0]!)]);
-    if ([...manifestDigests].some((candidate) => decisionDigests.has(candidate))) {
+    try {
+      const document = parseCanonicalDocument<ResultManifestV1>(
+        await readFile(file.absolute),
+        "result manifest",
+      );
+      const manifest = parseResultManifest(document.value);
+      const semantics = validateDurableSemantics({ result_manifest: document });
+      // The filename authenticates the manifest identity. Semantic validation authenticates the
+      // artifact digest against the embedded source artifact. No other manifest digest can retain
+      // a result merely because it happens to occur in nested metadata.
+      if (document.digest !== digest || !semantics.ok) {
+        protectedResults.add(digest);
+        continue;
+      }
+      if (decisionDigests.has(digest) || decisionDigests.has(manifest.artifact_digest)) {
+        protectedResults.add(digest);
+      }
+    } catch {
+      // Unknown authority bytes fail toward retention so a human can inspect or repair them.
       protectedResults.add(digest);
     }
   }

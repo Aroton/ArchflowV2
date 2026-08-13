@@ -39,6 +39,11 @@ function fullStatus(overrides: Record<string, unknown> = {}): TaskStatusV1 {
       ],
     },
     evidence: { available: false, reason: "review-set-incomplete" },
+    approval_issues: [{
+      gate_id: "gate-1",
+      gate_kind: "artifact-approval",
+      error: { code: "APPROVAL_LOAD_EXCEPTION", message: "diagnostic detail omitted from brief status" },
+    }],
     blocking_reasons: ["gate-decision-required"],
     next_action: {
       code: "resolve-open-gate",
@@ -68,6 +73,8 @@ describe("projectBriefStatus", () => {
     expect(JSON.stringify(brief)).not.toContain("input_fingerprint");
     expect(JSON.stringify(brief)).not.toContain("current-artifact");
     expect(JSON.stringify(brief)).not.toContain("Verbose rubric text");
+    expect(JSON.stringify(brief)).not.toContain("diagnostic detail omitted");
+    expect(brief).not.toHaveProperty("approval_issues");
     expect(brief.next_action.code).toBe("resolve-open-gate");
     expect(brief.next_action).toMatchObject({
       gate_kind: "artifact-approval",

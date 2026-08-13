@@ -86,16 +86,16 @@
   ],
   "artifacts": [
     {
-      "digest": "c69d4c1c9bfa36a3d88387832f97c954d75ab266a29f9fa22ba888d645fba6f4",
+      "digest": "2dd7933e201081080230b9931cea84dbc2cabeedcee4e0689c7a3baee9c5f031",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 1583655
+      "size": 1588591
     },
     {
-      "digest": "bf53246735a6b1a531823f4978e612188bbea01d1cddfdae75ac64b51060df65",
+      "digest": "71cc6aa7a4f7e79e4eab721464691475a45cc6a7447f2cce2a80500876688eb2",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 2440719
+      "size": 2444489
     },
     {
       "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
@@ -210,10 +210,10 @@
       "role": "manifest"
     },
     {
-      "digest": "e8aa71482b4b36c2935c379cfa2bb344e421b4a953409453f2f7f8e8b2a14aa8",
+      "digest": "289d4a87bc5c47f4817e7d1f47fea2f3c8abbfcade541aca23acea974a9bf707",
       "path": "metafile.json",
       "role": "metafile",
-      "size": 311876
+      "size": 312216
     }
   ],
   "build_entries": [
@@ -232,7 +232,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "bf53246735a6b1a531823f4978e612188bbea01d1cddfdae75ac64b51060df65",
+  "bundle_digest": "71cc6aa7a4f7e79e4eab721464691475a45cc6a7447f2cce2a80500876688eb2",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -2551,14 +2551,14 @@
       "size": 6779
     },
     {
-      "bytes_in_output": 16865,
-      "digest": "8cb72dd29e7903bce259dddd16654327d7f7bd86f46a0a010b6708be6b968902",
+      "bytes_in_output": 24007,
+      "digest": "75478cdb52f15c9fbe3ef14432d46441f7f28126aef3721375592c524cc16b49",
       "key": "src/contracts/durable-gate.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/durable-gate.ts"
       },
-      "size": 13875
+      "size": 19903
     },
     {
       "bytes_in_output": 4819,
@@ -2632,13 +2632,13 @@
     },
     {
       "bytes_in_output": 62919,
-      "digest": "ce4a1d468a6da5d0b866b0bb627829dbb9cf659743737d45919ec3c56893a89e",
+      "digest": "08473480bbccb6e13b4078d025bca5dc7d1d1fe0c75f94811e80a4ce417b4bb5",
       "key": "src/contracts/durable.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/durable.ts"
       },
-      "size": 44783
+      "size": 44838
     },
     {
       "bytes_in_output": 33475,
@@ -3321,14 +3321,14 @@
       "size": 14175
     },
     {
-      "bytes_in_output": 5611,
-      "digest": "c706f474def11f06498a60a9b26c5b3fba4e82d278eb408d28b7a5d656f18569",
+      "bytes_in_output": 5627,
+      "digest": "9c27bcdbf35d62d293263fb0f7437f13e6f1f139079b4ff6743af92c66611924",
       "key": "src/mcp/handlers/waiver.ts",
       "origin": {
         "kind": "repository",
         "path": "src/mcp/handlers/waiver.ts"
       },
-      "size": 7050
+      "size": 7080
     },
     {
       "bytes_in_output": 3941,
@@ -3571,14 +3571,14 @@
       "size": 5150
     },
     {
-      "bytes_in_output": 6976,
-      "digest": "6cf0d083c73232594aaf6f945124d2eb2fc4b7cc16b713e3d4b8a20b60d83873",
+      "bytes_in_output": 7008,
+      "digest": "b278635885ff5048f114a6340065b3e02594d9e4a1540683764366a85b462093",
       "key": "src/state/gate-approvals.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/gate-approvals.ts"
       },
-      "size": 5360
+      "size": 5433
     },
     {
       "bytes_in_output": 14347,
@@ -3611,14 +3611,14 @@
       "size": 2197
     },
     {
-      "bytes_in_output": 49816,
-      "digest": "da420c5622b3ee50df158b31288e6504e66aa5aa1773b004b505f7aa22b87a32",
+      "bytes_in_output": 49832,
+      "digest": "aef4a87acce0e47a68d9b8bf680b17d5d5563198d0601b37d64f1667f06718b4",
       "key": "src/state/gates.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/gates.ts"
       },
-      "size": 57653
+      "size": 57732
     },
     {
       "bytes_in_output": 48171,
@@ -3801,14 +3801,14 @@
       "size": 7934
     },
     {
-      "bytes_in_output": 29514,
-      "digest": "12b3e464914d7bcd16a0a02796a7b5be011134ea9c33357cb2c36ba027d92127",
+      "bytes_in_output": 30728,
+      "digest": "843511d9f590303fe68e6b4ab4fc37a093a5603db6a6c742684b072245c88f93",
       "key": "src/state/status.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/status.ts"
       },
-      "size": 47278
+      "size": 49397
     },
     {
       "bytes_in_output": 42839,
@@ -3831,14 +3831,14 @@
       "size": 19925
     },
     {
-      "bytes_in_output": 28763,
-      "digest": "8a23f10a8397069439673dd43e1c9b3c20ae3d858f02782d745415fd3664d995",
+      "bytes_in_output": 29049,
+      "digest": "7babeebde2c892329ccd595585b5a1b4dcc9c0abda4f33361a04ca633fc2d8ff",
       "key": "src/state/workspace-cleanup.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/workspace-cleanup.ts"
       },
-      "size": 17977
+      "size": 18480
     }
   ],
   "contributing_inputs": [
@@ -4747,7 +4747,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "bf53246735a6b1a531823f4978e612188bbea01d1cddfdae75ac64b51060df65",
+      "output_digest": "71cc6aa7a4f7e79e4eab721464691475a45cc6a7447f2cce2a80500876688eb2",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -5038,7 +5038,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "c69d4c1c9bfa36a3d88387832f97c954d75ab266a29f9fa22ba888d645fba6f4",
+      "output_digest": "2dd7933e201081080230b9931cea84dbc2cabeedcee4e0689c7a3baee9c5f031",
       "output_path": "archflow-local.mjs"
     }
   ],
