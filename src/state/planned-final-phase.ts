@@ -52,7 +52,7 @@ export async function loadApprovedDesignFinalPhase(
 ): Promise<ProjectResult<number | null | undefined>> {
   if (
     record.outcome !== "decided" ||
-    record.kind !== "artifact-approval" ||
+    (record.kind !== "artifact-approval" && record.kind !== "design-approval") ||
     record.phase_instance !== "design" ||
     record.envelope.payload.decision !== "approve"
   ) return ok(undefined);

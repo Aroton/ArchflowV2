@@ -250,7 +250,7 @@ async function assembleUpstreamContext(input: {
     const upstream = await loadProduceUpstreamSubject(input.dependencies, input.state, binding);
     if (!upstream.ok) return upstream;
     const approved = input.state.approvals.some((approval) =>
-      approval.gate_kind === "artifact-approval" &&
+      (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") &&
       approval.subject_digest === upstream.value.artifact_digest);
     if (!approved) return fail(input.state.phase_instance, "upstream-approval-missing");
     const projection = await readProduceProjection(

@@ -28,6 +28,7 @@ import {
   type ResolvedTaskWorkspacePath,
 } from "../repository/paths.js";
 import { verifyRepositoryIdentity } from "../repository/identity.js";
+import { resolveCommit } from "../repository/git.js";
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "./authority.js";
 import {
   DECISIONS,
@@ -111,7 +112,7 @@ async function authenticateWaiverOrigin(
   const request = await readCanonical(requestPath.value, "waiver origin request", parseArchivedGateRequest);
   const decision = await readCanonical(decisionPath.value, "waiver origin decision", parseArchivedGateDecisionRecord);
   if (request === "missing" || request === "invalid" || decision === "missing" || decision === "invalid") return issue("CONTRACT_INVALID", undefined, "waiver-origin-archive-invalid");
-  if (!validateDurableSemantics({ gate_request: request, gate_decision: decision }).ok || decision.digest !== context.origin.origin_decision_digest || decision.value.outcome !== "decided" || decision.value.envelope.payload.decision !== "waiver-requested") return issue("CONTRACT_INVALID", undefined, "waiver-origin-decision-invalid");
+  if (!validateDurableSemantics({ gate_request: request, gate_decision: decision }).ok || decision.digest !== context.origin.origin_decision_digest || decision.value.outcome !== "decided" || decision.value.envelope.payload.decision !== "waiver-requested" || (request.value.kind !== "constitution-review" && request.value.kind !== "design-approval")) return issue("CONTRACT_INVALID", undefined, "waiver-origin-decision-invalid");
   const payload = decision.value.envelope.payload as Extract<typeof decision.value.envelope.payload, { decision: "waiver-requested" }>;
   const requestContext = request.value.context;
   if (!("eligible_waivers" in requestContext) || request.value.gate_id !== context.origin.origin_gate_id || request.value.context_digest !== context.origin.origin_context_digest || request.value.task_id !== context.origin.task_id || request.value.phase_instance !== context.origin.phase_instance || request.value.subject_digest !== context.origin.subject_digest || request.value.current_evidence.set_digest !== context.origin.current_evidence_set_digest || !isDeepStrictEqual(payload.rule, context.origin.rule) || payload.operation !== context.origin.scope.operation || !requestContext.eligible_waivers.some((eligible) => isDeepStrictEqual(eligible.rule, context.origin.rule) && isDeepStrictEqual(eligible.scope, context.origin.scope))) return issue("CONTRACT_INVALID", undefined, "waiver-origin-binding-invalid");
@@ -295,7 +296,8 @@ export async function openDurableGate(
         if (
           input.subject_digest !== subject ||
           !current.value.approvals.some((approval) =>
-            approval.gate_kind === "artifact-approval" && approval.subject_digest === subject)
+            (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") &&
+            approval.subject_digest === subject)
         ) return issue("STATE_INVALID", current.value, "migration-audit-design-not-approved");
         const resume = await loadLegacyImportResumePhase(dependencies, input.authority, current.value);
         if (!resume.ok) return resume;
@@ -383,6 +385,7 @@ function enactsReentry(record: GateDecisionRecordV1): boolean {
   if (record.outcome !== "decided") return false;
   const decision = record.envelope.payload.decision;
   return (record.kind === "artifact-approval" && decision === "revise") ||
+    (record.kind === "design-approval" && decision === "revise") ||
     (record.kind === "constitution-review" && decision === "revise") ||
     (record.kind === "material-drift" && decision === "revise-current") ||
     (record.kind === "attempts-exhausted" && (decision === "retry-once" || decision === "revise")) ||
@@ -394,6 +397,7 @@ function beginsHumanRevision(record: GateDecisionRecordV1): boolean {
   if (record.outcome !== "decided") return false;
   const decision = record.envelope.payload.decision;
   return (record.kind === "artifact-approval" && decision === "revise") ||
+    (record.kind === "design-approval" && decision === "revise") ||
     (record.kind === "constitution-review" && decision === "revise") ||
     (record.kind === "material-drift" && decision === "revise-current") ||
     (record.kind === "attempts-exhausted" && decision === "revise") ||
@@ -495,6 +499,22 @@ async function closedStateForRecord(
 ): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
   if (enactsReentry(record)) {
     return planGateAuthorizedReentry(dependencies, authority, current, request, record);
+  }
+  if (
+    record.outcome === "decided" &&
+    record.kind === "design-approval" &&
+    record.envelope.payload.decision === "approve" &&
+    request.kind === "design-approval"
+  ) {
+    const symbolicRef = await dependencies.runner.runText({
+      argv: ["symbolic-ref", "--quiet", "HEAD"],
+      operation: parseSafeCode("git-design-approval-target"),
+      expectedAbsence: [{ code: 1, stderrIncludes: "" }],
+    });
+    if ((request.context.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== request.context.target_ref) ||
+        await resolveCommit(dependencies.runner, "HEAD") !== request.context.baseline_commit) {
+      return issue("STATE_INVALID", current.value, "design-approval-git-target-changed");
+    }
   }
   const plannedFinalPhase = await loadApprovedDesignFinalPhase(dependencies, current.value, record);
   return plannedFinalPhase.ok

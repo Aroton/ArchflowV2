@@ -8,7 +8,7 @@ import type { PipelineStep } from "../contracts/vocabulary.js";
 import type { AdjudicationGateRequest } from "../review/adjudication.js";
 import type { NextAction, NextActionRequest } from "./next-action.js";
 import { phaseReviewPaths, type PhaseReviewPaths } from "./phase-documents.js";
-import type { CommitAuthorizationInput } from "./status.js";
+import type { CommitAuthorizationInput, DesignApprovalInput } from "./status.js";
 import { legalRunStepStatus } from "./transitions.js";
 
 // Placeholder prose deliberately fails the target field's ingress validation wherever the
@@ -37,6 +37,7 @@ export type NextActionRequestFacts = Readonly<{
   subject_digest?: Sha256Digest;
   current_evidence?: CurrentEvidenceSetRef;
   commit_authorization?: CommitAuthorizationInput;
+  design_approval?: DesignApprovalInput;
   /**
    * The pending constitution-review gate, derived mechanically from retained adjudication
    * evidence by the same selector the fixed point uses; only the summary is authored.
@@ -174,6 +175,26 @@ export function buildNextActionRequest(next: NextAction, facts: NextActionReques
   }
 
   if (next.code === "open-gate") {
+    if (
+      next.gate_kind === "design-approval" &&
+      facts.design_approval !== undefined &&
+      facts.subject_digest !== undefined &&
+      facts.current_evidence !== undefined
+    ) {
+      return request("archflow_gate", {
+        ...mechanicalPrefix(facts.task_id, state, state.input_fingerprint),
+        phase_instance: state.phase_instance,
+        summary: TEMPLATE_SUMMARY,
+        subject_digest: facts.subject_digest,
+        current_evidence: facts.current_evidence as unknown as PlainJsonValue,
+        kind: "design-approval",
+        context: facts.design_approval.context as unknown as PlainJsonValue,
+      }, envelopeGuidance(
+        facts.task_id,
+        "archflow_gate",
+        `Write a self-contained design summary for the human reviewer. This is the single approval: every policy conflict and trigger is already bound in the context and must be explained conversationally. Approval also authorizes the automatic task-local milestone commit. ${facts.design_approval.target_ref_guidance}`,
+      ));
+    }
     if (next.gate_kind === "commit-authorization" && facts.commit_authorization !== undefined) {
       const authorization = facts.commit_authorization;
       return request("archflow_gate", {

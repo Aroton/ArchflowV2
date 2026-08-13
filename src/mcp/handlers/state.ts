@@ -21,7 +21,7 @@ import {
 import { runStateInitialization } from "../../state/initialization.js";
 import { identifyTransactionRequest } from "../../state/request.js";
 import { loadCurrentProduceSubject, type CurrentProduceSubject } from "../../state/produce-subject.js";
-import { implementationOutputCommittedAtCurrentTarget } from "../../state/implementation-manifest.js";
+import { designArtifactCommittedAtCurrentTarget, implementationOutputCommittedAtCurrentTarget } from "../../state/implementation-manifest.js";
 import { decodePhaseInstance } from "../../contracts/phase-instance.js";
 import {
   prepareResultInstallation,
@@ -187,9 +187,12 @@ export async function handleState(
           completionSubjectDigest = currentProduce.artifact_digest;
         }
         if (artifactPhaseExitSignal) {
+          const designExit = decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design";
           for (const approval of current.value.approvals) {
             if (
-              approval.gate_kind !== "artifact-approval" ||
+              !(designExit
+                ? approval.gate_kind === "design-approval" || approval.gate_kind === "artifact-approval"
+                : approval.gate_kind === "artifact-approval") ||
               approval.subject_digest !== completionSubjectDigest
             ) continue;
             const loaded = await loadAuthenticatedGateApproval(
@@ -197,6 +200,24 @@ export async function handleState(
             );
             if (!loaded.ok) return loaded;
             authenticatedGateApprovals.push(loaded.value);
+          }
+          if (
+            designExit &&
+            currentProduce?.artifact.artifact_kind === "document"
+          ) {
+            for (const authenticated of authenticatedGateApprovals) {
+              if (authenticated.request.kind !== "design-approval") continue;
+              if (await designArtifactCommittedAtCurrentTarget(
+                services.runner,
+                current.value.task_id,
+                currentProduce.artifact,
+                currentProduce.retained.prepared.manifest.value.outputs,
+                authenticated.request.context,
+              )) {
+                commitObserved = true;
+                break;
+              }
+            }
           }
         }
         if (completionSignal && currentProduce !== undefined) {

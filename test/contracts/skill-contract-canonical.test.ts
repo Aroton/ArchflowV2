@@ -64,7 +64,7 @@ describe("canonical skill contracts", () => {
     for (const error of namedErrors) expect(PROJECT_ERROR_DEFINITIONS).toHaveProperty(error);
   });
 
-  it("keeps exact frontmatter, server-owned review policy, and host-neutral normal phase skills", () => {
+  it("keeps exact frontmatter, server-owned review policy, and dual-client hand-offs", () => {
     for (const name of skillNames) {
       const fields = frontmatter(skill(name));
       expect(Object.keys(fields).sort()).toEqual(["description", "name"]);
@@ -73,8 +73,8 @@ describe("canonical skill contracts", () => {
     }
     for (const name of normalPhaseSkills) {
       const source = skill(name);
-      expect(source).not.toContain("Codex");
-      expect(source).not.toContain("Claude Code");
+      expect(source).toContain("Claude:");
+      expect(source).toContain("Codex:");
     }
     for (const name of productionRubricSkills) {
       const source = skill(name);
@@ -118,7 +118,8 @@ describe("canonical skill contracts", () => {
       const source = skill(name);
       expect(source).toContain("conversational");
       expect(source).toContain("ask one direct question");
-      expect(source).toContain("unless the user explicitly asks for diagnostics or audit detail");
+      expect(source).toContain("diagnostic");
+      expect(source).toContain("audit detail");
       expect(source).toContain("there is no optional");
     }
     expect(skill("archflow-status")).toContain("Do not expose the gate ID");
@@ -195,7 +196,7 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("exact server-derived destination command");
     expect(source).toContain("`next_action.skill`");
     expect(source).toContain("`next_action.skill_args`");
-    expect(source).toContain("never substitute the current phase's skill");
+    expect(source.toLowerCase()).toContain("never substitute the current phase's skill");
   });
 
   it("admits every canonical task document path used by the skills", () => {

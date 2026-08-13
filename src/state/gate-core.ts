@@ -40,6 +40,7 @@ import type { SecretScanner } from "../contracts/secret-scan.js";
 
 export const DECISIONS: Readonly<Record<GateKind, readonly string[]>> = Object.freeze({
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
+  "design-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
   "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],

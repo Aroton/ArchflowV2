@@ -82,7 +82,7 @@ export type OpenGateRef = {
 export const HUMAN_REVISION_CLASSIFICATIONS = ["simple", "significant"] as const;
 export type HumanRevisionClassification = (typeof HUMAN_REVISION_CLASSIFICATIONS)[number];
 export const HUMAN_REVISION_GATE_KINDS = [
-  "artifact-approval", "constitution-review", "material-drift", "attempts-exhausted",
+  "artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted",
   "commit-authorization", "migration-audit",
 ] as const satisfies readonly GateKind[];
 

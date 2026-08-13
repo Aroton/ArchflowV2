@@ -6,8 +6,8 @@ const D = "a".repeat(64);
 const RULE = { rule_id: "trust-boundary", rule_version: 1 };
 
 describe("gate catalogue", () => {
-  it("contains exactly the eight independent kinds", () => {
-    expect(GATE_KINDS).toEqual(["artifact-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"]);
+  it("contains exactly the nine independent kinds", () => {
+    expect(GATE_KINDS).toEqual(["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"]);
   });
 
   it("keeps cancellation outside decisions", () => {

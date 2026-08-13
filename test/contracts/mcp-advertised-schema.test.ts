@@ -303,7 +303,7 @@ describe("advertised MCP tool catalogue", () => {
     expect(stateProperties.expected_revision).toEqual({ $ref: "#/$defs/mcp-tools/$defs/integer" });
     expect(stateProperties.artifact).toEqual({ $ref: "#/$defs/mcp-tools/$defs/durableArtifact" });
     const gateProperties = (ADVERTISED_TOOL_CATALOGUE.find(({ name }) => name === "archflow_gate")!.inputSchema as { properties: Record<string, unknown> }).properties;
-    expect((gateProperties.context as { oneOf: unknown[] }).oneOf).toHaveLength(8);
+    expect((gateProperties.context as { oneOf: unknown[] }).oneOf).toHaveLength(9);
   });
 
   it("advertises exactly the reference-reachable definitions within the context-budget fence", () => {

@@ -35,7 +35,10 @@ describe("status classification", () => {
     expect(result.value.task_status).toMatchObject({ task_id: workspace.taskId });
     // Exactly one server-derived next action, mirrored from the computed task status.
     expect(result.value.next_action).toMatchObject({ code: result.value.task_status.next_action.code });
-    expect(result.value.next_action.command).toBe(`$archflow-prd ${workspace.taskId}`);
+    expect(result.value.next_action.commands).toEqual({
+      claude: `/archflow-prd ${workspace.taskId}`,
+      codex: `$archflow-prd ${workspace.taskId}`,
+    });
   });
 
   it("status classification reports read-only wait guidance when durable state is absent", async () => {
@@ -52,7 +55,6 @@ describe("status classification", () => {
           code: "wait-for-server",
           detail: "No durable task state exists. The MCP server records all progress; when it is available, proceed through the workflow skills. No offline recording exists.",
           human_required: false,
-          command: "archflow-local manual-status",
         },
       },
     });

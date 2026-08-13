@@ -547,6 +547,7 @@
               "kind": {
                 "enum": [
                   "artifact-approval",
+                  "design-approval",
                   "constitution-review",
                   "material-drift",
                   "attempts-exhausted",
@@ -570,6 +571,16 @@
                       },
                       "context": {
                         "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/artifactApproval/properties/context"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "design-approval"
+                      },
+                      "context": {
+                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/designApproval/properties/context"
                       }
                     }
                   },
@@ -659,6 +670,7 @@
             "type": "string",
             "enum": [
               "artifact-approval",
+              "design-approval",
               "constitution-review",
               "material-drift",
               "attempts-exhausted",

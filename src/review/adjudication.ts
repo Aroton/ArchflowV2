@@ -13,7 +13,7 @@ import {
 import type { Sha256Digest } from "../contracts/evidence.js";
 import type { AdapterId } from "../contracts/review.js";
 import type { AdjudicationEnvelopeInput } from "./envelopes.js";
-import type { EligibleWaiver, GateContext, GateKind, RuleVersionRef, WaivableOperation } from "../contracts/gates.js";
+import type { DesignPolicyFinding, EligibleWaiver, GateContext, GateKind, RuleVersionRef, WaivableOperation } from "../contracts/gates.js";
 
 export class AdjudicationServiceError extends Error {
   public constructor(public readonly project_error: ProjectError) {
@@ -130,6 +130,37 @@ function eligibleWaivers(
       left.rule.rule_id.localeCompare(right.rule.rule_id) ||
       left.rule.rule_version - right.rule.rule_version ||
       left.scope.operation.localeCompare(right.scope.operation)));
+}
+
+/** Policy portion of the one final design approval, retaining the reviewer's English evidence. */
+export function designApprovalPolicyContext(evidence: AdjudicationEvidence): Readonly<{
+  constitution: AdjudicationEvidence["constitution"];
+  policy_findings: readonly DesignPolicyFinding[];
+  eligible_waivers: readonly EligibleWaiver[];
+}> {
+  const failedOrUncertain = evidence.rule_findings.filter((item) => item.compliance !== "pass");
+  const triggered = evidence.rule_findings.filter((item) => item.trigger !== "not-matched");
+  return Object.freeze({
+    constitution: evidence.constitution,
+    policy_findings: Object.freeze(evidence.rule_findings.map((item) => Object.freeze({
+      rule_id: item.rule_id,
+      rule_version: item.rule_version,
+      compliance: item.compliance,
+      rationale: item.rationale,
+      trigger: item.trigger,
+      trigger_evidence: item.trigger_evidence,
+    }))),
+    eligible_waivers: eligibleWaivers([
+      ...failedOrUncertain.map((item) => ({
+        rule: Object.freeze({ rule_id: item.rule_id, rule_version: item.rule_version }),
+        operation: "adjudication-failure" as const,
+      })),
+      ...triggered.map((item) => ({
+        rule: Object.freeze({ rule_id: item.rule_id, rule_version: item.rule_version }),
+        operation: "review-trigger" as const,
+      })),
+    ]),
+  });
 }
 
 /**

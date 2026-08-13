@@ -1,6 +1,6 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** `src/review/`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
+**Explored:** 2026-08-13 · **Commit:** `247df34` · **Covers:** `src/review/`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
 
 Counter-review is the system's adversarial check: every artifact is reviewed by the *opposite model family* (Claude ⇄ Codex), dispatched by the server itself so the evidence is something the producer cannot author. One `archflow_counter_review` call covers up to two dispatches: the rubric counter-review, and — only when the pinned constitution has active rules, a decision the server makes alone — the constitution review (see below). This page covers the review envelope, the review flow, the constitution review, and waivers.
 
@@ -81,7 +81,7 @@ If the envelope still overflows after tiering and cap relief, the result is `ENV
 5. **Constitution dispatch** — when the pinned constitution has active rules, the server then dispatches a second opposite-family child that performs the constitution and drift review (see below). The server alone decides whether this runs; with no active rules the drift check is also skipped and the result records `constitution: {status: "not-run", reason: "no-active-constitution-rules"}`, which is normal.
 6. **Currency re-check and commit** — if the artifact drifted mid-dispatch, the result is discarded (`counter-review-subject-not-current`). Otherwise both results land in **one atomic state transaction**, and the tool result reports both: `{path, verdict, blocking_count, constitution, revision, request_digest}`, where `constitution` is either `{status: "evaluated", path, constitution: pass|fail|uncertain, drift: aligned|incidental|material, triggers: […]}` or the `not-run` shape above. A `fail` verdict is a successful recording, never an error.
 7. **Triage** — the producer accepts material defects and rejects output without a concrete material consequence. Any accepted finding forces re-entry into produce with a new attempt; the next reviewer receives the enriched `prior-triage` record and performs remediation review. Rejecting even a model-labeled blocker is sanctioned because severity does not substitute for evidence. Triage covers rubric findings only — the constitution verdict is never dispositioned by the producer; a failing or triggering verdict surfaces as a human gate after triage.
-8. **Human revision, when requested** — after applying the requested change, the producer classifies the actual diff. Simple wording or formatting changes may keep the predecessor evidence for one hop and still return for approval. Significant changes archive prior evidence, reset to attempt 1, and automatically dispatch a fresh rubric and constitution review. Uncertainty is significant; the human may override the classification in either direction.
+8. **Human decision and revision** — task design and phase design present the document outcome and every constitution finding together at one `design-approval`; other phases retain their own gate sequence. After a requested change, the producer classifies the actual diff. Simple wording or formatting changes may keep the predecessor evidence for one hop and still return for approval. Significant changes archive prior evidence, reset to attempt 1, and automatically dispatch a fresh rubric and constitution review. Uncertainty is significant; the human may override the classification in either direction.
 
 Editing the artifact changes its digest, which invalidates downstream evidence. You iterate until the remediation review finds no material defect worth accepting; non-material suggestions do not prolong the loop or move to the human approval agenda.
 
@@ -98,7 +98,7 @@ Each numbered Markdown file in `.archflow/constitution/` is exactly one rule: fr
 
 A task cannot amend its own governing constitution: a task-branch edit detected at counter-review time opens a `constitution-edit` gate when a retained review set exists to bind, and on the first round — when there is nothing to bind — fails with a plain `STATE_INVALID` `constitution-edited-on-task-branch` error. Either way the review never dispatches against edited rules.
 
-The constitution-review child gets a sealed envelope — the artifact, the sorted active rules, the approved upstream documents, and fixed instructions — and deliberately **no repository checkout**: it judges exactly the sealed evidence. Before dispatching, the server is unusually strict: durable state, the pinned constitution digest, the authenticated review set, and a durable `artifact-approval` for every declared upstream must all agree, or nothing is dispatched.
+The constitution-review child gets a sealed envelope — the artifact, the sorted active rules, the approved upstream documents, and fixed instructions — and deliberately **no repository checkout**: it judges exactly the sealed evidence. Before dispatching, the server is unusually strict: durable state, the pinned constitution digest, the authenticated review set, and the phase-appropriate durable approval for every declared upstream (`artifact-approval` for PRD, `design-approval` for current design documents, with legacy design archives still accepted) must all agree, or nothing is dispatched.
 
 The output is cross-checked mechanically: one finding per active rule, in ID order, matching versions.
 
@@ -112,8 +112,9 @@ A failing or uncertain rule, material upstream drift, or a matched `review_trigg
 
 ```mermaid
 flowchart TB
-    T[triage succeeds] -->|all rules pass, no triggers, no material drift| Adv["advance<br/>(to the phase's approval gate)"]
-    T -->|"rule fail / uncertain<br/>and/or review_trigger matched"| GF{{"constitution-review gate<br/>discloses both axes"}}
+    T[triage succeeds] -->|task/phase design| DA{{"one design-approval<br/>document + policy findings"}}
+    T -->|other phase: all rules pass, no triggers| Adv["advance<br/>(to the phase's approval gate)"]
+    T -->|"other phase: rule fail / uncertain<br/>and/or review_trigger matched"| GF{{"constitution-review gate<br/>discloses both axes"}}
     T -->|"material drift"| GD{{"material-drift gate<br/>resolving re-enters production"}}
     GF -->|human approves| Adv
     GF -->|human revises| P[re-enter produce]
@@ -133,7 +134,7 @@ A waiver is a durable, human-granted exemption from **one specific rule version*
 
 A waiver also names **one axis**: `adjudication-failure` exempts the rule's compliance verdict, `review-trigger` exempts its matched trigger. Waiving one says nothing about the other, so a gate that flagged a rule on both axes is satisfied by the waiver path only when both are granted.
 
-Waivers are requested from an existing gate, never conjured: the origin gate must be a `constitution-review` whose recorded decision literally says `waiver-requested`, naming a rule and axis pair the gate actually offered in `eligible_waivers`, and the server re-reads and re-authenticates the archived request and decision before binding the waiver. A `waiver-requested` decision is not approval; a denied or cancelled waiver grants nothing.
+Waivers are requested from an existing gate, never conjured: the origin must be a `constitution-review` or combined `design-approval` whose recorded decision literally says `waiver-requested`, naming a rule and axis pair the gate actually offered in `eligible_waivers`. The server re-reads and re-authenticates the archived request and decision before binding the waiver. A `waiver-requested` decision is not approval; a denied or cancelled waiver grants nothing.
 
 ### Durable decisions
 
@@ -141,6 +142,6 @@ Both gates and waivers funnel into the same machinery (`src/state/gates.ts`): ea
 
 ## Human-facing gates
 
-The durable request remains exact and machine-verifiable, but it is not what the human is asked to read. The server derives a reconstructible presentation with a plain title and summary, the material finding or evidence, one direct question, and labeled choices that explain their consequences. Skills present that conversationally and keep gate IDs, digests, JSON, internal paths, and protocol codes in the diagnostic layer unless the user asks for them.
+The durable request remains exact and machine-verifiable, but it is not what the human is asked to read. The server derives a reconstructible presentation with a plain title and summary, the material finding or evidence, one direct question, and labeled choices that explain their consequences. A `design-approval` presentation includes one plain-English detail for every non-passing compliance result and every matched or uncertain trigger, carrying the reviewer's rationale or evidence; pointing the human at an artifact on disk is not sufficient. Skills present that conversationally and keep gate IDs, digests, JSON, internal paths, and protocol codes in the diagnostic layer unless the user asks for them.
 
 There is no separate or optional gate counter-review. The opposite-family review already ran automatically in the normal evidence pipeline. A simple human revision can reuse that evidence for one hop because it changes no meaning; a significant revision automatically repeats the normal review because the prior judgment is no longer current.

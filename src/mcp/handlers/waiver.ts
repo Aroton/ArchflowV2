@@ -34,7 +34,7 @@ export function authenticWaiverOriginArchive(
     request.value.subject_digest === origin.subject_digest &&
     request.value.context_digest === origin.origin_context_digest &&
     request.value.current_evidence.set_digest === origin.current_evidence_set_digest &&
-    request.value.kind === "constitution-review" &&
+    (request.value.kind === "constitution-review" || request.value.kind === "design-approval") &&
     decision.digest === origin.origin_decision_digest &&
     payload?.decision === "waiver-requested" &&
     isDeepStrictEqual(payload.rule, origin.rule) &&

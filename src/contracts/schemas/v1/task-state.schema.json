@@ -14,6 +14,7 @@
       "type": "string",
       "enum": [
         "artifact-approval",
+        "design-approval",
         "constitution-review",
         "material-drift",
         "attempts-exhausted",
@@ -227,6 +228,7 @@
           "type": "string",
           "enum": [
             "artifact-approval",
+            "design-approval",
             "constitution-review",
             "material-drift",
             "attempts-exhausted",
@@ -281,6 +283,7 @@
           "type": "string",
           "enum": [
             "artifact-approval",
+            "design-approval",
             "constitution-review",
             "material-drift",
             "attempts-exhausted",

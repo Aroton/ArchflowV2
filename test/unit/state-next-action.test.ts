@@ -71,6 +71,13 @@ function input(overrides: Partial<NextActionInput> = {}): NextActionInput {
   };
 }
 
+const designCommit = Object.freeze({
+  path: ".archflow/tasks/task-1",
+  message: "ArchFlow: Approve task-1 design",
+  target_ref: "refs/heads/main",
+  baseline_commit: "abcdef0123456789abcdef0123456789abcdef01",
+});
+
 const reconciliationCases: readonly [ReconciliationFinding, string][] = [
   [{ kind: "receipt-only", request_digest: D("a"), receipt_digest: D("b"), next_action: "resume-exact-intent" }, "resume-exact-intent"],
   [{ kind: "projection-mismatch", path: "design.md" as never, recorded_digest: D("a"), next_action: "restore-or-record-new-transition" }, "restore-or-record-new-transition"],
@@ -94,6 +101,12 @@ describe("deriveNextAction", () => {
       ["resolve-open-gate", input({ state: state({ open_gate: gate }) })],
       ["run-step", input({ assessment: assessment("triage") })],
       ["open-gate", input({ assessment: assessment("advance") })],
+      ["commit-artifacts", input({
+        state: state({ phase_instance: encodePhaseInstance({ kind: "design" }) }),
+        assessment: assessment("advance"),
+        authenticated_approvals: [{ gate_kind: "design-approval", subject_digest: D("a") }],
+        design_commit: designCommit,
+      })],
       ["commit-phase", input({ assessment: assessment("advance"), authenticated_approvals: [{ gate_kind: "commit-authorization", subject_digest: D("a") }] })],
       ["advance-phase", input({ assessment: assessment("advance"), authenticated_approvals: [{ gate_kind: "commit-authorization", subject_digest: D("a") }], commit_observed: true })],
       ["complete-task", input({ state: state({ planned_final_phase: parseSafeInteger(1) }), assessment: assessment("advance"), authenticated_approvals: [{ gate_kind: "commit-authorization", subject_digest: D("a") }], commit_observed: true })],
@@ -218,12 +231,16 @@ describe("deriveNextAction", () => {
       const action = deriveNextAction(input({ state: state({ phase_instance: phaseInstance }), assessment: assessment("advance") }));
       expect(action).toMatchObject({
         code: "open-gate",
-        gate_kind: phaseInstance === "prd" || phaseInstance === "design" || phaseInstance === phaseDesign(2)
+        gate_kind: phaseInstance === "prd"
           ? "artifact-approval"
-          : "commit-authorization",
+          : phaseInstance === "design" || phaseInstance === phaseDesign(2)
+            ? "design-approval"
+            : "commit-authorization",
       });
     }
 
+    // A gate already recorded under the former document-only contract may finish without
+    // manufacturing a second approval or retroactively authorizing a commit.
     expect(deriveNextAction(input({
       state: state({ phase_instance: phaseDesign(2) }),
       assessment: assessment("advance"),
@@ -239,7 +256,8 @@ describe("deriveNextAction", () => {
   });
 
   it("routes every phase handoff to the destination skill and arguments", () => {
-    const approved = [{ gate_kind: "artifact-approval" as const, subject_digest: D("a") }];
+    const artifactApproved = [{ gate_kind: "artifact-approval" as const, subject_digest: D("a") }];
+    const designApproved = [{ gate_kind: "design-approval" as const, subject_digest: D("a") }];
     const committed = [{ gate_kind: "commit-authorization" as const, subject_digest: D("a") }];
     const cases = [
       ["prd", "design", "archflow-design", []],
@@ -249,11 +267,12 @@ describe("deriveNextAction", () => {
     ] as const;
     for (const [current, target, skill, skillArgs] of cases) {
       const isImpl = String(current).startsWith("phase-impl-");
+      const isPrd = current === "prd";
       expect(deriveNextAction(input({
         state: state({ phase_instance: current as TaskStateV1["phase_instance"] }),
         assessment: assessment("advance"),
-        authenticated_approvals: isImpl ? committed : approved,
-        ...(isImpl ? { commit_observed: true } : {}),
+        authenticated_approvals: isImpl ? committed : isPrd ? artifactApproved : designApproved,
+        ...(!isPrd ? { commit_observed: true } : {}),
       }))).toMatchObject({
         code: "advance-phase",
         phase_instance: current,
@@ -262,6 +281,20 @@ describe("deriveNextAction", () => {
         skill_args: skillArgs,
       });
     }
+  });
+
+  it("keeps material drift as a distinct redirect decision after combined design approval", () => {
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: encodePhaseInstance({ kind: "design" }) }),
+      assessment: assessment("adjudication-gate"),
+      authenticated_approvals: [{ gate_kind: "design-approval", subject_digest: D("a") }],
+      adjudication_gate_kind: "material-drift",
+      pending_adjudication_gate_kinds: ["material-drift"],
+    }))).toMatchObject({
+      code: "open-gate",
+      gate_kind: "material-drift",
+      human_required: true,
+    });
   });
 
   it("fails closed when a non-final maximum phase has no representable successor", () => {

@@ -1,8 +1,8 @@
 # contracts/CONTRACTS
 
-**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** `src/contracts/`
+**Explored:** 2026-08-13 · **Commit:** `247df34` · **Covers:** `src/contracts/`
 
-`src/contracts/` is the bottom layer: ~40 modules plus 35 JSON Schemas that define what a valid thing looks like and how to prove a thing is what it claims. Everything else imports from here; nothing here imports back out.
+`src/contracts/` is the bottom layer: ~40 modules plus 32 JSON Schemas that define what a valid thing looks like and how to prove a thing is what it claims. Everything else imports from here; nothing here imports back out.
 
 The premise it serves: durable files in `.archflow/` are the system's *only* memory across sessions, and the things writing them are language models. So the whole layer is built around one idea — **nothing an agent says is trusted until the server has re-derived it.**
 
@@ -40,7 +40,7 @@ flowchart LR
 - **Fingerprints** — all derived identity computation in one module.
 - **Evidence & trust semantics** — review/constitution-review/triage shapes in three assurance flavors (`agent-declared`, `server-attested`, `degraded`), the trust brands, secret-scan shapes, and renderers that escape control characters so rendered evidence can't spoof its own headers.
 - **Durable document shapes** — the `durable-*.ts` modules for persisted roots, plus `durable.ts`, one large cross-document semantic validator. `TaskStateV1.last_transition` is the self-contained replay authority for the newest committed call. `AuthoritativeResultRef` carries no path because `authority/results/<result-digest>.json` is derived. `ImplementationOutputV1.verification_evidence` requires the digest and byte count of the ignored raw transcript.
-- **Tool contracts & errors** — the four tools' input/output types (each input is a union: the full payload, or the four-field staged-request reference `{schema_version, task_id, intent_id, request_digest}` the server rehydrates from disk — see `../mcp/SERVER.md`), gate kinds and decisions, human gate presentations, human-revision references, and the project-error taxonomy. The technical shapes remain authority, but user-facing skills consume the conversational projection and expose raw bindings only for diagnostics.
+- **Tool contracts & errors** — the four tools' input/output types (each input is a union: the full payload, or the four-field staged-request reference `{schema_version, task_id, intent_id, request_digest}` the server rehydrates from disk — see `../mcp/SERVER.md`), gate kinds and decisions, human gate presentations, human-revision references, and the project-error taxonomy. `design-approval` is a distinct durable union arm: its context binds document kind, per-rule compliance and trigger evidence, eligible waivers, target ref, baseline Git commit, and commit message, while one decision covers approval, revision, rejection, or a waiver request. The technical shapes remain authority, but user-facing skills consume the conversational projection and expose raw bindings only for diagnostics.
 
 ## One shape authority: Zod generates the schemas
 

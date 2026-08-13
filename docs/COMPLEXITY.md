@@ -1,6 +1,6 @@
 # COMPLEXITY
 
-**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** the whole repository
+**Explored:** 2026-08-13 · **Commit:** `247df34` · **Covers:** the whole repository
 
 A per-subsystem audit of where the machinery is heaviest, what it buys, and what could be simplified. Written to support iterating on the workflow — each item states the concrete problem the complexity solves so a simplification can be judged against it, per the engineering priorities in CLAUDE.md.
 
@@ -28,7 +28,7 @@ The audit asked for an explicit decision about how much SDK distrust the prototy
 
 ### 4. Dual shape authorities in `contracts/` — resolved 2026-08-11
 
-Agent-facing shapes existed as JSON Schema *and* a Zod mirror, with `assertZodAgreement` proving they matched — three artifacts per shape, with some rules living in a *third* place (custom Ajv keywords). Zod is now the single runtime authority: 34 of the 35 committed schemas are generated from it (`generate:schemas` / `check:schemas`), the release manifest stays hand-written, keyword logic became Zod refines, and Ajv left production entirely — it is a dev dependency compiled only by `test/helpers/json-schema.ts` and the release scripts.
+Agent-facing shapes existed as JSON Schema *and* a Zod mirror, with `assertZodAgreement` proving they matched — three artifacts per shape, with some rules living in a *third* place (custom Ajv keywords). Zod is now the single runtime authority: 31 of the 32 committed schemas are generated from it (`generate:schemas` / `check:schemas`), the release manifest stays hand-written, keyword logic became Zod refines, and Ajv left production entirely — it is a dev dependency compiled only by `test/helpers/json-schema.ts` and the release scripts.
 
 ### 5. Four CLI commands overlap `build-request` — resolved 2026-08-11
 

@@ -1,6 +1,6 @@
 # DEPENDENCIES
 
-**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, CI
+**Explored:** 2026-08-13 · **Commit:** `247df34` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, CI
 
 ## Runtime and package baseline
 
@@ -13,7 +13,7 @@
 | Package | Pin | Concrete use |
 | --- | --- | --- |
 | `@modelcontextprotocol/server` | `2.0.0` | The public-root SDK boundary in `src/mcp/sdk-adapter.ts`: `Server`, `ProtocolError`, `specTypeSchemas`, and MCP types. It resolves `@modelcontextprotocol/core@2.0.0` transitively. |
-| `zod` | `4.4.3` | The single runtime shape authority: strict parsing for agent-facing, durable, and in-memory contracts throughout `src/contracts/`, and the source the 34 generated JSON Schemas are emitted from (`npm run generate:schemas`). |
+| `zod` | `4.4.3` | The single runtime shape authority: strict parsing for agent-facing, durable, and in-memory contracts throughout `src/contracts/`, and the source the 31 generated JSON Schemas are emitted from (`npm run generate:schemas`). |
 | `yaml` | `2.9.0` | `src/contracts/yaml.ts` implements strict, single-document YAML parsing used by `config.yaml` and `workflow.yaml`. |
 | `@secretlint/core` | `13.0.4` | `src/state/secret-scan.ts` calls `lintSource` before retaining implementation output. |
 | `@secretlint/secretlint-rule-preset-recommend` | `13.0.4` | Supplies the production detector set; the filter-comments rule is removed before scanning. |

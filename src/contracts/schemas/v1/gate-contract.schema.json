@@ -131,6 +131,95 @@
       ],
       "additionalProperties": false
     },
+    "designApprovalContext": {
+      "type": "object",
+      "properties": {
+        "artifact_kind": {
+          "type": "string",
+          "enum": [
+            "design",
+            "phase-design"
+          ]
+        },
+        "constitution": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        "policy_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "compliance": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail",
+                  "uncertain"
+                ]
+              },
+              "rationale": {
+                "$ref": "#/$defs/text"
+              },
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "not-matched",
+                  "matched",
+                  "uncertain"
+                ]
+              },
+              "trigger_evidence": {
+                "$ref": "#/$defs/text"
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version",
+              "compliance",
+              "rationale",
+              "trigger",
+              "trigger_evidence"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "eligible_waivers": {
+          "$ref": "#/$defs/eligibleWaivers"
+        },
+        "target_ref": {
+          "$ref": "#/$defs/text"
+        },
+        "baseline_commit": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
+        "commit_message": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "artifact_kind",
+        "constitution",
+        "policy_findings",
+        "eligible_waivers",
+        "target_ref",
+        "baseline_commit",
+        "commit_message"
+      ],
+      "additionalProperties": false
+    },
     "constitutionReviewContext": {
       "type": "object",
       "properties": {
@@ -368,6 +457,64 @@
       ],
       "additionalProperties": false
     },
+    "designApprovalDecision": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "enum": [
+                "approve",
+                "revise",
+                "reject"
+              ]
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "decision",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "const": "waiver-requested"
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            },
+            "rule": {
+              "$ref": "#/$defs/rule"
+            },
+            "operation": {
+              "type": "string",
+              "enum": [
+                "review-trigger",
+                "adjudication-failure"
+              ]
+            },
+            "rationale": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "decision",
+            "reason",
+            "rule",
+            "operation",
+            "rationale"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
     "constitutionReviewDecision": {
       "anyOf": [
         {
@@ -601,6 +748,27 @@
       ],
       "additionalProperties": false
     },
+    "designApproval": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "design-approval"
+        },
+        "context": {
+          "$ref": "#/$defs/designApprovalContext"
+        },
+        "payload": {
+          "$ref": "#/$defs/designApprovalDecision"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
     "constitutionReview": {
       "type": "object",
       "properties": {
@@ -752,6 +920,9 @@
   "oneOf": [
     {
       "$ref": "#/$defs/artifactApproval"
+    },
+    {
+      "$ref": "#/$defs/designApproval"
     },
     {
       "$ref": "#/$defs/constitutionReview"

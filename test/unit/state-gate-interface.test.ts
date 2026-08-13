@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { canonicalDocument, sha256Bytes } from "../../src/contracts/canonical.js";
+import { canonicalDocument, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
 import { parseActiveGate, parseGateRequest, type ActiveGateV1 } from "../../src/contracts/durable-gate.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parsePathSafeId, parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
@@ -55,6 +55,13 @@ afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: 
 
 const CASES = [
   { kind: "artifact-approval", context: { artifact_kind: "phase-implementation" }, allowed: ["approve", "revise", "reject", "cancel"] },
+  { kind: "design-approval", context: {
+    artifact_kind: "design", constitution: "fail",
+    policy_findings: [{ ...RULE_A, compliance: "fail", rationale: "The design crosses the required boundary.", trigger: "matched", trigger_evidence: "The affected interface is in scope." }],
+    eligible_waivers: [{ rule: RULE_A, scope: { operation: "adjudication-failure", boundary: "subject" } }],
+    target_ref: "refs/heads/task", baseline_commit: parseGitOid("abcdef0123456789abcdef0123456789abcdef01"),
+    commit_message: "ArchFlow: Approve task-1 design",
+  }, allowed: ["approve", "revise", "reject", "waiver-requested", "cancel"] },
   // One rule failing compliance and another matching a review trigger: the gate must offer a
   // waiver on each rule's own axis, so the human never has to read server source to find one.
   { kind: "constitution-review", context: { constitution: "fail", failed_rules: [RULE_B], uncertain_rules: [], matched_trigger_rules: [RULE_A], uncertain_trigger_rules: [], eligible_waivers: [{ rule: RULE_A, scope: { operation: "review-trigger", boundary: "subject" } }, { rule: RULE_B, scope: { operation: "adjudication-failure", boundary: "subject" } }] }, allowed: ["approve", "revise", "reject", "waiver-requested", "cancel"] },
@@ -70,10 +77,10 @@ function activeGate(entry: (typeof CASES)[number], suffix: string): ActiveGateV1
   const contextDigest = computeGateContextDigest(entry.kind, entry.context as never);
   return parseActiveGate({
     schema_version: "1", gate_id: `gate-${suffix}`, intent_id: `intent-${suffix}`, request_digest: D("f"), task_id: "task-1",
-    phase_instance: "phase-impl-2", summary: "Human decision", subject_digest: D("c"), context_digest: contextDigest,
+    phase_instance: entry.kind === "design-approval" ? "design" : "phase-impl-2", summary: "Human decision", subject_digest: D("c"), context_digest: contextDigest,
     current_evidence: evidence, kind: entry.kind, context: entry.context, allowed_decisions: entry.allowed,
     opened_at_revision: 5, status: "awaiting-human", decision_template: {
-      schema_version: "1", gate_id: `gate-${suffix}`, task_id: "task-1", phase_instance: "phase-impl-2", kind: entry.kind,
+      schema_version: "1", gate_id: `gate-${suffix}`, task_id: "task-1", phase_instance: entry.kind === "design-approval" ? "design" : "phase-impl-2", kind: entry.kind,
       subject_digest: D("c"), context_digest: contextDigest, required_fields: ["payload", "human_provenance"],
       cancellation_fields: ["cancelled", "reason", "human_provenance"],
     },
@@ -179,6 +186,14 @@ describe("gate decision interface", () => {
       expect(presentation.question, entry.kind).toContain("briefly explain why");
       expect(presentation.options, entry.kind).toHaveLength(buildGateDecisionTemplates(active).length);
       expect(presentation.options.every((option) => option.label.length > 0 && option.consequence.length > 0), entry.kind).toBe(true);
+      if (entry.kind === "design-approval") {
+        expect(presentation.options.find((option) => option.token === "approve")?.label)
+          .toBe("Approve, commit, and continue");
+        expect(presentation.details).toEqual([
+          "rule-a: policy compliance is fail. The design crosses the required boundary.",
+          "rule-a: review trigger is matched. The affected interface is in scope.",
+        ]);
+      }
       for (const option of presentation.options) {
         expect(() => selectGateDecisionTemplate(active, {
           choice: option.token,
@@ -195,7 +210,7 @@ describe("gate decision interface", () => {
   });
 
   it("resolves server-issued presentation tokens without copied selectors or rationale", () => {
-    const constitutionReview = activeGate(CASES[1], "presented-waiver");
+    const constitutionReview = activeGate(CASES[2], "presented-waiver");
     const presentation = buildHumanGatePresentation(constitutionReview);
     const requested = presentation.options.find((option) => option.token === "request-exception-2");
     expect(requested).toMatchObject({ label: "Request an exception for rule-b" });
@@ -211,7 +226,7 @@ describe("gate decision interface", () => {
       },
     });
 
-    const collision = activeGate(CASES[6], "presented-collision");
+    const collision = activeGate(CASES[7], "presented-collision");
     expect(selectGateDecisionTemplate(collision, {
       choice: "keep-current-version",
       reason: "The workspace version contains the intended recovery edits.",
@@ -237,7 +252,7 @@ describe("gate decision interface", () => {
       payload: { decision: "reject", reason: "The acceptance evidence is incomplete." },
     });
 
-    const constitutionReview = activeGate(CASES[1], "waiver-choice");
+    const constitutionReview = activeGate(CASES[2], "waiver-choice");
     expect(selectGateDecisionTemplate(constitutionReview, {
       choice: "waiver-requested",
       reason: "A narrow exception is needed.",
@@ -315,7 +330,7 @@ describe("gate decision interface", () => {
     };
     const context = { origin, rationale: "Narrow exception" } as const;
     const contextDigest = computeGateContextDigest("waiver", context);
-    const ordinary = activeGate(CASES[1], "waiver");
+    const ordinary = activeGate(CASES[2], "waiver");
     const active = parseActiveGate({
       ...ordinary, context, context_digest: contextDigest, allowed_decisions: ["grant", "deny", "cancel"],
       decision_template: { ...ordinary.decision_template, context_digest: contextDigest, required_fields: ["granted", "scope", "origin", "notes", "human_provenance"] },

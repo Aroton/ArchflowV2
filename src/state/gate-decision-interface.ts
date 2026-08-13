@@ -93,7 +93,7 @@ export function buildGateDecisionTemplates(active: ActiveGateV1): readonly Plain
     if (decision === "waiver-requested") {
       // One template per waivable (rule, axis) pair: waiving a rule's compliance and waiving its
       // review trigger are different requests, and the human must be shown both.
-      const eligible = (context as GateContext<"constitution-review">).eligible_waivers;
+      const eligible = (context as GateContext<"constitution-review"> | GateContext<"design-approval">).eligible_waivers;
       for (const item of eligible) {
         payloads.push({
           decision,
@@ -135,6 +135,8 @@ export type HumanGatePresentation = Readonly<{
   title: string;
   /** The summary stored with the durable gate request, not a reconstruction from protocol data. */
   summary: string;
+  /** Self-contained review context so the human never has to inspect an internal artifact. */
+  details?: readonly string[];
   question: string;
   options: readonly HumanGateDecisionOption[];
 }>;
@@ -169,6 +171,10 @@ const PRESENTATION_COPY = Object.freeze({
   "artifact-approval": Object.freeze({
     title: "Review the finished work",
     question: "Does this work meet your expectations, or would you like it changed?",
+  }),
+  "design-approval": Object.freeze({
+    title: "Review and approve the design",
+    question: "Should ArchFlow approve this design, commit its recoverable milestone, and continue?",
   }),
   "constitution-review": Object.freeze({
     title: "Review the policy findings",
@@ -248,7 +254,13 @@ function presentationBindings(active: ActiveGateV1): readonly PresentationBindin
   return Object.freeze(buildGateDecisionTemplates(active).flatMap((template): PresentationBinding[] => {
     const decision = gateDecisionTemplateName(template);
     if (decision === "unknown") return [];
-    const option = decision === "waiver-requested"
+    const option = active.kind === "design-approval" && decision === "approve"
+      ? Object.freeze({
+          token: "approve",
+          label: "Approve, commit, and continue",
+          consequence: "Approve the exact reviewed design and policy context, authorize its recoverable task-local commit, and continue the workflow.",
+        })
+      : decision === "waiver-requested"
       ? waiverOption(template, ++waiverIndex)
       : OPTION_COPY[decision];
     return [Object.freeze({ token: option.token, decision, template, option })];
@@ -268,6 +280,18 @@ export function buildHumanGatePresentation(active: ActiveGateV1): HumanGatePrese
   return Object.freeze({
     title: copy.title,
     summary: request.summary,
+    ...(request.kind === "design-approval" ? {
+      details: Object.freeze(request.context.policy_findings.flatMap((finding) => {
+        const lines: string[] = [];
+        if (finding.compliance !== "pass") {
+          lines.push(`${finding.rule_id}: policy compliance is ${finding.compliance}. ${finding.rationale}`);
+        }
+        if (finding.trigger !== "not-matched") {
+          lines.push(`${finding.rule_id}: review trigger is ${finding.trigger}. ${finding.trigger_evidence}`);
+        }
+        return lines;
+      })),
+    } : {}),
     question: `${copy.question} Choose an option and briefly explain why.`,
     options: Object.freeze(presentationBindings(request).map((binding) => binding.option)),
   });

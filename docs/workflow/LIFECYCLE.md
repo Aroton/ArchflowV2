@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `skills/`
+**Explored:** 2026-08-13 · **Commit:** `247df34` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -18,7 +18,7 @@ flowchart LR
     PI --> Done([task complete])
 ```
 
-One nuance the YAML alone doesn't show: `gate: on_trigger` refers only to the gates the constitution verdict can demand (derived after triage). The phase skills impose an additional mandatory human gate on top — phase-design always opens an `artifact-approval` gate, and phase-impl always opens a `commit-authorization` gate (`src/local/build-request.ts` picks the kind from the phase). In practice **every phase ends at a human decision.**
+One nuance the YAML alone doesn't show: `gate: on_trigger` refers to constitution obligations derived after triage. PRD and phase implementation may surface those as their own gate before their mandatory final approval. Task design and phase design instead fold every constitution finding into one mandatory `design-approval`; they never ask for constitution approval and then document approval. Phase implementation still ends at `commit-authorization`. In practice **every phase ends at one final human decision, with earlier trigger gates only where the phase contract keeps them distinct.**
 
 That decision does not silently rewrite the phase. Approval commits first; the active producer then automatically composes the server-derived `advance` operation and re-runs status until the successor or terminal state is durable. This separation preserves replay and auditability without leaving a customer action gap. If a session stops between the two commits, status recommends the exact destination skill and arguments, and that invocation can complete only its authenticated immediate-predecessor hand-off.
 
@@ -31,8 +31,8 @@ The workflow file's bytes are digest-pinned into each task at creation, so chang
 | explore | `archflow-explore` | the maintained `docs/` set (`OVERVIEW.md`, `section/FILE.md`, stamped with commit + coverage) | review + commit confirmation (not a server gate) |
 | task creation | any phase skill | `config.yaml` (byte-pinned), `state.json` | — |
 | prd | `archflow-prd` | `ask.md` (verbatim request plus clarification Q&A), `prd.md` | `artifact-approval`, always |
-| design | `archflow-design` | `design.md` with a machine-readable `### Phase N:` plan | `artifact-approval`, always |
-| phase-design | `archflow-phase-design` | `phases/<n>/design.md` | `artifact-approval` + any triggered gate |
+| design | `archflow-design` | `design.md` with a machine-readable `### Phase N:` plan | one `design-approval` containing document and constitution findings; approval authorizes the task-local milestone commit |
+| phase-design | `archflow-phase-design` | `phases/<n>/design.md` | one `design-approval` containing document and constitution findings; approval authorizes the task-local milestone commit |
 | phase-impl | `archflow-phase-impl` | code, tracked `phases/<n>/impl-notes.md`, digest-bound ignored verification transcript | `commit-authorization`, **then** a second explicit confirm-to-commit |
 | status | `archflow-status` | nothing — read-only | surfaces gates, resolves none |
 
@@ -49,7 +49,7 @@ Every gated stage runs the same evidence pipeline to a fixed point:
    - **accepted-editorial** — the fix is purely wording or formatting and the finding is non-blocking (the server refuses this disposition for blocking findings). See the editorial path below.
    - **rejected** — with a written rationale. Findings prefixed `unverifiable-` mean "the reviewer lacked evidence," and are rejected with an `envelope-gap:` rationale, never accepted.
 
-   The constitution verdict is never triaged: a failing or uncertain rule, a matched `review_trigger`, or material drift opens a human gate *after* triage, through the ordinary gate flow — status derives the pending gate and `build-request` (kind `"gate"`) composes the complete request mechanically; the human decides at the gate. One counter-review yields at most one constitution decision: compliance and trigger are separate judgments about the same rules that usually share a root cause, so a single `constitution-review` gate discloses both axes rather than asking twice about one rule.
+   The constitution verdict is never triaged. For PRD and phase implementation, a failing or uncertain rule, matched `review_trigger`, or material drift opens a human gate after triage. For task design and phase design, those same findings are carried into the final `design-approval` presentation with their rationale and evidence, so the human gets one self-contained decision rather than a constitution decision followed by document approval.
 
 Editing the artifact changes the subject digest, which normally invalidates all downstream evidence — the pipeline re-runs until everything agrees about the same bytes. Re-entry is bounded (`max_attempts`, default 3); exhaustion opens an `attempts-exhausted` gate rather than looping forever. A significant human revision begins a new cycle at attempt 1, so exhaustion counts only attempts since the latest such revision.
 
@@ -75,15 +75,16 @@ Beyond the forward hand-off (each succeeded step to its successor, same attempt)
 
 - **any-succeeded step → produce-running (attempt + 1)** — the "new information" door. From triage this is the accepted-finding (or editorial) re-entry; from a succeeded produce or counter_review it is the author withdrawing to incorporate new information. Downstream evidence simply goes stale and is redone — except on the one-hop editorial path, where retained evidence stays bound to the declared predecessor. Because re-entry is sanctioned, the artifact drifting on disk while state sits at produce running (or failed) is an *expected re-entry edit*, not material drift.
 
-The phase-completion signal fires from **triage-succeeded**: once triage closes the fixed point (and any post-triage gates resolve), the phase can advance — for phase-impl that is what arms the commit-authorization flow, and the legacy-import design jump fires from the same point. `advance-phase` and `complete-task` are executable actions, not reports: `build-request` kind `advance` recomputes status, derives the successor, and stages the existing `archflow_state` operation. At PRD, design, and phase-design boundaries that operation also re-verifies an authenticated artifact approval bound to the current produce result; it fails closed for missing, stale, or mismatched approval.
+The phase-completion signal fires from **triage-succeeded**: once triage closes the fixed point, the phase can advance — for phase-impl that is what arms the commit-authorization flow, and the legacy-import design jump fires from the same point. `advance-phase` and `complete-task` are executable actions, not reports: `build-request` kind `advance` recomputes status, derives the successor, and stages the existing `archflow_state` operation. PRD re-verifies `artifact-approval`. Design boundaries re-verify `design-approval` and refuse to advance until Git proves the approved task-local commit is the direct child of the bound baseline, contains the approved document and durable decision authority, touches no other task, and leaves the task root clean.
 
 ## Gates: where humans decide
 
-Eight gate kinds exist (`src/contracts/gates.ts`):
+Nine gate kinds exist (`src/contracts/gates.ts`):
 
 | Gate kind | Opens when |
 |---|---|
-| `artifact-approval` | a PRD, design, or phase design reaches its fixed point |
+| `artifact-approval` | a PRD reaches its fixed point; archived legacy design gates remain readable and finish under their original contract |
+| `design-approval` | task design or phase design reaches its fixed point; one decision includes document approval, constitution findings, and task-local milestone commit authority |
 | `commit-authorization` | a phase implementation is ready to commit |
 | `constitution-review` | the constitution review found a rule `fail`/`uncertain`, or a rule's `review_trigger` matched, or both (derived after triage; one gate discloses both axes and offers a waiver per rule *and* axis) |
 | `material-drift` | an approved upstream document drifted materially (derived after triage) |
@@ -105,7 +106,8 @@ These rules recur across every skill and are enforced by the server wherever mec
 
 - **Nothing is approved until a human explicitly decides, on the exact bytes.** Silence, elapsed time, agent prose, or a model verdict never supplies approval. Skills re-run `status` after a gate rather than trusting conversation memory.
 - **No code before approved phase design.** Durable state must say `phase-impl-<n>`; a design file existing on disk is explicitly insufficient.
-- **Committing is a double lock.** An `authorize-commit` gate decision bound to the final diff, *and then* a separate stop where the user sees the exact staged diff and message and explicitly confirms.
+- **Implementation committing is a double lock.** An `authorize-commit` gate decision bound to the final implementation diff, *and then* a separate stop where the user sees the exact staged diff and message and explicitly confirms. Design milestone commits use a different boundary: the single `design-approval` binds their target, baseline, and message, so they run automatically without a second prompt.
+- **Every nonterminal hand-off is explicit for both clients.** Skills print the exact server-derived successor as `Claude: /<skill> ...` and `Codex: $<skill> ...`; terminal completion prints no next command.
 - **Waivers are narrow.** A `waiver-requested` decision is not approval; a granted waiver covers one rule version + one subject digest + one task, and evaporates on any change.
 - **Fail closed, honestly.** With the MCP server unavailable nothing records progress — degraded mode is a read-only status, not an offline workflow; `repair-required` states never become progress; "task complete" means the last planned phase is committed — it does not imply QA, staging, or release.
 

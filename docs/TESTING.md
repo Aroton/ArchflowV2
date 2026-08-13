@@ -1,6 +1,6 @@
 # TESTING
 
-**Explored:** 2026-08-12 · **Commit:** `247df34` · **Covers:** `test/`, `vitest.config.ts`, `.github/workflows/`
+**Explored:** 2026-08-13 · **Commit:** `247df34` · **Covers:** `test/`, `vitest.config.ts`, `.github/workflows/`
 
 ## Test runner and configuration
 
@@ -9,24 +9,24 @@
 - `test/types/mcp-sdk-public-surface.ts` is therefore compile-time coverage exercised by `npm run typecheck`, not by Vitest.
 - The package supports Node `^24.15.0`. CI runs the validation matrix on exactly Node 24.15.0 and 24.18.0 (`.github/workflows/ci.yml`).
 
-At this commit, `npm test -- --reporter=dot` passed locally: **168 files discovered, 164 passed, 4 skipped; 1,802 tests discovered, 1,777 passed, 25 skipped**. The skipped groups were the explicitly opt-in real-host suites. Expected failure-path tests write some `INTERNAL_ERROR` diagnostics to stderr while still passing.
+At this commit, `npm test -- --reporter=dot` passed locally: **165 files discovered, 161 passed, 4 skipped; 1,714 tests discovered, 1,690 passed, 24 skipped**. The skipped groups were the explicitly opt-in real-host suites. Expected failure-path tests write some `INTERNAL_ERROR` diagnostics to stderr while still passing.
 
 ## Suite inventory by behavior
 
-### Unit: `test/unit/` (106 files)
+### Unit: `test/unit/` (101 files)
 
 The unit layer is broad and normally imports production modules directly.
 
 - **Durable contracts and validation:** canonical JSON/digests, plain-JSON input discipline, branded evidence/path claims, YAML/config/workflow parsing, durable documents, workspace cleanup, initialization, state, gates, implementation outputs, and semantic derivations. Representative files include `test/unit/plain-json.test.ts`, `test/unit/canonical.test.ts`, `test/unit/durable-state.test.ts`, `test/unit/durable-output-entry-matrix.test.ts`, and `test/unit/phase-instance.test.ts`.
-- **State authority and persistence:** initialization authority, transition ordering, `last_transition` replay, transactions, atomic replacement, work locks, snapshots, repair, reconciliation, reconstructible gate interfaces, successor-aware next-action derivation, guarded automatic hand-offs, cleanup, current result manifests, and secret rejection/scanning. Cleanup coverage verifies that decisions protect only a manifest's result identity or authenticated artifact identity, incidental nested digests do not retain stale results, and malformed authority fails toward retention. Handoff coverage checks every successor, exact destination skill arguments, terminal completion, and rejection of absent, stale, wrong-subject, or fabricated document approval. Representative files include `test/unit/state-transaction.test.ts`, `test/unit/state-gates.test.ts`, `test/unit/workspace-cleanup.test.ts`, `test/unit/state-snapshot-restore-seam.test.ts`, `test/unit/state-repair.test.ts`, and `test/unit/secret-rejection.test.ts`.
+- **State authority and persistence:** initialization authority, transition ordering, `last_transition` replay, transactions, atomic replacement, work locks, snapshots, repair, reconciliation, reconstructible gate interfaces, successor-aware next-action derivation, guarded automatic hand-offs, cleanup, current result manifests, and secret rejection/scanning. Cleanup coverage verifies that decisions protect only a manifest's result identity or authenticated artifact identity, incidental nested digests do not retain stale results, and malformed authority fails toward retention. Handoff coverage checks every successor, exact destination skill arguments, combined design approval, legacy-gate compatibility, the nonhuman `commit-artifacts` step, real-Git proof of the task-local milestone, terminal completion, and rejection of absent, stale, wrong-subject, or fabricated approval. Representative files include `test/unit/state-transaction.test.ts`, `test/unit/state-gates.test.ts`, `test/unit/state-gate-interface.test.ts`, `test/unit/state-next-action.test.ts`, `test/unit/implementation-output-builder.test.ts`, and `test/unit/workspace-cleanup.test.ts`.
 - **Repository/Git safety:** discovery and identity, resolved-path containment, index/history/object behavior, constitution reads, and linked-worktree behavior. These tests use real temporary Git repositories where behavior cannot be represented by a fake runner; examples are `test/unit/repository-paths.test.ts`, `test/unit/repository-index.test.ts`, and `test/unit/repository-identity.test.ts`.
 - **MCP runtime:** framing, send queue, SDK adapter, process runner, server, tools, handler authority/error mapping, replay/supersession, and cancellation/overflow translation. The retired session layer's surviving behaviors — repeated-initialize `-32004`, connection capture through the SDK initialized hook, response ordering through the SDK, and the missing-outcome `-32603` invariant — live in `test/unit/mcp-sdk-adapter.test.ts` (`test/unit/mcp-session.test.ts` was deleted with `src/mcp/session.ts`). Representative files include `test/unit/mcp-framing.test.ts`, `test/unit/mcp-sdk-adapter.test.ts`, and `test/unit/mcp-handler-authority.test.ts`.
 - **Dispatch and review:** CLI policy/projection, routing and attestation, child-process lifecycle, isolated workspaces, pinned context, review envelopes/diffs, the constitution review, counter-review, and service-level fixed-point behavior. See `test/unit/dispatch-cli.test.ts`, `test/unit/dispatch-process.test.ts`, `test/unit/review-services.test.ts`, and `test/unit/adjudication.test.ts`.
-- **Initialization and local surfaces:** asset/config scaffolding, host registration crash safety, task initialization, legacy upgrade, local command dispatch, and the read-only `manual-status` classifier. See `test/unit/init-registration-crash-safety.test.ts`, `test/unit/init-task-initialization.test.ts`, and `test/unit/legacy-upgrade.test.ts`.
+- **Initialization and local surfaces:** asset/config scaffolding, host registration crash safety, task initialization, legacy upgrade, local command dispatch, and the read-only `manual-status` classifier, including paired Claude/Codex successor commands and terminal command omission. See `test/unit/init-registration-crash-safety.test.ts`, `test/unit/init-task-initialization.test.ts`, `test/unit/status-classification.test.ts`, and `test/unit/legacy-upgrade.test.ts`.
 
 Success cases are paired with representative boundary failures: malformed/non-plain inputs and split-observation getters; digest, revision, task, and phase mismatches; stale or contradictory evidence; traversal/symlink/class-confusion paths; lock and snapshot limits; secret-bearing output; process cancellation/overflow; and unsupported or unauthenticated host classifications.
 
-### Contract: `test/contracts/` (27 files)
+### Contract: `test/contracts/` (25 files)
 
 This layer pins the published contract surface: the Zod shape authority's acceptance/rejection behavior, the generated JSON Schemas (strict-compiled as a third-party consumer would), durable semantics, MCP-advertised schemas, skills, and release metadata. Since the 2026-08-11 generation flip, the committed-bytes fence is `npm run check:schemas`; the former Zod↔schema agreement loops are gone, and per-shape suites assert validation under the Zod authority while pinning where the generated documents are deliberately weaker (retired `x-archflow-*` keywords).
 
@@ -34,12 +34,12 @@ This layer pins the published contract surface: the Zod shape authority's accept
 - Durable structural and semantic corpora, per-shape validation, gate presentations, human-revision classification and reset behavior, state `last_transition`, implementation verification evidence, and result manifests.
 - Frozen pre-`ad057d3` gate fixtures prove monotonic V1 archive reading: empty and populated supplemental ledgers remain valid, request supersession remains readable, malformed ledgers fail closed, superseded outcomes cannot act as approvals, and current writer parsers continue rejecting retired fields.
 - MCP catalogue/schema/runtime agreement: `mcp-advertised-schema.test.ts`, `mcp-contract-agreement.test.ts`.
-- Skill text and workflow trust boundaries, including automatic advance and exact predecessor recovery instructions: `skill-contract-canonical.test.ts`, `skill-contract-upgrade.test.ts`.
+- Skill text and workflow trust boundaries, including one design approval, automatic design milestone commit, automatic advance, dual-client successor syntax, and exact predecessor recovery instructions: `skill-contract-canonical.test.ts`, `skill-contract-upgrade.test.ts`.
 - Repository/package and release boundaries: `repository-boundary.test.ts`, `release-contracts.test.ts`, `canonical-parity.test.ts`.
 
 Fixtures under `test/fixtures/contracts/`, `test/fixtures/foundation/`, and `test/fixtures/mcp/` provide known-valid documents plus invalid traversal, contradictory review, malformed state, protocol, and adversarial-byte examples. Several corpus tests explicitly prove error precedence and total ordering, not merely acceptance/rejection.
 
-### Integration: `test/integration/` (32 files)
+### Integration: `test/integration/` (31 files)
 
 Integration tests assemble production services around real temporary repositories, real child processes, stdio framing, or generated bundles. They cover:
 

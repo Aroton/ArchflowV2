@@ -332,6 +332,20 @@ function adjudicationGateSatisfied(
   subject: EvidenceSubject,
   gate: AdjudicationGate,
 ): boolean {
+  const phaseKind = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
+  if (phaseKind && gate.kind === "constitution-review") {
+    const designApproval = (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+      assertAuthenticatedGateApproval(authenticated);
+      return authenticated.approval.gate_kind === "design-approval" &&
+        authenticated.approval.subject_digest === subject.subject_digest &&
+        authenticated.request.kind === "design-approval" &&
+        authenticated.request.phase_instance === state.phase_instance &&
+        authenticated.request.subject_digest === subject.subject_digest &&
+        authenticated.request.current_evidence.set_digest === deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest &&
+        authenticated.decision.envelope.payload.decision === "approve";
+    });
+    if (designApproval) return true;
+  }
   const contextDigest = computeGateContextDigest(gate.kind, gate.context);
   const evidence: RetainedGateEvidence = Object.freeze({
     counter_review_digest: retained.get("counter_review")?.manifest.artifact_digest,
@@ -564,9 +578,9 @@ export function requireApprovedUpstreamDigests(
   }
   for (const digest of sorted) {
     if (!approvals.some((approval) =>
-      approval.gate_kind === "artifact-approval" &&
+      (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") &&
       approval.subject_digest === digest)) {
-      throw new TypeError(`upstream ${digest} lacks current artifact approval`);
+      throw new TypeError(`upstream ${digest} lacks current document approval`);
     }
   }
   return Object.freeze(sorted);

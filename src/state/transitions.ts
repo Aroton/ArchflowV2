@@ -97,12 +97,16 @@ function artifactApprovalKind(
 function hasAuthenticatedArtifactApproval(input: TransitionPlanInput): boolean {
   const artifactKind = artifactApprovalKind(input.current.phase_instance);
   if (artifactKind === undefined || input.completion_subject_digest === undefined) return false;
+  const designArtifact = artifactKind === "design" || artifactKind === "phase-design";
   for (const authenticated of input.authenticated_gate_approvals ?? []) {
     assertAuthenticatedGateApproval(authenticated);
     if (
-      authenticated.approval.gate_kind === "artifact-approval" &&
+      authenticated.request.kind !== "artifact-approval" &&
+      !(designArtifact && authenticated.request.kind === "design-approval")
+    ) continue;
+    if (
+      authenticated.approval.gate_kind === authenticated.request.kind &&
       authenticated.approval.subject_digest === input.completion_subject_digest &&
-      authenticated.request.kind === "artifact-approval" &&
       authenticated.request.phase_instance === input.current.phase_instance &&
       authenticated.request.subject_digest === input.completion_subject_digest &&
       authenticated.request.context.artifact_kind === artifactKind &&
@@ -110,6 +114,14 @@ function hasAuthenticatedArtifactApproval(input: TransitionPlanInput): boolean {
     ) return true;
   }
   return false;
+}
+
+function hasAuthenticatedCombinedDesignApproval(input: TransitionPlanInput): boolean {
+  return (input.authenticated_gate_approvals ?? []).some((authenticated) =>
+    authenticated.request.kind === "design-approval" &&
+    authenticated.approval.gate_kind === "design-approval" &&
+    authenticated.approval.subject_digest === input.completion_subject_digest &&
+    authenticated.decision.envelope.payload.decision === "approve");
 }
 
 /**
@@ -349,6 +361,12 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     decodedCurrent.kind !== "phase-impl" &&
     crossesPhase &&
     !hasAuthenticatedArtifactApproval(input)
+  ) return invalid(input, from, to);
+  if (
+    (decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") &&
+    crossesPhase &&
+    hasAuthenticatedCombinedDesignApproval(input) &&
+    input.commit_observed !== true
   ) return invalid(input, from, to);
   if (
     !legalMovement(input) ||

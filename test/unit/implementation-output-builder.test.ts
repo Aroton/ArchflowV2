@@ -12,8 +12,11 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { canonicalDocument, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
+import { canonicalDocument, gitBlobOid, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
+import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
+import type { OutputEntry } from "../../src/contracts/durable-primitives.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
+import type { GateContext } from "../../src/contracts/gates.js";
 import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
@@ -23,6 +26,7 @@ import { createInternalTransactionAuthority } from "../../src/state/authority.js
 import type { GateLifecycleDependencies } from "../../src/state/gates.js";
 import {
   buildImplementationOutput,
+  designArtifactCommittedAtCurrentTarget,
   implementationOutputCommittedAtCurrentTarget,
   verifyImplementationManifest,
 } from "../../src/state/implementation-manifest.js";
@@ -41,6 +45,85 @@ const gitEnv: NodeJS.ProcessEnv = {
 };
 
 describe("implementation-output builder", () => {
+  it("proves only the exact task-local design milestone authorized by approval", async () => {
+    const root = mkdtempSync(join(tmpdir(), "archflow-design-commit-"));
+    roots.push(root);
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env: gitEnv });
+    writeFileSync(join(root, "tracked.txt"), "base\n");
+    execFileSync("git", ["add", "tracked.txt"], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: root, env: gitEnv });
+    const baseline = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: root, env: gitEnv, encoding: "utf8",
+    }).trim());
+
+    const taskId = parseTaskSlug("design-commit-task");
+    const taskPath = `.archflow/tasks/${taskId}`;
+    const taskRoot = join(root, taskPath);
+    const decisionRoot = join(taskRoot, "authority", "decisions", "gate-1");
+    mkdirSync(decisionRoot, { recursive: true });
+    const designBytes = new TextEncoder().encode("# Approved design\n");
+    writeFileSync(join(taskRoot, "design.md"), designBytes);
+    writeFileSync(join(taskRoot, "state.json"), "{}\n");
+    writeFileSync(join(decisionRoot, "request.json"), "{}\n");
+    writeFileSync(join(decisionRoot, "decision.json"), "{}\n");
+
+    const projectionTarget = parseRepositoryPathClaim(`${taskPath}/design.md`);
+    const artifact: DocumentArtifactV1 = {
+      schema_version: "1",
+      artifact_kind: "document",
+      task_id: taskId,
+      phase_instance: encodePhaseInstance({ kind: "design" }),
+      step: "produce",
+      document_path: parseTaskPathClaim("design.md"),
+      path_class: "document",
+      byte_count: parseSafeInteger(designBytes.byteLength),
+      content_digest: sha256Bytes(designBytes),
+      declared_inputs: [],
+      input_fingerprint: parseSha256Digest("1".repeat(64)),
+      snapshot_digest: parseSha256Digest("2".repeat(64)),
+      projection_target: projectionTarget,
+    };
+    const outputs: readonly OutputEntry[] = [{
+      path: projectionTarget,
+      path_class: "document",
+      operation: "add",
+      storage: "git-object",
+      file_type: "regular",
+      after: { oid: gitBlobOid(designBytes), mode: "100644", size_bytes: parseSafeInteger(designBytes.byteLength) },
+    }];
+    const context: GateContext<"design-approval"> = {
+      artifact_kind: "design",
+      constitution: "pass",
+      policy_findings: [],
+      eligible_waivers: [],
+      target_ref: "refs/heads/main",
+      baseline_commit: baseline,
+      commit_message: "ArchFlow: Approve design-commit-task design",
+    };
+    const operation: RepositoryOperationContext = {
+      task_id: taskId,
+      phase_instance: encodePhaseInstance({ kind: "design" }),
+      operation: "prove-design-commit" as never,
+      attempt: parseSafeInteger(1),
+    };
+    const discovered = await discoverWorktree(createGitRunner({ cwd: root }), operation);
+    if (!discovered.ok) throw discovered.error;
+
+    await expect(designArtifactCommittedAtCurrentTarget(
+      discovered.value, taskId, artifact, outputs, context,
+    )).resolves.toBe(false);
+    execFileSync("git", ["add", "-A", "--", taskPath], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "-qm", context.commit_message, "--", taskPath], { cwd: root, env: gitEnv });
+    await expect(designArtifactCommittedAtCurrentTarget(
+      discovered.value, taskId, artifact, outputs, context,
+    )).resolves.toBe(true);
+
+    writeFileSync(join(taskRoot, "late-change.txt"), "dirty\n");
+    await expect(designArtifactCommittedAtCurrentTarget(
+      discovered.value, taskId, artifact, outputs, context,
+    )).resolves.toBe(false);
+  });
+
   it("derives operations, identities, undeclared changes, secret scan, and successive accounting", async () => {
     const root = mkdtempSync(join(tmpdir(), "archflow-implementation-builder-"));
     roots.push(root);

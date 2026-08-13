@@ -15,6 +15,8 @@ import type {
   ParentDocumentRef,
   UndeclaredChangeReport,
 } from "../contracts/durable-implementation-output.js";
+import type { DocumentArtifactV1 } from "../contracts/durable-document.js";
+import type { GateContext } from "../contracts/gates.js";
 import type {
   BlobIdentity,
   ClaimableOutputPathClass,
@@ -145,6 +147,60 @@ export async function implementationOutputCommittedAtCurrentTarget(
         await readCommitTreeBlob(runner, headCommit, entry.previous_path) !== undefined) return false;
   }
   return true;
+}
+
+/**
+ * Proves the automatic design milestone commit authorized by the combined human gate. The commit
+ * must be the direct child of the approved baseline, touch only this task, contain the reviewed
+ * document plus durable recovery authority, and leave the task root clean.
+ */
+export async function designArtifactCommittedAtCurrentTarget(
+  runner: RootBoundGitRunner,
+  taskId: string,
+  artifact: DocumentArtifactV1,
+  outputs: readonly OutputEntry[],
+  context: GateContext<"design-approval">,
+): Promise<boolean> {
+  const symbolicRef = await runner.runText({
+    argv: ["symbolic-ref", "--quiet", "HEAD"],
+    operation: "git-current-design-target" as SafeCode,
+    expectedAbsence: [{ code: 1, stderrIncludes: "" }],
+  });
+  if (context.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context.target_ref) return false;
+  const head = await resolveCommit(runner, "HEAD");
+  if (await resolveCommit(runner, context.target_ref) !== head) return false;
+  if (head === context.baseline_commit) return false;
+  if (await resolveCommit(runner, `${head}^`) !== context.baseline_commit) return false;
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", head],
+    operation: "git-design-commit-message" as SafeCode,
+  });
+  if (message !== context.commit_message) return false;
+
+  const prefix = `.archflow/tasks/${taskId}/`;
+  const changed = await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context.baseline_commit, head, "--"],
+    operation: "git-design-commit-paths" as SafeCode,
+  });
+  if (changed.length === 0 || changed.some((path) => !path.startsWith(prefix))) return false;
+  if (!changed.includes(artifact.projection_target) || !changed.includes(`${prefix}state.json`)) return false;
+  if (!changed.some((path) => path.startsWith(`${prefix}authority/decisions/`) && path.endsWith("/request.json")) ||
+      !changed.some((path) => path.startsWith(`${prefix}authority/decisions/`) && path.endsWith("/decision.json"))) return false;
+
+  const output = outputs.find((entry) => entry.path === artifact.projection_target);
+  if (output === undefined || output.operation === "delete") return false;
+  const committed = await readCommitTreeBlob(runner, head, artifact.projection_target);
+  if (committed?.mode !== output.after.mode || committed.oid !== output.after.oid) return false;
+
+  const dirty = await runner.runNulFields({
+    argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", prefix.slice(0, -1)],
+    operation: "git-design-task-clean" as SafeCode,
+  });
+  if (dirty.length !== 0) return false;
+  // Close the observation window: a concurrent target move after the initial pin must not let
+  // stale commit evidence authorize the phase transition.
+  return await resolveCommit(runner, "HEAD") === head &&
+    await resolveCommit(runner, context.target_ref) === head;
 }
 
 const ordinal = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;

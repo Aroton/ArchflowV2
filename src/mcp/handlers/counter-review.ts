@@ -142,16 +142,17 @@ async function deriveApprovedUpstreams(
     const upstreamDigest = upstream.value.artifact_digest;
     let approved = false;
     for (const approval of [...durable.approvals]
-      .filter((candidate) => candidate.gate_kind === "artifact-approval" && candidate.subject_digest === upstreamDigest)
+      .filter((candidate) =>
+        (candidate.gate_kind === "artifact-approval" || candidate.gate_kind === "design-approval") &&
+        candidate.subject_digest === upstreamDigest)
       .sort((left, right) => right.resolved_at_revision - left.resolved_at_revision)) {
       const authenticated = await loadAuthenticatedGateApproval(
         services.dependencies, services.authority, approval,
       );
       if (!authenticated.ok) return authenticated;
-      if (
-        authenticated.value.request.kind === "artifact-approval" &&
-        authenticated.value.request.context.artifact_kind === binding.artifact_kind
-      ) {
+      const request = authenticated.value.request;
+      if ((request.kind === "artifact-approval" || request.kind === "design-approval") &&
+          request.context.artifact_kind === binding.artifact_kind) {
         approved = true;
         break;
       }

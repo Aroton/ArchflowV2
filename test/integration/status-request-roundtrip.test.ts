@@ -505,18 +505,37 @@ describe("status-derived requests execute against the real handlers", () => {
         reconciliation: { findings: [] },
         evidence: { assessment: { next: "advance" } },
         next_action: {
-          code: "advance-phase",
-          target_phase_instance: "phase-design-1",
-          skill: "archflow-phase-design",
-          skill_args: ["1"],
-          request: {
-            tool: "archflow_state",
-            input: { phase_instance: "phase-design-1", step: "produce", status: "running" },
-          },
+          code: "commit-artifacts",
+          human_required: false,
+          commit_path: `.archflow/tasks/${task}`,
+          commit_message: `ArchFlow: Approve ${task} design`,
+          commit_target_ref: "refs/heads/main",
         },
       });
       const approvedRevision = approved.revision;
       expect(approvedRevision).toBeDefined();
+
+      git(fixture.root, "add", "-A", "--", approved.next_action.commit_path!);
+      git(
+        fixture.root,
+        "commit",
+        "-q",
+        "-m",
+        approved.next_action.commit_message!,
+        "--",
+        approved.next_action.commit_path!,
+      );
+      const committed = await h.status();
+      expect(committed.next_action).toMatchObject({
+        code: "advance-phase",
+        target_phase_instance: "phase-design-1",
+        skill: "archflow-phase-design",
+        skill_args: ["1"],
+        request: {
+          tool: "archflow_state",
+          input: { phase_instance: "phase-design-1", step: "produce", status: "running" },
+        },
+      });
 
       const manual = await runLocalCommand({
         command: "manual-status",
@@ -524,8 +543,10 @@ describe("status-derived requests execute against the real handlers", () => {
         task_id: task,
       });
       expect(manual).toMatchObject({
-        ok: true,
-        value: { next_action: { command: `$archflow-phase-design ${task} 1` } },
+        ok: true, value: { next_action: { commands: {
+          claude: `/archflow-phase-design ${task} 1`,
+          codex: `$archflow-phase-design ${task} 1`,
+        } } },
       });
 
       const advance = await h.buildRequest({ intent_id: "handoff-design-advance", kind: "advance" });

@@ -21,6 +21,7 @@ export type NextActionCode =
   | "open-gate"
   | "resolve-open-gate"
   | "run-step"
+  | "commit-artifacts"
   | "commit-phase"
   | "advance-phase"
   | "complete-task"
@@ -51,6 +52,11 @@ export type NextAction = Readonly<{
   skill_args?: readonly string[];
   gate_id?: PathSafeId;
   gate_kind?: GateKind;
+  /** Exact task-local milestone commit authorized by the approved design gate. */
+  commit_path?: string;
+  commit_message?: string;
+  commit_target_ref?: string;
+  commit_baseline?: string;
   /**
    * Every constitution gate this review still demands, in the order they will open, including the
    * one named by `gate_kind`. Present only when more than one remains, so a human can be told the
@@ -80,6 +86,12 @@ export type NextActionInput = Readonly<{
   subject_digest?: Sha256Digest;
   authenticated_approvals?: readonly AuthenticatedApprovalFact[];
   commit_observed?: boolean;
+  design_commit?: Readonly<{
+    path: string;
+    message: string;
+    target_ref: string;
+    baseline_commit: string;
+  }>;
   adjudication_gate_kind?: GateKind;
   /** Every constitution gate still pending, in the order they open; the first is `adjudication_gate_kind`. */
   pending_adjudication_gate_kinds?: readonly GateKind[];
@@ -123,16 +135,38 @@ function matchingApproval(input: NextActionInput, kind: GateKind): boolean {
       approval.gate_kind === kind && approval.subject_digest === input.subject_digest);
 }
 
+function hasLegacyDesignApproval(input: NextActionInput): boolean {
+  return matchingApproval(input, "artifact-approval");
+}
+
 function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
   const phase = decodePhaseInstance(state.phase_instance);
-  const requiredKind = phase.kind === "prd" || phase.kind === "design" || phase.kind === "phase-design"
-    ? "artifact-approval"
+  const designPhase = phase.kind === "design" || phase.kind === "phase-design";
+  const requiredKind = designPhase
+    ? "design-approval"
+    : phase.kind === "prd"
+      ? "artifact-approval"
     : phase.kind === "phase-impl"
       ? "commit-authorization"
       : undefined;
-  if (requiredKind !== undefined && !matchingApproval(input, requiredKind)) {
+  const legacyDesignApproval = designPhase && hasLegacyDesignApproval(input);
+  if (requiredKind !== undefined && !matchingApproval(input, requiredKind) && !legacyDesignApproval) {
     return action("open-gate", `Open the required ${requiredKind} gate.`, true, state, {
       gate_kind: requiredKind,
+    });
+  }
+  // An artifact-approval request already recorded before design-approval existed completes under
+  // its original contract. It did not authorize a commit, so only the new combined gate enters
+  // the automatic commit step.
+  if (designPhase && !legacyDesignApproval && input.commit_observed !== true) {
+    if (input.design_commit === undefined) {
+      return action("inspect-state", "Inspect why the approved design commit authority is unavailable.", true, state);
+    }
+    return action("commit-artifacts", "Commit the exact recoverable task-local milestone authorized by design approval.", false, state, {
+      commit_path: input.design_commit.path,
+      commit_message: input.design_commit.message,
+      commit_target_ref: input.design_commit.target_ref,
+      commit_baseline: input.design_commit.baseline_commit,
     });
   }
   if (phase.kind === "phase-impl" && input.commit_observed !== true) {
@@ -237,6 +271,22 @@ export function deriveNextAction(input: NextActionInput): NextAction {
       return action("open-gate", "Open the attempts-exhausted gate.", true, state, { gate_kind: "attempts-exhausted" });
     }
     if (next === "adjudication-gate") {
+      const phase = decodePhaseInstance(state.phase_instance);
+      if (phase.kind === "design" || phase.kind === "phase-design") {
+        if (input.adjudication_gate_kind === "material-drift") {
+          // Material upstream drift asks where the correction belongs, so it retains its distinct
+          // redirect/revise decision instead of being silently collapsed into document approval.
+        } else if (hasLegacyDesignApproval(input) && !matchingApproval(input, "design-approval")) {
+          // A legacy document approval does not erase any separately recorded constitution gate.
+          // Let the old adjudication contract finish instead of opening the new combined gate.
+        } else {
+          return matchingApproval(input, "design-approval")
+          ? advanceAction(input, state)
+          : action("open-gate", "Open the single design approval with its policy findings and commit authority.", true, state, {
+              gate_kind: "design-approval",
+            });
+        }
+      }
       if (input.adjudication_gate_kind === undefined) {
         return action("inspect-state", "Inspect the unresolved adjudication gate obligation.", true, state);
       }

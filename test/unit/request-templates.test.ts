@@ -9,7 +9,7 @@ import type { PipelineStep } from "../../src/contracts/vocabulary.js";
 import { BUILD_REQUEST_KINDS } from "../../src/local/build-request.js";
 import type { NextAction } from "../../src/state/next-action.js";
 import { buildNextActionRequest, type BuiltNextActionRequest } from "../../src/state/request-templates.js";
-import type { CommitAuthorizationInput } from "../../src/state/status.js";
+import type { CommitAuthorizationInput, DesignApprovalInput } from "../../src/state/status.js";
 import { legalRunStepStatus, planStateTransition } from "../../src/state/transitions.js";
 
 const taskId = "template-task" as TaskSlug;
@@ -213,6 +213,50 @@ describe("next-action request templates", () => {
       context: { target_ref: "refs/heads/main" },
     });
     expect(request?.guidance).toContain("Confirm the target ref.");
+  });
+
+  it("folds policy findings and commit authority into one design approval template", () => {
+    const approval = {
+      kind: "design-approval",
+      subject_digest: subjectDigest,
+      current_evidence: { set_digest: "c".repeat(64), sources: [] },
+      context: {
+        artifact_kind: "design",
+        constitution: "uncertain",
+        policy_findings: [{
+          rule_id: "rule-a", rule_version: 1, compliance: "uncertain",
+          rationale: "The boundary is not fully evidenced.", trigger: "matched",
+          trigger_evidence: "The reviewed interface activates this rule.",
+        }],
+        eligible_waivers: [],
+        target_ref: "refs/heads/main",
+        baseline_commit: "abcdef0123456789abcdef0123456789abcdef01",
+        commit_message: "ArchFlow: Approve template-task design",
+      },
+      target_ref_guidance: "Confirm the target ref.",
+    } as unknown as DesignApprovalInput;
+    const request = buildNextActionRequest(
+      action({ code: "open-gate", gate_kind: "design-approval" }),
+      {
+        task_id: taskId,
+        state: stateAt("design"),
+        subject_digest: subjectDigest,
+        current_evidence: { set_digest: "c".repeat(64), sources: [] } as unknown as CurrentEvidenceSetRef,
+        design_approval: approval,
+      },
+    );
+    expect(request?.request.tool).toBe("archflow_gate");
+    expect(request?.request.input).toMatchObject({
+      kind: "design-approval",
+      subject_digest: subjectDigest,
+      context: {
+        constitution: "uncertain",
+        target_ref: "refs/heads/main",
+        commit_message: "ArchFlow: Approve template-task design",
+      },
+    });
+    expect(request?.guidance).toContain("single approval");
+    expect(request?.guidance).toContain("automatic task-local milestone commit");
   });
 
   it("emits nothing for actions that already have a surface or are pure human judgment", () => {

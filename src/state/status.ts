@@ -6,18 +6,20 @@ import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
 import { parseConfigYaml } from "../contracts/config.js";
 import { parseActiveGate, parseGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
+import type { AdjudicationEvidence } from "../contracts/adjudication.js";
 import type { ProjectError, ProjectResult } from "../contracts/errors.js";
 import { computeGateContextDigest, verifyPinnedConfig } from "../contracts/fingerprints.js";
 import type { PathSafeId, Sha256Digest, TaskSlug } from "../contracts/evidence.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
+import type { GateContext } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import type { ReviewEvidence } from "../contracts/review.js";
 import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
 import { resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
-import { selectAdjudicationGates } from "../review/adjudication.js";
+import { designApprovalPolicyContext, selectAdjudicationGates } from "../review/adjudication.js";
 import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS, waiverInForce, type EvidenceAssessment } from "../review/fixed-point.js";
 import { canonicalRubricForPhaseKind, type CanonicalRubric } from "../review/rubrics.js";
-import { createGitRunner, preflightGit } from "../repository/git.js";
+import { createGitRunner, preflightGit, resolveCommit } from "../repository/git.js";
 import { discoverWorktree } from "../repository/identity.js";
 import { readTaskState } from "./read.js";
 import type { TransactionAuthority } from "./authority.js";
@@ -35,7 +37,7 @@ import { deriveNextAction, type NextAction } from "./next-action.js";
 import { buildNextActionRequest } from "./request-templates.js";
 import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject } from "./produce-subject.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
-import { implementationOutputCommittedAtCurrentTarget } from "./implementation-manifest.js";
+import { designArtifactCommittedAtCurrentTarget, implementationOutputCommittedAtCurrentTarget } from "./implementation-manifest.js";
 import { phaseStatusResources, type StatusResource } from "./phase-documents.js";
 import { inspectWorkspaceCleanup, type WorkspaceCleanupReport } from "./workspace-cleanup.js";
 import { discoverReconciliationInput } from "./reconciliation-discovery.js";
@@ -131,6 +133,12 @@ export type CommitAuthorizationInput = Readonly<{
     current_artifact_digests: readonly Sha256Digest[];
     parent_document_digests: readonly Sha256Digest[];
   }>;
+  target_ref_guidance: string;
+}>;
+
+export type DesignApprovalInput = Readonly<{
+  kind: "design-approval";
+  context: GateContext<"design-approval">;
   target_ref_guidance: string;
 }>;
 
@@ -373,10 +381,20 @@ async function currentApprovedUpstreams(
     const loaded = await loadProduceUpstreamSubject(dependencies, state, binding);
     if (!loaded.ok) throw new TypeError("current upstream produced authority invalid");
     const approval = [...authenticated]
-      .filter((item) => item.approval.gate_kind === "artifact-approval" &&
-        item.approval.subject_digest === loaded.value.artifact_digest &&
-        item.request.kind === "artifact-approval" &&
-        item.request.context.artifact_kind === binding.artifact_kind)
+      .filter((item) => {
+        if (item.approval.subject_digest !== loaded.value.artifact_digest) return false;
+        if (binding.artifact_kind === "prd") {
+          return item.approval.gate_kind === "artifact-approval" &&
+            item.request.kind === "artifact-approval" &&
+            item.request.context.artifact_kind === "prd";
+        }
+        return (item.approval.gate_kind === "design-approval" &&
+            item.request.kind === "design-approval" &&
+            item.request.context.artifact_kind === binding.artifact_kind) ||
+          (item.approval.gate_kind === "artifact-approval" &&
+            item.request.kind === "artifact-approval" &&
+            item.request.context.artifact_kind === binding.artifact_kind);
+      })
       .sort((left, right) => right.approval.resolved_at_revision - left.approval.resolved_at_revision)[0];
     if (approval === undefined) throw new TypeError("current upstream produced authority lacks approval");
     digests.push(loaded.value.artifact_digest);
@@ -512,6 +530,35 @@ export function buildCommitAuthorizationInput(
       current_artifact_digests: Object.freeze([manifest.artifact_digest]),
       parent_document_digests: Object.freeze(subject.artifact.parent_documents
         .map((item) => item.content_digest).sort()),
+    }),
+    target_ref_guidance: target.guidance,
+  });
+}
+
+/** Builds the combined design/policy approval and the exact task-local commit it authorizes. */
+export async function buildDesignApprovalInput(
+  dependencies: GateLifecycleDependencies,
+  state: TaskStateV1,
+  retained: RetainedEvidenceSet,
+  target: Readonly<{ value: string; guidance: string }>,
+): Promise<DesignApprovalInput> {
+  const phase = decodePhaseInstance(state.phase_instance);
+  if (phase.kind !== "design" && phase.kind !== "phase-design") {
+    throw new TypeError("design approval requires a design phase");
+  }
+  const adjudication = retained.get("adjudicate")?.manifest.source_artifact as AdjudicationEvidence | undefined;
+  const policy = adjudication === undefined
+    ? Object.freeze({ constitution: "pass" as const, policy_findings: Object.freeze([]), eligible_waivers: Object.freeze([]) })
+    : designApprovalPolicyContext(adjudication);
+  const phaseLabel = phase.kind === "design" ? "design" : `phase ${String(phase.phase)} design`;
+  return Object.freeze({
+    kind: "design-approval",
+    context: Object.freeze({
+      artifact_kind: phase.kind,
+      ...policy,
+      target_ref: target.value,
+      baseline_commit: await resolveCommit(dependencies.runner, "HEAD"),
+      commit_message: `ArchFlow: Approve ${state.task_id} ${phaseLabel}`,
     }),
     target_ref_guidance: target.guidance,
   });
@@ -722,6 +769,36 @@ export async function computeTaskStatus(
       }
     }
   }
+  let designCommit: Readonly<{ path: string; message: string; target_ref: string; baseline_commit: string }> | undefined;
+  if (
+    produceSubject?.artifact.artifact_kind === "document" &&
+    (decodePhaseInstance(state.phase_instance).kind === "design" || decodePhaseInstance(state.phase_instance).kind === "phase-design")
+  ) {
+    const authenticated = authenticatedApprovals.find((item) =>
+      item.request.kind === "design-approval" &&
+      item.request.phase_instance === state.phase_instance &&
+      item.request.subject_digest === produceSubject!.artifact_digest &&
+      item.decision.envelope.payload.decision === "approve");
+    if (authenticated?.request.kind === "design-approval") {
+      designCommit = Object.freeze({
+        path: `.archflow/tasks/${state.task_id}`,
+        message: authenticated.request.context.commit_message,
+        target_ref: authenticated.request.context.target_ref,
+        baseline_commit: authenticated.request.context.baseline_commit,
+      });
+      try {
+        commitObserved = await designArtifactCommittedAtCurrentTarget(
+          dependencies.runner,
+          state.task_id,
+          produceSubject.artifact,
+          produceSubject.retained.prepared.manifest.value.outputs,
+          authenticated.request.context,
+        );
+      } catch {
+        blockers.push("commit-observation-unavailable");
+      }
+    }
+  }
 
   const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document"
     ? produceSubject.artifact.editorial_predecessor
@@ -908,17 +985,25 @@ export async function computeTaskStatus(
     ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),
     authenticated_approvals: approvalFacts,
     commit_observed: commitObserved,
+    ...(designCommit === undefined ? {} : { design_commit: designCommit }),
     ...(adjudicationGateKind === undefined ? {} : { adjudication_gate_kind: adjudicationGateKind }),
     ...(pendingGates.length === 0 ? {} : { pending_adjudication_gate_kinds: pendingGates.map((gate) => gate.kind) }),
   });
 
   let gateInput: CommitAuthorizationInput | undefined;
+  let designGateInput: DesignApprovalInput | undefined;
   if (
     nextAction.code === "open-gate" && nextAction.gate_kind === "commit-authorization" &&
     produceSubject?.artifact.artifact_kind === "implementation-output" && evidence.available
   ) {
     const target = await currentTargetRef(dependencies);
     gateInput = buildCommitAuthorizationInput(produceSubject, evidence.current_evidence, target);
+  }
+  if (
+    nextAction.code === "open-gate" && nextAction.gate_kind === "design-approval" && evidence.available
+  ) {
+    const target = await currentTargetRef(dependencies);
+    designGateInput = await buildDesignApprovalInput(dependencies, state, retained, target);
   }
   const nextActionWithRequest = attachNextActionRequest(nextAction, {
     task_id: authority.task_id,
@@ -933,6 +1018,7 @@ export async function computeTaskStatus(
         }
       : {}),
     ...(gateInput === undefined ? {} : { commit_authorization: gateInput }),
+    ...(designGateInput === undefined ? {} : { design_approval: designGateInput }),
     ...(adjudicationGate === undefined ? {} : { adjudication_gate: adjudicationGate }),
     maximum_attempts: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS,
   });

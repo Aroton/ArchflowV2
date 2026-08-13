@@ -36169,6 +36169,84 @@ var pathClassSchema = external_exports.enum(PATH_CLASSES);
 // src/contracts/gates.ts
 import { isDeepStrictEqual } from "node:util";
 
+// src/contracts/canonical.ts
+import { createHash } from "node:crypto";
+var GIT_TREE_MODES = ["040000", "100644", "100755", "120000", "160000"];
+var gitOidV1Schema = external_exports.string().regex(/^[0-9a-f]{40}$/u);
+var gitTreeModeV1Schema = external_exports.enum(GIT_TREE_MODES);
+function parseGitOid(value) {
+  assertPlainJson(value, "git object name");
+  return gitOidV1Schema.parse(value);
+}
+function parseGitTreeMode(value) {
+  assertPlainJson(value, "git tree mode");
+  return gitTreeModeV1Schema.parse(value);
+}
+function normalizeGitTreeMode(value) {
+  return parseGitTreeMode(value === "40000" ? "040000" : value);
+}
+var encoder = new TextEncoder();
+var decoder = new TextDecoder("utf-8", { fatal: true });
+function ordinal(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+function sortCanonical(value) {
+  if (Array.isArray(value)) return value.map(sortCanonical);
+  if (value !== null && typeof value === "object") {
+    const record2 = value;
+    return Object.fromEntries(
+      Object.keys(record2).sort(ordinal).map((key) => [key, sortCanonical(record2[key])])
+    );
+  }
+  if (value === void 0) throw new TypeError("canonical JSON cannot contain undefined");
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    throw new TypeError("canonical JSON cannot contain a non-finite number");
+  }
+  return value;
+}
+function canonicalJsonBytes(value) {
+  return encoder.encode(`${JSON.stringify(sortCanonical(value), null, 2)}
+`);
+}
+function sha256Bytes(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+function canonicalJsonDigest(value) {
+  return sha256Bytes(canonicalJsonBytes(value));
+}
+function gitBlobOid(content) {
+  const header = Buffer.from(`blob ${String(content.byteLength)}\0`, "ascii");
+  return createHash("sha1").update(header).update(content).digest("hex");
+}
+function repositoryCandidateDigest(absoluteCwd) {
+  return sha256Bytes(encoder.encode(`archflow:repository-candidate:v1:${absoluteCwd}`));
+}
+function canonicalDocument(value) {
+  const bytes = canonicalJsonBytes(value);
+  return Object.freeze({ bytes, value, digest: sha256Bytes(bytes) });
+}
+function parseCanonicalDocument(bytes, label = "JSON document") {
+  if (!(bytes instanceof Uint8Array)) throw new TypeError(`${label} must be bytes`);
+  let text4;
+  try {
+    text4 = decoder.decode(bytes);
+  } catch (error51) {
+    throw new TypeError(`${label} is not valid UTF-8: ${error51.message}`);
+  }
+  let value;
+  try {
+    value = JSON.parse(text4);
+  } catch (error51) {
+    throw new TypeError(`${label} is not valid JSON: ${error51.message}`);
+  }
+  assertPlainJson(value, label);
+  const expected = canonicalJsonBytes(value);
+  if (!Buffer.from(bytes).equals(Buffer.from(expected))) {
+    throw new TypeError(`${label} is not canonical JSON`);
+  }
+  return Object.freeze({ bytes, value, digest: sha256Bytes(bytes) });
+}
+
 // src/contracts/vocabulary.ts
 var PHASE_IDS = ["explore", "prd", "design", "phase-design", "phase-impl"];
 var PIPELINE_STEPS = ["produce", "counter_review", "triage", "adjudicate"];
@@ -36176,7 +36254,7 @@ var GATE_POLICIES = ["never", "always", "on_trigger"];
 var ITERATION_POLICIES = ["per_phase"];
 
 // src/contracts/gates.ts
-var GATE_KINDS = ["artifact-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"];
+var GATE_KINDS = ["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"];
 var safeId = safeIdV1Schema;
 var boundedText = external_exports.string().min(1).max(4096).regex(/\S/u);
 var digest = external_exports.string().regex(/^[0-9a-f]{64}$/u);
@@ -36202,8 +36280,35 @@ var canonicalStrings = external_exports.array(safeId).superRefine((items, contex
 var canonicalDigests = external_exports.array(digest).superRefine((items, context2) => {
   if (!sortedUnique(items, (a, b) => a.localeCompare(b))) context2.addIssue({ code: "custom", message: "digests must be sorted and unique" });
 });
+var designPolicyFinding = rule.extend({
+  compliance: external_exports.enum(["pass", "fail", "uncertain"]),
+  rationale: boundedText,
+  trigger: external_exports.enum(["not-matched", "matched", "uncertain"]),
+  trigger_evidence: boundedText
+}).strict();
+var canonicalDesignPolicyFindings = external_exports.array(designPolicyFinding).superRefine((items, context2) => {
+  if (!sortedUnique(items, (a, b) => compareRules(a, b))) context2.addIssue({ code: "custom", message: "policy findings must be sorted and unique by rule" });
+});
 var contexts = {
   "artifact-approval": external_exports.object({ artifact_kind: external_exports.enum(["prd", "design", "phase-design", "phase-implementation"]) }).strict(),
+  "design-approval": external_exports.object({
+    artifact_kind: external_exports.enum(["design", "phase-design"]),
+    constitution: external_exports.enum(["pass", "fail", "uncertain"]),
+    policy_findings: canonicalDesignPolicyFindings,
+    eligible_waivers: canonicalEligibleWaivers,
+    target_ref: boundedText,
+    baseline_commit: gitOidV1Schema,
+    commit_message: boundedText
+  }).strict().superRefine((value, context2) => {
+    const compliance = new Set(value.policy_findings.filter((item) => item.compliance !== "pass").map(ruleKey));
+    const trigger = new Set(value.policy_findings.filter((item) => item.trigger !== "not-matched").map(ruleKey));
+    const expected = value.policy_findings.some((item) => item.compliance === "fail") ? "fail" : value.policy_findings.some((item) => item.compliance === "uncertain") ? "uncertain" : "pass";
+    if (value.constitution !== expected) context2.addIssue({ code: "custom", message: `constitution must be ${expected}` });
+    for (const item of value.eligible_waivers) {
+      const available = item.scope.operation === "adjudication-failure" ? compliance : trigger;
+      if (!available.has(ruleKey(item.rule))) context2.addIssue({ code: "custom", message: "eligible waiver must name a design policy finding on the selected axis" });
+    }
+  }),
   "constitution-review": external_exports.object({ constitution: external_exports.enum(["pass", "fail", "uncertain"]), failed_rules: canonicalRules, uncertain_rules: canonicalRules, matched_trigger_rules: canonicalRules, uncertain_trigger_rules: canonicalRules, eligible_waivers: canonicalEligibleWaivers }).strict().superRefine((value, context2) => {
     const compliance = new Set([...value.failed_rules, ...value.uncertain_rules].map(ruleKey));
     const trigger = new Set([...value.matched_trigger_rules, ...value.uncertain_trigger_rules].map(ruleKey));
@@ -36223,6 +36328,7 @@ var contexts = {
 };
 var decisions = {
   "artifact-approval": decision(["approve", "revise", "reject"]),
+  "design-approval": external_exports.union([decision(["approve", "revise", "reject"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, operation: external_exports.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "constitution-review": external_exports.union([decision(["approve", "revise", "reject"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, operation: external_exports.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "material-drift": decision(["amend-upstream", "revise-current", "reject"]),
   "attempts-exhausted": decision(["retry-once", "revise", "abort"]),
@@ -36281,6 +36387,7 @@ var gateContractSchemaDefs = Object.freeze({
   eligibleWaivers: canonicalEligibleWaivers,
   authorityLink,
   artifactApprovalContext: contexts["artifact-approval"],
+  designApprovalContext: contexts["design-approval"],
   constitutionReviewContext: contexts["constitution-review"],
   materialDriftContext: contexts["material-drift"],
   attemptsExhaustedContext: contexts["attempts-exhausted"],
@@ -36289,6 +36396,7 @@ var gateContractSchemaDefs = Object.freeze({
   restoreCollisionContext: contexts["restore-collision"],
   migrationAuditContext: contexts["migration-audit"],
   artifactApprovalDecision: decisions["artifact-approval"],
+  designApprovalDecision: decisions["design-approval"],
   constitutionReviewDecision: decisions["constitution-review"],
   materialDriftDecision: decisions["material-drift"],
   attemptsExhaustedDecision: decisions["attempts-exhausted"],
@@ -36297,6 +36405,7 @@ var gateContractSchemaDefs = Object.freeze({
   restoreCollisionDecision: decisions["restore-collision"],
   migrationAuditDecision: decisions["migration-audit"],
   artifactApproval: contractArms["artifact-approval"],
+  designApproval: contractArms["design-approval"],
   constitutionReview: contractArms["constitution-review"],
   materialDrift: contractArms["material-drift"],
   attemptsExhausted: contractArms["attempts-exhausted"],
@@ -36309,6 +36418,7 @@ var gateRuleVersionRefSchema = rule;
 var gateWaiverScopeSchema = waiverScope;
 var gateDecisionEnvelopeV1Schema = external_exports.discriminatedUnion("kind", [
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("artifact-approval"), payload: decisions["artifact-approval"] }).strict(),
+  external_exports.object({ ...envelopeBase, kind: external_exports.literal("design-approval"), payload: decisions["design-approval"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("constitution-review"), payload: decisions["constitution-review"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("material-drift"), payload: decisions["material-drift"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("attempts-exhausted"), payload: decisions["attempts-exhausted"] }).strict(),
@@ -36334,7 +36444,7 @@ function validateGateDecision(kind, context2, payload) {
   parseGateContext(kind, context2);
   assertPlainJson(payload, `${kind} gate decision`);
   const parsed = decisions[kind].parse(payload);
-  if (kind === "constitution-review" && parsed.decision === "waiver-requested") {
+  if ((kind === "constitution-review" || kind === "design-approval") && parsed.decision === "waiver-requested") {
     const eligible = context2.eligible_waivers;
     if (!eligible.some((item) => ruleKey(item.rule) === ruleKey(parsed.rule) && item.scope.operation === parsed.operation)) throw new TypeError("waiver-requested rule and operation must be eligible");
   }
@@ -37132,84 +37242,6 @@ function parseAdjudicationEvidence(value) {
   return parsed;
 }
 
-// src/contracts/canonical.ts
-import { createHash } from "node:crypto";
-var GIT_TREE_MODES = ["040000", "100644", "100755", "120000", "160000"];
-var gitOidV1Schema = external_exports.string().regex(/^[0-9a-f]{40}$/u);
-var gitTreeModeV1Schema = external_exports.enum(GIT_TREE_MODES);
-function parseGitOid(value) {
-  assertPlainJson(value, "git object name");
-  return gitOidV1Schema.parse(value);
-}
-function parseGitTreeMode(value) {
-  assertPlainJson(value, "git tree mode");
-  return gitTreeModeV1Schema.parse(value);
-}
-function normalizeGitTreeMode(value) {
-  return parseGitTreeMode(value === "40000" ? "040000" : value);
-}
-var encoder = new TextEncoder();
-var decoder = new TextDecoder("utf-8", { fatal: true });
-function ordinal(a, b) {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-function sortCanonical(value) {
-  if (Array.isArray(value)) return value.map(sortCanonical);
-  if (value !== null && typeof value === "object") {
-    const record2 = value;
-    return Object.fromEntries(
-      Object.keys(record2).sort(ordinal).map((key) => [key, sortCanonical(record2[key])])
-    );
-  }
-  if (value === void 0) throw new TypeError("canonical JSON cannot contain undefined");
-  if (typeof value === "number" && !Number.isFinite(value)) {
-    throw new TypeError("canonical JSON cannot contain a non-finite number");
-  }
-  return value;
-}
-function canonicalJsonBytes(value) {
-  return encoder.encode(`${JSON.stringify(sortCanonical(value), null, 2)}
-`);
-}
-function sha256Bytes(bytes) {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-function canonicalJsonDigest(value) {
-  return sha256Bytes(canonicalJsonBytes(value));
-}
-function gitBlobOid(content) {
-  const header = Buffer.from(`blob ${String(content.byteLength)}\0`, "ascii");
-  return createHash("sha1").update(header).update(content).digest("hex");
-}
-function repositoryCandidateDigest(absoluteCwd) {
-  return sha256Bytes(encoder.encode(`archflow:repository-candidate:v1:${absoluteCwd}`));
-}
-function canonicalDocument(value) {
-  const bytes = canonicalJsonBytes(value);
-  return Object.freeze({ bytes, value, digest: sha256Bytes(bytes) });
-}
-function parseCanonicalDocument(bytes, label = "JSON document") {
-  if (!(bytes instanceof Uint8Array)) throw new TypeError(`${label} must be bytes`);
-  let text4;
-  try {
-    text4 = decoder.decode(bytes);
-  } catch (error51) {
-    throw new TypeError(`${label} is not valid UTF-8: ${error51.message}`);
-  }
-  let value;
-  try {
-    value = JSON.parse(text4);
-  } catch (error51) {
-    throw new TypeError(`${label} is not valid JSON: ${error51.message}`);
-  }
-  assertPlainJson(value, label);
-  const expected = canonicalJsonBytes(value);
-  if (!Buffer.from(bytes).equals(Buffer.from(expected))) {
-    throw new TypeError(`${label} is not canonical JSON`);
-  }
-  return Object.freeze({ bytes, value, digest: sha256Bytes(bytes) });
-}
-
 // src/contracts/validators.ts
 function isSortedUniqueBy(items, key = String) {
   return Array.isArray(items) && items.every((value, index) => index === 0 || key(items[index - 1]) < key(value));
@@ -37476,6 +37508,7 @@ var TERMINAL_STATES = ["complete", "abandoned"];
 var HUMAN_REVISION_CLASSIFICATIONS = ["simple", "significant"];
 var HUMAN_REVISION_GATE_KINDS = [
   "artifact-approval",
+  "design-approval",
   "constitution-review",
   "material-drift",
   "attempts-exhausted",
@@ -45925,6 +45958,41 @@ async function implementationOutputCommittedAtCurrentTarget(runner, output, targ
   }
   return true;
 }
+async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, outputs, context2) {
+  const symbolicRef = await runner.runText({
+    argv: ["symbolic-ref", "--quiet", "HEAD"],
+    operation: "git-current-design-target",
+    expectedAbsence: [{ code: 1, stderrIncludes: "" }]
+  });
+  if (context2.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context2.target_ref) return false;
+  const head = await resolveCommit(runner, "HEAD");
+  if (await resolveCommit(runner, context2.target_ref) !== head) return false;
+  if (head === context2.baseline_commit) return false;
+  if (await resolveCommit(runner, `${head}^`) !== context2.baseline_commit) return false;
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", head],
+    operation: "git-design-commit-message"
+  });
+  if (message !== context2.commit_message) return false;
+  const prefix = `.archflow/tasks/${taskId}/`;
+  const changed = await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context2.baseline_commit, head, "--"],
+    operation: "git-design-commit-paths"
+  });
+  if (changed.length === 0 || changed.some((path2) => !path2.startsWith(prefix))) return false;
+  if (!changed.includes(artifact.projection_target) || !changed.includes(`${prefix}state.json`)) return false;
+  if (!changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) || !changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"))) return false;
+  const output = outputs.find((entry) => entry.path === artifact.projection_target);
+  if (output === void 0 || output.operation === "delete") return false;
+  const committed2 = await readCommitTreeBlob(runner, head, artifact.projection_target);
+  if (committed2?.mode !== output.after.mode || committed2.oid !== output.after.oid) return false;
+  const dirty = await runner.runNulFields({
+    argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", prefix.slice(0, -1)],
+    operation: "git-design-task-clean"
+  });
+  if (dirty.length !== 0) return false;
+  return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, context2.target_ref) === head;
+}
 var ordinal5 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 function ownEnumerableData(value, key) {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
@@ -48463,6 +48531,95 @@ var gate_contract_schema_default = {
       ],
       additionalProperties: false
     },
+    designApprovalContext: {
+      type: "object",
+      properties: {
+        artifact_kind: {
+          type: "string",
+          enum: [
+            "design",
+            "phase-design"
+          ]
+        },
+        constitution: {
+          type: "string",
+          enum: [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        policy_findings: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              rule_id: {
+                $ref: "urn:archflow:schema:v1:primitives#/$defs/safeId"
+              },
+              rule_version: {
+                type: "integer",
+                exclusiveMinimum: 0,
+                maximum: 9007199254740991
+              },
+              compliance: {
+                type: "string",
+                enum: [
+                  "pass",
+                  "fail",
+                  "uncertain"
+                ]
+              },
+              rationale: {
+                $ref: "#/$defs/text"
+              },
+              trigger: {
+                type: "string",
+                enum: [
+                  "not-matched",
+                  "matched",
+                  "uncertain"
+                ]
+              },
+              trigger_evidence: {
+                $ref: "#/$defs/text"
+              }
+            },
+            required: [
+              "rule_id",
+              "rule_version",
+              "compliance",
+              "rationale",
+              "trigger",
+              "trigger_evidence"
+            ],
+            additionalProperties: false
+          }
+        },
+        eligible_waivers: {
+          $ref: "#/$defs/eligibleWaivers"
+        },
+        target_ref: {
+          $ref: "#/$defs/text"
+        },
+        baseline_commit: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
+        commit_message: {
+          $ref: "#/$defs/text"
+        }
+      },
+      required: [
+        "artifact_kind",
+        "constitution",
+        "policy_findings",
+        "eligible_waivers",
+        "target_ref",
+        "baseline_commit",
+        "commit_message"
+      ],
+      additionalProperties: false
+    },
     constitutionReviewContext: {
       type: "object",
       properties: {
@@ -48700,6 +48857,64 @@ var gate_contract_schema_default = {
       ],
       additionalProperties: false
     },
+    designApprovalDecision: {
+      anyOf: [
+        {
+          type: "object",
+          properties: {
+            decision: {
+              type: "string",
+              enum: [
+                "approve",
+                "revise",
+                "reject"
+              ]
+            },
+            reason: {
+              $ref: "#/$defs/text"
+            }
+          },
+          required: [
+            "decision",
+            "reason"
+          ],
+          additionalProperties: false
+        },
+        {
+          type: "object",
+          properties: {
+            decision: {
+              type: "string",
+              const: "waiver-requested"
+            },
+            reason: {
+              $ref: "#/$defs/text"
+            },
+            rule: {
+              $ref: "#/$defs/rule"
+            },
+            operation: {
+              type: "string",
+              enum: [
+                "review-trigger",
+                "adjudication-failure"
+              ]
+            },
+            rationale: {
+              $ref: "#/$defs/text"
+            }
+          },
+          required: [
+            "decision",
+            "reason",
+            "rule",
+            "operation",
+            "rationale"
+          ],
+          additionalProperties: false
+        }
+      ]
+    },
     constitutionReviewDecision: {
       anyOf: [
         {
@@ -48933,6 +49148,27 @@ var gate_contract_schema_default = {
       ],
       additionalProperties: false
     },
+    designApproval: {
+      type: "object",
+      properties: {
+        kind: {
+          type: "string",
+          const: "design-approval"
+        },
+        context: {
+          $ref: "#/$defs/designApprovalContext"
+        },
+        payload: {
+          $ref: "#/$defs/designApprovalDecision"
+        }
+      },
+      required: [
+        "kind",
+        "context",
+        "payload"
+      ],
+      additionalProperties: false
+    },
     constitutionReview: {
       type: "object",
       properties: {
@@ -49084,6 +49320,9 @@ var gate_contract_schema_default = {
   oneOf: [
     {
       $ref: "#/$defs/artifactApproval"
+    },
+    {
+      $ref: "#/$defs/designApproval"
     },
     {
       $ref: "#/$defs/constitutionReview"
@@ -49249,6 +49488,60 @@ var gate_decision_schema_default = {
         },
         payload: {
           $ref: "urn:archflow:schema:v1:gate-contract#/$defs/artifactApprovalDecision"
+        }
+      },
+      required: [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "subject_digest",
+        "context_digest",
+        "human_provenance",
+        "kind",
+        "payload"
+      ],
+      additionalProperties: false
+    },
+    {
+      type: "object",
+      properties: {
+        schema_version: {
+          type: "string",
+          const: "1"
+        },
+        gate_id: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        task_id: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        phase_instance: {
+          type: "string",
+          pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        subject_digest: {
+          $ref: "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        context_digest: {
+          $ref: "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        human_provenance: {
+          anyOf: [
+            {
+              $ref: "#/$defs/connected"
+            },
+            {
+              $ref: "#/$defs/local"
+            }
+          ]
+        },
+        kind: {
+          type: "string",
+          const: "design-approval"
+        },
+        payload: {
+          $ref: "urn:archflow:schema:v1:gate-contract#/$defs/designApprovalDecision"
         }
       },
       required: [
@@ -50195,6 +50488,7 @@ var mcp_tools_schema_default = {
               kind: {
                 enum: [
                   "artifact-approval",
+                  "design-approval",
                   "constitution-review",
                   "material-drift",
                   "attempts-exhausted",
@@ -50218,6 +50512,16 @@ var mcp_tools_schema_default = {
                       },
                       context: {
                         $ref: "urn:archflow:schema:v1:gate-contract#/$defs/artifactApproval/properties/context"
+                      }
+                    }
+                  },
+                  {
+                    properties: {
+                      kind: {
+                        const: "design-approval"
+                      },
+                      context: {
+                        $ref: "urn:archflow:schema:v1:gate-contract#/$defs/designApproval/properties/context"
                       }
                     }
                   },
@@ -50307,6 +50611,7 @@ var mcp_tools_schema_default = {
             type: "string",
             enum: [
               "artifact-approval",
+              "design-approval",
               "constitution-review",
               "material-drift",
               "attempts-exhausted",
@@ -51100,6 +51405,7 @@ var project_error_schema_default = {
       type: "string",
       enum: [
         "artifact-approval",
+        "design-approval",
         "constitution-review",
         "material-drift",
         "attempts-exhausted",
@@ -54988,6 +55294,7 @@ var task_state_schema_default = {
       type: "string",
       enum: [
         "artifact-approval",
+        "design-approval",
         "constitution-review",
         "material-drift",
         "attempts-exhausted",
@@ -55201,6 +55508,7 @@ var task_state_schema_default = {
           type: "string",
           enum: [
             "artifact-approval",
+            "design-approval",
             "constitution-review",
             "material-drift",
             "attempts-exhausted",
@@ -55255,6 +55563,7 @@ var task_state_schema_default = {
           type: "string",
           enum: [
             "artifact-approval",
+            "design-approval",
             "constitution-review",
             "material-drift",
             "attempts-exhausted",
@@ -59851,6 +60160,7 @@ var legacyDecisionRecordV1Schema = external_exports.discriminatedUnion("outcome"
 ]);
 var GATE_REQUEST_DECISIONS = {
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
+  "design-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
   "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
@@ -59882,6 +60192,7 @@ var gateRequestCommon = {
 var gateArm = (kind, context2, decisions2, extra) => external_exports.object({ ...gateRequestCommon, ...extra, kind: external_exports.literal(kind), context: context2, allowed_decisions: decisions2 }).strict();
 var gateArms = (extra) => ({
   artifactApproval: gateArm("artifact-approval", GATE_CONTRACTS["artifact-approval"].context, allowedDecisionTuples["artifact-approval"], extra),
+  designApproval: gateArm("design-approval", GATE_CONTRACTS["design-approval"].context, allowedDecisionTuples["design-approval"], extra),
   constitutionReview: gateArm("constitution-review", GATE_CONTRACTS["constitution-review"].context, allowedDecisionTuples["constitution-review"], extra),
   materialDrift: gateArm("material-drift", GATE_CONTRACTS["material-drift"].context, allowedDecisionTuples["material-drift"], extra),
   attemptsExhausted: gateArm("attempts-exhausted", GATE_CONTRACTS["attempts-exhausted"].context, allowedDecisionTuples["attempts-exhausted"], extra),
@@ -59921,6 +60232,7 @@ var gateRequestSchemaDefs = Object.freeze({
   origin,
   waiverContext: waiverGateContextSchema,
   artifactApprovalDecisions: allowedDecisionTuples["artifact-approval"],
+  designApprovalDecisions: allowedDecisionTuples["design-approval"],
   constitutionReviewDecisions: allowedDecisionTuples["constitution-review"],
   materialDriftDecisions: allowedDecisionTuples["material-drift"],
   attemptsExhaustedDecisions: allowedDecisionTuples["attempts-exhausted"],
@@ -59933,6 +60245,7 @@ var gateRequestSchemaDefs = Object.freeze({
 });
 var gateRequestSchemaDefOverrides = Object.freeze({
   artifactApprovalDecisions: { const: GATE_REQUEST_DECISIONS["artifact-approval"] },
+  designApprovalDecisions: { const: GATE_REQUEST_DECISIONS["design-approval"] },
   constitutionReviewDecisions: { const: GATE_REQUEST_DECISIONS["constitution-review"] },
   materialDriftDecisions: { const: GATE_REQUEST_DECISIONS["material-drift"] },
   attemptsExhaustedDecisions: { const: GATE_REQUEST_DECISIONS["attempts-exhausted"] },
@@ -59985,6 +60298,7 @@ import { constants as fsConstants5 } from "node:fs";
 import { isDeepStrictEqual as isDeepStrictEqual8 } from "node:util";
 var DECISIONS = Object.freeze({
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
+  "design-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
   "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
@@ -60226,11 +60540,16 @@ function artifactApprovalKind(instance) {
 function hasAuthenticatedArtifactApproval(input) {
   const artifactKind = artifactApprovalKind(input.current.phase_instance);
   if (artifactKind === void 0 || input.completion_subject_digest === void 0) return false;
+  const designArtifact = artifactKind === "design" || artifactKind === "phase-design";
   for (const authenticated of input.authenticated_gate_approvals ?? []) {
     assertAuthenticatedGateApproval(authenticated);
-    if (authenticated.approval.gate_kind === "artifact-approval" && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.request.kind === "artifact-approval" && authenticated.request.phase_instance === input.current.phase_instance && authenticated.request.subject_digest === input.completion_subject_digest && authenticated.request.context.artifact_kind === artifactKind && authenticated.decision.envelope.payload.decision === "approve") return true;
+    if (authenticated.request.kind !== "artifact-approval" && !(designArtifact && authenticated.request.kind === "design-approval")) continue;
+    if (authenticated.approval.gate_kind === authenticated.request.kind && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.request.phase_instance === input.current.phase_instance && authenticated.request.subject_digest === input.completion_subject_digest && authenticated.request.context.artifact_kind === artifactKind && authenticated.decision.envelope.payload.decision === "approve") return true;
   }
   return false;
+}
+function hasAuthenticatedCombinedDesignApproval(input) {
+  return (input.authenticated_gate_approvals ?? []).some((authenticated) => authenticated.request.kind === "design-approval" && authenticated.approval.gate_kind === "design-approval" && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.decision.envelope.payload.decision === "approve");
 }
 function hasAuthenticatedMigrationAudit(input) {
   if (input.legacy_resume_phase === void 0 || input.target.phase_instance !== input.legacy_resume_phase) return false;
@@ -60349,6 +60668,7 @@ function planStateTransition(value) {
   }
   if (decodedCurrent.kind === "phase-impl" && input.current.step === "triage" && input.current.status === "succeeded" && input.target.phase_instance !== input.current.phase_instance && !committedOutput) return invalid(input, from, to);
   if (decodedCurrent.kind !== "phase-impl" && crossesPhase && !hasAuthenticatedArtifactApproval(input)) return invalid(input, from, to);
+  if ((decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") && crossesPhase && hasAuthenticatedCombinedDesignApproval(input) && input.commit_observed !== true) return invalid(input, from, to);
   if (!legalMovement(input) || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input) || !pendingHumanRevisionMatches(input)) {
     return invalid(input, from, to);
   }
@@ -60862,7 +61182,7 @@ async function assembleUpstreamContext(input) {
   for (const binding of expectedProduceUpstreamBindings(input.state)) {
     const upstream = await loadProduceUpstreamSubject(input.dependencies, input.state, binding);
     if (!upstream.ok) return upstream;
-    const approved = input.state.approvals.some((approval) => approval.gate_kind === "artifact-approval" && approval.subject_digest === upstream.value.artifact_digest);
+    const approved = input.state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === upstream.value.artifact_digest);
     if (!approved) return fail19(input.state.phase_instance, "upstream-approval-missing");
     const projection = await readProduceProjection(
       input.runner,
@@ -61365,8 +61685,8 @@ function requireApprovedUpstreamDigests(approvals, upstreamDigests) {
     throw new TypeError("approved upstream digests must be unique");
   }
   for (const digest10 of sorted) {
-    if (!approvals.some((approval) => approval.gate_kind === "artifact-approval" && approval.subject_digest === digest10)) {
-      throw new TypeError(`upstream ${digest10} lacks current artifact approval`);
+    if (!approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === digest10)) {
+      throw new TypeError(`upstream ${digest10} lacks current document approval`);
     }
   }
   return Object.freeze(sorted);
@@ -61484,7 +61804,7 @@ function plannedFinalPhaseFromDesign(bytes) {
   return phases.length;
 }
 async function loadApprovedDesignFinalPhase(dependencies, current, record2) {
-  if (record2.outcome !== "decided" || record2.kind !== "artifact-approval" || record2.phase_instance !== "design" || record2.envelope.payload.decision !== "approve") return ok14(void 0);
+  if (record2.outcome !== "decided" || record2.kind !== "artifact-approval" && record2.kind !== "design-approval" || record2.phase_instance !== "design" || record2.envelope.payload.decision !== "approve") return ok14(void 0);
   const reference = current.authoritative_results.find((entry) => entry.phase_instance === "design" && entry.step === "produce");
   if (reference === void 0 || dependencies.load_retained_result === void 0) {
     return issue3("STATE_INVALID", current, "approved-design-result-missing");
@@ -61510,6 +61830,10 @@ var PRESENTATION_COPY = Object.freeze({
   "artifact-approval": Object.freeze({
     title: "Review the finished work",
     question: "Does this work meet your expectations, or would you like it changed?"
+  }),
+  "design-approval": Object.freeze({
+    title: "Review and approve the design",
+    question: "Should ArchFlow approve this design, commit its recoverable milestone, and continue?"
   }),
   "constitution-review": Object.freeze({
     title: "Review the policy findings",
@@ -61584,7 +61908,7 @@ async function authenticateWaiverOrigin(dependencies, authority, context2) {
   const request = await readCanonical(requestPath.value, "waiver origin request", parseArchivedGateRequest);
   const decision2 = await readCanonical(decisionPath.value, "waiver origin decision", parseArchivedGateDecisionRecord);
   if (request === "missing" || request === "invalid" || decision2 === "missing" || decision2 === "invalid") return issue3("CONTRACT_INVALID", void 0, "waiver-origin-archive-invalid");
-  if (!validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok || decision2.digest !== context2.origin.origin_decision_digest || decision2.value.outcome !== "decided" || decision2.value.envelope.payload.decision !== "waiver-requested") return issue3("CONTRACT_INVALID", void 0, "waiver-origin-decision-invalid");
+  if (!validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok || decision2.digest !== context2.origin.origin_decision_digest || decision2.value.outcome !== "decided" || decision2.value.envelope.payload.decision !== "waiver-requested" || request.value.kind !== "constitution-review" && request.value.kind !== "design-approval") return issue3("CONTRACT_INVALID", void 0, "waiver-origin-decision-invalid");
   const payload = decision2.value.envelope.payload;
   const requestContext = request.value.context;
   if (!("eligible_waivers" in requestContext) || request.value.gate_id !== context2.origin.origin_gate_id || request.value.context_digest !== context2.origin.origin_context_digest || request.value.task_id !== context2.origin.task_id || request.value.phase_instance !== context2.origin.phase_instance || request.value.subject_digest !== context2.origin.subject_digest || request.value.current_evidence.set_digest !== context2.origin.current_evidence_set_digest || !isDeepStrictEqual11(payload.rule, context2.origin.rule) || payload.operation !== context2.origin.scope.operation || !requestContext.eligible_waivers.some((eligible) => isDeepStrictEqual11(eligible.rule, context2.origin.rule) && isDeepStrictEqual11(eligible.scope, context2.origin.scope))) return issue3("CONTRACT_INVALID", void 0, "waiver-origin-binding-invalid");
@@ -61733,7 +62057,7 @@ async function openDurableGate(dependencies, input) {
         const retained = await dependencies.load_retained_result(reference);
         if (!retained.ok) return retained;
         const subject = retained.value.prepared.manifest.value.artifact_digest;
-        if (input.subject_digest !== subject || !current.value.approvals.some((approval) => approval.gate_kind === "artifact-approval" && approval.subject_digest === subject)) return issue3("STATE_INVALID", current.value, "migration-audit-design-not-approved");
+        if (input.subject_digest !== subject || !current.value.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === subject)) return issue3("STATE_INVALID", current.value, "migration-audit-design-not-approved");
         const resume = await loadLegacyImportResumePhase(dependencies, input.authority, current.value);
         if (!resume.ok) return resume;
         const decoded = decodePhaseInstance(resume.value);
@@ -61816,12 +62140,12 @@ function nextStateForRecord(state, record2, digest10, plannedFinalPhase) {
 function enactsReentry(record2) {
   if (record2.outcome !== "decided") return false;
   const decision2 = record2.envelope.payload.decision;
-  return record2.kind === "artifact-approval" && decision2 === "revise" || record2.kind === "constitution-review" && decision2 === "revise" || record2.kind === "material-drift" && decision2 === "revise-current" || record2.kind === "attempts-exhausted" && (decision2 === "retry-once" || decision2 === "revise") || record2.kind === "commit-authorization" && decision2 === "revise" || record2.kind === "migration-audit" && decision2 === "revise";
+  return record2.kind === "artifact-approval" && decision2 === "revise" || record2.kind === "design-approval" && decision2 === "revise" || record2.kind === "constitution-review" && decision2 === "revise" || record2.kind === "material-drift" && decision2 === "revise-current" || record2.kind === "attempts-exhausted" && (decision2 === "retry-once" || decision2 === "revise") || record2.kind === "commit-authorization" && decision2 === "revise" || record2.kind === "migration-audit" && decision2 === "revise";
 }
 function beginsHumanRevision(record2) {
   if (record2.outcome !== "decided") return false;
   const decision2 = record2.envelope.payload.decision;
-  return record2.kind === "artifact-approval" && decision2 === "revise" || record2.kind === "constitution-review" && decision2 === "revise" || record2.kind === "material-drift" && decision2 === "revise-current" || record2.kind === "attempts-exhausted" && decision2 === "revise" || record2.kind === "commit-authorization" && decision2 === "revise" || record2.kind === "migration-audit" && decision2 === "revise";
+  return record2.kind === "artifact-approval" && decision2 === "revise" || record2.kind === "design-approval" && decision2 === "revise" || record2.kind === "constitution-review" && decision2 === "revise" || record2.kind === "material-drift" && decision2 === "revise-current" || record2.kind === "attempts-exhausted" && decision2 === "revise" || record2.kind === "commit-authorization" && decision2 === "revise" || record2.kind === "migration-audit" && decision2 === "revise";
 }
 function exactOpenGateMatches(state, request) {
   const open5 = state.open_gate;
@@ -61882,6 +62206,16 @@ async function planGateAuthorizedReentry(dependencies, authority, current, reque
 async function closedStateForRecord(dependencies, authority, current, request, record2, digest10) {
   if (enactsReentry(record2)) {
     return planGateAuthorizedReentry(dependencies, authority, current, request, record2);
+  }
+  if (record2.outcome === "decided" && record2.kind === "design-approval" && record2.envelope.payload.decision === "approve" && request.kind === "design-approval") {
+    const symbolicRef = await dependencies.runner.runText({
+      argv: ["symbolic-ref", "--quiet", "HEAD"],
+      operation: parseSafeCode("git-design-approval-target"),
+      expectedAbsence: [{ code: 1, stderrIncludes: "" }]
+    });
+    if ((request.context.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== request.context.target_ref) || await resolveCommit(dependencies.runner, "HEAD") !== request.context.baseline_commit) {
+      return issue3("STATE_INVALID", current.value, "design-approval-git-target-changed");
+    }
   }
   const plannedFinalPhase = await loadApprovedDesignFinalPhase(dependencies, current.value, record2);
   return plannedFinalPhase.ok ? ok14(nextStateForRecord(current.value, record2, digest10, plannedFinalPhase.value)) : plannedFinalPhase;
@@ -62414,14 +62748,15 @@ async function deriveApprovedUpstreams(services, toolName, durable) {
     }
     const upstreamDigest = upstream.value.artifact_digest;
     let approved = false;
-    for (const approval of [...durable.approvals].filter((candidate) => candidate.gate_kind === "artifact-approval" && candidate.subject_digest === upstreamDigest).sort((left, right) => right.resolved_at_revision - left.resolved_at_revision)) {
+    for (const approval of [...durable.approvals].filter((candidate) => (candidate.gate_kind === "artifact-approval" || candidate.gate_kind === "design-approval") && candidate.subject_digest === upstreamDigest).sort((left, right) => right.resolved_at_revision - left.resolved_at_revision)) {
       const authenticated = await loadAuthenticatedGateApproval(
         services.dependencies,
         services.authority,
         approval
       );
       if (!authenticated.ok) return authenticated;
-      if (authenticated.value.request.kind === "artifact-approval" && authenticated.value.request.context.artifact_kind === binding.artifact_kind) {
+      const request = authenticated.value.request;
+      if ((request.kind === "artifact-approval" || request.kind === "design-approval") && request.context.artifact_kind === binding.artifact_kind) {
         approved = true;
         break;
       }
@@ -63507,8 +63842,9 @@ async function handleState(call, context2) {
           completionSubjectDigest = currentProduce.artifact_digest;
         }
         if (artifactPhaseExitSignal) {
+          const designExit = decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design";
           for (const approval of current.value.approvals) {
-            if (approval.gate_kind !== "artifact-approval" || approval.subject_digest !== completionSubjectDigest) continue;
+            if (!(designExit ? approval.gate_kind === "design-approval" || approval.gate_kind === "artifact-approval" : approval.gate_kind === "artifact-approval") || approval.subject_digest !== completionSubjectDigest) continue;
             const loaded = await loadAuthenticatedGateApproval(
               services.dependencies,
               services.authority,
@@ -63516,6 +63852,21 @@ async function handleState(call, context2) {
             );
             if (!loaded.ok) return loaded;
             authenticatedGateApprovals2.push(loaded.value);
+          }
+          if (designExit && currentProduce?.artifact.artifact_kind === "document") {
+            for (const authenticated of authenticatedGateApprovals2) {
+              if (authenticated.request.kind !== "design-approval") continue;
+              if (await designArtifactCommittedAtCurrentTarget(
+                services.runner,
+                current.value.task_id,
+                currentProduce.artifact,
+                currentProduce.retained.prepared.manifest.value.outputs,
+                authenticated.request.context
+              )) {
+                commitObserved = true;
+                break;
+              }
+            }
           }
         }
         if (completionSignal && currentProduce !== void 0) {
@@ -63612,7 +63963,7 @@ import { isDeepStrictEqual as isDeepStrictEqual12 } from "node:util";
 var fail25 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function authenticWaiverOriginArchive(request, decision2, origin2) {
   const payload = decision2.value.outcome === "decided" ? decision2.value.envelope.payload : void 0;
-  return request.value.gate_id === origin2.origin_gate_id && request.value.task_id === origin2.task_id && request.value.phase_instance === origin2.phase_instance && request.value.subject_digest === origin2.subject_digest && request.value.context_digest === origin2.origin_context_digest && request.value.current_evidence.set_digest === origin2.current_evidence_set_digest && request.value.kind === "constitution-review" && decision2.digest === origin2.origin_decision_digest && payload?.decision === "waiver-requested" && isDeepStrictEqual12(payload.rule, origin2.rule) && payload.operation === origin2.scope.operation && // The origin gate must actually have offered this rule on this axis.
+  return request.value.gate_id === origin2.origin_gate_id && request.value.task_id === origin2.task_id && request.value.phase_instance === origin2.phase_instance && request.value.subject_digest === origin2.subject_digest && request.value.context_digest === origin2.origin_context_digest && request.value.current_evidence.set_digest === origin2.current_evidence_set_digest && (request.value.kind === "constitution-review" || request.value.kind === "design-approval") && decision2.digest === origin2.origin_decision_digest && payload?.decision === "waiver-requested" && isDeepStrictEqual12(payload.rule, origin2.rule) && payload.operation === origin2.scope.operation && // The origin gate must actually have offered this rule on this axis.
   "eligible_waivers" in request.value.context && request.value.context.eligible_waivers.some((eligible) => isDeepStrictEqual12(eligible.rule, origin2.rule) && isDeepStrictEqual12(eligible.scope, origin2.scope)) && validateDurableSemantics({ gate_request: request, gate_decision: decision2 }).ok;
 }
 async function handleWaiver(call, context2) {

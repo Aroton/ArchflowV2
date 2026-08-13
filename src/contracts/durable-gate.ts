@@ -189,6 +189,7 @@ const legacyDecisionRecordV1Schema = z.discriminatedUnion("outcome", [
  */
 const GATE_REQUEST_DECISIONS = {
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
+  "design-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
   "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
@@ -243,6 +244,7 @@ const gateArm = (kind: GateKind, context: z.ZodType, decisions: z.ZodType, extra
  */
 const gateArms = (extra: Record<string, z.ZodType>) => ({
   artifactApproval: gateArm("artifact-approval", GATE_CONTRACTS["artifact-approval"].context, allowedDecisionTuples["artifact-approval"], extra),
+  designApproval: gateArm("design-approval", GATE_CONTRACTS["design-approval"].context, allowedDecisionTuples["design-approval"], extra),
   constitutionReview: gateArm("constitution-review", GATE_CONTRACTS["constitution-review"].context, allowedDecisionTuples["constitution-review"], extra),
   materialDrift: gateArm("material-drift", GATE_CONTRACTS["material-drift"].context, allowedDecisionTuples["material-drift"], extra),
   attemptsExhausted: gateArm("attempts-exhausted", GATE_CONTRACTS["attempts-exhausted"].context, allowedDecisionTuples["attempts-exhausted"], extra),
@@ -295,6 +297,7 @@ export const gateRequestSchemaDefs: Readonly<Record<string, z.ZodType>> = Object
   origin,
   waiverContext: waiverGateContextSchema,
   artifactApprovalDecisions: allowedDecisionTuples["artifact-approval"],
+  designApprovalDecisions: allowedDecisionTuples["design-approval"],
   constitutionReviewDecisions: allowedDecisionTuples["constitution-review"],
   materialDriftDecisions: allowedDecisionTuples["material-drift"],
   attemptsExhaustedDecisions: allowedDecisionTuples["attempts-exhausted"],
@@ -313,6 +316,7 @@ export const gateRequestSchemaDefs: Readonly<Record<string, z.ZodType>> = Object
  */
 export const gateRequestSchemaDefOverrides: Readonly<Record<string, Readonly<Record<string, unknown>>>> = Object.freeze({
   artifactApprovalDecisions: { const: GATE_REQUEST_DECISIONS["artifact-approval"] },
+  designApprovalDecisions: { const: GATE_REQUEST_DECISIONS["design-approval"] },
   constitutionReviewDecisions: { const: GATE_REQUEST_DECISIONS["constitution-review"] },
   materialDriftDecisions: { const: GATE_REQUEST_DECISIONS["material-drift"] },
   attemptsExhaustedDecisions: { const: GATE_REQUEST_DECISIONS["attempts-exhausted"] },

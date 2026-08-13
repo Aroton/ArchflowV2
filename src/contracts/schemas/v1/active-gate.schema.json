@@ -45,6 +45,7 @@
           "type": "string",
           "enum": [
             "artifact-approval",
+            "design-approval",
             "constitution-review",
             "material-drift",
             "attempts-exhausted",
@@ -153,6 +154,90 @@
         },
         "allowed_decisions": {
           "$ref": "urn:archflow:schema:v1:gate-request#/$defs/artifactApprovalDecisions"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "intent_id",
+        "request_digest",
+        "task_id",
+        "phase_instance",
+        "summary",
+        "subject_digest",
+        "context_digest",
+        "current_evidence",
+        "opened_at_revision",
+        "status",
+        "decision_template",
+        "kind",
+        "context",
+        "allowed_decisions"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "current_evidence": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "const": "awaiting-human"
+        },
+        "decision_template": {
+          "$ref": "#/$defs/decisionTemplate"
+        },
+        "kind": {
+          "type": "string",
+          "const": "design-approval"
+        },
+        "context": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/designApprovalContext"
+        },
+        "allowed_decisions": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/designApprovalDecisions"
         }
       },
       "required": [

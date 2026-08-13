@@ -23147,7 +23147,7 @@ var GATE_POLICIES = ["never", "always", "on_trigger"];
 var ITERATION_POLICIES = ["per_phase"];
 
 // src/contracts/gates.ts
-var GATE_KINDS = ["artifact-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"];
+var GATE_KINDS = ["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"];
 var safeId = safeIdV1Schema;
 var boundedText = external_exports.string().min(1).max(4096).regex(/\S/u);
 var digest = external_exports.string().regex(/^[0-9a-f]{64}$/u);
@@ -23173,8 +23173,35 @@ var canonicalStrings = external_exports.array(safeId).superRefine((items, contex
 var canonicalDigests = external_exports.array(digest).superRefine((items, context2) => {
   if (!sortedUnique(items, (a, b) => a.localeCompare(b))) context2.addIssue({ code: "custom", message: "digests must be sorted and unique" });
 });
+var designPolicyFinding = rule.extend({
+  compliance: external_exports.enum(["pass", "fail", "uncertain"]),
+  rationale: boundedText,
+  trigger: external_exports.enum(["not-matched", "matched", "uncertain"]),
+  trigger_evidence: boundedText
+}).strict();
+var canonicalDesignPolicyFindings = external_exports.array(designPolicyFinding).superRefine((items, context2) => {
+  if (!sortedUnique(items, (a, b) => compareRules(a, b))) context2.addIssue({ code: "custom", message: "policy findings must be sorted and unique by rule" });
+});
 var contexts = {
   "artifact-approval": external_exports.object({ artifact_kind: external_exports.enum(["prd", "design", "phase-design", "phase-implementation"]) }).strict(),
+  "design-approval": external_exports.object({
+    artifact_kind: external_exports.enum(["design", "phase-design"]),
+    constitution: external_exports.enum(["pass", "fail", "uncertain"]),
+    policy_findings: canonicalDesignPolicyFindings,
+    eligible_waivers: canonicalEligibleWaivers,
+    target_ref: boundedText,
+    baseline_commit: gitOidV1Schema,
+    commit_message: boundedText
+  }).strict().superRefine((value, context2) => {
+    const compliance = new Set(value.policy_findings.filter((item) => item.compliance !== "pass").map(ruleKey));
+    const trigger = new Set(value.policy_findings.filter((item) => item.trigger !== "not-matched").map(ruleKey));
+    const expected = value.policy_findings.some((item) => item.compliance === "fail") ? "fail" : value.policy_findings.some((item) => item.compliance === "uncertain") ? "uncertain" : "pass";
+    if (value.constitution !== expected) context2.addIssue({ code: "custom", message: `constitution must be ${expected}` });
+    for (const item of value.eligible_waivers) {
+      const available = item.scope.operation === "adjudication-failure" ? compliance : trigger;
+      if (!available.has(ruleKey(item.rule))) context2.addIssue({ code: "custom", message: "eligible waiver must name a design policy finding on the selected axis" });
+    }
+  }),
   "constitution-review": external_exports.object({ constitution: external_exports.enum(["pass", "fail", "uncertain"]), failed_rules: canonicalRules, uncertain_rules: canonicalRules, matched_trigger_rules: canonicalRules, uncertain_trigger_rules: canonicalRules, eligible_waivers: canonicalEligibleWaivers }).strict().superRefine((value, context2) => {
     const compliance = new Set([...value.failed_rules, ...value.uncertain_rules].map(ruleKey));
     const trigger = new Set([...value.matched_trigger_rules, ...value.uncertain_trigger_rules].map(ruleKey));
@@ -23194,6 +23221,7 @@ var contexts = {
 };
 var decisions = {
   "artifact-approval": decision(["approve", "revise", "reject"]),
+  "design-approval": external_exports.union([decision(["approve", "revise", "reject"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, operation: external_exports.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "constitution-review": external_exports.union([decision(["approve", "revise", "reject"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, operation: external_exports.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "material-drift": decision(["amend-upstream", "revise-current", "reject"]),
   "attempts-exhausted": decision(["retry-once", "revise", "abort"]),
@@ -23252,6 +23280,7 @@ var gateContractSchemaDefs = Object.freeze({
   eligibleWaivers: canonicalEligibleWaivers,
   authorityLink,
   artifactApprovalContext: contexts["artifact-approval"],
+  designApprovalContext: contexts["design-approval"],
   constitutionReviewContext: contexts["constitution-review"],
   materialDriftContext: contexts["material-drift"],
   attemptsExhaustedContext: contexts["attempts-exhausted"],
@@ -23260,6 +23289,7 @@ var gateContractSchemaDefs = Object.freeze({
   restoreCollisionContext: contexts["restore-collision"],
   migrationAuditContext: contexts["migration-audit"],
   artifactApprovalDecision: decisions["artifact-approval"],
+  designApprovalDecision: decisions["design-approval"],
   constitutionReviewDecision: decisions["constitution-review"],
   materialDriftDecision: decisions["material-drift"],
   attemptsExhaustedDecision: decisions["attempts-exhausted"],
@@ -23268,6 +23298,7 @@ var gateContractSchemaDefs = Object.freeze({
   restoreCollisionDecision: decisions["restore-collision"],
   migrationAuditDecision: decisions["migration-audit"],
   artifactApproval: contractArms["artifact-approval"],
+  designApproval: contractArms["design-approval"],
   constitutionReview: contractArms["constitution-review"],
   materialDrift: contractArms["material-drift"],
   attemptsExhausted: contractArms["attempts-exhausted"],
@@ -23280,6 +23311,7 @@ var gateRuleVersionRefSchema = rule;
 var gateWaiverScopeSchema = waiverScope;
 var gateDecisionEnvelopeV1Schema = external_exports.discriminatedUnion("kind", [
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("artifact-approval"), payload: decisions["artifact-approval"] }).strict(),
+  external_exports.object({ ...envelopeBase, kind: external_exports.literal("design-approval"), payload: decisions["design-approval"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("constitution-review"), payload: decisions["constitution-review"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("material-drift"), payload: decisions["material-drift"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("attempts-exhausted"), payload: decisions["attempts-exhausted"] }).strict(),
@@ -23305,7 +23337,7 @@ function validateGateDecision(kind, context2, payload) {
   parseGateContext(kind, context2);
   assertPlainJson(payload, `${kind} gate decision`);
   const parsed = decisions[kind].parse(payload);
-  if (kind === "constitution-review" && parsed.decision === "waiver-requested") {
+  if ((kind === "constitution-review" || kind === "design-approval") && parsed.decision === "waiver-requested") {
     const eligible = context2.eligible_waivers;
     if (!eligible.some((item) => ruleKey(item.rule) === ruleKey(parsed.rule) && item.scope.operation === parsed.operation)) throw new TypeError("waiver-requested rule and operation must be eligible");
   }
@@ -23734,6 +23766,7 @@ var legacyDecisionRecordV1Schema = external_exports.discriminatedUnion("outcome"
 ]);
 var GATE_REQUEST_DECISIONS = {
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
+  "design-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
   "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
@@ -23765,6 +23798,7 @@ var gateRequestCommon = {
 var gateArm = (kind, context2, decisions2, extra) => external_exports.object({ ...gateRequestCommon, ...extra, kind: external_exports.literal(kind), context: context2, allowed_decisions: decisions2 }).strict();
 var gateArms = (extra) => ({
   artifactApproval: gateArm("artifact-approval", GATE_CONTRACTS["artifact-approval"].context, allowedDecisionTuples["artifact-approval"], extra),
+  designApproval: gateArm("design-approval", GATE_CONTRACTS["design-approval"].context, allowedDecisionTuples["design-approval"], extra),
   constitutionReview: gateArm("constitution-review", GATE_CONTRACTS["constitution-review"].context, allowedDecisionTuples["constitution-review"], extra),
   materialDrift: gateArm("material-drift", GATE_CONTRACTS["material-drift"].context, allowedDecisionTuples["material-drift"], extra),
   attemptsExhausted: gateArm("attempts-exhausted", GATE_CONTRACTS["attempts-exhausted"].context, allowedDecisionTuples["attempts-exhausted"], extra),
@@ -23804,6 +23838,7 @@ var gateRequestSchemaDefs = Object.freeze({
   origin,
   waiverContext: waiverGateContextSchema,
   artifactApprovalDecisions: allowedDecisionTuples["artifact-approval"],
+  designApprovalDecisions: allowedDecisionTuples["design-approval"],
   constitutionReviewDecisions: allowedDecisionTuples["constitution-review"],
   materialDriftDecisions: allowedDecisionTuples["material-drift"],
   attemptsExhaustedDecisions: allowedDecisionTuples["attempts-exhausted"],
@@ -23816,6 +23851,7 @@ var gateRequestSchemaDefs = Object.freeze({
 });
 var gateRequestSchemaDefOverrides = Object.freeze({
   artifactApprovalDecisions: { const: GATE_REQUEST_DECISIONS["artifact-approval"] },
+  designApprovalDecisions: { const: GATE_REQUEST_DECISIONS["design-approval"] },
   constitutionReviewDecisions: { const: GATE_REQUEST_DECISIONS["constitution-review"] },
   materialDriftDecisions: { const: GATE_REQUEST_DECISIONS["material-drift"] },
   attemptsExhaustedDecisions: { const: GATE_REQUEST_DECISIONS["attempts-exhausted"] },
@@ -24864,6 +24900,7 @@ var TERMINAL_STATES = ["complete", "abandoned"];
 var HUMAN_REVISION_CLASSIFICATIONS = ["simple", "significant"];
 var HUMAN_REVISION_GATE_KINDS = [
   "artifact-approval",
+  "design-approval",
   "constitution-review",
   "material-drift",
   "attempts-exhausted",
@@ -31285,6 +31322,41 @@ async function implementationOutputCommittedAtCurrentTarget(runner, output, targ
   }
   return true;
 }
+async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, outputs, context2) {
+  const symbolicRef = await runner.runText({
+    argv: ["symbolic-ref", "--quiet", "HEAD"],
+    operation: "git-current-design-target",
+    expectedAbsence: [{ code: 1, stderrIncludes: "" }]
+  });
+  if (context2.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== context2.target_ref) return false;
+  const head = await resolveCommit(runner, "HEAD");
+  if (await resolveCommit(runner, context2.target_ref) !== head) return false;
+  if (head === context2.baseline_commit) return false;
+  if (await resolveCommit(runner, `${head}^`) !== context2.baseline_commit) return false;
+  const message = await runner.runText({
+    argv: ["log", "-1", "--format=%s", head],
+    operation: "git-design-commit-message"
+  });
+  if (message !== context2.commit_message) return false;
+  const prefix = `.archflow/tasks/${taskId}/`;
+  const changed = await runner.runNulFields({
+    argv: ["diff-tree", "--no-commit-id", "--name-only", "-z", "-r", context2.baseline_commit, head, "--"],
+    operation: "git-design-commit-paths"
+  });
+  if (changed.length === 0 || changed.some((path2) => !path2.startsWith(prefix))) return false;
+  if (!changed.includes(artifact.projection_target) || !changed.includes(`${prefix}state.json`)) return false;
+  if (!changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) || !changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"))) return false;
+  const output = outputs.find((entry) => entry.path === artifact.projection_target);
+  if (output === void 0 || output.operation === "delete") return false;
+  const committed = await readCommitTreeBlob(runner, head, artifact.projection_target);
+  if (committed?.mode !== output.after.mode || committed.oid !== output.after.oid) return false;
+  const dirty = await runner.runNulFields({
+    argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", prefix.slice(0, -1)],
+    operation: "git-design-task-clean"
+  });
+  if (dirty.length !== 0) return false;
+  return await resolveCommit(runner, "HEAD") === head && await resolveCommit(runner, context2.target_ref) === head;
+}
 var ordinal5 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 function ownEnumerableData(value, key) {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
@@ -32304,6 +32376,7 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
 // src/state/gate-core.ts
 var DECISIONS = Object.freeze({
   "artifact-approval": ["approve", "revise", "reject", "cancel"],
+  "design-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
   "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
@@ -33216,6 +33289,10 @@ var PRESENTATION_COPY = Object.freeze({
     title: "Review the finished work",
     question: "Does this work meet your expectations, or would you like it changed?"
   }),
+  "design-approval": Object.freeze({
+    title: "Review and approve the design",
+    question: "Should ArchFlow approve this design, commit its recoverable milestone, and continue?"
+  }),
   "constitution-review": Object.freeze({
     title: "Review the policy findings",
     question: "How would you like to handle the policy review?"
@@ -33289,7 +33366,11 @@ function presentationBindings(active) {
   return Object.freeze(buildGateDecisionTemplates(active).flatMap((template) => {
     const decision3 = gateDecisionTemplateName(template);
     if (decision3 === "unknown") return [];
-    const option = decision3 === "waiver-requested" ? waiverOption(template, ++waiverIndex) : OPTION_COPY[decision3];
+    const option = active.kind === "design-approval" && decision3 === "approve" ? Object.freeze({
+      token: "approve",
+      label: "Approve, commit, and continue",
+      consequence: "Approve the exact reviewed design and policy context, authorize its recoverable task-local commit, and continue the workflow."
+    }) : decision3 === "waiver-requested" ? waiverOption(template, ++waiverIndex) : OPTION_COPY[decision3];
     return [Object.freeze({ token: option.token, decision: decision3, template, option })];
   }));
 }
@@ -33303,6 +33384,18 @@ function buildHumanGatePresentation(active) {
   return Object.freeze({
     title: copy.title,
     summary: request2.summary,
+    ...request2.kind === "design-approval" ? {
+      details: Object.freeze(request2.context.policy_findings.flatMap((finding) => {
+        const lines = [];
+        if (finding.compliance !== "pass") {
+          lines.push(`${finding.rule_id}: policy compliance is ${finding.compliance}. ${finding.rationale}`);
+        }
+        if (finding.trigger !== "not-matched") {
+          lines.push(`${finding.rule_id}: review trigger is ${finding.trigger}. ${finding.trigger_evidence}`);
+        }
+        return lines;
+      }))
+    } : {},
     question: `${copy.question} Choose an option and briefly explain why.`,
     options: Object.freeze(presentationBindings(request2).map((binding) => binding.option))
   });
@@ -34712,6 +34805,31 @@ function eligibleWaivers(entries) {
     scope: Object.freeze({ operation: entry.operation, boundary: "subject" })
   })).sort((left, right) => left.rule.rule_id.localeCompare(right.rule.rule_id) || left.rule.rule_version - right.rule.rule_version || left.scope.operation.localeCompare(right.scope.operation)));
 }
+function designApprovalPolicyContext(evidence) {
+  const failedOrUncertain = evidence.rule_findings.filter((item) => item.compliance !== "pass");
+  const triggered = evidence.rule_findings.filter((item) => item.trigger !== "not-matched");
+  return Object.freeze({
+    constitution: evidence.constitution,
+    policy_findings: Object.freeze(evidence.rule_findings.map((item) => Object.freeze({
+      rule_id: item.rule_id,
+      rule_version: item.rule_version,
+      compliance: item.compliance,
+      rationale: item.rationale,
+      trigger: item.trigger,
+      trigger_evidence: item.trigger_evidence
+    }))),
+    eligible_waivers: eligibleWaivers([
+      ...failedOrUncertain.map((item) => ({
+        rule: Object.freeze({ rule_id: item.rule_id, rule_version: item.rule_version }),
+        operation: "adjudication-failure"
+      })),
+      ...triggered.map((item) => ({
+        rule: Object.freeze({ rule_id: item.rule_id, rule_version: item.rule_version }),
+        operation: "review-trigger"
+      }))
+    ])
+  });
+}
 function selectAdjudicationGates(registry2, evidence) {
   const gates = [];
   const failed = evidence.rule_findings.filter((item) => item.compliance === "fail");
@@ -35082,6 +35200,14 @@ function waiverPathSatisfiesGate(state, gate) {
   ) !== void 0);
 }
 function adjudicationGateSatisfied(state, retained, subject, gate) {
+  const phaseKind2 = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
+  if (phaseKind2 && gate.kind === "constitution-review") {
+    const designApproval = (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+      assertAuthenticatedGateApproval(authenticated);
+      return authenticated.approval.gate_kind === "design-approval" && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === "design-approval" && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest && authenticated.decision.envelope.payload.decision === "approve";
+    });
+    if (designApproval) return true;
+  }
   const contextDigest = computeGateContextDigest(gate.kind, gate.context);
   const evidence = Object.freeze({
     counter_review_digest: retained.get("counter_review")?.manifest.artifact_digest,
@@ -35237,12 +35363,28 @@ function runStepDetail(state, step) {
 function matchingApproval(input, kind) {
   return input.subject_digest !== void 0 && (input.authenticated_approvals ?? []).some((approval) => approval.gate_kind === kind && approval.subject_digest === input.subject_digest);
 }
+function hasLegacyDesignApproval(input) {
+  return matchingApproval(input, "artifact-approval");
+}
 function advanceAction(input, state) {
   const phase3 = decodePhaseInstance(state.phase_instance);
-  const requiredKind = phase3.kind === "prd" || phase3.kind === "design" || phase3.kind === "phase-design" ? "artifact-approval" : phase3.kind === "phase-impl" ? "commit-authorization" : void 0;
-  if (requiredKind !== void 0 && !matchingApproval(input, requiredKind)) {
+  const designPhase = phase3.kind === "design" || phase3.kind === "phase-design";
+  const requiredKind = designPhase ? "design-approval" : phase3.kind === "prd" ? "artifact-approval" : phase3.kind === "phase-impl" ? "commit-authorization" : void 0;
+  const legacyDesignApproval = designPhase && hasLegacyDesignApproval(input);
+  if (requiredKind !== void 0 && !matchingApproval(input, requiredKind) && !legacyDesignApproval) {
     return action("open-gate", `Open the required ${requiredKind} gate.`, true, state, {
       gate_kind: requiredKind
+    });
+  }
+  if (designPhase && !legacyDesignApproval && input.commit_observed !== true) {
+    if (input.design_commit === void 0) {
+      return action("inspect-state", "Inspect why the approved design commit authority is unavailable.", true, state);
+    }
+    return action("commit-artifacts", "Commit the exact recoverable task-local milestone authorized by design approval.", false, state, {
+      commit_path: input.design_commit.path,
+      commit_message: input.design_commit.message,
+      commit_target_ref: input.design_commit.target_ref,
+      commit_baseline: input.design_commit.baseline_commit
     });
   }
   if (phase3.kind === "phase-impl" && input.commit_observed !== true) {
@@ -35328,6 +35470,16 @@ function deriveNextAction(input) {
       return action("open-gate", "Open the attempts-exhausted gate.", true, state, { gate_kind: "attempts-exhausted" });
     }
     if (next === "adjudication-gate") {
+      const phase3 = decodePhaseInstance(state.phase_instance);
+      if (phase3.kind === "design" || phase3.kind === "phase-design") {
+        if (input.adjudication_gate_kind === "material-drift") {
+        } else if (hasLegacyDesignApproval(input) && !matchingApproval(input, "design-approval")) {
+        } else {
+          return matchingApproval(input, "design-approval") ? advanceAction(input, state) : action("open-gate", "Open the single design approval with its policy findings and commit authority.", true, state, {
+            gate_kind: "design-approval"
+          });
+        }
+      }
       if (input.adjudication_gate_kind === void 0) {
         return action("inspect-state", "Inspect the unresolved adjudication gate obligation.", true, state);
       }
@@ -35579,6 +35731,21 @@ function buildNextActionRequest(next, facts) {
     }, `Pipe {"kind":"advance"} to archflow-local build-request --task ${facts.task_id}; it recomputes full durable status, permits only the exact pending ${next.code} action, resolves the destination fingerprint, and returns the staged archflow_state request.`);
   }
   if (next.code === "open-gate") {
+    if (next.gate_kind === "design-approval" && facts.design_approval !== void 0 && facts.subject_digest !== void 0 && facts.current_evidence !== void 0) {
+      return request("archflow_gate", {
+        ...mechanicalPrefix(facts.task_id, state, state.input_fingerprint),
+        phase_instance: state.phase_instance,
+        summary: TEMPLATE_SUMMARY,
+        subject_digest: facts.subject_digest,
+        current_evidence: facts.current_evidence,
+        kind: "design-approval",
+        context: facts.design_approval.context
+      }, envelopeGuidance(
+        facts.task_id,
+        "archflow_gate",
+        `Write a self-contained design summary for the human reviewer. This is the single approval: every policy conflict and trigger is already bound in the context and must be explained conversationally. Approval also authorizes the automatic task-local milestone commit. ${facts.design_approval.target_ref_guidance}`
+      ));
+    }
     if (next.gate_kind === "commit-authorization" && facts.commit_authorization !== void 0) {
       const authorization = facts.commit_authorization;
       return request("archflow_gate", {
@@ -36047,7 +36214,13 @@ async function currentApprovedUpstreams(dependencies, state, authenticated) {
   for (const binding of bindings) {
     const loaded = await loadProduceUpstreamSubject(dependencies, state, binding);
     if (!loaded.ok) throw new TypeError("current upstream produced authority invalid");
-    const approval = [...authenticated].filter((item) => item.approval.gate_kind === "artifact-approval" && item.approval.subject_digest === loaded.value.artifact_digest && item.request.kind === "artifact-approval" && item.request.context.artifact_kind === binding.artifact_kind).sort((left, right) => right.approval.resolved_at_revision - left.approval.resolved_at_revision)[0];
+    const approval = [...authenticated].filter((item) => {
+      if (item.approval.subject_digest !== loaded.value.artifact_digest) return false;
+      if (binding.artifact_kind === "prd") {
+        return item.approval.gate_kind === "artifact-approval" && item.request.kind === "artifact-approval" && item.request.context.artifact_kind === "prd";
+      }
+      return item.approval.gate_kind === "design-approval" && item.request.kind === "design-approval" && item.request.context.artifact_kind === binding.artifact_kind || item.approval.gate_kind === "artifact-approval" && item.request.kind === "artifact-approval" && item.request.context.artifact_kind === binding.artifact_kind;
+    }).sort((left, right) => right.approval.resolved_at_revision - left.approval.resolved_at_revision)[0];
     if (approval === void 0) throw new TypeError("current upstream produced authority lacks approval");
     digests.push(loaded.value.artifact_digest);
   }
@@ -36136,6 +36309,26 @@ function buildCommitAuthorizationInput(subject, currentEvidence, target) {
       diff_digest: subject.artifact.diff_digest,
       current_artifact_digests: Object.freeze([manifest.artifact_digest]),
       parent_document_digests: Object.freeze(subject.artifact.parent_documents.map((item) => item.content_digest).sort())
+    }),
+    target_ref_guidance: target.guidance
+  });
+}
+async function buildDesignApprovalInput(dependencies, state, retained, target) {
+  const phase3 = decodePhaseInstance(state.phase_instance);
+  if (phase3.kind !== "design" && phase3.kind !== "phase-design") {
+    throw new TypeError("design approval requires a design phase");
+  }
+  const adjudication = retained.get("adjudicate")?.manifest.source_artifact;
+  const policy = adjudication === void 0 ? Object.freeze({ constitution: "pass", policy_findings: Object.freeze([]), eligible_waivers: Object.freeze([]) }) : designApprovalPolicyContext(adjudication);
+  const phaseLabel = phase3.kind === "design" ? "design" : `phase ${String(phase3.phase)} design`;
+  return Object.freeze({
+    kind: "design-approval",
+    context: Object.freeze({
+      artifact_kind: phase3.kind,
+      ...policy,
+      target_ref: target.value,
+      baseline_commit: await resolveCommit(dependencies.runner, "HEAD"),
+      commit_message: `ArchFlow: Approve ${state.task_id} ${phaseLabel}`
     }),
     target_ref_guidance: target.guidance
   });
@@ -36311,6 +36504,29 @@ async function computeTaskStatus(dependencies, authority) {
       }
     }
   }
+  let designCommit;
+  if (produceSubject?.artifact.artifact_kind === "document" && (decodePhaseInstance(state.phase_instance).kind === "design" || decodePhaseInstance(state.phase_instance).kind === "phase-design")) {
+    const authenticated = authenticatedApprovals.find((item) => item.request.kind === "design-approval" && item.request.phase_instance === state.phase_instance && item.request.subject_digest === produceSubject.artifact_digest && item.decision.envelope.payload.decision === "approve");
+    if (authenticated?.request.kind === "design-approval") {
+      designCommit = Object.freeze({
+        path: `.archflow/tasks/${state.task_id}`,
+        message: authenticated.request.context.commit_message,
+        target_ref: authenticated.request.context.target_ref,
+        baseline_commit: authenticated.request.context.baseline_commit
+      });
+      try {
+        commitObserved = await designArtifactCommittedAtCurrentTarget(
+          dependencies.runner,
+          state.task_id,
+          produceSubject.artifact,
+          produceSubject.retained.prepared.manifest.value.outputs,
+          authenticated.request.context
+        );
+      } catch {
+        blockers.push("commit-observation-unavailable");
+      }
+    }
+  }
   const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document" ? produceSubject.artifact.editorial_predecessor : void 0;
   const currentProduceReference = state.authoritative_results.find((reference) => reference.phase_instance === state.phase_instance && reference.step === "produce");
   const simpleHumanRevision = currentProduceReference === void 0 ? void 0 : [...state.human_revision_history ?? []].reverse().find((revision) => revision.phase_instance === state.phase_instance && revision.classification === "simple" && revision.resulting_result_digest === currentProduceReference.result_digest);
@@ -36463,13 +36679,19 @@ async function computeTaskStatus(dependencies, authority) {
     ...subjectDigest === void 0 ? {} : { subject_digest: subjectDigest },
     authenticated_approvals: approvalFacts,
     commit_observed: commitObserved,
+    ...designCommit === void 0 ? {} : { design_commit: designCommit },
     ...adjudicationGateKind === void 0 ? {} : { adjudication_gate_kind: adjudicationGateKind },
     ...pendingGates.length === 0 ? {} : { pending_adjudication_gate_kinds: pendingGates.map((gate) => gate.kind) }
   });
   let gateInput;
+  let designGateInput;
   if (nextAction.code === "open-gate" && nextAction.gate_kind === "commit-authorization" && produceSubject?.artifact.artifact_kind === "implementation-output" && evidence.available) {
     const target = await currentTargetRef(dependencies);
     gateInput = buildCommitAuthorizationInput(produceSubject, evidence.current_evidence, target);
+  }
+  if (nextAction.code === "open-gate" && nextAction.gate_kind === "design-approval" && evidence.available) {
+    const target = await currentTargetRef(dependencies);
+    designGateInput = await buildDesignApprovalInput(dependencies, state, retained, target);
   }
   const nextActionWithRequest = attachNextActionRequest(nextAction, {
     task_id: authority.task_id,
@@ -36482,6 +36704,7 @@ async function computeTaskStatus(dependencies, authority) {
       current_evidence: evidence.current_evidence
     } : {},
     ...gateInput === void 0 ? {} : { commit_authorization: gateInput },
+    ...designGateInput === void 0 ? {} : { design_approval: designGateInput },
     ...adjudicationGate === void 0 ? {} : { adjudication_gate: adjudicationGate },
     maximum_attempts: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS
   });
@@ -39165,7 +39388,7 @@ async function composeGate(services2, state, intentId, snapshot2) {
     throw new TypeError('build-request gate facts require a non-empty "summary" written for the human reviewer');
   }
   const phaseKind2 = decodePhaseInstance(state.phase_instance).kind;
-  const gateKind2 = phaseKind2 === "phase-impl" ? "commit-authorization" : "artifact-approval";
+  const gateKind2 = phaseKind2 === "phase-impl" ? "commit-authorization" : phaseKind2 === "design" || phaseKind2 === "phase-design" ? "design-approval" : "artifact-approval";
   if (state.terminal !== void 0 || state.open_gate !== void 0) {
     return transitionInvalid(state, `${gateKind2}-gate`);
   }
@@ -39200,7 +39423,19 @@ async function composeGate(services2, state, intentId, snapshot2) {
     pendingGate = pendingAdjudicationGate(state, constitution.value, loaded.value, authenticated);
   }
   let input;
-  if (pendingGate !== void 0) {
+  if (gateKind2 === "design-approval") {
+    const target = await currentTargetRef(services2.dependencies);
+    const approval = await buildDesignApprovalInput(services2.dependencies, state, loaded.value, target);
+    input = {
+      ...mechanicalInput(services2, state, intentId),
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: subject.value.artifact_digest,
+      current_evidence: derived.current_evidence_set,
+      kind: "design-approval",
+      context: approval.context
+    };
+  } else if (pendingGate !== void 0) {
     input = {
       ...mechanicalInput(services2, state, intentId),
       phase_instance: state.phase_instance,
@@ -39304,8 +39539,8 @@ async function runBuildRequest(services2, value) {
 
 // src/local/status-classification.ts
 var ok23 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-function action2(code2, detail, human, command, input) {
-  return Object.freeze({ code: code2, detail, human_required: human, command, ...input === void 0 ? {} : { input } });
+function action2(code2, detail, human, commands, input) {
+  return Object.freeze({ code: code2, detail, human_required: human, ...commands === void 0 ? {} : { commands }, ...input === void 0 ? {} : { input } });
 }
 async function classifyWorkflowStatus(input) {
   const readability = await classifyDurableStateReadability({
@@ -39318,8 +39553,7 @@ async function classifyWorkflowStatus(input) {
       next_action: action2(
         "wait-for-server",
         "No durable task state exists. The MCP server records all progress; when it is available, proceed through the workflow skills. No offline recording exists.",
-        false,
-        "archflow-local manual-status"
+        false
       )
     }));
   }
@@ -39330,7 +39564,7 @@ async function classifyWorkflowStatus(input) {
         "repair-durable-state",
         `Durable task state exists but is not readable canonical authority: ${readability.summary}`,
         true,
-        "archflow-local manual-status",
+        void 0,
         readability.details
       )
     }));
@@ -39344,7 +39578,11 @@ async function classifyWorkflowStatus(input) {
   const status2 = await computeTaskStatus(created.value.dependencies, created.value.authority);
   if (!status2.ok) return status2;
   const derived = status2.value.next_action;
-  const command = derived.skill === void 0 ? "archflow-status" : [`$${derived.skill}`, input.task_id, ...derived.skill_args ?? []].join(" ");
+  const args = [input.task_id, ...derived.skill_args ?? []].join(" ");
+  const commands = derived.skill === void 0 || derived.code === "task-complete" ? void 0 : Object.freeze({
+    claude: [`/${derived.skill}`, args].filter(Boolean).join(" "),
+    codex: [`$${derived.skill}`, args].filter(Boolean).join(" ")
+  });
   return ok23(Object.freeze({
     mode: "normal",
     task_status: status2.value,
@@ -39352,7 +39590,7 @@ async function classifyWorkflowStatus(input) {
       derived.code,
       derived.detail,
       derived.human_required,
-      command,
+      commands,
       structuredClone(derived)
     )
   }));

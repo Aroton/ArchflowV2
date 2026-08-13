@@ -25,7 +25,7 @@ import type { ProductionServices } from "../state/production.js";
 import { resolvePinnedConstitution } from "../state/constitution.js";
 import { loadAuthenticatedGateApproval, type AuthenticatedGateApproval } from "../state/gate-approvals.js";
 import { APPROVAL_ARTIFACT_KINDS } from "../state/request-templates.js";
-import { buildCommitAuthorizationInput, computeTaskStatus, currentTargetRef, pendingAdjudicationGate } from "../state/status.js";
+import { buildCommitAuthorizationInput, buildDesignApprovalInput, computeTaskStatus, currentTargetRef, pendingAdjudicationGate } from "../state/status.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "../state/transitions.js";
 import { writeStagedRequest } from "../state/staged-requests.js";
@@ -384,7 +384,11 @@ async function composeGate(
     throw new TypeError('build-request gate facts require a non-empty "summary" written for the human reviewer');
   }
   const phaseKind = decodePhaseInstance(state.phase_instance).kind;
-  const gateKind = phaseKind === "phase-impl" ? "commit-authorization" : "artifact-approval";
+  const gateKind = phaseKind === "phase-impl"
+    ? "commit-authorization"
+    : phaseKind === "design" || phaseKind === "phase-design"
+      ? "design-approval"
+      : "artifact-approval";
   if (state.terminal !== undefined || state.open_gate !== undefined) {
     return transitionInvalid(state, `${gateKind}-gate`);
   }
@@ -421,7 +425,19 @@ async function composeGate(
   }
 
   let input: Record<string, PlainJsonValue>;
-  if (pendingGate !== undefined) {
+  if (gateKind === "design-approval") {
+    const target = await currentTargetRef(services.dependencies);
+    const approval = await buildDesignApprovalInput(services.dependencies, state, loaded.value, target);
+    input = {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: subject.value.artifact_digest,
+      current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
+      kind: "design-approval",
+      context: approval.context as unknown as PlainJsonValue,
+    };
+  } else if (pendingGate !== undefined) {
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,

@@ -8,7 +8,7 @@ export type StatusNextAction = Readonly<{
   code: string;
   detail: string;
   human_required: boolean;
-  command: string;
+  commands?: Readonly<{ claude: string; codex: string }>;
   input?: PlainJsonValue;
 }>;
 
@@ -25,8 +25,8 @@ export type ClassifyWorkflowStatusInput = Readonly<{
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 
-function action(code: string, detail: string, human: boolean, command: string, input?: PlainJsonValue): StatusNextAction {
-  return Object.freeze({ code, detail, human_required: human, command, ...(input === undefined ? {} : { input }) });
+function action(code: string, detail: string, human: boolean, commands?: Readonly<{ claude: string; codex: string }>, input?: PlainJsonValue): StatusNextAction {
+  return Object.freeze({ code, detail, human_required: human, ...(commands === undefined ? {} : { commands }), ...(input === undefined ? {} : { input }) });
 }
 
 /** Read-only classifier: reports where durable authority stands and exactly one next action. */
@@ -42,7 +42,6 @@ export async function classifyWorkflowStatus(input: ClassifyWorkflowStatusInput)
         "wait-for-server",
         "No durable task state exists. The MCP server records all progress; when it is available, proceed through the workflow skills. No offline recording exists.",
         false,
-        "archflow-local manual-status",
       ),
     }));
   }
@@ -53,7 +52,7 @@ export async function classifyWorkflowStatus(input: ClassifyWorkflowStatusInput)
         "repair-durable-state",
         `Durable task state exists but is not readable canonical authority: ${readability.summary}`,
         true,
-        "archflow-local manual-status",
+        undefined,
         readability.details,
       ),
     }));
@@ -67,9 +66,13 @@ export async function classifyWorkflowStatus(input: ClassifyWorkflowStatusInput)
   const status = await computeTaskStatus(created.value.dependencies, created.value.authority);
   if (!status.ok) return status;
   const derived = status.value.next_action;
-  const command = derived.skill === undefined
-    ? "archflow-status"
-    : [`$${derived.skill}`, input.task_id, ...(derived.skill_args ?? [])].join(" ");
+  const args = [input.task_id, ...(derived.skill_args ?? [])].join(" ");
+  const commands = derived.skill === undefined || derived.code === "task-complete"
+    ? undefined
+    : Object.freeze({
+        claude: [`/${derived.skill}`, args].filter(Boolean).join(" "),
+        codex: [`$${derived.skill}`, args].filter(Boolean).join(" "),
+      });
   return ok(Object.freeze({
     mode: "normal" as const,
     task_status: status.value,
@@ -77,7 +80,7 @@ export async function classifyWorkflowStatus(input: ClassifyWorkflowStatusInput)
       derived.code,
       derived.detail,
       derived.human_required,
-      command,
+      commands,
       structuredClone(derived) as PlainJsonValue,
     ),
   }));
