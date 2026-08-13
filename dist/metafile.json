@@ -7647,7 +7647,7 @@
       ]
     },
     "src/state/produce-subject.ts": {
-      "bytes": 13618,
+      "bytes": 14156,
       "format": "esm",
       "imports": [
         {
@@ -9690,7 +9690,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2458039,
+      "bytes": 2458227,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -10942,7 +10942,7 @@
           "bytesInOutput": 3015
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 7952
+          "bytesInOutput": 8140
         },
         "src/state/production.ts": {
           "bytesInOutput": 12467

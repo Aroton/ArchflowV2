@@ -131,7 +131,14 @@ export type ProduceProjection = Readonly<{
   digest: Sha256Digest;
 }>;
 
-/** Authenticates one caller-selected task projection against the retained produce manifest. */
+/**
+ * Authenticates the caller-selected human-readable subject against retained produce authority.
+ *
+ * Document results retain that file as a result projection. Implementation results instead bind
+ * the implementation log as a parent document while their projections enumerate the declared
+ * repository changes. Looking for the log in the latter list strands otherwise-valid retained
+ * implementation results before dispatch.
+ */
 export async function readProduceProjection(
   runner: RootBoundGitRunner,
   authority: TransactionAuthority,
@@ -145,9 +152,11 @@ export async function readProduceProjection(
     context: authority.context,
   });
   if (!target.ok) return target;
-  const projection = subject.retained.prepared.manifest.value.projections.find((candidate) =>
-    candidate.path === target.value.repositoryRelative);
-  if (projection === undefined) return fail(authority.context.phase_instance, "produce-projection-not-retained");
+  const retainedDigest = subject.artifact.artifact_kind === "implementation-output"
+    ? subject.artifact.parent_documents.find((candidate) => candidate.document_path === artifactPath)?.content_digest
+    : subject.retained.prepared.manifest.value.projections.find((candidate) =>
+      candidate.path === target.value.repositoryRelative)?.content_digest;
+  if (retainedDigest === undefined) return fail(authority.context.phase_instance, "produce-projection-not-retained");
   let bytes: Uint8Array;
   try {
     bytes = new Uint8Array(await readFile(target.value.absolute));
@@ -155,7 +164,7 @@ export async function readProduceProjection(
     return fail(authority.context.phase_instance, "produce-projection-unavailable");
   }
   const digest = sha256Bytes(bytes);
-  if (digest !== projection.content_digest) {
+  if (digest !== retainedDigest) {
     return fail(authority.context.phase_instance, "produce-projection-not-current");
   }
   return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ bytes, digest }) });

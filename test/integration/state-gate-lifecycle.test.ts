@@ -632,9 +632,16 @@ describe("durable gate lifecycle", () => {
     const selected = (name: string) => {
       const scenario = corpus.scenarios.find((entry) => entry.name === name);
       if (scenario === undefined) throw new Error(`missing scenario ${name}`);
+      const {
+        constitution: _constitution,
+        drift: _drift,
+        matched_rule_versions: _matched,
+        uncertain_rule_versions: _uncertain,
+        ...rawOutput
+      } = scenario.output;
       const gate = selectAdjudicationGate(
         registry,
-        parseAndDeriveAdjudication(scenario.output) as unknown as AdjudicationEvidence,
+        parseAndDeriveAdjudication(rawOutput) as unknown as AdjudicationEvidence,
       );
       if (gate?.kind !== "material-drift") throw new Error(`expected material gate for ${name}`);
       return gate as AdjudicationGateRequest<"material-drift">;

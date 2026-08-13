@@ -58431,8 +58431,8 @@ async function readProduceProjection(runner, authority, subject, artifactPath) {
     context: authority.context
   });
   if (!target2.ok) return target2;
-  const projection = subject.retained.prepared.manifest.value.projections.find((candidate) => candidate.path === target2.value.repositoryRelative);
-  if (projection === void 0) return fail16(authority.context.phase_instance, "produce-projection-not-retained");
+  const retainedDigest = subject.artifact.artifact_kind === "implementation-output" ? subject.artifact.parent_documents.find((candidate) => candidate.document_path === artifactPath)?.content_digest : subject.retained.prepared.manifest.value.projections.find((candidate) => candidate.path === target2.value.repositoryRelative)?.content_digest;
+  if (retainedDigest === void 0) return fail16(authority.context.phase_instance, "produce-projection-not-retained");
   let bytes;
   try {
     bytes = new Uint8Array(await readFile4(target2.value.absolute));
@@ -58440,7 +58440,7 @@ async function readProduceProjection(runner, authority, subject, artifactPath) {
     return fail16(authority.context.phase_instance, "produce-projection-unavailable");
   }
   const digest10 = sha256Bytes(bytes);
-  if (digest10 !== projection.content_digest) {
+  if (digest10 !== retainedDigest) {
     return fail16(authority.context.phase_instance, "produce-projection-not-current");
   }
   return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ bytes, digest: digest10 }) });

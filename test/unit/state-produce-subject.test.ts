@@ -1,16 +1,74 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
 import { canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
 import type { ImplementationOutputV1 } from "../../src/contracts/durable-implementation-output.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { DIFF_CONTEXT_LINES } from "../../src/review/line-diff.js";
-import { EMBED_WHOLE_BYTE_CEILING, expectedProduceUpstreamBindings, renderProduceReviewMaterial, resolveProduceUpstreamBinding, resolveReviewExclusions, reviewChangeEntries, type CurrentProduceSubject } from "../../src/state/produce-subject.js";
+import { createGitRunner } from "../../src/repository/git.js";
+import { discoverWorktree } from "../../src/repository/identity.js";
+import { EMBED_WHOLE_BYTE_CEILING, expectedProduceUpstreamBindings, readProduceProjection, renderProduceReviewMaterial, resolveProduceUpstreamBinding, resolveReviewExclusions, reviewChangeEntries, type CurrentProduceSubject } from "../../src/state/produce-subject.js";
+import type { TransactionAuthority } from "../../src/state/authority.js";
+import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
+
+afterAll(cleanupTemporaryRepositories);
 
 describe("retained produce review material", () => {
+  it("authenticates implementation notes through the retained parent-document binding", async () => {
+    const repository = createTempRepository({ label: "implementation-review-log" });
+    const taskId = parseTaskSlug("demo");
+    const artifactPath = parseTaskPathClaim("phases/1/impl-notes.md");
+    const bytes = new TextEncoder().encode("Implementation notes\n");
+    repository.write(`.archflow/tasks/${taskId}/${artifactPath}`, Buffer.from(bytes));
+    repository.write("src/index.ts", "export {};\n");
+    repository.commitAll("fixture");
+    const context = {
+      task_id: taskId,
+      phase_instance: encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(1) }),
+      operation: parseSafeCode("read-implementation-review-log"),
+      attempt: parseSafeInteger(1),
+    } as const;
+    const discovered = await discoverWorktree(createGitRunner({ cwd: repository.path }), context);
+    if (!discovered.ok) throw discovered.error;
+    const fixture = JSON.parse(readFileSync(
+      new URL("../fixtures/contracts/durable/implementation-output.valid.json", import.meta.url),
+      "utf8",
+    )) as ImplementationOutputV1;
+    const artifact = {
+      ...fixture,
+      parent_documents: [{
+        document_path: artifactPath,
+        content_digest: sha256Bytes(bytes),
+        role: "impl-notes" as const,
+      }],
+    } as ImplementationOutputV1;
+    const subject = {
+      artifact_digest: canonicalJsonDigest(artifact),
+      artifact,
+      retained: {
+        prepared: { manifest: { value: {
+          projections: [{ path: "src/index.ts", content_digest: sha256Bytes(new TextEncoder().encode("export {};\n")) }],
+        } } },
+      },
+    } as unknown as CurrentProduceSubject;
+    const authority = { task_id: taskId, context } as unknown as TransactionAuthority;
+
+    const current = await readProduceProjection(discovered.value, authority, subject, artifactPath);
+    expect(current).toMatchObject({ ok: true, value: { digest: sha256Bytes(bytes) } });
+
+    writeFileSync(join(repository.path, ".archflow", "tasks", taskId, artifactPath), "changed notes\n");
+    const stale = await readProduceProjection(discovered.value, authority, subject, artifactPath);
+    expect(stale).toMatchObject({
+      ok: false,
+      error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: "produce-projection-not-current" } } },
+    });
+  });
+
   it("maps only the current phase's exact canonical upstream document paths", () => {
     const state = { phase_instance: "phase-impl-17" } as TaskStateV1;
     expect(expectedProduceUpstreamBindings(state)).toEqual([
