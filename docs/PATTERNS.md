@@ -192,7 +192,7 @@ npm test
 npm run check
 ```
 
-`npm run check` is the full local gate: SDK compatibility, typecheck, MCP runtime and full tests, contract tests, temporary build, dependency/notice policies, MCP SDK boundary policy, and release integrity/reproducibility checks. `.github/workflows/ci.yml` runs the same categories on Node 24.15.0 and 24.18.0.
+`npm run check` is the full maintainer-run gate: SDK compatibility, typecheck, MCP runtime and full tests, contract tests, temporary build, dependency/notice policies, MCP SDK boundary policy, and release integrity/reproducibility checks. The repository has no hosted CI workflow, so running this gate before merge is an explicit maintainer action.
 
 ## High-risk convention checklist
 

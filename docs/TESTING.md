@@ -1,15 +1,15 @@
 # TESTING
 
-**Explored:** 2026-08-13 · **Commit:** `66c4c9b` · **Covers:** `test/`, `vitest.config.ts`, `.github/workflows/`
+**Explored:** 2026-08-14 · **Commit:** `9331032` · **Covers:** `test/`, `vitest.config.ts`, `package.json`
 
 ## Test runner and configuration
 
 - Tests use Vitest 4.1.10 in the Node environment (`vitest.config.ts`). Its only include is `test/**/*.test.ts`; files without the `.test.ts` suffix are not runtime tests.
 - TypeScript validation is strict and emit-free (`tsconfig.json`): `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`, and `skipLibCheck: false`. The include covers `src/**/*.ts`, all `test/**/*.ts`, and `vitest.config.ts`.
 - `test/types/mcp-sdk-public-surface.ts` is therefore compile-time coverage exercised by `npm run typecheck`, not by Vitest.
-- The package supports Node `^24.15.0`. CI runs the validation matrix on exactly Node 24.15.0 and 24.18.0 (`.github/workflows/ci.yml`).
+- The package supports Node `^24.15.0`. Validation is run explicitly by maintainers with the package scripts; the repository does not configure hosted CI.
 
-At this commit, `npm test -- --reporter=dot` passed locally: **165 files discovered, 161 passed, 4 skipped; 1,714 tests discovered, 1,690 passed, 24 skipped**. The skipped groups were the explicitly opt-in real-host suites. Expected failure-path tests write some `INTERNAL_ERROR` diagnostics to stderr while still passing.
+At this commit, `npm test` passed locally: **165 files discovered, 161 passed, 4 skipped; 1,744 tests discovered, 1,720 passed, 24 skipped**. The skipped groups were the explicitly opt-in real-host suites. Expected failure-path tests write some `INTERNAL_ERROR` diagnostics to stderr while still passing.
 
 ## Suite inventory by behavior
 
@@ -107,22 +107,21 @@ npm run check
 
 There is no separate lint or formatter command in `package.json`. There is also no coverage command or enforced coverage threshold; `vitest.config.ts` only names `coverage/` as the report directory.
 
-## CI and release checks
+## Local validation and release checks
 
-`.github/workflows/ci.yml` runs on every push and pull request with read-only contents permission. On each Node matrix entry it installs with `npm ci`, expands the local aggregate into individual visible steps, then:
+`npm run check` is the maintainer-run validation gate. It covers the SDK compatibility probe, typecheck, schema drift, focused MCP tests, the full suite, contract tests, temporary builds, notice and SDK-boundary policies, and the release checks below. The repository intentionally has no GitHub Actions workflow, so pull requests do not receive automatic hosted checks.
 
-- validates tracked `dist/` and runs hostile/offline smoke, release mutation tests, and reproduction;
-- stages a fresh release into `$RUNNER_TEMP`, compares it with tracked `dist/`, and asserts the repository has no `.tmp` residue.
+For an explicit release comparison, `npm run release:stage -- --output <directory>` stages a fresh payload and `npm run release:check -- --payload dist --compare <directory>` compares it with tracked `dist/`.
 
 Release validation is implemented by `scripts/release-support.mjs` and front ends in `scripts/check-release.mjs`, `scripts/build-release.mjs`, `scripts/reproduce-release.mjs`, `scripts/smoke-release-bundle.mjs`, and `scripts/test-release-integrity.mjs`. It checks manifest/artifact closure and digests, build/input provenance, declared runtime assets, exact copies of third-party notices and retained upstream licenses, bundle imports, copied-payload behavior under a hostile guard, exact stdio/adversarial transcripts, module/repository canaries, mutation rejection, safe staging/recovery, and reproducibility. Dependency changes require no approval/evidence artifact. `test/contracts/release-contracts.test.ts` and `test/integration/release-offline.test.ts` add schema and offline behavior coverage.
 
 ## Known current limitations and gaps
 
-- **Real-host suites are intentionally outside `npm run check` and CI.** `test/contracts/repository-boundary.test.ts` pins this exclusion. Host/version/provider drift is found only when someone explicitly runs `test:real-host`; the benchmark has a second opt-in.
+- **Real-host suites are intentionally outside `npm run check`.** `test/contracts/repository-boundary.test.ts` pins this exclusion. Host/version/provider drift is found only when someone explicitly runs `test:real-host`; the benchmark has a second opt-in.
 - **The recorded review benchmark measures one observation per artifact and direction, not repeat stability.** It cannot establish deterministic verdicts or rounds-to-convergence. The deterministic contract suite instead pins the materiality and remediation instructions; a future opt-in convergence benchmark should repeat identical production envelopes and measure blocker-class agreement and remediation closure.
 - **Operator-level journeys remain separate evidence.** `docs/validation/release-validation.md` records the two full producer journeys (VAL-01) as unexecuted and a complete installed two-phase phase-design/phase-implementation slice (VAL-16) as an accepted gap; the server-absent manual journey it lists as pending (VAL-12) is moot now that degraded mode is read-only. The automated terminal suite proves named slices, not an entire human workflow.
 - **Some real failure classes remain simulated.** The same report records real `TIMEOUT`, `OUTPUT_OVERFLOW`, `RATE_LIMITED`, and logged-out `AUTH_UNAVAILABLE` as fake-only by design (VAL-08), and no observed real host holding a pending gate through its resolved timeout (VAL-09).
 - **Real-host security evidence is bounded.** Fake and real dispatch tests check canonical authentication locations, disposable workspaces, scrubbed environment, canaries, output scanning, and PII omission, but `docs/validation/release-validation.md` explicitly records no OS-enforced containment or proof against repository/global-instruction and persistence-capable-tool access (VAL-07). The workspace unit suite additionally proves an atomic credential replacement survives workspace disposal, preventing regression to disposable credential projection.
-- **Platform coverage is narrow.** CI is Ubuntu-only. Process-group cancellation/reaping cases in `test/integration/dispatch-plumbing.test.ts` and `test/integration/mcp-stdio.test.ts` run only when `process.platform !== "win32"`; no Windows CI job proves the alternate path.
+- **Platform coverage is maintainer-dependent.** Process-group cancellation/reaping cases in `test/integration/dispatch-plumbing.test.ts` and `test/integration/mcp-stdio.test.ts` run only when `process.platform !== "win32"`; there is no hosted platform matrix proving alternate paths.
 - **No quantitative coverage gate exists.** Confidence comes from behavioral/corpus/mutation suites and the release matrix, not line/branch percentages.
 - **Release-validation documentation is point-in-time evidence.** `docs/validation/release-validation.md` is stamped 2026-08-04 and contains some evolving Phase 21 observations; use executed tests/artifacts and a newly recorded opt-in run when deciding present real-host status rather than treating candidate procedures as current proof.

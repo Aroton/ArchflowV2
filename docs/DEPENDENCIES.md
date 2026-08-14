@@ -1,6 +1,6 @@
 # DEPENDENCIES
 
-**Explored:** 2026-08-13 · **Commit:** `247df34` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, CI
+**Explored:** 2026-08-14 · **Commit:** `9331032` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, release tooling
 
 ## Runtime and package baseline
 
@@ -160,15 +160,13 @@ The release is not published by automation. `dist/` is tracked and validated aga
 
 `install.sh` verifies the tracked payload, installs it beneath `${ARCHFLOW_HOME:-$HOME/.archflow}/bundle`, writes `archflow-mcp` and `archflow-local` launchers beneath `${ARCHFLOW_BIN:-$HOME/.local/bin}`, and copies skills to `~/.claude/skills/` and/or `~/.agents/skills/`. It requires Node in `^24.15.0` and requires the launcher directory to be on `PATH`.
 
-### CI/CD
+### Automation
 
-`.github/workflows/ci.yml` is the only CI integration. It runs on every push and pull request with read-only repository contents permission, `ubuntu-latest`, and a non-fail-fast matrix of Node `24.15.0` and `24.18.0`. `actions/checkout` and `actions/setup-node` are pinned to full commit SHAs.
-
-After `npm ci`, CI runs the SDK compatibility probe, typecheck, focused MCP tests, the full suite, contract tests, temporary build, notice and SDK-boundary checks with their mutation tests, release verification/smoke/mutations/reproduction, a fresh release staging comparison, and finally asserts that no repository `.tmp` directory remains. There is no deployment, package publication, container build, or artifact upload workflow.
+The repository has no hosted CI/CD workflow. Maintainers run `npm run check` explicitly for the SDK compatibility probe, typecheck, focused MCP tests, the full suite, contract tests, temporary build, notice and SDK-boundary checks with their mutation tests, and release verification, smoke, mutations, and reproduction. There is no automated deployment, package publication, container build, or artifact upload.
 
 ## Change checklist
 
 - Dependency changes update the exact pins in `package.json`, `package-lock.json`, and the ordinary third-party notice content as applicable.
 - Keep all production `@modelcontextprotocol/*` imports isolated to `src/mcp/sdk-adapter.ts` and public package roots.
 - The executable authorities for the dependency surface are `package.json`, `package-lock.json`, and the release provenance derived from the build — not narrative documents.
-- Real-host tests are capability probes that can spend provider quota and depend on installed CLI login state; they are not part of ordinary `npm test` or CI.
+- Real-host tests are capability probes that can spend provider quota and depend on installed CLI login state; they are not part of ordinary `npm test` or `npm run check`.

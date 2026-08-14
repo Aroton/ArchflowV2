@@ -46,7 +46,7 @@ flowchart LR
 
 ## One shape authority: Zod generates the schemas
 
-The Zod parsers are the single runtime shape authority. Of the 35 committed schemas under `schemas/v1/`, thirty-four are *generated from* the Zod sources by `npm run generate:schemas` (manifest in `internal/schema-generation.ts`, one plan module per shape group — leaf, durable, gate, errors, mcp-tools), and `npm run check:schemas` re-renders them in CI and fails on any byte drift, so the committed documents cannot disagree with the code. The release manifest stays hand-written: it describes the release payload itself, is consumed only by `scripts/release-support.mjs`, has no Zod source, and the generator refuses to emit it.
+The Zod parsers are the single runtime shape authority. Of the 35 committed schemas under `schemas/v1/`, thirty-four are *generated from* the Zod sources by `npm run generate:schemas` (manifest in `internal/schema-generation.ts`, one plan module per shape group — leaf, durable, gate, errors, mcp-tools), and `npm run check:schemas` re-renders them during the explicit validation gate and fails on any byte drift, so the committed documents cannot disagree with the code. The release manifest stays hand-written: it describes the release payload itself, is consumed only by `scripts/release-support.mjs`, has no Zod source, and the generator refuses to emit it.
 
 Why generate at all? The schemas are the *published* contract — something a third-party tool can compile with a stock draft-2020-12 validator. Generation ends the era of dual authorities: shapes used to exist as hand-written JSON Schema *plus* a Zod mirror, with `assertZodAgreement` proving the two matched.
 
