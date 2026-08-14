@@ -20,6 +20,7 @@ import { rulesForEnvelope } from "../../review/adjudication.js";
 import { runCounterReview, type ConstitutionReviewPlan } from "../../review/counter-review.js";
 import { canonicalRubricForPhaseKind } from "../../review/rubrics.js";
 import {
+  PRODUCED_REPOSITORY_VIEW_NOTE,
   REPOSITORY_VIEW_NOTE,
   REVIEW_ENVELOPE_BYTE_CAP,
   ReviewEnvelopeError,
@@ -40,11 +41,8 @@ import {
   loadProduceUpstreamSubject,
   readProduceProjection,
   renderProduceReviewMaterial,
-  resolveReviewExclusions,
-  reviewChangeEntries,
   type CurrentProduceSubject,
   type ProduceProjection,
-  type ReviewExclusionReason,
 } from "../../state/produce-subject.js";
 import type { ProductionServices } from "../../state/production.js";
 import { mapHandlerErrors } from "./errors.js";
@@ -65,21 +63,21 @@ function stableId(prefix: string, seed: PlainJsonValue): ReturnType<typeof parse
 
 /**
  * Translates a residual byte-cap failure — after cap relief exhausted every droppable context
- * entry — into `ENVELOPE_OVERFLOW` naming the largest change-set contributors, so the producer
- * knows to split the phase or mark generated content `linguist-generated` rather than guess at a
- * bare byte count. Returns `undefined` (caller rethrows) for any other failure, or when no
- * change entry can be named — the parameter schema requires at least one path.
+ * entry — into `ENVELOPE_OVERFLOW` naming the largest compact output declarations. Source bodies
+ * live in the sealed repository view and cannot cause this failure. Returns `undefined` (caller
+ * rethrows) for any other failure, or when no output path can be named — the parameter schema
+ * requires at least one path.
  */
 export function envelopeOverflowError(
   error: unknown,
   subject: CurrentProduceSubject,
-  exclusions: ReadonlyMap<string, ReviewExclusionReason>,
 ): ReturnType<typeof createProjectError> | undefined {
   if (!(error instanceof ReviewEnvelopeError)) return undefined;
   const parameters: Readonly<Record<string, unknown>> = error.project_error.diagnostic.parameters;
   if (parameters.issue_code !== "envelope-byte-cap") return undefined;
+  if (subject.artifact.artifact_kind !== "implementation-output") return undefined;
   const encoder = new TextEncoder();
-  const offending = reviewChangeEntries(subject, exclusions)
+  const offending = subject.artifact.outputs
     .map((entry) => ({ path: entry.path, byte_count: encoder.encode(JSON.stringify(entry)).byteLength }))
     .sort((left, right) => right.byte_count - left.byte_count)
     .slice(0, 5)
@@ -96,8 +94,8 @@ export function envelopeOverflowError(
 /**
  * Chooses the commit for the reviewer's read-only repository checkout. Document subjects use the
  * current HEAD — the same authority the mechanical evidence pins read from. Implementation-output
- * subjects use the artifact's attested `base_commit`: the reviewer sees the pre-change tree, and
- * the changes themselves travel in the envelope's change entries.
+ * subjects use the artifact's attested `base_commit`; retained after-images are applied to that
+ * baseline by the dispatch workspace.
  */
 export async function resolveRepositoryViewCommit(
   runner: RootBoundGitRunner,
@@ -243,12 +241,9 @@ export async function handleCounterReview(
       services.runner, services.authority, produce.value, call.input.artifact_path,
     );
     if (!projection.ok) return projection;
-    const exclusions = await resolveReviewExclusions(
-      services.runner, produce.value, services.authority.context,
-    );
     let artifact: string;
     try {
-      artifact = renderProduceReviewMaterial(produce.value, projection.value, exclusions);
+      artifact = renderProduceReviewMaterial(produce.value, projection.value);
     } catch {
       return fail(createProjectError("CONTRACT_INVALID", {
         tool: call.name,
@@ -264,6 +259,27 @@ export async function handleCounterReview(
     if (!constitution.ok) return constitution;
     const activeRules = [...constitution.value.rules.values()]
       .some((rule) => rule.status === "active");
+    const repositoryViewCommit = await resolveRepositoryViewCommit(
+      services.runner, produce.value.artifact,
+    );
+    const repositoryView = Object.freeze({
+      base_commit: repositoryViewCommit,
+      ...(produce.value.artifact.artifact_kind === "implementation-output"
+        ? { projection_plan: produce.value.retained.projection_plan }
+        : {}),
+    });
+    const workspaceBinding = produce.value.artifact.artifact_kind === "implementation-output"
+      ? Object.freeze({
+          kind: "read-only-produced-repository-snapshot" as const,
+          base_commit: repositoryViewCommit,
+          snapshot_digest: produce.value.artifact.snapshot_digest,
+          note: PRODUCED_REPOSITORY_VIEW_NOTE,
+        })
+      : Object.freeze({
+          kind: "read-only-repository-checkout" as const,
+          commit: repositoryViewCommit,
+          note: REPOSITORY_VIEW_NOTE,
+        });
 
     const retainedBytes = services.dependencies.read_retained_task_bytes;
     if (retainedBytes === undefined) throw new TypeError("retained byte accounting is unavailable");
@@ -284,8 +300,7 @@ export async function handleCounterReview(
         authority: services.authority, dependencies: services.dependencies, host: session.value.host,
         repository_root: services.runner.location.worktreeRoot, phase_instance: state.value.phase_instance,
         signal: context.signal, cancellation_source: "client", allow_claude_dispatch: true,
-        // Deliberately no repository_view_commit: the constitution reviewer judges exactly the
-        // sealed envelope, with nothing else to be steered by.
+        repository_view: repositoryView,
       });
       constitutionPlan = Object.freeze({
         registry: constitution.value.rules,
@@ -295,6 +310,7 @@ export async function handleCounterReview(
         approved_upstream_digests: approvedUpstreamDigests,
         invocation_id: stableId("adjudication-invocation", context.invocation_id),
         result_id: constitutionResultId,
+        workspace: workspaceBinding,
         dispatch: constitutionCoordinator,
         prepare_evidence: (evidence, measuredAtRevision) => prepareDispatchEvidence(
           services, retainedBytes, constitutionResultId, { kind: "adjudication", evidence }, measuredAtRevision,
@@ -313,9 +329,6 @@ export async function handleCounterReview(
     if (!context_entries.ok) return context_entries;
 
     const resultId = dispatchId("result", call.input.intent_id);
-    const repositoryViewCommit = await resolveRepositoryViewCommit(
-      services.runner, produce.value.artifact,
-    );
     const coordinator = createDispatchCoordinator({
       authority: services.authority,
       dependencies: services.dependencies,
@@ -326,7 +339,7 @@ export async function handleCounterReview(
       cancellation_source: "client",
       // Both producer directions are implemented; release authorization remains a separate gate.
       allow_claude_dispatch: true,
-      repository_view_commit: repositoryViewCommit,
+      repository_view: repositoryView,
     });
     const result = await runCounterReview({
       transaction: services.dependencies,
@@ -348,11 +361,7 @@ export async function handleCounterReview(
         artifact,
         rubric: canonicalRubric.rubric,
         context: context_entries.value,
-        workspace: {
-          kind: "read-only-repository-checkout",
-          commit: repositoryViewCommit,
-          note: REPOSITORY_VIEW_NOTE,
-        },
+        workspace: workspaceBinding,
         subject: {
           task_id: services.authority.task_id,
           phase_instance: state.value.phase_instance,
@@ -369,7 +378,7 @@ export async function handleCounterReview(
       projection_digest: projection.value.digest,
       ...(constitutionPlan === undefined ? {} : { constitution: constitutionPlan }),
     }).catch((error: unknown) => {
-      const overflow = envelopeOverflowError(error, produce.value, exclusions);
+      const overflow = envelopeOverflowError(error, produce.value);
       if (overflow !== undefined) return fail<never>(overflow);
       throw error;
     });

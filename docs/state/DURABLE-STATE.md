@@ -73,6 +73,8 @@ Raw phase verification is written to `.archflow/runtime/tasks/<task>/cache/phase
 
 When a cached result payload is absent, readers recover from structured evidence embedded in its manifest, a verified tracked projection, or its recorded Git blob identity. An implementation result separates its declared changed-file projections from its parent-document bindings: counter-review authenticates the tracked implementation log through the latter, so the log need not be misclassified as a changed implementation output. This is why a fresh clone containing only tracked files can still validate durable results, rebuild gate UI, report status, and derive the next action. The guarantee reaches the last checked-in durable boundary, not uncommitted implementation bytes.
 
+During implementation review, those retained projections are also the only source of changed repository bytes. Dispatch archives the recorded base commit and applies the retained after-images into a disposable checkout; it never copies the live worktree. The compact envelope binds the base and declared snapshot while the child reads full files from that reconstructed tree. Thus a transport cap cannot silently select only part of a changed file, and edits made after produce cannot leak into the reviewed subject.
+
 ## Cleanup
 
 Cleanup runs at explicit lifecycle boundaries:

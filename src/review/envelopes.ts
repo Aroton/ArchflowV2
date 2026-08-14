@@ -99,17 +99,27 @@ export type PinnedContextEntry =
 export const REPOSITORY_VIEW_NOTE =
   "Your working directory is a read-only checkout of the repository at this commit, excluding .archflow/tasks. Use it to verify repository claims; the artifact and pinned context remain the review subject and take precedence on conflict.";
 
+/** Fixed child-visible explanation of the retained implementation snapshot. */
+export const PRODUCED_REPOSITORY_VIEW_NOTE =
+  "Your working directory is a sealed read-only post-change repository snapshot reconstructed from the authenticated implementation output, excluding .archflow/tasks. The artifact names the changed paths and baseline; inspect the files in this snapshot as the review subject.";
+
 /**
- * Declares the read-only repository checkout offered to a review child. Optional: adjudication
- * envelopes never carry one, and a review envelope without it describes the historical empty
- * workspace. The commit is the checkout's exact tree (HEAD for documents, the implementation's
- * base commit for change sets).
+ * Declares the read-only repository view offered to either review child. A plain checkout binds
+ * one commit; an implementation snapshot binds its baseline plus the retained declared-output
+ * snapshot applied there. Absence describes the historical empty workspace.
  */
-export type ReviewWorkspaceBinding = {
-  readonly kind: "read-only-repository-checkout";
-  readonly commit: GitOid;
-  readonly note: typeof REPOSITORY_VIEW_NOTE;
-};
+export type ReviewWorkspaceBinding =
+  | {
+      readonly kind: "read-only-repository-checkout";
+      readonly commit: GitOid;
+      readonly note: typeof REPOSITORY_VIEW_NOTE;
+    }
+  | {
+      readonly kind: "read-only-produced-repository-snapshot";
+      readonly base_commit: GitOid;
+      readonly snapshot_digest: Sha256Digest;
+      readonly note: typeof PRODUCED_REPOSITORY_VIEW_NOTE;
+    };
 
 export type ReviewEnvelopeInput = {
   readonly artifact: string;
@@ -175,6 +185,7 @@ export type AdjudicationEnvelopeInput = {
   readonly rules: readonly AdjudicationRuleInput[];
   readonly approved_upstreams: readonly AdjudicationUpstreamInput[];
   readonly source_evidence_set_digest: Sha256Digest;
+  readonly workspace?: ReviewWorkspaceBinding;
   readonly subject: AdjudicationSubject;
 };
 
@@ -289,16 +300,28 @@ function validateAdjudicationSubject(value: AdjudicationSubject): AdjudicationSu
 }
 
 function validateWorkspace(value: ReviewWorkspaceBinding): ReviewWorkspaceBinding {
-  exactFields(value, ["kind", "commit", "note"], "review workspace binding");
-  if (value.kind !== "read-only-repository-checkout") {
-    throw new TypeError("review workspace kind must be read-only-repository-checkout");
+  if (value.kind === "read-only-repository-checkout") {
+    exactFields(value, ["kind", "commit", "note"], "review workspace binding");
+    if (value.note !== REPOSITORY_VIEW_NOTE) {
+      throw new TypeError("review workspace note must be the fixed checkout literal");
+    }
+    return {
+      kind: value.kind,
+      commit: parseGitOid(value.commit),
+      note: value.note,
+    };
   }
-  if (value.note !== REPOSITORY_VIEW_NOTE) {
-    throw new TypeError("review workspace note must be the fixed literal");
+  exactFields(value, ["kind", "base_commit", "snapshot_digest", "note"], "review workspace binding");
+  if (value.kind !== "read-only-produced-repository-snapshot") {
+    throw new TypeError("review workspace kind is invalid");
+  }
+  if (value.note !== PRODUCED_REPOSITORY_VIEW_NOTE) {
+    throw new TypeError("review workspace note must be the fixed produced-snapshot literal");
   }
   return {
     kind: value.kind,
-    commit: parseGitOid(value.commit),
+    base_commit: parseGitOid(value.base_commit),
+    snapshot_digest: parseSha256Digest(value.snapshot_digest),
     note: value.note,
   };
 }
@@ -487,9 +510,12 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
  */
 export function buildAdjudicationEnvelope(value: AdjudicationEnvelopeInput): DispatchEnvelope {
   const snapshot = materialize(value);
+  const workspace = snapshot.workspace === undefined ? undefined : validateWorkspace(snapshot.workspace);
   exactFields(
     snapshot,
-    ["artifact", "rules", "approved_upstreams", "source_evidence_set_digest", "subject"],
+    workspace === undefined
+      ? ["artifact", "rules", "approved_upstreams", "source_evidence_set_digest", "subject"]
+      : ["artifact", "rules", "approved_upstreams", "source_evidence_set_digest", "workspace", "subject"],
     "adjudication envelope input",
   );
   if (typeof snapshot.artifact !== "string") throw new TypeError("adjudication envelope artifact must be text");
@@ -512,11 +538,12 @@ export function buildAdjudicationEnvelope(value: AdjudicationEnvelopeInput): Dis
     rules,
     approved_upstreams: approvedUpstreams,
     source_evidence_set_digest: sourceEvidenceSetDigest,
+    ...(workspace === undefined ? {} : { workspace }),
     instructions: {
       rule_coverage: "Return exactly one rule finding for every supplied rule, using its id as rule_id and version as rule_version. Do not omit, duplicate, or invent rules.",
       drift_coverage: "Return exactly one drift finding for every supplied approved upstream, using its upstream_digest. Do not omit, duplicate, or invent upstreams. Use drift=aligned with an empty affected_claim_ids array when no approved claim is affected; otherwise name every affected claim using lowercase kebab-case IDs.",
       enforcement_context: "A rule's enforced_by labels name where that rule is mechanically enforced in the repository. They are context for your judgment, not evidence you are asked to verify or report on. Judge every rule the same way: from the artifact and the evidence supplied here.",
-      uncertainty: "Report uncertain compliance only when the artifact itself leaves the question genuinely open. Absence of test results, command output, or repository access is expected here and is not by itself a reason to be uncertain.",
+      uncertainty: "Report uncertain compliance only when the artifact, approved upstreams, and supplied repository snapshot leave the question genuinely open. Absence of runtime-only evidence is not by itself a reason to be uncertain.",
     },
     subject,
   } as const satisfies PlainJsonValue;

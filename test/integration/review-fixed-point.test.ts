@@ -43,6 +43,7 @@ import {
   parsePositiveSafePhaseNumber,
 } from "../../src/contracts/phase-instance.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
+import { REPOSITORY_VIEW_NOTE } from "../../src/review/envelopes.js";
 import type { ReviewEvidence } from "../../src/contracts/review.js";
 import type { SecretScanner } from "../../src/contracts/secret-scan.js";
 import type { CurrentReviewSet } from "../../src/contracts/trust.js";
@@ -692,6 +693,11 @@ function constitutionPlan(
     approved_upstream_digests: [],
     invocation_id: parseSafeId(`adjudication-invocation-v${version}`),
     result_id: parseSafeId(resultId),
+    workspace: {
+      kind: "read-only-repository-checkout",
+      commit: "0123456789abcdef0123456789abcdef01234567" as never,
+      note: REPOSITORY_VIEW_NOTE,
+    },
     dispatch: async (_route, envelope) => {
       const parsed = JSON.parse(new TextDecoder().decode(envelope.bytes)) as {
         subject: Record<string, unknown>;

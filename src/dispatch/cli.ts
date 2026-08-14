@@ -550,11 +550,10 @@ const claudeAdapter: CliAdapter = Object.freeze({
     }
     const mcpConfigPath = join(workspace.root, "empty-mcp.json");
     await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 0o600 });
-    // A review workspace with a materialized repository view runs the child inside the view with
+    // A dispatch workspace with a materialized repository view runs the child inside the view with
     // exactly the read-only tools (no write, bash, or network tools). `--setting-sources ""`,
     // `--disable-slash-commands`, and the empty strict MCP config stay pinned so the view's own
-    // CLAUDE.md and settings never become instructions. Without a view (adjudication), every tool
-    // stays disabled exactly as before.
+    // CLAUDE.md and settings never become instructions. Without a view, every tool stays disabled.
     return Object.freeze({
       adapter: "claude-cli",
       command: "claude",

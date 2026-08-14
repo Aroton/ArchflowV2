@@ -1,7 +1,9 @@
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
+
+import type { ProjectionPlan } from "../state/snapshots.js";
 
 import type { AdapterId } from "../contracts/review.js";
 
@@ -101,8 +103,9 @@ export async function createDispatchWorkspace(
 const GIT_OID = /^[0-9a-f]{40}$/u;
 
 /**
- * Materializes a read-only checkout of the repository at `commit` under the workspace, for review
- * dispatch only. `git archive` (NOT `git worktree add`) is deliberate: an archive extraction has
+ * Materializes a read-only checkout of the repository at `commit` under the workspace. When a
+ * retained projection is supplied, its authenticated after-images reconstruct the proposed tree.
+ * `git archive` (NOT `git worktree add`) is deliberate: an archive extraction has
  * no `.git` link back to the repository object database, so after `.archflow/tasks` is removed
  * the tracked task blobs (produce artifacts, triage) are unreachable from the view — the
  * reviewer-independence property of `src/review/envelopes.ts` holds structurally, not by child
@@ -113,6 +116,7 @@ export async function materializeRepositoryView(
   workspace: DispatchWorkspace,
   repositoryRoot: string,
   commit: string,
+  projectionPlan?: ProjectionPlan,
 ): Promise<DispatchWorkspace> {
   if (!GIT_OID.test(commit)) {
     throw new TypeError("repository view commit must be a full lowercase git object id");
@@ -159,5 +163,64 @@ export async function materializeRepositoryView(
     });
   });
   await rm(join(view, ".archflow", "tasks"), { recursive: true, force: true });
+  if (projectionPlan !== undefined) await applyProducedProjection(view, projectionPlan);
   return Object.freeze({ ...workspace, repository_view_root: view });
+}
+
+function errno(error: unknown): string | undefined {
+  return error !== null && typeof error === "object" && "code" in error && typeof error.code === "string"
+    ? error.code
+    : undefined;
+}
+
+async function ensureContainedParent(view: string, repositoryPath: string): Promise<string> {
+  const target = resolve(view, repositoryPath);
+  if (target === view || !isInside(view, target)) {
+    throw new TypeError("produced repository view path escapes the checkout");
+  }
+  const segments = repositoryPath.split("/");
+  let parent = view;
+  for (const segment of segments.slice(0, -1)) {
+    parent = join(parent, segment);
+    try {
+      const status = await lstat(parent);
+      if (!status.isDirectory() || status.isSymbolicLink()) {
+        throw new TypeError("produced repository view path traverses a non-directory");
+      }
+    } catch (error) {
+      if (errno(error) !== "ENOENT") throw error;
+      await mkdir(parent);
+    }
+  }
+  return target;
+}
+
+async function removeLeaf(target: string): Promise<void> {
+  try {
+    const status = await lstat(target);
+    if (status.isDirectory() && !status.isSymbolicLink()) {
+      throw new TypeError("produced repository view output collides with a directory");
+    }
+    await rm(target, { force: true });
+  } catch (error) {
+    if (errno(error) !== "ENOENT") throw error;
+  }
+}
+
+/** Applies only authenticated retained after-images to the archived baseline checkout. */
+async function applyProducedProjection(view: string, projectionPlan: ProjectionPlan): Promise<void> {
+  for (const entry of projectionPlan.entries) {
+    if (entry.path === ".archflow/tasks" || entry.path.startsWith(".archflow/tasks/")) {
+      throw new TypeError("produced repository view cannot expose task authority");
+    }
+    const target = await ensureContainedParent(view, entry.path);
+    await removeLeaf(target);
+    if (entry.desired.state === "absent") continue;
+    if (entry.desired.file_type === "symlink") {
+      await symlink(new TextDecoder().decode(entry.desired.bytes), target);
+      continue;
+    }
+    await writeFile(target, entry.desired.bytes, { mode: entry.desired.mode === "100755" ? 0o755 : 0o644 });
+    await chmod(target, entry.desired.mode === "100755" ? 0o755 : 0o644);
+  }
 }

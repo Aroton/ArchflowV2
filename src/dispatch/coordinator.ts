@@ -24,6 +24,7 @@ import { createDispatchWorkspace, materializeRepositoryView } from "./workspace.
 import { assertInternalTransactionAuthority, type TransactionAuthority } from "../state/authority.js";
 import { ensureAttemptDirectory } from "../state/layout.js";
 import type { TransactionDependencies } from "../state/transaction.js";
+import type { ProjectionPlan } from "../state/snapshots.js";
 
 export type DispatchCoordinatorInput = Readonly<{
   authority: TransactionAuthority;
@@ -34,12 +35,12 @@ export type DispatchCoordinatorInput = Readonly<{
   signal: AbortSignal;
   cancellation_source: NonNullable<DispatchChildSpec["cancellation_source"]>;
   allow_claude_dispatch: boolean;
-  /**
-   * When present, review dispatches get a read-only repository checkout at this commit as their
-   * working directory. Adjudication envelopes never materialize a view: the adjudicator judges
-   * exactly the sealed envelope.
-   */
-  repository_view_commit?: GitOid;
+  /** When present, the child gets this sealed repository snapshot as its working directory. */
+  repository_view?: Readonly<{
+    base_commit: GitOid;
+    /** Present for an implementation subject: retained after-images are applied to the baseline. */
+    projection_plan?: ProjectionPlan;
+  }>;
 }>;
 
 export type DispatchCoordinatorResult = Readonly<{
@@ -151,11 +152,12 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
 
     try {
       workspace = await createDispatchWorkspace(adapter.id, input.repository_root);
-      if (input.repository_view_commit !== undefined && envelope.result_kind === "review") {
+      if (input.repository_view !== undefined) {
         workspace = await materializeRepositoryView(
           workspace,
           input.repository_root,
-          input.repository_view_commit,
+          input.repository_view.base_commit,
+          input.repository_view.projection_plan,
         );
       }
       preflight = await adapter.preflight(

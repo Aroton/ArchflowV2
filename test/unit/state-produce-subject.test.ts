@@ -9,10 +9,9 @@ import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
-import { DIFF_CONTEXT_LINES } from "../../src/review/line-diff.js";
 import { createGitRunner } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
-import { EMBED_WHOLE_BYTE_CEILING, expectedProduceUpstreamBindings, readProduceProjection, renderProduceReviewMaterial, resolveProduceUpstreamBinding, resolveReviewExclusions, reviewChangeEntries, type CurrentProduceSubject } from "../../src/state/produce-subject.js";
+import { expectedProduceUpstreamBindings, readProduceProjection, renderProduceReviewMaterial, resolveProduceUpstreamBinding, type CurrentProduceSubject } from "../../src/state/produce-subject.js";
 import type { TransactionAuthority } from "../../src/state/authority.js";
 import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
 
@@ -82,11 +81,12 @@ describe("retained produce review material", () => {
     expect(resolveProduceUpstreamBinding(state, parseTaskPathClaim("phases/17/impl-notes.md"))).toBeUndefined();
   });
 
-  it("sends authenticated implementation-output metadata and retained before/after bytes", () => {
+  it("sends compact authenticated implementation metadata while source bytes stay in the workspace", () => {
     const artifact = JSON.parse(readFileSync(
       new URL("../fixtures/contracts/durable/implementation-output.valid.json", import.meta.url),
       "utf8",
     )) as ImplementationOutputV1;
+    const largeAfterImage = new TextEncoder().encode(`large-source-sentinel\n${"x".repeat(1_400_000)}`);
     const subject = {
       artifact_digest: canonicalJsonDigest(artifact),
       artifact,
@@ -94,7 +94,7 @@ describe("retained produce review material", () => {
         projection_plan: {
           entries: [{
             path: artifact.outputs[0]!.path,
-            desired: { state: "present", file_type: "regular", mode: "100644", bytes: new TextEncoder().encode("new code\n") },
+            desired: { state: "present", file_type: "regular", mode: "100644", bytes: largeAfterImage },
             rollback: { state: "present", file_type: "regular", mode: "100644", bytes: new TextEncoder().encode("old code\n") },
           }],
         },
@@ -104,210 +104,16 @@ describe("retained produce review material", () => {
     const rendered = JSON.parse(renderProduceReviewMaterial(subject, {
       bytes: new TextEncoder().encode("implementation notes\n"),
       digest: canonicalJsonDigest({ projection: true }),
-    }, new Map())) as Record<string, unknown>;
+    })) as Record<string, unknown>;
 
     expect(rendered).toMatchObject({
       subject_kind: "retained-implementation-output",
       artifact_digest: subject.artifact_digest,
       implementation_output: { artifact_kind: "implementation-output", diff_digest: artifact.diff_digest },
-      changes: [{
-        path: artifact.outputs[0]!.path,
-        rendering: "embedded",
-        before: {
-          state: "present",
-          encoding: "utf8",
-          content: "old code\n",
-          content_digest: sha256Bytes(new TextEncoder().encode("old code\n")),
-          byte_count: 9,
-        },
-        after: {
-          state: "present",
-          encoding: "utf8",
-          content: "new code\n",
-          content_digest: sha256Bytes(new TextEncoder().encode("new code\n")),
-          byte_count: 9,
-        },
-      }],
     });
-    const entries = (rendered as { changes: Record<string, unknown>[] }).changes;
-    expect(entries[0]).not.toHaveProperty("reason");
-  });
-
-  it("renders an excluded path digest-only, declaring the reason and withholding content", () => {
-    const artifact = JSON.parse(readFileSync(
-      new URL("../fixtures/contracts/durable/implementation-output.valid.json", import.meta.url),
-      "utf8",
-    )) as ImplementationOutputV1;
-    const lockBytes = new TextEncoder().encode("enormous lockfile churn\n");
-    const subject = {
-      artifact_digest: canonicalJsonDigest(artifact),
-      artifact,
-      retained: {
-        projection_plan: {
-          entries: [{
-            path: "package-lock.json",
-            desired: { state: "present", file_type: "regular", mode: "100644", bytes: lockBytes },
-            rollback: { state: "absent" },
-          }],
-        },
-      },
-    } as unknown as CurrentProduceSubject;
-
-    const entries = reviewChangeEntries(subject, new Map([["package-lock.json", "excluded-basename"]]));
-
-    expect(entries).toEqual([{
-      path: "package-lock.json",
-      rendering: "digest-only",
-      reason: "excluded-basename",
-      after: {
-        state: "present",
-        content_digest: sha256Bytes(lockBytes),
-        byte_count: lockBytes.byteLength,
-      },
-      before: { state: "absent" },
-    }]);
-    expect(entries[0]!.after).not.toHaveProperty("content");
-  });
-
-  it("renders an over-ceiling text file as a wide-context unified diff with verifiable side digests", () => {
-    const artifact = JSON.parse(readFileSync(
-      new URL("../fixtures/contracts/durable/implementation-output.valid.json", import.meta.url),
-      "utf8",
-    )) as ImplementationOutputV1;
-    const beforeLines = Array.from({ length: 7000 }, (_, index) => `line ${index}\n`);
-    const afterLines = [...beforeLines];
-    afterLines[3500] = "changed line\n";
-    const beforeBytes = new TextEncoder().encode(beforeLines.join(""));
-    const afterBytes = new TextEncoder().encode(afterLines.join(""));
-    expect(beforeBytes.byteLength).toBeGreaterThan(EMBED_WHOLE_BYTE_CEILING);
-    const subject = {
-      artifact_digest: canonicalJsonDigest(artifact),
-      artifact,
-      retained: {
-        projection_plan: {
-          entries: [{
-            path: "src/big.ts",
-            desired: { state: "present", file_type: "regular", mode: "100644", bytes: afterBytes },
-            rollback: { state: "present", file_type: "regular", mode: "100644", bytes: beforeBytes },
-          }],
-        },
-      },
-    } as unknown as CurrentProduceSubject;
-
-    const entries = reviewChangeEntries(subject, new Map());
-
-    expect(entries[0]).toMatchObject({
-      path: "src/big.ts",
-      rendering: "unified-diff",
-      reason: "exceeds-embed-ceiling",
-      after: { state: "present", content_digest: sha256Bytes(afterBytes), byte_count: afterBytes.byteLength },
-      before: { state: "present", content_digest: sha256Bytes(beforeBytes), byte_count: beforeBytes.byteLength },
-      diff: { format: "unified", context_lines: DIFF_CONTEXT_LINES },
-    });
-    expect(entries[0]!.after).not.toHaveProperty("content");
-    expect(entries[0]!.diff!.content).toContain("+changed line\n");
-    expect(entries[0]!.diff!.content).toContain("-line 3500\n");
-    expect(entries[0]!.diff!.content.match(/^@@/gm)).toHaveLength(1);
-  });
-
-  it("keeps one oversized side sufficient to trigger the diff tier, and small binaries embedded", () => {
-    const artifact = JSON.parse(readFileSync(
-      new URL("../fixtures/contracts/durable/implementation-output.valid.json", import.meta.url),
-      "utf8",
-    )) as ImplementationOutputV1;
-    const bigText = new TextEncoder().encode("line\n".repeat(8000));
-    const smallText = new TextEncoder().encode("small\n");
-    const smallBinary = new Uint8Array([0xff, 0x00, 0x01]);
-    const bigBinary = new Uint8Array(EMBED_WHOLE_BYTE_CEILING + 1).fill(0xff);
-    const subject = {
-      artifact_digest: canonicalJsonDigest(artifact),
-      artifact,
-      retained: {
-        projection_plan: {
-          entries: [
-            {
-              path: "src/shrunk.ts",
-              desired: { state: "present", file_type: "regular", mode: "100644", bytes: smallText },
-              rollback: { state: "present", file_type: "regular", mode: "100644", bytes: bigText },
-            },
-            {
-              path: "assets/icon.bin",
-              desired: { state: "present", file_type: "regular", mode: "100644", bytes: smallBinary },
-            },
-            {
-              path: "assets/blob.bin",
-              desired: { state: "present", file_type: "regular", mode: "100644", bytes: bigBinary },
-            },
-          ],
-        },
-      },
-    } as unknown as CurrentProduceSubject;
-
-    const entries = reviewChangeEntries(subject, new Map());
-
-    expect(entries[0]).toMatchObject({ rendering: "unified-diff", reason: "exceeds-embed-ceiling" });
-    expect(entries[1]).toMatchObject({
-      rendering: "embedded",
-      after: { state: "present", encoding: "base64", content: Buffer.from(smallBinary).toString("base64") },
-    });
-    expect(entries[1]).not.toHaveProperty("reason");
-    expect(entries[2]).toMatchObject({
-      rendering: "digest-only",
-      reason: "binary-content",
-      after: { state: "present", content_digest: sha256Bytes(bigBinary), byte_count: bigBinary.byteLength },
-    });
-    expect(entries[2]!.after).not.toHaveProperty("content");
-  });
-
-  it("resolves exclusions from lockfile basenames plus linguist-generated attributes, degrading to basenames when the attribute check fails", async () => {
-    const artifact = JSON.parse(readFileSync(
-      new URL("../fixtures/contracts/durable/implementation-output.valid.json", import.meta.url),
-      "utf8",
-    )) as ImplementationOutputV1;
-    const entry = (path: string) => ({
-      path,
-      desired: { state: "present", file_type: "regular", mode: "100644", bytes: new Uint8Array([1]) },
-    });
-    const subject = {
-      artifact_digest: canonicalJsonDigest(artifact),
-      artifact,
-      retained: {
-        projection_plan: {
-          entries: [entry("deep/package-lock.json"), entry("dist/bundle.mjs"), entry("src/app.ts")],
-        },
-      },
-    } as unknown as CurrentProduceSubject;
-    const context = {
-      task_id: parseTaskSlug("mcp-integration"),
-      phase_instance: "phase-impl-1",
-      operation: parseSafeCode("test"),
-      attempt: parseSafeInteger(1),
-    } as unknown as Parameters<typeof resolveReviewExclusions>[2];
-
-    const requested: string[][] = [];
-    const runner = {
-      runNulFields: (spec: { argv: readonly string[] }) => {
-        requested.push([...spec.argv]);
-        return Promise.resolve([
-          "dist/bundle.mjs", "linguist-generated", "set",
-          "src/app.ts", "linguist-generated", "unspecified",
-        ]);
-      },
-    } as unknown as Parameters<typeof resolveReviewExclusions>[0];
-
-    const exclusions = await resolveReviewExclusions(runner, subject, context);
-    expect(exclusions).toEqual(new Map([
-      ["deep/package-lock.json", "excluded-basename"],
-      ["dist/bundle.mjs", "generated-attribute"],
-    ]));
-    expect(requested[0]).toEqual([
-      "check-attr", "-z", "linguist-generated", "--", "dist/bundle.mjs", "src/app.ts",
-    ]);
-
-    const failingRunner = {
-      runNulFields: () => Promise.resolve(["wrong", "cardinality"]),
-    } as unknown as Parameters<typeof resolveReviewExclusions>[0];
-    const degraded = await resolveReviewExclusions(failingRunner, subject, context);
-    expect(degraded).toEqual(new Map([["deep/package-lock.json", "excluded-basename"]]));
+    expect(rendered).not.toHaveProperty("changes");
+    expect(new TextEncoder().encode(JSON.stringify(rendered)).byteLength).toBeLessThan(100_000);
+    expect(JSON.stringify(rendered)).not.toContain("large-source-sentinel");
+    expect(JSON.stringify(rendered)).not.toContain("old code");
   });
 });

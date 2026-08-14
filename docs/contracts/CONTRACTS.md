@@ -20,6 +20,8 @@ Durable gate V1 is monotonic on read. Current writers emit only the conversation
 
 **Trust brands.** Types like "an authenticated review set" or "a validated triage" carry a `unique symbol` brand *and* are registered by object identity in a module-private `WeakSet`/`WeakMap` at mint time. A caller cannot construct a plausible look-alike object and pass it as trusted evidence — membership is by identity, not shape. Rules like "a counter-review must come from the opposite family" are checked once, at minting, and the brand carries the proof forward. This pattern recurs across the whole codebase and is its signature move.
 
+**Review workspace bindings.** A document envelope may bind a plain read-only checkout commit. An implementation envelope instead binds a `read-only-produced-repository-snapshot` with its base commit and declared snapshot digest. Source bytes remain in the server-materialized workspace rather than the JSON contract; the child verdict still binds the retained artifact digest and the exact control-envelope digest.
+
 ## How the mechanisms compose
 
 ```mermaid

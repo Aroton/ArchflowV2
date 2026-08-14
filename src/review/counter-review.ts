@@ -54,6 +54,7 @@ import {
   type AdjudicationUpstreamInput,
   type DispatchEnvelope,
   type DispatchSubject,
+  type ReviewWorkspaceBinding,
   type ReviewEnvelopeSeed,
 } from "./envelopes.js";
 import { buildReviewEnvelopeWithCap } from "./pinned-context.js";
@@ -97,8 +98,8 @@ export type RunCounterReviewDependencies = Readonly<{
 /**
  * Everything the constitution review needs beyond what the rubric review already carries. The
  * handler derives all of it from durable authority — pinned constitution, approved upstream
- * documents, a distinct result identity, and a dispatch coordinator that materializes NO
- * repository checkout: the adjudicating child judges exactly the sealed envelope.
+ * documents, a distinct result identity, and the same sealed repository view used by the rubric
+ * reviewer. Implementation source bytes stay out of both control envelopes.
  */
 export type ConstitutionReviewPlan = Readonly<{
   registry: ConstitutionRegistry;
@@ -108,6 +109,7 @@ export type ConstitutionReviewPlan = Readonly<{
   approved_upstream_digests: readonly Sha256Digest[];
   invocation_id: SafeId;
   result_id: SafeId;
+  workspace: ReviewWorkspaceBinding;
   dispatch: (
     route: DispatchRoute,
     envelope: ReturnType<typeof buildAdjudicationEnvelope>,
@@ -339,6 +341,7 @@ export async function runCounterReview(
       rules: plan.rules,
       source_evidence_set_digest: setDigest,
       approved_upstreams: plan.approved_upstreams,
+      workspace: plan.workspace,
       subject: constitutionSubject,
     });
     const constitutionDispatched = await serializeDispatch(() =>

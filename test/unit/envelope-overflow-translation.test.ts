@@ -8,7 +8,10 @@ import type { CurrentProduceSubject } from "../../src/state/produce-subject.js";
 function subjectWithEntries(sizes: Readonly<Record<string, number>>): CurrentProduceSubject {
   return {
     artifact_digest: "a".repeat(64),
-    artifact: { artifact_kind: "implementation-output" },
+    artifact: {
+      artifact_kind: "implementation-output",
+      outputs: Object.entries(sizes).map(([path, size]) => ({ path, padding: "x".repeat(size) })),
+    },
     retained: {
       projection_plan: {
         entries: Object.entries(sizes).map(([path, size]) => ({
@@ -42,7 +45,7 @@ describe("envelope overflow translation", () => {
       "src/g-tiny.ts": 5,
     });
 
-    const error = envelopeOverflowError(capError, subject, new Map());
+    const error = envelopeOverflowError(capError, subject);
 
     expect(error).toMatchObject({
       code: "ENVELOPE_OVERFLOW",
@@ -69,8 +72,8 @@ describe("envelope overflow translation", () => {
       createProjectError("CONTRACT_INVALID", { issue_code: "artifact-not-utf8" }),
     );
 
-    expect(envelopeOverflowError(otherEnvelopeError, subject, new Map())).toBeUndefined();
-    expect(envelopeOverflowError(new Error("unrelated"), subject, new Map())).toBeUndefined();
-    expect(envelopeOverflowError(capError, subjectWithEntries({}), new Map())).toBeUndefined();
+    expect(envelopeOverflowError(otherEnvelopeError, subject)).toBeUndefined();
+    expect(envelopeOverflowError(new Error("unrelated"), subject)).toBeUndefined();
+    expect(envelopeOverflowError(capError, subjectWithEntries({}))).toBeUndefined();
   });
 });

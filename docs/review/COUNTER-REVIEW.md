@@ -6,18 +6,18 @@ Counter-review is the system's adversarial check: every artifact is reviewed by 
 
 ## The dispatch envelope
 
-The envelope is a single JSON document — serialized, hashed, byte-capped at 1 MiB — that is the *entire* input to the reviewing child. It arrives on stdin; nothing else is prepended.
+The control envelope is a single JSON document — serialized, hashed, and byte-capped at 1 MiB. It arrives on stdin with nothing prepended. For implementation reviews, source bytes are not transported through that JSON: the server separately materializes the authenticated retained output as the child's sealed, read-only working directory. The envelope declares and binds that workspace.
 
 ```mermaid
 flowchart TB
     subgraph ENV["Sealed envelope (≤ 1 MiB, digested)"]
-        A["artifact<br/>document bytes, or a tiered<br/>implementation change-set"]
+        A["artifact<br/>document bytes, or compact<br/>implementation metadata"]
         R["rubric<br/>{id, text, blocking} triples"]
         C["context — pinned evidence:<br/>user-ask · approved-upstream ·<br/>verification-transcript · prior-triage ·<br/>interface-excerpt · conventions · repo-map"]
         S["subject — the binding:<br/>task, phase, attempt, digests,<br/>fingerprint, producer family"]
-        W["workspace (optional)<br/>read-only checkout declaration"]
+        W["workspace (optional)<br/>baseline checkout or sealed<br/>post-change snapshot"]
     end
-    ENV -->|stdin| Child["Opposite-family CLI<br/>+ read-only checkout at pinned commit"]
+    ENV -->|stdin| Child["Opposite-family CLI<br/>+ sealed read-only repository view"]
     Child -->|JSON verdict + findings| Server
 ```
 
@@ -58,25 +58,21 @@ When the cap is hit, droppable context is replaced lowest-priority-first (`repo-
 
 For implementation subjects, the raw transcript lives only at ignored `.archflow/runtime/tasks/<task>/cache/phases/<n>/verification.txt`. `ImplementationOutputV1.verification_evidence` binds its SHA-256 digest and byte count into durable authority. Envelope assembly verifies those bytes before review; after phase advancement the raw transcript may be removed without weakening already-approved authority. If it disappears during an uncommitted active step, status asks for a rerun rather than invalidating an earlier phase.
 
-## The tiered change-set rendering
+## The sealed implementation snapshot
 
-Implementation reviews can't always embed whole files, so the artifact uses a three-tier ladder (in `src/state/produce-subject.ts`):
+An implementation envelope carries the compact `ImplementationOutputV1`: baseline commit, declared operations and paths, snapshot and diff identities, verification binding, and undeclared-change report. It carries neither whole source files nor generated diffs. Source size therefore does not consume the 1 MiB control-envelope budget.
 
-| Tier | When | What ships |
-|---|---|---|
-| `embedded` | both sides ≤ 32 KiB | whole files — full context is where diff-invisible findings come from |
-| `unified-diff` | larger UTF-8 text | hand-rolled Myers diff with 40 context lines (generous on purpose — it approximates full-file review) |
-| `digest-only` | generated files (`linguist-generated`), lockfiles, non-UTF-8 | digest + byte count only |
+Before either child runs, `workspace.ts` archives the attested `base_commit`, removes `.archflow/tasks`, and applies every authenticated retained after-image, deletion, rename endpoint, symlink, and executable mode. The result is the exact proposed repository state, not the live worktree and not merely the baseline. The child starts in that snapshot and navigates it with read-only tools. This gives it full-file and cross-file context—including facts a diff can hide—while the artifact's changed-path declarations keep the review scoped.
 
-The diff is hand-rolled (`src/review/line-diff.ts`) so the renderer remains deterministic and in-memory; shelling out to `diff` would add a host-specific executable dependency. Every non-embedded entry still names its exact bytes by digest, so nothing is silently elided.
+The workspace declaration binds the baseline and declared snapshot digest; the review subject already binds the complete retained implementation artifact. Materialization rejects task-authority paths, path escape, symlink-parent traversal, and file/directory collisions. The temporary archive has no `.git`, so removed task blobs and unrelated worktree edits are unreachable.
 
-If the envelope still overflows after tiering and cap relief, the result is `ENVELOPE_OVERFLOW` naming the five largest contributors. The intended human reading: a generated path belongs in `.gitattributes`; a hand-written one means the phase is too big for one sealed review pass and should be split at the design gate. There is deliberately no chunked multi-dispatch fallback — one subject, one attestation.
+The 1 MiB cap remains a control-plane safeguard. An overflow now means compact declarations or mandatory pinned context are themselves excessive; it is not evidence that ordinary source files are too large. A phase split is a product/design judgment about review scope, not an automatic response to source transport size.
 
 ## The flow, end to end
 
 1. **Produce** — the artifact is recorded durably; its digest becomes the subject digest.
 2. **Counter-review call** — `archflow_counter_review` with the artifact path and fingerprint; in the normal flow `build-request` derives both. The server selects the rubric. Everything through step 6 happens inside this one call.
-3. **Server assembles** the review material (document text or tiered change set), pins context (failing closed on authority violations), seals the envelope under the cap, and materializes the read-only checkout — HEAD for documents, the attested `base_commit` for implementations (the reviewer sees the pre-change tree; changes travel only in the envelope).
+3. **Server assembles** the review material (document text or compact implementation metadata), pins context (failing closed on authority violations), and seals the envelope under the cap. Document reviews receive a checkout at HEAD. Implementation reviews receive the attested base tree with the retained after-images applied, producing the exact post-change snapshot.
 4. **Rubric dispatch** — the opposite-family CLI runs headless (see `../mcp/DISPATCH.md`); output is parsed and bound to its provenance (adapter, CLI version, route, envelope digest).
 5. **Constitution dispatch** — when the pinned constitution has active rules, the server then dispatches a second opposite-family child that performs the constitution and drift review (see below). The child returns only its per-rule and per-upstream judgments. The server deterministically derives the constitution, drift, matched-trigger, and uncertain-trigger summaries before attestation, so redundant model-authored rollups cannot contradict those judgments. The server alone decides whether this runs; with no active rules the drift check is also skipped and the result records `constitution: {status: "not-run", reason: "no-active-constitution-rules"}`, which is normal.
 6. **Currency re-check and commit** — if the artifact drifted mid-dispatch, the result is discarded (`counter-review-subject-not-current`). Otherwise both results land in **one atomic state transaction**, and the tool result reports both: `{path, verdict, blocking_count, constitution, revision, request_digest}`, where `constitution` is either `{status: "evaluated", path, constitution: pass|fail|uncertain, drift: aligned|incidental|material, triggers: […]}` or the `not-run` shape above. A `fail` verdict is a successful recording, never an error.
@@ -98,7 +94,7 @@ Each numbered Markdown file in `.archflow/constitution/` is exactly one rule: fr
 
 A task-branch constitution edit does not change the rules governing that task. Counter-review continues against the immutable constitution pinned at task initialization; mutable or later committed policy bytes are never substituted into the constitution envelope. The policy edit may travel as an ordinary reviewed implementation output and becomes available to future tasks only when their approved policy base includes it.
 
-The constitution-review child gets a sealed envelope — the artifact, the sorted active rules, the approved upstream documents, and fixed instructions — and deliberately **no repository checkout**: it judges exactly the sealed evidence. The instructions require one finding for every supplied rule and every supplied upstream. Those finding arrays are semantic sets, so the server canonicalizes their order before validation and storage; missing, duplicate, invented, or contradictory entries still fail closed. Invalid output is reported with a safe structural category (for example upstream coverage, duplicate findings, unexpected fields, or an authority-binding mismatch) rather than exposing the rejected response or collapsing every cause into one opaque code. Before dispatching, the server is unusually strict: durable state, the pinned constitution digest, the authenticated review set, and the phase-appropriate durable approval for every declared upstream (`artifact-approval` for PRD, `design-approval` for current design documents, with legacy design archives still accepted) must all agree, or nothing is dispatched.
+The constitution-review child gets its own sealed envelope — the artifact, sorted active rules, approved upstream documents, fixed instructions, and the same workspace binding used for rubric review. For implementations it therefore judges policy and drift against the exact post-change repository snapshot without duplicating source bytes in JSON. The instructions require one finding for every supplied rule and every supplied upstream. Those finding arrays are semantic sets, so the server canonicalizes their order before validation and storage; missing, duplicate, invented, or contradictory entries still fail closed. Invalid output is reported with a safe structural category (for example upstream coverage, duplicate findings, unexpected fields, or an authority-binding mismatch) rather than exposing the rejected response or collapsing every cause into one opaque code. Before dispatching, the server is unusually strict: durable state, the pinned constitution digest, the authenticated review set, and the phase-appropriate durable approval for every declared upstream (`artifact-approval` for PRD, `design-approval` for current design documents, with legacy design archives still accepted) must all agree, or nothing is dispatched.
 
 The output is cross-checked mechanically: one finding per active rule, in ID order, matching versions.
 
@@ -106,7 +102,7 @@ After triage, status and request construction read the adjudication evidence fro
 
 A rule may also declare `enforced_by` — labels naming where the rule is mechanically enforced in the repository, such as a test suite. These travel to the child as *context for its judgment*, nothing more. They are deliberately not something the reviewer reports back on, and a rule that declares them is judged exactly like a rule that does not.
 
-That was once the opposite, and the reason is worth recording. The reviewer used to be instructed to report a per-mechanism evidence state for each declared label, and forbidden from claiming current mechanical evidence — which it could never have, because the sealed envelope has no field through which such evidence could arrive, for any subject. So a rule declaring `enforced_by` could never be reported `pass`; it was permanently `uncertain`, and every review of every artifact opened a human gate carrying no information. Declaring where a rule is enforced made it strictly impossible to satisfy. The instruction and the mechanism reporting are both gone.
+That was once the opposite, and the reason is worth recording. The reviewer used to be instructed to report a per-mechanism evidence state for each declared label, even though those labels are names rather than executable proofs and document reviews may expose no relevant implementation. So a rule declaring `enforced_by` could never reliably be reported `pass`; it was permanently `uncertain`, and every review of every artifact opened a human gate carrying no information. Declaring where a rule is enforced made it strictly impossible to satisfy. The instruction and the mechanism reporting are both gone.
 
 ### What the verdict opens
 

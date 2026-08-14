@@ -34896,30 +34896,6 @@ function selectAdjudicationGates(registry2, evidence) {
 init_trust_brands();
 init_renderers();
 
-// src/contracts/utf8.ts
-var strictDecoder = new TextDecoder("utf-8", { fatal: true });
-
-// src/repository/attributes.ts
-var ARCHFLOW_GITATTRIBUTES_RULE = ".archflow/** -text merge=binary";
-var ARCHFLOW_ATTRIBUTES_REMEDIATION = `add \`${ARCHFLOW_GITATTRIBUTES_RULE}\` to the repository root \`.gitattributes\`, commit it, then run \`git add --renormalize .archflow\``;
-var REVIEW_EXCLUDED_BASENAMES = Object.freeze(/* @__PURE__ */ new Set([
-  "package-lock.json",
-  "npm-shrinkwrap.json",
-  "yarn.lock",
-  "pnpm-lock.yaml",
-  "bun.lock",
-  "bun.lockb",
-  "Cargo.lock",
-  "poetry.lock",
-  "uv.lock",
-  "Pipfile.lock",
-  "Gemfile.lock",
-  "composer.lock",
-  "go.sum",
-  "flake.lock"
-]));
-var NOT_GENERATED_VALUES = Object.freeze(/* @__PURE__ */ new Set(["unspecified", "unset", "false"]));
-
 // src/state/produce-subject.ts
 var fatalUtf8 = new TextDecoder("utf-8", { fatal: true });
 function expectedProduceUpstreamBindings(state) {
@@ -37692,7 +37668,7 @@ function preflightAdapter(adapterId, workspace) {
 }
 
 // src/dispatch/workspace.ts
-import { mkdir as mkdir4, mkdtemp, realpath as realpath4, rm as rm2, symlink as symlink2 } from "node:fs/promises";
+import { chmod as chmod2, lstat as lstat10, mkdir as mkdir4, mkdtemp, realpath as realpath4, rm as rm2, symlink as symlink2, writeFile as writeFile2 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute as isAbsolute3, join as join9, relative as relative4, resolve } from "node:path";
 var FORWARDED_ENVIRONMENT = Object.freeze([
@@ -38243,7 +38219,7 @@ async function runInit(input) {
 }
 
 // src/init/legacy-upgrade.ts
-import { lstat as lstat10, readdir as readdir4, readFile as readFile10, realpath as realpath5 } from "node:fs/promises";
+import { lstat as lstat11, readdir as readdir4, readFile as readFile10, realpath as realpath5 } from "node:fs/promises";
 import { isAbsolute as isAbsolute4, join as join13, relative as relative5, sep as sep4 } from "node:path";
 
 // src/init/task-initialization.ts
@@ -38387,7 +38363,7 @@ function isInside2(root, candidate) {
 }
 async function exists(path2) {
   try {
-    await lstat10(path2);
+    await lstat11(path2);
     return true;
   } catch (error51) {
     if (error51.code === "ENOENT") return false;
@@ -38466,7 +38442,7 @@ async function enumerateSource(sourceRoot, excluded, context2) {
       }
       let metadata2;
       try {
-        metadata2 = await lstat10(absolute);
+        metadata2 = await lstat11(absolute);
       } catch {
         return fail19(ioError3(context2));
       }

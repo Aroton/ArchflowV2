@@ -222,7 +222,7 @@ describe("createDispatchCoordinator", () => {
       signal: new AbortController().signal,
       cancellation_source: "client",
       allow_claude_dispatch: false,
-      repository_view_commit: head,
+      repository_view: { base_commit: head },
     });
 
     const saved = { PATH: process.env.PATH, HOME: process.env.HOME };
@@ -248,7 +248,7 @@ describe("createDispatchCoordinator", () => {
     expect(observed.view).toEqual({ tracked: true, git: false, tasks: false });
   });
 
-  it("never materializes a repository view for adjudication dispatch", async () => {
+  it("materializes the explicitly configured sealed repository view for adjudication dispatch", async () => {
     const h = await harness("success");
     const head = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: h.repository, encoding: "utf8",
@@ -262,11 +262,22 @@ describe("createDispatchCoordinator", () => {
       signal: new AbortController().signal,
       cancellation_source: "client",
       allow_claude_dispatch: false,
-      repository_view_commit: head,
+      repository_view: { base_commit: head },
     });
 
-    await withDispatchEnvironment(h, () =>
-      coordinator(ROUTE, { ...ENVELOPE, result_kind: "adjudication" }, adjudicationSchema as PlainJsonValue));
+    const saved = { PATH: process.env.PATH, HOME: process.env.HOME };
+    process.env.PATH = `${h.bin}${delimiter}${saved.PATH ?? dirname(process.execPath)}`;
+    process.env.HOME = h.sourceHome;
+    try {
+      await coordinator(
+        ROUTE,
+        { ...ENVELOPE, result_kind: "adjudication" },
+        adjudicationSchema as PlainJsonValue,
+      );
+    } finally {
+      if (saved.PATH === undefined) delete process.env.PATH; else process.env.PATH = saved.PATH;
+      if (saved.HOME === undefined) delete process.env.HOME; else process.env.HOME = saved.HOME;
+    }
 
     const observed = JSON.parse(await readFile(join(h.root, "observed-invocation.json"), "utf8")) as {
       argv: string[];
@@ -274,9 +285,8 @@ describe("createDispatchCoordinator", () => {
     };
     const target = observed.argv[observed.argv.indexOf("-C") + 1]!;
     const outputPath = observed.argv[observed.argv.indexOf("-o") + 1]!;
-    expect(target).toBe(dirname(outputPath));
-    expect(target.endsWith("repo")).toBe(false);
-    expect(observed.view).toEqual({ tracked: false, git: false, tasks: false });
+    expect(target).toBe(join(dirname(outputPath), "repo"));
+    expect(observed.view).toEqual({ tracked: true, git: false, tasks: false });
   });
 
   it("cancels during version preflight and still finalizes a failed attempt", async () => {
