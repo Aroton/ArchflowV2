@@ -43,7 +43,6 @@ function claudeConfig(entry: Record<string, unknown>): string {
 
 const workspace = Object.freeze({
   root: "/tmp/archflow-init-diagnostics",
-  home: "/tmp/archflow-init-diagnostics/home",
   env: Object.freeze({
     PATH: "/bin",
     HOME: "/tmp/archflow-init-diagnostics/home",

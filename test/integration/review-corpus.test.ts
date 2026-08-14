@@ -106,7 +106,6 @@ async function fakeWorkspace(
   await writeFile(join(root, "scenario"), scenario);
   return Object.freeze({
     root,
-    home,
     env: Object.freeze({
       PATH: `${bin}${delimiter}${dirname(process.execPath)}`,
       HOME: home,

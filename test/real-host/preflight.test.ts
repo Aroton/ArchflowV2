@@ -95,7 +95,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host preflight", () => {
     }
   }, REAL_HOST_PROBE_TIMEOUT_MS);
 
-  it("rejects an unsolicited pre-initialize request and remains open for initialization", async () => {
+  it("serves an unsolicited pre-initialize list request and remains open for initialization", async () => {
     const input = new PassThrough();
     const output = new PassThrough();
     const lines: string[] = [];
@@ -113,7 +113,9 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host preflight", () => {
     try {
       input.write(`${JSON.stringify({ jsonrpc: "2.0", id: "early", method: "tools/list", params: {} })}\n`);
       await waitForLines(lines, 1);
-      expect(JSON.parse(lines[0]!)).toMatchObject({ jsonrpc: "2.0", id: "early", error: { code: -32600 } });
+      expect(JSON.parse(lines[0]!)).toMatchObject({
+        jsonrpc: "2.0", id: "early", result: { tools: expect.any(Array) },
+      });
 
       input.write(`${JSON.stringify({
         jsonrpc: "2.0", id: "initialize-after-error", method: "initialize",
@@ -161,7 +163,10 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host preflight", () => {
       });
       await expect(dispatch(route, envelope, reviewSchema as PlainJsonValue)).rejects.toSatisfy((error: unknown) =>
         error instanceof CliAdapterError && error.project_error.code === "PROCESS_FAILED");
-      const attemptDirectory = join(workspace.root, ".archflow", "tasks", workspace.taskId, "attempts", "prd");
+      const attemptDirectory = join(
+        workspace.root,
+        ".archflow", "runtime", "tasks", workspace.taskId, "diagnostics", "attempts", "prd",
+      );
       const attempts = await readdir(attemptDirectory);
       expect(attempts).toHaveLength(1);
       const persisted = await readFile(join(attemptDirectory, attempts[0]!));

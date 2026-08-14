@@ -37458,7 +37458,7 @@ function classifyMessage(adapter2, message) {
   if (/\b(?:rate[ -]?limit(?:ed)?|too many requests|usage limit|quota (?:exceeded|reached))\b/iu.test(message)) {
     return createProjectError("RATE_LIMITED", { adapter: adapter2, attempt: 1 });
   }
-  if (/\b(?:not logged in|login required|authentication (?:failed|required)|unauthorized|invalid credentials?)\b/iu.test(message)) {
+  if (/\b(?:not logged in|login required|authentication (?:failed|required)|failed to authenticate|unauthorized|invalid credentials?|oauth session expired|refresh token (?:expired|invalid)|could not be refreshed)\b/iu.test(message)) {
     return createProjectError("AUTH_UNAVAILABLE", { adapter: adapter2 });
   }
   if (/\b(?:model|deployment)\b.*\b(?:not found|not supported|unsupported|does not exist|unknown|invalid)\b/iu.test(message) || /\b(?:not found|not supported|unsupported|does not exist|unknown|invalid)\b.*\b(?:model|deployment)\b/iu.test(message)) {
@@ -37684,18 +37684,6 @@ function isInside(parent, candidate) {
   const fromParent = relative4(parent, candidate);
   return fromParent === "" || !fromParent.startsWith("..") && !isAbsolute3(fromParent);
 }
-function credentialPaths(adapter2, sourceHome, generatedHome) {
-  if (adapter2 === "claude-cli") {
-    return {
-      source: join9(sourceHome, ".claude", ".credentials.json"),
-      destination: join9(generatedHome, ".claude", ".credentials.json")
-    };
-  }
-  return {
-    source: join9(sourceHome, ".codex", "auth.json"),
-    destination: join9(generatedHome, ".codex", "auth.json")
-  };
-}
 async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd()) {
   const [realTemporaryRoot, realRepositoryRoot] = await Promise.all([
     realpath4(tmpdir()),
@@ -37706,16 +37694,11 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
   }
   const root = await mkdtemp(join9(realTemporaryRoot, "archflow-dispatch-"));
   try {
-    const home = join9(root, "home");
-    const codexHome = join9(home, ".codex");
     const sourceHome = resolve(process.env.HOME ?? homedir());
-    const credential = credentialPaths(adapter2, sourceHome, home);
-    await mkdir4(resolve(credential.destination, ".."), { recursive: true });
-    await symlink2(credential.source, credential.destination, "file");
     const env = {
-      HOME: home,
+      HOME: sourceHome,
       TMPDIR: root,
-      CODEX_HOME: codexHome
+      ...adapter2 === "codex-cli" ? { CODEX_HOME: resolve(process.env.CODEX_HOME ?? join9(sourceHome, ".codex")) } : process.env.CLAUDE_CONFIG_DIR === void 0 ? {} : { CLAUDE_CONFIG_DIR: resolve(process.env.CLAUDE_CONFIG_DIR) }
     };
     for (const name of FORWARDED_ENVIRONMENT) {
       const value = process.env[name];
@@ -37726,7 +37709,7 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
       disposal ??= rm2(root, { recursive: true, force: true });
       return disposal;
     };
-    return Object.freeze({ root, home, env: Object.freeze(env), dispose });
+    return Object.freeze({ root, env: Object.freeze(env), dispose });
   } catch (error51) {
     await rm2(root, { recursive: true, force: true });
     throw error51;
@@ -38167,7 +38150,7 @@ async function collectInitDiagnostics(input) {
     ),
     runtime_directory: runtimeDirectory,
     limitations: Object.freeze([
-      "Dispatch context hygiene uses a generated home and scrubbed environment, but it is best-effort and is not an enforced isolation boundary.",
+      "Dispatch context hygiene uses a temporary workspace and scrubbed environment, but authentication stays in each CLI's canonical home; the boundary is best-effort, not enforced isolation.",
       "Claude project MCP registration may remain pending until a human approves it; reset choices with `claude mcp reset-project-choices` when needed.",
       "Codex project MCP configuration is active only after a human trusts the repository in Codex; init never writes trust_level.",
       "A one-hour host tool timeout bounds a call, not a durable gate decision; retrying the resumable gate is safe."

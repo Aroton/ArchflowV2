@@ -216,7 +216,7 @@ export async function collectInitDiagnostics(input: InitDiagnosticsInput): Promi
     ),
     runtime_directory: runtimeDirectory,
     limitations: Object.freeze([
-      "Dispatch context hygiene uses a generated home and scrubbed environment, but it is best-effort and is not an enforced isolation boundary.",
+      "Dispatch context hygiene uses a temporary workspace and scrubbed environment, but authentication stays in each CLI's canonical home; the boundary is best-effort, not enforced isolation.",
       "Claude project MCP registration may remain pending until a human approves it; reset choices with `claude mcp reset-project-choices` when needed.",
       "Codex project MCP configuration is active only after a human trusts the repository in Codex; init never writes trust_level.",
       "A one-hour host tool timeout bounds a call, not a durable gate decision; retrying the resumable gate is safe.",

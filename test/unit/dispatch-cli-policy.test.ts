@@ -22,7 +22,6 @@ import { selectCliAdapter } from "../../src/dispatch/cli.js";
 
 const workspace: DispatchWorkspace = Object.freeze({
   root: "/tmp/archflow-policy-test",
-  home: "/tmp/archflow-policy-test/home",
   env: Object.freeze({ PATH: "/bin", HOME: "/tmp/archflow-policy-test/home", TMPDIR: "/tmp/archflow-policy-test", CODEX_HOME: "/tmp/archflow-policy-test/home/.codex" }),
   dispose: async () => undefined,
 });

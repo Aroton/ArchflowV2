@@ -29,7 +29,6 @@ async function fakeWorkspace(kind: "claude" | "codex", scenario = "success"): Pr
   await writeFile(join(root, "scenario"), scenario);
   return Object.freeze({
     root,
-    home,
     env: Object.freeze({
       PATH: `${bin}${delimiter}${dirname(process.execPath)}`,
       HOME: home,
@@ -89,7 +88,7 @@ describe("CLI adapter preflight", () => {
     expect(await rejectedCode(adapter.preflight(target))).toBe("CLI_VERSION_UNSUPPORTED");
   });
 
-  it.each(["claude", "codex"] as const)("rejects logged-out %s generated homes", async (kind) => {
+  it.each(["claude", "codex"] as const)("rejects logged-out %s credential stores", async (kind) => {
     const target = await fakeWorkspace(kind, "logged-out");
     const adapter = kind === "claude"
       ? selectCliAdapter("codex", { allow_claude_dispatch: true })

@@ -66,9 +66,13 @@ async function fixtureWorkspace(
   scratchRoots.push(outside);
   const sourceHome = join(outside, "source-home");
   const bin = join(outside, "bin");
-  const credential = adapter === "claude-cli"
-    ? join(sourceHome, ".claude", ".credentials.json")
-    : join(sourceHome, ".codex", "auth.json");
+  const credentialDirectory = adapter === "claude-cli"
+    ? join(sourceHome, "claude-profile")
+    : join(sourceHome, "codex-profile");
+  const credential = join(
+    credentialDirectory,
+    adapter === "claude-cli" ? ".credentials.json" : "auth.json",
+  );
   await Promise.all([mkdir(dirname(credential), { recursive: true }), mkdir(bin)]);
   await writeFile(credential, '{"fixture":"not-a-real-credential"}\n');
 
@@ -77,10 +81,17 @@ async function fixtureWorkspace(
   await chmod(fixture, 0o755);
   await symlink(fixture, join(bin, family));
 
-  const names = ["HOME", "PATH", "LANG", "LC_ALL", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "NODE_EXTRA_CA_CERTS", ...plantedNames] as const;
+  const names = ["HOME", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "PATH", "LANG", "LC_ALL", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "NODE_EXTRA_CA_CERTS", ...plantedNames] as const;
   const saved = new Map(names.map((name) => [name, process.env[name]]));
   try {
     process.env.HOME = sourceHome;
+    if (adapter === "claude-cli") {
+      process.env.CLAUDE_CONFIG_DIR = credentialDirectory;
+      delete process.env.CODEX_HOME;
+    } else {
+      process.env.CODEX_HOME = credentialDirectory;
+      delete process.env.CLAUDE_CONFIG_DIR;
+    }
     process.env.PATH = `${bin}${delimiter}${dirname(process.execPath)}`;
     process.env.LANG = "C.UTF-8";
     process.env.LC_ALL = "C.UTF-8";
@@ -161,8 +172,14 @@ describe("dispatch plumbing proof", () => {
         ? ["--tools", "", "--setting-sources", ""]
         : ["--ignore-user-config", "--ignore-rules", "project_doc_max_bytes=0"]));
 
-      const expectedKeys = ["CODEX_HOME", "HOME", "HTTPS_PROXY", "HTTP_PROXY", "LANG", "LC_ALL", "NODE_EXTRA_CA_CERTS", "NO_PROXY", "PATH", "TMPDIR"];
+      const expectedKeys = [
+        ...(adapter.id === "claude-cli" ? ["CLAUDE_CONFIG_DIR"] : ["CODEX_HOME"]),
+        "HOME", "HTTPS_PROXY", "HTTP_PROXY", "LANG", "LC_ALL", "NODE_EXTRA_CA_CERTS", "NO_PROXY", "PATH", "TMPDIR",
+      ].sort();
       expect(Object.keys(seen.env).sort()).toEqual(expectedKeys);
+      expect(seen.env.HOME).toBe(workspace.env.HOME);
+      expect(seen.env[adapter.id === "claude-cli" ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME"])
+        .toBe(workspace.env[adapter.id === "claude-cli" ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME"]);
       for (const name of plantedNames) expect(seen.env).not.toHaveProperty(name);
     } finally {
       await workspace.dispose();

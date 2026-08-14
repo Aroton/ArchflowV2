@@ -75,15 +75,18 @@ The repository itself contains current examples in `.mcp.json` and `.codex/confi
 - Claude runs in print/safe mode with tools and slash commands disabled, an empty strict MCP config, no session persistence or setting sources, and a projected JSON output schema.
 - Codex runs `exec --ephemeral` with user config/rules ignored, read-only sandboxing, strict config, a generated output schema/file, and shell, browser, computer, image, apps, plugins, hooks, skill search, and multi-agent features disabled.
 - `src/dispatch/process.ts` uses `spawn` without a shell, caps total output at 8 MiB, times out after 15 minutes by default (a real review of the pinned checkout is legitimately multi-minute), and terminates the process group on non-Windows.
-- A process-wide FIFO in `src/dispatch/cli.ts` serializes dispatches so concurrent calls do not race shared credential files.
+- A process-wide FIFO in `src/dispatch/cli.ts` limits one MCP server process to one resource-intensive reviewer at a time. Credential concurrency remains the first-party CLI's responsibility; the FIFO does not coordinate separate MCP server or interactive processes.
 
-`src/dispatch/workspace.ts` creates a disposable home outside the repository and symlinks only the selected credential:
+`src/dispatch/workspace.ts` creates a disposable working directory outside the repository but deliberately does not create a disposable authentication home:
 
-- Claude: source `~/.claude/.credentials.json`.
-- Codex: source `~/.codex/auth.json`.
-- Child values set by ArchFlow: generated `HOME`, generated `TMPDIR`, and generated `CODEX_HOME`.
+- Both adapters receive the caller's canonical `HOME`.
+- Claude also receives `CLAUDE_CONFIG_DIR` when the caller configured it.
+- Codex receives the caller's `CODEX_HOME`, or the canonical `$HOME/.codex` default.
+- `TMPDIR`, repository views, schemas, and outputs remain under the disposable workspace.
 - Forwarded only when present: `PATH`, `LANG`, `LC_ALL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `NODE_EXTRA_CA_CERTS`.
 - Provider keys such as `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`, plus all other caller environment variables, are intentionally dropped.
+
+Canonical authentication is a correctness requirement, not a containment gap to repair with links or copies. Both CLIs may atomically replace their credential file when rotating OAuth tokens; redirecting that path through a disposable symlink can replace the link, preserve a consumed token in the real store, and then delete the only fresh token during cleanup. Claude safe mode and Codex's user-config/rule suppressions keep review instructions isolated without relocating mutable authentication.
 
 Managed-policy presence is reported from fixed Claude paths under `/etc/claude-code/` and `/Library/Application Support/ClaudeCode/`, and Codex paths under `/etc/codex/`; it is diagnostic evidence, not permission to bypass host policy.
 

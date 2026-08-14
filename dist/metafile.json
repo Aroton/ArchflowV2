@@ -4678,7 +4678,7 @@
       ]
     },
     "src/dispatch/cli.ts": {
-      "bytes": 30621,
+      "bytes": 30796,
       "format": "esm",
       "imports": [
         {
@@ -4827,7 +4827,7 @@
       ]
     },
     "src/dispatch/workspace.ts": {
-      "bytes": 8823,
+      "bytes": 8468,
       "format": "esm",
       "imports": [
         {
@@ -4884,7 +4884,7 @@
       ]
     },
     "src/init/diagnostics.ts": {
-      "bytes": 9986,
+      "bytes": 10034,
       "format": "esm",
       "imports": [
         {
@@ -8452,7 +8452,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1603918,
+      "bytes": 1603574,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -9490,7 +9490,7 @@
           "bytesInOutput": 1585
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 20303
+          "bytesInOutput": 20405
         },
         "src/dispatch/process.ts": {
           "bytesInOutput": 7404
@@ -9499,13 +9499,13 @@
           "bytesInOutput": 2091
         },
         "src/dispatch/workspace.ts": {
-          "bytesInOutput": 2402
+          "bytesInOutput": 1908
         },
         "src/init/assets.ts": {
           "bytesInOutput": 4542
         },
         "src/init/diagnostics.ts": {
-          "bytesInOutput": 7156
+          "bytesInOutput": 7204
         },
         "src/init/index.ts": {
           "bytesInOutput": 1563
@@ -9648,7 +9648,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2449429,
+      "bytes": 2449037,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -10747,7 +10747,7 @@
           "bytesInOutput": 1586
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 22618
+          "bytesInOutput": 22720
         },
         "src/dispatch/coordinator.ts": {
           "bytesInOutput": 5187
@@ -10759,7 +10759,7 @@
           "bytesInOutput": 2091
         },
         "src/dispatch/workspace.ts": {
-          "bytesInOutput": 6571
+          "bytesInOutput": 6077
         },
         "src/main.ts": {
           "bytesInOutput": 805

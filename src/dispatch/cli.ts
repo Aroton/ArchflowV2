@@ -271,8 +271,9 @@ function envelopeSubject(envelope: DispatchEnvelope): Readonly<Record<string, Pl
 let dispatchQueue: Promise<void> = Promise.resolve();
 
 /**
- * Serializes dispatch operations through one process-wide FIFO. Phase 15 owns the operation
- * itself; this seam only prevents concurrent use of the shared first-party credential stores.
+ * Serializes dispatch operations through one process-wide FIFO. This bounds one MCP server
+ * process to one resource-intensive reviewer at a time; authentication remains owned and
+ * coordinated by each first-party CLI through its canonical credential store.
  */
 export function serializeDispatch<T>(operation: () => Promise<T>): Promise<T> {
   const result = dispatchQueue.then(operation);
@@ -460,7 +461,7 @@ function classifyMessage(adapter: AdapterId, message: string): ProjectError | un
   if (/\b(?:rate[ -]?limit(?:ed)?|too many requests|usage limit|quota (?:exceeded|reached))\b/iu.test(message)) {
     return createProjectError("RATE_LIMITED", { adapter, attempt: 1 });
   }
-  if (/\b(?:not logged in|login required|authentication (?:failed|required)|unauthorized|invalid credentials?)\b/iu.test(message)) {
+  if (/\b(?:not logged in|login required|authentication (?:failed|required)|failed to authenticate|unauthorized|invalid credentials?|oauth session expired|refresh token (?:expired|invalid)|could not be refreshed)\b/iu.test(message)) {
     return createProjectError("AUTH_UNAVAILABLE", { adapter });
   }
   if (/\b(?:model|deployment)\b.*\b(?:not found|not supported|unsupported|does not exist|unknown|invalid)\b/iu.test(message) ||

@@ -42,7 +42,7 @@ const envelope: DispatchEnvelope = Object.freeze({
 
 async function workspace(): Promise<DispatchWorkspace> {
   const root = await mkdtemp(join(tmpdir(), "archflow-cli-test-"));
-  return Object.freeze({ root, home: join(root, "home"), env: Object.freeze({ PATH: process.env.PATH, HOME: join(root, "home"), TMPDIR: root, CODEX_HOME: join(root, "home", ".codex") }), dispose: async () => undefined });
+  return Object.freeze({ root, env: Object.freeze({ PATH: process.env.PATH, HOME: join(root, "home"), TMPDIR: root, CODEX_HOME: join(root, "home", ".codex") }), dispose: async () => undefined });
 }
 
 /** Every `const` value in a projected schema, at any depth. */
@@ -455,5 +455,10 @@ describe("CLI output contracts and failure classification", () => {
     expect(adapter.classifyFailure(result({ stderr: bytes("deprecated model: rate limit wording") }))).toBeUndefined();
     expect(adapter.classifyFailure(result({ exit_code: 1, stdout: bytes(JSON.stringify({ is_error: true, result: "Login required" })) })))
       .toMatchObject({ code: "AUTH_UNAVAILABLE" });
+    expect(adapter.classifyFailure(result({ exit_code: 1, stdout: bytes(JSON.stringify({
+      is_error: true,
+      terminal_reason: "api_error",
+      result: "Failed to authenticate: OAuth session expired and could not be refreshed",
+    })) }))).toMatchObject({ code: "AUTH_UNAVAILABLE" });
   });
 });

@@ -9,7 +9,6 @@ import type { AdapterId } from "../contracts/review.js";
 
 export type DispatchWorkspace = Readonly<{
   root: string;
-  home: string;
   env: Readonly<NodeJS.ProcessEnv>;
   /** Read-only checkout for review dispatch; absent for adjudication and preflight-only use. */
   repository_view_root?: string;
@@ -31,25 +30,11 @@ function isInside(parent: string, candidate: string): boolean {
   return fromParent === "" || (!fromParent.startsWith("..") && !isAbsolute(fromParent));
 }
 
-function credentialPaths(adapter: AdapterId, sourceHome: string, generatedHome: string): Readonly<{
-  source: string;
-  destination: string;
-}> {
-  if (adapter === "claude-cli") {
-    return {
-      source: join(sourceHome, ".claude", ".credentials.json"),
-      destination: join(generatedHome, ".claude", ".credentials.json"),
-    };
-  }
-  return {
-    source: join(sourceHome, ".codex", "auth.json"),
-    destination: join(generatedHome, ".codex", "auth.json"),
-  };
-}
-
 /**
- * Creates disposable best-effort dispatch context hygiene. The generated home links only the
- * selected first-party CLI credential file; no other state from the caller's home is admitted.
+ * Creates disposable best-effort dispatch context hygiene without virtualizing authentication.
+ * The child uses the caller's canonical home and selected CLI credential directory so an OAuth
+ * refresh is persisted by the first-party client exactly as it is in an interactive session.
+ * Repository material, schema/output files, and temporary state remain disposable below `root`.
  *
  * Containment for the Claude child is likewise best-effort: a repository view materialized under
  * this workspace is offered as the child's working directory, but reads outside the view are not
@@ -70,18 +55,15 @@ export async function createDispatchWorkspace(
 
   const root = await mkdtemp(join(realTemporaryRoot, "archflow-dispatch-"));
   try {
-    const home = join(root, "home");
-    const codexHome = join(home, ".codex");
     const sourceHome = resolve(process.env.HOME ?? homedir());
-    const credential = credentialPaths(adapter, sourceHome, home);
-
-    await mkdir(resolve(credential.destination, ".."), { recursive: true });
-    await symlink(credential.source, credential.destination, "file");
-
     const env: NodeJS.ProcessEnv = {
-      HOME: home,
+      HOME: sourceHome,
       TMPDIR: root,
-      CODEX_HOME: codexHome,
+      ...(adapter === "codex-cli"
+        ? { CODEX_HOME: resolve(process.env.CODEX_HOME ?? join(sourceHome, ".codex")) }
+        : process.env.CLAUDE_CONFIG_DIR === undefined
+          ? {}
+          : { CLAUDE_CONFIG_DIR: resolve(process.env.CLAUDE_CONFIG_DIR) }),
     };
     for (const name of FORWARDED_ENVIRONMENT) {
       const value = process.env[name];
@@ -93,7 +75,7 @@ export async function createDispatchWorkspace(
       disposal ??= rm(root, { recursive: true, force: true });
       return disposal;
     };
-    return Object.freeze({ root, home, env: Object.freeze(env), dispose });
+    return Object.freeze({ root, env: Object.freeze(env), dispose });
   } catch (error) {
     await rm(root, { recursive: true, force: true });
     throw error;

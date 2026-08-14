@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readFile, readlink, readdir, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readlink, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -24,7 +24,10 @@ describe("dispatch workspace", () => {
   it("builds the exact allowlisted environment", async () => {
     const sourceHome = await temporaryRoot("home");
     const repository = await temporaryRoot("repository");
+    const codexHome = join(sourceHome, "custom-codex-home");
     vi.stubEnv("HOME", sourceHome);
+    vi.stubEnv("CODEX_HOME", codexHome);
+    vi.stubEnv("CLAUDE_CONFIG_DIR", join(sourceHome, "must-not-reach-codex"));
     vi.stubEnv("PATH", "/fixture/bin");
     vi.stubEnv("LANG", "en_US.UTF-8");
     vi.stubEnv("LC_ALL", "C.UTF-8");
@@ -39,11 +42,11 @@ describe("dispatch workspace", () => {
     const workspace = await createDispatchWorkspace("codex-cli", repository);
     expect(workspace.env).toEqual({
       PATH: "/fixture/bin",
-      HOME: workspace.home,
+      HOME: sourceHome,
       LANG: "en_US.UTF-8",
       LC_ALL: "C.UTF-8",
       TMPDIR: workspace.root,
-      CODEX_HOME: join(workspace.home, ".codex"),
+      CODEX_HOME: codexHome,
       HTTP_PROXY: "http://proxy.invalid",
       HTTPS_PROXY: "https://proxy.invalid",
       NO_PROXY: "localhost",
@@ -55,7 +58,7 @@ describe("dispatch workspace", () => {
   it.each([
     ["claude-cli", ".claude", ".credentials.json"],
     ["codex-cli", ".codex", "auth.json"],
-  ] as const)("links only the %s credential file without reading its value", async (adapter, directory, filename) => {
+  ] as const)("uses the canonical %s credential store and preserves atomic rotation", async (adapter, directory, filename) => {
     const sourceHome = await temporaryRoot(`${adapter}-home`);
     const repository = await temporaryRoot(`${adapter}-repository`);
     const sourceDirectory = join(sourceHome, directory);
@@ -64,13 +67,50 @@ describe("dispatch workspace", () => {
     await writeFile(sourceCredential, "credential-canary-never-read", "utf8");
     await writeFile(join(sourceDirectory, "unrelated-state.json"), "state-canary", "utf8");
     vi.stubEnv("HOME", sourceHome);
+    if (adapter === "claude-cli") vi.stubEnv("CLAUDE_CONFIG_DIR", sourceDirectory);
+    else vi.stubEnv("CODEX_HOME", sourceDirectory);
 
     const workspace = await createDispatchWorkspace(adapter, repository);
-    const generatedCredential = join(workspace.home, directory, filename);
-    expect((await lstat(generatedCredential)).isSymbolicLink()).toBe(true);
-    expect(await readlink(generatedCredential)).toBe(sourceCredential);
-    expect(await readdir(join(workspace.home, directory))).toEqual([filename]);
-    expect(await readdir(workspace.home)).toEqual([directory]);
+    const selectedDirectory = adapter === "claude-cli"
+      ? workspace.env.CLAUDE_CONFIG_DIR
+      : workspace.env.CODEX_HOME;
+    expect(workspace.env.HOME).toBe(sourceHome);
+    expect(selectedDirectory).toBe(sourceDirectory);
+    expect(workspace.env).not.toHaveProperty(adapter === "claude-cli" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR");
+    await expect(lstat(join(workspace.root, "home"))).rejects.toMatchObject({ code: "ENOENT" });
+
+    const selectedCredential = join(selectedDirectory!, filename);
+    const replacement = join(sourceDirectory, "rotated-credential.tmp");
+    await writeFile(replacement, "rotated-credential", "utf8");
+    await rename(replacement, selectedCredential);
+    await workspace.dispose();
+    await expect(readFile(sourceCredential, "utf8")).resolves.toBe("rotated-credential");
+    await expect(readdir(sourceDirectory)).resolves.toEqual([filename, "unrelated-state.json"]);
+  });
+
+  it("uses Claude's default home credential store without inventing a config override", async () => {
+    const sourceHome = await temporaryRoot("claude-default-home");
+    const repository = await temporaryRoot("claude-default-repository");
+    vi.stubEnv("HOME", sourceHome);
+    vi.stubEnv("CLAUDE_CONFIG_DIR", undefined);
+
+    const workspace = await createDispatchWorkspace("claude-cli", repository);
+    expect(workspace.env.HOME).toBe(sourceHome);
+    expect(workspace.env).not.toHaveProperty("CLAUDE_CONFIG_DIR");
+    expect(workspace.env).not.toHaveProperty("CODEX_HOME");
+    await workspace.dispose();
+  });
+
+  it("uses Codex's default credential home when no override is configured", async () => {
+    const sourceHome = await temporaryRoot("codex-default-home");
+    const repository = await temporaryRoot("codex-default-repository");
+    vi.stubEnv("HOME", sourceHome);
+    vi.stubEnv("CODEX_HOME", undefined);
+
+    const workspace = await createDispatchWorkspace("codex-cli", repository);
+    expect(workspace.env.HOME).toBe(sourceHome);
+    expect(workspace.env.CODEX_HOME).toBe(join(sourceHome, ".codex"));
+    expect(workspace.env).not.toHaveProperty("CLAUDE_CONFIG_DIR");
     await workspace.dispose();
   });
 
