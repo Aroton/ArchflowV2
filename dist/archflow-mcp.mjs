@@ -57472,7 +57472,7 @@ async function removeLeaf(target2) {
 async function applyProducedProjection(view, projectionPlan) {
   for (const entry of projectionPlan.entries) {
     if (entry.path === ".archflow/tasks" || entry.path.startsWith(".archflow/tasks/")) {
-      throw new TypeError("produced repository view cannot expose task authority");
+      continue;
     }
     const target2 = await ensureContainedParent(view, entry.path);
     await removeLeaf(target2);
@@ -57511,6 +57511,8 @@ async function writeAttemptRecord(input, attemptId, route, preflight2, error51, 
   });
   if (!target2.ok) return;
   const code2 = failureCode(error51);
+  const unclassified = code2 === void 0 && error51 instanceof Error;
+  const systemCode = unclassified && "code" in error51 && typeof error51.code === "string" ? error51.code : void 0;
   const channels = telemetry.child_result ?? (error51 instanceof DispatchProcessError ? error51.channels : void 0);
   const stdoutTail = channels === void 0 ? "" : channelTail(channels.stdout);
   const stderrTail = channels === void 0 ? "" : channelTail(channels.stderr);
@@ -57524,6 +57526,7 @@ async function writeAttemptRecord(input, attemptId, route, preflight2, error51, 
     model: route.model,
     effort: route.effort,
     status: "failed",
+    failure_stage: telemetry.failure_stage,
     started_at: telemetry.started_at,
     duration_ms: telemetry.duration_ms,
     ...preflight2 === void 0 ? {} : {
@@ -57532,6 +57535,8 @@ async function writeAttemptRecord(input, attemptId, route, preflight2, error51, 
       managed_policy_paths: [...preflight2.managed_policy_paths]
     },
     ...code2 === void 0 ? {} : { failure_code: code2 },
+    ...unclassified ? { error_name: error51.name, error_message: error51.message } : {},
+    ...systemCode === void 0 ? {} : { system_code: systemCode },
     ...code2 === "CANCELLED" ? { cancellation_source: input.cancellation_source } : {},
     ...telemetry.child_result === void 0 ? {} : { exit_class: exitClass(telemetry.child_result) },
     ...stdoutTail === "" ? {} : { stdout_tail: stdoutTail },
@@ -57554,9 +57559,11 @@ function createDispatchCoordinator(input) {
     let primaryError;
     let childResult;
     let workspace;
+    let failureStage = "workspace-create";
     try {
       workspace = await createDispatchWorkspace(adapter2.id, input.repository_root);
       if (input.repository_view !== void 0) {
+        failureStage = "repository-view-materialization";
         workspace = await materializeRepositoryView(
           workspace,
           input.repository_root,
@@ -57564,19 +57571,24 @@ function createDispatchCoordinator(input) {
           input.repository_view.projection_plan
         );
       }
+      failureStage = "cli-preflight";
       preflight2 = await adapter2.preflight(
         workspace,
         input.signal,
         input.cancellation_source
       );
+      failureStage = "invocation-build";
       const invocation = await adapter2.buildInvocation(envelope, route, workspace, outputSchema);
+      failureStage = "child-run";
       childResult = await runDispatchChild({
         ...invocation,
         signal: input.signal,
         cancellation_source: input.cancellation_source
       });
+      failureStage = "child-failure-classification";
       const failure2 = adapter2.classifyFailure(childResult);
       if (failure2 !== void 0) throw new CliAdapterError(failure2);
+      failureStage = "output-parse";
       return Object.freeze({
         cli_version: preflight2.cli_version,
         extracted_output_bytes: adapter2.parseOutput(childResult)
@@ -57590,6 +57602,7 @@ function createDispatchCoordinator(input) {
         await writeAttemptRecord(input, attemptId, route, preflight2, primaryError, {
           started_at: startedAt.toISOString(),
           duration_ms: Date.now() - startedAt.getTime(),
+          failure_stage: failureStage,
           child_result: childResult
         }).catch(() => void 0);
       }

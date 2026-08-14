@@ -211,7 +211,7 @@ async function removeLeaf(target: string): Promise<void> {
 async function applyProducedProjection(view: string, projectionPlan: ProjectionPlan): Promise<void> {
   for (const entry of projectionPlan.entries) {
     if (entry.path === ".archflow/tasks" || entry.path.startsWith(".archflow/tasks/")) {
-      throw new TypeError("produced repository view cannot expose task authority");
+      continue;
     }
     const target = await ensureContainedParent(view, entry.path);
     await removeLeaf(target);

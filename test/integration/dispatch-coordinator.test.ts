@@ -289,6 +289,30 @@ describe("createDispatchCoordinator", () => {
     expect(observed.view).toEqual({ tracked: true, git: false, tasks: false });
   });
 
+  it("records the stage and safe exception detail when repository materialization fails", async () => {
+    const h = await harness("success");
+    const coordinator = createDispatchCoordinator({
+      authority: h.authority,
+      dependencies: h.dependencies,
+      host: "claude",
+      repository_root: h.repository,
+      phase_instance: PHASE,
+      signal: new AbortController().signal,
+      cancellation_source: "client",
+      allow_claude_dispatch: false,
+      repository_view: { base_commit: "f".repeat(40) as never },
+    });
+
+    await expect(coordinator(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue))
+      .rejects.toThrow(/repository view materialization failed/u);
+    expect(await attemptRecord(h.repository)).toMatchObject({
+      status: "failed",
+      failure_stage: "repository-view-materialization",
+      error_name: "Error",
+      error_message: expect.stringMatching(/repository view materialization failed/u),
+    });
+  });
+
   it("cancels during version preflight and still finalizes a failed attempt", async () => {
     const h = await harness("hang-version");
     const controller = new AbortController();

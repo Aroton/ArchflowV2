@@ -67,8 +67,18 @@ function channelTail(channel: Uint8Array): string {
 type AttemptTelemetry = Readonly<{
   started_at: string;
   duration_ms: number;
+  failure_stage: DispatchFailureStage;
   child_result: DispatchChildResult | undefined;
 }>;
+
+type DispatchFailureStage =
+  | "workspace-create"
+  | "repository-view-materialization"
+  | "cli-preflight"
+  | "invocation-build"
+  | "child-run"
+  | "child-failure-classification"
+  | "output-parse";
 
 /**
  * Persists the forensic record of one FAILED dispatch. Successful dispatches write nothing:
@@ -98,6 +108,10 @@ async function writeAttemptRecord(
   if (!target.ok) return;
 
   const code = failureCode(error);
+  const unclassified = code === undefined && error instanceof Error;
+  const systemCode = unclassified && "code" in error && typeof error.code === "string"
+    ? error.code
+    : undefined;
   const channels: DispatchFailureChannels | DispatchChildResult | undefined = telemetry.child_result
     ?? (error instanceof DispatchProcessError ? error.channels : undefined);
   const stdoutTail = channels === undefined ? "" : channelTail(channels.stdout);
@@ -112,6 +126,7 @@ async function writeAttemptRecord(
     model: route.model,
     effort: route.effort,
     status: "failed",
+    failure_stage: telemetry.failure_stage,
     started_at: telemetry.started_at,
     duration_ms: telemetry.duration_ms,
     ...(preflight === undefined ? {} : {
@@ -120,6 +135,8 @@ async function writeAttemptRecord(
       managed_policy_paths: [...preflight.managed_policy_paths],
     }),
     ...(code === undefined ? {} : { failure_code: code }),
+    ...(unclassified ? { error_name: error.name, error_message: error.message } : {}),
+    ...(systemCode === undefined ? {} : { system_code: systemCode }),
     ...(code === "CANCELLED" ? { cancellation_source: input.cancellation_source } : {}),
     ...(telemetry.child_result === undefined ? {} : { exit_class: exitClass(telemetry.child_result) }),
     ...(stdoutTail === "" ? {} : { stdout_tail: stdoutTail }),
@@ -149,10 +166,12 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
     let primaryError: unknown;
     let childResult: DispatchChildResult | undefined;
     let workspace: Awaited<ReturnType<typeof createDispatchWorkspace>> | undefined;
+    let failureStage: DispatchFailureStage = "workspace-create";
 
     try {
       workspace = await createDispatchWorkspace(adapter.id, input.repository_root);
       if (input.repository_view !== undefined) {
+        failureStage = "repository-view-materialization";
         workspace = await materializeRepositoryView(
           workspace,
           input.repository_root,
@@ -160,19 +179,24 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
           input.repository_view.projection_plan,
         );
       }
+      failureStage = "cli-preflight";
       preflight = await adapter.preflight(
         workspace,
         input.signal,
         input.cancellation_source,
       );
+      failureStage = "invocation-build";
       const invocation = await adapter.buildInvocation(envelope, route, workspace, outputSchema);
+      failureStage = "child-run";
       childResult = await runDispatchChild({
         ...invocation,
         signal: input.signal,
         cancellation_source: input.cancellation_source,
       });
+      failureStage = "child-failure-classification";
       const failure = adapter.classifyFailure(childResult);
       if (failure !== undefined) throw new CliAdapterError(failure);
+      failureStage = "output-parse";
       return Object.freeze({
         cli_version: preflight.cli_version,
         extracted_output_bytes: adapter.parseOutput(childResult),
@@ -186,6 +210,7 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
         await writeAttemptRecord(input, attemptId, route, preflight, primaryError, {
           started_at: startedAt.toISOString(),
           duration_ms: Date.now() - startedAt.getTime(),
+          failure_stage: failureStage,
           child_result: childResult,
         }).catch(() => undefined);
       }

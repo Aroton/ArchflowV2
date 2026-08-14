@@ -186,7 +186,7 @@ describe("dispatch workspace", () => {
     await workspace.dispose();
   });
 
-  it("refuses to project durable task authority into a review view", async () => {
+  it("omits retained task authority while applying repository outputs", async () => {
     const sourceHome = await temporaryRoot("produced-authority-home");
     const repository = await temporaryRoot("produced-authority-repository");
     vi.stubEnv("HOME", sourceHome);
@@ -199,17 +199,21 @@ describe("dispatch workspace", () => {
       entries: [{
         path: ".archflow/tasks/demo/state.json",
         desired: { state: "present", file_type: "regular", mode: "100644", bytes: new TextEncoder().encode("{}\n") },
+      }, {
+        path: "tracked.txt",
+        desired: { state: "present", file_type: "regular", mode: "100644", bytes: new TextEncoder().encode("after\n") },
       }],
       collisions: [],
       collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"],
     } as unknown as NonNullable<Parameters<typeof materializeRepositoryView>[3]>;
-    const workspace = await createDispatchWorkspace("codex-cli", repository);
-    try {
-      await expect(materializeRepositoryView(workspace, repository, commit, plan))
-        .rejects.toThrow(/cannot expose task authority/u);
-    } finally {
-      await workspace.dispose();
-    }
+    const workspace = await materializeRepositoryView(
+      await createDispatchWorkspace("codex-cli", repository), repository, commit, plan,
+    );
+    await expect(readFile(join(workspace.repository_view_root!, "tracked.txt"), "utf8"))
+      .resolves.toBe("after\n");
+    await expect(lstat(join(workspace.repository_view_root!, ".archflow", "tasks")))
+      .rejects.toMatchObject({ code: "ENOENT" });
+    await workspace.dispose();
   });
 
   it("removes the workspace and makes disposal idempotent", async () => {
