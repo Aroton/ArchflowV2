@@ -1,6 +1,6 @@
 # COMPLEXITY
 
-**Explored:** 2026-08-13 · **Commit:** `247df34` · **Covers:** the whole repository
+**Explored:** 2026-08-14 · **Commit:** `6637099` · **Covers:** the whole repository
 
 A per-subsystem audit of where the machinery is heaviest, what it buys, and what could be simplified. Written to support iterating on the workflow — each item states the concrete problem the complexity solves so a simplification can be judged against it, per the engineering priorities in CLAUDE.md.
 
@@ -11,6 +11,12 @@ Three categories recur:
 - **Load-bearing** — the complexity directly implements a human trust boundary. Simplify the *implementation*, never the guarantee.
 - **Duplication** — the same logic or shape exists twice or more; consolidation is nearly free correctness.
 - **Questionable weight** — machinery whose cost may exceed its prototype-stage value; candidates for the "documented limitation instead of a subsystem" trade.
+
+## Current top target: the client orchestration surface
+
+The workflow's durable machinery is more coherent than its public interface. A routine client action currently crosses status, a request template, one of seven `build-request` kinds, a call envelope or staged reference, and one of four low-level MCP tools. An already-started, no-rework document phase uses seven MCP mutations, each normally surrounded by CLI composition and status reads. Gates are especially inverted: the MCP call blocks while the client polls status and writes the decision through the separate local CLI.
+
+This is now the highest-value open simplification. Keep the state transitions, receipts, digests, reviews, and human trust boundaries, but coordinate them behind client-intent operations: inspect, start, submit work/triage, and relay a human decision. Every mutation should return the fresh semantic next action, and gates should open nonblockingly and resolve through a simple MCP decision call. The full action map, evidence, proposed boundaries, and follow-up acceptance criteria are in [`validation/client-interface-audit.md`](validation/client-interface-audit.md).
 
 ## Ranked simplification targets
 
