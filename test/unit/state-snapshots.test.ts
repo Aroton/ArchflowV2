@@ -204,6 +204,96 @@ describe("snapshot storage", () => {
       payloads: [fixture.payload], retained_task_bytes: 0 as SafeInteger })).resolves.toMatchObject({ ok: false, error: { code: "SNAPSHOT_INVALID" } });
   });
 
+  it("verifies every payload in a compound document snapshot", async () => {
+    const directory = await root();
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: directory });
+    const primaryBytes = Buffer.from("phase design\n");
+    const parentBytes = Buffer.from("architecture v2\n");
+    const fixture = await documentSnapshotFixture(directory, primaryBytes);
+    const parentPath = P(".archflow/tasks/demo/design.md");
+    const parentIdentity = await hashGitBlobIdentity(createGitRunner({ cwd: directory }), parentBytes, parentPath);
+    const parentDigest = sha256Bytes(parentBytes);
+    const parentOutput = {
+      path: parentPath,
+      path_class: "document" as const,
+      operation: "add" as const,
+      storage: "raw-payload" as const,
+      payload_bytes: parseSafeInteger(parentBytes.byteLength),
+      payload_digest: parentDigest,
+      file_type: "regular" as const,
+      after: {
+        oid: parentIdentity.oid as never,
+        mode: "100644" as const,
+        size_bytes: parseSafeInteger(parentIdentity.size_bytes),
+      },
+    };
+    const primaryArtifact = fixture.manifest.source_artifact;
+    if (primaryArtifact.artifact_kind !== "document") throw new TypeError("fixture artifact changed");
+    const sourceArtifact: DocumentArtifactV1 = {
+      ...primaryArtifact,
+      additional_documents: [{
+        document_path: P("design.md") as never,
+        byte_count: parentOutput.payload_bytes,
+        content_digest: parentDigest,
+        projection_target: parentPath,
+      }],
+    };
+    const primaryOutput = fixture.manifest.outputs[0];
+    if (primaryOutput === undefined || primaryOutput.storage !== "raw-payload") {
+      throw new TypeError("primary document output changed");
+    }
+    const outputs = [parentOutput, primaryOutput] as const;
+    const projections = outputs.map((output) => ({ path: output.path, content_digest: output.payload_digest }));
+    const snapshotDigest = deriveDeclaredSnapshotDigest(outputs, projections);
+    const resultBytes = parseSafeInteger(primaryBytes.byteLength + parentBytes.byteLength);
+    const manifest: ResultManifestV1 = {
+      ...fixture.manifest,
+      artifact_digest: canonicalJsonDigest(sourceArtifact),
+      source_artifact: sourceArtifact,
+      snapshot_digest: snapshotDigest,
+      outputs,
+      projections,
+      accounting: {
+        ...fixture.manifest.accounting,
+        result_bytes: resultBytes,
+        task_bytes: resultBytes,
+        counted_entries: outputs.map((output) => ({
+          path: output.path,
+          storage: "raw-payload" as const,
+          stored_bytes: output.payload_bytes,
+        })),
+      },
+      secret_scan: {
+        schema_version: "1",
+        outcome: "clean",
+        detector_set_id: parseSafeId("test"),
+        scanned_paths: outputs.map((output) => output.path),
+      },
+    };
+    const parentPayload = {
+      path: parentPath,
+      bytes: parentBytes,
+      target: workspaceResolved(join(directory, "parent-payload.md"), P("parent-payload.md")),
+    };
+    await expect(prepareDocumentSnapshot({
+      runner: createGitRunner({ cwd: directory }),
+      manifest,
+      payloads: [parentPayload, fixture.payload],
+      retained_task_bytes: 0 as SafeInteger,
+    })).resolves.toMatchObject({ ok: true });
+
+    const forged = structuredClone(manifest);
+    const forgedParent = forged.outputs[0];
+    if (forgedParent === undefined || forgedParent.operation === "delete") throw new TypeError("parent output changed");
+    (forgedParent.after as { oid: string }).oid = "1".repeat(40);
+    await expect(prepareDocumentSnapshot({
+      runner: createGitRunner({ cwd: directory }),
+      manifest: forged,
+      payloads: [parentPayload, fixture.payload],
+      retained_task_bytes: 0 as SafeInteger,
+    })).resolves.toMatchObject({ ok: false, error: { code: "SNAPSHOT_INVALID" } });
+  });
+
   it("rejects immutable symlink reuse and validates payload bytes on read", async () => {
     const directory = await root();
     const real = join(directory, "real.bin");

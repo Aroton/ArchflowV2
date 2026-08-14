@@ -35,7 +35,7 @@ import {
 import { activeProjection, type GateLifecycleDependencies } from "./gate-core.js";
 import { deriveNextAction, type NextAction } from "./next-action.js";
 import { buildNextActionRequest } from "./request-templates.js";
-import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject } from "./produce-subject.js";
+import { expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject, produceUpstreamBindingsForSubject } from "./produce-subject.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
 import { designArtifactCommittedAtCurrentTarget, implementationOutputCommittedAtCurrentTarget } from "./implementation-manifest.js";
 import { phaseStatusResources, type StatusResource } from "./phase-documents.js";
@@ -376,9 +376,12 @@ async function currentApprovedUpstreams(
   authority: TransactionAuthority,
   state: TaskStateV1,
   authenticated: readonly AuthenticatedGateApproval[],
+  subject: CurrentProduceSubject | undefined,
 ): Promise<readonly Sha256Digest[]> {
-  const bindings = expectedProduceUpstreamBindings(state);
-  const digests: Sha256Digest[] = [];
+  const bindings = subject === undefined
+    ? expectedProduceUpstreamBindings(state)
+    : produceUpstreamBindingsForSubject(state, subject.artifact);
+  const digests = new Set<Sha256Digest>();
   for (const binding of bindings) {
     const loaded = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
     if (!loaded.ok) throw new TypeError("current upstream produced authority invalid");
@@ -387,29 +390,25 @@ async function currentApprovedUpstreams(
         item.request.kind === "migration-audit" && item.decision.envelope.payload.decision === "accept-import-audit")) {
         throw new TypeError("imported upstream lacks accepted migration audit");
       }
-      digests.push(loaded.value.artifact_digest);
+      digests.add(loaded.value.artifact_digest);
       continue;
     }
+    const ownerKind = decodePhaseInstance(loaded.value.artifact.phase_instance).kind;
     const approval = [...authenticated]
       .filter((item) => {
         if (item.approval.subject_digest !== loaded.value.artifact_digest) return false;
-        if (binding.artifact_kind === "prd") {
-          return item.approval.gate_kind === "artifact-approval" &&
-            item.request.kind === "artifact-approval" &&
-            item.request.context.artifact_kind === "prd";
-        }
         return (item.approval.gate_kind === "design-approval" &&
             item.request.kind === "design-approval" &&
-            item.request.context.artifact_kind === binding.artifact_kind) ||
+            item.request.context.artifact_kind === ownerKind) ||
           (item.approval.gate_kind === "artifact-approval" &&
             item.request.kind === "artifact-approval" &&
-            item.request.context.artifact_kind === binding.artifact_kind);
+            item.request.context.artifact_kind === ownerKind);
       })
       .sort((left, right) => right.approval.resolved_at_revision - left.approval.resolved_at_revision)[0];
     if (approval === undefined) throw new TypeError("current upstream produced authority lacks approval");
-    digests.push(loaded.value.artifact_digest);
+    digests.add(loaded.value.artifact_digest);
   }
-  return Object.freeze(digests.sort());
+  return Object.freeze([...digests].sort());
 }
 
 export async function resolveStatusEvidenceAssessment(
@@ -843,6 +842,9 @@ export async function computeTaskStatus(
             target_ref: migration.request.context.target_ref,
             baseline_commit: migration.request.context.baseline_commit,
             commit_message: migration.request.context.commit_message,
+            ...(migration.request.context.imported_documents === undefined ? {} : {
+              authorized_document_paths: migration.request.context.imported_documents.map((document) => document.path),
+            }),
           },
         );
       } catch {
@@ -876,7 +878,7 @@ export async function computeTaskStatus(
   let assessment: EvidenceAssessment | undefined;
   if (constitution !== undefined && subjectDigest !== undefined) {
     const resolvedAssessment = await resolveStatusEvidenceAssessment(
-      () => currentApprovedUpstreams(dependencies, authority, state, authenticatedApprovals),
+      () => currentApprovedUpstreams(dependencies, authority, state, authenticatedApprovals, produceSubject),
       (approvedUpstreamDigests) => assessCurrentEvidence(state, retained, {
         subject_digest: subjectDigest,
         input_fingerprint: state.input_fingerprint,

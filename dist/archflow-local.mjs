@@ -24041,6 +24041,12 @@ var snapshotAccountingV1Schema = external_exports.object({
 }).strict();
 
 // src/contracts/durable-document.ts
+var additionalDocumentArtifactV1Schema = external_exports.object({
+  document_path: taskPathClaimV1Schema,
+  byte_count: safeIntegerV1Schema,
+  content_digest: sha256DigestV1Schema,
+  projection_target: repositoryPathClaimV1Schema
+}).strict();
 var editorialPredecessorRefV1Schema = external_exports.object({
   subject_digest: sha256DigestV1Schema,
   input_fingerprint: sha256DigestV1Schema,
@@ -24060,8 +24066,13 @@ var documentArtifactV1Schema = external_exports.object({
   input_fingerprint: sha256DigestV1Schema,
   snapshot_digest: sha256DigestV1Schema,
   projection_target: repositoryPathClaimV1Schema,
+  additional_documents: external_exports.array(additionalDocumentArtifactV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("document_path")), "additional_documents must be sorted by document_path with no duplicates").optional(),
   editorial_predecessor: editorialPredecessorRefV1Schema.optional()
-}).strict();
+}).strict().superRefine((artifact, context2) => {
+  if (artifact.additional_documents?.some((document2) => document2.document_path === artifact.document_path)) {
+    context2.addIssue({ code: "custom", message: "additional_documents must not repeat document_path", path: ["additional_documents"] });
+  }
+});
 function parseDocumentArtifact(value) {
   assertPlainJson(value, "document artifact");
   return documentArtifactV1Schema.parse(value);
@@ -25490,11 +25501,23 @@ function validateDurableSemantics(subject) {
         }
       }
     } else if (source.artifact_kind === "document") {
-      const output = resultManifest.outputs[0];
-      if (resultManifest.outputs.length !== 1 || output?.operation !== "add" || output.storage !== "raw-payload" || output.file_type !== "regular" || output.path !== source.projection_target || output.path_class !== "document" || output.payload_bytes !== source.byte_count || output.payload_digest !== source.content_digest || output.after.mode !== "100644") {
+      const declaredDocuments = [{
+        projection_target: source.projection_target,
+        byte_count: source.byte_count,
+        content_digest: source.content_digest
+      }, ...source.additional_documents ?? []].sort((left, right) => left.projection_target < right.projection_target ? -1 : left.projection_target > right.projection_target ? 1 : 0);
+      const outputsMatch = resultManifest.outputs.length === declaredDocuments.length && resultManifest.outputs.every((output, index) => {
+        const document2 = declaredDocuments[index];
+        return document2 !== void 0 && output.operation === "add" && output.storage === "raw-payload" && output.file_type === "regular" && output.path === document2.projection_target && output.path_class === "document" && output.payload_bytes === document2.byte_count && output.payload_digest === document2.content_digest && output.after.mode === "100644";
+      });
+      if (!outputsMatch) {
         return fail3(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestOutputsMismatch));
       }
-      if (resultManifest.projections.length !== 1 || resultManifest.projections[0]?.path !== source.projection_target || resultManifest.projections[0]?.content_digest !== source.content_digest) {
+      const projectionsMatch = resultManifest.projections.length === declaredDocuments.length && resultManifest.projections.every((projection, index) => {
+        const document2 = declaredDocuments[index];
+        return document2 !== void 0 && projection.path === document2.projection_target && projection.content_digest === document2.content_digest;
+      });
+      if (!projectionsMatch) {
         return fail3(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
       }
     } else {
@@ -31378,12 +31401,31 @@ async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, 
     operation: "git-design-commit-paths"
   });
   if (changed.length === 0 || changed.some((path2) => !path2.startsWith(prefix))) return false;
-  if (!changed.includes(artifact.projection_target) || !changed.includes(`${prefix}state.json`)) return false;
+  if (!changed.includes(`${prefix}state.json`)) return false;
   if (!changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) || !changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"))) return false;
-  const output = outputs.find((entry) => entry.path === artifact.projection_target);
-  if (output === void 0 || output.operation === "delete") return false;
-  const committed = await readCommitTreeBlob(runner, head, artifact.projection_target);
-  if (committed?.mode !== output.after.mode || committed.oid !== output.after.oid) return false;
+  const additional = artifact.additional_documents ?? [];
+  const approvedDocumentPaths = /* @__PURE__ */ new Set([
+    artifact.projection_target,
+    ...additional.map((entry) => entry.projection_target)
+  ]);
+  for (const path2 of approvedDocumentPaths) {
+    const output = outputs.find((entry) => entry.path === path2);
+    if (output === void 0 || output.operation === "delete") return false;
+    const committed = await readCommitTreeBlob(runner, head, path2);
+    if (committed?.mode !== output.after.mode || committed.oid !== output.after.oid) return false;
+    const baseline = await readCommitTreeBlob(runner, context2.baseline_commit, path2);
+    const differsFromBaseline = baseline?.mode !== output.after.mode || baseline.oid !== output.after.oid;
+    if (differsFromBaseline && !changed.includes(path2)) return false;
+  }
+  const authorizedDocumentPaths = /* @__PURE__ */ new Set([
+    ...approvedDocumentPaths,
+    ...context2.authorized_document_paths ?? []
+  ]);
+  const taskDocumentPath = /^(?:prd\.md|design\.md|phases\/[1-9][0-9]*\/(?:design|impl-notes)\.md)$/u;
+  if (changed.some((path2) => {
+    const taskRelative = path2.startsWith(prefix) ? path2.slice(prefix.length) : path2;
+    return taskDocumentPath.test(taskRelative) && !authorizedDocumentPaths.has(path2);
+  })) return false;
   const dirty = await runner.runNulFields({
     argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", prefix.slice(0, -1)],
     operation: "git-design-task-clean"
@@ -34963,68 +35005,77 @@ function expectedProduceUpstreamBindings(state) {
   ]);
 }
 async function loadProduceUpstreamSubject(dependencies, authority, state, binding) {
-  const reference = [...state.authoritative_results].reverse().find((candidate) => candidate.phase_instance === binding.phase_instance && candidate.step === "produce");
-  if (reference === void 0 || dependencies.load_retained_result === void 0) {
-    const initialization = await loadLegacyImportInitialization(
-      dependencies,
-      authority,
-      state
-    );
-    if (!initialization.ok || initialization.value === void 0) {
-      return fail13(state.phase_instance, "current-upstream-produce-result-missing");
+  const approvedOwners = [];
+  let retainedOwnerExists = false;
+  if (dependencies.load_retained_result !== void 0) {
+    for (const reference of [...state.authoritative_results].reverse()) {
+      if (reference.step !== "produce") continue;
+      const retained = await dependencies.load_retained_result(reference);
+      if (!retained.ok) return retained;
+      const manifest = retained.value.prepared.manifest.value;
+      const artifact2 = manifest.source_artifact;
+      const ownsPath = artifact2.artifact_kind === "document" && documentProjectionDescriptors(artifact2).some((entry) => entry.document_path === binding.path);
+      if (ownsPath) retainedOwnerExists = true;
+      if (artifact2.artifact_kind !== "document" || canonicalJsonDigest(artifact2) !== manifest.artifact_digest || !ownsPath || !state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === manifest.artifact_digest)) continue;
+      approvedOwners.push(Object.freeze({
+        measured_at_revision: manifest.accounting.measured_at_revision,
+        subject: Object.freeze({
+          artifact_digest: manifest.artifact_digest,
+          artifact: artifact2,
+          retained: retained.value
+        })
+      }));
     }
-    const destination = `.archflow/tasks/${state.task_id}/${binding.path}`;
-    const mapping = initialization.value.mapping.find((entry) => entry.destination_path === destination);
-    const staged = mapping === void 0 ? void 0 : initialization.value.staged_payload_refs.find((entry) => entry.legacy_path === mapping.legacy_path);
-    if (mapping === void 0 || staged === void 0) return fail13(state.phase_instance, "current-upstream-import-missing");
-    const target = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: binding.path, context: authority.context });
-    if (!target.ok) return target;
-    let bytes;
-    try {
-      bytes = new Uint8Array(await readFile5(target.value.absolute));
-    } catch {
-      return fail13(state.phase_instance, "current-upstream-import-unavailable");
-    }
-    if (sha256Bytes(bytes) !== staged.digest) return fail13(state.phase_instance, "current-upstream-import-changed");
-    const artifact2 = Object.freeze({
-      schema_version: "1",
-      artifact_kind: "document",
-      task_id: state.task_id,
-      phase_instance: binding.phase_instance,
-      step: "produce",
-      document_path: binding.path,
-      path_class: "document",
-      byte_count: staged.byte_count,
-      content_digest: staged.digest,
-      declared_inputs: Object.freeze([]),
-      input_fingerprint: state.input_fingerprint,
-      snapshot_digest: canonicalJsonDigest({ schema_version: "1", imported_document: binding.path, content_digest: staged.digest }),
-      projection_target: target.value.repositoryRelative
-    });
-    return Object.freeze({
-      schema_version: "1",
-      ok: true,
-      value: Object.freeze({
-        artifact_digest: canonicalJsonDigest({ schema_version: "1", initialization_digest: state.initialization_digest, imported_document: binding.path, content_digest: staged.digest }),
-        artifact: artifact2,
-        imported_projection: Object.freeze({ path: binding.path, content_digest: staged.digest })
-      })
-    });
   }
-  const retained = await dependencies.load_retained_result(reference);
-  if (!retained.ok) return retained;
-  const manifest = retained.value.prepared.manifest.value;
-  const artifact = manifest.source_artifact;
-  if (artifact.artifact_kind !== "document" || artifact.document_path !== binding.path) {
-    return fail13(state.phase_instance, "current-upstream-produce-artifact-invalid");
+  approvedOwners.sort((left, right) => right.measured_at_revision - left.measured_at_revision);
+  if (approvedOwners[0] !== void 0) {
+    return Object.freeze({ schema_version: "1", ok: true, value: approvedOwners[0].subject });
   }
-  if (canonicalJsonDigest(artifact) !== manifest.artifact_digest) {
-    return fail13(state.phase_instance, "current-upstream-produce-artifact-digest-mismatch");
+  if (retainedOwnerExists) return fail13(state.phase_instance, "upstream-approval-missing");
+  const initialization = await loadLegacyImportInitialization(
+    dependencies,
+    authority,
+    state
+  );
+  if (!initialization.ok || initialization.value === void 0) {
+    return fail13(state.phase_instance, "current-upstream-produce-result-missing");
   }
+  const destination = `.archflow/tasks/${state.task_id}/${binding.path}`;
+  const mapping = initialization.value.mapping.find((entry) => entry.destination_path === destination);
+  const staged = mapping === void 0 ? void 0 : initialization.value.staged_payload_refs.find((entry) => entry.legacy_path === mapping.legacy_path);
+  if (mapping === void 0 || staged === void 0) return fail13(state.phase_instance, "current-upstream-import-missing");
+  const target = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: binding.path, context: authority.context });
+  if (!target.ok) return target;
+  let bytes;
+  try {
+    bytes = new Uint8Array(await readFile5(target.value.absolute));
+  } catch {
+    return fail13(state.phase_instance, "current-upstream-import-unavailable");
+  }
+  if (sha256Bytes(bytes) !== staged.digest) return fail13(state.phase_instance, "current-upstream-import-changed");
+  const artifact = Object.freeze({
+    schema_version: "1",
+    artifact_kind: "document",
+    task_id: state.task_id,
+    phase_instance: binding.phase_instance,
+    step: "produce",
+    document_path: binding.path,
+    path_class: "document",
+    byte_count: staged.byte_count,
+    content_digest: staged.digest,
+    declared_inputs: Object.freeze([]),
+    input_fingerprint: state.input_fingerprint,
+    snapshot_digest: canonicalJsonDigest({ schema_version: "1", imported_document: binding.path, content_digest: staged.digest }),
+    projection_target: target.value.repositoryRelative
+  });
   return Object.freeze({
     schema_version: "1",
     ok: true,
-    value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, retained: retained.value })
+    value: Object.freeze({
+      artifact_digest: canonicalJsonDigest({ schema_version: "1", initialization_digest: state.initialization_digest, imported_document: binding.path, content_digest: staged.digest }),
+      artifact,
+      imported_projection: Object.freeze({ path: binding.path, content_digest: staged.digest })
+    })
   });
 }
 var fail13 = (phase3, issue_code) => Object.freeze({
@@ -35033,7 +35084,7 @@ var fail13 = (phase3, issue_code) => Object.freeze({
   error: createProjectError("STATE_INVALID", { phase_instance: phase3, issue_code })
 });
 async function loadCurrentProduceSubject(dependencies, state) {
-  const reference = state.authoritative_results.find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "produce");
+  const reference = [...state.authoritative_results].reverse().find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "produce");
   if (reference === void 0 || dependencies.load_retained_result === void 0) {
     return fail13(state.phase_instance, "current-produce-result-missing");
   }
@@ -35052,6 +35103,21 @@ async function loadCurrentProduceSubject(dependencies, state) {
     ok: true,
     value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, retained: retained.value })
   });
+}
+function documentProjectionDescriptors(artifact) {
+  return Object.freeze([
+    Object.freeze({
+      document_path: artifact.document_path,
+      content_digest: artifact.content_digest,
+      projection_target: artifact.projection_target
+    }),
+    ...artifact.additional_documents ?? []
+  ]);
+}
+function produceUpstreamBindingsForSubject(state, artifact) {
+  if (artifact.artifact_kind !== "document") return expectedProduceUpstreamBindings(state);
+  const owned = new Set(documentProjectionDescriptors(artifact).map((entry) => entry.document_path));
+  return Object.freeze(expectedProduceUpstreamBindings(state).filter((binding) => !owned.has(binding.path)));
 }
 
 // src/state/evidence-results.ts
@@ -35688,18 +35754,23 @@ function phaseDocumentDefaults(taskId, phaseInstance4) {
         declared_inputs: [{ input_id: "user-ask", path: task("ask.md") }]
       };
     case "design":
-      return {
+    case "phase-design": {
+      const taskPrefix = task("");
+      const additionalDocumentPaths = phaseStatusResources(taskId, phaseInstance4).filter((resource) => resource.access === "read-write" && resource.path.startsWith(taskPrefix)).map((resource) => resource.path.slice(taskPrefix.length)).sort();
+      if (phase3.kind === "design") return {
         document_path: "design.md",
+        additional_document_paths: additionalDocumentPaths,
         declared_inputs: [{ input_id: "prd", path: task("prd.md") }]
       };
-    case "phase-design":
       return {
         document_path: `phases/${phase3.phase}/design.md`,
+        additional_document_paths: additionalDocumentPaths,
         declared_inputs: [
           { input_id: "design", path: task("design.md") },
           { input_id: "prd", path: task("prd.md") }
         ]
       };
+    }
     case "phase-impl":
       return void 0;
   }
@@ -36314,9 +36385,9 @@ async function readArchivedGateRequest(dependencies, authority, gateId) {
     throw error51;
   }
 }
-async function currentApprovedUpstreams(dependencies, authority, state, authenticated) {
-  const bindings = expectedProduceUpstreamBindings(state);
-  const digests = [];
+async function currentApprovedUpstreams(dependencies, authority, state, authenticated, subject) {
+  const bindings = subject === void 0 ? expectedProduceUpstreamBindings(state) : produceUpstreamBindingsForSubject(state, subject.artifact);
+  const digests = /* @__PURE__ */ new Set();
   for (const binding of bindings) {
     const loaded = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
     if (!loaded.ok) throw new TypeError("current upstream produced authority invalid");
@@ -36324,20 +36395,18 @@ async function currentApprovedUpstreams(dependencies, authority, state, authenti
       if (state.phase_instance !== "design" && !authenticated.some((item) => item.request.kind === "migration-audit" && item.decision.envelope.payload.decision === "accept-import-audit")) {
         throw new TypeError("imported upstream lacks accepted migration audit");
       }
-      digests.push(loaded.value.artifact_digest);
+      digests.add(loaded.value.artifact_digest);
       continue;
     }
+    const ownerKind = decodePhaseInstance(loaded.value.artifact.phase_instance).kind;
     const approval = [...authenticated].filter((item) => {
       if (item.approval.subject_digest !== loaded.value.artifact_digest) return false;
-      if (binding.artifact_kind === "prd") {
-        return item.approval.gate_kind === "artifact-approval" && item.request.kind === "artifact-approval" && item.request.context.artifact_kind === "prd";
-      }
-      return item.approval.gate_kind === "design-approval" && item.request.kind === "design-approval" && item.request.context.artifact_kind === binding.artifact_kind || item.approval.gate_kind === "artifact-approval" && item.request.kind === "artifact-approval" && item.request.context.artifact_kind === binding.artifact_kind;
+      return item.approval.gate_kind === "design-approval" && item.request.kind === "design-approval" && item.request.context.artifact_kind === ownerKind || item.approval.gate_kind === "artifact-approval" && item.request.kind === "artifact-approval" && item.request.context.artifact_kind === ownerKind;
     }).sort((left, right) => right.approval.resolved_at_revision - left.approval.resolved_at_revision)[0];
     if (approval === void 0) throw new TypeError("current upstream produced authority lacks approval");
-    digests.push(loaded.value.artifact_digest);
+    digests.add(loaded.value.artifact_digest);
   }
-  return Object.freeze(digests.sort());
+  return Object.freeze([...digests].sort());
 }
 async function resolveStatusEvidenceAssessment(loadApprovedUpstreams, assess) {
   let approvedUpstreamDigests;
@@ -36664,7 +36733,10 @@ async function computeTaskStatus(dependencies, authority) {
           {
             target_ref: migration.request.context.target_ref,
             baseline_commit: migration.request.context.baseline_commit,
-            commit_message: migration.request.context.commit_message
+            commit_message: migration.request.context.commit_message,
+            ...migration.request.context.imported_documents === void 0 ? {} : {
+              authorized_document_paths: migration.request.context.imported_documents.map((document2) => document2.path)
+            }
           }
         );
       } catch {
@@ -36685,7 +36757,7 @@ async function computeTaskStatus(dependencies, authority) {
   let assessment;
   if (constitution !== void 0 && subjectDigest !== void 0) {
     const resolvedAssessment = await resolveStatusEvidenceAssessment(
-      () => currentApprovedUpstreams(dependencies, authority, state, authenticatedApprovals),
+      () => currentApprovedUpstreams(dependencies, authority, state, authenticatedApprovals, produceSubject),
       (approvedUpstreamDigests) => assessCurrentEvidence(state, retained, {
         subject_digest: subjectDigest,
         input_fingerprint: state.input_fingerprint,
@@ -38956,16 +39028,62 @@ async function buildDocumentArtifact(runner, authority, input) {
   assertInternalTransactionAuthority(authority);
   assertPlainJson(input, "document artifact builder input");
   const materialized = structuredClone(input);
-  const documentTarget = await resolveTaskPath({
-    runner,
-    taskId: authority.task_id,
-    claim: materialized.document_path,
-    expectedClass: "document",
-    context: authority.context
-  });
-  if (!documentTarget.ok) return documentTarget;
-  const documentBytes = await readResolvedBytes(documentTarget.value, authority);
-  if (!documentBytes.ok) return documentBytes;
+  const additionalPaths = [...materialized.additional_document_paths ?? []].sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+  if (new Set(additionalPaths).size !== additionalPaths.length || additionalPaths.includes(materialized.document_path)) {
+    throw new TypeError("additional document paths must be unique and must not repeat the primary document");
+  }
+  const observeDocument = async (documentPath) => {
+    const resolved = await resolveTaskPath({
+      runner,
+      taskId: authority.task_id,
+      claim: documentPath,
+      expectedClass: "document",
+      context: authority.context
+    });
+    if (!resolved.ok) return resolved;
+    const read = await readResolvedBytes(resolved.value, authority);
+    if (!read.ok) return read;
+    const byteCount = parseSafeInteger(read.value.byteLength);
+    const contentDigest = sha256Bytes(read.value);
+    let identity;
+    try {
+      identity = await hashGitBlobIdentity(runner, read.value, resolved.value.repositoryRelative);
+    } catch (error51) {
+      if (error51 instanceof GitInvocationError) {
+        return fail20(projectErrorForGitFailure(error51, runner, authority.context));
+      }
+      throw error51;
+    }
+    return ok18(Object.freeze({
+      document_path: documentPath,
+      projection_target: resolved.value.repositoryRelative,
+      bytes: read.value,
+      byte_count: byteCount,
+      content_digest: contentDigest,
+      output: Object.freeze({
+        path: resolved.value.repositoryRelative,
+        path_class: "document",
+        operation: "add",
+        storage: "raw-payload",
+        payload_bytes: byteCount,
+        payload_digest: contentDigest,
+        file_type: "regular",
+        after: Object.freeze({
+          oid: parseGitOid(identity.oid),
+          mode: "100644",
+          size_bytes: parseSafeInteger(identity.size_bytes)
+        })
+      })
+    }));
+  };
+  const observedPrimary = await observeDocument(materialized.document_path);
+  if (!observedPrimary.ok) return observedPrimary;
+  const observedAdditional = [];
+  for (const path2 of additionalPaths) {
+    const observed = await observeDocument(path2);
+    if (!observed.ok) return observed;
+    observedAdditional.push(observed.value);
+  }
   const declaredInputs = [];
   for (const declared of materialized.declared_inputs) {
     const target = await resolveDeclaredInput(runner, authority, declared.path);
@@ -38978,38 +39096,20 @@ async function buildDocumentArtifact(runner, authority, input) {
     }));
   }
   declaredInputs.sort((left, right) => left.input_id < right.input_id ? -1 : left.input_id > right.input_id ? 1 : 0);
-  const byteCount = parseSafeInteger(documentBytes.value.byteLength);
-  const contentDigest = sha256Bytes(documentBytes.value);
-  let identity;
-  try {
-    identity = await hashGitBlobIdentity(
-      runner,
-      documentBytes.value,
-      documentTarget.value.repositoryRelative
-    );
-  } catch (error51) {
-    if (error51 instanceof GitInvocationError) {
-      return fail20(projectErrorForGitFailure(error51, runner, authority.context));
-    }
-    throw error51;
-  }
-  const output = Object.freeze({
-    path: documentTarget.value.repositoryRelative,
-    path_class: "document",
-    operation: "add",
-    storage: "raw-payload",
-    payload_bytes: byteCount,
-    payload_digest: contentDigest,
-    file_type: "regular",
-    after: Object.freeze({
-      oid: parseGitOid(identity.oid),
-      mode: "100644",
-      size_bytes: parseSafeInteger(identity.size_bytes)
-    })
-  });
-  const projections = Object.freeze([
-    Object.freeze({ path: output.path, content_digest: contentDigest })
-  ]);
+  const observations = [observedPrimary.value, ...observedAdditional].sort((left, right) => left.projection_target < right.projection_target ? -1 : left.projection_target > right.projection_target ? 1 : 0);
+  const outputs = Object.freeze(observations.map((observed) => observed.output));
+  const projections = Object.freeze(observations.map((observed) => Object.freeze({
+    path: observed.projection_target,
+    content_digest: observed.content_digest
+  })));
+  const additionalDocuments = Object.freeze(
+    observedAdditional.map((observed) => Object.freeze({
+      document_path: observed.document_path,
+      byte_count: observed.byte_count,
+      content_digest: observed.content_digest,
+      projection_target: observed.projection_target
+    }))
+  );
   return ok18(parseDocumentArtifact({
     schema_version: "1",
     artifact_kind: "document",
@@ -39018,12 +39118,13 @@ async function buildDocumentArtifact(runner, authority, input) {
     step: materialized.step,
     document_path: materialized.document_path,
     path_class: "document",
-    byte_count: byteCount,
-    content_digest: contentDigest,
+    byte_count: observedPrimary.value.byte_count,
+    content_digest: observedPrimary.value.content_digest,
     declared_inputs: Object.freeze(declaredInputs),
     input_fingerprint: materialized.input_fingerprint,
-    snapshot_digest: deriveDeclaredSnapshotDigest([output], projections),
-    projection_target: toRepositoryPathClaim(authority.task_id, materialized.document_path)
+    snapshot_digest: deriveDeclaredSnapshotDigest(outputs, projections),
+    projection_target: toRepositoryPathClaim(authority.task_id, materialized.document_path),
+    ...additionalDocuments.length === 0 ? {} : { additional_documents: additionalDocuments }
   }));
 }
 
@@ -39522,6 +39623,7 @@ async function composeProduce(services2, state, intentId, snapshot2) {
       phase_instance: state.phase_instance,
       step: "produce",
       document_path: document2.document_path ?? defaults.document_path,
+      ...defaults.additional_document_paths === void 0 ? {} : { additional_document_paths: defaults.additional_document_paths },
       declared_inputs: document2.declared_inputs ?? defaults.declared_inputs,
       input_fingerprint: state.input_fingerprint
     });

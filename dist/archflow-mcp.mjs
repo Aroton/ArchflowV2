@@ -37380,6 +37380,12 @@ var snapshotAccountingV1Schema = external_exports.object({
 }).strict();
 
 // src/contracts/durable-document.ts
+var additionalDocumentArtifactV1Schema = external_exports.object({
+  document_path: taskPathClaimV1Schema,
+  byte_count: safeIntegerV1Schema,
+  content_digest: sha256DigestV1Schema,
+  projection_target: repositoryPathClaimV1Schema
+}).strict();
 var editorialPredecessorRefV1Schema = external_exports.object({
   subject_digest: sha256DigestV1Schema,
   input_fingerprint: sha256DigestV1Schema,
@@ -37399,8 +37405,13 @@ var documentArtifactV1Schema = external_exports.object({
   input_fingerprint: sha256DigestV1Schema,
   snapshot_digest: sha256DigestV1Schema,
   projection_target: repositoryPathClaimV1Schema,
+  additional_documents: external_exports.array(additionalDocumentArtifactV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("document_path")), "additional_documents must be sorted by document_path with no duplicates").optional(),
   editorial_predecessor: editorialPredecessorRefV1Schema.optional()
-}).strict();
+}).strict().superRefine((artifact, context2) => {
+  if (artifact.additional_documents?.some((document2) => document2.document_path === artifact.document_path)) {
+    context2.addIssue({ code: "custom", message: "additional_documents must not repeat document_path", path: ["additional_documents"] });
+  }
+});
 
 // src/contracts/secret-scan.ts
 var detectorId = safeIdV1Schema;
@@ -45628,11 +45639,23 @@ function validateDurableSemantics(subject) {
         }
       }
     } else if (source.artifact_kind === "document") {
-      const output = resultManifest.outputs[0];
-      if (resultManifest.outputs.length !== 1 || output?.operation !== "add" || output.storage !== "raw-payload" || output.file_type !== "regular" || output.path !== source.projection_target || output.path_class !== "document" || output.payload_bytes !== source.byte_count || output.payload_digest !== source.content_digest || output.after.mode !== "100644") {
+      const declaredDocuments = [{
+        projection_target: source.projection_target,
+        byte_count: source.byte_count,
+        content_digest: source.content_digest
+      }, ...source.additional_documents ?? []].sort((left, right) => left.projection_target < right.projection_target ? -1 : left.projection_target > right.projection_target ? 1 : 0);
+      const outputsMatch = resultManifest.outputs.length === declaredDocuments.length && resultManifest.outputs.every((output, index) => {
+        const document2 = declaredDocuments[index];
+        return document2 !== void 0 && output.operation === "add" && output.storage === "raw-payload" && output.file_type === "regular" && output.path === document2.projection_target && output.path_class === "document" && output.payload_bytes === document2.byte_count && output.payload_digest === document2.content_digest && output.after.mode === "100644";
+      });
+      if (!outputsMatch) {
         return fail7(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestOutputsMismatch));
       }
-      if (resultManifest.projections.length !== 1 || resultManifest.projections[0]?.path !== source.projection_target || resultManifest.projections[0]?.content_digest !== source.content_digest) {
+      const projectionsMatch = resultManifest.projections.length === declaredDocuments.length && resultManifest.projections.every((projection, index) => {
+        const document2 = declaredDocuments[index];
+        return document2 !== void 0 && projection.path === document2.projection_target && projection.content_digest === document2.content_digest;
+      });
+      if (!projectionsMatch) {
         return fail7(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
       }
     } else {
@@ -45956,12 +45979,31 @@ async function designArtifactCommittedAtCurrentTarget(runner, taskId, artifact, 
     operation: "git-design-commit-paths"
   });
   if (changed.length === 0 || changed.some((path2) => !path2.startsWith(prefix))) return false;
-  if (!changed.includes(artifact.projection_target) || !changed.includes(`${prefix}state.json`)) return false;
+  if (!changed.includes(`${prefix}state.json`)) return false;
   if (!changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/request.json")) || !changed.some((path2) => path2.startsWith(`${prefix}authority/decisions/`) && path2.endsWith("/decision.json"))) return false;
-  const output = outputs.find((entry) => entry.path === artifact.projection_target);
-  if (output === void 0 || output.operation === "delete") return false;
-  const committed2 = await readCommitTreeBlob(runner, head, artifact.projection_target);
-  if (committed2?.mode !== output.after.mode || committed2.oid !== output.after.oid) return false;
+  const additional = artifact.additional_documents ?? [];
+  const approvedDocumentPaths = /* @__PURE__ */ new Set([
+    artifact.projection_target,
+    ...additional.map((entry) => entry.projection_target)
+  ]);
+  for (const path2 of approvedDocumentPaths) {
+    const output = outputs.find((entry) => entry.path === path2);
+    if (output === void 0 || output.operation === "delete") return false;
+    const committed2 = await readCommitTreeBlob(runner, head, path2);
+    if (committed2?.mode !== output.after.mode || committed2.oid !== output.after.oid) return false;
+    const baseline = await readCommitTreeBlob(runner, context2.baseline_commit, path2);
+    const differsFromBaseline = baseline?.mode !== output.after.mode || baseline.oid !== output.after.oid;
+    if (differsFromBaseline && !changed.includes(path2)) return false;
+  }
+  const authorizedDocumentPaths = /* @__PURE__ */ new Set([
+    ...approvedDocumentPaths,
+    ...context2.authorized_document_paths ?? []
+  ]);
+  const taskDocumentPath = /^(?:prd\.md|design\.md|phases\/[1-9][0-9]*\/(?:design|impl-notes)\.md)$/u;
+  if (changed.some((path2) => {
+    const taskRelative = path2.startsWith(prefix) ? path2.slice(prefix.length) : path2;
+    return taskDocumentPath.test(taskRelative) && !authorizedDocumentPaths.has(path2);
+  })) return false;
   const dirty = await runner.runNulFields({
     argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", prefix.slice(0, -1)],
     operation: "git-design-task-clean"
@@ -46405,14 +46447,20 @@ async function prepareDocumentSnapshot(input) {
   if (!prepared.ok) return prepared;
   const manifest = prepared.value.manifest.value;
   if (manifest.source_artifact.artifact_kind !== "document") throw new TypeError("document snapshot requires a document artifact");
-  const output = manifest.outputs[0];
-  const payload = prepared.value.payloads[0];
-  if (manifest.outputs.length !== 1 || prepared.value.payloads.length !== 1 || output === void 0 || output.operation === "delete" || payload === void 0) {
+  const expectedCount = 1 + (manifest.source_artifact.additional_documents?.length ?? 0);
+  if (manifest.outputs.length !== expectedCount || prepared.value.payloads.length !== expectedCount) {
     return snapshotInvalid(manifest.snapshot_digest, "document-output-shape-mismatch");
   }
-  const identity = await hashGitBlobIdentity(input.runner, payload.bytes, manifest.source_artifact.projection_target);
-  if (output.after.oid !== identity.oid || output.after.size_bytes !== identity.size_bytes) {
-    return snapshotInvalid(manifest.snapshot_digest, "document-git-identity-mismatch");
+  const payloads = new Map(prepared.value.payloads.map((payload) => [payload.path, payload]));
+  for (const output of manifest.outputs) {
+    const payload = payloads.get(output.path);
+    if (output.operation === "delete" || payload === void 0) {
+      return snapshotInvalid(manifest.snapshot_digest, "document-output-shape-mismatch");
+    }
+    const identity = await hashGitBlobIdentity(input.runner, payload.bytes, output.path);
+    if (output.after.oid !== identity.oid || output.after.size_bytes !== identity.size_bytes) {
+      return snapshotInvalid(manifest.snapshot_digest, "document-git-identity-mismatch");
+    }
   }
   return prepared;
 }
@@ -47429,6 +47477,32 @@ var evidence_slots_schema_default = {
 var document_artifact_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "urn:archflow:schema:v1:document-artifact",
+  $defs: {
+    additionalDocumentArtifact: {
+      type: "object",
+      properties: {
+        document_path: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
+        },
+        byte_count: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+        },
+        content_digest: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        projection_target: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+        }
+      },
+      required: [
+        "document_path",
+        "byte_count",
+        "content_digest",
+        "projection_target"
+      ],
+      additionalProperties: false
+    }
+  },
   type: "object",
   properties: {
     schema_version: {
@@ -47481,6 +47555,12 @@ var document_artifact_schema_default = {
     },
     projection_target: {
       $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+    },
+    additional_documents: {
+      type: "array",
+      items: {
+        $ref: "#/$defs/additionalDocumentArtifact"
+      }
     },
     editorial_predecessor: {
       type: "object",
@@ -58577,68 +58657,77 @@ function expectedProduceUpstreamBindings(state) {
   ]);
 }
 async function loadProduceUpstreamSubject(dependencies, authority, state, binding) {
-  const reference = [...state.authoritative_results].reverse().find((candidate) => candidate.phase_instance === binding.phase_instance && candidate.step === "produce");
-  if (reference === void 0 || dependencies.load_retained_result === void 0) {
-    const initialization = await loadLegacyImportInitialization(
-      dependencies,
-      authority,
-      state
-    );
-    if (!initialization.ok || initialization.value === void 0) {
-      return fail16(state.phase_instance, "current-upstream-produce-result-missing");
+  const approvedOwners = [];
+  let retainedOwnerExists = false;
+  if (dependencies.load_retained_result !== void 0) {
+    for (const reference of [...state.authoritative_results].reverse()) {
+      if (reference.step !== "produce") continue;
+      const retained = await dependencies.load_retained_result(reference);
+      if (!retained.ok) return retained;
+      const manifest = retained.value.prepared.manifest.value;
+      const artifact2 = manifest.source_artifact;
+      const ownsPath = artifact2.artifact_kind === "document" && documentProjectionDescriptors(artifact2).some((entry) => entry.document_path === binding.path);
+      if (ownsPath) retainedOwnerExists = true;
+      if (artifact2.artifact_kind !== "document" || canonicalJsonDigest(artifact2) !== manifest.artifact_digest || !ownsPath || !state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === manifest.artifact_digest)) continue;
+      approvedOwners.push(Object.freeze({
+        measured_at_revision: manifest.accounting.measured_at_revision,
+        subject: Object.freeze({
+          artifact_digest: manifest.artifact_digest,
+          artifact: artifact2,
+          retained: retained.value
+        })
+      }));
     }
-    const destination = `.archflow/tasks/${state.task_id}/${binding.path}`;
-    const mapping = initialization.value.mapping.find((entry) => entry.destination_path === destination);
-    const staged = mapping === void 0 ? void 0 : initialization.value.staged_payload_refs.find((entry) => entry.legacy_path === mapping.legacy_path);
-    if (mapping === void 0 || staged === void 0) return fail16(state.phase_instance, "current-upstream-import-missing");
-    const target2 = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: binding.path, context: authority.context });
-    if (!target2.ok) return target2;
-    let bytes;
-    try {
-      bytes = new Uint8Array(await readFile4(target2.value.absolute));
-    } catch {
-      return fail16(state.phase_instance, "current-upstream-import-unavailable");
-    }
-    if (sha256Bytes(bytes) !== staged.digest) return fail16(state.phase_instance, "current-upstream-import-changed");
-    const artifact2 = Object.freeze({
-      schema_version: "1",
-      artifact_kind: "document",
-      task_id: state.task_id,
-      phase_instance: binding.phase_instance,
-      step: "produce",
-      document_path: binding.path,
-      path_class: "document",
-      byte_count: staged.byte_count,
-      content_digest: staged.digest,
-      declared_inputs: Object.freeze([]),
-      input_fingerprint: state.input_fingerprint,
-      snapshot_digest: canonicalJsonDigest({ schema_version: "1", imported_document: binding.path, content_digest: staged.digest }),
-      projection_target: target2.value.repositoryRelative
-    });
-    return Object.freeze({
-      schema_version: "1",
-      ok: true,
-      value: Object.freeze({
-        artifact_digest: canonicalJsonDigest({ schema_version: "1", initialization_digest: state.initialization_digest, imported_document: binding.path, content_digest: staged.digest }),
-        artifact: artifact2,
-        imported_projection: Object.freeze({ path: binding.path, content_digest: staged.digest })
-      })
-    });
   }
-  const retained = await dependencies.load_retained_result(reference);
-  if (!retained.ok) return retained;
-  const manifest = retained.value.prepared.manifest.value;
-  const artifact = manifest.source_artifact;
-  if (artifact.artifact_kind !== "document" || artifact.document_path !== binding.path) {
-    return fail16(state.phase_instance, "current-upstream-produce-artifact-invalid");
+  approvedOwners.sort((left, right) => right.measured_at_revision - left.measured_at_revision);
+  if (approvedOwners[0] !== void 0) {
+    return Object.freeze({ schema_version: "1", ok: true, value: approvedOwners[0].subject });
   }
-  if (canonicalJsonDigest(artifact) !== manifest.artifact_digest) {
-    return fail16(state.phase_instance, "current-upstream-produce-artifact-digest-mismatch");
+  if (retainedOwnerExists) return fail16(state.phase_instance, "upstream-approval-missing");
+  const initialization = await loadLegacyImportInitialization(
+    dependencies,
+    authority,
+    state
+  );
+  if (!initialization.ok || initialization.value === void 0) {
+    return fail16(state.phase_instance, "current-upstream-produce-result-missing");
   }
+  const destination = `.archflow/tasks/${state.task_id}/${binding.path}`;
+  const mapping = initialization.value.mapping.find((entry) => entry.destination_path === destination);
+  const staged = mapping === void 0 ? void 0 : initialization.value.staged_payload_refs.find((entry) => entry.legacy_path === mapping.legacy_path);
+  if (mapping === void 0 || staged === void 0) return fail16(state.phase_instance, "current-upstream-import-missing");
+  const target2 = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: binding.path, context: authority.context });
+  if (!target2.ok) return target2;
+  let bytes;
+  try {
+    bytes = new Uint8Array(await readFile4(target2.value.absolute));
+  } catch {
+    return fail16(state.phase_instance, "current-upstream-import-unavailable");
+  }
+  if (sha256Bytes(bytes) !== staged.digest) return fail16(state.phase_instance, "current-upstream-import-changed");
+  const artifact = Object.freeze({
+    schema_version: "1",
+    artifact_kind: "document",
+    task_id: state.task_id,
+    phase_instance: binding.phase_instance,
+    step: "produce",
+    document_path: binding.path,
+    path_class: "document",
+    byte_count: staged.byte_count,
+    content_digest: staged.digest,
+    declared_inputs: Object.freeze([]),
+    input_fingerprint: state.input_fingerprint,
+    snapshot_digest: canonicalJsonDigest({ schema_version: "1", imported_document: binding.path, content_digest: staged.digest }),
+    projection_target: target2.value.repositoryRelative
+  });
   return Object.freeze({
     schema_version: "1",
     ok: true,
-    value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, retained: retained.value })
+    value: Object.freeze({
+      artifact_digest: canonicalJsonDigest({ schema_version: "1", initialization_digest: state.initialization_digest, imported_document: binding.path, content_digest: staged.digest }),
+      artifact,
+      imported_projection: Object.freeze({ path: binding.path, content_digest: staged.digest })
+    })
   });
 }
 var fail16 = (phase3, issue_code) => Object.freeze({
@@ -58647,7 +58736,7 @@ var fail16 = (phase3, issue_code) => Object.freeze({
   error: createProjectError("STATE_INVALID", { phase_instance: phase3, issue_code })
 });
 async function loadCurrentProduceSubject(dependencies, state) {
-  const reference = state.authoritative_results.find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "produce");
+  const reference = [...state.authoritative_results].reverse().find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "produce");
   if (reference === void 0 || dependencies.load_retained_result === void 0) {
     return fail16(state.phase_instance, "current-produce-result-missing");
   }
@@ -58667,6 +58756,21 @@ async function loadCurrentProduceSubject(dependencies, state) {
     value: Object.freeze({ artifact_digest: manifest.artifact_digest, artifact, retained: retained.value })
   });
 }
+function documentProjectionDescriptors(artifact) {
+  return Object.freeze([
+    Object.freeze({
+      document_path: artifact.document_path,
+      content_digest: artifact.content_digest,
+      projection_target: artifact.projection_target
+    }),
+    ...artifact.additional_documents ?? []
+  ]);
+}
+function produceUpstreamBindingsForSubject(state, artifact) {
+  if (artifact.artifact_kind !== "document") return expectedProduceUpstreamBindings(state);
+  const owned = new Set(documentProjectionDescriptors(artifact).map((entry) => entry.document_path));
+  return Object.freeze(expectedProduceUpstreamBindings(state).filter((binding) => !owned.has(binding.path)));
+}
 async function readProduceProjection(runner, authority, subject, artifactPath) {
   const target2 = await resolveTaskPath({
     runner,
@@ -58675,7 +58779,7 @@ async function readProduceProjection(runner, authority, subject, artifactPath) {
     context: authority.context
   });
   if (!target2.ok) return target2;
-  const retainedDigest = "imported_projection" in subject ? subject.imported_projection.path === artifactPath ? subject.imported_projection.content_digest : void 0 : subject.artifact.artifact_kind === "implementation-output" ? subject.artifact.parent_documents.find((candidate) => candidate.document_path === artifactPath)?.content_digest : subject.retained.prepared.manifest.value.projections.find((candidate) => candidate.path === target2.value.repositoryRelative)?.content_digest;
+  const retainedDigest = "imported_projection" in subject ? subject.imported_projection.path === artifactPath ? subject.imported_projection.content_digest : void 0 : subject.artifact.artifact_kind === "implementation-output" ? subject.artifact.parent_documents.find((candidate) => candidate.document_path === artifactPath)?.content_digest : documentProjectionDescriptors(subject.artifact).find((candidate) => candidate.document_path === artifactPath)?.content_digest;
   if (retainedDigest === void 0) return fail16(authority.context.phase_instance, "produce-projection-not-retained");
   let bytes;
   try {
@@ -58687,11 +58791,33 @@ async function readProduceProjection(runner, authority, subject, artifactPath) {
   if (digest10 !== retainedDigest) {
     return fail16(authority.context.phase_instance, "produce-projection-not-current");
   }
-  return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ bytes, digest: digest10 }) });
+  return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ path: artifactPath, bytes, digest: digest10 }) });
 }
-function renderProduceReviewMaterial(subject, selectedProjection) {
+async function readProduceProjectionSet(runner, authority, subject, selectedPath) {
+  const paths = "imported_projection" in subject || subject.artifact.artifact_kind === "implementation-output" ? [selectedPath] : documentProjectionDescriptors(subject.artifact).map((entry) => entry.document_path);
+  const projections = [];
+  for (const path2 of paths) {
+    const projection = await readProduceProjection(runner, authority, subject, path2);
+    if (!projection.ok) return projection;
+    projections.push(projection.value);
+  }
+  return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze(projections) });
+}
+function produceProjectionSetDigest(projections) {
+  if (projections.length === 1) return projections[0].digest;
+  return canonicalJsonDigest({
+    schema_version: "1",
+    projections: projections.map((projection) => ({ path: projection.path, content_digest: projection.digest }))
+  });
+}
+function renderProduceReviewMaterial(subject, selectedProjection, projections = [selectedProjection]) {
   if (subject.artifact.artifact_kind === "document") {
-    return fatalUtf8.decode(selectedProjection.bytes);
+    if (projections.length === 1) return fatalUtf8.decode(selectedProjection.bytes);
+    return projections.map(
+      (projection) => `## Document: ${projection.path}
+
+${fatalUtf8.decode(projection.bytes)}`
+    ).join("\n\n");
   }
   return `${JSON.stringify({
     schema_version: "1",
@@ -58977,6 +59103,16 @@ async function validateEditorialPredecessorDeclaration(dependencies, state, arti
   if (editorial === void 0 || editorial.triage.subject_digest !== declared.subject_digest || editorial.triage.input_fingerprint !== declared.input_fingerprint || editorial.triage_result_digest !== declared.triage_result_digest) return invalid2("editorial-authorizing-triage-invalid");
   if (artifact.content_digest === produced.value.artifact.content_digest) {
     return invalid2("editorial-revision-unchanged-bytes");
+  }
+  const companionSet = (document2) => JSON.stringify(
+    (document2.additional_documents ?? []).map((entry) => ({
+      document_path: entry.document_path,
+      content_digest: entry.content_digest,
+      projection_target: entry.projection_target
+    }))
+  );
+  if (companionSet(artifact) !== companionSet(produced.value.artifact)) {
+    return invalid2("editorial-revision-companion-changed");
   }
   return ok11(void 0);
 }
@@ -61008,7 +61144,7 @@ async function assembleReviewContext(input) {
 }
 async function assembleUpstreamContext(input) {
   const entries = [];
-  for (const binding of expectedProduceUpstreamBindings(input.state)) {
+  for (const binding of produceUpstreamBindingsForSubject(input.state, input.subject.artifact)) {
     const upstream = await loadProduceUpstreamSubject(input.dependencies, input.authority, input.state, binding);
     if (!upstream.ok) return upstream;
     const approved = "imported_projection" in upstream.value ? input.state.phase_instance === "design" || input.state.approvals.some((approval) => approval.gate_kind === "migration-audit") : input.state.approvals.some((approval) => (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") && approval.subject_digest === upstream.value.artifact_digest);
@@ -62635,21 +62771,27 @@ function envelopeOverflowError(error51, subject) {
 async function resolveRepositoryViewCommit(runner, artifact) {
   return artifact.artifact_kind === "implementation-output" ? artifact.base_commit : readHeadCommit(runner);
 }
-async function deriveApprovedUpstreams(services, toolName, durable) {
+async function deriveApprovedUpstreams(services, toolName, durable, subject) {
   const derived = [];
-  for (const binding of expectedProduceUpstreamBindings(durable)) {
+  const seenOwners = /* @__PURE__ */ new Set();
+  for (const binding of produceUpstreamBindingsForSubject(durable, subject.artifact)) {
     const upstream = await loadProduceUpstreamSubject(services.dependencies, services.authority, durable, binding);
     if (!upstream.ok) return upstream;
-    const upstreamProjection = await readProduceProjection(
+    if (seenOwners.has(upstream.value.artifact_digest)) continue;
+    const upstreamProjections = await readProduceProjectionSet(
       services.runner,
       services.authority,
       upstream.value,
       binding.path
     );
-    if (!upstreamProjection.ok) return upstreamProjection;
+    if (!upstreamProjections.ok) return upstreamProjections;
     let text4;
     try {
-      text4 = new TextDecoder("utf-8", { fatal: true }).decode(upstreamProjection.value.bytes);
+      text4 = "imported_projection" in upstream.value ? new TextDecoder("utf-8", { fatal: true }).decode(upstreamProjections.value[0].bytes) : renderProduceReviewMaterial(
+        upstream.value,
+        upstreamProjections.value.find((projection) => projection.path === binding.path),
+        upstreamProjections.value
+      );
     } catch {
       return fail20(createProjectError("CONTRACT_INVALID", {
         tool: toolName,
@@ -62678,7 +62820,8 @@ async function deriveApprovedUpstreams(services, toolName, durable) {
       );
       if (!authenticated.ok) return authenticated;
       const request = authenticated.value.request;
-      if ((request.kind === "artifact-approval" || request.kind === "design-approval") && request.context.artifact_kind === binding.artifact_kind) {
+      const ownerKind = decodePhaseInstance(upstream.value.artifact.phase_instance).kind;
+      if ((request.kind === "artifact-approval" || request.kind === "design-approval") && request.context.artifact_kind === ownerKind) {
         approved = true;
         break;
       }
@@ -62689,6 +62832,7 @@ async function deriveApprovedUpstreams(services, toolName, durable) {
         issue_code: "upstream-approval-missing"
       }));
     }
+    seenOwners.add(upstreamDigest);
     derived.push(Object.freeze({ upstream_digest: upstreamDigest, artifact: text4 }));
   }
   derived.sort((left, right) => left.upstream_digest.localeCompare(right.upstream_digest));
@@ -62717,13 +62861,13 @@ async function reobserveProjectionDigest(services, phaseInstance4, expectedArtif
     phase_instance: phaseInstance4,
     issue_code: "counter-review-subject-not-current"
   }));
-  const observed = await readProduceProjection(
+  const observed = await readProduceProjectionSet(
     services.runner,
     services.authority,
     retained.value,
     artifactPath
   );
-  return observed.ok ? Object.freeze({ schema_version: "1", ok: true, value: observed.value.digest }) : observed;
+  return observed.ok ? Object.freeze({ schema_version: "1", ok: true, value: produceProjectionSetDigest(observed.value) }) : observed;
 }
 async function handleCounterReview(call, context2) {
   return mapHandlerErrors(context2.invocation_id, async () => {
@@ -62752,9 +62896,16 @@ async function handleCounterReview(call, context2) {
       call.input.artifact_path
     );
     if (!projection.ok) return projection;
+    const projections = await readProduceProjectionSet(
+      services.runner,
+      services.authority,
+      produce.value,
+      call.input.artifact_path
+    );
+    if (!projections.ok) return projections;
     let artifact;
     try {
-      artifact = renderProduceReviewMaterial(produce.value, projection.value);
+      artifact = renderProduceReviewMaterial(produce.value, projection.value, projections.value);
     } catch {
       return fail20(createProjectError("CONTRACT_INVALID", {
         tool: call.name,
@@ -62793,7 +62944,7 @@ async function handleCounterReview(call, context2) {
     );
     let constitutionPlan;
     if (activeRules) {
-      const upstreams = await deriveApprovedUpstreams(services, call.name, state.value);
+      const upstreams = await deriveApprovedUpstreams(services, call.name, state.value, produce.value);
       if (!upstreams.ok) return upstreams;
       const approvedUpstreamDigests = requireApprovedUpstreamDigests(
         state.value.approvals,
@@ -62893,7 +63044,7 @@ async function handleCounterReview(call, context2) {
           result_id: resultId
         }
       },
-      projection_digest: projection.value.digest,
+      projection_digest: produceProjectionSetDigest(projections.value),
       ...constitutionPlan === void 0 ? {} : { constitution: constitutionPlan }
     }).catch((error51) => {
       const overflow = envelopeOverflowError(error51, produce.value);
@@ -63370,6 +63521,103 @@ async function runStateInitialization(dependencies, request) {
   }
 }
 
+// src/state/phase-documents.ts
+var STATUS_RESOURCE_ROLES = Object.freeze([
+  "current-artifact",
+  "user-ask",
+  "prd",
+  "task-design",
+  "phase-design",
+  "prior-implementation-notes",
+  "verification-transcript"
+]);
+function phaseStatusResources(taskId, phaseInstance4) {
+  const phase3 = decodePhaseInstance(phaseInstance4);
+  const task = (path2) => `.archflow/tasks/${taskId}/${path2}`;
+  const runtime = (path2) => `.archflow/runtime/tasks/${taskId}/${path2}`;
+  const resources = [];
+  switch (phase3.kind) {
+    case "prd":
+      resources.push(
+        { role: "current-artifact", path: task("prd.md"), access: "write" },
+        { role: "user-ask", path: task("ask.md"), access: "read-write" }
+      );
+      break;
+    case "design":
+      resources.push(
+        { role: "current-artifact", path: task("design.md"), access: "write" },
+        { role: "prd", path: task("prd.md"), access: "read-write" }
+      );
+      break;
+    case "phase-design":
+      resources.push(
+        { role: "current-artifact", path: task(`phases/${phase3.phase}/design.md`), access: "write" },
+        { role: "prd", path: task("prd.md"), access: "read-write" },
+        { role: "task-design", path: task("design.md"), access: "read-write" }
+      );
+      if (Number(phase3.phase) > 1) {
+        resources.push({
+          role: "prior-implementation-notes",
+          path: task(`phases/${Number(phase3.phase) - 1}/impl-notes.md`),
+          access: "read"
+        });
+      }
+      break;
+    case "phase-impl":
+      resources.push(
+        { role: "current-artifact", path: task(`phases/${phase3.phase}/impl-notes.md`), access: "write" },
+        { role: "prd", path: task("prd.md"), access: "read-write" },
+        { role: "task-design", path: task("design.md"), access: "read-write" },
+        { role: "phase-design", path: task(`phases/${phase3.phase}/design.md`), access: "read-write" }
+      );
+      if (Number(phase3.phase) > 1) {
+        resources.push({
+          role: "prior-implementation-notes",
+          path: task(`phases/${Number(phase3.phase) - 1}/impl-notes.md`),
+          access: "read"
+        });
+      }
+      resources.push({
+        role: "verification-transcript",
+        path: runtime(`cache/phases/${phase3.phase}/verification.txt`),
+        access: "write"
+      });
+      break;
+  }
+  return Object.freeze(resources.map((resource) => Object.freeze(resource)));
+}
+function phaseDocumentDefaults(taskId, phaseInstance4) {
+  const phase3 = decodePhaseInstance(phaseInstance4);
+  const task = (path2) => `.archflow/tasks/${taskId}/${path2}`;
+  switch (phase3.kind) {
+    case "prd":
+      return {
+        document_path: "prd.md",
+        declared_inputs: [{ input_id: "user-ask", path: task("ask.md") }]
+      };
+    case "design":
+    case "phase-design": {
+      const taskPrefix = task("");
+      const additionalDocumentPaths = phaseStatusResources(taskId, phaseInstance4).filter((resource) => resource.access === "read-write" && resource.path.startsWith(taskPrefix)).map((resource) => resource.path.slice(taskPrefix.length)).sort();
+      if (phase3.kind === "design") return {
+        document_path: "design.md",
+        additional_document_paths: additionalDocumentPaths,
+        declared_inputs: [{ input_id: "prd", path: task("prd.md") }]
+      };
+      return {
+        document_path: `phases/${phase3.phase}/design.md`,
+        additional_document_paths: additionalDocumentPaths,
+        declared_inputs: [
+          { input_id: "design", path: task("design.md") },
+          { input_id: "prd", path: task("prd.md") }
+        ]
+      };
+    }
+    case "phase-impl":
+      return void 0;
+  }
+}
+
 // src/mcp/handlers/state-results.ts
 var ok18 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var contractInvalid2 = (issueCode) => Object.freeze({
@@ -63427,48 +63675,73 @@ function accounting(outputs, retained, revision) {
   });
 }
 async function prepareDocumentResult(input) {
-  const documentTarget = await target(input.services, input.artifact.document_path, "document");
-  if (!documentTarget.ok) return documentTarget;
-  if (documentTarget.value.repositoryRelative !== input.artifact.projection_target) {
-    return contractInvalid2("document-projection-target-mismatch");
+  const canonicalDefaults = phaseDocumentDefaults(
+    input.services.authority.task_id,
+    input.artifact.phase_instance
+  );
+  const allowedAdditionalPaths = new Set(canonicalDefaults?.additional_document_paths ?? []);
+  const suppliedAdditionalPaths = (input.artifact.additional_documents ?? []).map((document2) => document2.document_path);
+  if (suppliedAdditionalPaths.some((path2) => !allowedAdditionalPaths.has(path2)) || suppliedAdditionalPaths.some((path2, index) => index > 0 && suppliedAdditionalPaths[index - 1] >= path2)) {
+    return contractInvalid2("document-additional-documents-unauthorized");
   }
-  const captured = await captureProjectionTarget(documentTarget.value);
-  if (captured.rollback.state !== "present" || captured.rollback.file_type !== "regular") {
-    return contractInvalid2("document-projection-not-regular-file");
+  const declaredDocuments = [{
+    document_path: input.artifact.document_path,
+    byte_count: input.artifact.byte_count,
+    content_digest: input.artifact.content_digest,
+    projection_target: input.artifact.projection_target
+  }, ...input.artifact.additional_documents ?? []].sort((left, right) => left.projection_target < right.projection_target ? -1 : left.projection_target > right.projection_target ? 1 : 0);
+  if (new Set(declaredDocuments.map((document2) => document2.projection_target)).size !== declaredDocuments.length) {
+    return contractInvalid2("document-projection-target-duplicate");
   }
-  const bytes = captured.rollback.bytes;
-  if (bytes.byteLength !== input.artifact.byte_count || sha256Bytes(bytes) !== input.artifact.content_digest) {
-    return contractInvalid2("document-content-mismatch");
+  const observedDocuments = [];
+  for (const document2 of declaredDocuments) {
+    const documentTarget = await target(input.services, document2.document_path, "document");
+    if (!documentTarget.ok) return documentTarget;
+    if (documentTarget.value.repositoryRelative !== document2.projection_target) {
+      return contractInvalid2("document-projection-target-mismatch");
+    }
+    const captured = await captureProjectionTarget(documentTarget.value);
+    if (captured.rollback.state !== "present" || captured.rollback.file_type !== "regular") {
+      return contractInvalid2("document-projection-not-regular-file");
+    }
+    const bytes = captured.rollback.bytes;
+    if (bytes.byteLength !== document2.byte_count || sha256Bytes(bytes) !== document2.content_digest) {
+      return contractInvalid2("document-content-mismatch");
+    }
+    const identity = await hashGitBlobIdentity(input.services.runner, bytes, document2.projection_target);
+    const output = Object.freeze({
+      path: document2.projection_target,
+      path_class: "document",
+      operation: "add",
+      storage: "raw-payload",
+      payload_bytes: parseSafeInteger(bytes.byteLength),
+      payload_digest: sha256Bytes(bytes),
+      file_type: "regular",
+      after: Object.freeze({
+        oid: parseGitOid(identity.oid),
+        mode: "100644",
+        size_bytes: parseSafeInteger(identity.size_bytes)
+      })
+    });
+    observedDocuments.push(Object.freeze({ documentTarget: documentTarget.value, captured, bytes, output }));
   }
-  const identity = await hashGitBlobIdentity(input.services.runner, bytes, input.artifact.projection_target);
-  const after = Object.freeze({
-    oid: parseGitOid(identity.oid),
-    mode: "100644",
-    size_bytes: parseSafeInteger(identity.size_bytes)
-  });
-  const output = Object.freeze({
-    path: input.artifact.projection_target,
-    path_class: "document",
-    operation: "add",
-    storage: "raw-payload",
-    payload_bytes: parseSafeInteger(bytes.byteLength),
-    payload_digest: sha256Bytes(bytes),
-    file_type: "regular",
-    after
-  });
-  const projections = Object.freeze([{ path: output.path, content_digest: output.payload_digest }]);
-  if (deriveDeclaredSnapshotDigest([output], projections) !== input.artifact.snapshot_digest) {
+  const outputs = Object.freeze(observedDocuments.map((document2) => document2.output));
+  const projections = Object.freeze(outputs.map((output) => Object.freeze({
+    path: output.path,
+    content_digest: output.payload_digest
+  })));
+  if (deriveDeclaredSnapshotDigest(outputs, projections) !== input.artifact.snapshot_digest) {
     return contractInvalid2("document-snapshot-digest-mismatch");
   }
   const capture = scannerCapture(input.scanner);
-  const plan = await prepareProjectionPlan([{
-    path: output.path,
-    target: documentTarget.value,
-    desired: { state: "present", file_type: "regular", mode: "100644", bytes },
-    authenticated_before: captured.observation,
-    rollback: captured.rollback,
+  const plan = await prepareProjectionPlan(observedDocuments.map((document2) => ({
+    path: document2.output.path,
+    target: document2.documentTarget,
+    desired: { state: "present", file_type: "regular", mode: "100644", bytes: document2.bytes },
+    authenticated_before: document2.captured.observation,
+    rollback: document2.captured.rollback,
     git_tracked: true
-  }], capture.scanner, input.services.runner.location.worktreeRoot);
+  })), capture.scanner, input.services.runner.location.worktreeRoot);
   if (!plan.ok) return plan;
   const manifestValue = {
     schema_version: "1",
@@ -63481,20 +63754,24 @@ async function prepareDocumentResult(input) {
     source_artifact: input.artifact,
     input_fingerprint: input.artifact.input_fingerprint,
     snapshot_digest: input.artifact.snapshot_digest,
-    outputs: [output],
+    outputs,
     projections,
-    accounting: accounting([output], input.retained_task_bytes, input.measured_at_revision),
+    accounting: accounting(outputs, input.retained_task_bytes, input.measured_at_revision),
     secret_scan: capture.result()
   };
   const manifest = canonicalDocument(manifestValue);
   const manifestTarget = await target(input.services, resultAuthorityClaim(manifest.digest), "authority-result");
-  const payload = await payloadTarget(input.services, manifest.digest, output.path);
   if (!manifestTarget.ok) return manifestTarget;
-  if (!payload.ok) return payload;
+  const payloads = [];
+  for (const document2 of observedDocuments) {
+    const payload = await payloadTarget(input.services, manifest.digest, document2.output.path);
+    if (!payload.ok) return payload;
+    payloads.push({ path: document2.output.path, bytes: document2.bytes, target: payload.value });
+  }
   const prepared = await prepareDocumentSnapshot({
     runner: input.services.runner,
     manifest: manifestValue,
-    payloads: [{ path: output.path, bytes, target: payload.value }],
+    payloads,
     retained_task_bytes: input.retained_task_bytes
   });
   if (!prepared.ok) return prepared;
@@ -63842,7 +64119,10 @@ async function handleState(call, context2) {
                   {
                     target_ref: loaded.value.request.context.target_ref,
                     baseline_commit: loaded.value.request.context.baseline_commit,
-                    commit_message: loaded.value.request.context.commit_message
+                    commit_message: loaded.value.request.context.commit_message,
+                    ...loaded.value.request.context.imported_documents === void 0 ? {} : {
+                      authorized_document_paths: loaded.value.request.context.imported_documents.map((document2) => document2.path)
+                    }
                   }
                 );
               }

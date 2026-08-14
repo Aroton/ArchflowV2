@@ -159,7 +159,8 @@ export async function designArtifactCommittedAtCurrentTarget(
   taskId: string,
   artifact: DocumentArtifactV1,
   outputs: readonly OutputEntry[],
-  context: Pick<GateContext<"design-approval">, "target_ref" | "baseline_commit" | "commit_message">,
+  context: Pick<GateContext<"design-approval">, "target_ref" | "baseline_commit" | "commit_message"> &
+    Readonly<{ authorized_document_paths?: readonly RepositoryPathClaim[] }>,
 ): Promise<boolean> {
   const symbolicRef = await runner.runText({
     argv: ["symbolic-ref", "--quiet", "HEAD"],
@@ -183,14 +184,33 @@ export async function designArtifactCommittedAtCurrentTarget(
     operation: "git-design-commit-paths" as SafeCode,
   });
   if (changed.length === 0 || changed.some((path) => !path.startsWith(prefix))) return false;
-  if (!changed.includes(artifact.projection_target) || !changed.includes(`${prefix}state.json`)) return false;
+  if (!changed.includes(`${prefix}state.json`)) return false;
   if (!changed.some((path) => path.startsWith(`${prefix}authority/decisions/`) && path.endsWith("/request.json")) ||
       !changed.some((path) => path.startsWith(`${prefix}authority/decisions/`) && path.endsWith("/decision.json"))) return false;
 
-  const output = outputs.find((entry) => entry.path === artifact.projection_target);
-  if (output === undefined || output.operation === "delete") return false;
-  const committed = await readCommitTreeBlob(runner, head, artifact.projection_target);
-  if (committed?.mode !== output.after.mode || committed.oid !== output.after.oid) return false;
+  const additional = artifact.additional_documents ?? [];
+  const approvedDocumentPaths = new Set<RepositoryPathClaim>([
+    artifact.projection_target,
+    ...additional.map((entry) => entry.projection_target),
+  ]);
+  for (const path of approvedDocumentPaths) {
+    const output = outputs.find((entry) => entry.path === path);
+    if (output === undefined || output.operation === "delete") return false;
+    const committed = await readCommitTreeBlob(runner, head, path);
+    if (committed?.mode !== output.after.mode || committed.oid !== output.after.oid) return false;
+    const baseline = await readCommitTreeBlob(runner, context.baseline_commit, path);
+    const differsFromBaseline = baseline?.mode !== output.after.mode || baseline.oid !== output.after.oid;
+    if (differsFromBaseline && !changed.includes(path)) return false;
+  }
+  const authorizedDocumentPaths = new Set([
+    ...approvedDocumentPaths,
+    ...(context.authorized_document_paths ?? []),
+  ]);
+  const taskDocumentPath = /^(?:prd\.md|design\.md|phases\/[1-9][0-9]*\/(?:design|impl-notes)\.md)$/u;
+  if (changed.some((path) => {
+    const taskRelative = path.startsWith(prefix) ? path.slice(prefix.length) : path;
+    return taskDocumentPath.test(taskRelative) && !authorizedDocumentPaths.has(path as RepositoryPathClaim);
+  })) return false;
 
   const dirty = await runner.runNulFields({
     argv: ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", prefix.slice(0, -1)],

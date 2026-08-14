@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseTaskSlug } from "../../src/contracts/evidence.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
-import { phaseStatusResources } from "../../src/state/phase-documents.js";
+import { phaseDocumentDefaults, phaseStatusResources } from "../../src/state/phase-documents.js";
 
 const TASK = parseTaskSlug("resource-task");
 
@@ -29,6 +29,16 @@ describe("status phase resources", () => {
       { role: "task-design", path: ".archflow/tasks/resource-task/design.md", access: "read-write" },
       { role: "prior-implementation-notes", path: ".archflow/tasks/resource-task/phases/2/impl-notes.md", access: "read" },
     ]);
+  });
+
+  it("derives phase-design companion documents from writable parent resources", () => {
+    expect(phaseDocumentDefaults(TASK, parsePhaseInstanceId("design")))
+      .toMatchObject({ document_path: "design.md", additional_document_paths: ["prd.md"] });
+    expect(phaseDocumentDefaults(TASK, parsePhaseInstanceId("phase-design-3")))
+      .toMatchObject({
+        document_path: "phases/3/design.md",
+        additional_document_paths: ["design.md", "prd.md"],
+      });
   });
 
   it("projects implementation inputs and the ignored verification write target", () => {

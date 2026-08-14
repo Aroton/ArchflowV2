@@ -18,8 +18,8 @@ import type { RootBoundGitRunner } from "../repository/identity.js";
 import { openResolved, resolveTaskPath, resolveTaskWorkspacePath, verificationTranscriptClaim } from "../repository/paths.js";
 import type { TransactionAuthority } from "../state/authority.js";
 import {
-  expectedProduceUpstreamBindings,
   loadProduceUpstreamSubject,
+  produceUpstreamBindingsForSubject,
   readProduceProjection,
   type CurrentProduceSubject,
 } from "../state/produce-subject.js";
@@ -245,9 +245,10 @@ async function assembleUpstreamContext(input: {
   readonly authority: TransactionAuthority;
   readonly dependencies: Pick<TransactionDependencies, "load_retained_result" | "runner">;
   readonly state: TaskStateV1;
+  readonly subject: CurrentProduceSubject;
 }): Promise<ProjectResult<readonly PinnedContextEntry[]>> {
   const entries: PinnedContextEntry[] = [];
-  for (const binding of expectedProduceUpstreamBindings(input.state)) {
+  for (const binding of produceUpstreamBindingsForSubject(input.state, input.subject.artifact)) {
     const upstream = await loadProduceUpstreamSubject(input.dependencies, input.authority, input.state, binding);
     if (!upstream.ok) return upstream;
     const approved = "imported_projection" in upstream.value

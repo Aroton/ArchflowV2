@@ -571,6 +571,16 @@ export async function validateEditorialPredecessorDeclaration(
   if (artifact.content_digest === produced.value.artifact.content_digest) {
     return invalid("editorial-revision-unchanged-bytes");
   }
+  const companionSet = (document: DocumentArtifactV1): string => JSON.stringify(
+    (document.additional_documents ?? []).map((entry) => ({
+      document_path: entry.document_path,
+      content_digest: entry.content_digest,
+      projection_target: entry.projection_target,
+    })),
+  );
+  if (companionSet(artifact) !== companionSet(produced.value.artifact)) {
+    return invalid("editorial-revision-companion-changed");
+  }
   return ok(undefined);
 }
 

@@ -49,16 +49,20 @@ describe("implementation-output builder", () => {
     const root = mkdtempSync(join(tmpdir(), "archflow-design-commit-"));
     roots.push(root);
     execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env: gitEnv });
+    const taskId = parseTaskSlug("design-commit-task");
+    const taskPath = `.archflow/tasks/${taskId}`;
+    const taskRoot = join(root, taskPath);
+    mkdirSync(join(taskRoot, "phases", "1"), { recursive: true });
+    const prdBytes = new TextEncoder().encode("# Approved requirements\n");
+    writeFileSync(join(taskRoot, "prd.md"), prdBytes);
+    writeFileSync(join(taskRoot, "phases", "1", "design.md"), "# Prior phase\n");
     writeFileSync(join(root, "tracked.txt"), "base\n");
-    execFileSync("git", ["add", "tracked.txt"], { cwd: root, env: gitEnv });
+    execFileSync("git", ["add", "tracked.txt", taskPath], { cwd: root, env: gitEnv });
     execFileSync("git", ["commit", "-qm", "base"], { cwd: root, env: gitEnv });
     const baseline = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: root, env: gitEnv, encoding: "utf8",
     }).trim());
 
-    const taskId = parseTaskSlug("design-commit-task");
-    const taskPath = `.archflow/tasks/${taskId}`;
-    const taskRoot = join(root, taskPath);
     const decisionRoot = join(taskRoot, "authority", "decisions", "gate-1");
     mkdirSync(decisionRoot, { recursive: true });
     const designBytes = new TextEncoder().encode("# Approved design\n");
@@ -82,6 +86,12 @@ describe("implementation-output builder", () => {
       input_fingerprint: parseSha256Digest("1".repeat(64)),
       snapshot_digest: parseSha256Digest("2".repeat(64)),
       projection_target: projectionTarget,
+      additional_documents: [{
+        document_path: parseTaskPathClaim("prd.md"),
+        byte_count: parseSafeInteger(prdBytes.byteLength),
+        content_digest: sha256Bytes(prdBytes),
+        projection_target: parseRepositoryPathClaim(`${taskPath}/prd.md`),
+      }],
     };
     const outputs: readonly OutputEntry[] = [{
       path: projectionTarget,
@@ -90,6 +100,14 @@ describe("implementation-output builder", () => {
       storage: "git-object",
       file_type: "regular",
       after: { oid: gitBlobOid(designBytes), mode: "100644", size_bytes: parseSafeInteger(designBytes.byteLength) },
+    }, {
+      path: parseRepositoryPathClaim(`${taskPath}/prd.md`),
+      path_class: "document",
+      operation: "modify",
+      storage: "git-object",
+      file_type: "regular",
+      before: { oid: gitBlobOid(prdBytes), mode: "100644", size_bytes: parseSafeInteger(prdBytes.byteLength) },
+      after: { oid: gitBlobOid(prdBytes), mode: "100644", size_bytes: parseSafeInteger(prdBytes.byteLength) },
     }];
     const context: GateContext<"design-approval"> = {
       artifact_kind: "design",
@@ -112,8 +130,15 @@ describe("implementation-output builder", () => {
     await expect(designArtifactCommittedAtCurrentTarget(
       discovered.value, taskId, artifact, outputs, context,
     )).resolves.toBe(false);
+    writeFileSync(join(taskRoot, "phases", "1", "design.md"), "# Illegally changed prior phase\n");
     execFileSync("git", ["add", "-A", "--", taskPath], { cwd: root, env: gitEnv });
     execFileSync("git", ["commit", "-qm", context.commit_message, "--", taskPath], { cwd: root, env: gitEnv });
+    await expect(designArtifactCommittedAtCurrentTarget(
+      discovered.value, taskId, artifact, outputs, context,
+    )).resolves.toBe(false);
+    writeFileSync(join(taskRoot, "phases", "1", "design.md"), "# Prior phase\n");
+    execFileSync("git", ["add", "-A", "--", taskPath], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "--amend", "--no-edit", "-q"], { cwd: root, env: gitEnv });
     await expect(designArtifactCommittedAtCurrentTarget(
       discovered.value, taskId, artifact, outputs, context,
     )).resolves.toBe(true);

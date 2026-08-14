@@ -34,6 +34,7 @@ import {
   type ProjectionSource,
 } from "../../state/snapshots.js";
 import type { ProductionServices } from "../../state/production.js";
+import { phaseDocumentDefaults } from "../../state/phase-documents.js";
 
 export type PreparedStateResult = Readonly<{
   reference: AuthoritativeResultRef;
@@ -123,48 +124,78 @@ export async function prepareDocumentResult(input: Readonly<{
   measured_at_revision: SafeInteger;
   scanner: SecretScanner;
 }>): Promise<ProjectResult<PreparedStateResult>> {
-  const documentTarget = await target(input.services, input.artifact.document_path, "document");
-  if (!documentTarget.ok) return documentTarget;
-  if (documentTarget.value.repositoryRelative !== input.artifact.projection_target) {
-    return contractInvalid("document-projection-target-mismatch");
+  const canonicalDefaults = phaseDocumentDefaults(
+    input.services.authority.task_id,
+    input.artifact.phase_instance,
+  );
+  const allowedAdditionalPaths = new Set(canonicalDefaults?.additional_document_paths ?? []);
+  const suppliedAdditionalPaths = (input.artifact.additional_documents ?? [])
+    .map((document) => document.document_path);
+  if (
+    suppliedAdditionalPaths.some((path) => !allowedAdditionalPaths.has(path)) ||
+    suppliedAdditionalPaths.some((path, index) => index > 0 && suppliedAdditionalPaths[index - 1]! >= path)
+  ) {
+    return contractInvalid("document-additional-documents-unauthorized");
   }
-  const captured = await captureProjectionTarget(documentTarget.value);
-  if (captured.rollback.state !== "present" || captured.rollback.file_type !== "regular") {
-    return contractInvalid("document-projection-not-regular-file");
+  const declaredDocuments = [{
+    document_path: input.artifact.document_path,
+    byte_count: input.artifact.byte_count,
+    content_digest: input.artifact.content_digest,
+    projection_target: input.artifact.projection_target,
+  }, ...(input.artifact.additional_documents ?? [])]
+    .sort((left, right) => left.projection_target < right.projection_target ? -1 : left.projection_target > right.projection_target ? 1 : 0);
+  if (new Set(declaredDocuments.map((document) => document.projection_target)).size !== declaredDocuments.length) {
+    return contractInvalid("document-projection-target-duplicate");
   }
-  const bytes = captured.rollback.bytes;
-  if (bytes.byteLength !== input.artifact.byte_count || sha256Bytes(bytes) !== input.artifact.content_digest) {
-    return contractInvalid("document-content-mismatch");
+  const observedDocuments = [];
+  for (const document of declaredDocuments) {
+    const documentTarget = await target(input.services, document.document_path, "document");
+    if (!documentTarget.ok) return documentTarget;
+    if (documentTarget.value.repositoryRelative !== document.projection_target) {
+      return contractInvalid("document-projection-target-mismatch");
+    }
+    const captured = await captureProjectionTarget(documentTarget.value);
+    if (captured.rollback.state !== "present" || captured.rollback.file_type !== "regular") {
+      return contractInvalid("document-projection-not-regular-file");
+    }
+    const bytes = captured.rollback.bytes;
+    if (bytes.byteLength !== document.byte_count || sha256Bytes(bytes) !== document.content_digest) {
+      return contractInvalid("document-content-mismatch");
+    }
+    const identity = await hashGitBlobIdentity(input.services.runner, bytes, document.projection_target);
+    const output: OutputEntry = Object.freeze({
+      path: document.projection_target,
+      path_class: "document" as const,
+      operation: "add" as const,
+      storage: "raw-payload" as const,
+      payload_bytes: parseSafeInteger(bytes.byteLength),
+      payload_digest: sha256Bytes(bytes),
+      file_type: "regular" as const,
+      after: Object.freeze({
+        oid: parseGitOid(identity.oid),
+        mode: "100644" as const,
+        size_bytes: parseSafeInteger(identity.size_bytes),
+      }),
+    });
+    observedDocuments.push(Object.freeze({ documentTarget: documentTarget.value, captured, bytes, output }));
   }
-  const identity = await hashGitBlobIdentity(input.services.runner, bytes, input.artifact.projection_target);
-  const after = Object.freeze({
-    oid: parseGitOid(identity.oid),
-    mode: "100644" as const,
-    size_bytes: parseSafeInteger(identity.size_bytes),
-  });
-  const output: OutputEntry = Object.freeze({
-    path: input.artifact.projection_target,
-    path_class: "document" as const,
-    operation: "add" as const,
-    storage: "raw-payload" as const,
-    payload_bytes: parseSafeInteger(bytes.byteLength),
-    payload_digest: sha256Bytes(bytes),
-    file_type: "regular" as const,
-    after,
-  });
-  const projections = Object.freeze([{ path: output.path, content_digest: output.payload_digest }]);
-  if (deriveDeclaredSnapshotDigest([output], projections) !== input.artifact.snapshot_digest) {
+  const outputs = Object.freeze(observedDocuments.map((document) => document.output));
+  const projections = Object.freeze(outputs.map((output) => Object.freeze({
+    path: output.path,
+    content_digest: output.payload_digest,
+  })));
+  if (deriveDeclaredSnapshotDigest(outputs, projections) !== input.artifact.snapshot_digest) {
     return contractInvalid("document-snapshot-digest-mismatch");
   }
   const capture = scannerCapture(input.scanner);
-  const plan = await prepareProjectionPlan([{
-    path: output.path,
-    target: documentTarget.value,
-    desired: { state: "present", file_type: "regular", mode: "100644", bytes },
-    authenticated_before: captured.observation,
-    rollback: captured.rollback,
+  const plan = await prepareProjectionPlan(observedDocuments.map((document) => ({
+    path: document.output.path,
+    target: document.documentTarget,
+    desired: { state: "present", file_type: "regular", mode: "100644", bytes: document.bytes },
+    authenticated_before: document.captured.observation,
+    rollback: document.captured.rollback,
     git_tracked: true,
-  }], capture.scanner, input.services.runner.location.worktreeRoot as ResolvedTaskPath);
+  })), capture.scanner, input.services.runner.location.worktreeRoot as ResolvedTaskPath);
   if (!plan.ok) return plan;
   const manifestValue: ResultManifestV1 = {
     schema_version: "1",
@@ -177,20 +208,24 @@ export async function prepareDocumentResult(input: Readonly<{
     source_artifact: input.artifact,
     input_fingerprint: input.artifact.input_fingerprint,
     snapshot_digest: input.artifact.snapshot_digest,
-    outputs: [output],
+    outputs,
     projections,
-    accounting: accounting([output], input.retained_task_bytes, input.measured_at_revision),
+    accounting: accounting(outputs, input.retained_task_bytes, input.measured_at_revision),
     secret_scan: capture.result(),
   };
   const manifest = canonicalDocument(manifestValue);
   const manifestTarget = await target(input.services, resultAuthorityClaim(manifest.digest), "authority-result");
-  const payload = await payloadTarget(input.services, manifest.digest, output.path);
   if (!manifestTarget.ok) return manifestTarget;
-  if (!payload.ok) return payload;
+  const payloads = [];
+  for (const document of observedDocuments) {
+    const payload = await payloadTarget(input.services, manifest.digest, document.output.path);
+    if (!payload.ok) return payload;
+    payloads.push({ path: document.output.path, bytes: document.bytes, target: payload.value });
+  }
   const prepared = await prepareDocumentSnapshot({
     runner: input.services.runner,
     manifest: manifestValue,
-    payloads: [{ path: output.path, bytes, target: payload.value }],
+    payloads,
     retained_task_bytes: input.retained_task_bytes,
   });
   if (!prepared.ok) return prepared;

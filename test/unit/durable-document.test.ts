@@ -85,6 +85,34 @@ describe("document artifact contract", () => {
     await rejectedByZodAuthority({ ...valid, declared_inputs: [inputs[0], inputs[0]] });
   });
 
+  it("accepts sorted companion documents and rejects ambiguous ownership", async () => {
+    const valid = await fixture();
+    const companion = {
+      document_path: "design.md",
+      byte_count: 12,
+      content_digest: "a".repeat(64),
+      projection_target: ".archflow/tasks/demo/design.md",
+    };
+    const parsed = parseDocumentArtifact({ ...valid, additional_documents: [companion] });
+    expect(parsed.additional_documents).toEqual([companion]);
+
+    await rejectedByZodAuthority({
+      ...valid,
+      additional_documents: [
+        { ...companion, document_path: "prd.md", projection_target: ".archflow/tasks/demo/prd.md" },
+        companion,
+      ],
+    });
+    await rejectedByZodAuthority({
+      ...valid,
+      additional_documents: [{
+        ...companion,
+        document_path: valid["document_path"],
+        projection_target: valid["projection_target"],
+      }],
+    });
+  });
+
   it("rejects an unknown field in both authorities", async () => {
     await rejectedBoth({ ...(await fixture()), reviewer: "someone" });
   });

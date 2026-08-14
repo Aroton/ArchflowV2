@@ -292,6 +292,9 @@ export async function handleState(
                     target_ref: loaded.value.request.context.target_ref,
                     baseline_commit: loaded.value.request.context.baseline_commit,
                     commit_message: loaded.value.request.context.commit_message,
+                    ...(loaded.value.request.context.imported_documents === undefined ? {} : {
+                      authorized_document_paths: loaded.value.request.context.imported_documents.map((document) => document.path),
+                    }),
                   },
                 );
               }

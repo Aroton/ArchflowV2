@@ -548,25 +548,35 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
         }
       }
     } else if (source.artifact_kind === "document") {
-      const output = resultManifest.outputs[0];
-      if (
-        resultManifest.outputs.length !== 1 ||
-        output?.operation !== "add" ||
-        output.storage !== "raw-payload" ||
-        output.file_type !== "regular" ||
-        output.path !== source.projection_target ||
-        output.path_class !== "document" ||
-        output.payload_bytes !== source.byte_count ||
-        output.payload_digest !== source.content_digest ||
-        output.after.mode !== "100644"
-      ) {
+      const declaredDocuments = [{
+        projection_target: source.projection_target,
+        byte_count: source.byte_count,
+        content_digest: source.content_digest,
+      }, ...(source.additional_documents ?? [])]
+        .sort((left, right) => left.projection_target < right.projection_target ? -1 : left.projection_target > right.projection_target ? 1 : 0);
+      const outputsMatch = resultManifest.outputs.length === declaredDocuments.length &&
+        resultManifest.outputs.every((output, index) => {
+          const document = declaredDocuments[index];
+          return document !== undefined &&
+            output.operation === "add" &&
+            output.storage === "raw-payload" &&
+            output.file_type === "regular" &&
+            output.path === document.projection_target &&
+            output.path_class === "document" &&
+            output.payload_bytes === document.byte_count &&
+            output.payload_digest === document.content_digest &&
+            output.after.mode === "100644";
+        });
+      if (!outputsMatch) {
         return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestOutputsMismatch));
       }
-      if (
-        resultManifest.projections.length !== 1 ||
-        resultManifest.projections[0]?.path !== source.projection_target ||
-        resultManifest.projections[0]?.content_digest !== source.content_digest
-      ) {
+      const projectionsMatch = resultManifest.projections.length === declaredDocuments.length &&
+        resultManifest.projections.every((projection, index) => {
+          const document = declaredDocuments[index];
+          return document !== undefined && projection.path === document.projection_target &&
+            projection.content_digest === document.content_digest;
+        });
+      if (!projectionsMatch) {
         return fail(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
       }
     } else {

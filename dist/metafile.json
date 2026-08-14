@@ -3571,7 +3571,7 @@
       ]
     },
     "src/contracts/durable-document.ts": {
-      "bytes": 6779,
+      "bytes": 8376,
       "format": "esm",
       "imports": [
         {
@@ -3970,7 +3970,7 @@
       ]
     },
     "src/contracts/durable.ts": {
-      "bytes": 44838,
+      "bytes": 45602,
       "format": "esm",
       "imports": [
         {
@@ -4365,7 +4365,7 @@
       }
     },
     "src/contracts/schemas/v1/document-artifact.schema.json": {
-      "bytes": 2427,
+      "bytes": 3302,
       "format": "esm",
       "imports": [],
       "with": {
@@ -5189,7 +5189,7 @@
       ]
     },
     "src/local/build-request.ts": {
-      "bytes": 26248,
+      "bytes": 26398,
       "format": "esm",
       "imports": [
         {
@@ -5620,7 +5620,7 @@
       "imports": []
     },
     "src/mcp/handlers/counter-review.ts": {
-      "bytes": 18544,
+      "bytes": 19416,
       "format": "esm",
       "imports": [
         {
@@ -5871,7 +5871,7 @@
       ]
     },
     "src/mcp/handlers/state-results.ts": {
-      "bytes": 13782,
+      "bytes": 15636,
       "format": "esm",
       "imports": [
         {
@@ -5923,11 +5923,16 @@
           "kind": "import-statement",
           "original": "../../state/snapshots.js",
           "path": "src/state/snapshots.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../state/phase-documents.js",
+          "path": "src/state/phase-documents.ts"
         }
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 16176,
+      "bytes": 16426,
       "format": "esm",
       "imports": [
         {
@@ -6624,7 +6629,7 @@
       ]
     },
     "src/review/pinned-context.ts": {
-      "bytes": 28499,
+      "bytes": 28570,
       "format": "esm",
       "imports": [
         {
@@ -6794,7 +6799,7 @@
       ]
     },
     "src/state/document-artifact.ts": {
-      "bytes": 6212,
+      "bytes": 8454,
       "format": "esm",
       "imports": [
         {
@@ -6850,7 +6855,7 @@
       ]
     },
     "src/state/evidence-results.ts": {
-      "bytes": 25398,
+      "bytes": 25827,
       "format": "esm",
       "imports": [
         {
@@ -7338,7 +7343,7 @@
       ]
     },
     "src/state/implementation-manifest.ts": {
-      "bytes": 42169,
+      "bytes": 43172,
       "format": "esm",
       "imports": [
         {
@@ -7675,7 +7680,7 @@
       ]
     },
     "src/state/phase-documents.ts": {
-      "bytes": 6221,
+      "bytes": 6762,
       "format": "esm",
       "imports": [
         {
@@ -7702,7 +7707,7 @@
       ]
     },
     "src/state/produce-subject.ts": {
-      "bytes": 11236,
+      "bytes": 14700,
       "format": "esm",
       "imports": [
         {
@@ -8040,7 +8045,7 @@
       ]
     },
     "src/state/snapshots.ts": {
-      "bytes": 36356,
+      "bytes": 36636,
       "format": "esm",
       "imports": [
         {
@@ -8172,7 +8177,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 57879,
+      "bytes": 58119,
       "format": "esm",
       "imports": [
         {
@@ -8538,7 +8543,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1624103,
+      "bytes": 1630265,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -9508,7 +9513,7 @@
           "bytesInOutput": 2258
         },
         "src/contracts/durable-document.ts": {
-          "bytesInOutput": 1203
+          "bytesInOutput": 1982
         },
         "src/contracts/durable-gate.ts": {
           "bytesInOutput": 12351
@@ -9535,7 +9540,7 @@
           "bytesInOutput": 531
         },
         "src/contracts/durable.ts": {
-          "bytesInOutput": 31452
+          "bytesInOutput": 32183
         },
         "src/contracts/errors.ts": {
           "bytesInOutput": 15915
@@ -9631,7 +9636,7 @@
           "bytesInOutput": 5017
         },
         "src/local/build-request.ts": {
-          "bytesInOutput": 18957
+          "bytesInOutput": 19086
         },
         "src/local/call-envelope.ts": {
           "bytesInOutput": 4571
@@ -9676,7 +9681,7 @@
           "bytesInOutput": 5022
         },
         "src/state/document-artifact.ts": {
-          "bytesInOutput": 4051
+          "bytesInOutput": 5798
         },
         "src/state/evidence-results.ts": {
           "bytesInOutput": 6159
@@ -9700,7 +9705,7 @@
           "bytesInOutput": 0
         },
         "src/state/implementation-manifest.ts": {
-          "bytesInOutput": 33592
+          "bytesInOutput": 34512
         },
         "src/state/initialization.ts": {
           "bytesInOutput": 9055
@@ -9721,10 +9726,10 @@
           "bytesInOutput": 8763
         },
         "src/state/phase-documents.ts": {
-          "bytesInOutput": 4246
+          "bytesInOutput": 4683
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 5872
+          "bytesInOutput": 7090
         },
         "src/state/production.ts": {
           "bytesInOutput": 12475
@@ -9754,7 +9759,7 @@
           "bytesInOutput": 1353
         },
         "src/state/status.ts": {
-          "bytesInOutput": 38129
+          "bytesInOutput": 38330
         },
         "src/state/transitions.ts": {
           "bytesInOutput": 982
@@ -9765,7 +9770,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2467569,
+      "bytes": 2480340,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -10726,7 +10731,7 @@
           "bytesInOutput": 3275
         },
         "src/contracts/durable-document.ts": {
-          "bytesInOutput": 1066
+          "bytesInOutput": 1845
         },
         "src/contracts/durable-gate.ts": {
           "bytesInOutput": 12400
@@ -10753,7 +10758,7 @@
           "bytesInOutput": 531
         },
         "src/contracts/durable.ts": {
-          "bytesInOutput": 31467
+          "bytesInOutput": 32198
         },
         "src/contracts/errors.ts": {
           "bytesInOutput": 17560
@@ -10801,7 +10806,7 @@
           "bytesInOutput": 3595
         },
         "src/contracts/schemas/v1/document-artifact.schema.json": {
-          "bytesInOutput": 2369
+          "bytesInOutput": 3208
         },
         "src/contracts/schemas/v1/durable-primitives.schema.json": {
           "bytesInOutput": 26279
@@ -10903,7 +10908,7 @@
           "bytesInOutput": 2638
         },
         "src/mcp/handlers/counter-review.ts": {
-          "bytesInOutput": 13196
+          "bytesInOutput": 13981
         },
         "src/mcp/handlers/errors.ts": {
           "bytesInOutput": 908
@@ -10921,10 +10926,10 @@
           "bytesInOutput": 2447
         },
         "src/mcp/handlers/state-results.ts": {
-          "bytesInOutput": 10505
+          "bytesInOutput": 12288
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 12977
+          "bytesInOutput": 13223
         },
         "src/mcp/handlers/waiver.ts": {
           "bytesInOutput": 5673
@@ -10969,7 +10974,7 @@
           "bytesInOutput": 658
         },
         "src/review/pinned-context.ts": {
-          "bytesInOutput": 18694
+          "bytesInOutput": 18720
         },
         "src/review/rubrics.ts": {
           "bytesInOutput": 10588
@@ -10984,7 +10989,7 @@
           "bytesInOutput": 3362
         },
         "src/state/evidence-results.ts": {
-          "bytesInOutput": 14948
+          "bytesInOutput": 15350
         },
         "src/state/fingerprint-readers.ts": {
           "bytesInOutput": 3960
@@ -11008,7 +11013,7 @@
           "bytesInOutput": 55414
         },
         "src/state/implementation-manifest.ts": {
-          "bytesInOutput": 19116
+          "bytesInOutput": 20036
         },
         "src/state/initialization.ts": {
           "bytesInOutput": 21858
@@ -11025,11 +11030,14 @@
         "src/state/lock.ts": {
           "bytesInOutput": 2311
         },
+        "src/state/phase-documents.ts": {
+          "bytesInOutput": 3601
+        },
         "src/state/planned-final-phase.ts": {
           "bytesInOutput": 3015
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 7611
+          "bytesInOutput": 9958
         },
         "src/state/production.ts": {
           "bytesInOutput": 12467
@@ -11044,7 +11052,7 @@
           "bytesInOutput": 4541
         },
         "src/state/snapshots.ts": {
-          "bytesInOutput": 26042
+          "bytesInOutput": 26321
         },
         "src/state/staged-requests.ts": {
           "bytesInOutput": 3568

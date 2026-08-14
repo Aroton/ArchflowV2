@@ -170,6 +170,9 @@ async function composeProduce(
       phase_instance: state.phase_instance,
       step: "produce",
       document_path: document.document_path ?? defaults.document_path,
+      ...(defaults.additional_document_paths === undefined
+        ? {}
+        : { additional_document_paths: defaults.additional_document_paths }),
       declared_inputs: document.declared_inputs ?? defaults.declared_inputs,
       input_fingerprint: state.input_fingerprint,
     } as unknown as DocumentArtifactInput);

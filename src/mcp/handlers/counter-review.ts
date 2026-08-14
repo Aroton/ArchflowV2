@@ -36,10 +36,12 @@ import {
 } from "../../state/evidence-results.js";
 import { loadAuthenticatedGateApproval } from "../../state/gates.js";
 import {
-  expectedProduceUpstreamBindings,
   loadCurrentProduceSubject,
   loadProduceUpstreamSubject,
+  produceProjectionSetDigest,
+  produceUpstreamBindingsForSubject,
   readProduceProjection,
+  readProduceProjectionSet,
   renderProduceReviewMaterial,
   type CurrentProduceSubject,
   type ProduceProjection,
@@ -115,18 +117,27 @@ async function deriveApprovedUpstreams(
   services: ProductionServices,
   toolName: "archflow_counter_review",
   durable: TaskStateV1,
+  subject: CurrentProduceSubject,
 ): Promise<ProjectResult<readonly AdjudicationUpstreamInput[]>> {
   const derived: AdjudicationUpstreamInput[] = [];
-  for (const binding of expectedProduceUpstreamBindings(durable)) {
+  const seenOwners = new Set<string>();
+  for (const binding of produceUpstreamBindingsForSubject(durable, subject.artifact)) {
     const upstream = await loadProduceUpstreamSubject(services.dependencies, services.authority, durable, binding);
     if (!upstream.ok) return upstream;
-    const upstreamProjection = await readProduceProjection(
+    if (seenOwners.has(upstream.value.artifact_digest)) continue;
+    const upstreamProjections = await readProduceProjectionSet(
       services.runner, services.authority, upstream.value, binding.path,
     );
-    if (!upstreamProjection.ok) return upstreamProjection;
+    if (!upstreamProjections.ok) return upstreamProjections;
     let text: string;
     try {
-      text = new TextDecoder("utf-8", { fatal: true }).decode(upstreamProjection.value.bytes);
+      text = "imported_projection" in upstream.value
+        ? new TextDecoder("utf-8", { fatal: true }).decode(upstreamProjections.value[0]!.bytes)
+        : renderProduceReviewMaterial(
+          upstream.value,
+          upstreamProjections.value.find((projection) => projection.path === binding.path)!,
+          upstreamProjections.value,
+        );
     } catch {
       return fail(createProjectError("CONTRACT_INVALID", {
         tool: toolName, issue_code: "adjudication-upstream-not-utf8",
@@ -161,8 +172,9 @@ async function deriveApprovedUpstreams(
       );
       if (!authenticated.ok) return authenticated;
       const request = authenticated.value.request;
+      const ownerKind = decodePhaseInstance(upstream.value.artifact.phase_instance).kind;
       if ((request.kind === "artifact-approval" || request.kind === "design-approval") &&
-          request.context.artifact_kind === binding.artifact_kind) {
+          request.context.artifact_kind === ownerKind) {
         approved = true;
         break;
       }
@@ -172,6 +184,7 @@ async function deriveApprovedUpstreams(
         phase_instance: durable.phase_instance, issue_code: "upstream-approval-missing",
       }));
     }
+    seenOwners.add(upstreamDigest);
     derived.push(Object.freeze({ upstream_digest: upstreamDigest, artifact: text }));
   }
   derived.sort((left, right) => left.upstream_digest.localeCompare(right.upstream_digest));
@@ -222,11 +235,11 @@ async function reobserveProjectionDigest(
   if (retained.value.artifact_digest !== expectedArtifactDigest) return fail(createProjectError("STATE_INVALID", {
     phase_instance: phaseInstance, issue_code: "counter-review-subject-not-current",
   }));
-  const observed = await readProduceProjection(
+  const observed = await readProduceProjectionSet(
     services.runner, services.authority, retained.value, artifactPath,
   );
   return observed.ok
-    ? Object.freeze({ schema_version: "1" as const, ok: true as const, value: observed.value.digest })
+    ? Object.freeze({ schema_version: "1" as const, ok: true as const, value: produceProjectionSetDigest(observed.value) })
     : observed;
 }
 
@@ -258,9 +271,13 @@ export async function handleCounterReview(
       services.runner, services.authority, produce.value, call.input.artifact_path,
     );
     if (!projection.ok) return projection;
+    const projections = await readProduceProjectionSet(
+      services.runner, services.authority, produce.value, call.input.artifact_path,
+    );
+    if (!projections.ok) return projections;
     let artifact: string;
     try {
-      artifact = renderProduceReviewMaterial(produce.value, projection.value);
+      artifact = renderProduceReviewMaterial(produce.value, projection.value, projections.value);
     } catch {
       return fail(createProjectError("CONTRACT_INVALID", {
         tool: call.name,
@@ -306,7 +323,7 @@ export async function handleCounterReview(
 
     let constitutionPlan: ConstitutionReviewPlan | undefined;
     if (activeRules) {
-      const upstreams = await deriveApprovedUpstreams(services, call.name, state.value);
+      const upstreams = await deriveApprovedUpstreams(services, call.name, state.value, produce.value);
       if (!upstreams.ok) return upstreams;
       const approvedUpstreamDigests = requireApprovedUpstreamDigests(
         state.value.approvals,
@@ -392,7 +409,7 @@ export async function handleCounterReview(
           result_id: resultId,
         },
       },
-      projection_digest: projection.value.digest,
+      projection_digest: produceProjectionSetDigest(projections.value),
       ...(constitutionPlan === undefined ? {} : { constitution: constitutionPlan }),
     }).catch((error: unknown) => {
       const overflow = envelopeOverflowError(error, produce.value);

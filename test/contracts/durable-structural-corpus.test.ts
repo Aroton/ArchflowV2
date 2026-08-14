@@ -264,6 +264,24 @@ const taskStateRevisionCollections: JsonObject = {
   human_revision_history: [revisionRecord("gate-a", "1"), revisionRecord("gate-b", "2")],
 };
 
+const documentArtifactAdditionalDocuments: JsonObject = {
+  ...documentArtifact.sample,
+  additional_documents: [
+    {
+      document_path: "design.md",
+      byte_count: 1024,
+      content_digest: "a".repeat(64),
+      projection_target: ".archflow/tasks/demo/design.md",
+    },
+    {
+      document_path: "prd.md",
+      byte_count: 2048,
+      content_digest: "b".repeat(64),
+      projection_target: ".archflow/tasks/demo/prd.md",
+    },
+  ],
+};
+
 /**
  * Every declared set in the phase, with the shape whose fixture carries it. This list is asserted
  * below to be exactly the set of arrays these schemas declare — the design is explicit that
@@ -280,6 +298,7 @@ const DECLARED_SETS: readonly { readonly shape: string; readonly path: string; r
   { shape: "legacy-import-initialization", path: "mapping" },
   { shape: "legacy-import-initialization", path: "staged_payload_refs" },
   { shape: "document-artifact", path: "declared_inputs" },
+  { shape: "document-artifact", path: "additional_documents", base: documentArtifactAdditionalDocuments },
   { shape: "implementation-output", path: "outputs" },
   { shape: "implementation-output", path: "parent_documents" },
   { shape: "implementation-output", path: "restore_targets" },
@@ -359,6 +378,7 @@ describe("no array in this phase is exempt from set ordering", () => {
     expect(collectArraySubschemas().map((entry) => entry.location).sort()).toStrictEqual(
       [
         "durable-primitives/$defs/snapshotAccounting/properties/counted_entries",
+        "document-artifact/properties/additional_documents",
         "document-artifact/properties/declared_inputs",
         "implementation-output/$defs/undeclaredChangeReport/properties/undeclared_paths",
         "implementation-output/properties/declared_inputs",

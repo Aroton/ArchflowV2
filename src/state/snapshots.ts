@@ -170,7 +170,7 @@ export function prepareSnapshot<M extends SnapshotManifest>(input: Readonly<{
   return ok(Object.freeze({ manifest: document, result_digest: document.digest, payloads: Object.freeze(payloads) }));
 }
 
-/** Adds the path-aware Git identity proof required for a document projection. */
+/** Adds the path-aware Git identity proof required for every document projection. */
 export async function prepareDocumentSnapshot(input: Readonly<{
   runner: GitRunner;
   manifest: ResultManifestV1;
@@ -191,14 +191,20 @@ export async function prepareDocumentSnapshot(input: Readonly<{
   if (!prepared.ok) return prepared;
   const manifest = prepared.value.manifest.value;
   if (manifest.source_artifact.artifact_kind !== "document") throw new TypeError("document snapshot requires a document artifact");
-  const output = manifest.outputs[0];
-  const payload = prepared.value.payloads[0];
-  if (manifest.outputs.length !== 1 || prepared.value.payloads.length !== 1 || output === undefined || output.operation === "delete" || payload === undefined) {
+  const expectedCount = 1 + (manifest.source_artifact.additional_documents?.length ?? 0);
+  if (manifest.outputs.length !== expectedCount || prepared.value.payloads.length !== expectedCount) {
     return snapshotInvalid(manifest.snapshot_digest, "document-output-shape-mismatch");
   }
-  const identity = await hashGitBlobIdentity(input.runner, payload.bytes, manifest.source_artifact.projection_target);
-  if (output.after.oid !== identity.oid || output.after.size_bytes !== identity.size_bytes) {
-    return snapshotInvalid(manifest.snapshot_digest, "document-git-identity-mismatch");
+  const payloads = new Map(prepared.value.payloads.map((payload) => [payload.path, payload]));
+  for (const output of manifest.outputs) {
+    const payload = payloads.get(output.path);
+    if (output.operation === "delete" || payload === undefined) {
+      return snapshotInvalid(manifest.snapshot_digest, "document-output-shape-mismatch");
+    }
+    const identity = await hashGitBlobIdentity(input.runner, payload.bytes, output.path);
+    if (output.after.oid !== identity.oid || output.after.size_bytes !== identity.size_bytes) {
+      return snapshotInvalid(manifest.snapshot_digest, "document-git-identity-mismatch");
+    }
   }
   return prepared;
 }

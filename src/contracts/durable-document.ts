@@ -71,6 +71,13 @@ export type DocumentArtifactV1 = {
   /** REPOSITORY frame (D3). */
   readonly projection_target: RepositoryPathClaim;
   /**
+   * Other task documents deliberately co-produced with the primary document. The collection is
+   * optional for backwards compatibility and, when present, is a set sorted by `document_path`.
+   * Retaining these identities on the source artifact keeps every revision bound to the complete
+   * document generation instead of silently falling back to an older parent projection.
+   */
+  readonly additional_documents?: readonly AdditionalDocumentArtifactV1[];
+  /**
    * Declares this document as an editorial revision of the produce result it replaces: the
    * predecessor's retained artifact digest and input fingerprint, plus the retained result digest
    * of the triage whose only accepted findings were `accepted-editorial`. The link is what lets
@@ -79,6 +86,22 @@ export type DocumentArtifactV1 = {
    */
   readonly editorial_predecessor?: EditorialPredecessorRef;
 };
+
+export type AdditionalDocumentArtifactV1 = {
+  /** TASK-relative frame. */
+  readonly document_path: TaskPathClaim;
+  readonly byte_count: SafeInteger;
+  readonly content_digest: Sha256Digest;
+  /** REPOSITORY-relative projection owned by this result. */
+  readonly projection_target: RepositoryPathClaim;
+};
+
+export const additionalDocumentArtifactV1Schema = z.object({
+  document_path: taskPathClaimV1Schema,
+  byte_count: safeIntegerV1Schema,
+  content_digest: sha256DigestV1Schema,
+  projection_target: repositoryPathClaimV1Schema,
+}).strict() as unknown as z.ZodType<AdditionalDocumentArtifactV1>;
 
 export type EditorialPredecessorRef = {
   readonly subject_digest: Sha256Digest;
@@ -111,8 +134,15 @@ export const documentArtifactV1Schema = z.object({
   input_fingerprint: sha256DigestV1Schema,
   snapshot_digest: sha256DigestV1Schema,
   projection_target: repositoryPathClaimV1Schema,
+  additional_documents: z.array(additionalDocumentArtifactV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("document_path")), "additional_documents must be sorted by document_path with no duplicates")
+    .optional(),
   editorial_predecessor: editorialPredecessorRefV1Schema.optional(),
-}).strict() as unknown as z.ZodType<DocumentArtifactV1>;
+}).strict().superRefine((artifact, context) => {
+  if (artifact.additional_documents?.some((document) => document.document_path === artifact.document_path)) {
+    context.addIssue({ code: "custom", message: "additional_documents must not repeat document_path", path: ["additional_documents"] });
+  }
+}) as unknown as z.ZodType<DocumentArtifactV1>;
 
 /** Throws, per the contract-layer convention. */
 export function parseDocumentArtifact(value: unknown): DocumentArtifactV1 {

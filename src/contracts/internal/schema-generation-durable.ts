@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { documentArtifactV1Schema } from "../durable-document.js";
+import { additionalDocumentArtifactV1Schema, documentArtifactV1Schema } from "../durable-document.js";
 import { implementationOutputV1Schema, parentDocumentRefV1Schema, undeclaredChangeReportV1Schema, verificationEvidenceV1Schema } from "../durable-implementation-output.js";
 import { intentReceiptV1Schema, plainJsonV1Schema } from "../durable-intent.js";
 import { legacyImportInitializationV1Schema, legacyMappingEntryV1Schema, stagedPayloadRefV1Schema } from "../durable-legacy-import.js";
@@ -132,6 +132,7 @@ export const durableSchemaGroup: SchemaGenerationGroup = {
       file: "document-artifact",
       id: SCHEMA_IDS.documentArtifact,
       root: documentArtifactV1Schema,
+      defs: { additionalDocumentArtifact: additionalDocumentArtifactV1Schema },
       migrated: true,
     },
     {

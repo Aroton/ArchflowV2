@@ -110,6 +110,7 @@ export function phaseReviewPaths(phaseInstance: PhaseInstanceId): PhaseReviewPat
 
 export type PhaseDocumentDefaults = Readonly<{
   document_path: string;
+  additional_document_paths?: readonly string[];
   declared_inputs: readonly Readonly<{ input_id: string; path: string }>[];
 }>;
 
@@ -130,17 +131,27 @@ export function phaseDocumentDefaults(
       document_path: "prd.md",
       declared_inputs: [{ input_id: "user-ask", path: task("ask.md") }],
     };
-    case "design": return {
-      document_path: "design.md",
-      declared_inputs: [{ input_id: "prd", path: task("prd.md") }],
-    };
-    case "phase-design": return {
-      document_path: `phases/${phase.phase}/design.md`,
-      declared_inputs: [
-        { input_id: "design", path: task("design.md") },
-        { input_id: "prd", path: task("prd.md") },
-      ],
-    };
+    case "design":
+    case "phase-design": {
+      const taskPrefix = task("");
+      const additionalDocumentPaths = phaseStatusResources(taskId, phaseInstance)
+        .filter((resource) => resource.access === "read-write" && resource.path.startsWith(taskPrefix))
+        .map((resource) => resource.path.slice(taskPrefix.length))
+        .sort();
+      if (phase.kind === "design") return {
+        document_path: "design.md",
+        additional_document_paths: additionalDocumentPaths,
+        declared_inputs: [{ input_id: "prd", path: task("prd.md") }],
+      };
+      return {
+        document_path: `phases/${phase.phase}/design.md`,
+        additional_document_paths: additionalDocumentPaths,
+        declared_inputs: [
+          { input_id: "design", path: task("design.md") },
+          { input_id: "prd", path: task("prd.md") },
+        ],
+      };
+    }
     case "phase-impl": return undefined;
   }
 }

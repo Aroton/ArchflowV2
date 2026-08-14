@@ -129,11 +129,76 @@ describe("state result caller-data classification", () => {
       mocks.deriveDeclaredSnapshotDigest.mockReturnValue(D("9"));
       return prepareDocumentResult({ services, artifact: documentArtifact({ content_digest: sha256Bytes(bytes) }), result_id: "result-1" as never, retained_task_bytes: 0 as never, measured_at_revision: 1 as never, scanner });
     }],
+    ["document-additional-documents-unauthorized", async () => {
+      return prepareDocumentResult({
+        services,
+        artifact: documentArtifact({
+          phase_instance: "phase-design-15",
+          additional_documents: [{
+            document_path: "phases/14/design.md",
+            byte_count: 5,
+            content_digest: D("7"),
+            projection_target: ".archflow/tasks/task-1/phases/14/design.md",
+          }],
+        } as never),
+        result_id: "result-1" as never,
+        retained_task_bytes: 0 as never,
+        measured_at_revision: 1 as never,
+        scanner,
+      });
+    }],
+    ["document-projection-target-duplicate", async () => {
+      return prepareDocumentResult({
+        services,
+        artifact: documentArtifact({
+          phase_instance: "phase-design-15",
+          additional_documents: [
+            {
+              document_path: "design.md",
+              byte_count: 5,
+              content_digest: D("7"),
+              projection_target: documentTarget.repositoryRelative,
+            },
+            {
+              document_path: "prd.md",
+              byte_count: 5,
+              content_digest: D("8"),
+              projection_target: documentTarget.repositoryRelative,
+            },
+          ],
+        } as never),
+        result_id: "result-1" as never,
+        retained_task_bytes: 0 as never,
+        measured_at_revision: 1 as never,
+        scanner,
+      });
+    }],
   ])("returns CONTRACT_INVALID/%s", async (issueCode, run) => {
     const result = await run();
     // The snapshot case supplies a mismatching digest through the mocked authority; all earlier
     // cases stop before projection preparation.
     expectIssue(result, issueCode);
+  });
+
+  it("accepts an omitted companion set for retained singleton compatibility", async () => {
+    const bytes = new TextEncoder().encode("notes");
+    mocks.captureProjectionTarget.mockResolvedValue({
+      rollback: { state: "present", file_type: "regular", bytes },
+      observation: {},
+    });
+    mocks.deriveDeclaredSnapshotDigest.mockReturnValue(D("9"));
+    const result = await prepareDocumentResult({
+      services,
+      artifact: documentArtifact({
+        phase_instance: "phase-design-15" as never,
+        content_digest: sha256Bytes(bytes),
+      }),
+      result_id: "result-1" as never,
+      retained_task_bytes: 0 as never,
+      measured_at_revision: 1 as never,
+      scanner,
+    });
+    expectIssue(result, "document-snapshot-digest-mismatch");
   });
 
   it("classifies unavailable implementation after-image bytes", async () => {

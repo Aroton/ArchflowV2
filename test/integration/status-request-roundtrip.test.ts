@@ -12,8 +12,9 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
+import { canonicalDocument, canonicalJsonDigest } from "../../src/contracts/canonical.js";
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
+import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parseSafeCode, parseTaskSlug } from "../../src/contracts/evidence.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import type { ReviewEvidence } from "../../src/contracts/review.js";
@@ -246,7 +247,7 @@ async function completeDocumentPhase(
   label: string,
   artifactPath: string,
   contents: string,
-): Promise<void> {
+): Promise<CallEnvelope> {
   writeFileSync(join(root, ".archflow", "tasks", task, artifactPath), contents);
   const produced = await h.buildRequest({ intent_id: `${label}-produce`, kind: "produce" });
   await h.invoke(produced.request.tool, produced.staged?.reference ?? produced.request.input);
@@ -273,6 +274,7 @@ async function completeDocumentPhase(
     summary: `${label} is ready for approval.`,
   });
   await approveComposedGate(root, h, gate);
+  return produced;
 }
 
 describe("status-derived requests execute against the real handlers", () => {
@@ -569,6 +571,201 @@ describe("status-derived requests execute against the real handlers", () => {
       expect(durable.planned_final_phase).toBe(1);
       expect(await h.buildRequestError({ intent_id: "handoff-repeat", kind: "advance" }))
         .toBe("TRANSITION_INVALID");
+    } finally {
+      stub.restore();
+    }
+  }, TIMEOUT);
+
+  it("reviews, approves, and commits a later phase design with its revised parent architecture", async () => {
+    const fixture = await repository();
+    const h = harness(fixture.root, "claude");
+    const stub = installReviewerStub(fixture.root);
+    const taskRoot = join(fixture.root, ".archflow", "tasks", task);
+    const statePath = join(taskRoot, "state.json");
+    const parentDesignPath = join(taskRoot, "design.md");
+    const prdPath = join(taskRoot, "prd.md");
+    try {
+      const initialized = await h.buildRequest({ intent_id: "compound-initialize", kind: "initialize" });
+      await h.invoke(initialized.request.tool, initialized.request.input);
+      writeFileSync(join(taskRoot, "ask.md"), "Allow later phase design to correct parent architecture.\n");
+
+      await completeDocumentPhase(
+        fixture.root,
+        h,
+        "compound-prd",
+        "prd.md",
+        "# PRD\n\nLater planning may refine the governing documents.\n",
+      );
+      const prdAdvance = await h.buildRequest({ intent_id: "compound-prd-advance", kind: "advance" });
+      await h.invoke(prdAdvance.request.tool, prdAdvance.staged?.reference ?? prdAdvance.request.input);
+
+      writeFileSync(
+        prdPath,
+        "# PRD\n\nTask design clarified that governing documents may be refined by later planning.\n",
+      );
+      const taskDesignProduce = await completeDocumentPhase(
+        fixture.root,
+        h,
+        "compound-design",
+        "design.md",
+        "# Design\n\nInitial architecture.\n\n### Phase 1: First\n\n### Phase 2: Second\n\n### Phase 3: Third\n\n### Phase 4: Refine architecture\n",
+      );
+      expect((taskDesignProduce.request.input as {
+        artifact: { document_path: string; additional_documents?: readonly { document_path: string }[] };
+      }).artifact).toMatchObject({
+        document_path: "design.md",
+        additional_documents: [{ document_path: "prd.md" }],
+      });
+      const designReady = await h.status();
+      expect(designReady).toMatchObject({
+        reconciliation: { classification: "consistent", findings: [] },
+        next_action: { code: "commit-artifacts" },
+      });
+      git(fixture.root, "add", "-A", "--", designReady.next_action.commit_path!);
+      git(
+        fixture.root,
+        "commit",
+        "-q",
+        "-m",
+        designReady.next_action.commit_message!,
+        "--",
+        designReady.next_action.commit_path!,
+      );
+      const designAdvance = await h.buildRequest({ intent_id: "compound-design-advance", kind: "advance" });
+      await h.invoke(designAdvance.request.tool, designAdvance.staged?.reference ?? designAdvance.request.input);
+
+      // Keep this journey focused on compound document authority rather than repeating three
+      // implementation lifecycles. The fixture starts the public composer at a valid later-phase
+      // produce position and commits representative prior phase history as its clean baseline.
+      const durable = JSON.parse(readFileSync(statePath, "utf8")) as TaskStateV1;
+      const { last_transition: _lastTransition, ...withoutTransition } = durable;
+      writeFileSync(statePath, canonicalDocument({
+        ...withoutTransition,
+        phase_instance: "phase-design-4",
+        step: "produce",
+        status: "running",
+        attempt: 1,
+        planned_final_phase: 4,
+      } as TaskStateV1).bytes);
+      const priorPhaseContents = new Map<string, string>();
+      for (const phaseNumber of [1, 2, 3]) {
+        const relative = `phases/${phaseNumber}/design.md`;
+        const contents = `# Phase ${phaseNumber}\n\nApproved historical phase design.\n`;
+        mkdirSync(join(taskRoot, "phases", String(phaseNumber)), { recursive: true });
+        writeFileSync(join(taskRoot, relative), contents);
+        priorPhaseContents.set(relative, contents);
+      }
+      mkdirSync(join(taskRoot, "phases", "4"), { recursive: true });
+      git(fixture.root, "add", "-A", "--", `.archflow/tasks/${task}`);
+      git(fixture.root, "commit", "-q", "-m", "fixture: enter later phase design");
+      const compoundBaseline = git(fixture.root, "rev-parse", "HEAD");
+
+      const prdBefore = readFileSync(prdPath, "utf8");
+      writeFileSync(parentDesignPath, "# Design\n\nArchitecture corrected during Phase 4 planning.\n\n### Phase 1: First\n\n### Phase 2: Second\n\n### Phase 3: Third\n\n### Phase 4: Refine architecture\n");
+      writeFileSync(join(taskRoot, "phases", "4", "design.md"), "# Phase 4\n\nImplement the corrected architecture.\n");
+      const firstProduce = await h.buildRequest({ intent_id: "compound-phase-produce-1", kind: "produce" });
+      const firstArtifact = (firstProduce.request.input as {
+        artifact: {
+          document_path: string;
+          additional_documents?: readonly { document_path: string; content_digest: string }[];
+        };
+      }).artifact;
+      expect(firstArtifact.document_path).toBe("phases/4/design.md");
+      expect(firstArtifact.additional_documents?.map((document) => document.document_path)).toEqual([
+        "design.md",
+        "prd.md",
+      ]);
+      await h.invoke(firstProduce.request.tool, firstProduce.staged?.reference ?? firstProduce.request.input);
+      const firstProduced = await h.status();
+      expect(firstProduced).toMatchObject({
+        phase_instance: "phase-design-4",
+        reconciliation: { classification: "consistent", findings: [] },
+        next_action: { code: "run-step", step: "counter_review" },
+      });
+
+      const firstCounterEntry = await h.buildRequest({
+        intent_id: "compound-phase-counter-entry-1", kind: "running", step: "counter_review",
+      });
+      await h.invoke(firstCounterEntry.request.tool, firstCounterEntry.staged?.reference ?? firstCounterEntry.request.input);
+      const firstCounter = await h.buildRequest({ intent_id: "compound-phase-counter-1", kind: "counter-review" });
+      await h.invoke(firstCounter.request.tool, firstCounter.staged?.reference ?? firstCounter.request.input);
+
+      // Author-initiated re-entry changes only the phase plan. Both parent projections must
+      // nevertheless remain in the new result instead of falling back to their older owners.
+      const reentry = await h.buildRequest({
+        intent_id: "compound-phase-reentry", kind: "running", step: "produce",
+      });
+      await h.invoke(reentry.request.tool, reentry.staged?.reference ?? reentry.request.input);
+      writeFileSync(join(taskRoot, "phases", "4", "design.md"), "# Phase 4\n\nImplement and verify the corrected architecture.\n");
+      const revisedProduce = await h.buildRequest({ intent_id: "compound-phase-produce-2", kind: "produce" });
+      const revisedArtifact = (revisedProduce.request.input as {
+        artifact: { additional_documents?: readonly { document_path: string; content_digest: string }[] };
+      }).artifact;
+      expect(revisedArtifact.additional_documents).toEqual(firstArtifact.additional_documents);
+      await h.invoke(revisedProduce.request.tool, revisedProduce.staged?.reference ?? revisedProduce.request.input);
+      const revised = await h.status();
+      expect(revised.reconciliation).toMatchObject({ classification: "consistent", findings: [] });
+      expect(revised.evidence?.assessment).toMatchObject({ next: "counter_review", stale: ["counter_review"] });
+
+      const counterEntry = await h.buildRequest({
+        intent_id: "compound-phase-counter-entry-2", kind: "running", step: "counter_review",
+      });
+      await h.invoke(counterEntry.request.tool, counterEntry.staged?.reference ?? counterEntry.request.input);
+      const counter = await h.buildRequest({ intent_id: "compound-phase-counter-2", kind: "counter-review" });
+      await h.invoke(counter.request.tool, counter.staged?.reference ?? counter.request.input);
+      const triageEntry = await h.buildRequest({
+        intent_id: "compound-phase-triage-entry", kind: "running", step: "triage",
+      });
+      await h.invoke(triageEntry.request.tool, triageEntry.staged?.reference ?? triageEntry.request.input);
+      const triage = await h.buildRequest({
+        intent_id: "compound-phase-triage",
+        kind: "triage",
+        dispositions: [{
+          finding_id: "requirement-untestable",
+          disposition: "rejected",
+          rationale: "The phase design names the implementation and verification outcome.",
+          evidence: "phases/4/design.md names both implementation and verification.",
+        }],
+      });
+      await h.invoke(triage.request.tool, triage.staged?.reference ?? triage.request.input);
+      const gate = await h.buildRequest({
+        intent_id: "compound-phase-gate", kind: "gate", summary: "Approve Phase 4 and its corrected architecture.",
+      });
+      await approveComposedGate(fixture.root, h, gate);
+
+      const approved = await h.status();
+      expect(approved).toMatchObject({
+        phase_instance: "phase-design-4",
+        reconciliation: { classification: "consistent", findings: [] },
+        next_action: { code: "commit-artifacts", human_required: false },
+      });
+      git(fixture.root, "add", "-A", "--", approved.next_action.commit_path!);
+      git(
+        fixture.root,
+        "commit",
+        "-q",
+        "-m",
+        approved.next_action.commit_message!,
+        "--",
+        approved.next_action.commit_path!,
+      );
+      const committed = await h.status();
+      expect(committed.next_action).toMatchObject({
+        code: "advance-phase",
+        target_phase_instance: "phase-impl-4",
+      });
+
+      const committedPaths = git(fixture.root, "diff-tree", "--no-commit-id", "--name-only", "-r", compoundBaseline, "HEAD")
+        .split("\n").filter(Boolean);
+      expect(committedPaths).toEqual(expect.arrayContaining([
+        `.archflow/tasks/${task}/design.md`,
+        `.archflow/tasks/${task}/phases/4/design.md`,
+      ]));
+      expect(readFileSync(prdPath, "utf8")).toBe(prdBefore);
+      for (const [relative, contents] of priorPhaseContents) {
+        expect(readFileSync(join(taskRoot, relative), "utf8")).toBe(contents);
+        expect(committedPaths).not.toContain(`.archflow/tasks/${task}/${relative}`);
+      }
     } finally {
       stub.restore();
     }

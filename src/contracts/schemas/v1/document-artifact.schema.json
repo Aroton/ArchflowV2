@@ -1,6 +1,32 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:archflow:schema:v1:document-artifact",
+  "$defs": {
+    "additionalDocumentArtifact": {
+      "type": "object",
+      "properties": {
+        "document_path": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
+        },
+        "byte_count": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+        },
+        "content_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "projection_target": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+        }
+      },
+      "required": [
+        "document_path",
+        "byte_count",
+        "content_digest",
+        "projection_target"
+      ],
+      "additionalProperties": false
+    }
+  },
   "type": "object",
   "properties": {
     "schema_version": {
@@ -53,6 +79,12 @@
     },
     "projection_target": {
       "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+    },
+    "additional_documents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/additionalDocumentArtifact"
+      }
     },
     "editorial_predecessor": {
       "type": "object",

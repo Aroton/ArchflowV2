@@ -57,8 +57,9 @@ async function fixture(): Promise<Readonly<{
   writeFileSync(join(root, ".gitattributes"), ".archflow/** -text merge=binary\n");
   writeFileSync(join(root, "source.txt"), "source bytes\n");
   writeFileSync(join(root, ".archflow", "tasks", "task-1", "prd.md"), "prd input\n");
+  writeFileSync(join(root, ".archflow", "tasks", "task-1", "design.md"), "architecture v2\n");
   writeFileSync(join(root, ".archflow", "tasks", "task-1", "phases", "1", "design.md"), "design v1\n");
-  execFileSync("git", ["add", "--", ".gitattributes", "source.txt", ".archflow/tasks/task-1/prd.md", ".archflow/tasks/task-1/phases/1/design.md"], { cwd: root, env });
+  execFileSync("git", ["add", "--", ".gitattributes", "source.txt", ".archflow/tasks/task-1/prd.md", ".archflow/tasks/task-1/design.md", ".archflow/tasks/task-1/phases/1/design.md"], { cwd: root, env });
   execFileSync("git", ["commit", "-q", "-m", "fixture"], { cwd: root, env });
 
   const taskId = parseTaskSlug("task-1");
@@ -159,6 +160,43 @@ describe("document artifact builder", () => {
         content_digest: sha256Bytes(new Uint8Array()),
       },
     });
+  });
+
+  it("binds sorted companion identities into the compound snapshot", async () => {
+    const built = await fixture();
+    const result = await buildDocumentArtifact(built.runner, built.authority, {
+      ...built.input,
+      additional_document_paths: [
+        parseTaskPathClaim("prd.md"),
+        parseTaskPathClaim("design.md"),
+      ],
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        additional_documents: [
+          {
+            document_path: "design.md",
+            byte_count: Buffer.byteLength("architecture v2\n"),
+            content_digest: sha256Bytes(Buffer.from("architecture v2\n")),
+            projection_target: ".archflow/tasks/task-1/design.md",
+          },
+          {
+            document_path: "prd.md",
+            byte_count: Buffer.byteLength("prd input\n"),
+            content_digest: sha256Bytes(Buffer.from("prd input\n")),
+            projection_target: ".archflow/tasks/task-1/prd.md",
+          },
+        ],
+      },
+    });
+    if (!result.ok) return;
+    const primaryOnly = await expectedSnapshot(
+      built.runner,
+      parseRepositoryPathClaim(".archflow/tasks/task-1/phases/1/design.md"),
+      Buffer.from("design v1\n"),
+    );
+    expect(result.value.snapshot_digest).not.toBe(primaryOnly);
   });
 
   it("rejects a task path outside the canonical document class", async () => {
