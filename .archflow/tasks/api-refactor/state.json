@@ -1,0 +1,140 @@
+{
+  "approvals": [
+    {
+      "decision_digest": "5ae6b3e8f3cc1fc5a39dc0d043e1042b4f703c873ba983924c30975f0a40ea4f",
+      "gate_id": "g-0f6ed94cc5bb4f7b19434439d76eb2a72331a4c68433b7d22570f8c74dc3a33e",
+      "gate_kind": "artifact-approval",
+      "resolved_at_revision": 23,
+      "subject_digest": "801652c7f12171429cc26bb6b599864818f4b0867225b00226f21631936b0153"
+    },
+    {
+      "decision_digest": "a68b0229cbc274d4f10d7c38d055eac44fef72dbc0b7ce47f4148bb231fcbf6f",
+      "gate_id": "g-fababfd5641059798b388b1818a2c2dcc0af9c20374a050b56c82837d30dca28",
+      "gate_kind": "constitution-review",
+      "resolved_at_revision": 21,
+      "subject_digest": "801652c7f12171429cc26bb6b599864818f4b0867225b00226f21631936b0153"
+    }
+  ],
+  "attempt": 2,
+  "authoritative_results": [
+    {
+      "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
+      "phase_instance": "prd",
+      "result_digest": "5eca91005bc5a99e482895bc845169061bb6c03843b509080e9c444fdb9333f6",
+      "result_id": "adjudication-result-93374a7d577b815f783f9ed26ea39802",
+      "step": "adjudicate"
+    },
+    {
+      "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
+      "phase_instance": "prd",
+      "result_digest": "fe41ebee2f5f2bcb311db29835293f8f89284916ec956b07ed08662a85d03bd1",
+      "result_id": "result-876a05ddb0c62ea022f8109856ac1425",
+      "step": "counter_review"
+    },
+    {
+      "input_fingerprint": "0494fce7f9c53cede4e8ebfce202735db0349b9449e60f7209fcbf2eb1565073",
+      "phase_instance": "prd",
+      "result_digest": "4441407d1e80a1e44cc1396c38c807db3db9363ebade06fadda2bc97927b454f",
+      "result_id": "state-result-b7f8e5fa77b3de69be88273296dce21a",
+      "step": "produce"
+    },
+    {
+      "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
+      "phase_instance": "prd",
+      "result_digest": "f78b5952773e55fa1064119c23b97438c4c46a6993bbde92b14a0ee2fe75a89a",
+      "result_id": "state-result-c0b22d99c0887ef2f188eb88fcc76f29",
+      "step": "triage"
+    }
+  ],
+  "config_digest": "493173957ba07913669e2970f822f501cace89fcbd42b68d0cf7b54185880c08",
+  "constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+  "human_revision_history": [
+    {
+      "classification": "significant",
+      "evidence": [
+        {
+          "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
+          "phase_instance": "prd",
+          "result_digest": "7076108bd66a2472430dc3119600297f6506617c06e7d519893f21694d98fcf2",
+          "result_id": "adjudication-result-93f382faac389f216b62e587599f5cda",
+          "step": "adjudicate"
+        },
+        {
+          "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
+          "phase_instance": "prd",
+          "result_digest": "e8666775d12b286954beb32d027429bedc632bf50bca108e0567e7ac42f88ee9",
+          "result_id": "result-7144890f2eb8256332a415c92c032e9f",
+          "step": "counter_review"
+        },
+        {
+          "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
+          "phase_instance": "prd",
+          "result_digest": "ee9549956988581c9a7f717e57518c319039aa138652594d932dcf74e3ea3fbe",
+          "result_id": "state-result-8e3f86e731037b89a44265af847d2740",
+          "step": "triage"
+        }
+      ],
+      "gate_id": "g-943f2b3a0f58a97b7773783b0eb72764faf77a2d3162ef1efb4c4b2d1a05d37a",
+      "gate_kind": "constitution-review",
+      "phase_instance": "prd",
+      "predecessor_input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
+      "predecessor_subject_digest": "a4b47f58b22c2e08ddf4f428e85d06bff01d1ecc5f1e4df82fea28babf04e55d",
+      "previous_attempt": 1,
+      "rationale": "The revision changes the workflow ownership model: it removes the proposed all-phases autonomous run, retains separate human kickoffs and public skills for PRD, design, each phase design, and each phase implementation, and confines near-total automation to the currently invoked phase-design or phase-implementation step. This changes public interfaces, authority boundaries, success criteria, and verification, so prior review evidence cannot be reused.",
+      "resulting_attempt": 1,
+      "resulting_result_digest": "8d3b05fa51c3e4617ac2d783dd5d39e3f8148f1f9b2eda3e222f5231ac09f1a3",
+      "resulting_subject_digest": "cfe47a11447ba96b95349e23189f7f354cd518496abb9c24f382f120b4f6f950"
+    }
+  ],
+  "initialization_digest": "30babbe4e47c17babce8db5b51f4774a68539757589276f7948c8f74ae62b908",
+  "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
+  "last_transition": {
+    "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
+    "intent_id": "gate-20260814T211615-0aa1",
+    "operation": "gate",
+    "outcome": {
+      "decision": {
+        "context_digest": "03096477ebcc02b146d4258ef3a5cda48613ec1aaba04af403e0a909f975888c",
+        "gate_id": "g-0f6ed94cc5bb4f7b19434439d76eb2a72331a4c68433b7d22570f8c74dc3a33e",
+        "human_provenance": {
+          "actor_class": "human",
+          "assurance": "declared-local-trace",
+          "channel": "archflow-local",
+          "decision_event_id": "1ed3d000-a1bb-4ff6-b7b6-6138a07ac5ad",
+          "helper_invocation_id": "7a685e47-8da2-4a47-9de6-931aa81121bf",
+          "recorded_at": "2026-08-14T21:17:36.054Z",
+          "schema_version": "1"
+        },
+        "kind": "artifact-approval",
+        "payload": {
+          "decision": "approve",
+          "reason": "approve"
+        },
+        "phase_instance": "prd",
+        "schema_version": "1",
+        "subject_digest": "801652c7f12171429cc26bb6b599864818f4b0867225b00226f21631936b0153",
+        "task_id": "api-refactor"
+      },
+      "kind": "artifact-approval",
+      "notes": "approve",
+      "revision": 23
+    },
+    "outcome_digest": "2e657c6a6b66b2ff4220c5980bdf7caa71119d2a35d6a5011a7e75d382b2fa43",
+    "prior_revision": 22,
+    "request_digest": "6888d35f89b0191df51b8b01427e7d735f86e8de1bd8f6c51706c1672f4bae1b",
+    "result_id": "g-0f6ed94cc5bb4f7b19434439d76eb2a72331a4c68433b7d22570f8c74dc3a33e",
+    "resulting_revision": 23,
+    "schema_version": "1",
+    "tool": "archflow_gate"
+  },
+  "phase_instance": "prd",
+  "policy_base_commit": "8dad5260e31368b45da85bad748704d9a80b9df3",
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "revision": 23,
+  "schema_version": "1",
+  "status": "succeeded",
+  "step": "triage",
+  "task_id": "api-refactor",
+  "waivers": [],
+  "workflow_digest": "3f5f7536f19219fbf4ade78aea07c93d22d03057ce2ed83d532e25a54a8aab9a"
+}

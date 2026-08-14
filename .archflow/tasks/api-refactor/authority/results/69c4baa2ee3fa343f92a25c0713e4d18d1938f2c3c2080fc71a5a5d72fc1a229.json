@@ -1,0 +1,76 @@
+{
+  "accounting": {
+    "counted_entries": [
+      {
+        "path": ".archflow/tasks/api-refactor/prd.md",
+        "storage": "raw-payload",
+        "stored_bytes": 32995
+      }
+    ],
+    "measured_at_revision": 1,
+    "result_byte_cap": 26214400,
+    "result_bytes": 32995,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 32995
+  },
+  "artifact_digest": "a4b47f58b22c2e08ddf4f428e85d06bff01d1ecc5f1e4df82fea28babf04e55d",
+  "input_fingerprint": "0f68053c619a015f7976ce34f4f48c53a2029a7c828060eb306122fa5b5ddf13",
+  "outputs": [
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "51b9d3937322e43a1d89b28d3967e167c5526886",
+        "size_bytes": 32995
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": ".archflow/tasks/api-refactor/prd.md",
+      "path_class": "document",
+      "payload_bytes": 32995,
+      "payload_digest": "e43fad786c628a15f516fab343d60884ec83b1a036007a3970cca128c1616aa0",
+      "storage": "raw-payload"
+    }
+  ],
+  "phase_instance": "prd",
+  "projections": [
+    {
+      "content_digest": "e43fad786c628a15f516fab343d60884ec83b1a036007a3970cca128c1616aa0",
+      "path": ".archflow/tasks/api-refactor/prd.md"
+    }
+  ],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "state-result-65b48b7d528928f4a7c5824c91910b1d",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [
+      ".archflow/tasks/api-refactor/prd.md"
+    ],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "7f209a40d047df28429d1e2b487ea4f75cf553621622ae240072a7984b4dd4a0",
+  "source_artifact": {
+    "artifact_kind": "document",
+    "byte_count": 32995,
+    "content_digest": "e43fad786c628a15f516fab343d60884ec83b1a036007a3970cca128c1616aa0",
+    "declared_inputs": [
+      {
+        "digest": "4cd8d1cd418c550c578530c28ad05eb25bcbaa1ef8fd036e9c19979bc19a5fb6",
+        "input_id": "user-ask"
+      }
+    ],
+    "document_path": "prd.md",
+    "input_fingerprint": "0f68053c619a015f7976ce34f4f48c53a2029a7c828060eb306122fa5b5ddf13",
+    "path_class": "document",
+    "phase_instance": "prd",
+    "projection_target": ".archflow/tasks/api-refactor/prd.md",
+    "schema_version": "1",
+    "snapshot_digest": "7f209a40d047df28429d1e2b487ea4f75cf553621622ae240072a7984b4dd4a0",
+    "step": "produce",
+    "task_id": "api-refactor"
+  },
+  "step": "produce",
+  "task_id": "api-refactor"
+}

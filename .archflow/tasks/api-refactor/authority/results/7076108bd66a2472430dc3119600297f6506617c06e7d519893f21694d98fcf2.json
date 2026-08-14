@@ -1,0 +1,109 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 3,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 32995
+  },
+  "artifact_digest": "b6e8192decbe3e77b3db8cab6148e0e330ec40d1419222f714b72a505e281988",
+  "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
+  "outputs": [],
+  "phase_instance": "prd",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-93f382faac389f216b62e587599f5cda",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.232",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "a2a80fdcd55dbc64f544631d5967e2572f105730f94675339c10cca7d5f1ab9d",
+      "input_fingerprint": "643a097810100c16012bc85027c2e61c80463452d323850fab7b65cb0b08dca3",
+      "invocation_id": "adjudication-invocation-14c748f21f7d9afeccf6932b14807811",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "397c3232992637f24f2a66f89e4e0e9a51f83e1dca5ca9fb039b4c384e1b60b0",
+      "phase_instance": "prd",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-93f382faac389f216b62e587599f5cda",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "The subject is a requirements document, not implementation, so no code precedes an approved phase design. It preserves the rule rather than eroding it: implementation entry is explicitly conditioned on a durable, reviewed phase design conforming to the approved task design; any potentially material revision invalidates stale evidence and restarts the review cycle, with only demonstrably editorial changes eligible for the one-hop rule; and material deviations must update governing documents and re-enter the review boundary. R1 and the Assumptions section keep existing phase-design, implementation, gate, and commit rules authoritative until an exact policy revision is separately approved, so nothing here authorizes code ahead of design.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The artifact is a PRD that defines the post-design execution loop, including R5 item 4 ('entry into implementation only after a durable, reviewed phase design conforms to the approved task design') and R6 ('material deviations update the PRD/design and require new exact human approval when they exceed the envelope')."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The bounded-delegation model relocates human authority but does not infer it. Authority still originates in an explicit human approval over exact bytes: PRD and task-design approvals remain explicit decisions over exact bytes with scoped milestone commits created and observed under the fence before hand-off (R4), and the run may not start from conversational approval or uncommitted bytes. The envelope must be derived from approved durable artifacts rather than caller-authored digest fields, and 'do whatever is needed' is explicitly rejected as an envelope. Crucially, R1 makes the enabling policy change itself a separate explicit repository approval and states that until then existing gate and commit-approval rules remain authoritative; the Assumptions section repeats that no PRD approval alone authorizes bypassing current gates, and the Verification section forbids deleting superseded gate tests before that approval. Escalation resolution (R7) requires a server-issued choice binding, human reason, re-authentication of the exact presentation and observations, and stale/replay protection, so no decision is satisfied by silence, elapsed time, agent prose, or a model verdict. The residual tension — that a future approved policy would let one human approval cover a range of later commits — is surfaced honestly and gated on an explicit human decision rather than assumed by this document.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "R1 proposes that 'approval of the exact task design grants prior authority only for work inside a bounded delegation envelope', and R5 has the coordinator create commits and advance phases without per-step human approval."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Non-success states stay visible with a safe next action throughout. Cancellation must not invent completion; pause stops at a defined safe durable boundary leaving a resumable run; blocked carries a human-readable recovery direction and routes restart/upgrade needs explicitly. Fail-closed behavior is required for competing writers, stale generations, ambiguous orphan edits, unprovable diffs, unavailable worker containment on a supported platform ('the workflow must fail closed and explain the limitation'), and inconsistent durable authority. R7 requires escalation presentations that explain what happened, why authority is insufficient, the evidence, choices, and consequences. Limitations are stated rather than papered over: the containment boundary's residual trust is documented, LIMITATIONS.md is in the required documentation set, and R15 forbids silently rewriting the point-in-time audit as current-state documentation. Human control is preserved via pause, cancel, and the escalation categories reserved for authority or judgment the approved artifacts do not supply.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "R3's state vocabulary includes 'escalated', 'paused', 'canceled', and 'blocked' with 'a human-readable recovery direction'; R8 requires cancel to stop 'without marking unfinished phases complete'; the Non-goals disclaim protection from a malicious same-user process 'with residual local-machine trust documented honestly'."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Isolation and evidence binding are strengthened rather than relaxed. Cross-task filesystem access becomes a mechanically denied capability with structured denial evidence, and the adversarial verification list explicitly requires proving cross-task access is denied before effect. Evidence remains bound to exact bytes: canonical bytes, pinned context, digests, replay protection, re-authentication, and exact evidence bindings stay authoritative under autonomy; any potentially material revision invalidates stale evidence; decisions must resist stale and replayed bindings and be re-authenticated against the exact presentation and observations. Maintenance and upgrade paths are held to the same standard — repairs are re-authenticated against exact observed bytes, build, and fencing context and applied under the maintenance fence, migration preview approval must be replay-safe with denial leaving no partially canonical task, and diagnostic proposals are stored independently of potentially malformed task state so they cannot borrow authority from it. Fencing generations bind worker results so a stale or orphaned writer's output cannot authorize staging or commit, with fail-closed escalation when partial edits cannot be attributed safely.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "R6 states 'tasks never read one another's files'; R10 requires denial before effect of 'filesystem access outside the authorized repository and task scope, including access to other tasks'; R9 requires that 'results from stale generations must not be admitted, staged, or committed'."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "6d594680c53773dd43f73497b0366c99d6a423d12dc9104457da6a68c8ff9e91",
+      "step": "adjudicate",
+      "subject_digest": "a4b47f58b22c2e08ddf4f428e85d06bff01d1ecc5f1e4df82fea28babf04e55d",
+      "task_id": "api-refactor",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "api-refactor"
+}

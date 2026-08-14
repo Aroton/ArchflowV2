@@ -1,0 +1,99 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "constitution": "pass",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "failed_rules": [],
+    "matched_trigger_rules": [
+      {
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1
+      }
+    ],
+    "uncertain_rules": [],
+    "uncertain_trigger_rules": []
+  },
+  "context_digest": "31615f4ed9572d097024da223f01b1b9d1b554b8399c5d0d136cc98fa25d39d6",
+  "current_evidence": {
+    "set_digest": "6b3c0b647eecf84c7c5cde0680bf4a46349727ee953214f534d4fa1730302301",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "1425f662c6bf14a1fdae3e8c8356b32a1931d1ddc421476102ae497334dbc70b",
+        "independence": "opposite-family",
+        "producer_family": "codex",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-fababfd5641059798b388b1818a2c2dcc0af9c20374a050b56c82837d30dca28",
+  "intent_id": "gate-20260814T210710-c2eb",
+  "kind": "constitution-review",
+  "opened_at_revision": 20,
+  "phase_instance": "prd",
+  "request_digest": "516980aa6f7b57343f1886c862e73a5eeae95d22480577e7e697c82d407d87d3",
+  "schema_version": "1",
+  "subject_digest": "801652c7f12171429cc26bb6b599864818f4b0867225b00226f21631936b0153",
+  "summary": "The clarified PRD passed its fresh independent remediation review with no findings, and the constitution review found it compliant and aligned with no failed or uncertain rules. It now preserves explicit human kickoff of PRD, design, every phase design, and every phase implementation; every phase design unconditionally requires approval of the exact reviewed bytes; and completion never starts the next step. The active rules still matched review triggers because the PRD proposes stage-scoped automation: approved-design-before-code is enforced before a separately kicked-off implementation; explicit-human-authority binds every step kickoff, exact artifact approval, and expansion; honest-human-centered-outcomes distinguishes expected approval, exceptional escalation, blocked, pause, cancel, and recovery states; and task-and-evidence-isolation remains enforced through exact bindings, fencing, capabilities, and fresh evidence. This gate asks whether the compliant, trigger-matching PRD may proceed to ordinary artifact approval. It does not approve a future constitution change or authorize implementation.",
+  "task_id": "api-refactor"
+}

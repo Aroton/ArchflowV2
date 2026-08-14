@@ -1,0 +1,32 @@
+{
+  "context_digest": "03096477ebcc02b146d4258ef3a5cda48613ec1aaba04af403e0a909f975888c",
+  "envelope": {
+    "context_digest": "03096477ebcc02b146d4258ef3a5cda48613ec1aaba04af403e0a909f975888c",
+    "gate_id": "g-0f6ed94cc5bb4f7b19434439d76eb2a72331a4c68433b7d22570f8c74dc3a33e",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "archflow-local",
+      "decision_event_id": "1ed3d000-a1bb-4ff6-b7b6-6138a07ac5ad",
+      "helper_invocation_id": "7a685e47-8da2-4a47-9de6-931aa81121bf",
+      "recorded_at": "2026-08-14T21:17:36.054Z",
+      "schema_version": "1"
+    },
+    "kind": "artifact-approval",
+    "payload": {
+      "decision": "approve",
+      "reason": "approve"
+    },
+    "phase_instance": "prd",
+    "schema_version": "1",
+    "subject_digest": "801652c7f12171429cc26bb6b599864818f4b0867225b00226f21631936b0153",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-0f6ed94cc5bb4f7b19434439d76eb2a72331a4c68433b7d22570f8c74dc3a33e",
+  "kind": "artifact-approval",
+  "outcome": "decided",
+  "phase_instance": "prd",
+  "schema_version": "1",
+  "subject_digest": "801652c7f12171429cc26bb6b599864818f4b0867225b00226f21631936b0153",
+  "task_id": "api-refactor"
+}
