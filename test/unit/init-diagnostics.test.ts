@@ -29,6 +29,7 @@ import {
   claudeTimeoutFinding,
   codexTimeoutFinding,
   collectInitDiagnostics,
+  diagnoseIgnoredGeneratedAssets,
   diagnoseRuntimeDirectory,
 } from "../../src/init/diagnostics.js";
 import {
@@ -69,6 +70,21 @@ describe("init diagnostics", () => {
       expect(contaminated.ignored).toBe(true);
       expect(contaminated.tracked_paths).toEqual([".archflow/runtime/tasks/demo/cached.json"]);
       expect(contaminated.error).toBeNull();
+    } finally {
+      await rm(repository, { recursive: true, force: true });
+    }
+  });
+
+  it("reports generated assets hidden by ancestor ignore rules", async () => {
+    const repository = await mkdtemp(join(tmpdir(), "archflow-init-hidden-assets-"));
+    try {
+      execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: repository });
+      await writeFile(join(repository, ".gitignore"), ".archflow/\n.mcp.json\n", "utf8");
+      const hidden = await diagnoseIgnoredGeneratedAssets(repository);
+      expect(hidden).toContain(".archflow/workflow.yaml");
+      expect(hidden).toContain(".archflow/config.yaml");
+      expect(hidden).toContain(".mcp.json");
+      expect(hidden).not.toContain(".codex/config.toml");
     } finally {
       await rm(repository, { recursive: true, force: true });
     }

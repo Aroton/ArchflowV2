@@ -38,9 +38,9 @@ describe("server-outage skill contracts", () => {
     }
   });
 
-  it("archflow-status still documents the three classification modes with wait guidance", () => {
+  it("archflow-status documents durable and upgrade-staging classification modes with wait guidance", () => {
     const status = source("archflow-status");
-    expect(status).toContain("`normal`, `degraded`, or `repair-required`");
+    expect(status).toContain("`normal`, `degraded`, `repair-required`, `upgrade-staged`, or `upgrade-restart-required`");
     expect(status).toContain("workflow must wait for the server");
     expect(status).toContain("there is no offline recording");
     expect(status).toContain("archflow-local manual-status --task <task>");

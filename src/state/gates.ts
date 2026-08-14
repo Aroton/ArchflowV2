@@ -51,7 +51,7 @@ import {
 } from "./gate-core.js";
 import { waitForGateInterface } from "./gate-wait.js";
 import { ensureDecisionDirectory, ensureIntentDirectory, ensureWorkspaceProjectionParent } from "./layout.js";
-import { loadLegacyImportResumePhase } from "./legacy-import-resume.js";
+import { loadLegacyImportInitialization, loadLegacyImportResumePhase } from "./legacy-import-resume.js";
 import { TaskLockError } from "./lock.js";
 import { loadApprovedDesignFinalPhase } from "./planned-final-phase.js";
 import { planStateTransition } from "./transitions.js";
@@ -293,19 +293,62 @@ export async function openDurableGate(
         const retained = await dependencies.load_retained_result(reference);
         if (!retained.ok) return retained;
         const subject = retained.value.prepared.manifest.value.artifact_digest;
+        const context = input.context as Extract<GateRequestV1, { kind: "migration-audit" }>["context"];
+        const reviewReference = [...current.value.authoritative_results].reverse().find((item) => item.phase_instance === "design" && item.step === "counter_review");
+        const triageReference = [...current.value.authoritative_results].reverse().find((item) => item.phase_instance === "design" && item.step === "triage");
+        let reviewedMigration =
+          context.resume_phase !== undefined &&
+          context.planned_final_phase !== undefined &&
+          context.target_ref !== undefined && context.baseline_commit !== undefined && context.commit_message !== undefined &&
+          context.imported_documents !== undefined && context.imported_documents.length >= 2 &&
+          reviewReference !== undefined && triageReference !== undefined;
+        if (reviewedMigration) {
+          const [review, triage] = await Promise.all([
+            dependencies.load_retained_result(reviewReference!),
+            dependencies.load_retained_result(triageReference!),
+          ]);
+          if (!review.ok) return review;
+          if (!triage.ok) return triage;
+          const reviewArtifact = review.value.prepared.manifest.value.source_artifact;
+          const triageArtifact = triage.value.prepared.manifest.value.source_artifact;
+          reviewedMigration =
+            reviewArtifact.artifact_kind === "review-evidence" && reviewArtifact.evidence.subject_digest === subject &&
+            triageArtifact.artifact_kind === "triage" && triageArtifact.evidence.subject_digest === subject;
+        }
+        const traditionallyApproved = current.value.approvals.some((approval) =>
+          (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") &&
+          approval.subject_digest === subject);
         if (
           input.subject_digest !== subject ||
-          !current.value.approvals.some((approval) =>
-            (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") &&
-            approval.subject_digest === subject)
+          (!traditionallyApproved && !reviewedMigration)
         ) return issue("STATE_INVALID", current.value, "migration-audit-design-not-approved");
         const resume = await loadLegacyImportResumePhase(dependencies, input.authority, current.value);
         if (!resume.ok) return resume;
+        const imported = await loadLegacyImportInitialization(dependencies, input.authority, current.value);
+        if (!imported.ok || imported.value === undefined) return imported.ok ? issue("STATE_INVALID", current.value, "legacy-import-manifest-missing") : imported;
+        const expectedDocuments = imported.value.mapping.map((entry) => ({
+          path: entry.destination_path,
+          content_digest: imported.value!.staged_payload_refs.find((reference) => reference.legacy_path === entry.legacy_path)!.digest,
+        })).sort((left, right) => left.path.localeCompare(right.path));
+        const contextMatchesImport =
+          context.source_identity_digest === imported.value.source_identity_digest &&
+          context.import_digest === imported.value.import_digest &&
+          context.destination_identity_digest === input.authority.task_identity_digest &&
+          context.code_baseline_digest === canonicalJsonDigest({ schema_version: "1", digest_kind: "code-baseline-commit", commit: imported.value.code_baseline_commit }) &&
+          context.policy_baseline_digest === canonicalJsonDigest({ schema_version: "1", digest_kind: "policy-base-commit", commit: imported.value.policy_base_commit }) &&
+          context.baseline_commit === imported.value.code_baseline_commit &&
+          context.resume_phase === imported.value.resume_phase &&
+          context.planned_final_phase === imported.value.planned_final_phase &&
+          context.target_ref === imported.value.target_ref &&
+          context.commit_message === imported.value.commit_message &&
+          isDeepStrictEqual(context.imported_documents, expectedDocuments);
         const decoded = decodePhaseInstance(resume.value);
         if (
-          decoded.kind !== "phase-design" ||
-          current.value.planned_final_phase === undefined ||
-          Number(decoded.phase) > Number(current.value.planned_final_phase)
+          !contextMatchesImport ||
+          (decoded.kind !== "phase-design" && decoded.kind !== "phase-impl") ||
+          (context.resume_phase !== undefined && context.resume_phase !== resume.value) ||
+          (context.planned_final_phase ?? current.value.planned_final_phase) === undefined ||
+          Number(decoded.phase) > Number(context.planned_final_phase ?? current.value.planned_final_phase)
         ) return issue("STATE_INVALID", current.value, "migration-audit-phase-plan-insufficient");
       }
       const waiver = waiverContext(input.context);
@@ -516,7 +559,32 @@ async function closedStateForRecord(
       return issue("STATE_INVALID", current.value, "design-approval-git-target-changed");
     }
   }
+  if (
+    record.outcome === "decided" && record.kind === "migration-audit" &&
+    record.envelope.payload.decision === "accept-import-audit" && request.kind === "migration-audit"
+  ) {
+    if (request.context.target_ref === undefined || request.context.baseline_commit === undefined) {
+      return issue("STATE_INVALID", current.value, "migration-audit-commit-authority-missing");
+    }
+    const symbolicRef = await dependencies.runner.runText({
+      argv: ["symbolic-ref", "--quiet", "HEAD"],
+      operation: parseSafeCode("git-migration-audit-target"),
+      expectedAbsence: [{ code: 1, stderrIncludes: "" }],
+    });
+    if ((request.context.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== request.context.target_ref) ||
+        await resolveCommit(dependencies.runner, "HEAD") !== request.context.baseline_commit) {
+      return issue("STATE_INVALID", current.value, "migration-audit-git-target-changed");
+    }
+  }
   const plannedFinalPhase = await loadApprovedDesignFinalPhase(dependencies, current.value, record);
+  if (
+    plannedFinalPhase.ok && plannedFinalPhase.value === undefined &&
+    record.outcome === "decided" && record.kind === "migration-audit" &&
+    record.envelope.payload.decision === "accept-import-audit" && request.kind === "migration-audit" &&
+    request.context.planned_final_phase !== undefined
+  ) {
+    return ok(nextStateForRecord(current.value, record, digest, request.context.planned_final_phase));
+  }
   return plannedFinalPhase.ok
     ? ok(nextStateForRecord(current.value, record, digest, plannedFinalPhase.value))
     : plannedFinalPhase;

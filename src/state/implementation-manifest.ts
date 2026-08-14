@@ -159,7 +159,7 @@ export async function designArtifactCommittedAtCurrentTarget(
   taskId: string,
   artifact: DocumentArtifactV1,
   outputs: readonly OutputEntry[],
-  context: GateContext<"design-approval">,
+  context: Pick<GateContext<"design-approval">, "target_ref" | "baseline_commit" | "commit_message">,
 ): Promise<boolean> {
   const symbolicRef = await runner.runText({
     argv: ["symbolic-ref", "--quiet", "HEAD"],

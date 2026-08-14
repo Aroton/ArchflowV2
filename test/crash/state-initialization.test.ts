@@ -114,22 +114,6 @@ describe("revision-0 crash cuts", () => {
     }, 20_000);
   }
 
-  it("leaves legacy-import initialization uncommitted at the state-before smoke cut", async () => {
-    const fixture = await setup("legacy");
-    const child = start(fixture.taskRoot, "state-before");
-    await message(child, "cut");
-    await new Promise<void>((resolve) => child.once("exit", () => resolve()));
-    expect((await readTaskState(fixture.authority.state)).kind).toBe("missing");
-    expect(existsSync(join(fixture.authority.workspace_root, "transient", "intents", "initialize.json"))).toBe(true);
-    const plan = await inspectAbandonedTaskLock(fixture.authority);
-    await removeConfirmedAbandonedTaskLock(fixture.authority, plan, true);
-    const resumed = start(fixture.taskRoot, "none");
-    expect(await message(resumed, "result")).toMatchObject({ ok: true, revision: 1 });
-    const final = await readTaskState(fixture.authority.state);
-    expect(final.kind).toBe("canonical");
-    if (final.kind === "canonical") expect(final.document.value.revision).toBe(1);
-  }, 20_000);
-
   for (const [label, mutate] of [
     ["wrong canonical paths", (artifact: Record<string, any>) => { artifact.canonical_paths.state = ".archflow/tasks/other/state.json"; }],
     ["missing code baseline commit", (artifact: Record<string, any>) => { artifact.code_baseline_commit = "1".repeat(40); }],

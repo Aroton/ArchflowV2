@@ -63,7 +63,7 @@ Strictly read-only. Runs `archflow-local manual-status --task <task>`, translate
 
 ## archflow-upgrade
 
-Migrates a legacy flat-file task into the canonical layout. Governing principle: **stage, never convert.** Legacy files are copied byte-for-byte into ignored `.archflow/runtime/tasks/<task>/cache/imports/` staging (after a mandatory secret scan), mapped into `draft` seeds (prd, design — inputs for redoing the work) and `historical` material (old phase docs, logs, reviews). The task then re-enters at the PRD and runs the *full* pipeline; a `migration-audit` gate at the approved design authorizes a guarded jump to the derived resume phase. The load-bearing rule: imported prose, history, and prior decisions are **never** approval evidence.
+Adopts an in-flight legacy task into a distinct canonical task. `preview` validates and derives the mapping without writes; an explicitly approved preview may be `stage`d only into ignored runtime storage, and staging never creates the visible destination. With MCP available, revision-zero initialization authenticates every staged payload and atomically publishes config, state, PRD, overall design, mapped phase designs, and implementation logs. The task enters one normal design counter-review/triage cycle whose pinned context labels the imported PRD and phase history as migration references. One `migration-audit` human gate then approves the exact imported bytes, phase plan, and resume point and authorizes the task-local import milestone commit. A mapped design without its implementation log resumes directly at phase implementation; otherwise the task resumes at the next phase design. Old review prose remains historical rather than approval evidence.
 
 ## Shared conventions across skills
 

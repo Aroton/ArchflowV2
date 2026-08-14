@@ -262,9 +262,10 @@ function snapshotFixture(task: string, state: any, bytes: Buffer, retained: numb
 }
 
 async function adopt(root: string, task: string, artifact: any, intent: string, transmittedArtifact = artifact): Promise<any> {
+  const phase = artifact?.artifact_kind === "legacy-import-initialization" ? "design" : "prd";
   const draft = {
     schema_version: "1", task_id: task, intent_id: intent, expected_revision: 0,
-    input_fingerprint: "0".repeat(64), phase_instance: "prd", step: "produce", status: "running", artifact,
+    input_fingerprint: "0".repeat(64), phase_instance: phase, step: "produce", status: "running", artifact,
   };
   const envelope = local(root, task, "envelope", { tool: "archflow_state", input: draft });
   expect(envelope.value).toMatchObject({ ok: true });
@@ -691,12 +692,15 @@ describe.skipIf(!enabled)("installed terminal journeys", () => {
     git(root, "commit", "-q", "-m", "legacy source");
     const baseline = git(root, "rev-parse", "HEAD");
     const sourceBefore = digestTree([source]);
-    const value = {
+    const descriptor = {
       source_root: source, task_id: "upgrade-task", policy_base_commit: head,
       import_baseline_commit: baseline, code_baseline_commit: baseline,
     };
+    const preview = local(root, "upgrade-task", "upgrade", { operation: "preview", ...descriptor });
+    expect(preview.value).toMatchObject({ ok: true, value: { resume_phase: "phase-impl-3" } });
+    const value = { operation: "stage", approved_preview_digest: preview.value.value.preview_digest, ...descriptor };
     const first = local(root, "upgrade-task", "upgrade", value);
-    expect(first.value).toMatchObject({ ok: true, value: { resume_phase: "phase-design-4" } });
+    expect(first.value).toMatchObject({ ok: true, value: { resume_phase: "phase-impl-3" } });
     const destination = join(root, ".archflow", "tasks", "upgrade-task");
     const firstDestination = digestTree([destination]);
     // Model the last pre-authority crash point: payloads exist, but the manifest that makes

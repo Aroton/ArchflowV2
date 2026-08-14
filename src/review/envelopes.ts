@@ -47,7 +47,7 @@ export type DispatchSubject = {
  * every field restates durable triage/review authority.
  */
 export const PINNED_CONTEXT_KINDS = [
-  "user-ask", "approved-upstream", "verification-transcript",
+  "user-ask", "approved-upstream", "imported-reference", "verification-transcript",
   "prior-triage", "interface-excerpt", "conventions", "repo-map",
 ] as const;
 export type PinnedContextKind = (typeof PINNED_CONTEXT_KINDS)[number];

@@ -48,6 +48,7 @@ import {
   type ReconciliationResult,
 } from "./reconciliation.js";
 import { gateRequestClaim, parseWorkspacePathClaim, resolveTaskPath, resolveTaskWorkspacePath } from "../repository/paths.js";
+import { loadLegacyImportInitialization } from "./legacy-import-resume.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 
@@ -372,14 +373,23 @@ async function readArchivedGateRequest(
 
 async function currentApprovedUpstreams(
   dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
   state: TaskStateV1,
   authenticated: readonly AuthenticatedGateApproval[],
 ): Promise<readonly Sha256Digest[]> {
   const bindings = expectedProduceUpstreamBindings(state);
   const digests: Sha256Digest[] = [];
   for (const binding of bindings) {
-    const loaded = await loadProduceUpstreamSubject(dependencies, state, binding);
+    const loaded = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
     if (!loaded.ok) throw new TypeError("current upstream produced authority invalid");
+    if ("imported_projection" in loaded.value) {
+      if (state.phase_instance !== "design" && !authenticated.some((item) =>
+        item.request.kind === "migration-audit" && item.decision.envelope.payload.decision === "accept-import-audit")) {
+        throw new TypeError("imported upstream lacks accepted migration audit");
+      }
+      digests.push(loaded.value.artifact_digest);
+      continue;
+    }
     const approval = [...authenticated]
       .filter((item) => {
         if (item.approval.subject_digest !== loaded.value.artifact_digest) return false;
@@ -806,6 +816,39 @@ export async function computeTaskStatus(
         blockers.push("commit-observation-unavailable");
       }
     }
+    const migration = authenticatedApprovals.find((item) =>
+      item.request.kind === "migration-audit" &&
+      item.request.phase_instance === state.phase_instance &&
+      item.request.subject_digest === produceSubject!.artifact_digest &&
+      item.decision.envelope.payload.decision === "accept-import-audit");
+    if (
+      migration?.request.kind === "migration-audit" &&
+      migration.request.context.target_ref !== undefined &&
+      migration.request.context.baseline_commit !== undefined &&
+      migration.request.context.commit_message !== undefined
+    ) {
+      designCommit = Object.freeze({
+        path: `.archflow/tasks/${state.task_id}`,
+        message: migration.request.context.commit_message,
+        target_ref: migration.request.context.target_ref,
+        baseline_commit: migration.request.context.baseline_commit,
+      });
+      try {
+        commitObserved = await designArtifactCommittedAtCurrentTarget(
+          dependencies.runner,
+          state.task_id,
+          produceSubject.artifact,
+          produceSubject.retained.prepared.manifest.value.outputs,
+          {
+            target_ref: migration.request.context.target_ref,
+            baseline_commit: migration.request.context.baseline_commit,
+            commit_message: migration.request.context.commit_message,
+          },
+        );
+      } catch {
+        blockers.push("commit-observation-unavailable");
+      }
+    }
   }
 
   const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document"
@@ -833,7 +876,7 @@ export async function computeTaskStatus(
   let assessment: EvidenceAssessment | undefined;
   if (constitution !== undefined && subjectDigest !== undefined) {
     const resolvedAssessment = await resolveStatusEvidenceAssessment(
-      () => currentApprovedUpstreams(dependencies, state, authenticatedApprovals),
+      () => currentApprovedUpstreams(dependencies, authority, state, authenticatedApprovals),
       (approvedUpstreamDigests) => assessCurrentEvidence(state, retained, {
         subject_digest: subjectDigest,
         input_fingerprint: state.input_fingerprint,
@@ -979,6 +1022,31 @@ export async function computeTaskStatus(
   }
   const adjudicationGate = pendingGates[0];
   const adjudicationGateKind = adjudicationGate?.kind;
+  const legacyInitialization = await loadLegacyImportInitialization(dependencies, authority, state);
+  const migrationAuditRequired = legacyInitialization.ok && legacyInitialization.value !== undefined &&
+    state.phase_instance === "design" &&
+    !authenticatedApprovals.some((item) => item.request.kind === "migration-audit" && item.decision.envelope.payload.decision === "accept-import-audit");
+  const migrationAuditContext: GateContext<"migration-audit"> | undefined =
+    migrationAuditRequired && legacyInitialization.ok && legacyInitialization.value?.resume_phase !== undefined &&
+    legacyInitialization.value.planned_final_phase !== undefined && legacyInitialization.value.target_ref !== undefined &&
+    legacyInitialization.value.commit_message !== undefined
+      ? Object.freeze({
+          source_identity_digest: legacyInitialization.value.source_identity_digest,
+          destination_identity_digest: authority.task_identity_digest,
+          import_digest: legacyInitialization.value.import_digest,
+          code_baseline_digest: canonicalJsonDigest({ schema_version: "1", digest_kind: "code-baseline-commit", commit: legacyInitialization.value.code_baseline_commit }),
+          policy_baseline_digest: canonicalJsonDigest({ schema_version: "1", digest_kind: "policy-base-commit", commit: legacyInitialization.value.policy_base_commit }),
+          resume_phase: legacyInitialization.value.resume_phase,
+          planned_final_phase: legacyInitialization.value.planned_final_phase,
+          imported_documents: Object.freeze(legacyInitialization.value.mapping.map((entry) => Object.freeze({
+            path: entry.destination_path,
+            content_digest: legacyInitialization.value!.staged_payload_refs.find((reference) => reference.legacy_path === entry.legacy_path)!.digest,
+          })).sort((left, right) => left.path.localeCompare(right.path))),
+          target_ref: legacyInitialization.value.target_ref,
+          baseline_commit: legacyInitialization.value.code_baseline_commit,
+          commit_message: legacyInitialization.value.commit_message,
+        })
+      : undefined;
   const nextAction = deriveNextAction({
     repository_initialized: true,
     state,
@@ -996,6 +1064,7 @@ export async function computeTaskStatus(
     ...(designCommit === undefined ? {} : { design_commit: designCommit }),
     ...(adjudicationGateKind === undefined ? {} : { adjudication_gate_kind: adjudicationGateKind }),
     ...(pendingGates.length === 0 ? {} : { pending_adjudication_gate_kinds: pendingGates.map((gate) => gate.kind) }),
+    migration_audit_required: migrationAuditRequired,
   });
 
   let gateInput: CommitAuthorizationInput | undefined;
@@ -1027,6 +1096,7 @@ export async function computeTaskStatus(
       : {}),
     ...(gateInput === undefined ? {} : { commit_authorization: gateInput }),
     ...(designGateInput === undefined ? {} : { design_approval: designGateInput }),
+    ...(migrationAuditContext === undefined ? {} : { migration_audit: migrationAuditContext }),
     ...(adjudicationGate === undefined ? {} : { adjudication_gate: adjudicationGate }),
     maximum_attempts: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS,
   });

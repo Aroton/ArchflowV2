@@ -41,9 +41,35 @@ export type InitDiagnostics = Readonly<{
   codex_masked_by_higher_precedence: boolean | null;
   timeout_findings: readonly string[];
   runtime_directory: RuntimeDirectoryInitDiagnostic;
+  ignored_generated_assets: readonly string[];
   limitations: readonly string[];
   recovery_guidance: readonly string[];
 }>;
+
+const GENERATED_ASSET_PATHS = Object.freeze([
+  ".archflow/.gitignore",
+  ".archflow/config.yaml",
+  ".archflow/workflow.yaml",
+  ".archflow/constitution/README.md",
+  ".mcp.json",
+  ".codex/config.toml",
+]);
+
+export async function diagnoseIgnoredGeneratedAssets(repository: string): Promise<readonly string[]> {
+  const runner = createGitRunner({ cwd: repository });
+  const ignored: string[] = [];
+  for (const path of GENERATED_ASSET_PATHS) {
+    try {
+      const result = await runner.run({
+        argv: ["check-ignore", "--quiet", "--no-index", "--", path],
+        operation: parseSafeCode("init-check-generated-asset-ignore"),
+        expectedAbsence: [{ code: 1, stderrIncludes: "" }],
+      });
+      if (!result.absent) ignored.push(path);
+    } catch { /* Adapter diagnostics report Git failures elsewhere; this list is advisory. */ }
+  }
+  return Object.freeze(ignored);
+}
 
 export type InitDiagnosticsInput = Readonly<{
   working_directory: string;
@@ -194,12 +220,13 @@ export async function diagnoseRuntimeDirectory(repository: string): Promise<Runt
 }
 
 export async function collectInitDiagnostics(input: InitDiagnosticsInput): Promise<InitDiagnostics> {
-  const [claude, codex, claudeHostConfig, codexHostConfig, runtimeDirectory] = await Promise.all([
+  const [claude, codex, claudeHostConfig, codexHostConfig, runtimeDirectory, ignoredAssets] = await Promise.all([
     diagnoseAdapter("claude-cli", input.working_directory),
     diagnoseAdapter("codex-cli", input.working_directory),
     readHostConfig(join(input.working_directory, ".mcp.json")),
     readHostConfig(join(input.working_directory, ".codex", "config.toml")),
     diagnoseRuntimeDirectory(input.working_directory),
+    diagnoseIgnoredGeneratedAssets(input.working_directory),
   ]);
   return Object.freeze({
     schema_version: "1",
@@ -215,6 +242,7 @@ export async function collectInitDiagnostics(input: InitDiagnosticsInput): Promi
         .filter((finding): finding is string => finding !== undefined),
     ),
     runtime_directory: runtimeDirectory,
+    ignored_generated_assets: ignoredAssets,
     limitations: Object.freeze([
       "Dispatch context hygiene uses a temporary workspace and scrubbed environment, but authentication stays in each CLI's canonical home; the boundary is best-effort, not enforced isolation.",
       "Claude project MCP registration may remain pending until a human approves it; reset choices with `claude mcp reset-project-choices` when needed.",
@@ -223,6 +251,7 @@ export async function collectInitDiagnostics(input: InitDiagnosticsInput): Promi
     ]),
     recovery_guidance: Object.freeze([
       "Repair any reported Node, CLI, authentication, policy, trust, approval, or command-collision issue, then re-run archflow-local init.",
+      ...(ignoredAssets.length === 0 ? [] : [`Generated ArchFlow assets are hidden by an ancestor Git ignore rule: ${ignoredAssets.join(", ")}. Review that rule and explicitly add the intended files; init does not rewrite repository ignore policy.`]),
       "Initialization is idempotent: re-running the full command is the supported recovery path after any interrupted step.",
     ]),
   });

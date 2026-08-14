@@ -17,10 +17,10 @@ describe("upgrade skill contract", () => {
     expect(lines.slice(0, 6)).toEqual([
       "---",
       "name: archflow-upgrade",
-      "description: Stage a legacy ArchFlow task into a distinct canonical task and guide its explicit migration audit.",
+      "description: Adopt a legacy in-flight ArchFlow task into a distinct canonical task and resume it through one reviewed migration gate.",
       "---",
       "",
-      "# Upgrade a Legacy Task",
+      "# Upgrade an In-Flight Legacy Task",
     ]);
     expect(source).not.toMatch(/^\d+[.)]\s/mu);
     expect(source).not.toContain("```");
@@ -40,20 +40,22 @@ describe("upgrade skill contract", () => {
     }
   });
 
-  it("pins staging, rerun, audit, and resume semantics", () => {
+  it("pins preview, atomic adoption, single-gate review, and in-flight resume semantics", () => {
     for (const required of [
-      "Keep the legacy source unchanged",
-      "require the source and destination to share one Git repository",
+      "Keep the source unchanged",
+      "same Git worktree",
       "distinct canonical destination",
-      "Seed `.archflow/tasks/<task>/prd.md` from the staged draft",
-      "Seed `.archflow/tasks/<task>/design.md` from the staged draft",
-      "never approval evidence",
-      "phase plan that covers the derived resume phase",
-      "revise the canonical design before asking the human to approve it",
-      "Open the `migration-audit` gate only while durable status is at the approved `design` result",
-      "The accepted gate leaves the cursor at `design`; the next ordinary `archflow_state` produce call performs the jump",
-      "one past the highest mapped implementation log",
-      "Use `exclude` as the explicit lever",
+      "operation `preview`",
+      "without writing",
+      "operation `stage`",
+      "must not create `.archflow/tasks/<task>/config.yaml`",
+      "atomically publishes one destination",
+      "`config.yaml`, `state.json`, `prd.md`, and `design.md`",
+      "every mapped prior phase design",
+      "one `migration-audit` gate instead of separate PRD and design approval gates",
+      "fresh human approval for the exact imported document bytes",
+      "phase N has a mapped design and no implementation log",
+      "use `exclude` only for the exact legacy-relative path",
       "unresolved task-local constitution edit",
       "secretlint reports selected legacy content",
     ]) expect(source).toContain(required);

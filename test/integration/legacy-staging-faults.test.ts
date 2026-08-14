@@ -173,7 +173,7 @@ describe("legacy staging faults and collisions", () => {
     const destination = join(prepared.root, ".archflow", "tasks", "destination");
     const workspace = join(prepared.root, ".archflow", "runtime", "tasks", "destination");
     expect(existsSync(join(destination, "state.json"))).toBe(false);
-    expect(regularFiles(destination)).toEqual(["config.yaml"]);
+    expect(regularFiles(destination)).toEqual([]);
     const interruptedFiles = regularFiles(workspace);
     expect(interruptedFiles).toHaveLength(1);
     expect(interruptedFiles[0]).toMatch(/cache\/imports\/.+\/payload\/architecture\.md$/u);
@@ -183,7 +183,7 @@ describe("legacy staging faults and collisions", () => {
     expect(converged.ok).toBe(true);
     if (!converged.ok) return;
     expect(existsSync(join(destination, "state.json"))).toBe(false);
-    expect(regularFiles(destination)).toEqual(["config.yaml"]);
+    expect(regularFiles(destination)).toEqual([]);
     expect(regularFiles(workspace)).toEqual(converged.value.staged_paths
       .map((path) => path.replace(".archflow/runtime/tasks/destination/", "")).sort());
     for (const reference of converged.value.initialization.staged_payload_refs) {

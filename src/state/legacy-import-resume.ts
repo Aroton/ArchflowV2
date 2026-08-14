@@ -1,6 +1,6 @@
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { ProjectResult } from "../contracts/errors.js";
-import { parseLegacyImportInitialization } from "../contracts/durable-legacy-import.js";
+import { parseLegacyImportInitialization, type LegacyImportInitializationV1 } from "../contracts/durable-legacy-import.js";
 import { decodePhaseInstance, encodePhaseInstance, parsePositiveSafePhaseNumber, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import { initializationAuthorityClaim, resolveTaskPath } from "../repository/paths.js";
 import type { TransactionAuthority } from "./authority.js";
@@ -12,6 +12,32 @@ export async function findLegacyImportResumePhase(
   authority: TransactionAuthority,
   state: TaskStateV1,
 ): Promise<ProjectResult<PhaseInstanceId | undefined>> {
+  const loaded = await loadLegacyImportInitialization(dependencies, authority, state);
+  if (!loaded.ok) return loaded;
+  if (loaded.value === undefined) return ok(undefined);
+  const document = loaded.value;
+  if (document.resume_phase !== undefined) return ok(document.resume_phase);
+  const designs = new Set<number>();
+  const implementations = new Set<number>();
+  for (const entry of document.mapping) {
+    const decoded = decodePhaseInstance(entry.phase_instance);
+    if (decoded.kind === "phase-design") designs.add(Number(decoded.phase));
+    if (decoded.kind === "phase-impl") implementations.add(Number(decoded.phase));
+  }
+  let highest = 0;
+  while (implementations.has(highest + 1)) highest += 1;
+  const next = highest + 1;
+  return ok(encodePhaseInstance({
+    kind: designs.has(next) ? "phase-impl" : "phase-design",
+    phase: parsePositiveSafePhaseNumber(next),
+  }));
+}
+
+export async function loadLegacyImportInitialization(
+  dependencies: Pick<GateLifecycleDependencies, "runner">,
+  authority: TransactionAuthority,
+  state: TaskStateV1,
+): Promise<ProjectResult<LegacyImportInitializationV1 | undefined>> {
   const resolved = await resolveTaskPath({
     runner: dependencies.runner,
     taskId: authority.task_id,
@@ -28,15 +54,7 @@ export async function findLegacyImportResumePhase(
   if (document === "missing" || document === "invalid" || document.digest !== state.initialization_digest) {
     return ok(undefined);
   }
-  let highest = 0;
-  for (const entry of document.value.mapping) {
-    const decoded = decodePhaseInstance(entry.phase_instance);
-    if (decoded.kind === "phase-impl") highest = Math.max(highest, Number(decoded.phase));
-  }
-  return ok(encodePhaseInstance({
-    kind: "phase-design",
-    phase: parsePositiveSafePhaseNumber(highest + 1),
-  }));
+  return ok(document.value);
 }
 
 export async function loadLegacyImportResumePhase(

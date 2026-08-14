@@ -81,6 +81,11 @@ export type LegacyImportInitializationV1 = {
   readonly mapping: readonly LegacyMappingEntry[];
   /** SET — sorted by `legacy_path`, duplicates rejected. */
   readonly staged_payload_refs: readonly StagedPayloadRef[];
+  /** Present for resumable imports produced by the current upgrader. */
+  readonly resume_phase?: PhaseInstanceId;
+  readonly planned_final_phase?: SafeInteger;
+  readonly target_ref?: string;
+  readonly commit_message?: string;
 };
 
 const sha256Digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
@@ -129,6 +134,10 @@ export const legacyImportInitializationV1Schema = z.object({
     .refine((items) => isSortedUniqueBy(items, tupleKey("destination_path")), "mapping must be sorted by destination_path with no duplicates"),
   staged_payload_refs: z.array(stagedPayloadRefV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("legacy_path")), "staged_payload_refs must be sorted by legacy_path with no duplicates"),
+  resume_phase: phaseInstanceIdV1Schema.optional(),
+  planned_final_phase: safeInteger.optional(),
+  target_ref: z.string().min(1).max(512).optional(),
+  commit_message: z.string().min(1).max(512).optional(),
 }).strict() as unknown as z.ZodType<LegacyImportInitializationV1>;
 
 /** Throws, per the contract-layer convention. */

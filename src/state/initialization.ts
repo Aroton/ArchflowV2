@@ -1,4 +1,5 @@
-import { isAbsolute, relative } from "node:path";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative } from "node:path";
 
 import {
   canonicalDocument,
@@ -47,6 +48,7 @@ import { IntentLayoutError, ensureAuthorityDirectory, ensureIntentDirectory } fr
 import { TaskLockError } from "./lock.js";
 import type { TransactionDependencies, TransactionOutcome, TransactionRequest } from "./transaction.js";
 import { cleanTaskWorkspace } from "./workspace-cleanup.js";
+import { readStagedLegacyConfig, readStagedLegacyPayload } from "./legacy-stage.js";
 
 type InitializationArtifact = TaskInitializationV1 | LegacyImportInitializationV1;
 type StateCall = Extract<ParsedToolCall, { readonly name: "archflow_state" }>;
@@ -177,10 +179,10 @@ function initialState(
   const initialization = initializationFor(artifact);
   if (initialization === undefined) return contract("initialization-artifact-required");
 
-  // Task and legacy-import initialization always enter the workflow at its first phase's
-  // pipeline head (WORKFLOW_V1.phases: "prd" / "produce"); any other combination would write
-  // a bogus revision-1 state that no later transition could have produced.
-  if (call.input.phase_instance !== "prd" || call.input.step !== "produce" || call.input.status !== "running") {
+  // Fresh tasks enter at PRD. A legacy import enters at design production because the canonical
+  // PRD, overall design, and phase history are adopted atomically and reviewed as one migration.
+  const expectedPhase = initialization.artifact_kind === "legacy-import-initialization" ? "design" : "prd";
+  if (call.input.phase_instance !== expectedPhase || call.input.step !== "produce" || call.input.status !== "running") {
     return contract("initialization-entry-point-mismatch");
   }
 
@@ -247,7 +249,11 @@ export async function identifyStateInitialization(
   });
   if (!initializationSemantics.ok) return initializationSemantics;
 
-  const config = await dependencies.read_config(request.authority.config);
+  let config = await dependencies.read_config(request.authority.config);
+  if (config.kind === "missing" && initialization.artifact_kind === "legacy-import-initialization") {
+    const staged = await readStagedLegacyConfig(request.authority, initialization);
+    if (staged !== undefined) config = Object.freeze({ kind: "valid", snapshot: staged });
+  }
   if (config.kind !== "valid") return config.kind === "invalid" ? contract("task-config-invalid") : io(request, "task-config-read");
   if (config.snapshot.digest !== initialization.config_digest) {
     return fail(createProjectError("PINNED_CONFIG_MISMATCH", {
@@ -273,6 +279,48 @@ export async function identifyStateInitialization(
     request_digest: identified.request_digest,
     prepared_state: preparedState,
   }));
+}
+
+async function installLegacyDestination(
+  request: TransactionRequest<"archflow_state">,
+  initialization: LegacyImportInitializationV1,
+  initializationBytes: Uint8Array,
+  stateBytes: Uint8Array,
+): Promise<ProjectResult<void>> {
+  const config = await readStagedLegacyConfig(request.authority, initialization);
+  if (config === undefined) return contract("legacy-staged-config-missing");
+  const references = new Map(initialization.staged_payload_refs.map((entry) => [entry.legacy_path, entry] as const));
+  let temporary: string | undefined;
+  try {
+    // Build below ignored runtime, then rename the complete directory into the durable task root.
+    // A process crash can strand only ignored staging, never a visible partial destination.
+    temporary = await mkdtemp(join(request.authority.workspace_root, ".adopt-"));
+    await mkdir(join(temporary, "authority"), { recursive: true });
+    await writeFile(join(temporary, "config.yaml"), config.bytes, { flag: "wx", mode: 0o644 });
+    for (const entry of initialization.mapping) {
+      const reference = references.get(entry.legacy_path);
+      if (reference === undefined) return contract("legacy-mapping-payload-missing");
+      const bytes = await readStagedLegacyPayload(request.authority, initialization, reference);
+      if (bytes === undefined) return contract("legacy-staged-payload-invalid");
+      const prefix = `.archflow/tasks/${initialization.task_id}/`;
+      const relativeDestination = entry.destination_path.slice(prefix.length);
+      const target = join(temporary, relativeDestination);
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, bytes, { flag: "wx", mode: 0o644 });
+    }
+    await writeFile(join(temporary, "authority", "initialization.json"), initializationBytes, { flag: "wx", mode: 0o644 });
+    await writeFile(join(temporary, "state.json"), stateBytes, { flag: "wx", mode: 0o644 });
+    await rename(temporary, request.authority.task_root);
+    temporary = undefined;
+    return ok(undefined);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST" || (error as NodeJS.ErrnoException).code === "ENOTEMPTY") {
+      return contract("legacy-destination-became-occupied");
+    }
+    return io(request, "legacy-destination-adopt");
+  } finally {
+    if (temporary !== undefined) await rm(temporary, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 async function intentTarget(
@@ -416,6 +464,18 @@ async function executeLocked(
   }
 
   try {
+    if (artifact.artifact_kind === "legacy-import-initialization") {
+      if (existing.kind === "missing") {
+        await ensureIntentDirectory(request.authority);
+        const created = await dependencies.atomic.createExclusive(path, receipt.bytes);
+        if (created === "exists") return contract("intent-receipt-collision");
+      }
+      const installed = await installLegacyDestination(request, artifact, artifactDocument.bytes, final.bytes);
+      if (!installed.ok) return installed;
+      const observed = await dependencies.read_state(request.authority.state);
+      if (observed.kind !== "canonical" || observed.document.digest !== final.digest) return contract("transaction-outcome-ambiguous");
+      return ok(Object.freeze({ state: observed.document, outcome, replayed: false }));
+    }
     await ensureAuthorityDirectory(request.authority);
     await ensureIntentDirectory(request.authority);
     const installedInitialization = await dependencies.atomic.createExclusive(

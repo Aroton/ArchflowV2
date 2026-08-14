@@ -1,4 +1,4 @@
-import { lstat, readdir, readFile, realpath } from "node:fs/promises";
+import { lstat, readdir, readFile, realpath, rm, rmdir } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
 
 import {
@@ -19,7 +19,6 @@ import { computePinnedConfigDigest } from "../contracts/fingerprints.js";
 import type { GateContext } from "../contracts/gates.js";
 import {
   parseRepositoryPathClaim,
-  parseTaskPathClaim,
   type RepositoryPathClaim,
 } from "../contracts/path-claims.js";
 import {
@@ -37,10 +36,8 @@ import {
 } from "../repository/git.js";
 import { discoverWorktree } from "../repository/identity.js";
 import {
-  classifyTaskPath,
   parseWorkspacePathClaim,
   resolveLegacySourcePath,
-  resolveTaskPath,
   resolveTaskWorkspacePath,
 } from "../repository/paths.js";
 import { createProjectionWriter, type ProjectionWriter } from "../state/atomic.js";
@@ -51,7 +48,6 @@ import { createSecretlintScanner, secretScanCandidateFromBytes } from "../state/
 import {
   canonicalTaskPaths,
   commitDigest,
-  createTaskConfig,
   policyBaseInvalid,
   resolveInitializationPolicyBase,
 } from "./task-initialization.js";
@@ -64,6 +60,10 @@ export type StageLegacyUpgradeInput = Readonly<{
   import_baseline_commit: string;
   code_baseline_commit: string;
   exclude?: readonly string[];
+  /** Preview performs every validation and computes the immutable plan without writing. */
+  operation?: "preview" | "stage";
+  /** Stage is accepted only for the exact preview the human reviewed. */
+  approved_preview_digest?: string;
   projection_writer?: ProjectionWriter;
 }>;
 
@@ -72,9 +72,17 @@ export type StagedLegacyUpgrade = Readonly<{
   audit_context: GateContext<"migration-audit">;
   manifest_path: string;
   resume_phase: PhaseInstanceId;
+  preview_digest: ReturnType<typeof canonicalJsonDigest>;
+  operation: "preview" | "stage";
   draft_sources: readonly { destination_path: string; staged_path: string }[];
   staged_paths: readonly string[];
   unmapped: readonly string[];
+}>;
+
+export type DiscardLegacyUpgradeInput = Readonly<{
+  working_directory: string;
+  task_id: string;
+  import_digest: string;
 }>;
 
 type SelectedFile = Readonly<{ legacy_path: RepositoryPathClaim; bytes: Uint8Array }>;
@@ -98,24 +106,6 @@ async function exists(path: string): Promise<boolean> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
   }
-}
-
-async function hasCanonicalDocument(taskRoot: string, taskId: ReturnType<typeof parseTaskSlug>): Promise<boolean> {
-  if (!(await exists(taskRoot))) return false;
-  const pending = [taskRoot];
-  while (pending.length > 0) {
-    const directory = pending.pop()!;
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      const absolute = join(directory, entry.name);
-      if (entry.isDirectory()) { pending.push(absolute); continue; }
-      const rel = relative(taskRoot, absolute).split(sep).join("/");
-      try {
-        const classified = classifyTaskPath(taskId, parseTaskPathClaim(rel));
-        if (classified.ok && classified.value === "document") return true;
-      } catch { /* An unrelated destination file is not a canonical document. */ }
-    }
-  }
-  return false;
 }
 
 function mappedEntry(
@@ -145,6 +135,29 @@ function mappedEntry(
   // Rendered legacy reviews are evidence cache, not durable documents. Their exact source bytes
   // remain in ignored import staging and are reported as unmapped for the migration audit.
   return undefined;
+}
+
+function deriveResumePhase(mapping: readonly LegacyMappingEntry[]): ProjectResult<PhaseInstanceId> {
+  const designs = new Set<number>();
+  const implementations = new Set<number>();
+  for (const entry of mapping) {
+    const decoded = /^(phase-design|phase-impl)-([1-9][0-9]*)$/u.exec(entry.phase_instance);
+    if (decoded === null) continue;
+    (decoded[1] === "phase-design" ? designs : implementations).add(Number(decoded[2]));
+  }
+  let highestImplemented = 0;
+  while (implementations.has(highestImplemented + 1)) {
+    const next = highestImplemented + 1;
+    if (!designs.has(next)) {
+      return fail(createProjectError("TASK_INVALID", { task_id: mapping[0]?.destination_path.split("/")[2] ?? "legacy", issue_code: "legacy-implementation-without-design" }));
+    }
+    highestImplemented = next;
+  }
+  if ([...implementations].some((phase) => phase > highestImplemented)) {
+    return fail(createProjectError("TASK_INVALID", { task_id: mapping[0]?.destination_path.split("/")[2] ?? "legacy", issue_code: "legacy-phase-history-gap" }));
+  }
+  const inFlight = highestImplemented + 1;
+  return ok(parsePhaseInstanceId(designs.has(inFlight) ? `phase-impl-${inFlight}` : `phase-design-${inFlight}`));
 }
 
 async function enumerateSource(
@@ -211,11 +224,16 @@ export async function stageLegacyUpgrade(input: StageLegacyUpgradeInput): Promis
     if (isInside(sourceRoot, destinationRoot) || isInside(destinationRoot, sourceRoot)) {
       return fail(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-source-destination-overlap" }));
     }
-    if (await exists(join(destinationRoot, "state.json")) || await hasCanonicalDocument(destinationRoot, taskId)) {
+    if (await exists(destinationRoot)) {
       return fail(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-in-use" }));
     }
 
-    const configBytes = await createTaskConfig(runner.location.worktreeRoot, taskId);
+    let configBytes: Uint8Array;
+    try {
+      configBytes = new Uint8Array(await readFile(join(runner.location.worktreeRoot, ".archflow", "config.yaml")));
+    } catch {
+      return fail(createProjectError("CONFIG_INVALID", { issue_code: "archflow-initialization-required" }));
+    }
     try { parseConfigYaml(decoder.decode(configBytes), "task config"); }
     catch { return fail(createProjectError("CONFIG_INVALID", { issue_code: "task-config-invalid" })); }
 
@@ -266,6 +284,19 @@ export async function stageLegacyUpgrade(input: StageLegacyUpgradeInput): Promis
     if (mapping.some((entry, index) => index > 0 && mapping[index - 1]!.destination_path === entry.destination_path)) {
       return fail(createProjectError("PATH_INVALID", { task_id: taskId, path_class: "document" }));
     }
+    if (!mapping.some((entry) => entry.phase_instance === "prd") || !mapping.some((entry) => entry.phase_instance === "design")) {
+      return fail(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-prd-and-architecture-required" }));
+    }
+    const resume = deriveResumePhase(mapping);
+    if (!resume.ok) return resume;
+    const resumeNumber = Number(/([1-9][0-9]*)$/u.exec(resume.value)?.[1] ?? 1);
+    let plannedFinalPhase = Math.max(resumeNumber, ...mapping.map((entry) => Number(/([1-9][0-9]*)$/u.exec(entry.phase_instance)?.[1] ?? 0)));
+    const architecture = selected.value.files.find((file) => file.legacy_path === "architecture.md");
+    if (architecture !== undefined) {
+      for (const match of decoder.decode(architecture.bytes).matchAll(/\bphase\s+([1-9][0-9]*)\b/giu)) {
+        plannedFinalPhase = Math.max(plannedFinalPhase, Number(match[1]));
+      }
+    }
     const importDigest = canonicalJsonDigest({ schema_version: "1", staged_payload_refs: stagedRefs, mapping });
     const sourceRelative = relative(runner.location.worktreeRoot, sourceRoot).split(sep).join("/");
     const sourceIdentityDigest = canonicalJsonDigest({
@@ -273,6 +304,13 @@ export async function stageLegacyUpgrade(input: StageLegacyUpgradeInput): Promis
       repository_identity_digest: authority.repository_identity_digest,
       source_root: parseRepositoryPathClaim(sourceRelative),
     });
+    const symbolicRef = await runner.runText({
+      argv: ["symbolic-ref", "--quiet", "HEAD"],
+      operation: parseSafeCode("legacy-upgrade-target-ref"),
+      expectedAbsence: [{ code: 1, stderrIncludes: "" }],
+    });
+    const targetRef = symbolicRef === "" ? "HEAD" : symbolicRef;
+    const commitMessage = `archflow(${taskId}): adopt legacy import`;
     const initialization: LegacyImportInitializationV1 = Object.freeze({
       schema_version: "1",
       artifact_kind: "legacy-import-initialization",
@@ -289,7 +327,24 @@ export async function stageLegacyUpgrade(input: StageLegacyUpgradeInput): Promis
       canonical_paths: canonicalTaskPaths(taskId),
       mapping: Object.freeze(mapping),
       staged_payload_refs: Object.freeze(stagedRefs),
+      resume_phase: resume.value,
+      planned_final_phase: parseSafeInteger(plannedFinalPhase),
+      target_ref: targetRef,
+      commit_message: commitMessage,
     });
+    const previewDigest = canonicalJsonDigest({
+      schema_version: "1",
+      initialization,
+      resume_phase: resume.value,
+      excluded: [...excluded].sort(ordinal),
+    });
+    const operation = input.operation ?? "stage";
+    if (operation === "stage" && input.approved_preview_digest !== undefined && input.approved_preview_digest !== previewDigest) {
+      return fail(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-preview-digest-mismatch" }));
+    }
+    if (operation === "stage" && input.operation !== undefined && input.approved_preview_digest === undefined) {
+      return fail(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-preview-approval-required" }));
+    }
     const writer = input.projection_writer ?? createProjectionWriter();
     const stagedPaths: string[] = [];
     const stagedByLegacy = new Map<string, string>();
@@ -297,8 +352,10 @@ export async function stageLegacyUpgrade(input: StageLegacyUpgradeInput): Promis
       const claim = parseWorkspacePathClaim(`cache/imports/${importDigest}/payload/${file.legacy_path}`);
       const target = await resolveTaskWorkspacePath({ runner, taskId, claim, expectedClass: "workspace-import", context });
       if (!target.ok) return target;
-      await ensureWorkspaceProjectionParent(authority, target.value.absolute);
-      await writer.replaceRegular(target.value, file.bytes, false);
+      if (operation === "stage") {
+        await ensureWorkspaceProjectionParent(authority, target.value.absolute);
+        await writer.replaceRegular(target.value, file.bytes, false);
+      }
       const stagedPath = target.value.repositoryRelative as string;
       stagedPaths.push(stagedPath);
       stagedByLegacy.set(file.legacy_path, stagedPath);
@@ -306,8 +363,10 @@ export async function stageLegacyUpgrade(input: StageLegacyUpgradeInput): Promis
     const manifestClaim = parseWorkspacePathClaim(`cache/imports/${importDigest}/manifest.json`);
     const manifestTarget = await resolveTaskWorkspacePath({ runner, taskId, claim: manifestClaim, expectedClass: "workspace-import", context });
     if (!manifestTarget.ok) return manifestTarget;
-    await ensureWorkspaceProjectionParent(authority, manifestTarget.value.absolute);
-    await writer.replaceRegular(manifestTarget.value, canonicalDocument(initialization).bytes, false);
+    if (operation === "stage") {
+      await ensureWorkspaceProjectionParent(authority, manifestTarget.value.absolute);
+      await writer.replaceRegular(manifestTarget.value, canonicalDocument(initialization).bytes, false);
+    }
     const manifestPath = manifestTarget.value.repositoryRelative as string;
     stagedPaths.push(manifestPath);
     stagedPaths.sort(ordinal);
@@ -319,12 +378,29 @@ export async function stageLegacyUpgrade(input: StageLegacyUpgradeInput): Promis
       destination_path: entry.destination_path as string,
       staged_path: stagedByLegacy.get(entry.legacy_path)!,
     }));
-    let highestImplemented = 0;
-    for (const entry of mapping) {
-      const match = /^phase-impl-([1-9][0-9]*)$/u.exec(entry.phase_instance);
-      if (match !== null) highestImplemented = Math.max(highestImplemented, Number(match[1]));
+    if (operation === "stage") {
+      const configClaim = parseWorkspacePathClaim(`cache/imports/${importDigest}/config.yaml`);
+      const configTarget = await resolveTaskWorkspacePath({ runner, taskId, claim: configClaim, expectedClass: "workspace-import", context });
+      if (!configTarget.ok) return configTarget;
+      await ensureWorkspaceProjectionParent(authority, configTarget.value.absolute);
+      await writer.replaceRegular(configTarget.value, configBytes, false);
+      stagedPaths.push(configTarget.value.repositoryRelative as string);
+
+      const stageClaim = parseWorkspacePathClaim(`cache/imports/${importDigest}/stage.json`);
+      const stageTarget = await resolveTaskWorkspacePath({ runner, taskId, claim: stageClaim, expectedClass: "workspace-import", context });
+      if (!stageTarget.ok) return stageTarget;
+      await ensureWorkspaceProjectionParent(authority, stageTarget.value.absolute);
+      await writer.replaceRegular(stageTarget.value, canonicalDocument({
+        schema_version: "1",
+        task_id: taskId,
+        import_digest: importDigest,
+        preview_digest: previewDigest,
+        manifest_path: manifestPath,
+        resume_phase: resume.value,
+      }).bytes, false);
+      stagedPaths.push(stageTarget.value.repositoryRelative as string);
     }
-    const resumePhase = parsePhaseInstanceId(`phase-design-${highestImplemented + 1}`);
+    stagedPaths.sort(ordinal);
     return ok(Object.freeze({
       initialization,
       audit_context: Object.freeze({
@@ -333,9 +409,20 @@ export async function stageLegacyUpgrade(input: StageLegacyUpgradeInput): Promis
         import_digest: importDigest,
         code_baseline_digest: commitDigest(codeCommit, "code-baseline-commit"),
         policy_baseline_digest: commitDigest(policyCommit, "policy-base-commit"),
+        resume_phase: resume.value,
+        planned_final_phase: parseSafeInteger(plannedFinalPhase),
+        imported_documents: Object.freeze(mapping.map((entry) => Object.freeze({
+          path: entry.destination_path,
+          content_digest: stagedRefs.find((reference) => reference.legacy_path === entry.legacy_path)!.digest,
+        })).sort((left, right) => ordinal(left.path, right.path))),
+        target_ref: targetRef,
+        baseline_commit: codeCommit,
+        commit_message: commitMessage,
       }),
       manifest_path: manifestPath,
-      resume_phase: resumePhase,
+      resume_phase: resume.value,
+      preview_digest: previewDigest,
+      operation,
       draft_sources: Object.freeze(draftSources),
       staged_paths: Object.freeze(stagedPaths),
       unmapped: Object.freeze(unmapped),
@@ -344,4 +431,45 @@ export async function stageLegacyUpgrade(input: StageLegacyUpgradeInput): Promis
     if (error instanceof GitInvocationError) return fail(projectErrorForGitFailure(error, runner, context));
     return fail(ioError(context));
   }
+}
+
+/** Removes only an explicitly named, unadopted import stage and the known pre-fix config side effect. */
+export async function discardLegacyUpgrade(input: DiscardLegacyUpgradeInput): Promise<ProjectResult<Readonly<{ discarded: true }>>> {
+  const taskId = parseTaskSlug(input.task_id);
+  const context: RepositoryOperationContext = Object.freeze({
+    task_id: taskId,
+    phase_instance: parsePhaseInstanceId("prd"),
+    operation: parseSafeCode("discard-legacy-stage"),
+    attempt: parseSafeInteger(1),
+  });
+  const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), context);
+  if (!discovered.ok) return discovered;
+  const root = discovered.value.location.worktreeRoot;
+  const digest = String(input.import_digest);
+  if (!/^[a-f0-9]{64}$/u.test(digest)) {
+    return fail(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-import-digest-invalid" }));
+  }
+  const destination = join(root, ".archflow", "tasks", taskId);
+  if (await exists(join(destination, "state.json"))) {
+    return fail(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-already-adopted" }));
+  }
+  if (await exists(destination)) {
+    const entries = await readdir(destination);
+    if (entries.some((entry) => entry !== "config.yaml")) {
+      return fail(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-not-disposable" }));
+    }
+    if (entries.includes("config.yaml")) {
+      const [actual, template] = await Promise.all([
+        readFile(join(destination, "config.yaml")),
+        readFile(join(root, ".archflow", "config.yaml")),
+      ]);
+      if (!actual.equals(template)) {
+        return fail(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-config-modified" }));
+      }
+      await rm(join(destination, "config.yaml"));
+      await rmdir(destination).catch(() => undefined);
+    }
+  }
+  await rm(join(root, ".archflow", "runtime", "tasks", taskId, "cache", "imports", digest), { recursive: true, force: true });
+  return ok(Object.freeze({ discarded: true as const }));
 }

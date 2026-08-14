@@ -255,7 +255,7 @@ const WORKSPACE_CLASS_RULES: readonly ClassRule<WorkspacePathClass>[] = [
   },
   {
     path_class: "workspace-import",
-    pattern: anchored(`cache/imports/${SHA256}/(?:manifest\\.json|payload/.+)`),
+    pattern: anchored(`cache/imports/${SHA256}/(?:manifest\\.json|stage\\.json|config\\.yaml|payload/.+)`),
   },
   {
     path_class: "workspace-attempt",

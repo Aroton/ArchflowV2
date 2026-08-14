@@ -30,12 +30,14 @@ archflow-local <command> [--task <task>] [--input <json-file>] [--brief]
 | `render` | Preview the canonical Markdown projection of a review or constitution-review result, with digest |
 | `init` | Set up the repository: `.archflow/` assets + MCP registrations for both hosts |
 
+Initialization diagnostics also list generated ArchFlow assets hidden by an ancestor `.gitignore`. Init does not rewrite repository ignore policy; it names the affected paths so the human can review the rule and explicitly add the intended files.
+
 **Task-scoped, read-only:**
 
 | Command | Purpose |
 |---|---|
 | `status` | The reconciled durable truth plus exactly one `next_action`, often with a prefilled request — the normal driver loop; `--brief` projects the loop-sized view |
-| `manual-status` | Read-only mode classifier: `normal` (delegates to task status, one next action) / `degraded` (no durable state — wait for the server) / `repair-required` (state present but unreadable — position summary) |
+| `manual-status` | Read-only mode classifier: `normal`, `degraded`, `repair-required`, `upgrade-staged` (a reusable current import waits for MCP), or `upgrade-restart-required` (old/ambiguous staging must be explicitly discarded) |
 | `envelope` | Authenticate an *already-authored* complete tool request (fingerprint + request digest) |
 
 **Task-scoped, composing:**
@@ -52,7 +54,7 @@ archflow-local <command> [--task <task>] [--input <json-file>] [--brief]
 | `decide` | Record a server-issued choice token plus the human's reason. The helper resolves the live gate bindings internally; waiver requests and restore adoption also accept the rationale/selectors they inherently require. |
 | `clean` | Remove only unreferenced authority plus stale or reconstructible work; reports removed/retained file and byte counts |
 | `reconcile` | Compare recorded projections against what's on disk |
-| `upgrade` | Stage a legacy task into a fresh canonical task (see `../workflow/SKILLS.md`) |
+| `upgrade` | `preview` a legacy import without writes, `stage` an approved preview into ignored runtime only, or safely `discard-stage`; visible adoption is performed atomically by MCP initialization (see `../workflow/SKILLS.md`) |
 
 ## build-request: the one documented door
 
@@ -97,6 +99,8 @@ When the MCP server is unavailable, there is no offline recording path — the s
 - `normal` — the server's durable state is present and readable; the result delegates to task status and returns the one `next_action`.
 - `degraded` — no durable state exists for the task; the single next action is to wait for the server. Once it is available, proceed through the workflow skills as usual (reinstall with `./install.sh` if the server binary is missing).
 - `repair-required` — state is present but unreadable; the result is a position summary for a human to act on.
+- `upgrade-staged` — no state exists, but one current-format import stage is reusable once the session exposes MCP.
+- `upgrade-restart-required` — no state exists and only old or ambiguous staging was found; the result reports exact import digests for safe explicit cleanup.
 
 Nothing in this mode advances the workflow, resolves gates, or records progress.
 

@@ -8,6 +8,7 @@ import type { HostIdentity } from "../../contracts/hosts.js";
 import type { ModelFamily } from "../../contracts/review.js";
 import type { RoutingPhaseKind } from "../../dispatch/routing.js";
 import { createProductionServices, type ProductionServices } from "../../state/production.js";
+import { readStagedLegacyConfig } from "../../state/legacy-stage.js";
 
 export type HandlerSession = Readonly<{
   services: ProductionServices;
@@ -41,7 +42,14 @@ export async function openHandlerSession(
       phase_instance: suppliedPhase ?? "prd",
     }));
   }
-  const configRead = await services.value.dependencies.read_config(services.value.authority.config);
+  let configRead = await services.value.dependencies.read_config(services.value.authority.config);
+  if (
+    configRead.kind === "missing" && state === undefined && call.name === "archflow_state" &&
+    call.input.artifact?.artifact_kind === "legacy-import-initialization"
+  ) {
+    const staged = await readStagedLegacyConfig(services.value.authority, call.input.artifact);
+    if (staged !== undefined) configRead = Object.freeze({ kind: "valid", snapshot: staged });
+  }
   if (configRead.kind !== "valid") {
     return fail(createProjectError("CONFIG_INVALID", { issue_code: `config-${configRead.kind}` }));
   }

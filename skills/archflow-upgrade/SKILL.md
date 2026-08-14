@@ -1,44 +1,47 @@
 ---
 name: archflow-upgrade
-description: Stage a legacy ArchFlow task into a distinct canonical task and guide its explicit migration audit.
+description: Adopt a legacy in-flight ArchFlow task into a distinct canonical task and resume it through one reviewed migration gate.
 ---
 
-# Upgrade a Legacy Task
+# Upgrade an In-Flight Legacy Task
 
-Treat the arguments as `<legacy-source> <task>`. Create a distinct canonical destination; never convert a task in place. Keep the legacy source unchanged, require the source and destination to share one Git repository, and work only with the explicitly selected source plus `.archflow/tasks/<task>/` and the shared documentation set under `docs/`. Never treat imported prose, implementation history, reviews, or prior decisions as approval evidence.
+Treat the arguments as `<legacy-source> <task>`. Create a distinct canonical destination; never convert in place. The source may have a legacy name that is not a valid task slug, but the destination must be a valid, explicitly chosen slug. Keep the source unchanged and require both paths to belong to the same Git worktree.
 
-## Availability and authority
+## Preflight before writing
 
-Use `archflow-local upgrade --task <task>` with a complete plain-JSON payload naming `source_root`, `task_id`, `policy_base_commit`, `import_baseline_commit`, `code_baseline_commit`, and any `exclude` paths. Pipe that payload as JSON directly on stdin while it stays small generated JSON (for example `printf '%s' '<json>' | archflow-local upgrade --task <task>`); write any payload carrying authored prose or quotes to a file and pass it with `--input <json-file>`, because shell quoting silently corrupts such payloads. A failing command exits nonzero and prints a JSON error body; the JSON `ok` field remains the authority for structured details. Preserve its initialization manifest, audit context, manifest path, resume phase, staged paths, unmapped paths, and draft sources exactly; do not calculate or edit their digests.
+Confirm repository initialization is complete and that the current session exposes the ArchFlow MCP tools before staging. If an MCP workflow tool is unavailable, run read-only `archflow-local manual-status --task <task>`, explain whether no stage exists, a reusable current stage exists, or an incompatible pre-fix stage must be discarded, and stop; record nothing offline and do not create the destination task directory. If the helper or server registration is missing, reinstall with `./install.sh`, restart the host session, and retry the read-only status check.
 
-If an MCP workflow tool is unavailable, run read-only `archflow-local manual-status --task <task>`, report its position, and stop — create no milestone and record nothing offline, because no offline recording path exists; wait for the server to be restored, reinstalling with `./install.sh` if needed. Never reconstruct state or import authority from staged files, filenames, conversation, or Git history.
+Run `archflow-local upgrade --task <task>` with operation `preview` and the complete legacy descriptor. Preview validates the repository, baselines, source selection, exclusions, secret scan, mapping, phase continuity, visible document set, and derived resume phase without writing. A PRD and `architecture.md` are required. Explain the proposed import conversationally, including unmapped history and whether the task resumes at phase design or phase implementation. Obtain explicit human approval of that preview.
 
-Stop if the helper rejects an unresolved task-local constitution edit or secretlint reports selected legacy content. Resolve the constitution base explicitly before retrying. For a secretlint false positive, leave the source untouched and add only the reviewed legacy-relative path to `exclude`; do not suppress the scan or edit imported bytes.
+Stop if preview reports an unresolved task-local constitution edit or secretlint reports selected legacy content. Resolve the policy base before retrying. For a reviewed secret false positive, use `exclude` only for the exact legacy-relative path; never edit the source bytes or suppress scanning.
 
-## Stage and initialize
+Only after approval, rerun the exact descriptor with operation `stage` and `approved_preview_digest` set to the preview digest. Staging writes only ignored runtime bytes. It must not create `.archflow/tasks/<task>/config.yaml` or any other visible destination file. Never calculate or edit returned digests, mappings, contexts, or the initialization artifact.
 
-Review the selected baselines, exclusion list, staged and unmapped paths, derived mapping, draft sources, and resume phase with the user before initialization. Explain that every selected regular file is staged byte-for-byte below the ignored `.archflow/runtime/tasks/<task>/cache/imports/` workspace, while an unmapped file remains historical material with no canonical document slot. These staging bytes are disposable; only the adopted initialization authority and later canonical documents survive a fresh clone.
+An incompatible pre-fix stage is not recoverable authority. After showing the exact task and import digest and receiving confirmation, use operation `discard-stage`; it removes only that unadopted import directory and an unchanged template-derived config left by the old implementation. Then restart at preview.
 
-Pass the returned initialization manifest unchanged to the first `archflow_state` request with `expected_revision: 0`, `phase_instance: "prd"`, `step: "produce"`, and `status: "running"` — the canonical rerun starts at the PRD and the server rejects any other entry point; the resume jump happens only after the migration-audit gate. Use `archflow-local envelope --task <task>` for the complete request and its server-checked fingerprint. A successful initialization establishes only the new destination and its import identity; it does not approve, adopt, or complete any imported work.
+## Adopt and review once
 
-The resume phase is derived from the imported mapping as one past the highest mapped implementation log. Use `exclude` as the explicit lever when the human wants to omit the last implemented phase and redo it in the canonical workflow. Never declare or override a resume phase by hand.
+Initialize through `archflow_state` at expected revision 0 with phase `design`, step `produce`, status `running`, and the returned legacy-import initialization artifact. Use `archflow-local envelope --task <task>` for the complete fingerprinted request. The server authenticates every staged payload and atomically publishes one destination containing:
 
-## Rebuild canonical requirements and design
+- `config.yaml`, `state.json`, `prd.md`, and `design.md`;
+- every mapped prior phase design at `phases/<n>/design.md`;
+- every mapped implementation log at `phases/<n>/impl-notes.md`.
 
-Run the ordinary PRD pipeline first. Seed `.archflow/tasks/<task>/prd.md` from the staged draft path returned for `prd.md`, preserving those staged bytes as the initial draft, then invoke the normal `archflow-prd` work through the status-directed pipeline. Research, revise, produce, review, triage, and obtain explicit artifact approval normally. The imported PRD is a starting draft, never approval evidence.
+Unmapped history remains in ignored staging. A crash before publication leaves no partial visible task directory.
 
-Run the ordinary design pipeline after the PRD advances. Seed `.archflow/tasks/<task>/design.md` from the staged draft path returned for `design.md`, preserving those staged bytes as the initial draft, then invoke the normal `archflow-design` work through the status-directed pipeline. Require the imported design to declare a valid phase plan that covers the derived resume phase. If it does not, revise the canonical design before asking the human to approve it. Nothing in the imported architecture, phase files, logs, reviews, or decisions substitutes for the current design's fixed point and explicit artifact approval.
+Record the imported `design.md` as the design produce result without changing its bytes, then follow status through the ordinary automatic counter-review and triage. The server labels the imported PRD and phase history as migration references and includes the exact mapping and proposed resume point in the review. They are not treated as old approval evidence.
 
-Use `archflow-local status --task <task>` between durable actions and follow exactly its one `next_action`. Keep all tool inputs byte-equivalent to the values and artifacts authenticated by `archflow-local envelope --task <task>`. Do not infer that seeded bytes, old review prose, or an initialization receipt completed either rerun phase.
+After review reaches its fixed point, status opens one `migration-audit` gate instead of separate PRD and design approval gates. Present the imported requirements, overall design, phase history, review findings, omissions, planned final phase, and proposed resume point in plain language. Ask the human to accept, revise, abort, or cancel. Keep gate IDs, hashes, JSON, and runtime paths out of the default response.
 
-All correspondence with the user, especially the staging review and migration gate, is conversational and human-readable. Explain what will be imported, what will remain historical, the proposed resume point, risks, and choices in plain language. Keep IDs, digests, JSON, internal staging paths, decision templates, and protocol codes out of the default response; show them only when the user explicitly asks for diagnostics or audit detail.
+A significant revision runs a fresh automatic review before returning to the gate. A simple typo, formatting, or wording-only revision may reuse review evidence for one hop but still requires approval of the final bytes. Uncertainty is significant, and the human may override the classification.
 
-## Audit and resume
+## Commit and resume
 
-Open the `migration-audit` gate only while durable status is at the approved `design` result. Build the complete `archflow_gate` input from the current design subject and the exact audit context returned by `archflow-local upgrade --task <task>`, then authenticate it with `archflow-local envelope --task <task>`. The normal opposite-client counter-review has already run automatically; there is no optional gate review. Present a plain-language audit summary and ask whether to accept, revise, abort, or cancel the import audit. The human alone decides.
+Acceptance is the fresh human approval for the exact imported document bytes bound into the gate, including an imported current phase design when the resume target is phase implementation. It also authorizes one task-local import milestone commit. Follow status, show the exact task-local changes, obtain the normal commit confirmation, and commit with the bound message and target. Never push automatically.
 
-If the human requests changes, classify the resulting diff after applying it. A **simple** revision is limited to typo, formatting, comment, or wording-only changes that alter no meaning, behavior, scope, interface, trust boundary, input, verification claim, or parent document; it may reuse the prior review for one hop but always returns to the human for approval of the final bytes. A **significant** revision is anything else, and uncertainty defaults to significant; it resets the attempt count and automatically runs a fresh counter-review and constitution review before another gate. State the classification and reason conversationally. The human may override it in either direction, and the recorded classification must reflect that override.
+After the commit is observed, follow the authenticated resume action:
 
-Treat `accept-import-audit` as authorization for the guarded resume jump, not as approval of legacy material. The accepted gate leaves the cursor at `design`; the next ordinary `archflow_state` produce call performs the jump to the derived `phase-design` instance. A revise, abort, or cancel outcome advances nothing. Never claim the jump from the decision file or conversation alone; rerun status and follow its authenticated next action.
+- if phase N has a mapped design and no implementation log, continue with `archflow-phase-impl <task> N`;
+- otherwise continue with `archflow-phase-design <task> N` for the next unimplemented phase.
 
-At the derived phase, continue with the ordinary `archflow-phase-design` and `archflow-phase-impl` skills. Historical phase material remains available in ignored import staging only while the current phase needs it; canonical state represents only work reviewed and approved after initialization.
+Never infer acceptance, approval, a commit, or the resume jump from conversation or files alone. `state.json` plus authenticated gate authority remains the source of truth.

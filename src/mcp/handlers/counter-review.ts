@@ -118,7 +118,7 @@ async function deriveApprovedUpstreams(
 ): Promise<ProjectResult<readonly AdjudicationUpstreamInput[]>> {
   const derived: AdjudicationUpstreamInput[] = [];
   for (const binding of expectedProduceUpstreamBindings(durable)) {
-    const upstream = await loadProduceUpstreamSubject(services.dependencies, durable, binding);
+    const upstream = await loadProduceUpstreamSubject(services.dependencies, services.authority, durable, binding);
     if (!upstream.ok) return upstream;
     const upstreamProjection = await readProduceProjection(
       services.runner, services.authority, upstream.value, binding.path,
@@ -133,7 +133,24 @@ async function deriveApprovedUpstreams(
       }));
     }
     const upstreamDigest = upstream.value.artifact_digest;
-    let approved = false;
+    let approved = "imported_projection" in upstream.value && durable.phase_instance === "design";
+    if ("imported_projection" in upstream.value && !approved) {
+      const repositoryPath = `.archflow/tasks/${durable.task_id}/${binding.path}`;
+      const importedContentDigest = upstream.value.imported_projection.content_digest;
+      for (const approval of durable.approvals.filter((candidate) => candidate.gate_kind === "migration-audit")) {
+        const authenticated = await loadAuthenticatedGateApproval(services.dependencies, services.authority, approval);
+        if (!authenticated.ok) return authenticated;
+        if (
+          authenticated.value.request.kind === "migration-audit" &&
+          authenticated.value.decision.envelope.payload.decision === "accept-import-audit" &&
+          authenticated.value.request.context.imported_documents?.some((document) =>
+            document.path === repositoryPath && document.content_digest === importedContentDigest)
+        ) {
+          approved = true;
+          break;
+        }
+      }
+    }
     for (const approval of [...durable.approvals]
       .filter((candidate) =>
         (candidate.gate_kind === "artifact-approval" || candidate.gate_kind === "design-approval") &&

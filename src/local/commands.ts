@@ -26,7 +26,7 @@ import { installSnapshot, prepareSnapshot, restoreSnapshotOutput } from "../stat
 import { reconcileCurrentAuthority } from "../state/reconciliation.js";
 import type { ProjectResult } from "../contracts/errors.js";
 import { runInit } from "../init/index.js";
-import { stageLegacyUpgrade } from "../init/legacy-upgrade.js";
+import { discardLegacyUpgrade, stageLegacyUpgrade } from "../init/legacy-upgrade.js";
 import { BUILD_REQUEST_KINDS, runBuildRequest } from "./build-request.js";
 import { computeCallEnvelope } from "./call-envelope.js";
 import { classifyWorkflowStatus } from "./status-classification.js";
@@ -58,7 +58,7 @@ export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommand
   envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
   "build-request": { payload: `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},...kind facts: none (initialize/counter-review/advance), "step" (running), "document"/"implementation" (produce), "dispositions":[...] (triage), "summary" (gate)}`, task: "required" },
   "manual-status": { payload: null, task: "required" },
-  upgrade: { payload: "<legacy staging descriptor>", task: "optional" },
+  upgrade: { payload: '{"operation":"preview"|"stage"|"discard-stage",...legacy import facts}', task: "optional" },
 });
 
 export const INPUT_FREE_COMMANDS: ReadonlySet<LocalCommand> =
@@ -116,6 +116,15 @@ async function init(input: CommandInput): Promise<PlainJsonValue | ProjectResult
 
 async function upgrade(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
   const value = recordValue(input);
+  const operation = String(value.operation ?? "preview");
+  if (operation === "discard-stage") {
+    return discardLegacyUpgrade({
+      working_directory: input.working_directory,
+      task_id: String(value.task_id ?? input.task_id),
+      import_digest: String(value.import_digest),
+    });
+  }
+  if (operation !== "preview" && operation !== "stage") throw new TypeError("upgrade input.operation is invalid");
   return stageLegacyUpgrade({
     working_directory: input.working_directory,
     source_root: String(value.source_root),
@@ -123,6 +132,8 @@ async function upgrade(input: CommandInput): Promise<PlainJsonValue | ProjectRes
     policy_base_commit: String(value.policy_base_commit),
     import_baseline_commit: String(value.import_baseline_commit),
     code_baseline_commit: String(value.code_baseline_commit),
+    operation,
+    ...(value.approved_preview_digest === undefined ? {} : { approved_preview_digest: String(value.approved_preview_digest) }),
     ...(value.exclude === undefined ? {} : { exclude: value.exclude as unknown as readonly string[] }),
   });
 }

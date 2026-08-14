@@ -253,8 +253,8 @@ export async function handleState(
           current.value.phase_instance === "design" &&
           current.value.step === "triage" &&
           current.value.status === "succeeded" &&
-          decodedTarget.kind === "phase-design" &&
-          Number(decodedTarget.phase) > 1;
+          (decodedTarget.kind === "phase-design" || decodedTarget.kind === "phase-impl") &&
+          Number(decodedTarget.phase) >= 1;
         if (legacyJumpSignal) {
           const resolved = await findLegacyImportResumePhase(
             services.dependencies,
@@ -276,6 +276,25 @@ export async function handleState(
               );
               if (!loaded.ok) return loaded;
               authenticatedGateApprovals.push(loaded.value);
+              if (
+                loaded.value.request.kind === "migration-audit" &&
+                loaded.value.request.context.target_ref !== undefined &&
+                loaded.value.request.context.baseline_commit !== undefined &&
+                loaded.value.request.context.commit_message !== undefined &&
+                currentProduce?.artifact.artifact_kind === "document"
+              ) {
+                commitObserved = await designArtifactCommittedAtCurrentTarget(
+                  services.runner,
+                  current.value.task_id,
+                  currentProduce.artifact,
+                  currentProduce.retained.prepared.manifest.value.outputs,
+                  {
+                    target_ref: loaded.value.request.context.target_ref,
+                    baseline_commit: loaded.value.request.context.baseline_commit,
+                    commit_message: loaded.value.request.context.commit_message,
+                  },
+                );
+              }
             }
           }
         }

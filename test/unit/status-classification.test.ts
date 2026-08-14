@@ -1,4 +1,5 @@
-import { rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -69,5 +70,31 @@ describe("status classification", () => {
     const result = await classify(workspace);
     expect(result).toMatchObject({ ok: true, value: { mode: "repair-required" } });
     expect(result.value.next_action).toBeDefined();
+  });
+
+  it("distinguishes a reusable current upgrade stage from incompatible pre-fix staging", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "status-classify-stage", label: "status-classify-stage" });
+    workspaces.push(workspace);
+    rmSync(workspace.services.authority.state.absolute);
+    const digest = "a".repeat(64);
+    const stageRoot = join(workspace.root, ".archflow", "runtime", "tasks", workspace.taskId, "cache", "imports", digest);
+    mkdirSync(stageRoot, { recursive: true });
+    writeFileSync(join(stageRoot, "stage.json"), JSON.stringify({
+      schema_version: "1", task_id: workspace.taskId, import_digest: digest,
+      preview_digest: "b".repeat(64), manifest_path: "manifest.json", resume_phase: "phase-impl-2",
+    }));
+    expect(await classify(workspace)).toMatchObject({
+      ok: true,
+      value: { mode: "upgrade-staged", next_action: { code: "resume-upgrade-in-mcp-session" } },
+    });
+
+    rmSync(join(stageRoot, "stage.json"));
+    expect(await classify(workspace)).toMatchObject({
+      ok: true,
+      value: {
+        mode: "upgrade-restart-required",
+        next_action: { code: "discard-incompatible-upgrade-stage", input: { import_digests: [digest] } },
+      },
+    });
   });
 });

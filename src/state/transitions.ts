@@ -151,7 +151,7 @@ export function legalRunStepStatus(
 }
 
 function hasAuthenticatedMigrationAudit(input: TransitionPlanInput): boolean {
-  if (input.legacy_resume_phase === undefined || input.target.phase_instance !== input.legacy_resume_phase) return false;
+  if (input.commit_observed !== true || input.legacy_resume_phase === undefined || input.target.phase_instance !== input.legacy_resume_phase) return false;
   for (const authenticated of input.authenticated_gate_approvals ?? []) {
     assertAuthenticatedGateApproval(authenticated);
     if (

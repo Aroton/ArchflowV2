@@ -91,7 +91,7 @@ Nine gate kinds exist (`src/contracts/gates.ts`):
 | `attempts-exhausted` | the produce/review loop hit its attempt cap (status prefills its request; `build-request` composes only the approval kinds, so complete it through `archflow-local envelope`) |
 | `constitution-edit` | legacy compatibility for previously opened policy-edit gates; current counter-review does not emit this gate because task policy is already pinned immutably |
 | `restore-collision` | a drift repair would overwrite conflicting bytes |
-| `migration-audit` | a legacy import is ready for its guarded resume jump |
+| `migration-audit` | an atomically adopted legacy import has completed its automatic design review and triage; one decision binds every imported document digest, phase plan, commit authority, and the derived phase-design or phase-implementation resume point |
 
 Every gate is a durable pair of canonical documents (request + decision record) bound to a gate ID, context digest, subject digest, and the current evidence set. Decisions carry human provenance. Two properties keep them honest:
 

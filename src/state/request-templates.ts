@@ -5,6 +5,7 @@ import type { PlainJsonValue } from "../contracts/plain-json.js";
 import type { ToolName } from "../contracts/tool-names.js";
 import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
+import type { GateContext } from "../contracts/gates.js";
 import type { AdjudicationGateRequest } from "../review/adjudication.js";
 import type { NextAction, NextActionRequest } from "./next-action.js";
 import { phaseReviewPaths, type PhaseReviewPaths } from "./phase-documents.js";
@@ -38,6 +39,7 @@ export type NextActionRequestFacts = Readonly<{
   current_evidence?: CurrentEvidenceSetRef;
   commit_authorization?: CommitAuthorizationInput;
   design_approval?: DesignApprovalInput;
+  migration_audit?: GateContext<"migration-audit">;
   /**
    * The pending constitution-review gate, derived mechanically from retained adjudication
    * evidence by the same selector the fixed point uses; only the summary is authored.
@@ -175,6 +177,24 @@ export function buildNextActionRequest(next: NextAction, facts: NextActionReques
   }
 
   if (next.code === "open-gate") {
+    if (
+      next.gate_kind === "migration-audit" && facts.migration_audit !== undefined &&
+      facts.subject_digest !== undefined && facts.current_evidence !== undefined
+    ) {
+      return request("archflow_gate", {
+        ...mechanicalPrefix(facts.task_id, state, state.input_fingerprint),
+        phase_instance: state.phase_instance,
+        summary: TEMPLATE_SUMMARY,
+        subject_digest: facts.subject_digest,
+        current_evidence: facts.current_evidence as unknown as PlainJsonValue,
+        kind: "migration-audit",
+        context: facts.migration_audit as unknown as PlainJsonValue,
+      }, envelopeGuidance(
+        facts.task_id,
+        "archflow_gate",
+        "Summarize the imported PRD, overall design, visible phase history, review findings, and proposed resume point. Acceptance approves exactly those bytes and authorizes the task-local import milestone commit.",
+      ));
+    }
     if (
       next.gate_kind === "design-approval" &&
       facts.design_approval !== undefined &&

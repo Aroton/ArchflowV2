@@ -95,6 +95,7 @@ export type NextActionInput = Readonly<{
   adjudication_gate_kind?: GateKind;
   /** Every constitution gate still pending, in the order they open; the first is `adjudication_gate_kind`. */
   pending_adjudication_gate_kinds?: readonly GateKind[];
+  migration_audit_required?: boolean;
 }>;
 
 function action(
@@ -150,7 +151,8 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
       ? "commit-authorization"
       : undefined;
   const legacyDesignApproval = designPhase && hasLegacyDesignApproval(input);
-  if (requiredKind !== undefined && !matchingApproval(input, requiredKind) && !legacyDesignApproval) {
+  const migrationApproval = designPhase && matchingApproval(input, "migration-audit");
+  if (requiredKind !== undefined && !matchingApproval(input, requiredKind) && !legacyDesignApproval && !migrationApproval) {
     return action("open-gate", `Open the required ${requiredKind} gate.`, true, state, {
       gate_kind: requiredKind,
     });
@@ -273,6 +275,11 @@ export function deriveNextAction(input: NextActionInput): NextAction {
     if (next === "adjudication-gate") {
       const phase = decodePhaseInstance(state.phase_instance);
       if (phase.kind === "design" || phase.kind === "phase-design") {
+        if (input.migration_audit_required === true) {
+          return action("open-gate", "Open the reviewed migration audit for the exact imported documents and resume point.", true, state, {
+            gate_kind: "migration-audit",
+          });
+        }
         if (input.adjudication_gate_kind === "material-drift") {
           // Material upstream drift asks where the correction belongs, so it retains its distinct
           // redirect/revise decision instead of being silently collapsed into document approval.

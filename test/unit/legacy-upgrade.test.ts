@@ -19,7 +19,7 @@ import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } fro
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
-import { stageLegacyUpgrade } from "../../src/init/legacy-upgrade.js";
+import { discardLegacyUpgrade, stageLegacyUpgrade } from "../../src/init/legacy-upgrade.js";
 import type { RepositoryOperationContext } from "../../src/repository/git.js";
 import { resolveLegacySourcePath } from "../../src/repository/paths.js";
 import { findLegacyImportResumePhase } from "../../src/state/gates.js";
@@ -139,7 +139,8 @@ describe("legacy upgrade", () => {
     expect(staged.value.unmapped).toContain("reviews/review-findings.md");
     expect(staged.value.initialization.staged_payload_refs.find((item) => item.legacy_path === "phases/empty.bin")?.byte_count).toBe(0);
     expect(readFileSync(join(root, staged.value.manifest_path))).toEqual(Buffer.from(canonicalDocument(staged.value.initialization).bytes));
-    expect(readFileSync(join(root, ".archflow", "tasks", "destination", "config.yaml")))
+    expect(() => readFileSync(join(root, ".archflow", "tasks", "destination", "config.yaml"))).toThrow();
+    expect(readFileSync(join(root, ".archflow", "runtime", "tasks", "destination", "cache", "imports", staged.value.initialization.import_digest, "config.yaml")))
       .toEqual(readFileSync(join(root, ".archflow", "config.yaml")));
     expect(() => readFileSync(join(root, ".archflow", "tasks", "destination", "prd.md"))).toThrow();
 
@@ -175,6 +176,35 @@ describe("legacy upgrade", () => {
       .toEqual({ schema_version: "1", ok: true, value: undefined });
   });
 
+  it("previews without writes and resumes an imported in-flight phase at implementation", async () => {
+    const { root, source, head } = await fixture();
+    writeFileSync(join(source, "phases", "phase-2-current.md"), "# Phase 2 current design\n");
+    const preview = await stageLegacyUpgrade({
+      working_directory: root,
+      source_root: source,
+      task_id: "destination",
+      policy_base_commit: head,
+      import_baseline_commit: head,
+      code_baseline_commit: head,
+      operation: "preview",
+    });
+    expect(preview).toMatchObject({ ok: true, value: { operation: "preview", resume_phase: "phase-impl-2" } });
+    expect(() => readFileSync(join(root, ".archflow", "tasks", "destination", "config.yaml"))).toThrow();
+    expect(() => readFileSync(join(root, ".archflow", "runtime", "tasks", "destination", "cache", "imports", preview.ok ? preview.value.initialization.import_digest : "missing", "manifest.json"))).toThrow();
+    if (!preview.ok) return;
+    const staged = await stageLegacyUpgrade({
+      working_directory: root,
+      source_root: source,
+      task_id: "destination",
+      policy_base_commit: head,
+      import_baseline_commit: head,
+      code_baseline_commit: head,
+      operation: "stage",
+      approved_preview_digest: preview.value.preview_digest,
+    });
+    expect(staged).toMatchObject({ ok: true, value: { operation: "stage", resume_phase: "phase-impl-2" } });
+  });
+
   it("rejects source/destination overlap and an occupied canonical destination before staging", async () => {
     const { root, source, head } = await fixture();
     const overlap = await stageLegacyUpgrade({ working_directory: root, source_root: join(root, ".archflow", "tasks"), task_id: "destination", policy_base_commit: head, import_baseline_commit: head, code_baseline_commit: head });
@@ -185,5 +215,20 @@ describe("legacy upgrade", () => {
     const result = await stageLegacyUpgrade({ working_directory: root, source_root: source, task_id: "occupied", policy_base_commit: head, import_baseline_commit: head, code_baseline_commit: head });
     expect(result).toMatchObject({ ok: false, error: { code: "TASK_INVALID" } });
     expect(() => readFileSync(join(occupied, "config.yaml"))).toThrow();
+  });
+
+  it("safely discards an explicitly named pre-fix stage and unchanged config side effect", async () => {
+    const { root } = await fixture();
+    const digest = "c".repeat(64);
+    const destination = join(root, ".archflow", "tasks", "destination");
+    mkdirSync(destination, { recursive: true });
+    writeFileSync(join(destination, "config.yaml"), readFileSync(join(root, ".archflow", "config.yaml")));
+    const importRoot = join(root, ".archflow", "runtime", "tasks", "destination", "cache", "imports", digest);
+    mkdirSync(importRoot, { recursive: true });
+    writeFileSync(join(importRoot, "manifest.json"), "{}\n");
+    expect(await discardLegacyUpgrade({ working_directory: root, task_id: "destination", import_digest: digest }))
+      .toEqual({ schema_version: "1", ok: true, value: { discarded: true } });
+    expect(() => readFileSync(join(destination, "config.yaml"))).toThrow();
+    expect(() => readFileSync(join(importRoot, "manifest.json"))).toThrow();
   });
 });

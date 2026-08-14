@@ -105,6 +105,22 @@
       "items": {
         "$ref": "#/$defs/stagedPayloadRef"
       }
+    },
+    "resume_phase": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+    },
+    "planned_final_phase": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+    },
+    "target_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "commit_message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
     }
   },
   "required": [

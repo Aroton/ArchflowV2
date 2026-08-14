@@ -8309,7 +8309,7 @@ var require_dist = __commonJS({
 });
 
 // src/local/main.ts
-import { readFile as readFile11 } from "node:fs/promises";
+import { readFile as readFile14 } from "node:fs/promises";
 import process3 from "node:process";
 import { parseArgs } from "node:util";
 
@@ -23217,7 +23217,19 @@ var contexts = {
   "constitution-edit": external_exports.object({ pinned_constitution_digest: digest, current_constitution_digest: digest, changed_path_class: external_exports.literal("task-branch-constitution") }).strict(),
   "commit-authorization": external_exports.object({ target_ref: boundedText, diff_digest: digest, current_artifact_digests: canonicalDigests.min(1), parent_document_digests: canonicalDigests.min(1) }).strict(),
   "restore-collision": external_exports.object({ path: taskPathClaimV1Schema, recorded_generation_digest: digest, current_generation_digest: digest, adoption_candidate: authorityLink.optional() }).strict(),
-  "migration-audit": external_exports.object({ source_identity_digest: digest, destination_identity_digest: digest, import_digest: digest, code_baseline_digest: digest, policy_baseline_digest: digest }).strict()
+  "migration-audit": external_exports.object({
+    source_identity_digest: digest,
+    destination_identity_digest: digest,
+    import_digest: digest,
+    code_baseline_digest: digest,
+    policy_baseline_digest: digest,
+    resume_phase: phaseInstanceIdV1Schema.optional(),
+    planned_final_phase: safeInteger.optional(),
+    imported_documents: external_exports.array(external_exports.object({ path: repositoryPathClaimV1Schema, content_digest: digest }).strict()).optional(),
+    target_ref: boundedText.optional(),
+    baseline_commit: gitOidV1Schema.optional(),
+    commit_message: boundedText.optional()
+  }).strict()
 };
 var decisions = {
   "artifact-approval": decision(["approve", "revise", "reject"]),
@@ -24471,6 +24483,9 @@ function stagedRequestClaim(intentId) {
 function gateDecisionClaim(gateId) {
   return parseTaskPathClaim(`authority/decisions/${gateId}/decision.json`);
 }
+function initializationAuthorityClaim() {
+  return parseTaskPathClaim("authority/initialization.json");
+}
 function resultAuthorityClaim(resultDigest) {
   if (!/^[0-9a-f]{64}$/u.test(resultDigest)) {
     throw new TypeError("result digest must be lowercase SHA-256");
@@ -24546,7 +24561,7 @@ var WORKSPACE_CLASS_RULES = [
   },
   {
     path_class: "workspace-import",
-    pattern: anchored(`cache/imports/${SHA256}/(?:manifest\\.json|payload/.+)`)
+    pattern: anchored(`cache/imports/${SHA256}/(?:manifest\\.json|stage\\.json|config\\.yaml|payload/.+)`)
   },
   {
     path_class: "workspace-attempt",
@@ -32639,8 +32654,37 @@ var legacyImportInitializationV1Schema = external_exports.object({
   config_digest: sha256Digest5,
   canonical_paths: canonicalTaskPathsV1Schema,
   mapping: external_exports.array(legacyMappingEntryV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("destination_path")), "mapping must be sorted by destination_path with no duplicates"),
-  staged_payload_refs: external_exports.array(stagedPayloadRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("legacy_path")), "staged_payload_refs must be sorted by legacy_path with no duplicates")
+  staged_payload_refs: external_exports.array(stagedPayloadRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("legacy_path")), "staged_payload_refs must be sorted by legacy_path with no duplicates"),
+  resume_phase: phaseInstanceIdV1Schema.optional(),
+  planned_final_phase: safeInteger5.optional(),
+  target_ref: external_exports.string().min(1).max(512).optional(),
+  commit_message: external_exports.string().min(1).max(512).optional()
 }).strict();
+function parseLegacyImportInitialization(value) {
+  assertPlainJson(value, "legacy import initialization");
+  return legacyImportInitializationV1Schema.parse(value);
+}
+
+// src/state/legacy-import-resume.ts
+async function loadLegacyImportInitialization(dependencies, authority, state) {
+  const resolved = await resolveTaskPath({
+    runner: dependencies.runner,
+    taskId: authority.task_id,
+    claim: initializationAuthorityClaim(),
+    expectedClass: "authority-initialization",
+    context: authority.context
+  });
+  if (!resolved.ok) return resolved;
+  const document2 = await readCanonical(
+    resolved.value,
+    "legacy import initialization authority",
+    parseLegacyImportInitialization
+  );
+  if (document2 === "missing" || document2 === "invalid" || document2.digest !== state.initialization_digest) {
+    return ok6(void 0);
+  }
+  return ok6(document2.value);
+}
 
 // src/state/lock.ts
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -34756,7 +34800,7 @@ async function createProductionServices(input) {
 }
 
 // src/state/status.ts
-import { readFile as readFile5 } from "node:fs/promises";
+import { readFile as readFile6 } from "node:fs/promises";
 
 // src/dispatch/routing.ts
 var DispatchRoutingError = class extends Error {
@@ -34897,6 +34941,7 @@ init_trust_brands();
 init_renderers();
 
 // src/state/produce-subject.ts
+import { readFile as readFile5 } from "node:fs/promises";
 var fatalUtf8 = new TextDecoder("utf-8", { fatal: true });
 function expectedProduceUpstreamBindings(state) {
   const phase3 = decodePhaseInstance(state.phase_instance);
@@ -34917,10 +34962,54 @@ function expectedProduceUpstreamBindings(state) {
     Object.freeze({ phase_instance: encodePhaseInstance({ kind: "design" }), path: parseTaskPathClaim("design.md"), artifact_kind: "design" })
   ]);
 }
-async function loadProduceUpstreamSubject(dependencies, state, binding) {
+async function loadProduceUpstreamSubject(dependencies, authority, state, binding) {
   const reference = [...state.authoritative_results].reverse().find((candidate) => candidate.phase_instance === binding.phase_instance && candidate.step === "produce");
   if (reference === void 0 || dependencies.load_retained_result === void 0) {
-    return fail13(state.phase_instance, "current-upstream-produce-result-missing");
+    const initialization = await loadLegacyImportInitialization(
+      dependencies,
+      authority,
+      state
+    );
+    if (!initialization.ok || initialization.value === void 0) {
+      return fail13(state.phase_instance, "current-upstream-produce-result-missing");
+    }
+    const destination = `.archflow/tasks/${state.task_id}/${binding.path}`;
+    const mapping = initialization.value.mapping.find((entry) => entry.destination_path === destination);
+    const staged = mapping === void 0 ? void 0 : initialization.value.staged_payload_refs.find((entry) => entry.legacy_path === mapping.legacy_path);
+    if (mapping === void 0 || staged === void 0) return fail13(state.phase_instance, "current-upstream-import-missing");
+    const target = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: binding.path, context: authority.context });
+    if (!target.ok) return target;
+    let bytes;
+    try {
+      bytes = new Uint8Array(await readFile5(target.value.absolute));
+    } catch {
+      return fail13(state.phase_instance, "current-upstream-import-unavailable");
+    }
+    if (sha256Bytes(bytes) !== staged.digest) return fail13(state.phase_instance, "current-upstream-import-changed");
+    const artifact2 = Object.freeze({
+      schema_version: "1",
+      artifact_kind: "document",
+      task_id: state.task_id,
+      phase_instance: binding.phase_instance,
+      step: "produce",
+      document_path: binding.path,
+      path_class: "document",
+      byte_count: staged.byte_count,
+      content_digest: staged.digest,
+      declared_inputs: Object.freeze([]),
+      input_fingerprint: state.input_fingerprint,
+      snapshot_digest: canonicalJsonDigest({ schema_version: "1", imported_document: binding.path, content_digest: staged.digest }),
+      projection_target: target.value.repositoryRelative
+    });
+    return Object.freeze({
+      schema_version: "1",
+      ok: true,
+      value: Object.freeze({
+        artifact_digest: canonicalJsonDigest({ schema_version: "1", initialization_digest: state.initialization_digest, imported_document: binding.path, content_digest: staged.digest }),
+        artifact: artifact2,
+        imported_projection: Object.freeze({ path: binding.path, content_digest: staged.digest })
+      })
+    });
   }
   const retained = await dependencies.load_retained_result(reference);
   if (!retained.ok) return retained;
@@ -35366,7 +35455,8 @@ function advanceAction(input, state) {
   const designPhase = phase3.kind === "design" || phase3.kind === "phase-design";
   const requiredKind = designPhase ? "design-approval" : phase3.kind === "prd" ? "artifact-approval" : phase3.kind === "phase-impl" ? "commit-authorization" : void 0;
   const legacyDesignApproval = designPhase && hasLegacyDesignApproval(input);
-  if (requiredKind !== void 0 && !matchingApproval(input, requiredKind) && !legacyDesignApproval) {
+  const migrationApproval = designPhase && matchingApproval(input, "migration-audit");
+  if (requiredKind !== void 0 && !matchingApproval(input, requiredKind) && !legacyDesignApproval && !migrationApproval) {
     return action("open-gate", `Open the required ${requiredKind} gate.`, true, state, {
       gate_kind: requiredKind
     });
@@ -35467,6 +35557,11 @@ function deriveNextAction(input) {
     if (next === "adjudication-gate") {
       const phase3 = decodePhaseInstance(state.phase_instance);
       if (phase3.kind === "design" || phase3.kind === "phase-design") {
+        if (input.migration_audit_required === true) {
+          return action("open-gate", "Open the reviewed migration audit for the exact imported documents and resume point.", true, state, {
+            gate_kind: "migration-audit"
+          });
+        }
         if (input.adjudication_gate_kind === "material-drift") {
         } else if (hasLegacyDesignApproval(input) && !matchingApproval(input, "design-approval")) {
         } else {
@@ -35726,6 +35821,21 @@ function buildNextActionRequest(next, facts) {
     }, `Pipe {"kind":"advance"} to archflow-local build-request --task ${facts.task_id}; it recomputes full durable status, permits only the exact pending ${next.code} action, resolves the destination fingerprint, and returns the staged archflow_state request.`);
   }
   if (next.code === "open-gate") {
+    if (next.gate_kind === "migration-audit" && facts.migration_audit !== void 0 && facts.subject_digest !== void 0 && facts.current_evidence !== void 0) {
+      return request("archflow_gate", {
+        ...mechanicalPrefix(facts.task_id, state, state.input_fingerprint),
+        phase_instance: state.phase_instance,
+        summary: TEMPLATE_SUMMARY,
+        subject_digest: facts.subject_digest,
+        current_evidence: facts.current_evidence,
+        kind: "migration-audit",
+        context: facts.migration_audit
+      }, envelopeGuidance(
+        facts.task_id,
+        "archflow_gate",
+        "Summarize the imported PRD, overall design, visible phase history, review findings, and proposed resume point. Acceptance approves exactly those bytes and authorizes the task-local import milestone commit."
+      ));
+    }
     if (next.gate_kind === "design-approval" && facts.design_approval !== void 0 && facts.subject_digest !== void 0 && facts.current_evidence !== void 0) {
       return request("archflow_gate", {
         ...mechanicalPrefix(facts.task_id, state, state.input_fingerprint),
@@ -36181,7 +36291,7 @@ async function readActiveGateProjection(dependencies, authority) {
       context: authority.context
     });
     if (!target.ok) return void 0;
-    const bytes = new Uint8Array(await readFile5(target.value.absolute));
+    const bytes = new Uint8Array(await readFile6(target.value.absolute));
     return parseActiveGate(parseCanonicalDocument(bytes, "active gate").value);
   } catch {
     return void 0;
@@ -36197,19 +36307,26 @@ async function readArchivedGateRequest(dependencies, authority, gateId) {
       context: authority.context
     });
     if (!target.ok) return void 0;
-    const bytes = new Uint8Array(await readFile5(target.value.absolute));
+    const bytes = new Uint8Array(await readFile6(target.value.absolute));
     return parseGateRequest(parseCanonicalDocument(bytes, "gate request").value);
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
     throw error51;
   }
 }
-async function currentApprovedUpstreams(dependencies, state, authenticated) {
+async function currentApprovedUpstreams(dependencies, authority, state, authenticated) {
   const bindings = expectedProduceUpstreamBindings(state);
   const digests = [];
   for (const binding of bindings) {
-    const loaded = await loadProduceUpstreamSubject(dependencies, state, binding);
+    const loaded = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
     if (!loaded.ok) throw new TypeError("current upstream produced authority invalid");
+    if ("imported_projection" in loaded.value) {
+      if (state.phase_instance !== "design" && !authenticated.some((item) => item.request.kind === "migration-audit" && item.decision.envelope.payload.decision === "accept-import-audit")) {
+        throw new TypeError("imported upstream lacks accepted migration audit");
+      }
+      digests.push(loaded.value.artifact_digest);
+      continue;
+    }
     const approval = [...authenticated].filter((item) => {
       if (item.approval.subject_digest !== loaded.value.artifact_digest) return false;
       if (binding.artifact_kind === "prd") {
@@ -36530,6 +36647,30 @@ async function computeTaskStatus(dependencies, authority) {
         blockers.push("commit-observation-unavailable");
       }
     }
+    const migration = authenticatedApprovals.find((item) => item.request.kind === "migration-audit" && item.request.phase_instance === state.phase_instance && item.request.subject_digest === produceSubject.artifact_digest && item.decision.envelope.payload.decision === "accept-import-audit");
+    if (migration?.request.kind === "migration-audit" && migration.request.context.target_ref !== void 0 && migration.request.context.baseline_commit !== void 0 && migration.request.context.commit_message !== void 0) {
+      designCommit = Object.freeze({
+        path: `.archflow/tasks/${state.task_id}`,
+        message: migration.request.context.commit_message,
+        target_ref: migration.request.context.target_ref,
+        baseline_commit: migration.request.context.baseline_commit
+      });
+      try {
+        commitObserved = await designArtifactCommittedAtCurrentTarget(
+          dependencies.runner,
+          state.task_id,
+          produceSubject.artifact,
+          produceSubject.retained.prepared.manifest.value.outputs,
+          {
+            target_ref: migration.request.context.target_ref,
+            baseline_commit: migration.request.context.baseline_commit,
+            commit_message: migration.request.context.commit_message
+          }
+        );
+      } catch {
+        blockers.push("commit-observation-unavailable");
+      }
+    }
   }
   const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document" ? produceSubject.artifact.editorial_predecessor : void 0;
   const currentProduceReference = state.authoritative_results.find((reference) => reference.phase_instance === state.phase_instance && reference.step === "produce");
@@ -36544,7 +36685,7 @@ async function computeTaskStatus(dependencies, authority) {
   let assessment;
   if (constitution !== void 0 && subjectDigest !== void 0) {
     const resolvedAssessment = await resolveStatusEvidenceAssessment(
-      () => currentApprovedUpstreams(dependencies, state, authenticatedApprovals),
+      () => currentApprovedUpstreams(dependencies, authority, state, authenticatedApprovals),
       (approvedUpstreamDigests) => assessCurrentEvidence(state, retained, {
         subject_digest: subjectDigest,
         input_fingerprint: state.input_fingerprint,
@@ -36669,6 +36810,24 @@ async function computeTaskStatus(dependencies, authority) {
   }
   const adjudicationGate = pendingGates[0];
   const adjudicationGateKind = adjudicationGate?.kind;
+  const legacyInitialization = await loadLegacyImportInitialization(dependencies, authority, state);
+  const migrationAuditRequired = legacyInitialization.ok && legacyInitialization.value !== void 0 && state.phase_instance === "design" && !authenticatedApprovals.some((item) => item.request.kind === "migration-audit" && item.decision.envelope.payload.decision === "accept-import-audit");
+  const migrationAuditContext = migrationAuditRequired && legacyInitialization.ok && legacyInitialization.value?.resume_phase !== void 0 && legacyInitialization.value.planned_final_phase !== void 0 && legacyInitialization.value.target_ref !== void 0 && legacyInitialization.value.commit_message !== void 0 ? Object.freeze({
+    source_identity_digest: legacyInitialization.value.source_identity_digest,
+    destination_identity_digest: authority.task_identity_digest,
+    import_digest: legacyInitialization.value.import_digest,
+    code_baseline_digest: canonicalJsonDigest({ schema_version: "1", digest_kind: "code-baseline-commit", commit: legacyInitialization.value.code_baseline_commit }),
+    policy_baseline_digest: canonicalJsonDigest({ schema_version: "1", digest_kind: "policy-base-commit", commit: legacyInitialization.value.policy_base_commit }),
+    resume_phase: legacyInitialization.value.resume_phase,
+    planned_final_phase: legacyInitialization.value.planned_final_phase,
+    imported_documents: Object.freeze(legacyInitialization.value.mapping.map((entry) => Object.freeze({
+      path: entry.destination_path,
+      content_digest: legacyInitialization.value.staged_payload_refs.find((reference) => reference.legacy_path === entry.legacy_path).digest
+    })).sort((left, right) => left.path.localeCompare(right.path))),
+    target_ref: legacyInitialization.value.target_ref,
+    baseline_commit: legacyInitialization.value.code_baseline_commit,
+    commit_message: legacyInitialization.value.commit_message
+  }) : void 0;
   const nextAction = deriveNextAction({
     repository_initialized: true,
     state,
@@ -36685,7 +36844,8 @@ async function computeTaskStatus(dependencies, authority) {
     commit_observed: commitObserved,
     ...designCommit === void 0 ? {} : { design_commit: designCommit },
     ...adjudicationGateKind === void 0 ? {} : { adjudication_gate_kind: adjudicationGateKind },
-    ...pendingGates.length === 0 ? {} : { pending_adjudication_gate_kinds: pendingGates.map((gate) => gate.kind) }
+    ...pendingGates.length === 0 ? {} : { pending_adjudication_gate_kinds: pendingGates.map((gate) => gate.kind) },
+    migration_audit_required: migrationAuditRequired
   });
   let gateInput;
   let designGateInput;
@@ -36709,6 +36869,7 @@ async function computeTaskStatus(dependencies, authority) {
     } : {},
     ...gateInput === void 0 ? {} : { commit_authorization: gateInput },
     ...designGateInput === void 0 ? {} : { design_approval: designGateInput },
+    ...migrationAuditContext === void 0 ? {} : { migration_audit: migrationAuditContext },
     ...adjudicationGate === void 0 ? {} : { adjudication_gate: adjudicationGate },
     maximum_attempts: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS
   });
@@ -36764,7 +36925,7 @@ function attachNextActionRequest(next, facts) {
 }
 async function recoverStatePosition(statePath) {
   try {
-    const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(await readFile5(statePath))));
+    const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(await readFile6(statePath))));
     if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return void 0;
     const candidate = raw;
     const position2 = Object.freeze({
@@ -36829,7 +36990,7 @@ async function classifyDurableStateReadability(input) {
 
 // src/init/assets.ts
 import { constants } from "node:fs";
-import { access, mkdir as mkdir3, open as open4, readFile as readFile6 } from "node:fs/promises";
+import { access, mkdir as mkdir3, open as open4, readFile as readFile7 } from "node:fs/promises";
 import { dirname as dirname5, join as join7 } from "node:path";
 import { fileURLToPath } from "node:url";
 var ARCHFLOW_GITATTRIBUTES_LINE = ".archflow/** -text merge=binary";
@@ -36873,7 +37034,7 @@ async function appendGitAttributes(workingDirectory) {
   const path2 = join7(workingDirectory, ".gitattributes");
   let current;
   try {
-    current = new Uint8Array(await readFile6(path2));
+    current = new Uint8Array(await readFile7(path2));
   } catch (error51) {
     if (!errno(error51, "ENOENT")) throw error51;
     const handle2 = await open4(path2, "wx");
@@ -36900,13 +37061,13 @@ async function appendGitAttributes(workingDirectory) {
 async function scaffoldRepositoryAssets(input) {
   try {
     const sourceRoot = await assetRoot();
-    const sources = await Promise.all(ASSETS.map(async ([source, destination]) => Object.freeze({ source: new Uint8Array(await readFile6(join7(sourceRoot, source))), destination })));
+    const sources = await Promise.all(ASSETS.map(async ([source, destination]) => Object.freeze({ source: new Uint8Array(await readFile7(join7(sourceRoot, source))), destination })));
     const created = [];
     const unchanged = [];
     for (const asset of sources) {
       const destination = join7(input.working_directory, asset.destination);
       try {
-        const existing = new Uint8Array(await readFile6(destination));
+        const existing = new Uint8Array(await readFile7(destination));
         if (!Buffer.from(existing).equals(Buffer.from(asset.source))) {
           process.stderr.write(
             `ArchFlow scaffold differs at ${asset.destination}. Review or delete that file, then re-run archflow-local init.
@@ -36945,7 +37106,7 @@ async function scaffoldRepositoryAssets(input) {
 }
 
 // src/init/diagnostics.ts
-import { readFile as readFile8, stat as stat4 } from "node:fs/promises";
+import { readFile as readFile9, stat as stat4 } from "node:fs/promises";
 import { join as join11 } from "node:path";
 
 // src/dispatch/cli.ts
@@ -37719,7 +37880,7 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
 // src/init/registration.ts
 import { spawn as spawn2 } from "node:child_process";
 import { randomUUID as randomUUID3 } from "node:crypto";
-import { mkdir as mkdir5, open as open6, readFile as readFile7, rename as rename3, unlink as unlink3 } from "node:fs/promises";
+import { mkdir as mkdir5, open as open6, readFile as readFile8, rename as rename3, unlink as unlink3 } from "node:fs/promises";
 import { basename as basename4, dirname as dirname6, join as join10 } from "node:path";
 var CLAUDE_MCP_TIMEOUT_MS = 36e5;
 var CODEX_TOOL_TIMEOUT_SEC = 3600;
@@ -37790,7 +37951,7 @@ function runCommand(command, argv, cwd, environment) {
 }
 async function readOptional(path2) {
   try {
-    return await readFile7(path2, "utf8");
+    return await readFile8(path2, "utf8");
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
     throw error51;
@@ -38011,6 +38172,30 @@ async function registerCodexProject(input) {
 }
 
 // src/init/diagnostics.ts
+var GENERATED_ASSET_PATHS = Object.freeze([
+  ".archflow/.gitignore",
+  ".archflow/config.yaml",
+  ".archflow/workflow.yaml",
+  ".archflow/constitution/README.md",
+  ".mcp.json",
+  ".codex/config.toml"
+]);
+async function diagnoseIgnoredGeneratedAssets(repository) {
+  const runner = createGitRunner({ cwd: repository });
+  const ignored = [];
+  for (const path2 of GENERATED_ASSET_PATHS) {
+    try {
+      const result = await runner.run({
+        argv: ["check-ignore", "--quiet", "--no-index", "--", path2],
+        operation: parseSafeCode("init-check-generated-asset-ignore"),
+        expectedAbsence: [{ code: 1, stderrIncludes: "" }]
+      });
+      if (!result.absent) ignored.push(path2);
+    } catch {
+    }
+  }
+  return Object.freeze(ignored);
+}
 async function presentPaths(paths) {
   const found = await Promise.all(paths.map(async (path2) => {
     try {
@@ -38095,7 +38280,7 @@ function codexTimeoutFinding(source) {
 }
 async function readHostConfig(path2) {
   try {
-    return await readFile8(path2, "utf8");
+    return await readFile9(path2, "utf8");
   } catch {
     return void 0;
   }
@@ -38129,12 +38314,13 @@ async function diagnoseRuntimeDirectory(repository) {
   }
 }
 async function collectInitDiagnostics(input) {
-  const [claude, codex, claudeHostConfig, codexHostConfig, runtimeDirectory] = await Promise.all([
+  const [claude, codex, claudeHostConfig, codexHostConfig, runtimeDirectory, ignoredAssets] = await Promise.all([
     diagnoseAdapter("claude-cli", input.working_directory),
     diagnoseAdapter("codex-cli", input.working_directory),
     readHostConfig(join11(input.working_directory, ".mcp.json")),
     readHostConfig(join11(input.working_directory, ".codex", "config.toml")),
-    diagnoseRuntimeDirectory(input.working_directory)
+    diagnoseRuntimeDirectory(input.working_directory),
+    diagnoseIgnoredGeneratedAssets(input.working_directory)
   ]);
   return Object.freeze({
     schema_version: "1",
@@ -38149,6 +38335,7 @@ async function collectInitDiagnostics(input) {
       [claudeTimeoutFinding(claudeHostConfig), codexTimeoutFinding(codexHostConfig)].filter((finding) => finding !== void 0)
     ),
     runtime_directory: runtimeDirectory,
+    ignored_generated_assets: ignoredAssets,
     limitations: Object.freeze([
       "Dispatch context hygiene uses a temporary workspace and scrubbed environment, but authentication stays in each CLI's canonical home; the boundary is best-effort, not enforced isolation.",
       "Claude project MCP registration may remain pending until a human approves it; reset choices with `claude mcp reset-project-choices` when needed.",
@@ -38157,6 +38344,7 @@ async function collectInitDiagnostics(input) {
     ]),
     recovery_guidance: Object.freeze([
       "Repair any reported Node, CLI, authentication, policy, trust, approval, or command-collision issue, then re-run archflow-local init.",
+      ...ignoredAssets.length === 0 ? [] : [`Generated ArchFlow assets are hidden by an ancestor Git ignore rule: ${ignoredAssets.join(", ")}. Review that rule and explicitly add the intended files; init does not rewrite repository ignore policy.`],
       "Initialization is idempotent: re-running the full command is the supported recovery path after any interrupted step."
     ])
   });
@@ -38202,11 +38390,11 @@ async function runInit(input) {
 }
 
 // src/init/legacy-upgrade.ts
-import { lstat as lstat11, readdir as readdir4, readFile as readFile10, realpath as realpath5 } from "node:fs/promises";
+import { lstat as lstat11, readdir as readdir4, readFile as readFile11, realpath as realpath5, rm as rm3, rmdir as rmdir3 } from "node:fs/promises";
 import { isAbsolute as isAbsolute4, join as join13, relative as relative5, sep as sep4 } from "node:path";
 
 // src/init/task-initialization.ts
-import { mkdir as mkdir6, open as open7, readFile as readFile9 } from "node:fs/promises";
+import { mkdir as mkdir6, open as open7, readFile as readFile10 } from "node:fs/promises";
 import { dirname as dirname7, join as join12 } from "node:path";
 var decoder4 = new TextDecoder("utf-8", { fatal: true });
 var ok16 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
@@ -38225,11 +38413,11 @@ function policyBaseInvalid(commit) {
 async function createTaskConfig(root, taskId) {
   const taskConfig = join12(root, ".archflow", "tasks", taskId, "config.yaml");
   try {
-    return new Uint8Array(await readFile9(taskConfig));
+    return new Uint8Array(await readFile10(taskConfig));
   } catch (error51) {
     if (!errno2(error51, "ENOENT")) throw error51;
   }
-  const template = new Uint8Array(await readFile9(join12(root, ".archflow", "config.yaml")));
+  const template = new Uint8Array(await readFile10(join12(root, ".archflow", "config.yaml")));
   await mkdir6(dirname7(taskConfig), { recursive: true });
   try {
     const handle = await open7(taskConfig, "wx");
@@ -38241,7 +38429,7 @@ async function createTaskConfig(root, taskId) {
     return template;
   } catch (error51) {
     if (!errno2(error51, "EEXIST")) throw error51;
-    return new Uint8Array(await readFile9(taskConfig));
+    return new Uint8Array(await readFile10(taskConfig));
   }
 }
 function canonicalTaskPaths(taskId) {
@@ -38353,27 +38541,6 @@ async function exists(path2) {
     throw error51;
   }
 }
-async function hasCanonicalDocument(taskRoot, taskId) {
-  if (!await exists(taskRoot)) return false;
-  const pending = [taskRoot];
-  while (pending.length > 0) {
-    const directory = pending.pop();
-    for (const entry of await readdir4(directory, { withFileTypes: true })) {
-      const absolute = join13(directory, entry.name);
-      if (entry.isDirectory()) {
-        pending.push(absolute);
-        continue;
-      }
-      const rel = relative5(taskRoot, absolute).split(sep4).join("/");
-      try {
-        const classified = classifyTaskPath(taskId, parseTaskPathClaim(rel));
-        if (classified.ok && classified.value === "document") return true;
-      } catch {
-      }
-    }
-  }
-  return false;
-}
 function mappedEntry(legacyPath, taskId) {
   const prefix = `.archflow/tasks/${taskId}/`;
   if (legacyPath === "prd.md") {
@@ -38396,6 +38563,28 @@ function mappedEntry(legacyPath, taskId) {
     };
   }
   return void 0;
+}
+function deriveResumePhase(mapping) {
+  const designs = /* @__PURE__ */ new Set();
+  const implementations = /* @__PURE__ */ new Set();
+  for (const entry of mapping) {
+    const decoded = /^(phase-design|phase-impl)-([1-9][0-9]*)$/u.exec(entry.phase_instance);
+    if (decoded === null) continue;
+    (decoded[1] === "phase-design" ? designs : implementations).add(Number(decoded[2]));
+  }
+  let highestImplemented = 0;
+  while (implementations.has(highestImplemented + 1)) {
+    const next = highestImplemented + 1;
+    if (!designs.has(next)) {
+      return fail19(createProjectError("TASK_INVALID", { task_id: mapping[0]?.destination_path.split("/")[2] ?? "legacy", issue_code: "legacy-implementation-without-design" }));
+    }
+    highestImplemented = next;
+  }
+  if ([...implementations].some((phase3) => phase3 > highestImplemented)) {
+    return fail19(createProjectError("TASK_INVALID", { task_id: mapping[0]?.destination_path.split("/")[2] ?? "legacy", issue_code: "legacy-phase-history-gap" }));
+  }
+  const inFlight = highestImplemented + 1;
+  return ok17(parsePhaseInstanceId(designs.has(inFlight) ? `phase-impl-${inFlight}` : `phase-design-${inFlight}`));
 }
 async function enumerateSource(sourceRoot, excluded, context2) {
   const files = [];
@@ -38436,7 +38625,7 @@ async function enumerateSource(sourceRoot, excluded, context2) {
       const resolved = await resolveLegacySourcePath({ sourceRoot, claim, context: context2 });
       if (!resolved.ok) return resolved;
       try {
-        files.push(Object.freeze({ legacy_path: claim, bytes: new Uint8Array(await readFile10(resolved.value.absolute)) }));
+        files.push(Object.freeze({ legacy_path: claim, bytes: new Uint8Array(await readFile11(resolved.value.absolute)) }));
       } catch {
         return fail19(ioError3(context2));
       }
@@ -38473,10 +38662,15 @@ async function stageLegacyUpgrade(input) {
     if (isInside2(sourceRoot, destinationRoot) || isInside2(destinationRoot, sourceRoot)) {
       return fail19(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-source-destination-overlap" }));
     }
-    if (await exists(join13(destinationRoot, "state.json")) || await hasCanonicalDocument(destinationRoot, taskId)) {
+    if (await exists(destinationRoot)) {
       return fail19(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-in-use" }));
     }
-    const configBytes = await createTaskConfig(runner.location.worktreeRoot, taskId);
+    let configBytes;
+    try {
+      configBytes = new Uint8Array(await readFile11(join13(runner.location.worktreeRoot, ".archflow", "config.yaml")));
+    } catch {
+      return fail19(createProjectError("CONFIG_INVALID", { issue_code: "archflow-initialization-required" }));
+    }
     try {
       parseConfigYaml(decoder5.decode(configBytes), "task config");
     } catch {
@@ -38526,6 +38720,19 @@ async function stageLegacyUpgrade(input) {
     if (mapping.some((entry, index) => index > 0 && mapping[index - 1].destination_path === entry.destination_path)) {
       return fail19(createProjectError("PATH_INVALID", { task_id: taskId, path_class: "document" }));
     }
+    if (!mapping.some((entry) => entry.phase_instance === "prd") || !mapping.some((entry) => entry.phase_instance === "design")) {
+      return fail19(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-prd-and-architecture-required" }));
+    }
+    const resume = deriveResumePhase(mapping);
+    if (!resume.ok) return resume;
+    const resumeNumber = Number(/([1-9][0-9]*)$/u.exec(resume.value)?.[1] ?? 1);
+    let plannedFinalPhase = Math.max(resumeNumber, ...mapping.map((entry) => Number(/([1-9][0-9]*)$/u.exec(entry.phase_instance)?.[1] ?? 0)));
+    const architecture = selected.value.files.find((file2) => file2.legacy_path === "architecture.md");
+    if (architecture !== void 0) {
+      for (const match of decoder5.decode(architecture.bytes).matchAll(/\bphase\s+([1-9][0-9]*)\b/giu)) {
+        plannedFinalPhase = Math.max(plannedFinalPhase, Number(match[1]));
+      }
+    }
     const importDigest = canonicalJsonDigest({ schema_version: "1", staged_payload_refs: stagedRefs, mapping });
     const sourceRelative = relative5(runner.location.worktreeRoot, sourceRoot).split(sep4).join("/");
     const sourceIdentityDigest = canonicalJsonDigest({
@@ -38533,6 +38740,13 @@ async function stageLegacyUpgrade(input) {
       repository_identity_digest: authority.repository_identity_digest,
       source_root: parseRepositoryPathClaim(sourceRelative)
     });
+    const symbolicRef = await runner.runText({
+      argv: ["symbolic-ref", "--quiet", "HEAD"],
+      operation: parseSafeCode("legacy-upgrade-target-ref"),
+      expectedAbsence: [{ code: 1, stderrIncludes: "" }]
+    });
+    const targetRef = symbolicRef === "" ? "HEAD" : symbolicRef;
+    const commitMessage = `archflow(${taskId}): adopt legacy import`;
     const initialization = Object.freeze({
       schema_version: "1",
       artifact_kind: "legacy-import-initialization",
@@ -38548,8 +38762,25 @@ async function stageLegacyUpgrade(input) {
       config_digest: computePinnedConfigDigest(configBytes),
       canonical_paths: canonicalTaskPaths(taskId),
       mapping: Object.freeze(mapping),
-      staged_payload_refs: Object.freeze(stagedRefs)
+      staged_payload_refs: Object.freeze(stagedRefs),
+      resume_phase: resume.value,
+      planned_final_phase: parseSafeInteger(plannedFinalPhase),
+      target_ref: targetRef,
+      commit_message: commitMessage
     });
+    const previewDigest = canonicalJsonDigest({
+      schema_version: "1",
+      initialization,
+      resume_phase: resume.value,
+      excluded: [...excluded].sort(ordinal6)
+    });
+    const operation = input.operation ?? "stage";
+    if (operation === "stage" && input.approved_preview_digest !== void 0 && input.approved_preview_digest !== previewDigest) {
+      return fail19(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-preview-digest-mismatch" }));
+    }
+    if (operation === "stage" && input.operation !== void 0 && input.approved_preview_digest === void 0) {
+      return fail19(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-preview-approval-required" }));
+    }
     const writer = input.projection_writer ?? createProjectionWriter();
     const stagedPaths = [];
     const stagedByLegacy = /* @__PURE__ */ new Map();
@@ -38557,8 +38788,10 @@ async function stageLegacyUpgrade(input) {
       const claim = parseWorkspacePathClaim(`cache/imports/${importDigest}/payload/${file2.legacy_path}`);
       const target = await resolveTaskWorkspacePath({ runner, taskId, claim, expectedClass: "workspace-import", context: context2 });
       if (!target.ok) return target;
-      await ensureWorkspaceProjectionParent(authority, target.value.absolute);
-      await writer.replaceRegular(target.value, file2.bytes, false);
+      if (operation === "stage") {
+        await ensureWorkspaceProjectionParent(authority, target.value.absolute);
+        await writer.replaceRegular(target.value, file2.bytes, false);
+      }
       const stagedPath = target.value.repositoryRelative;
       stagedPaths.push(stagedPath);
       stagedByLegacy.set(file2.legacy_path, stagedPath);
@@ -38566,8 +38799,10 @@ async function stageLegacyUpgrade(input) {
     const manifestClaim = parseWorkspacePathClaim(`cache/imports/${importDigest}/manifest.json`);
     const manifestTarget = await resolveTaskWorkspacePath({ runner, taskId, claim: manifestClaim, expectedClass: "workspace-import", context: context2 });
     if (!manifestTarget.ok) return manifestTarget;
-    await ensureWorkspaceProjectionParent(authority, manifestTarget.value.absolute);
-    await writer.replaceRegular(manifestTarget.value, canonicalDocument(initialization).bytes, false);
+    if (operation === "stage") {
+      await ensureWorkspaceProjectionParent(authority, manifestTarget.value.absolute);
+      await writer.replaceRegular(manifestTarget.value, canonicalDocument(initialization).bytes, false);
+    }
     const manifestPath = manifestTarget.value.repositoryRelative;
     stagedPaths.push(manifestPath);
     stagedPaths.sort(ordinal6);
@@ -38579,12 +38814,28 @@ async function stageLegacyUpgrade(input) {
       destination_path: entry.destination_path,
       staged_path: stagedByLegacy.get(entry.legacy_path)
     }));
-    let highestImplemented = 0;
-    for (const entry of mapping) {
-      const match = /^phase-impl-([1-9][0-9]*)$/u.exec(entry.phase_instance);
-      if (match !== null) highestImplemented = Math.max(highestImplemented, Number(match[1]));
+    if (operation === "stage") {
+      const configClaim = parseWorkspacePathClaim(`cache/imports/${importDigest}/config.yaml`);
+      const configTarget = await resolveTaskWorkspacePath({ runner, taskId, claim: configClaim, expectedClass: "workspace-import", context: context2 });
+      if (!configTarget.ok) return configTarget;
+      await ensureWorkspaceProjectionParent(authority, configTarget.value.absolute);
+      await writer.replaceRegular(configTarget.value, configBytes, false);
+      stagedPaths.push(configTarget.value.repositoryRelative);
+      const stageClaim = parseWorkspacePathClaim(`cache/imports/${importDigest}/stage.json`);
+      const stageTarget = await resolveTaskWorkspacePath({ runner, taskId, claim: stageClaim, expectedClass: "workspace-import", context: context2 });
+      if (!stageTarget.ok) return stageTarget;
+      await ensureWorkspaceProjectionParent(authority, stageTarget.value.absolute);
+      await writer.replaceRegular(stageTarget.value, canonicalDocument({
+        schema_version: "1",
+        task_id: taskId,
+        import_digest: importDigest,
+        preview_digest: previewDigest,
+        manifest_path: manifestPath,
+        resume_phase: resume.value
+      }).bytes, false);
+      stagedPaths.push(stageTarget.value.repositoryRelative);
     }
-    const resumePhase = parsePhaseInstanceId(`phase-design-${highestImplemented + 1}`);
+    stagedPaths.sort(ordinal6);
     return ok17(Object.freeze({
       initialization,
       audit_context: Object.freeze({
@@ -38592,10 +38843,21 @@ async function stageLegacyUpgrade(input) {
         destination_identity_digest: authority.task_identity_digest,
         import_digest: importDigest,
         code_baseline_digest: commitDigest(codeCommit, "code-baseline-commit"),
-        policy_baseline_digest: commitDigest(policyCommit, "policy-base-commit")
+        policy_baseline_digest: commitDigest(policyCommit, "policy-base-commit"),
+        resume_phase: resume.value,
+        planned_final_phase: parseSafeInteger(plannedFinalPhase),
+        imported_documents: Object.freeze(mapping.map((entry) => Object.freeze({
+          path: entry.destination_path,
+          content_digest: stagedRefs.find((reference) => reference.legacy_path === entry.legacy_path).digest
+        })).sort((left, right) => ordinal6(left.path, right.path))),
+        target_ref: targetRef,
+        baseline_commit: codeCommit,
+        commit_message: commitMessage
       }),
       manifest_path: manifestPath,
-      resume_phase: resumePhase,
+      resume_phase: resume.value,
+      preview_digest: previewDigest,
+      operation,
       draft_sources: Object.freeze(draftSources),
       staged_paths: Object.freeze(stagedPaths),
       unmapped: Object.freeze(unmapped)
@@ -38604,6 +38866,45 @@ async function stageLegacyUpgrade(input) {
     if (error51 instanceof GitInvocationError) return fail19(projectErrorForGitFailure(error51, runner, context2));
     return fail19(ioError3(context2));
   }
+}
+async function discardLegacyUpgrade(input) {
+  const taskId = parseTaskSlug(input.task_id);
+  const context2 = Object.freeze({
+    task_id: taskId,
+    phase_instance: parsePhaseInstanceId("prd"),
+    operation: parseSafeCode("discard-legacy-stage"),
+    attempt: parseSafeInteger(1)
+  });
+  const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), context2);
+  if (!discovered.ok) return discovered;
+  const root = discovered.value.location.worktreeRoot;
+  const digest10 = String(input.import_digest);
+  if (!/^[a-f0-9]{64}$/u.test(digest10)) {
+    return fail19(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-import-digest-invalid" }));
+  }
+  const destination = join13(root, ".archflow", "tasks", taskId);
+  if (await exists(join13(destination, "state.json"))) {
+    return fail19(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-already-adopted" }));
+  }
+  if (await exists(destination)) {
+    const entries = await readdir4(destination);
+    if (entries.some((entry) => entry !== "config.yaml")) {
+      return fail19(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-not-disposable" }));
+    }
+    if (entries.includes("config.yaml")) {
+      const [actual, template] = await Promise.all([
+        readFile11(join13(destination, "config.yaml")),
+        readFile11(join13(root, ".archflow", "config.yaml"))
+      ]);
+      if (!actual.equals(template)) {
+        return fail19(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-config-modified" }));
+      }
+      await rm3(join13(destination, "config.yaml"));
+      await rmdir3(destination).catch(() => void 0);
+    }
+  }
+  await rm3(join13(root, ".archflow", "runtime", "tasks", taskId, "cache", "imports", digest10), { recursive: true, force: true });
+  return ok17(Object.freeze({ discarded: true }));
 }
 
 // src/local/build-request.ts
@@ -38826,6 +39127,24 @@ async function writeStagedRequest(input) {
   }));
 }
 
+// src/state/legacy-stage.ts
+import { readFile as readFile12 } from "node:fs/promises";
+import { join as join14 } from "node:path";
+function importRoot(authority, initialization) {
+  return join14(authority.workspace_root, "cache", "imports", initialization.import_digest);
+}
+async function readStagedLegacyConfig(authority, initialization) {
+  try {
+    const bytes = new Uint8Array(await readFile12(join14(importRoot(authority, initialization), "config.yaml")));
+    parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
+    const digest10 = sha256Bytes(bytes);
+    if (digest10 !== initialization.config_digest) return void 0;
+    return Object.freeze({ bytes, digest: digest10 });
+  } catch {
+    return void 0;
+  }
+}
+
 // src/state/initialization.ts
 var ok20 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail21 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
@@ -38911,7 +39230,8 @@ async function validateLiveInitialization(dependencies, request2, initialization
 function initialState(call, artifact) {
   const initialization = initializationFor(artifact);
   if (initialization === void 0) return contract("initialization-artifact-required");
-  if (call.input.phase_instance !== "prd" || call.input.step !== "produce" || call.input.status !== "running") {
+  const expectedPhase = initialization.artifact_kind === "legacy-import-initialization" ? "design" : "prd";
+  if (call.input.phase_instance !== expectedPhase || call.input.step !== "produce" || call.input.status !== "running") {
     return contract("initialization-entry-point-mismatch");
   }
   const state = {
@@ -38966,7 +39286,11 @@ async function identifyStateInitialization(dependencies, request2) {
     artifact: canonicalDocument(initialization)
   });
   if (!initializationSemantics.ok) return initializationSemantics;
-  const config2 = await dependencies.read_config(request2.authority.config);
+  let config2 = await dependencies.read_config(request2.authority.config);
+  if (config2.kind === "missing" && initialization.artifact_kind === "legacy-import-initialization") {
+    const staged = await readStagedLegacyConfig(request2.authority, initialization);
+    if (staged !== void 0) config2 = Object.freeze({ kind: "valid", snapshot: staged });
+  }
   if (config2.kind !== "valid") return config2.kind === "invalid" ? contract("task-config-invalid") : io3(request2, "task-config-read");
   if (config2.snapshot.digest !== initialization.config_digest) {
     return fail21(createProjectError("PINNED_CONFIG_MISMATCH", {
@@ -39525,9 +39849,58 @@ async function runBuildRequest(services2, value) {
 }
 
 // src/local/status-classification.ts
+import { readdir as readdir5, readFile as readFile13 } from "node:fs/promises";
+import { join as join15 } from "node:path";
 var ok23 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function action2(code2, detail, human, commands, input) {
   return Object.freeze({ code: code2, detail, human_required: human, ...commands === void 0 ? {} : { commands }, ...input === void 0 ? {} : { input } });
+}
+async function stagedUpgradeStatus(input) {
+  const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), {
+    task_id: input.task_id,
+    phase_instance: parsePhaseInstanceId("prd"),
+    operation: parseSafeCode("inspect-legacy-stage"),
+    attempt: parseSafeInteger(1)
+  });
+  if (!discovered.ok) return void 0;
+  const imports = join15(discovered.value.location.worktreeRoot, ".archflow", "runtime", "tasks", input.task_id, "cache", "imports");
+  let digests;
+  try {
+    digests = (await readdir5(imports)).filter((entry) => /^[a-f0-9]{64}$/u.test(entry)).sort();
+  } catch {
+    return void 0;
+  }
+  if (digests.length === 0) return void 0;
+  const stages = [];
+  for (const digest10 of digests) {
+    try {
+      const parsed = JSON.parse(await readFile13(join15(imports, digest10, "stage.json"), "utf8"));
+      if (parsed !== null && !Array.isArray(parsed) && typeof parsed === "object") stages.push(parsed);
+    } catch {
+    }
+  }
+  if (digests.length === 1 && stages.length === 1 && stages[0].task_id === input.task_id && stages[0].import_digest === digests[0]) {
+    return Object.freeze({
+      mode: "upgrade-staged",
+      next_action: action2(
+        "resume-upgrade-in-mcp-session",
+        `A reviewed legacy import is staged for this task and no durable state exists. Resume the upgrade in a session that exposes the ArchFlow MCP server; ${String(stages[0].resume_phase)} is the proposed continuation point.`,
+        false,
+        Object.freeze({ claude: `/archflow-upgrade ${input.task_id}`, codex: `$archflow-upgrade ${input.task_id}` }),
+        structuredClone(stages[0])
+      )
+    });
+  }
+  return Object.freeze({
+    mode: "upgrade-restart-required",
+    next_action: action2(
+      "discard-incompatible-upgrade-stage",
+      "An older or ambiguous legacy import stage exists, but no durable state was created. Discard the explicitly reported stage, then rerun upgrade preview and staging with an active MCP server.",
+      true,
+      void 0,
+      { operation: "discard-stage", task_id: input.task_id, import_digests: digests }
+    )
+  });
 }
 async function classifyWorkflowStatus(input) {
   const readability = await classifyDurableStateReadability({
@@ -39535,6 +39908,8 @@ async function classifyWorkflowStatus(input) {
     task_id: input.task_id
   });
   if (readability.readability === "absent") {
+    const staged = await stagedUpgradeStatus(input);
+    if (staged !== void 0) return ok23(staged);
     return ok23(Object.freeze({
       mode: "degraded",
       next_action: action2(
@@ -39614,7 +39989,7 @@ var LOCAL_COMMAND_CONTRACTS = Object.freeze({
   envelope: { payload: '{"tool":<tool name>,"input":<tool input>}', task: "required" },
   "build-request": { payload: `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},...kind facts: none (initialize/counter-review/advance), "step" (running), "document"/"implementation" (produce), "dispositions":[...] (triage), "summary" (gate)}`, task: "required" },
   "manual-status": { payload: null, task: "required" },
-  upgrade: { payload: "<legacy staging descriptor>", task: "optional" }
+  upgrade: { payload: '{"operation":"preview"|"stage"|"discard-stage",...legacy import facts}', task: "optional" }
 });
 var INPUT_FREE_COMMANDS = new Set(LOCAL_COMMANDS.filter((command) => LOCAL_COMMAND_CONTRACTS[command].payload === null));
 function requireValue(input) {
@@ -39663,6 +40038,15 @@ async function init(input) {
 }
 async function upgrade(input) {
   const value = recordValue(input);
+  const operation = String(value.operation ?? "preview");
+  if (operation === "discard-stage") {
+    return discardLegacyUpgrade({
+      working_directory: input.working_directory,
+      task_id: String(value.task_id ?? input.task_id),
+      import_digest: String(value.import_digest)
+    });
+  }
+  if (operation !== "preview" && operation !== "stage") throw new TypeError("upgrade input.operation is invalid");
   return stageLegacyUpgrade({
     working_directory: input.working_directory,
     source_root: String(value.source_root),
@@ -39670,6 +40054,8 @@ async function upgrade(input) {
     policy_base_commit: String(value.policy_base_commit),
     import_baseline_commit: String(value.import_baseline_commit),
     code_baseline_commit: String(value.code_baseline_commit),
+    operation,
+    ...value.approved_preview_digest === void 0 ? {} : { approved_preview_digest: String(value.approved_preview_digest) },
     ...value.exclude === void 0 ? {} : { exclude: value.exclude }
   });
 }
@@ -39849,7 +40235,7 @@ async function readInput(command, path2) {
     process3.stdin.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
     process3.stdin.once("end", () => resolve2(Buffer.concat(chunks)));
     process3.stdin.once("error", reject);
-  }) : await readFile11(path2);
+  }) : await readFile14(path2);
   if (bytes.byteLength === 0) throw missingPayload();
   try {
     return JSON.parse(bytes.toString("utf8"));

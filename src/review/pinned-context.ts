@@ -1,11 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { join, posix } from "node:path";
 
-import { sha256Bytes } from "../contracts/canonical.js";
+import { canonicalJsonBytes, sha256Bytes } from "../contracts/canonical.js";
 import { decodeUtf8Strict, visibleContent } from "../contracts/utf8.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import type { Sha256Digest } from "../contracts/evidence.js";
-import { userAskClaim } from "../contracts/path-claims.js";
+import { parseTaskPathClaim, userAskClaim } from "../contracts/path-claims.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import {
@@ -24,6 +24,7 @@ import {
   type CurrentProduceSubject,
 } from "../state/produce-subject.js";
 import type { TransactionDependencies } from "../state/transaction.js";
+import { loadLegacyImportInitialization } from "../state/legacy-import-resume.js";
 import {
   ReviewEnvelopeError,
   buildReviewEnvelope,
@@ -39,7 +40,7 @@ import {
  * that cannot fit the artifact plus every non-droppable entry fails closed exactly as before.
  */
 const CAP_PRIORITY: readonly PinnedContextKind[] = [
-  "approved-upstream", "user-ask", "verification-transcript",
+  "approved-upstream", "imported-reference", "user-ask", "verification-transcript",
   "prior-triage", "interface-excerpt", "conventions", "repo-map",
 ];
 
@@ -176,7 +177,7 @@ const fail = <T>(phase: PhaseInstanceId, issue_code: string): ProjectResult<T> =
 export async function assembleReviewContext(input: {
   readonly runner: RootBoundGitRunner;
   readonly authority: TransactionAuthority;
-  readonly dependencies: Pick<TransactionDependencies, "load_retained_result">;
+  readonly dependencies: Pick<TransactionDependencies, "load_retained_result" | "runner">;
   readonly state: TaskStateV1;
   readonly subject: CurrentProduceSubject;
   readonly projection_bytes: Uint8Array;
@@ -242,14 +243,16 @@ export async function assembleReviewContext(input: {
 async function assembleUpstreamContext(input: {
   readonly runner: RootBoundGitRunner;
   readonly authority: TransactionAuthority;
-  readonly dependencies: Pick<TransactionDependencies, "load_retained_result">;
+  readonly dependencies: Pick<TransactionDependencies, "load_retained_result" | "runner">;
   readonly state: TaskStateV1;
 }): Promise<ProjectResult<readonly PinnedContextEntry[]>> {
   const entries: PinnedContextEntry[] = [];
   for (const binding of expectedProduceUpstreamBindings(input.state)) {
-    const upstream = await loadProduceUpstreamSubject(input.dependencies, input.state, binding);
+    const upstream = await loadProduceUpstreamSubject(input.dependencies, input.authority, input.state, binding);
     if (!upstream.ok) return upstream;
-    const approved = input.state.approvals.some((approval) =>
+    const approved = "imported_projection" in upstream.value
+      ? input.state.phase_instance === "design" || input.state.approvals.some((approval) => approval.gate_kind === "migration-audit")
+      : input.state.approvals.some((approval) =>
       (approval.gate_kind === "artifact-approval" || approval.gate_kind === "design-approval") &&
       approval.subject_digest === upstream.value.artifact_digest);
     if (!approved) return fail(input.state.phase_instance, "upstream-approval-missing");
@@ -257,7 +260,38 @@ async function assembleUpstreamContext(input: {
       input.runner, input.authority, upstream.value, binding.path,
     );
     if (!projection.ok) return projection;
-    entries.push(pinnedContextEntry("approved-upstream", binding.path, projection.value.bytes));
+    entries.push(pinnedContextEntry("imported_projection" in upstream.value ? "imported-reference" : "approved-upstream", binding.path, projection.value.bytes));
+  }
+  if (input.state.phase_instance === "design") {
+    const imported = await loadLegacyImportInitialization(
+      input.dependencies, input.authority, input.state,
+    );
+    if (!imported.ok) return imported;
+    if (imported.value !== undefined) {
+      const prefix = `.archflow/tasks/${input.state.task_id}/`;
+      for (const mapping of imported.value.mapping) {
+        if (mapping.phase_instance === "prd" || mapping.phase_instance === "design") continue;
+        const relativePath = mapping.destination_path.slice(prefix.length);
+        const target = await resolveTaskPath({
+          runner: input.runner,
+          taskId: input.authority.task_id,
+          claim: parseTaskPathClaim(relativePath),
+          expectedClass: "document",
+          context: input.authority.context,
+        });
+        if (!target.ok) return target;
+        const bytes = new Uint8Array(await readFile(target.value.absolute));
+        const reference = imported.value.staged_payload_refs.find((item) => item.legacy_path === mapping.legacy_path);
+        if (reference === undefined || sha256Bytes(bytes) !== reference.digest) return fail(input.state.phase_instance, "imported-reference-changed");
+        entries.push(pinnedContextEntry("imported-reference", relativePath, bytes));
+      }
+      entries.push(pinnedContextEntry("imported-reference", "migration-plan.json", canonicalJsonBytes({
+        schema_version: "1",
+        ...(imported.value.resume_phase === undefined ? {} : { resume_phase: imported.value.resume_phase }),
+        ...(imported.value.planned_final_phase === undefined ? {} : { planned_final_phase: imported.value.planned_final_phase }),
+        mapping: imported.value.mapping,
+      })));
+    }
   }
   return ok(Object.freeze(entries));
 }

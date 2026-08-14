@@ -425,6 +425,40 @@
         },
         "policy_baseline_digest": {
           "$ref": "#/$defs/digest"
+        },
+        "resume_phase": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+        },
+        "planned_final_phase": {
+          "$ref": "#/$defs/safeInteger"
+        },
+        "imported_documents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+              },
+              "content_digest": {
+                "$ref": "#/$defs/digest"
+              }
+            },
+            "required": [
+              "path",
+              "content_digest"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "target_ref": {
+          "$ref": "#/$defs/text"
+        },
+        "baseline_commit": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
+        "commit_message": {
+          "$ref": "#/$defs/text"
         }
       },
       "required": [

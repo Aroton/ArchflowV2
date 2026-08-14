@@ -1,6 +1,12 @@
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import type { ProjectResult } from "../contracts/errors.js";
-import type { SafeCode, TaskSlug } from "../contracts/evidence.js";
+import { parseSafeCode, parseSafeInteger, type SafeCode, type TaskSlug } from "../contracts/evidence.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
+import { parsePhaseInstanceId } from "../contracts/phase-instance.js";
+import { createGitRunner } from "../repository/git.js";
+import { discoverWorktree } from "../repository/identity.js";
 import { createProductionServices } from "../state/production.js";
 import { classifyDurableStateReadability, computeTaskStatus, type TaskStatusV1 } from "../state/status.js";
 
@@ -13,7 +19,7 @@ export type StatusNextAction = Readonly<{
 }>;
 
 export type WorkflowStatusClassification = Readonly<{
-  mode: "normal" | "degraded" | "repair-required";
+  mode: "normal" | "degraded" | "repair-required" | "upgrade-staged" | "upgrade-restart-required";
   task_status?: TaskStatusV1;
   next_action: StatusNextAction;
 }>;
@@ -29,6 +35,50 @@ function action(code: string, detail: string, human: boolean, commands?: Readonl
   return Object.freeze({ code, detail, human_required: human, ...(commands === undefined ? {} : { commands }), ...(input === undefined ? {} : { input }) });
 }
 
+async function stagedUpgradeStatus(input: ClassifyWorkflowStatusInput): Promise<WorkflowStatusClassification | undefined> {
+  const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), {
+    task_id: input.task_id,
+    phase_instance: parsePhaseInstanceId("prd"),
+    operation: parseSafeCode("inspect-legacy-stage"),
+    attempt: parseSafeInteger(1),
+  });
+  if (!discovered.ok) return undefined;
+  const imports = join(discovered.value.location.worktreeRoot, ".archflow", "runtime", "tasks", input.task_id, "cache", "imports");
+  let digests: string[];
+  try { digests = (await readdir(imports)).filter((entry) => /^[a-f0-9]{64}$/u.test(entry)).sort(); }
+  catch { return undefined; }
+  if (digests.length === 0) return undefined;
+  const stages: Array<Record<string, PlainJsonValue>> = [];
+  for (const digest of digests) {
+    try {
+      const parsed = JSON.parse(await readFile(join(imports, digest, "stage.json"), "utf8")) as unknown;
+      if (parsed !== null && !Array.isArray(parsed) && typeof parsed === "object") stages.push(parsed as Record<string, PlainJsonValue>);
+    } catch { /* A pre-fix stage has no stage descriptor. */ }
+  }
+  if (digests.length === 1 && stages.length === 1 && stages[0]!.task_id === input.task_id && stages[0]!.import_digest === digests[0]) {
+    return Object.freeze({
+      mode: "upgrade-staged" as const,
+      next_action: action(
+        "resume-upgrade-in-mcp-session",
+        `A reviewed legacy import is staged for this task and no durable state exists. Resume the upgrade in a session that exposes the ArchFlow MCP server; ${String(stages[0]!.resume_phase)} is the proposed continuation point.`,
+        false,
+        Object.freeze({ claude: `/archflow-upgrade ${input.task_id}`, codex: `$archflow-upgrade ${input.task_id}` }),
+        structuredClone(stages[0]!) as PlainJsonValue,
+      ),
+    });
+  }
+  return Object.freeze({
+    mode: "upgrade-restart-required" as const,
+    next_action: action(
+      "discard-incompatible-upgrade-stage",
+      "An older or ambiguous legacy import stage exists, but no durable state was created. Discard the explicitly reported stage, then rerun upgrade preview and staging with an active MCP server.",
+      true,
+      undefined,
+      { operation: "discard-stage", task_id: input.task_id, import_digests: digests },
+    ),
+  });
+}
+
 /** Read-only classifier: reports where durable authority stands and exactly one next action. */
 export async function classifyWorkflowStatus(input: ClassifyWorkflowStatusInput): Promise<ProjectResult<WorkflowStatusClassification>> {
   const readability = await classifyDurableStateReadability({
@@ -36,6 +86,8 @@ export async function classifyWorkflowStatus(input: ClassifyWorkflowStatusInput)
     task_id: input.task_id,
   });
   if (readability.readability === "absent") {
+    const staged = await stagedUpgradeStatus(input);
+    if (staged !== undefined) return ok(staged);
     return ok(Object.freeze({
       mode: "degraded" as const,
       next_action: action(

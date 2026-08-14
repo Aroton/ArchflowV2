@@ -12,6 +12,7 @@ import type { RootBoundGitRunner } from "../repository/identity.js";
 import { resolveTaskPath } from "../repository/paths.js";
 import type { TransactionAuthority } from "./authority.js";
 import type { TransactionDependencies, RetainedResultInstallation } from "./transaction.js";
+import { loadLegacyImportInitialization } from "./legacy-import-resume.js";
 
 /** Throwing decoder for document projections, which must be UTF-8 text — no base64 fallback. */
 const fatalUtf8 = new TextDecoder("utf-8", { fatal: true });
@@ -22,6 +23,12 @@ export type CurrentProduceSubject = Readonly<{
   artifact_digest: Sha256Digest;
   artifact: ProduceArtifact;
   retained: RetainedResultInstallation;
+}>;
+
+export type ProduceUpstreamSubject = CurrentProduceSubject | Readonly<{
+  artifact_digest: Sha256Digest;
+  artifact: DocumentArtifactV1;
+  imported_projection: Readonly<{ path: TaskPathClaim; content_digest: Sha256Digest }>;
 }>;
 
 export type ProduceUpstreamBinding = Readonly<{
@@ -61,14 +68,54 @@ export function resolveProduceUpstreamBinding(
 
 /** Loads and authenticates the retained document artifact that currently owns an upstream path. */
 export async function loadProduceUpstreamSubject(
-  dependencies: Pick<TransactionDependencies, "load_retained_result">,
+  dependencies: Pick<TransactionDependencies, "load_retained_result" | "runner">,
+  authority: TransactionAuthority,
   state: TaskStateV1,
   binding: ProduceUpstreamBinding,
-): Promise<ProjectResult<CurrentProduceSubject>> {
+): Promise<ProjectResult<ProduceUpstreamSubject>> {
   const reference = [...state.authoritative_results].reverse().find((candidate) =>
     candidate.phase_instance === binding.phase_instance && candidate.step === "produce");
   if (reference === undefined || dependencies.load_retained_result === undefined) {
-    return fail(state.phase_instance, "current-upstream-produce-result-missing");
+    const initialization = await loadLegacyImportInitialization(
+      dependencies, authority, state,
+    );
+    if (!initialization.ok || initialization.value === undefined) {
+      return fail(state.phase_instance, "current-upstream-produce-result-missing");
+    }
+    const destination = `.archflow/tasks/${state.task_id}/${binding.path}`;
+    const mapping = initialization.value.mapping.find((entry) => entry.destination_path === destination);
+    const staged = mapping === undefined ? undefined : initialization.value.staged_payload_refs.find((entry) => entry.legacy_path === mapping.legacy_path);
+    if (mapping === undefined || staged === undefined) return fail(state.phase_instance, "current-upstream-import-missing");
+    const target = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: binding.path, context: authority.context });
+    if (!target.ok) return target;
+    let bytes: Uint8Array;
+    try { bytes = new Uint8Array(await readFile(target.value.absolute)); }
+    catch { return fail(state.phase_instance, "current-upstream-import-unavailable"); }
+    if (sha256Bytes(bytes) !== staged.digest) return fail(state.phase_instance, "current-upstream-import-changed");
+    const artifact: DocumentArtifactV1 = Object.freeze({
+      schema_version: "1",
+      artifact_kind: "document",
+      task_id: state.task_id,
+      phase_instance: binding.phase_instance,
+      step: "produce",
+      document_path: binding.path,
+      path_class: "document",
+      byte_count: staged.byte_count,
+      content_digest: staged.digest,
+      declared_inputs: Object.freeze([]),
+      input_fingerprint: state.input_fingerprint,
+      snapshot_digest: canonicalJsonDigest({ schema_version: "1", imported_document: binding.path, content_digest: staged.digest }),
+      projection_target: target.value.repositoryRelative,
+    });
+    return Object.freeze({
+      schema_version: "1",
+      ok: true,
+      value: Object.freeze({
+        artifact_digest: canonicalJsonDigest({ schema_version: "1", initialization_digest: state.initialization_digest, imported_document: binding.path, content_digest: staged.digest }),
+        artifact,
+        imported_projection: Object.freeze({ path: binding.path, content_digest: staged.digest }),
+      }),
+    });
   }
   const retained = await dependencies.load_retained_result(reference);
   if (!retained.ok) return retained;
@@ -137,7 +184,7 @@ export type ProduceProjection = Readonly<{
 export async function readProduceProjection(
   runner: RootBoundGitRunner,
   authority: TransactionAuthority,
-  subject: CurrentProduceSubject,
+  subject: ProduceUpstreamSubject,
   artifactPath: TaskPathClaim,
 ): Promise<ProjectResult<ProduceProjection>> {
   const target = await resolveTaskPath({
@@ -147,7 +194,9 @@ export async function readProduceProjection(
     context: authority.context,
   });
   if (!target.ok) return target;
-  const retainedDigest = subject.artifact.artifact_kind === "implementation-output"
+  const retainedDigest = "imported_projection" in subject
+    ? subject.imported_projection.path === artifactPath ? subject.imported_projection.content_digest : undefined
+    : subject.artifact.artifact_kind === "implementation-output"
     ? subject.artifact.parent_documents.find((candidate) => candidate.document_path === artifactPath)?.content_digest
     : subject.retained.prepared.manifest.value.projections.find((candidate) =>
       candidate.path === target.value.repositoryRelative)?.content_digest;

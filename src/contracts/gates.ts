@@ -8,8 +8,8 @@ import type { Sha256Digest } from "./evidence.js";
 import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type TaskSlug } from "./evidence.js";
 import { safeIdV1Schema } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
-import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
-import { taskPathClaimV1Schema, type PathClass, type TaskPathClaim } from "./path-claims.js";
+import { decodePhaseInstance, phaseInstanceIdV1Schema, type PhaseInstanceId } from "./phase-instance.js";
+import { repositoryPathClaimV1Schema, taskPathClaimV1Schema, type PathClass, type RepositoryPathClaim, type TaskPathClaim } from "./path-claims.js";
 import { PIPELINE_STEPS, type PipelineStep } from "./vocabulary.js";
 
 export type RuleVersionRef = { readonly rule_id: string; readonly rule_version: number };
@@ -68,7 +68,7 @@ export interface GateContractByKind {
   readonly "constitution-edit": { readonly context: { readonly pinned_constitution_digest: Sha256Digest; readonly current_constitution_digest: Sha256Digest; readonly changed_path_class: "task-branch-constitution" }; readonly decision: { readonly decision: "revert-edit" | "start-base-amendment" | "abort"; readonly reason: string } };
   readonly "commit-authorization": { readonly context: { readonly target_ref: string; readonly diff_digest: Sha256Digest; readonly current_artifact_digests: readonly Sha256Digest[]; readonly parent_document_digests: readonly Sha256Digest[] }; readonly decision: { readonly decision: "authorize-commit" | "revise" | "abort"; readonly reason: string } };
   readonly "restore-collision": { readonly context: { readonly path: TaskPathClaim; readonly recorded_generation_digest: Sha256Digest; readonly current_generation_digest: Sha256Digest; readonly adoption_candidate?: AuthorityLinkRef }; readonly decision: { readonly decision: "discard-and-restore" | "abort"; readonly reason: string } | { readonly decision: "adopt-as-new-generation"; readonly reason: string; readonly adoption_authority: AuthorityLinkRef; readonly rationale: string } };
-  readonly "migration-audit": { readonly context: { readonly source_identity_digest: Sha256Digest; readonly destination_identity_digest: Sha256Digest; readonly import_digest: Sha256Digest; readonly code_baseline_digest: Sha256Digest; readonly policy_baseline_digest: Sha256Digest }; readonly decision: { readonly decision: "accept-import-audit" | "revise" | "abort"; readonly reason: string } };
+  readonly "migration-audit": { readonly context: { readonly source_identity_digest: Sha256Digest; readonly destination_identity_digest: Sha256Digest; readonly import_digest: Sha256Digest; readonly code_baseline_digest: Sha256Digest; readonly policy_baseline_digest: Sha256Digest; readonly resume_phase?: PhaseInstanceId; readonly planned_final_phase?: number; readonly imported_documents?: readonly { readonly path: RepositoryPathClaim; readonly content_digest: Sha256Digest }[]; readonly target_ref?: string; readonly baseline_commit?: GitOid; readonly commit_message?: string }; readonly decision: { readonly decision: "accept-import-audit" | "revise" | "abort"; readonly reason: string } };
 }
 
 export const GATE_KINDS = ["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "migration-audit"] as const;
@@ -158,7 +158,19 @@ const contexts = {
   "constitution-edit": z.object({ pinned_constitution_digest: digest, current_constitution_digest: digest, changed_path_class: z.literal("task-branch-constitution" satisfies PathClass) }).strict(),
   "commit-authorization": z.object({ target_ref: boundedText, diff_digest: digest, current_artifact_digests: canonicalDigests.min(1), parent_document_digests: canonicalDigests.min(1) }).strict(),
   "restore-collision": z.object({ path: taskPathClaimV1Schema, recorded_generation_digest: digest, current_generation_digest: digest, adoption_candidate: authorityLink.optional() }).strict(),
-  "migration-audit": z.object({ source_identity_digest: digest, destination_identity_digest: digest, import_digest: digest, code_baseline_digest: digest, policy_baseline_digest: digest }).strict(),
+  "migration-audit": z.object({
+    source_identity_digest: digest,
+    destination_identity_digest: digest,
+    import_digest: digest,
+    code_baseline_digest: digest,
+    policy_baseline_digest: digest,
+    resume_phase: phaseInstanceIdV1Schema.optional(),
+    planned_final_phase: safeInteger.optional(),
+    imported_documents: z.array(z.object({ path: repositoryPathClaimV1Schema, content_digest: digest }).strict()).optional(),
+    target_ref: boundedText.optional(),
+    baseline_commit: gitOidV1Schema.optional(),
+    commit_message: boundedText.optional(),
+  }).strict(),
 } as const;
 
 const decisions = {
