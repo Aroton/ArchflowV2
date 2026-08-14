@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:document-artifact",
+  "$defs": {
+    "additionalDocumentArtifact": {
+      "type": "object",
+      "properties": {
+        "document_path": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
+        },
+        "byte_count": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+        },
+        "content_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "projection_target": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+        }
+      },
+      "required": [
+        "document_path",
+        "byte_count",
+        "content_digest",
+        "projection_target"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "artifact_kind": {
+      "type": "string",
+      "const": "document"
+    },
+    "task_id": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+    },
+    "phase_instance": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+    },
+    "step": {
+      "type": "string",
+      "enum": [
+        "produce",
+        "counter_review",
+        "triage",
+        "adjudicate"
+      ]
+    },
+    "document_path": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
+    },
+    "path_class": {
+      "type": "string",
+      "const": "document"
+    },
+    "byte_count": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+    },
+    "content_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "declared_inputs": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/declaredInputRef"
+      }
+    },
+    "input_fingerprint": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "snapshot_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "projection_target": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+    },
+    "additional_documents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/additionalDocumentArtifact"
+      }
+    },
+    "editorial_predecessor": {
+      "type": "object",
+      "properties": {
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "input_fingerprint": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "triage_result_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        }
+      },
+      "required": [
+        "subject_digest",
+        "input_fingerprint",
+        "triage_result_digest"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "artifact_kind",
+    "task_id",
+    "phase_instance",
+    "step",
+    "document_path",
+    "path_class",
+    "byte_count",
+    "content_digest",
+    "declared_inputs",
+    "input_fingerprint",
+    "snapshot_digest",
+    "projection_target"
+  ],
+  "additionalProperties": false
+}

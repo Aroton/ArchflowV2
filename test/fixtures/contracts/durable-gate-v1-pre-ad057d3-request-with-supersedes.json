@@ -1,0 +1,31 @@
+{
+  "allowed_decisions": ["approve", "revise", "reject", "cancel"],
+  "context": { "artifact_kind": "phase-implementation" },
+  "context_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "current_evidence": {
+    "set_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "slots": [{
+      "assurance": "server-attested",
+      "evidence_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "independence": "opposite-family",
+      "producer_family": "claude",
+      "reviewer_family": "codex",
+      "role": "counter-review"
+    }]
+  },
+  "gate_id": "gate-legacy-2",
+  "intent_id": "intent-legacy-2",
+  "kind": "artifact-approval",
+  "opened_at_revision": 7,
+  "phase_instance": "phase-impl-2",
+  "request_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "schema_version": "1",
+  "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "summary": "Approve the revised implementation",
+  "supersedes": {
+    "accepted_triage_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+    "old_subject_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+    "superseded_gate_id": "gate-legacy-1"
+  },
+  "task_id": "task-1"
+}

@@ -1,120 +1,56 @@
 ---
 name: archflow-phase-impl
-description: Implement, verify, review, log, and commit one designed ArchFlow phase. Use when the user asks to implement, resume, or complete a task phase.
+description: Implement, verify, review, log, authorize, and complete one durably approved ArchFlow phase.
 ---
 
-# Implement Phase
+# Phase Implementation
 
-Treat the supplied arguments as `<task> <phase-number>`. This skill implements a phase that was designed and approved via `archflow-phase-design`; it is meant to run in a fresh session so the whole phase fits in a clean context.
+Treat the arguments as `<task> <phase-number>`. Full status returns task-scoped `resources` entries shaped `{role,path,access}`; select workflow artifacts by role and use the returned paths instead of reconstructing task or runtime paths. Work only in those returned task resources, the implementation paths authorized by the `phase-design` resource, and shared documentation under `docs/`; never read another task's files. Ordinary repository exploration remains available when the work needs it.
 
-**Build to the operating envelope.** Implement the approved design and no more: functionality and maintainability first, for the scale, criticality, and threat model the PRD states — absent one, an early-stage product serving thousands of users. Do not add abstraction layers, configuration hooks, defensive invariants, or recovery paths the design did not call for; if implementation reveals one is genuinely needed, that is a deviation worth raising, not a silent addition. State this in every implementation sub-agent brief — an unconstrained agent will over-build.
+Before changing code, run status and require durable authority for `phase_instance: "phase-impl-<phase-number>"`. A phase-design file or approval in conversation is insufficient. The only pre-check recovery is the exact immediate-predecessor hand-off described below; it must finish before any code is written. Never write code before the phase design is durably approved.
 
-## Setup and state
+This session is the **producer** and workflow orchestrator — the server identifies the producer family from the initialize handshake of the connected client. The server dispatches the opposite-family counter-review, and the constitution review with it when the repository has active constitution rules; you never perform, spawn, or simulate either. The orchestrator's context is the workflow's scarcest resource: conversation with the user, human gates, triage, and synthesis stay here. Run exploration and research through sub-agents in parallel, each spawned with a complete brief — a sub-agent sees nothing of this conversation — writing bulk output to disk and returning only conclusions. Implementation chunks are sub-agent work by default: brief each chunk sub-agent completely (goal, files, pinned cross-chunk interfaces, the phase-design excerpts it needs), run independent chunks in parallel, and integrate the results here; do inline only what is too small to justify a hand-off. Run verification yourself or through a verifying sub-agent whose raw transcript you capture. Review the change through a fresh review sub-agent before recording produce (below), and run independent review work in parallel: the counter-review dispatch runs in the background while any same-side review sub-agents run. Then triage, resolve, and re-enter review as needed, bounded by the attempt budget.
 
-1. Read `.archflow/tasks/<task>/architecture.md`; it is required. If missing, stop and direct the user to `archflow-design <task>`.
-2. Read the phase design document `phase-<N>-*.md` in `.archflow/tasks/<task>/phases/`; it is required. If missing, stop and direct the user to `archflow-phase-design <task> <N>`.
-3. Read relevant `.archflow/context/` documents from every workspace repo that has them, and for phase 2 or later the immediately prior phase's implementation log (older logs only when they cover ground this phase touches).
-4. Check `.archflow/tasks/<task>/reviews/` for this phase's review files.
+## Degraded operation
 
-Then act on state:
+If a workflow tool is unavailable, run read-only `archflow-local manual-status --task <task>`, report its position, and stop — create no milestone, infer no authorization, and record nothing offline, because no offline recording path exists; the MCP server records all progress. Wait for the server to be restored (reinstall with `./install.sh` if needed), then resume through the normal loop below; never stage or commit while the server is unavailable.
 
-- **`DESIGNED`**: if `phase-<N>-design-counter-review.md` exists without a `## Triage` section, stop and recommend triaging it first via `archflow-phase-design <task> <N>` — implementing against a design with unaddressed findings wastes the work. Otherwise, the user invoking this skill on an approved design is the instruction to implement: summarize the goal and work breakdown in a few sentences and begin.
-- **`IN PROGRESS`**: resume — read the full design, analyze the codebase to determine completed and remaining work, report the result, and continue from that point. If an untriaged `phase-<N>-impl-counter-review.md` exists, triage it (see Implementation counter-review).
-- **`COMPLETE`**: report it and suggest the next phase.
+## Review policy
 
-## Implement
+Run full status before review work and use its canonical `review_policy`. Use `review_policy.rubric` verbatim in every non-durable same-side review brief; never copy a rubric from skill text or author one. The server selects that same policy for the durable counter-review. Use the active pinned rules exactly as status reports them; the request composer derives `rubric_digest`, provenance, and every routing identity from durable authority — never self-declare or calculate server-checked identities.
 
-Set the phase status to `IN PROGRESS`. **Delegate chunks to implementation sub-agents by default.** The orchestrator's context must last the entire phase — implementation, verification, and review — and a delegated chunk costs it a brief out and a summary back, where direct implementation costs the full file reads, edits, and test output. Treat sub-agents as available — both Claude Code and Codex provide them natively. Implement directly only when the phase is small enough (a few chunks touching few files) that delegation overhead buys nothing; the rule is finishing the phase without compaction.
+## Durable loop and implementation
 
-Spawn one implementation agent per chunk. A sub-agent sees nothing of this session, so its brief must be complete: the chunk objective, relevant Files-table paths, the pinned interface contracts, prior-log patterns, and architecture/context conventions. Instruct agents to write files directly and return only a concise summary of modified or created paths. Run chunks in parallel only when their file sets are disjoint — parallel edits to the same file conflict; sequence dependent or overlapping chunks, passing forward the summaries and interfaces they need. After all chunks finish, run the applicable test suite.
+Run `archflow-local status --task <task>`, inspect JSON `ok`, perform exactly `next_action`, then re-run status. Use `--brief` for these routine loop iterations — it projects position, blockers, open-gate and reconciliation summaries, and the one `next_action` from the same computed status without rendered rule text, prompts, or template bodies; run full status when opening or resolving a gate or repairing. Stop on repair and human-required actions rather than improvising. Enter each pipeline step by piping `{"kind":"running","step":"<step>"}` to `archflow-local build-request --task <task>` and calling `archflow_state` with the returned `staged.reference`; the composer refuses an illegal entry with the server's own answer. Record terminal exits only for `produce` and `triage`; `archflow_counter_review` records its own successful exit and covers both the rubric review and the constitution review — do not send a second successful state transition after the tool returns. When material new information invalidates the current implementation mid-loop — an upstream change, the user restating intent — do not park it for the gate or smuggle it into a triage finding: record a fresh produce running entry through build-request (`kind: "running"`, `step: "produce"`, legal from any succeeded step) and only then revise the outputs; downstream evidence goes stale and the loop re-runs from produce. When `next_action` carries a prefilled `request`, it is the preview of the call `archflow-local build-request --task <task>` composes: prefer piping the matching kind's facts to build-request, and complete a prefill by hand through `archflow-local envelope --task <task>` only when no kind composes that request — either way the resolved output, not the prefill, is the digest authority.
 
-## Verify
+When status returns `next_action.code: "advance-phase"` or `"complete-task"` from the active phase implementation, pipe `{"kind":"advance"}` to `archflow-local build-request --task <task>` and call `archflow_state` with the returned `staged.reference`. Commit authorization and the later human confirmation to commit remain separate from this hand-off; the composer rechecks the server's observed committed outputs and derives either the next phase or terminal completion. Re-run status and do not return until durable status shows `next_action.target_phase_instance` or `task-complete`. A phase-implementation invocation may recover a task stranded at its immediate predecessor hand-off before the phase check above, but only when status itself returns `advance-phase`, names `phase-impl-<phase-number>` as `target_phase_instance`, and its server-derived `skill` plus `skill_args` exactly match this invocation. Perform the same advance call first, then require fresh status to select the requested phase; otherwise refuse the wrong phase and report the returned action. After a non-terminal hand-off, print `Claude: /<next_action.skill> <task> <next_action.skill_args...>` and `Codex: $<next_action.skill> <task> <next_action.skill_args...>`. At `task-complete`, report completion without inventing another command.
 
-Run every verification step you can execute yourself: tests, builds, linters, and actually driving the affected flow (run the command, hit the endpoint, exercise the behavior). Fix what fails — routing non-trivial fixes through implementation sub-agents the same way chunks were delegated — and re-verify until your own checks pass.
+For `produce`, read the full-status `phase-design`, `task-design`, and `prd` resources, relevant context, any returned `prior-implementation-notes` resource, and pinned policy from status. Implement only the approved scope. Name every file, test, script, and identifier you create for the behavior it covers, never for the phase that produced it. Run all executable verification from the phase design and exercise the changed behavior. Fix failures before review. Write each verification command and its raw, unedited output to the returned `verification-transcript` resource; this transcript is ignored and must not be included in the change set. The implementation output's required `verification_evidence: {transcript_digest, byte_count}` binds authority to those exact bytes before the raw cache is removed at the phase boundary — the dispatched counter-review judges verification only from this digest-checked transcript, so a claim without one reads as unverified. Both review children explore the exact retained post-change repository snapshot reconstructed from the implementation's base commit (excluding task workflow files); source bodies and generated diffs do not travel in the sealed control envelope. When a counter-review fails with ENVELOPE_OVERFLOW, diagnose compact output declarations and mandatory pinned evidence. Do not infer from source-file size alone that the approved phase must be split, and never trim authenticated evidence to evade the cap; request a design split only when the remaining declaration or cognitive scope genuinely requires it.
 
-Then present the evidence — commands run, output observed, behaviors confirmed — alongside anything that genuinely requires human judgment or access you lack (visual/UX checks, production credentials, "does this match your intent"). Stop for the user's verdict. If issues are reported, fix them, re-verify the affected items, and re-present only what changed. Do not proceed until the user confirms.
+Keep the full-status `current-artifact` resource (the implementation notes) current. Its implementation log has `## Implementation Log: Phase <phase-number> - <name>` followed by `### Decisions Made`, `### Deviations from Plan`, `### Patterns Established`, `### Gotchas`, `### Key Interfaces`, and `### Verification Evidence`; fill each with exact paths, signatures, commands, and observed facts useful to the next phase. Update returned writable `task-design` and `prd` resources whenever implementation changes reality. Preserve the lifecycle no document → `DESIGNED` → `IN PROGRESS` → `COMPLETE` as a projection of durable state, never as a substitute for it.
 
-## Implementation counter-review
+To record the terminal produce result, pipe `{"implementation":{…}}` to `archflow-local build-request --task <task>`, supplying the base commit, required `verification_evidence`, plus sorted repository-relative outputs and restore targets (and sorted declared inputs when any exist); the helper selects the canonical parent documents from the status resources, fills the current `phase_instance` and `step: "produce"`, then observes identities, digests, undeclared changes, accounting, and secret scan; do not author those values. It returns the complete resolved `archflow_state` request, already staged: call the tool with its `staged.reference`.
 
-Alongside the verification evidence, offer a **counter-review of the implementation by the other client**: emit a copy/paste-ready prompt addressed to the client you are not running in (in Claude Code, write it for Codex; in Codex, for Claude Code). Whether to run it is the user's call. The prompt must be self-contained, along these lines:
+Pipe small generated JSON payloads to `archflow-local` commands directly on stdin (for example `printf '%s' '<json>' | archflow-local build-request --task <task>`); write any payload carrying authored prose or quotes — findings, dispositions, and gate summaries — to a file and pass it with `--input <json-file>`, because shell quoting silently corrupts such payloads. Every tool request is resolved exactly once before the call: `archflow-local build-request --task <task>` composes and resolves each request kind named here, and `archflow-local envelope --task <task>` resolves a complete proposed request such as a status prefill — in both cases the helper resolves the fingerprint internally and returns the resolved request with its true `request_digest`, so never hand-copy a digest between commands, and a further `envelope` pass over build-request output is a no-op fixed point, harmless but never required. Omit `intent_id` from every build-request payload: the composer generates a fresh one and echoes it in the request and in `staged.reference`; supply an explicit `intent_id` only to replay or resume an interrupted call by reusing the id a previous envelope echoed. The MCP call sends the three-field staged reference from that output: build-request stages the resolved request at `staged.path` and echoes `staged.reference` — `schema_version`, `task_id`, `intent_id`, `request_digest` — which is the entire tool input to pass; the server loads the staged request and refuses on any digest mismatch, so the multi-kilobyte `request.input` is never transcribed. If the staged reference is unavailable, fall back to passing `request.tool` and `request.input` verbatim. Either way each tool's success result echoes the recorded `request_digest`: a match proves the operation's semantic fields — repository and task identity, the operation, its request fields, and the resolved input fingerprint — arrived verbatim, while `intent_id` and `expected_revision` sit outside the digest and are checked separately by intent correlation and the revision check. On a fingerprint mismatch, discard the intent, take only the returned expected digest and safe action, rebuild with a fresh intent, and re-run status.
 
-```text
-Counter-review the implementation of phase <N> of task <task>.
+## Review and triage
 
-Read first: the design at .archflow/tasks/<task>/phases/phase-<N>-<slug>.md,
-.archflow/tasks/<task>/architecture.md, and .archflow/context/ if present —
-check every workspace repo for its own .archflow/context/, not just the repo
-holding the task.
-The changed code is uncommitted — inspect it with git status / git diff, scoped
-to the files in the design's Files table.
+Before recording the terminal produce result, spawn a fresh review sub-agent with a complete brief: the final changed bytes, the full-status `phase-design`, `current-artifact`, and `verification-transcript` resources, `review_policy.rubric`, and the pinned active rules from status — nothing of this conversation. Have it return findings only. Fix what it finds or consciously dismiss it, revising and re-verifying until you are satisfied; spawn a second reviewer sub-agent when the first pass found substantive problems — typically one pass suffices. Nothing from this review is recorded durably; the counter-review remains the independent, server-attested check.
 
-A different model implemented and already verified this — your job is to find
-what it missed: bugs, unhandled edge cases, silent deviations from the design,
-unmet success criteria, and violations of the project's established patterns.
-This targets the operating envelope in the PRD, so do not ask for hardening,
-abstraction, or failure handling beyond what the design called for — code that
-exists without a requirement behind it is itself a finding. Do not change any
-files.
+For `counter_review`, pipe `{"kind":"counter-review"}` to `archflow-local build-request --task <task>` and call `archflow_counter_review` with the returned `staged.reference`; the server derives the artifact path and canonical review policy. The one call covers two reviews: the server dispatches the other-family rubric reviewer against the sealed repository snapshot, and then — only when the pinned constitution has active rules, a decision the server makes alone — a second other-family child performing the constitution and drift review against its own sealed envelope and the same snapshot. Each dispatch may legitimately run many minutes — the server allows up to fifteen per dispatch — so run the call in the background rather than assuming a hang. The result reports both the rubric verdict and a `constitution` block; `{status:"not-run", reason:"no-active-constitution-rules"}` is normal and means the repository pins no active rules. The reviewed subject remains the retained implementation output selected by durable state; do not substitute an informal diff summary.
 
-Report only findings that would change the code: a real defect, an unmet
-criterion, a deviation that matters. Style preferences, naming, and speculative
-robustness are not findings. Use two severities: blocker (wrong behavior, data
-loss, or an unmet success criterion) and major (likely to bite in normal use).
+For `triage`, author exactly one disposition per rubric finding — `{"finding_id":…,"disposition":"accepted"|"rejected","rationale":…}` plus `revision_intent` for acceptance and `evidence` for rejection. Accept only material defects whose resolution is reasonably likely to change required behavior, verification, an approved boundary, or important risk. Reject optional cleanup, stylistic preferences, and alleged blockers without a concrete consequence. On a remediation round, verify prior accepted revision intents first and accept a newly discovered issue only when it independently clears the same materiality bar. Reject `unverifiable-` evidence gaps with evidence beginning `envelope-gap: ` and never accept them. Record `{"kind":"triage","dispositions":[…]}` through build-request and `archflow_state`; the composer enforces exact finding coverage. Accepted findings change code or parent documents as stated, rerun verification, and re-enter production plus remediation review. The constitution verdict is never triaged; triggered outcomes become human gates.
 
-Write your findings to
-.archflow/tasks/<task>/reviews/phase-<N>-impl-counter-review.md
-as a list, each with a severity and a suggested resolution. If nothing meets that
-bar, say so explicitly in that file — that is a valid result.
-```
+## Gates, log, and commit authorization
 
-When the user returns and the review file exists without a `## Triage` section, read it and triage every finding: accept it and fix the code, or reject it with a stated reason. Rejecting is a normal outcome — a finding that only expresses a style preference, or that asks for hardening beyond the operating envelope, is rejected by default. Append the dispositions as a `## Triage` section to the review file, re-verify what the fixes touched, and re-present only what changed.
+Compose any skill-opened gate through `archflow-local build-request --task <task>` and make the blocking `archflow_gate` call with its staged reference. The constitution gates (`constitution-review`, `material-drift`) are derived after triage. For every open gate, re-run status and use its human-facing presentation. Explain conversationally what is ready, material findings or risks, why the decision matters, and each available choice with its consequence, then ask one direct question. Never dump gate IDs, digests, JSON, decision templates, internal paths, or protocol codes unless the user explicitly asks for diagnostics or audit detail. The normal opposite-client counter-review already ran automatically before the gate; there is no optional review at the end. Human approval or commit authorization is not a backlog-triage meeting: do not add rejected non-material observations to its agenda. At an `attempts-exhausted` gate, explain the unresolved material defect and whether another revision appears worthwhile. Record the user's chosen server-issued option and reason through `archflow-local decide --task <task>`; the helper supplies all live bindings.
 
-## Log and update parents
+If the human requests changes, apply them, rerun relevant implementation verification, and classify the actual diff. A **simple** revision is limited to typo, formatting, comment, or wording-only changes that alter no meaning, behavior, scope, interface, trust boundary, input, verification claim, or parent document. It keeps the current attempt count, may reuse the prior review and constitution evidence for one hop, shows the exact small diff, and always returns to the human for approval of the final bytes. A **significant** revision is anything else; uncertainty defaults to significant. It archives the prior evidence as history, resets the attempt count to 1, and automatically runs a fresh opposite-client counter-review plus constitution review before a new gate. State the classification and reason in ordinary language. The human may override it in either direction, and the durable record must reflect that override. The `attempts-exhausted` gate counts only attempts since the latest significant human revision.
 
-Create `phase-<N>-<slug>-log.md` with this structure:
+If the explicit decision is `waiver-requested`, it is not approval. Re-run status, construct the `archflow_waiver` origin only from the server's archived request and decision plus helper-derived digests, run `envelope` before the blocking waiver call, and present the waiver gate through the same conversational procedure. A denied or cancelled waiver grants nothing.
 
-```markdown
-## Implementation Log: Phase N - [Name]
+After all implementation and parent changes are final, ensure `impl-notes.md` contains the durable implementation log and propose every task-independent convention for the target project's `CLAUDE.md`; keep task-specific facts in the notes. Then rebuild the implementation output so its digest binds those final bytes.
 
-### Decisions Made
-[Key technical decisions and why]
+The distinct `commit-authorization` gate is mandatory even when no trigger gate opened. When status returns `next_action.code: "open-gate"` and `gate_kind: "commit-authorization"`, write `{"kind":"gate","summary":<text for the human>}` to a file and pass it with `--input` to `archflow-local build-request --task <task>`: the composer derives and binds the current evidence from durable authority, and you author only the summary. Present a conversational overview of the final behavior, verification, material risks, and files that will be committed, then make the blocking `archflow_gate` call with the returned `staged.reference`. Keep its identifiers and authenticated bindings internal unless diagnostics are requested.
 
-### Deviations from Plan
-[What changed and why]
-
-### Patterns Established
-[Patterns future phases should follow]
-
-### Gotchas
-[Unexpected issues and workarounds]
-
-### Key Interfaces
-[Exact paths, exports, and function signatures future phases depend on]
-```
-
-Be concrete — the log's reader is the next phase's agent, so every entry is an exact path, signature, or fact a future session would otherwise rediscover the hard way; anything else stays out. Review the log and update only parent-doc content that implementation made inaccurate:
-
-- In `architecture.md`, mark the phase complete; update system architecture, data model, decisions, and remaining phases when actual deviations require it, including adding, removing, or reordering phases.
-- In `prd.md`, update requirements made infeasible, split, or newly necessary; move confirmed exclusions to Out of Scope with a reason.
-
-Then check the log for rules that outlive this task: durable conventions every future session should follow regardless of ArchFlow (error-handling patterns, "always use X repo, never query directly", build/test gotchas). Propose adding those to the project's `CLAUDE.md` — `.archflow/` is removed before PR, so anything permanent must live outside it. Task-specific detail stays in the log.
-
-## Confirm, commit, complete
-
-Ask the user for explicit confirmation to commit and stop. Apply requested changes and repeat until approval. Then stage the files this phase created or modified — not unrelated working-tree changes — and commit:
-
-```text
-<Task Title> Phase <N>: <Phase Name>
-
-<2–3 sentence summary of delivered work, key decisions, and deviations>
-```
-
-After committing, set the phase design status to `COMPLETE`, add the implementation date, and present the next phase with copy/paste-ready commands:
-
-```text
-Phase <N> complete. Design phase <N+1> next:
-Claude Code: /archflow-phase-design <task> <N+1>
-Codex: $archflow-phase-design <task> <N+1>
-```
-
-Never pass a review or commit gate without confirmation.
+Do not stage or commit anything before status proves an explicit `authorize-commit` decision bound to the final diff and current artifact digests. Never choose that decision for the user or treat conversation as authority. After authorization, status returns `next_action.code: "commit-phase"`; stage only the declared phase outputs, show the exact staged diff and proposed commit message, and stop for the user's explicit confirmation to commit. Only then commit to the authorized current target ref. Re-run status: repository authority must first prove the approved target is still current, the retained base is its ancestor, and the committed tree contains every retained after-image and absence; status then exposes `advance-phase` or `complete-task`. Perform the server-derived advance call above and re-run status again. Record `COMPLETE` only from that durable successor or terminal state; task completion means the final planned implementation phase is committed, not that QA, staging, release, deployment, or publication occurred.

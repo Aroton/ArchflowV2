@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://archflow.dev/schemas/v1/result-expectation",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "tool": {
+      "type": "string",
+      "enum": [
+        "archflow_state",
+        "archflow_counter_review",
+        "archflow_gate",
+        "archflow_waiver"
+      ]
+    },
+    "task_id": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+    },
+    "intent_id": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+    },
+    "input_fingerprint": {
+      "$ref": "https://archflow.dev/schemas/v1/mcp-tools#/$defs/digest"
+    },
+    "request_digest": {
+      "$ref": "https://archflow.dev/schemas/v1/mcp-tools#/$defs/digest"
+    },
+    "result_id": {
+      "$ref": "https://archflow.dev/schemas/v1/mcp-tools#/$defs/id"
+    },
+    "resulting_revision": {
+      "$ref": "https://archflow.dev/schemas/v1/mcp-tools#/$defs/integer"
+    },
+    "success": {}
+  },
+  "required": [
+    "schema_version",
+    "tool",
+    "task_id",
+    "intent_id",
+    "input_fingerprint",
+    "request_digest",
+    "result_id",
+    "resulting_revision",
+    "success"
+  ],
+  "additionalProperties": false
+}

@@ -1,141 +1,58 @@
 ---
 name: archflow-phase-design
-description: Design one planned ArchFlow phase, run sub-agent and cross-client reviews, and hand off to implementation. Use when the user asks to design, revise, or counter-review a task phase.
+description: Design and durably review one approved ArchFlow implementation phase before code may be written.
 ---
 
-# Design Phase
+# Phase Design
 
-Treat the supplied arguments as `<task> <phase-number>`. This skill only designs — implementation happens in a fresh session via `archflow-phase-impl`, so the implementing agent starts with a clean context that reads nothing but the approved design and its inputs.
+Treat the arguments as `<task> <phase-number>`. Full status returns task-scoped `resources` entries shaped `{role,path,access}`; select `current-artifact`, `task-design`, `prd`, and any `prior-implementation-notes` by role and use the returned paths instead of reconstructing task paths. Never read another task's files. Shared documentation under `docs/` and ordinary repository exploration remain available when the work needs them. Durable status, not a document status line, decides whether implementation may begin.
 
-Run this session as the workflow orchestrator: state handling, review gates, and triage stay here because they need the full history, while bulk work — exploration, research, drafting, fresh-context review — runs in sub-agents that write to disk and return only conclusions. Treat sub-agents as available — both Claude Code and Codex provide them natively; work inline only when spawning actually fails or a piece of work is too small to justify the hand-off.
+This session is the **producer** and workflow orchestrator — the server identifies the producer family from the initialize handshake of the connected client. The server dispatches the opposite-family counter-review, and the constitution review with it when the repository has active constitution rules; you never perform, spawn, or simulate either. The orchestrator's context is the workflow's scarcest resource: conversation with the user, human gates, triage, and synthesis stay here. Run codebase exploration and research through sub-agents in parallel, each spawned with a complete brief — a sub-agent sees nothing of this conversation — writing bulk output to disk and returning only the conclusions this phase's design needs. Plan the work, then delegate the parallelizable pieces to sub-agents; do inline only what is too small to justify a hand-off. Review the draft through a fresh review sub-agent before recording produce (below), and run independent review work in parallel: the counter-review dispatch runs in the background while any same-side review sub-agents run. Then triage, resolve, and re-enter review as needed, bounded by the attempt budget.
 
-**Design to the operating envelope.** Build for the scale, criticality, and threat model the PRD states — absent one, an early-stage product serving thousands of users, where functionality and maintainability outrank everything else. Prefer the boring, obvious construction: every abstraction, invariant, integrity check, and recovery path must be bought by a requirement or an observed failure, never a hypothetical. State this in every sub-agent brief in this skill — a writer or reviewer without this constraint will reliably produce more machinery than the product needs.
+## Degraded operation
 
-## Setup and state
+If a workflow tool is unavailable, run read-only `archflow-local manual-status --task <task>`, report its position, and stop — create no milestone and record nothing offline, because no offline recording path exists; the MCP server records all progress. Wait for the server to be restored (reinstall with `./install.sh` if needed), then resume through the normal loop below; never write code or infer design approval while the server is unavailable.
 
-1. Read `.archflow/tasks/<task>/architecture.md`; it is required. If missing, stop and direct the user to `archflow-design <task>`.
-2. Locate `<phase-number>` in the architecture’s Phases section. If absent, show available phases and stop.
-3. Read relevant `.archflow/context/` documents from every workspace repo that has them. If any carry a commit stamp far behind their repo's current HEAD, warn the user that context may be stale and suggest a refresh in the affected area.
-4. For phase 2 or later, read the immediately prior phase's design document and implementation log in `.archflow/tasks/<task>/phases/`. The architecture doc is kept accurate as phases complete, so it plus the latest log carries the durable state; consult older logs only when they cover ground this phase touches.
-5. Check for an existing `phase-<N>-*.md` design document and for `.archflow/tasks/<task>/reviews/phase-<N>-design-counter-review.md`.
+## Review policy
 
-Then act on state:
+Run full status before review work and use its canonical `review_policy`. Use `review_policy.rubric` verbatim in every non-durable same-side review brief; never copy a rubric from skill text or author one. The server selects that same policy for the durable counter-review. Obtain the active pinned rules from status; the request composer derives `rubric_digest`, provenance, and every routing identity from durable authority. Do not self-declare routing facts or calculate any value the server checks.
 
-- **No design document**: design the phase (below).
-- **`DESIGNED` with an untriaged counter-review** (a review file with no `## Triage` section): triage it (see Counter-review triage).
-- **`DESIGNED` otherwise**: show the design summary and ask whether to revise or proceed to implementation in a fresh session (`archflow-phase-impl <task> <N>`).
-- **`IN PROGRESS`**: report that implementation has started and direct the user to `archflow-phase-impl <task> <N>` to resume.
-- **`COMPLETE`**: report it and suggest the next phase.
+## Durable loop and step ownership
 
-## Explore and design
+Run `archflow-local status --task <task>`, check the result's JSON `ok` field, perform exactly its `next_action`, and run status again after every durable action. Use `--brief` for these routine loop iterations — it projects position, blockers, open-gate and reconciliation summaries, and the one `next_action` from the same computed status without rendered rule text, prompts, or template bodies; run full status when opening or resolving a gate or repairing. Verify that `phase_instance` is `phase-design-<phase-number>` before writing this phase. If status selects another phase, a repair, or a human-required action, report that instead of bypassing it. When `next_action` carries a prefilled `request`, it is the preview of the call `archflow-local build-request --task <task>` composes: prefer piping the matching kind's facts to build-request, and complete a prefill by hand through `archflow-local envelope --task <task>` only when no kind composes that request — either way the resolved output, not the prefill, is the digest authority.
 
-Spawn an exploration agent and — only when the phase enters unfamiliar territory — a research agent alongside it; run them in parallel and wait for both. An agent sees nothing of this conversation, so brief each completely:
+When status returns `next_action.code: "commit-artifacts"`, the single resolved phase-design approval has already authorized the exact recoverable task-local milestone. Confirm HEAD still matches `commit_baseline` and `commit_target_ref`, stage only `:(top,literal)<commit_path>` with `git add -A --`, inspect the staged task-local diff, then commit immediately with `commit_message` and the same top-anchored literal pathspec. Do not ask for a second confirmation and never include unrelated staged changes. Re-run status and require its independent commit proof; a Git failure retains approval and is retryable.
 
-- **Codebase analysis**: use the phase goal, scope, requirements, prior-phase patterns and interfaces, and the summary of earlier work to identify current file state, reusable utilities and patterns, and integration points. Return paths and code snippets.
-- **Targeted research**, only for unfamiliar territory: use the PRD and architecture constraints to research the specific technical challenge; return only the synthesized conclusions the design depends on.
+When status returns `next_action.code: "advance-phase"` or `"complete-task"` from the active phase design, pipe `{"kind":"advance"}` to `archflow-local build-request --task <task>` and call `archflow_state` with the returned `staged.reference`. Approval, its verified milestone commit, and hand-off are distinct durable facts, but only approval requires human judgment. Re-run status and do not return until durable status shows `next_action.target_phase_instance` or terminal completion. A phase-design invocation may recover a task stranded at its immediate predecessor hand-off before applying the phase check above, but only when status itself returns `advance-phase`, names `phase-design-<phase-number>` as `target_phase_instance`, and its server-derived `skill` plus `skill_args` exactly match this invocation. Perform the same advance call first, then require fresh status to select the requested phase; otherwise refuse the wrong phase and report the returned action.
 
-Spawn a writer agent to draft the phase design; it sees none of this conversation, so give it the phase definition, PRD, exploration and research findings, the relevant prior design/log documents, and context documents. Draft inline only when the phase is small enough that the hand-off would cost more than the drafting. Create `.archflow/tasks/<task>/phases/phase-<N>-<slug>.md`, slugging the phase name.
+Enter each pipeline step by piping `{"kind":"running","step":"<step>"}` to `archflow-local build-request --task <task>` and calling `archflow_state` with the returned `staged.reference`; the composer refuses an illegal entry with the server's own answer. Record the terminal exit for `produce` and `triage` only. `archflow_counter_review` records its own successful exit and covers both the rubric review and the constitution review; do not send a second successful state transition after the tool returns. When material new information invalidates the current phase design mid-loop — an upstream change, the user restating intent — do not park it for the gate or smuggle it into a triage finding: record a fresh produce running entry through build-request (`kind: "running"`, `step: "produce"`, legal from any succeeded step) and only then revise the phase design; downstream evidence goes stale and the loop re-runs from produce.
 
-The design must be reviewable in one sitting and define **what** and **where**, not line-by-line implementation or pseudocode. Its primary reader is the implementing agent in a fresh session — favor what a machine consumer needs (exact paths, pinned interface names, unambiguous chunk boundaries) over prose written to persuade a human. It is a plan for a competent implementer who will make the local calls themselves, not a specification that pre-decides them. Interface signatures at chunk boundaries are the exception: when chunks will be implemented separately, pin down the exact exports and types they share so the seams stay coherent. Everything else stays at the level of intent — if a paragraph is naming specific expressions, field accesses, or control flow inside a function, it has dropped below the design's altitude and should be cut back to what the code must accomplish. Prose that dense also makes the document expensive to review and revise, which is how design turns into a loop over wording. Use this structure:
+Pipe small generated JSON payloads to `archflow-local` commands directly on stdin (for example `printf '%s' '<json>' | archflow-local build-request --task <task>`); write any payload carrying authored prose or quotes — findings, dispositions, and gate summaries — to a file and pass it with `--input <json-file>`, because shell quoting silently corrupts such payloads. Every tool request is resolved exactly once before the call: `archflow-local build-request --task <task>` composes and resolves each request kind named below, and `archflow-local envelope --task <task>` resolves a complete proposed request such as a status prefill — in both cases the helper resolves the fingerprint internally and returns the resolved request with its true `request_digest`, so never hand-copy a digest between commands, and a further `envelope` pass over build-request output is a no-op fixed point, harmless but never required. Omit `intent_id` from every build-request payload: the composer generates a fresh one and echoes it in the request and in `staged.reference`; supply an explicit `intent_id` only to replay or resume an interrupted call by reusing the id a previous envelope echoed. The MCP call sends the three-field staged reference from that output: build-request stages the resolved request at `staged.path` and echoes `staged.reference` — `schema_version`, `task_id`, `intent_id`, `request_digest` — which is the entire tool input to pass; the server loads the staged request and refuses on any digest mismatch, so the multi-kilobyte `request.input` is never transcribed. If the staged reference is unavailable, fall back to passing `request.tool` and `request.input` verbatim. Either way each tool's success result echoes the recorded `request_digest`: a match proves the operation's semantic fields — repository and task identity, the operation, its request fields, and the resolved input fingerprint — arrived verbatim, while `intent_id` and `expected_revision` sit outside the digest and are checked separately by intent correlation and the revision check.
 
-```markdown
-# Phase N: [Name]
+To record the terminal produce result, write the full-status `current-artifact` resource and any returned writable parent resources that planning made inaccurate, then pipe `{}` to `archflow-local build-request --task <task>`: the helper uses the canonical resource paths, binds every changed authorized document into one reviewed production result, assembles the complete `archflow_state` request, and returns it already resolved and staged — call `archflow_state` with its `staged.reference`.
 
-**Status**: DESIGNED
-**Task**: [task name]
-**Goal**: [From architecture doc]
-**Requirements**: [REQ-IDs]
+On a fingerprint mismatch, abandon the pending intent, use the returned expected digest and safe next action, rebuild with a fresh intent, and re-run status. A fingerprint mismatch is recovery within the normal loop, never evidence that a tool is unavailable.
 
-## Context
-[1–2 paragraphs: earlier work and decisions that affect this phase.]
+## Phase work
 
-## What We're Building
-[1–2 paragraphs: high-level approach; no code.]
+For `produce`, read the full-status `task-design` and `prd` resources, relevant context, any returned `prior-implementation-notes` resource when its interfaces affect this phase, and the pinned policy surfaced by status. Write a reviewable phase design to the `current-artifact` resource that defines the goal, requirements, context, files, work chunks, pinned cross-chunk interfaces, success criteria, and executable verification. Keep it within the approved phase scope and current operating envelope. If implementation planning proves the task design or PRD inaccurate, update the corresponding returned writable parent resources in the same production change and record each deviation explicitly. The dispatched counter-review reads the repository at the pinned commit (excluding task workflow files), so repository claims are verifiable — write the phase design so each claim about existing code can be checked against those bytes.
 
-## Files
-| Action | File | Purpose |
-|--------|------|---------|
-| Create | [path] | [What it does] |
-| Modify | [path] | [What changes and why] |
+Do not write implementation code in this skill. A phase design has no authority merely because its file exists.
 
-## Work Breakdown
-1. **[Chunk name]**: [1–2 sentences: what to build, not how.]
-2. **[Chunk name]**: [1–2 sentences.]
-3. **[Chunk name]**: [1–2 sentences; note dependencies.]
+Before recording the terminal produce result, spawn a fresh review sub-agent with a complete brief: the full-status `current-artifact`, `task-design`, and `prd` resources, `review_policy.rubric`, and the pinned active rules from status — nothing of this conversation. Have it return findings only. Fix what it finds or consciously dismiss it, revising the phase design until you are satisfied; spawn a second reviewer sub-agent when the first pass found substantive problems — typically one pass suffices. Nothing from this review is recorded durably; the counter-review remains the independent, server-attested check.
 
-## Success Criteria
-- [ ] [Observable behavior from the user perspective]
-- [ ] [Observable behavior]
-- [ ] [Tests pass / build succeeds]
+For `counter_review`, pipe `{"kind":"counter-review"}` to `archflow-local build-request --task <task>` and call `archflow_counter_review` with the staged reference. The server derives the artifact path and canonical review policy. The call dispatches the other-family rubric review against the read-only pinned repository and, when active rules exist, the constitution review; the returned result records both. A remediation review first verifies prior accepted revision intents and may add a new finding only when it names a material consequence.
 
-## Verification Steps
-[Commands and behaviors the implementing agent runs itself, plus edge cases worth exercising. List separately anything only a human can judge — visual/UX checks, intent alignment.]
+For `triage`, author exactly one disposition per rubric finding — `{"finding_id":…,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":…}` plus `revision_intent` for acceptance and `evidence` for rejection. Accept only material defects; reject optional polish, preferred alternatives, and alleged blockers without a concrete downstream consequence. `accepted-editorial` is limited to non-blocking wording or formatting that changes no meaning. Reject `unverifiable-` evidence gaps with evidence beginning `envelope-gap: ` and never accept them. Record `{"kind":"triage","dispositions":[…]}` through build-request and `archflow_state`; the composer enforces exact finding coverage. Plain accepted findings revise the phase design and any parent document made inaccurate, then re-enter production and remediation review. Editorial-only acceptance uses the status-driven one-hop predecessor path without rerunning review. The constitution verdict is never triaged; triggered outcomes become human gates.
 
----
-*Designed: [date]*
-```
+## Approval gates and hand-off to implementation
 
-**The phase boundary from the architecture is the contract — design within it.** Sizing was decided in `archflow-design`, and re-cutting it here costs the user a re-planning cycle and fragments the work into phases too small to deliver anything observable. When a phase feels large, the first lever is delegation, not a smaller phase: implementation delegates chunks to sub-agents, so the implementing orchestrator carries briefs and summaries, not file contents — the architecture already sized the phase to fit one fully delegated session (the calibration numbers live there). The second lever is the design's own altitude — a phase usually looks oversized because the document is over-specified, not because the work is.
+Material drift and exhausted attempts remain corrective gates because they require new work or direction. Otherwise every phase design ends at one `design-approval` gate combining document approval, every constitution conflict or trigger, and milestone-commit authorization. Write `{"kind":"gate","summary":<text for the human>}` to a file and pass it with `--input` to `archflow-local build-request --task <task>`, then make the blocking `archflow_gate` call with the returned `staged.reference`. When status carries an `editorial_revision` block, show the small diff and explain that retained reviews evaluated its predecessor.
 
-Propose a split only when the work genuinely cannot be finished in one implementation session even fully delegated. That is a rare outcome and a user decision: stop, explain what does not fit, and get approval to amend the architecture's phase list before continuing. If it starts happening on most phases, the architecture's sizing is the thing to fix, and say so rather than absorbing it phase by phase.
+For every open gate, re-run full status and use its human-facing presentation. At `design-approval`, state the phase-design outcome and reproduce every `presentation.details` entry in plain English, including the rule, compliance or trigger result, and the reviewer's actual rationale or evidence. Never assume the human read a workflow artifact on disk. Explain every choice and ask one direct question. Keep mechanical bindings internal unless the user explicitly asks for diagnostics or audit detail. The opposite-client review already ran automatically; there is no optional review at the end. Phase-design approval is not a backlog-triage meeting: do not add rejected non-material observations. Record the chosen server-issued option and reason through `archflow-local decide --task <task>`.
 
-## Sub-agent review
+If the human requests changes, apply them and classify the actual diff. A **simple** revision is limited to typo, formatting, comment, or wording-only changes that alter no meaning, behavior, scope, interface, trust boundary, input, verification claim, or parent document. It keeps the current attempt count, may reuse the prior review and constitution evidence for one hop, shows the exact small diff, and always returns to the human for approval of the final bytes. A **significant** revision is anything else; uncertainty defaults to significant. It archives the prior evidence as history, resets the attempt count to 1, and automatically runs a fresh opposite-client counter-review plus constitution review before a new gate. State the classification and reason in ordinary language. The human may override it in either direction, and the durable record must reflect that override. The `attempts-exhausted` gate counts only attempts since the latest significant human revision.
 
-Before the user sees the draft, have it critiqued. Spawn one or more fresh-context reviewer agents — sized to the phase, one is usually enough — giving each the draft, the phase definition from the architecture, the relevant PRD requirements and operating envelope, and prior-phase interfaces. Instruct them to find problems, not to affirm: requirement coverage gaps, incoherent chunk seams or missing interface contracts, integration risks, conflicts with established patterns, and complexity the envelope does not pay for — invariants, integrity machinery, or failure handling built for scale, adversaries, or partial-failure modes this product does not face. Over-engineering is a defect here, weighted the same as a gap.
+If the explicit decision is `waiver-requested`, it is not approval. Re-run status, construct the `archflow_waiver` origin only from the server's archived request and decision plus helper-derived digests, run `envelope` before the blocking waiver call, and present the waiver gate through the same conversational procedure. A denied or cancelled waiver grants nothing.
 
-**Hold reviewers to a materiality bar** — this is what keeps review from turning into a loop over wording. A finding qualifies only if acting on it changes what gets built: code that would be written differently, a seam that does not fit, a requirement left uncovered, a risk that would cause rework. Wording, naming, section ordering, terminology drift between paragraphs, restating what the document already says, and additional hardening beyond the envelope are not findings — the author fixes anything worth fixing there silently, without a review round. Use two severities: **blocker** (implement this as written and it fails or misses a requirement) and **major** (likely to cause real rework). Returning "nothing material" is a good outcome, not a failed review. Do not ask reviewers to judge phase sizing; the architecture owns that.
-
-Whenever the phase design introduces or pins an external dependency the architecture review did not already clear — a library, framework, model, service, or version, including an architecture-level choice this phase is the first to actually install or use — also spawn a dedicated **dependency currency reviewer** with web access. Skip it when the phase has no new dependency surface; do not re-litigate choices already reviewed and approved at architecture time unless something has actually changed since. Require its findings to come from live web research, never training knowledge — a model's sense of "current best" is stale by construction. It verifies each dependency is still the current recommended option (not deprecated, superseded, unmaintained, or major versions behind), citing enough evidence (latest version, release date, source) for the user to judge; and it checks the work breakdown for anything built by hand that a ubiquitous, well-maintained, permissively-licensed library already solves — prefer that library over rolling our own; copyleft of any strength is flagged for the user to decide, never silently adopted.
-
-Triage the findings and revise for blockers and majors. Run a second round only when the revisions changed the design's shape enough that new problems could have been introduced — never to see whether a fresh reviewer can find something. A round that would produce only editorial changes means review is done. Tell the user what review caught and changed.
-
-## Present and counter-review
-
-Confirm the document exists and present it, noting what the sub-agent review changed. Alongside it, offer a **counter-review by the other client**: emit a copy/paste-ready prompt addressed to the client you are not running in (in Claude Code, write it for Codex using `$`-invocation conventions; in Codex, for Claude Code) so a different model reviews the design with fresh eyes. Whether to run it is the user's call. The prompt must be self-contained, along these lines:
-
-```text
-Counter-review the phase design at .archflow/tasks/<task>/phases/phase-<N>-<slug>.md.
-
-Read first: .archflow/tasks/<task>/architecture.md, .archflow/tasks/<task>/prd.md,
-and .archflow/context/ if present — check every workspace repo for its own
-.archflow/context/, not just the repo holding the task.
-
-A different model drafted this design and already revised it once — your job is to
-find what it missed. Challenge requirement coverage, chunk seams and interface
-contracts, integration risks, dependency currency (stale versions, superseded
-models, deprecated APIs), and anything inconsistent with the architecture or the
-actual codebase. Challenge complexity too: this targets the operating envelope in
-the PRD, so flag invariants, integrity machinery, or failure handling built for
-scale, adversaries, or partial-failure modes the product does not face —
-over-engineering is a defect, not caution. Phase sizing is set by the architecture
-and is not under review. Do not rewrite the document or change any files outside
-the review.
-
-Report only findings that change what gets built: code that would be written
-differently, a seam that does not fit, an uncovered requirement, a risk that would
-cause rework. Wording, naming, ordering, terminology drift, and polish are not
-findings. Use two severities: blocker (implement this as written and it fails or
-misses a requirement) and major (likely to cause real rework).
-
-Write your findings to
-.archflow/tasks/<task>/reviews/phase-<N>-design-counter-review.md
-as a list, each with a severity and a suggested resolution. If nothing meets that
-bar, say so explicitly in that file — that is a valid result.
-```
-
-Then stop. The user may run the counter-review and come back, give feedback directly, or approve.
-
-## Counter-review triage
-
-When a counter-review file exists without a `## Triage` section, read it and triage every finding: accept it and revise the design, or reject it with a stated reason. Rejecting is a normal outcome — a finding that only makes the document read better, or that hardens against something outside the operating envelope, is rejected by default and never reopens the review loop. Append the dispositions to the review file as a `## Triage` section (finding → accepted/rejected → what changed or why not), and re-present only what changed in the design. Repeat the sub-agent review only if the revisions were substantial.
-
-## Approval and hand-off
-
-Never write implementation code in this skill, and never treat the design as approved without the user saying so. On approval the status stays `DESIGNED`, and you report:
-
-```text
-Phase <N> design approved. Implement it in a fresh session so the whole phase
-fits in a clean context:
-Claude Code: /archflow-phase-impl <task> <N>
-Codex: $archflow-phase-impl <task> <N>
-```
+Never pass a review gate or claim `DESIGNED` without explicit human approval. After approval resolves, re-run status, perform `commit-artifacts`, and then perform the server-derived hand-off. Report `DESIGNED` only when fresh status proves advancement to implementation. Then print the exact successor in both forms: `Claude: /<next_action.skill> <task> <next_action.skill_args...>` and `Codex: $<next_action.skill> <task> <next_action.skill_args...>`.

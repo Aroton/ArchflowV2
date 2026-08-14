@@ -1,38 +1,25 @@
 ---
 name: archflow-status
-description: Show ArchFlow task status and recommend exactly one next action. Use when the user asks about project progress, phase state, or what to do next.
+description: Report reconciled durable ArchFlow truth and exactly one server-derived next action.
 ---
 
-# Project Status
+# Workflow Status
 
-Optionally accept a task name. Inspect `.archflow/` without changing files.
+Accept an optional `<task>`. This skill is read-only: it does not edit artifacts, resolve gates, repair authority, stage files, or commit.
 
-1. If `.archflow/` is absent, report that no ArchFlow tasks exist and direct the user to `archflow-prd <task-name>`.
-2. List task directories under `.archflow/tasks/`; when a task was supplied, report only that task.
-3. For every reported task, inspect `prd.md`, `architecture.md` (including its Progress table), and every phase design and implementation-log file. Present:
+If `.archflow/` is absent, report that repository initialization is required. If no task is supplied, list directory names directly under `.archflow/tasks/`; do not ask the helper to enumerate tasks. Run input-free `archflow-local manual-status --task <task>` once for each selected task; a failing command exits nonzero and prints a JSON error body, and the JSON `ok` field remains the authority for structured details.
 
-   ```markdown
-   ## ArchFlow Status
+The helper-classified result is the only authority for task state. Translate it into a concise, conversational account of where the task stands, what—if anything—is blocking it, and exactly one recommended next action. Preserve the classification as `normal`, `degraded`, `repair-required`, `upgrade-staged`, or `upgrade-restart-required`, but do not print the complete machine-shaped `task_status`. In normal mode, mention the current phase and review state, material blockers, whether human judgment is needed, and cleanup only when it is pending. In degraded mode, explain that no durable state exists, there is no offline recording, and the workflow must wait for the server. In `upgrade-staged` mode, explain that a current-format ignored import stage is reusable but is not durable task authority and must resume through the upgrade skill in an MCP-enabled session. In `upgrade-restart-required` mode, explain that old or ambiguous staging cannot be adopted and report only the helper's exact safe discard-and-restart action. In repair-required mode, explain that state exists but cannot currently be trusted and give only the safe recovery action. Do not derive progress from `prd.md`, `design.md`, `phases/<n>/design.md`, `phases/<n>/impl-notes.md`, filenames, status lines, Git history, conversation, or missing files.
 
-   ### [task-name]
-   PRD: Done / Not started
-   Architecture: Done / Not started
-   Phases:
-   | # | Name | Status |
-   |---|------|--------|
-   | 1 | ... | Complete |
-   | 2 | ... | In Progress |
-   | 3 | ... | Not Started |
+When configuration is not verified, explain which kind of configuration changed and that an intentional routing, model, or effort change needs a distinct new task or the explicit upgrade workflow. Keep the expected and observed digests available for diagnostics, but do not show them unless the user asks.
 
-   **Next**:
-   Claude Code: `/archflow-[skill] [arguments]`
-   Codex: `$archflow-[skill] [arguments]`
-   ```
+When normal-mode `task_status` reports an open gate, use its human-facing presentation to explain what needs a decision, why it matters, the material evidence or finding, and each available choice with its consequence. Ask one direct question. The normal opposite-client counter-review already ran automatically before the gate; there is no optional review to offer. Do not expose the gate ID, digests, task-root decision path, JSON templates, internal paths, raw status fields, or protocol codes unless the user explicitly requests diagnostics or audit detail. Do not select, write, approve, waive, cancel, or resolve anything for the user.
 
-   If several tasks exist, use a compact version for each.
-4. Check `.archflow/tasks/<task>/reviews/` for counter-review files lacking a `## Triage` section. An untriaged counter-review means the authoring skill should be resumed to triage it, and that takes priority as the next action (PRD or architecture reviews → the skill that wrote the document; `phase-N-design-*` → `archflow-phase-design`; `phase-N-impl-*` → `archflow-phase-impl`).
-5. Check every workspace repo for `.archflow/context/` and report when each repo's context was last updated. If documents carry a commit stamp, compare it against that repo's current HEAD and flag significant drift with a suggestion to re-run `archflow-explore` against that repo, focused on the areas that changed most.
-6. Show the five most recent commit subjects using `git log --oneline -5`.
-7. Recommend exactly one next action for the requested or most active task: create a PRD, design architecture, triage an untriaged counter-review, or advance the next incomplete phase — `archflow-phase-design <task> N` when the phase has no design doc, `archflow-phase-impl <task> N` (in a fresh session) when it is `DESIGNED` or `IN PROGRESS` — or declare completion. If context does not exist, recommend exploration only when it is the most useful next action.
+Present exactly one recommended action in ordinary language. For workflow skill actions, render both exact server-derived destination commands from `next_action.skill` and `next_action.skill_args`: `Claude: /<skill> <task> <args...>` and `Codex: $<skill> <task> <args...>`. Never substitute the current phase's skill, infer arguments from `phase_instance`, or reconstruct a command from prose. At terminal completion print no next command. Keep `next_action.code`, raw detail, identifiers, and other mechanical bindings internal unless diagnostics are requested. In particular:
 
-Replace `[skill] [arguments]` with exactly one applicable next action; always display both copy/paste-ready client forms.
+- `initialize-repository`, `create-task`, `run-step`, `commit-phase`, `advance-phase`, and `complete-task` identify workflow work, not inferred permission to skip the named skill. For `advance-phase`, recommend the destination skill and exact arguments returned by the server even though durable `phase_instance` still names the predecessor; that destination invocation can complete the one pending hand-off. `commit-phase` means authorization exists but Git has not yet proved the authorized outputs committed on the approved current target; it does not itself authorize staging or committing without the phase skill's explicit confirmation gate.
+- `open-gate` and `resolve-open-gate` are human trust boundaries and remain pending until durable authority proves resolution.
+- `resume-exact-intent`, `restore-or-record-new-transition`, `create-fresh-intent`, `resolve-current-authority`, `restore-pinned-config`, and `inspect-state` are reported as blocking recovery work exactly as returned; do not invent a repair. Before entering produce, only fixed-point-authorized edits to the retained produce artifact are expected. While durable state is already `produce: running` or `produce: failed`, implementation edits are inside the active write window: status reports changed historical projection paths under `reconciliation.expected_reentry_edits` and continues toward the terminal produce result instead of asking the human to reconcile the producer's own work. Receipt and gate mismatches remain blocking, and projection drift becomes strict again after produce.
+- `task-complete` means the final planned implementation phase is committed. It does not imply QA, staging, release, deployment, or publication.
+
+When the result is not `ok`, explain the problem and safe next action conversationally without promoting partial information to state. Keep the structured error, identifiers, and protocol code internal unless diagnostics are requested. For `repair-required`, recommend only the returned action; unreadable, corrupt, or contradictory authority never becomes progress. If the helper itself is unavailable, report only this static non-advancing action: reinstall with `./install.sh`, then rerun `archflow-local manual-status --task <task>`. Do not reconstruct a status while both server and helper are unavailable.

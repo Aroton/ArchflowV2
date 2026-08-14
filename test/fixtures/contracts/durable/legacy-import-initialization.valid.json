@@ -1,0 +1,47 @@
+{
+  "schema_version": "1",
+  "artifact_kind": "legacy-import-initialization",
+  "task_id": "imported",
+  "repository_identity_digest": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809",
+  "source_identity_digest": "5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d",
+  "import_digest": "6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e",
+  "import_baseline_commit": "1234567890abcdef1234567890abcdef12345678",
+  "code_baseline_commit": "0f1e2d3c4b5a69788796a5b4c3d2e1f001234567",
+  "policy_base_commit": "89abcdef0123456789abcdef0123456789abcdef",
+  "constitution_digest": "2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a",
+  "workflow_digest": "3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b",
+  "config_digest": "4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c",
+  "canonical_paths": {
+    "task_root": ".archflow/tasks/imported",
+    "config": ".archflow/tasks/imported/config.yaml",
+    "state": ".archflow/tasks/imported/state.json",
+    "workflow": ".archflow/workflow.yaml",
+    "constitution_root": ".archflow/constitution"
+  },
+  "mapping": [
+    {
+      "legacy_path": "legacy/docs/design.md",
+      "destination_path": ".archflow/tasks/imported/design.md",
+      "phase_instance": "design",
+      "disposition": "historical"
+    },
+    {
+      "legacy_path": "legacy/docs/prd.md",
+      "destination_path": ".archflow/tasks/imported/prd.md",
+      "phase_instance": "prd",
+      "disposition": "draft"
+    }
+  ],
+  "staged_payload_refs": [
+    {
+      "legacy_path": "legacy/docs/design.md",
+      "digest": "708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f",
+      "byte_count": 8192
+    },
+    {
+      "legacy_path": "legacy/docs/prd.md",
+      "digest": "8192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f70",
+      "byte_count": 0
+    }
+  ]
+}

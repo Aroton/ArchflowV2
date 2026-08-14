@@ -1,0 +1,88 @@
+{
+  "schema_version": "1",
+  "artifact_kind": "implementation-output",
+  "task_id": "demo",
+  "phase_instance": "phase-impl-1",
+  "step": "produce",
+  "base_commit": "0f1e2d3c4b5a69788796a5b4c3d2e1f001234567",
+  "index_identity_digest": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809",
+  "worktree_identity_digest": "2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a",
+  "outputs": [
+    {
+      "path": ".archflow/tasks/demo/phases/phase-1-setup.md",
+      "path_class": "document",
+      "operation": "add",
+      "storage": "raw-payload",
+      "payload_bytes": 2048,
+      "payload_digest": "3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b",
+      "file_type": "regular",
+      "after": { "oid": "1234567890abcdef1234567890abcdef12345678", "mode": "100644", "size_bytes": 2048 }
+    },
+    {
+      "path": "src/index.ts",
+      "path_class": "repository-source",
+      "operation": "modify",
+      "storage": "git-object",
+      "file_type": "regular",
+      "before": { "oid": "89abcdef0123456789abcdef0123456789abcdef", "mode": "100644", "size_bytes": 512 },
+      "after": { "oid": "fedcba9876543210fedcba9876543210fedcba98", "mode": "100644", "size_bytes": 640 }
+    }
+  ],
+  "parent_documents": [
+    {
+      "document_path": "architecture.md",
+      "content_digest": "4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c",
+      "role": "design"
+    },
+    {
+      "document_path": "prd.md",
+      "content_digest": "5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d",
+      "role": "prd"
+    }
+  ],
+  "diff_digest": "6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e",
+  "snapshot_digest": "708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f",
+  "restore_targets": [
+    ".archflow/tasks/demo/phases/phase-1-setup.md",
+    "src/index.ts"
+  ],
+  "accounting": {
+    "schema_version": "1",
+    "result_bytes": 2048,
+    "task_bytes": 8192,
+    "result_byte_cap": 26214400,
+    "task_byte_cap": 262144000,
+    "counted_entries": [
+      { "path": ".archflow/tasks/demo/phases/phase-1-setup.md", "storage": "raw-payload", "stored_bytes": 2048 },
+      { "path": "src/index.ts", "storage": "git-object", "stored_bytes": 0 }
+    ],
+    "measured_at_revision": 3
+  },
+  "secret_scan": {
+    "schema_version": "1",
+    "outcome": "clean",
+    "detector_set_id": "archflow.default:v1",
+    "scanned_paths": [
+      ".archflow/tasks/demo/phases/phase-1-setup.md",
+      "src/index.ts"
+    ]
+  },
+  "undeclared_changes": {
+    "scanned": true,
+    "undeclared_paths": [
+      "notes/scratch .txt",
+      "notes/weird:name.txt"
+    ],
+    "unrepresentable_count": 1
+  },
+  "verification_evidence": {
+    "transcript_digest": "b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3",
+    "byte_count": 4096
+  },
+  "declared_inputs": [
+    { "input_id": "architecture:v3", "digest": "8192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f70" },
+    { "input_id": "prd:v1", "digest": "92a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081" }
+  ],
+  "input_fingerprint": "a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192",
+  "constitution_edit_gate_id": "constitution-edit-1"
+}

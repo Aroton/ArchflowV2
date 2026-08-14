@@ -1,0 +1,18 @@
+{
+  "schema_version": "1",
+  "artifact_kind": "document",
+  "task_id": "demo",
+  "phase_instance": "phase-design-1",
+  "step": "produce",
+  "document_path": "phases/phase-1-setup.md",
+  "path_class": "document",
+  "byte_count": 4096,
+  "content_digest": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809",
+  "declared_inputs": [
+    { "input_id": "architecture:v3", "digest": "2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a" },
+    { "input_id": "prd:v1", "digest": "3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b" }
+  ],
+  "input_fingerprint": "4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c",
+  "snapshot_digest": "5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d",
+  "projection_target": ".archflow/tasks/demo/phases/phase-1-setup.md"
+}

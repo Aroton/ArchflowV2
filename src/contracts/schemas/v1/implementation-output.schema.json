@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:implementation-output",
+  "$defs": {
+    "parentDocumentRef": {
+      "type": "object",
+      "properties": {
+        "document_path": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
+        },
+        "content_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "prd",
+            "design",
+            "phase-design",
+            "impl-notes"
+          ]
+        }
+      },
+      "required": [
+        "document_path",
+        "content_digest",
+        "role"
+      ],
+      "additionalProperties": false
+    },
+    "undeclaredChangeReport": {
+      "type": "object",
+      "properties": {
+        "scanned": {
+          "type": "boolean"
+        },
+        "undeclared_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unrepresentable_count": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+        }
+      },
+      "required": [
+        "scanned",
+        "undeclared_paths",
+        "unrepresentable_count"
+      ],
+      "additionalProperties": false
+    },
+    "verificationEvidence": {
+      "type": "object",
+      "properties": {
+        "transcript_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "byte_count": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+        }
+      },
+      "required": [
+        "transcript_digest",
+        "byte_count"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "artifact_kind": {
+      "type": "string",
+      "const": "implementation-output"
+    },
+    "task_id": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+    },
+    "phase_instance": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+    },
+    "step": {
+      "type": "string",
+      "enum": [
+        "produce",
+        "counter_review",
+        "triage",
+        "adjudicate"
+      ]
+    },
+    "base_commit": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+    },
+    "index_identity_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "worktree_identity_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "outputs": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/outputEntry"
+      }
+    },
+    "parent_documents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/parentDocumentRef"
+      }
+    },
+    "diff_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "snapshot_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "restore_targets": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+      }
+    },
+    "accounting": {
+      "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/snapshotAccounting"
+    },
+    "secret_scan": {
+      "$ref": "urn:archflow:schema:v1:secret-scan-result"
+    },
+    "undeclared_changes": {
+      "$ref": "#/$defs/undeclaredChangeReport"
+    },
+    "verification_evidence": {
+      "$ref": "#/$defs/verificationEvidence"
+    },
+    "declared_inputs": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:archflow:schema:v1:durable-primitives#/$defs/declaredInputRef"
+      }
+    },
+    "input_fingerprint": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "constitution_edit_gate_id": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+    }
+  },
+  "required": [
+    "schema_version",
+    "artifact_kind",
+    "task_id",
+    "phase_instance",
+    "step",
+    "base_commit",
+    "index_identity_digest",
+    "worktree_identity_digest",
+    "outputs",
+    "parent_documents",
+    "diff_digest",
+    "snapshot_digest",
+    "restore_targets",
+    "accounting",
+    "secret_scan",
+    "undeclared_changes",
+    "verification_evidence",
+    "declared_inputs",
+    "input_fingerprint"
+  ],
+  "additionalProperties": false
+}

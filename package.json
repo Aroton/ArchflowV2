@@ -1,0 +1,52 @@
+{
+  "name": "archflow-mcp-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^24.15.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:contracts": "vitest run test/contracts",
+    "test:mcp-runtime": "vitest run test/unit/mcp-*.test.ts test/integration/mcp-stdio.test.ts",
+    "test:real-host": "vitest run --no-file-parallelism test/real-host",
+    "bench:review": "vitest run test/real-host/review-benchmark.test.ts",
+    "probe:mcp-sdk-compatibility": "node scripts/probe-mcp-sdk-compatibility.mjs",
+    "build:temp": "node scripts/build-temp.mjs",
+    "release:stage": "node scripts/build-release.mjs",
+    "release:check": "node scripts/check-release.mjs",
+    "release:reproduce": "node scripts/reproduce-release.mjs",
+    "release:write": "node scripts/write-tracked-release.mjs",
+    "release:smoke": "node scripts/smoke-release-bundle.mjs",
+    "release:mutations": "node scripts/test-release-integrity.mjs",
+    "check:release": "npm run release:check -- --payload dist && npm run release:smoke -- --payload dist && npm run release:mutations && npm run release:reproduce",
+    "generate:schemas": "node scripts/generate-schemas.mjs",
+    "check:schemas": "node scripts/generate-schemas.mjs --check",
+    "check:notices": "node scripts/check-notices.mjs",
+    "test:notices-policy": "node scripts/test-notices-policy.mjs",
+    "check:mcp-sdk-boundary": "node scripts/check-mcp-sdk-boundary.mjs",
+    "test:mcp-sdk-boundary-policy": "node scripts/test-mcp-sdk-boundary-policy.mjs",
+    "check": "npm run probe:mcp-sdk-compatibility && npm run typecheck && npm run check:schemas && npm run test:mcp-runtime && npm test && npm run test:contracts && npm run build:temp && npm run check:notices && npm run test:notices-policy && npm run check:mcp-sdk-boundary && npm run test:mcp-sdk-boundary-policy && npm run check:release"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "@secretlint/core": "13.0.4",
+    "@secretlint/secretlint-rule-preset-recommend": "13.0.4",
+    "write-file-atomic": "8.0.0",
+    "yaml": "2.9.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@secretlint/secretlint-rule-aws": "13.0.4",
+    "@types/node": "24.13.3",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "esbuild": "0.28.1",
+    "typescript": "7.0.2",
+    "vite": "7.3.6",
+    "vitest": "4.1.10"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "not_object": [null, [], "1", 42, true],
+  "missing_schema_version": {},
+  "invalid_schema_versions": [null, 1, "", "version_2", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+  "unsupported_schema_version": "2.0-beta.1",
+  "version_one_but_invalid": {
+    "schema_version": "1",
+    "unexpected": "handler must not see this"
+  }
+}

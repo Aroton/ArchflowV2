@@ -1,0 +1,3698 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:project-error",
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "taskSlug": {
+      "type": "string",
+      "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "pathSafeId": {
+      "type": "string",
+      "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "pathClass": {
+      "type": "string",
+      "enum": [
+        "task-config",
+        "task-state",
+        "task-ask",
+        "document",
+        "authority-initialization",
+        "authority-result",
+        "authority-decision",
+        "shared-workflow",
+        "shared-constitution",
+        "task-branch-constitution",
+        "repository-source"
+      ]
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9.-]{1,64}$"
+    },
+    "integer": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "tool": {
+      "type": "string",
+      "enum": [
+        "archflow_state",
+        "archflow_counter_review",
+        "archflow_gate",
+        "archflow_waiver"
+      ]
+    },
+    "adapter": {
+      "type": "string",
+      "enum": [
+        "claude-cli",
+        "codex-cli"
+      ]
+    },
+    "family": {
+      "type": "string",
+      "enum": [
+        "claude",
+        "codex"
+      ]
+    },
+    "gate": {
+      "type": "string",
+      "enum": [
+        "artifact-approval",
+        "design-approval",
+        "constitution-review",
+        "material-drift",
+        "attempts-exhausted",
+        "constitution-edit",
+        "commit-authorization",
+        "restore-collision",
+        "migration-audit"
+      ]
+    },
+    "phase": {
+      "type": "string",
+      "pattern": "^(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)$"
+    },
+    "repositoryPathClaim": {
+      "type": "string",
+      "minLength": 1,
+      "x-archflow-max-utf8-bytes": 1024,
+      "x-archflow-nfc": true,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!//)(?!.*\\\\)(?!.*[\\u0000-\\u001F\\u007F-\\u009F])(?!\\.\\.?(?:/|$))(?!.*\\/\\.\\.?(?:/|$))(?!.*//)(?!.*[:*?\\[\\]<>|])(?!.*[. ](?:/|$))(?!(?:.*/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?(?:/|$)).+$"
+    },
+    "issue": {
+      "type": "object",
+      "properties": {
+        "issue_code": {
+          "$ref": "#/$defs/code"
+        }
+      },
+      "required": [
+        "issue_code"
+      ],
+      "additionalProperties": false
+    },
+    "validationIssues": {
+      "minItems": 1,
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
+    "digests": {
+      "type": "object",
+      "properties": {
+        "expected_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "observed_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "expected_digest",
+        "observed_digest"
+      ],
+      "additionalProperties": false
+    },
+    "taskPath": {
+      "type": "object",
+      "properties": {
+        "task_id": {
+          "$ref": "#/$defs/taskSlug"
+        },
+        "path_class": {
+          "$ref": "#/$defs/pathClass"
+        }
+      },
+      "required": [
+        "task_id",
+        "path_class"
+      ],
+      "additionalProperties": false
+    },
+    "gateParams": {
+      "type": "object",
+      "properties": {
+        "gate_id": {
+          "$ref": "#/$defs/pathSafeId"
+        },
+        "gate_kind": {
+          "$ref": "#/$defs/gate"
+        }
+      },
+      "required": [
+        "gate_id",
+        "gate_kind"
+      ],
+      "additionalProperties": false
+    },
+    "adapterOnly": {
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "$ref": "#/$defs/adapter"
+        }
+      },
+      "required": [
+        "adapter"
+      ],
+      "additionalProperties": false
+    },
+    "adapterAttempt": {
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "$ref": "#/$defs/adapter"
+        },
+        "attempt": {
+          "$ref": "#/$defs/integer"
+        }
+      },
+      "required": [
+        "adapter",
+        "attempt"
+      ],
+      "additionalProperties": false
+    },
+    "E_CONTRACT_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CONTRACT_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "contracts"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CONTRACT_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "tool": {
+                  "$ref": "#/$defs/tool"
+                },
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                },
+                "schema_version": {
+                  "$ref": "#/$defs/version"
+                },
+                "issues": {
+                  "$ref": "#/$defs/validationIssues"
+                }
+              },
+              "required": [
+                "issue_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "correct-contract"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_RESULT_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "RESULT_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "integrity"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "RESULT_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "tool": {
+                  "$ref": "#/$defs/tool"
+                },
+                "result_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "expected_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "observed_digest": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "tool",
+                "result_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-retained-result"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_CONTRACT_VERSION_UNSUPPORTED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CONTRACT_VERSION_UNSUPPORTED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "contracts"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CONTRACT_VERSION_UNSUPPORTED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "schema_version": {
+                  "$ref": "#/$defs/version"
+                },
+                "supported_version": {
+                  "$ref": "#/$defs/version"
+                }
+              },
+              "required": [
+                "schema_version",
+                "supported_version"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "upgrade-caller"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_ENVELOPE_OVERFLOW": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "ENVELOPE_OVERFLOW"
+        },
+        "owner": {
+          "type": "string",
+          "const": "contracts"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "ENVELOPE_OVERFLOW"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "offending_paths": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/repositoryPathClaim"
+                  },
+                  "uniqueItems": true,
+                  "x-archflow-sorted-unique": true
+                },
+                "current_bytes": {
+                  "$ref": "#/$defs/integer"
+                },
+                "byte_cap": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "offending_paths",
+                "current_bytes",
+                "byte_cap"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "reduce-review-subject"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_WORKFLOW_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "WORKFLOW_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "config"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "WORKFLOW_INVALID"
+            },
+            "parameters": {
+              "$ref": "#/$defs/issue"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-workflow"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_CONFIG_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CONFIG_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "config"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CONFIG_INVALID"
+            },
+            "parameters": {
+              "$ref": "#/$defs/issue"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-config"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_CONFIG_MODEL_UNSUPPORTED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CONFIG_MODEL_UNSUPPORTED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "config"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CONFIG_MODEL_UNSUPPORTED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "model"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "select-supported-model"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_CONFIG_FAMILY_UNSUPPORTED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CONFIG_FAMILY_UNSUPPORTED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "config"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CONFIG_FAMILY_UNSUPPORTED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "family": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "family"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "select-supported-family"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_RUNTIME_VERSION_UNSUPPORTED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "RUNTIME_VERSION_UNSUPPORTED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "config"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "RUNTIME_VERSION_UNSUPPORTED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "component": {
+                  "$ref": "#/$defs/id"
+                },
+                "version": {
+                  "$ref": "#/$defs/version"
+                }
+              },
+              "required": [
+                "component",
+                "version"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "upgrade-runtime"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_REPOSITORY_NOT_FOUND": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "REPOSITORY_NOT_FOUND"
+        },
+        "owner": {
+          "type": "string",
+          "const": "repository"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "REPOSITORY_NOT_FOUND"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "repository_candidate_digest": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "repository_candidate_digest"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "open-repository"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_REPOSITORY_MISMATCH": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "REPOSITORY_MISMATCH"
+        },
+        "owner": {
+          "type": "string",
+          "const": "repository"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "REPOSITORY_MISMATCH"
+            },
+            "parameters": {
+              "$ref": "#/$defs/digests"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "reopen-task-worktree"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_TASK_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "TASK_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "repository"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "TASK_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "task_id": {
+                  "$ref": "#/$defs/taskSlug"
+                },
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "task_id",
+                "issue_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-task"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_PATH_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "PATH_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "paths"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "PATH_INVALID"
+            },
+            "parameters": {
+              "$ref": "#/$defs/taskPath"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "use-valid-path-claim"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_PATH_ESCAPE": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "PATH_ESCAPE"
+        },
+        "owner": {
+          "type": "string",
+          "const": "paths"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "PATH_ESCAPE"
+            },
+            "parameters": {
+              "$ref": "#/$defs/taskPath"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "use-task-relative-path"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_TASK_SCOPE_VIOLATION": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "TASK_SCOPE_VIOLATION"
+        },
+        "owner": {
+          "type": "string",
+          "const": "paths"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "TASK_SCOPE_VIOLATION"
+            },
+            "parameters": {
+              "$ref": "#/$defs/taskPath"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "use-task-scoped-path"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_GIT_CONFLICT": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "GIT_CONFLICT"
+        },
+        "owner": {
+          "type": "string",
+          "const": "repository"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "GIT_CONFLICT"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "operation": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "operation"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "resolve-git-conflict"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_GIT_DIVERGED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "GIT_DIVERGED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "repository"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "GIT_DIVERGED"
+            },
+            "parameters": {
+              "$ref": "#/$defs/digests"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "reconcile-git-history"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_HANDOFF_REQUIRED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "HANDOFF_REQUIRED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "repository"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "HANDOFF_REQUIRED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "phase_instance": {
+                  "$ref": "#/$defs/phase"
+                }
+              },
+              "required": [
+                "phase_instance"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "complete-clean-handoff"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_POLICY_BASE_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "POLICY_BASE_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "policy"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "POLICY_BASE_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "expected_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "observed_digest": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "expected_digest"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "restore-policy-base"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_WORKFLOW_MISMATCH": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "WORKFLOW_MISMATCH"
+        },
+        "owner": {
+          "type": "string",
+          "const": "policy"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "WORKFLOW_MISMATCH"
+            },
+            "parameters": {
+              "$ref": "#/$defs/digests"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "restore-pinned-workflow"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_PINNED_CONFIG_MISMATCH": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "PINNED_CONFIG_MISMATCH"
+        },
+        "owner": {
+          "type": "string",
+          "const": "policy"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "PINNED_CONFIG_MISMATCH"
+            },
+            "parameters": {
+              "$ref": "#/$defs/digests"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "restore-pinned-config"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_STALE_SKILLS": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "STALE_SKILLS"
+        },
+        "owner": {
+          "type": "string",
+          "const": "policy"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "STALE_SKILLS"
+            },
+            "parameters": {
+              "$ref": "#/$defs/digests"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "refresh-skills"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_STATE_MISSING": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "STATE_MISSING"
+        },
+        "owner": {
+          "type": "string",
+          "const": "state"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "STATE_MISSING"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "phase_instance": {
+                  "$ref": "#/$defs/phase"
+                }
+              },
+              "required": [
+                "phase_instance"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "initialize-state"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_STATE_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "STATE_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "state"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "STATE_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "phase_instance": {
+                  "$ref": "#/$defs/phase"
+                },
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "phase_instance",
+                "issue_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-state"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_TRANSITION_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "TRANSITION_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "state"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "TRANSITION_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "phase_instance": {
+                  "$ref": "#/$defs/phase"
+                },
+                "from": {
+                  "$ref": "#/$defs/code"
+                },
+                "to": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "phase_instance",
+                "from",
+                "to"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "select-valid-transition"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_INPUT_FINGERPRINT_MISMATCH": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "INPUT_FINGERPRINT_MISMATCH"
+        },
+        "owner": {
+          "type": "string",
+          "const": "state"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "INPUT_FINGERPRINT_MISMATCH"
+            },
+            "parameters": {
+              "$ref": "#/$defs/digests"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "create-fresh-intent"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_STATE_CONFLICT": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "STATE_CONFLICT"
+        },
+        "owner": {
+          "type": "string",
+          "const": "state"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": true
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "STATE_CONFLICT"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "expected_revision": {
+                  "$ref": "#/$defs/integer"
+                },
+                "observed_revision": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "expected_revision",
+                "observed_revision"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "reread-and-retry-intent"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_INTENT_MISMATCH": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "INTENT_MISMATCH"
+        },
+        "owner": {
+          "type": "string",
+          "const": "intent"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "INTENT_MISMATCH"
+            },
+            "parameters": {
+              "$ref": "#/$defs/digests"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "create-fresh-intent"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_INTENT_NOT_CURRENT": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "INTENT_NOT_CURRENT"
+        },
+        "owner": {
+          "type": "string",
+          "const": "intent"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "INTENT_NOT_CURRENT"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "intent_id": {
+                  "$ref": "#/$defs/pathSafeId"
+                },
+                "receipt_revision": {
+                  "$ref": "#/$defs/integer"
+                },
+                "current_revision": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "intent_id",
+                "receipt_revision",
+                "current_revision"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "inspect-current-state"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_STAGED_REQUEST_NOT_FOUND": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "STAGED_REQUEST_NOT_FOUND"
+        },
+        "owner": {
+          "type": "string",
+          "const": "intent"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "STAGED_REQUEST_NOT_FOUND"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "task_id": {
+                  "$ref": "#/$defs/taskSlug"
+                },
+                "intent_id": {
+                  "$ref": "#/$defs/pathSafeId"
+                }
+              },
+              "required": [
+                "task_id",
+                "intent_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "stage-request-with-build-request"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_STAGED_REQUEST_MISMATCH": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "STAGED_REQUEST_MISMATCH"
+        },
+        "owner": {
+          "type": "string",
+          "const": "intent"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "STAGED_REQUEST_MISMATCH"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "intent_id": {
+                  "$ref": "#/$defs/pathSafeId"
+                },
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                },
+                "expected_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "observed_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "issues": {
+                  "$ref": "#/$defs/validationIssues"
+                }
+              },
+              "required": [
+                "intent_id",
+                "issue_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "rebuild-staged-request"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_SNAPSHOT_LIMIT": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "SNAPSHOT_LIMIT"
+        },
+        "owner": {
+          "type": "string",
+          "const": "snapshot"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "SNAPSHOT_LIMIT"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "limit_scope": {
+                  "type": "string",
+                  "enum": [
+                    "result",
+                    "task"
+                  ]
+                },
+                "offending_paths": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/repositoryPathClaim"
+                  },
+                  "uniqueItems": true,
+                  "x-archflow-sorted-unique": true
+                },
+                "current_bytes": {
+                  "$ref": "#/$defs/integer"
+                },
+                "byte_cap": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "limit_scope",
+                "offending_paths",
+                "current_bytes",
+                "byte_cap"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "reduce-snapshot"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_SNAPSHOT_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "SNAPSHOT_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "snapshot"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "SNAPSHOT_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "snapshot_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "snapshot_digest",
+                "issue_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-snapshot"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_RESTORE_COLLISION": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "RESTORE_COLLISION"
+        },
+        "owner": {
+          "type": "string",
+          "const": "snapshot"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "RESTORE_COLLISION"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "gate_id": {
+                  "$ref": "#/$defs/pathSafeId"
+                },
+                "path_class": {
+                  "$ref": "#/$defs/pathClass"
+                }
+              },
+              "required": [
+                "gate_id",
+                "path_class"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "resolve-restore-gate"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_RECONCILIATION_REQUIRED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "RECONCILIATION_REQUIRED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "snapshot"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "RECONCILIATION_REQUIRED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "recorded_digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "observed_digest": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "recorded_digest",
+                "observed_digest"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "run-reconciliation"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_SECRET_DETECTED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "SECRET_DETECTED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "snapshot"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "SECRET_DETECTED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path_class": {
+                  "$ref": "#/$defs/pathClass"
+                },
+                "detector_id": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "path_class",
+                "detector_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "remove-secret"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_GATE_ACTIVE": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "GATE_ACTIVE"
+        },
+        "owner": {
+          "type": "string",
+          "const": "gate"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "GATE_ACTIVE"
+            },
+            "parameters": {
+              "$ref": "#/$defs/gateParams"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "resolve-recorded-gate"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_GATE_DECISION_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "GATE_DECISION_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "gate"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "GATE_DECISION_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "gate_id": {
+                  "$ref": "#/$defs/pathSafeId"
+                },
+                "gate_kind": {
+                  "$ref": "#/$defs/gate"
+                },
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "gate_id",
+                "gate_kind",
+                "issue_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "record-valid-gate-decision"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_GATE_CANCELLED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "GATE_CANCELLED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "gate"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "GATE_CANCELLED"
+            },
+            "parameters": {
+              "$ref": "#/$defs/gateParams"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "restart-gate-flow"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_UNSUPPORTED_HOST": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "UNSUPPORTED_HOST"
+        },
+        "owner": {
+          "type": "string",
+          "const": "routing"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "UNSUPPORTED_HOST"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "host"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "select-supported-host"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_UNSUPPORTED_MODEL": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "UNSUPPORTED_MODEL"
+        },
+        "owner": {
+          "type": "string",
+          "const": "routing"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "UNSUPPORTED_MODEL"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "model"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "select-supported-model"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_FAMILY_MISMATCH": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "FAMILY_MISMATCH"
+        },
+        "owner": {
+          "type": "string",
+          "const": "routing"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "FAMILY_MISMATCH"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "expected_family": {
+                  "$ref": "#/$defs/family"
+                },
+                "observed_family": {
+                  "$ref": "#/$defs/family"
+                }
+              },
+              "required": [
+                "expected_family",
+                "observed_family"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "select-correct-family"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_CLI_VERSION_UNSUPPORTED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CLI_VERSION_UNSUPPORTED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CLI_VERSION_UNSUPPORTED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "adapter": {
+                  "$ref": "#/$defs/adapter"
+                },
+                "version": {
+                  "$ref": "#/$defs/version"
+                }
+              },
+              "required": [
+                "adapter",
+                "version"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "upgrade-cli"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_AUTH_UNAVAILABLE": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "AUTH_UNAVAILABLE"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "AUTH_UNAVAILABLE"
+            },
+            "parameters": {
+              "$ref": "#/$defs/adapterOnly"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-authentication"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_CLI_MISSING": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CLI_MISSING"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CLI_MISSING"
+            },
+            "parameters": {
+              "$ref": "#/$defs/adapterOnly"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "install-cli"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_SANDBOX_UNAVAILABLE": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "SANDBOX_UNAVAILABLE"
+        },
+        "owner": {
+          "type": "string",
+          "const": "sandbox"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "SANDBOX_UNAVAILABLE"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "capability": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "capability"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-sandbox"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_SANDBOX_PROBE_FAILED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "SANDBOX_PROBE_FAILED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "sandbox"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "SANDBOX_PROBE_FAILED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "capability": {
+                  "$ref": "#/$defs/id"
+                },
+                "failure_class": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "capability",
+                "failure_class"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-sandbox"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_RATE_LIMITED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "RATE_LIMITED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": true
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "RATE_LIMITED"
+            },
+            "parameters": {
+              "$ref": "#/$defs/adapterAttempt"
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "retry-after-backoff"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_TIMEOUT": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "TIMEOUT"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": true
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "TIMEOUT"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "adapter": {
+                  "$ref": "#/$defs/adapter"
+                },
+                "attempt": {
+                  "$ref": "#/$defs/integer"
+                },
+                "limit_ms": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "adapter",
+                "attempt",
+                "limit_ms"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "retry-unchanged-attempt"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_CANCELLED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "CANCELLED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": true
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "CANCELLED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "client",
+                    "transport"
+                  ]
+                },
+                "attempt": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "source",
+                "attempt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "restart-child-attempt"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_MODEL_OUTPUT_INVALID": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "MODEL_OUTPUT_INVALID"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": true
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "MODEL_OUTPUT_INVALID"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "adapter": {
+                  "$ref": "#/$defs/adapter"
+                },
+                "attempt": {
+                  "$ref": "#/$defs/integer"
+                },
+                "issue_code": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "adapter",
+                "attempt",
+                "issue_code"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "retry-unchanged-attempt"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_IO_ERROR": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "IO_ERROR"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": true
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "IO_ERROR"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "operation": {
+                  "$ref": "#/$defs/code"
+                },
+                "attempt": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "operation",
+                "attempt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "retry-unchanged-attempt"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_OUTPUT_OVERFLOW": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "OUTPUT_OVERFLOW"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "OUTPUT_OVERFLOW"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "adapter": {
+                  "$ref": "#/$defs/adapter"
+                },
+                "byte_count": {
+                  "$ref": "#/$defs/integer"
+                },
+                "byte_cap": {
+                  "$ref": "#/$defs/integer"
+                }
+              },
+              "required": [
+                "adapter",
+                "byte_count",
+                "byte_cap"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "reduce-output"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_PROCESS_FAILED": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "PROCESS_FAILED"
+        },
+        "owner": {
+          "type": "string",
+          "const": "dispatch"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "PROCESS_FAILED"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "adapter": {
+                  "$ref": "#/$defs/adapter"
+                },
+                "exit_class": {
+                  "$ref": "#/$defs/code"
+                }
+              },
+              "required": [
+                "adapter",
+                "exit_class"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "repair-before-fresh-attempt"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    "E_INTERNAL_ERROR": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "code": {
+          "type": "string",
+          "const": "INTERNAL_ERROR"
+        },
+        "owner": {
+          "type": "string",
+          "const": "integrity"
+        },
+        "retryable": {
+          "type": "boolean",
+          "const": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "const": "INTERNAL_ERROR"
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "correlation_id": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "correlation_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "template_id",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "next_action": {
+          "type": "string",
+          "const": "stop-and-inspect"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "owner",
+        "retryable",
+        "diagnostic",
+        "next_action"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/E_CONTRACT_INVALID"
+    },
+    {
+      "$ref": "#/$defs/E_RESULT_INVALID"
+    },
+    {
+      "$ref": "#/$defs/E_CONTRACT_VERSION_UNSUPPORTED"
+    },
+    {
+      "$ref": "#/$defs/E_ENVELOPE_OVERFLOW"
+    },
+    {
+      "$ref": "#/$defs/E_WORKFLOW_INVALID"
+    },
+    {
+      "$ref": "#/$defs/E_CONFIG_INVALID"
+    },
+    {
+      "$ref": "#/$defs/E_CONFIG_MODEL_UNSUPPORTED"
+    },
+    {
+      "$ref": "#/$defs/E_CONFIG_FAMILY_UNSUPPORTED"
+    },
+    {
+      "$ref": "#/$defs/E_RUNTIME_VERSION_UNSUPPORTED"
+    },
+    {
+      "$ref": "#/$defs/E_REPOSITORY_NOT_FOUND"
+    },
+    {
+      "$ref": "#/$defs/E_REPOSITORY_MISMATCH"
+    },
+    {
+      "$ref": "#/$defs/E_TASK_INVALID"
+    },
+    {
+      "$ref": "#/$defs/E_PATH_INVALID"
+    },
+    {
+      "$ref": "#/$defs/E_PATH_ESCAPE"
+    },
+    {
+      "$ref": "#/$defs/E_TASK_SCOPE_VIOLATION"
+    },
+    {
+      "$ref": "#/$defs/E_GIT_CONFLICT"
+    },
+    {
+      "$ref": "#/$defs/E_GIT_DIVERGED"
+    },
+    {
+      "$ref": "#/$defs/E_HANDOFF_REQUIRED"
+    },
+    {
+      "$ref": "#/$defs/E_POLICY_BASE_INVALID"
+    },
+    {
+      "$ref": "#/$defs/E_WORKFLOW_MISMATCH"
+    },
+    {
+      "$ref": "#/$defs/E_PINNED_CONFIG_MISMATCH"
+    },
+    {
+      "$ref": "#/$defs/E_STALE_SKILLS"
+    },
+    {
+      "$ref": "#/$defs/E_STATE_MISSING"
+    },
+    {
+      "$ref": "#/$defs/E_STATE_INVALID"
+    },
+    {
+      "$ref": "#/$defs/E_TRANSITION_INVALID"
+    },
+    {
+      "$ref": "#/$defs/E_INPUT_FINGERPRINT_MISMATCH"
+    },
+    {
+      "$ref": "#/$defs/E_STATE_CONFLICT"
+    },
+    {
+      "$ref": "#/$defs/E_INTENT_MISMATCH"
+    },
+    {
+      "$ref": "#/$defs/E_INTENT_NOT_CURRENT"
+    },
+    {
+      "$ref": "#/$defs/E_STAGED_REQUEST_NOT_FOUND"
+    },
+    {
+      "$ref": "#/$defs/E_STAGED_REQUEST_MISMATCH"
+    },
+    {
+      "$ref": "#/$defs/E_SNAPSHOT_LIMIT"
+    },
+    {
+      "$ref": "#/$defs/E_SNAPSHOT_INVALID"
+    },
+    {
+      "$ref": "#/$defs/E_RESTORE_COLLISION"
+    },
+    {
+      "$ref": "#/$defs/E_RECONCILIATION_REQUIRED"
+    },
+    {
+      "$ref": "#/$defs/E_SECRET_DETECTED"
+    },
+    {
+      "$ref": "#/$defs/E_GATE_ACTIVE"
+    },
+    {
+      "$ref": "#/$defs/E_GATE_DECISION_INVALID"
+    },
+    {
+      "$ref": "#/$defs/E_GATE_CANCELLED"
+    },
+    {
+      "$ref": "#/$defs/E_UNSUPPORTED_HOST"
+    },
+    {
+      "$ref": "#/$defs/E_UNSUPPORTED_MODEL"
+    },
+    {
+      "$ref": "#/$defs/E_FAMILY_MISMATCH"
+    },
+    {
+      "$ref": "#/$defs/E_CLI_VERSION_UNSUPPORTED"
+    },
+    {
+      "$ref": "#/$defs/E_AUTH_UNAVAILABLE"
+    },
+    {
+      "$ref": "#/$defs/E_CLI_MISSING"
+    },
+    {
+      "$ref": "#/$defs/E_SANDBOX_UNAVAILABLE"
+    },
+    {
+      "$ref": "#/$defs/E_SANDBOX_PROBE_FAILED"
+    },
+    {
+      "$ref": "#/$defs/E_RATE_LIMITED"
+    },
+    {
+      "$ref": "#/$defs/E_TIMEOUT"
+    },
+    {
+      "$ref": "#/$defs/E_CANCELLED"
+    },
+    {
+      "$ref": "#/$defs/E_MODEL_OUTPUT_INVALID"
+    },
+    {
+      "$ref": "#/$defs/E_IO_ERROR"
+    },
+    {
+      "$ref": "#/$defs/E_OUTPUT_OVERFLOW"
+    },
+    {
+      "$ref": "#/$defs/E_PROCESS_FAILED"
+    },
+    {
+      "$ref": "#/$defs/E_INTERNAL_ERROR"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "initialize-1",
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2025-11-25",
+      "capabilities": {},
+      "clientInfo": {
+        "name": "archflow-integration-test",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "response": {
+    "jsonrpc": "2.0",
+    "id": "initialize-1",
+    "result": {
+      "protocolVersion": "2025-11-25",
+      "capabilities": {
+        "tools": {}
+      },
+      "serverInfo": {
+        "name": "archflow-mcp",
+        "version": "0.0.0"
+      }
+    }
+  },
+  "initialized": {
+    "jsonrpc": "2.0",
+    "method": "notifications/initialized"
+  },
+  "malformed_request": {
+    "jsonrpc": "2.0",
+    "id": "malformed-initialize",
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2025-11-25",
+      "capabilities": {},
+      "clientInfo": {
+        "name": 1,
+        "version": "invalid"
+      }
+    }
+  },
+  "malformed_response": {
+    "jsonrpc": "2.0",
+    "id": "malformed-initialize",
+    "error": {
+      "code": -32603,
+      "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"params\",\n      \"clientInfo\",\n      \"name\"\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  }\n]"
+    }
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "schema_version": "1",
+  "gate_id": "gate-review-1",
+  "intent_id": "intent-1",
+  "request_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "task_id": "task-1",
+  "phase_instance": "phase-impl-2",
+  "summary": "Run the triggered constitution review before the phase may advance",
+  "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "context_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "current_evidence": {
+    "set_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+    "slots": [
+      {
+        "role": "counter-review",
+        "evidence_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+        "assurance": "server-attested",
+        "producer_family": "claude",
+        "reviewer_family": "codex",
+        "independence": "opposite-family"
+      }
+    ]
+  },
+  "kind": "constitution-review",
+  "context": {
+    "constitution": "pass",
+    "failed_rules": [],
+    "uncertain_rules": [],
+    "matched_trigger_rules": [
+      {
+        "rule_id": "rule-a",
+        "rule_version": 1
+      },
+      {
+        "rule_id": "rule-b",
+        "rule_version": 2
+      }
+    ],
+    "uncertain_trigger_rules": [
+      {
+        "rule_id": "rule-c",
+        "rule_version": 1
+      }
+    ],
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "rule-a",
+          "rule_version": 1
+        },
+        "scope": {
+          "operation": "review-trigger",
+          "boundary": "subject"
+        }
+      }
+    ]
+  },
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "opened_at_revision": 4
+}

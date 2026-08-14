@@ -1,0 +1,443 @@
+import { describe, expect, it } from "vitest";
+
+import type { DurableArtifact } from "../../src/contracts/durable.js";
+import type { AuthoritativeResultRef, TaskStateV1 } from "../../src/contracts/durable-state.js";
+import type { SafeInteger, Sha256Digest, TaskSlug } from "../../src/contracts/evidence.js";
+import { parseToolCall } from "../../src/contracts/mcp-tools.js";
+import type { CurrentEvidenceSetRef } from "../../src/contracts/trust.js";
+import type { PipelineStep } from "../../src/contracts/vocabulary.js";
+import { BUILD_REQUEST_KINDS } from "../../src/local/build-request.js";
+import type { NextAction } from "../../src/state/next-action.js";
+import { buildNextActionRequest, type BuiltNextActionRequest } from "../../src/state/request-templates.js";
+import type { CommitAuthorizationInput, DesignApprovalInput } from "../../src/state/status.js";
+import { legalRunStepStatus, planStateTransition } from "../../src/state/transitions.js";
+
+const taskId = "template-task" as TaskSlug;
+const fingerprint = "a".repeat(64) as Sha256Digest;
+const subjectDigest = "b".repeat(64) as Sha256Digest;
+const fingerprintSentinel = "0".repeat(64);
+
+function stateAt(
+  phaseInstance: string,
+  step: TaskStateV1["step"] = "produce",
+  status: TaskStateV1["status"] = "succeeded",
+): TaskStateV1 {
+  return {
+    schema_version: "1",
+    task_id: taskId,
+    revision: 7,
+    phase_instance: phaseInstance,
+    step,
+    status,
+    attempt: 1,
+    input_fingerprint: fingerprint,
+    authoritative_results: [],
+    approvals: [],
+    waivers: [],
+  } as unknown as TaskStateV1;
+}
+
+function action(partial: Partial<NextAction> & Pick<NextAction, "code">): NextAction {
+  return { detail: "test", human_required: false, ...partial } as NextAction;
+}
+
+function assertFrozenPlainJson(value: unknown, path = "$"): void {
+  if (value === null || typeof value !== "object") {
+    expect(["string", "number", "boolean"].includes(typeof value) || value === null, path).toBe(true);
+    return;
+  }
+  expect(Object.isFrozen(value), path).toBe(true);
+  for (const [key, nested] of Object.entries(value)) assertFrozenPlainJson(nested, `${path}.${key}`);
+}
+
+describe("next-action request templates", () => {
+  it("prefills the initialization entry point and fails closed when submitted unedited", () => {
+    const request = buildNextActionRequest(action({ code: "create-task" }), { task_id: taskId });
+    expect(request?.request.tool).toBe("archflow_state");
+    expect(request?.request.input).toMatchObject({
+      schema_version: "1",
+      task_id: taskId,
+      intent_id: "initialize-task",
+      expected_revision: 0,
+      phase_instance: "prd",
+      step: "produce",
+      status: "running",
+    });
+    assertFrozenPlainJson(request?.request.input);
+    expect((request?.request.input as { artifact?: unknown }).artifact).toContain("build-request");
+    // Placeholder prose must not survive ingress: the artifact placeholder violates its field's
+    // contract, so an unedited template cannot become a real call. The fingerprint sentinel is
+    // parseable on purpose (envelope must be able to process the completed template) but can
+    // never match a computed fingerprint, so it too fails closed at the server.
+    expect(() => parseToolCall("archflow_state", structuredClone(request?.request.input))).toThrow();
+  });
+
+  it("prefills the running step entry from durable state with the sentinel fingerprint", () => {
+    const request = buildNextActionRequest(
+      action({ code: "run-step", step: "triage" }),
+      { task_id: taskId, state: stateAt("prd", "counter_review", "succeeded") },
+    );
+    expect(request?.request.tool).toBe("archflow_state");
+    expect(request?.request.input).toMatchObject({
+      expected_revision: 7,
+      input_fingerprint: fingerprintSentinel,
+      phase_instance: "prd",
+      step: "triage",
+      status: "running",
+    });
+    expect(request?.guidance).toContain("archflow-local envelope");
+  });
+
+  it("swaps in the editorial wording on the editorial produce re-entry template", () => {
+    const editorial = buildNextActionRequest(
+      action({ code: "run-step", step: "produce", editorial_revision: true }),
+      { task_id: taskId, state: stateAt("prd", "triage", "succeeded") },
+    );
+    expect(editorial?.request.input).toMatchObject({ step: "produce", status: "running" });
+    expect(editorial?.guidance).toMatch(/exactly the accepted editorial revision intents/u);
+    expect(editorial?.guidance).toMatch(/Nothing is re-run/u);
+    const plain = buildNextActionRequest(
+      action({ code: "run-step", step: "produce" }),
+      { task_id: taskId, state: stateAt("prd", "triage", "succeeded") },
+    );
+    expect(plain?.guidance).not.toMatch(/editorial/u);
+  });
+
+  it("emits the terminal record, not a repeat entry, for a step already running", () => {
+    const request = buildNextActionRequest(
+      action({ code: "run-step", step: "produce" }),
+      { task_id: taskId, state: stateAt("prd", "produce", "running") },
+    );
+    expect(request?.request.tool).toBe("archflow_state");
+    expect(request?.request.input).toMatchObject({
+      phase_instance: "prd",
+      step: "produce",
+      status: "succeeded",
+    });
+    expect((request?.request.input as { artifact?: unknown }).artifact).toContain("build-request");
+    expect(request?.guidance).toContain("failed");
+    expect(() => parseToolCall("archflow_state", structuredClone(request?.request.input))).toThrow();
+
+    const review = buildNextActionRequest(
+      action({ code: "run-step", step: "triage" }),
+      { task_id: taskId, state: stateAt("prd", "triage", "running") },
+    );
+    expect(review?.request.input).toMatchObject({ step: "triage", status: "succeeded" });
+  });
+
+  it("emits the retry entry for a failed step", () => {
+    const request = buildNextActionRequest(
+      action({ code: "run-step", step: "produce" }),
+      { task_id: taskId, state: stateAt("prd", "produce", "failed") },
+    );
+    expect(request?.request.input).toMatchObject({ step: "produce", status: "running" });
+    expect((request?.request.input as { artifact?: unknown }).artifact).toBeUndefined();
+  });
+
+  it("emits nothing when no legal run-step transition exists from the derived state", () => {
+    // A succeeded produce still has one same-subject move: the author-initiated
+    // withdraw-and-redo re-entry, so its produce template is the running entry.
+    expect(buildNextActionRequest(
+      action({ code: "run-step", step: "produce" }),
+      { task_id: taskId, state: stateAt("prd", "produce", "succeeded") },
+    )?.request.input).toMatchObject({ step: "produce", status: "running" });
+    // triage is not the pipeline successor of produce.
+    expect(buildNextActionRequest(
+      action({ code: "run-step", step: "triage" }),
+      { task_id: taskId, state: stateAt("prd", "produce", "succeeded") },
+    )).toBeUndefined();
+  });
+
+  it("derives the canonical review subject paths per phase kind while the step is running", () => {
+    const counter = buildNextActionRequest(
+      action({ code: "run-step", step: "counter_review" }),
+      { task_id: taskId, state: stateAt("phase-design-2", "counter_review", "running") },
+    );
+    expect(counter?.request.tool).toBe("archflow_counter_review");
+    expect(counter?.request.input).toMatchObject({ artifact_path: "phases/2/design.md" });
+    expect(counter?.request.input).not.toHaveProperty("rubric");
+    expect(() => parseToolCall("archflow_counter_review", structuredClone(counter?.request.input))).toThrow();
+
+    // The adjudicate position is retired: no run-step template may target it from any state.
+    expect(buildNextActionRequest(
+      action({ code: "run-step", step: "adjudicate" }),
+      { task_id: taskId, state: stateAt("phase-impl-3", "triage", "succeeded") },
+    )).toBeUndefined();
+
+    const counterEntry = buildNextActionRequest(
+      action({ code: "run-step", step: "counter_review" }),
+      { task_id: taskId, state: stateAt("phase-design-2", "produce", "succeeded") },
+    );
+    expect(counterEntry?.request.tool).toBe("archflow_state");
+    expect(counterEntry?.request.input).toMatchObject({ step: "counter_review", status: "running" });
+  });
+
+  it("binds the artifact-approval gate template to the authenticated subject", () => {
+    const currentEvidence = {
+      set_digest: "c".repeat(64),
+      sources: [],
+    } as unknown as CurrentEvidenceSetRef;
+    const request = buildNextActionRequest(
+      action({ code: "open-gate", gate_kind: "artifact-approval" }),
+      { task_id: taskId, state: stateAt("design"), subject_digest: subjectDigest, current_evidence: currentEvidence },
+    );
+    expect(request?.request.tool).toBe("archflow_gate");
+    expect(request?.request.input).toMatchObject({
+      subject_digest: subjectDigest,
+      kind: "artifact-approval",
+      context: { artifact_kind: "design" },
+    });
+  });
+
+  it("folds the commit-authorization facts into a complete gate template", () => {
+    const authorization = {
+      kind: "commit-authorization",
+      subject_digest: subjectDigest,
+      current_evidence: { set_digest: "c".repeat(64), sources: [] },
+      context: {
+        target_ref: "refs/heads/main",
+        diff_digest: "d".repeat(64),
+        current_artifact_digests: [subjectDigest],
+        parent_document_digests: [],
+      },
+      target_ref_guidance: "Confirm the target ref.",
+    } as unknown as CommitAuthorizationInput;
+    const request = buildNextActionRequest(
+      action({ code: "open-gate", gate_kind: "commit-authorization" }),
+      { task_id: taskId, state: stateAt("phase-impl-1"), commit_authorization: authorization },
+    );
+    expect(request?.request.tool).toBe("archflow_gate");
+    expect(request?.request.input).toMatchObject({
+      kind: "commit-authorization",
+      subject_digest: subjectDigest,
+      context: { target_ref: "refs/heads/main" },
+    });
+    expect(request?.guidance).toContain("Confirm the target ref.");
+  });
+
+  it("folds policy findings and commit authority into one design approval template", () => {
+    const approval = {
+      kind: "design-approval",
+      subject_digest: subjectDigest,
+      current_evidence: { set_digest: "c".repeat(64), sources: [] },
+      context: {
+        artifact_kind: "design",
+        constitution: "uncertain",
+        policy_findings: [{
+          rule_id: "rule-a", rule_version: 1, compliance: "uncertain",
+          rationale: "The boundary is not fully evidenced.", trigger: "matched",
+          trigger_evidence: "The reviewed interface activates this rule.",
+        }],
+        eligible_waivers: [],
+        target_ref: "refs/heads/main",
+        baseline_commit: "abcdef0123456789abcdef0123456789abcdef01",
+        commit_message: "ArchFlow: Approve template-task design",
+      },
+      target_ref_guidance: "Confirm the target ref.",
+    } as unknown as DesignApprovalInput;
+    const request = buildNextActionRequest(
+      action({ code: "open-gate", gate_kind: "design-approval" }),
+      {
+        task_id: taskId,
+        state: stateAt("design"),
+        subject_digest: subjectDigest,
+        current_evidence: { set_digest: "c".repeat(64), sources: [] } as unknown as CurrentEvidenceSetRef,
+        design_approval: approval,
+      },
+    );
+    expect(request?.request.tool).toBe("archflow_gate");
+    expect(request?.request.input).toMatchObject({
+      kind: "design-approval",
+      subject_digest: subjectDigest,
+      context: {
+        constitution: "uncertain",
+        target_ref: "refs/heads/main",
+        commit_message: "ArchFlow: Approve template-task design",
+      },
+    });
+    expect(request?.guidance).toContain("single approval");
+    expect(request?.guidance).toContain("automatic task-local milestone commit");
+  });
+
+  it("emits nothing for actions that already have a surface or are pure human judgment", () => {
+    for (const code of ["resolve-open-gate", "commit-phase", "task-complete", "inspect-state"] as const) {
+      expect(buildNextActionRequest(action({ code }), { task_id: taskId, state: stateAt("prd") })).toBeUndefined();
+    }
+    expect(buildNextActionRequest(action({ code: "run-step", step: "produce" }), { task_id: taskId })).toBeUndefined();
+  });
+
+  it("prefills executable phase advancement and terminal completion requests", () => {
+    const advance = buildNextActionRequest(
+      action({ code: "advance-phase", target_phase_instance: "phase-design-1" as never }),
+      { task_id: taskId, state: stateAt("design", "triage", "succeeded") },
+    );
+    expect(advance?.request).toMatchObject({
+      tool: "archflow_state",
+      input: {
+        phase_instance: "phase-design-1", step: "produce", status: "running",
+        expected_revision: 7, input_fingerprint: fingerprintSentinel,
+      },
+    });
+    expect(advance?.guidance).toContain('{"kind":"advance"}');
+
+    const complete = buildNextActionRequest(
+      action({ code: "complete-task", target_phase_instance: "phase-impl-2" as never }),
+      { task_id: taskId, state: stateAt("phase-impl-2", "triage", "succeeded") },
+    );
+    expect(complete?.request.input).toMatchObject({
+      phase_instance: "phase-impl-2", step: "triage", status: "succeeded",
+    });
+  });
+});
+
+describe("run-step template legality", () => {
+  const steps: readonly PipelineStep[] = ["produce", "counter_review", "triage"];
+  const statuses: readonly TaskStateV1["status"][] = ["running", "failed", "succeeded"];
+
+  // Mirrors the server's attempt derivation: the client never supplies attempt, so the template's
+  // target must be legal at exactly the attempt the handler will derive for it.
+  function derivedAttempt(current: TaskStateV1, targetStep: PipelineStep): SafeInteger {
+    const retry = current.status === "failed" && current.step === targetStep;
+    const reentry = current.status === "succeeded" && targetStep === "produce";
+    return (retry || reentry ? current.attempt + 1 : current.attempt) as SafeInteger;
+  }
+
+  function documentStub(current: TaskStateV1, step: PipelineStep): DurableArtifact {
+    return {
+      artifact_kind: "document",
+      task_id: current.task_id,
+      phase_instance: current.phase_instance,
+      step,
+      input_fingerprint: fingerprint,
+    } as unknown as DurableArtifact;
+  }
+
+  function referenceStub(current: TaskStateV1, step: PipelineStep): AuthoritativeResultRef {
+    return {
+      phase_instance: current.phase_instance,
+      step,
+      result_digest: subjectDigest,
+      result_id: "result-1",
+      input_fingerprint: fingerprint,
+    } as unknown as AuthoritativeResultRef;
+  }
+
+  it("every emitted archflow_state target is a legal transition from the state it was derived in", () => {
+    for (const step of steps) for (const status of statuses) {
+      const current = stateAt("prd", step, status);
+      for (const target of steps) {
+        const derived = legalRunStepStatus(current, target);
+        if (derived === undefined) continue;
+        // counter_review and adjudicate terminal results are recorded by their own tools,
+        // never through an archflow_state template.
+        if (derived === "succeeded" && (target === "counter_review" || target === "adjudicate")) continue;
+        const producing = derived === "succeeded";
+        const plan = planStateTransition({
+          current,
+          target: {
+            phase_instance: current.phase_instance,
+            step: target,
+            status: derived,
+            attempt: derivedAttempt(current, target),
+            input_fingerprint: fingerprint,
+          },
+          recomputed_input_fingerprint: fingerprint,
+          ...(producing && target === "produce" ? { artifact: documentStub(current, target) } : {}),
+          ...(producing ? { result_reference: referenceStub(current, target) } : {}),
+        });
+        expect(plan.ok, `${step}-${status} -> ${target}-${derived}`).toBe(true);
+      }
+    }
+  });
+
+  it("every emitted prefill maps onto a build-request composer kind", () => {
+    // The guard for the create-task class of gap: a prefill without a composer kind forces the
+    // client back to hand-assembly, so any future next-action prefill must either map here or
+    // deliberately emit no request at all (waiver, adjudication gates, repository init, human
+    // judgment codes are exempt by construction).
+    function composerKindFor(code: string, built: BuiltNextActionRequest): string {
+      if (code === "create-task") return "initialize";
+      const input = built.request.input as { step?: string; status?: string };
+      switch (built.request.tool) {
+        case "archflow_counter_review": return "counter-review";
+        case "archflow_gate": return "gate";
+        case "archflow_state":
+          if (code === "advance-phase" || code === "complete-task") return "advance";
+          if (input.status === "running") return "running";
+          if (input.status === "succeeded" && input.step === "produce") return "produce";
+          if (input.status === "succeeded" && input.step === "triage") return "triage";
+          break;
+      }
+      throw new Error(`no build-request kind composes the ${code} prefill ${JSON.stringify(built.request)}`);
+    }
+
+    const emitted: Array<readonly [string, BuiltNextActionRequest]> = [];
+    const createTask = buildNextActionRequest(action({ code: "create-task" }), { task_id: taskId });
+    if (createTask !== undefined) emitted.push(["create-task", createTask]);
+    for (const step of steps) for (const status of statuses) for (const target of steps) {
+      const built = buildNextActionRequest(
+        action({ code: "run-step", step: target }),
+        { task_id: taskId, state: stateAt("prd", step, status) },
+      );
+      if (built !== undefined) emitted.push(["run-step", built]);
+    }
+    const currentEvidence = { set_digest: "c".repeat(64), sources: [] } as unknown as CurrentEvidenceSetRef;
+    const artifactGate = buildNextActionRequest(
+      action({ code: "open-gate", gate_kind: "artifact-approval" }),
+      { task_id: taskId, state: stateAt("design"), subject_digest: subjectDigest, current_evidence: currentEvidence },
+    );
+    if (artifactGate !== undefined) emitted.push(["open-gate", artifactGate]);
+    const commitGate = buildNextActionRequest(
+      action({ code: "open-gate", gate_kind: "commit-authorization" }),
+      {
+        task_id: taskId,
+        state: stateAt("phase-impl-1"),
+        commit_authorization: {
+          kind: "commit-authorization",
+          subject_digest: subjectDigest,
+          current_evidence: currentEvidence,
+          context: {
+            target_ref: "refs/heads/main",
+            diff_digest: "d".repeat(64),
+            current_artifact_digests: [subjectDigest],
+            parent_document_digests: [],
+          },
+          target_ref_guidance: "Confirm the target ref.",
+        } as unknown as CommitAuthorizationInput,
+      },
+    );
+    if (commitGate !== undefined) emitted.push(["open-gate", commitGate]);
+    const advance = buildNextActionRequest(
+      action({ code: "advance-phase", target_phase_instance: "design" as never }),
+      { task_id: taskId, state: stateAt("prd", "triage", "succeeded") },
+    );
+    if (advance !== undefined) emitted.push(["advance-phase", advance]);
+
+    // The sweep must actually cover every prefill family, or the invariant proves nothing.
+    expect(emitted.length).toBeGreaterThanOrEqual(10);
+    const tools = new Set(emitted.map(([, built]) => built.request.tool));
+    expect([...tools].sort()).toEqual(["archflow_counter_review", "archflow_gate", "archflow_state"]);
+    for (const [code, built] of emitted) {
+      expect(BUILD_REQUEST_KINDS).toContain(composerKindFor(code, built));
+    }
+  });
+
+  it("never derives the repeat running entry the server rejects mid-step", () => {
+    for (const step of steps) {
+      const current = stateAt("prd", step, "running");
+      expect(legalRunStepStatus(current, step)).not.toBe("running");
+      const plan = planStateTransition({
+        current,
+        target: {
+          phase_instance: current.phase_instance,
+          step,
+          status: "running",
+          attempt: current.attempt,
+          input_fingerprint: fingerprint,
+        },
+        recomputed_input_fingerprint: fingerprint,
+      });
+      expect(plan.ok ? undefined : plan.error.code, `${step}-running -> ${step}-running`).toBe("TRANSITION_INVALID");
+    }
+  });
+});

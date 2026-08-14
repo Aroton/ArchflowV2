@@ -1,0 +1,41 @@
+#!/usr/bin/env node
+import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const argv = process.argv.slice(2);
+const scenario = await readFile(join(process.cwd(), "scenario"), "utf8").catch(() => "success");
+
+async function corpusOutput(selection) {
+  const [file, name] = selection.slice("corpus:".length).trim().split("#");
+  const corpus = JSON.parse(await readFile(
+    join(dirname(fileURLToPath(import.meta.url)), "..", "corpus", file),
+    "utf8",
+  ));
+  const entry = corpus.scenarios.find((candidate) => candidate.name === name);
+  if (entry === undefined) throw new Error(`unknown corpus scenario: ${selection.trim()}`);
+  if (entry.output.step !== "adjudicate") return entry.output;
+  const { constitution, drift, matched_rule_versions, uncertain_rule_versions, ...output } = entry.output;
+  return output;
+}
+
+if (argv.length === 1 && argv[0] === "--version") {
+  process.stdout.write(scenario.trim() === "old-version" ? "2.1.204 (Claude Code)\n" : "2.1.220 (Claude Code)\n");
+  process.exit(0);
+}
+if (argv[0] === "auth" && argv[1] === "status") {
+  process.stdout.write(JSON.stringify({ loggedIn: scenario.trim() !== "logged-out" }));
+  process.exit(scenario.trim() === "logged-out" ? 1 : 0);
+}
+if (argv.includes("--json-schema")) {
+  const schema = argv[argv.indexOf("--json-schema") + 1];
+  try { JSON.parse(schema); } catch { process.stderr.write("schema was not inline JSON\n"); process.exit(64); }
+}
+process.stdin.resume();
+process.stdin.on("end", async () => {
+  process.stderr.write("deprecated model warning\n");
+  const output = scenario.trim().startsWith("corpus:")
+    ? await corpusOutput(scenario)
+    : { schema_version: "1" };
+  process.stdout.write(JSON.stringify({ structured_output: output }));
+});

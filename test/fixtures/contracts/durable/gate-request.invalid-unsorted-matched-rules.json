@@ -1,0 +1,50 @@
+{
+  "schema_version": "1",
+  "gate_id": "gate-review-1",
+  "intent_id": "intent-1",
+  "request_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "task_id": "task-1",
+  "phase_instance": "phase-impl-2",
+  "summary": "Matched rules are unique but not in canonical sorted order",
+  "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "context_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "current_evidence": {
+    "set_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+    "slots": [
+      {
+        "role": "counter-review",
+        "evidence_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+        "assurance": "server-attested",
+        "producer_family": "claude",
+        "reviewer_family": "codex",
+        "independence": "opposite-family"
+      }
+    ]
+  },
+  "kind": "constitution-review",
+  "context": {
+    "constitution": "pass",
+    "failed_rules": [],
+    "uncertain_rules": [],
+    "matched_trigger_rules": [
+      {
+        "rule_id": "rule-b",
+        "rule_version": 2
+      },
+      {
+        "rule_id": "rule-a",
+        "rule_version": 1
+      }
+    ],
+    "uncertain_trigger_rules": [],
+    "eligible_waivers": []
+  },
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "opened_at_revision": 4
+}

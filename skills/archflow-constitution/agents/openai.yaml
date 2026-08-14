@@ -1,0 +1,4 @@
+interface:
+  display_name: "ArchFlow Constitution"
+  short_description: "Configure repository constitution rules"
+  default_prompt: "Use $archflow-constitution to explain or configure this repository’s ArchFlow constitution rules."

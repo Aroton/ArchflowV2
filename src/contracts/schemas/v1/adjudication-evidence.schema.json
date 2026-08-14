@@ -1,0 +1,807 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:adjudication-evidence",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:adjudication#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "step": {
+          "type": "string",
+          "const": "adjudicate"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "input_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "pinned_constitution_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "approved_upstream_digests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "source_evidence_set_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "rule_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "compliance": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail",
+                  "uncertain"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "not-matched",
+                  "matched",
+                  "uncertain"
+                ]
+              },
+              "trigger_evidence": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version",
+              "compliance",
+              "rationale",
+              "trigger",
+              "trigger_evidence"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "drift_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "upstream_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "drift": {
+                "type": "string",
+                "enum": [
+                  "aligned",
+                  "incidental",
+                  "material"
+                ]
+              },
+              "affected_claim_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                }
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "upstream_digest",
+              "drift",
+              "affected_claim_ids",
+              "rationale"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "constitution": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        "drift": {
+          "type": "string",
+          "enum": [
+            "aligned",
+            "incidental",
+            "material"
+          ]
+        },
+        "matched_rule_versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "uncertain_rule_versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "model_family": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "claude",
+                "codex"
+              ]
+            },
+            {
+              "type": "string",
+              "const": "unknown"
+            }
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "effort": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                "ultra"
+              ]
+            },
+            {
+              "type": "string",
+              "const": "unknown"
+            }
+          ]
+        },
+        "assurance": {
+          "type": "string",
+          "const": "agent-declared"
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "phase_instance",
+        "step",
+        "subject_digest",
+        "input_fingerprint",
+        "pinned_constitution_digest",
+        "approved_upstream_digests",
+        "source_evidence_set_digest",
+        "rule_findings",
+        "drift_findings",
+        "constitution",
+        "drift",
+        "matched_rule_versions",
+        "uncertain_rule_versions",
+        "model_family",
+        "model",
+        "effort",
+        "assurance"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:adjudication#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "step": {
+          "type": "string",
+          "const": "adjudicate"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "input_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "pinned_constitution_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "approved_upstream_digests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "source_evidence_set_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "rule_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "compliance": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail",
+                  "uncertain"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "not-matched",
+                  "matched",
+                  "uncertain"
+                ]
+              },
+              "trigger_evidence": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version",
+              "compliance",
+              "rationale",
+              "trigger",
+              "trigger_evidence"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "drift_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "upstream_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "drift": {
+                "type": "string",
+                "enum": [
+                  "aligned",
+                  "incidental",
+                  "material"
+                ]
+              },
+              "affected_claim_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                }
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "upstream_digest",
+              "drift",
+              "affected_claim_ids",
+              "rationale"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "constitution": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        "drift": {
+          "type": "string",
+          "enum": [
+            "aligned",
+            "incidental",
+            "material"
+          ]
+        },
+        "matched_rule_versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "uncertain_rule_versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "model_family": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "codex"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ]
+        },
+        "assurance": {
+          "type": "string",
+          "const": "server-attested"
+        },
+        "adapter": {
+          "type": "string",
+          "enum": [
+            "claude-cli",
+            "codex-cli"
+          ]
+        },
+        "cli_version": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "invocation_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        },
+        "envelope_input_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "observed_output_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "result_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "phase_instance",
+        "step",
+        "subject_digest",
+        "input_fingerprint",
+        "pinned_constitution_digest",
+        "approved_upstream_digests",
+        "source_evidence_set_digest",
+        "rule_findings",
+        "drift_findings",
+        "constitution",
+        "drift",
+        "matched_rule_versions",
+        "uncertain_rule_versions",
+        "model_family",
+        "model",
+        "effort",
+        "assurance",
+        "adapter",
+        "cli_version",
+        "invocation_id",
+        "envelope_input_digest",
+        "observed_output_digest",
+        "result_id"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:adjudication#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "step": {
+          "type": "string",
+          "const": "adjudicate"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "input_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "pinned_constitution_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "approved_upstream_digests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "source_evidence_set_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "rule_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "compliance": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail",
+                  "uncertain"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "not-matched",
+                  "matched",
+                  "uncertain"
+                ]
+              },
+              "trigger_evidence": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version",
+              "compliance",
+              "rationale",
+              "trigger",
+              "trigger_evidence"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "drift_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "upstream_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "drift": {
+                "type": "string",
+                "enum": [
+                  "aligned",
+                  "incidental",
+                  "material"
+                ]
+              },
+              "affected_claim_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                }
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "upstream_digest",
+              "drift",
+              "affected_claim_ids",
+              "rationale"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "constitution": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        "drift": {
+          "type": "string",
+          "enum": [
+            "aligned",
+            "incidental",
+            "material"
+          ]
+        },
+        "matched_rule_versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "uncertain_rule_versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "model_family": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "claude",
+                "codex"
+              ]
+            },
+            {
+              "type": "string",
+              "const": "unknown"
+            }
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "effort": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                "ultra"
+              ]
+            },
+            {
+              "type": "string",
+              "const": "unknown"
+            }
+          ]
+        },
+        "assurance": {
+          "type": "string",
+          "const": "degraded"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "phase_instance",
+        "step",
+        "subject_digest",
+        "input_fingerprint",
+        "pinned_constitution_digest",
+        "approved_upstream_digests",
+        "source_evidence_set_digest",
+        "rule_findings",
+        "drift_findings",
+        "constitution",
+        "drift",
+        "matched_rule_versions",
+        "uncertain_rule_versions",
+        "model_family",
+        "model",
+        "effort",
+        "assurance",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

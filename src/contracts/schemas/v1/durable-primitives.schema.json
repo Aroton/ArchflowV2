@@ -1,0 +1,850 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:durable-primitives",
+  "$defs": {
+    "blobTreeMode": {
+      "type": "string",
+      "enum": [
+        "100644",
+        "100755",
+        "120000"
+      ]
+    },
+    "regularBlobIdentity": {
+      "type": "object",
+      "properties": {
+        "oid": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "100644",
+            "100755"
+          ]
+        },
+        "size_bytes": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+        }
+      },
+      "required": [
+        "oid",
+        "mode",
+        "size_bytes"
+      ],
+      "additionalProperties": false
+    },
+    "symlinkBlobIdentity": {
+      "type": "object",
+      "properties": {
+        "oid": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
+        "mode": {
+          "type": "string",
+          "const": "120000"
+        },
+        "size_bytes": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+        }
+      },
+      "required": [
+        "oid",
+        "mode",
+        "size_bytes"
+      ],
+      "additionalProperties": false
+    },
+    "blobIdentity": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/regularBlobIdentity"
+        },
+        {
+          "$ref": "#/$defs/symlinkBlobIdentity"
+        }
+      ]
+    },
+    "claimableOutputPathClass": {
+      "type": "string",
+      "enum": [
+        "document",
+        "repository-source",
+        "task-branch-constitution"
+      ]
+    },
+    "declaredInputRef": {
+      "type": "object",
+      "properties": {
+        "input_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+        },
+        "digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        }
+      },
+      "required": [
+        "input_id",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
+    "canonicalTaskPaths": {
+      "type": "object",
+      "properties": {
+        "task_root": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+        },
+        "config": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+        },
+        "state": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+        },
+        "workflow": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+        },
+        "constitution_root": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+        }
+      },
+      "required": [
+        "task_root",
+        "config",
+        "state",
+        "workflow",
+        "constitution_root"
+      ],
+      "additionalProperties": false
+    },
+    "snapshotAccountingEntry": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "path": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+            },
+            "storage": {
+              "type": "string",
+              "const": "git-object"
+            },
+            "stored_bytes": {
+              "type": "number",
+              "const": 0
+            }
+          },
+          "required": [
+            "path",
+            "storage",
+            "stored_bytes"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "path": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+            },
+            "storage": {
+              "type": "string",
+              "const": "raw-payload"
+            },
+            "stored_bytes": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+            }
+          },
+          "required": [
+            "path",
+            "storage",
+            "stored_bytes"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "snapshotAccounting": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "result_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 26214400
+        },
+        "task_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 262144000
+        },
+        "result_byte_cap": {
+          "type": "number",
+          "const": 26214400
+        },
+        "task_byte_cap": {
+          "type": "number",
+          "const": 262144000
+        },
+        "counted_entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/snapshotAccountingEntry"
+          }
+        },
+        "measured_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "schema_version",
+        "result_bytes",
+        "task_bytes",
+        "result_byte_cap",
+        "task_byte_cap",
+        "counted_entries",
+        "measured_at_revision"
+      ],
+      "additionalProperties": false
+    },
+    "outputEntry": {
+      "oneOf": [
+        {
+          "oneOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    },
+                    "path_class": {
+                      "$ref": "#/$defs/claimableOutputPathClass"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "git-object"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "const": "add"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "const": "regular"
+                    },
+                    "after": {
+                      "$ref": "#/$defs/regularBlobIdentity"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "path_class",
+                    "storage",
+                    "operation",
+                    "file_type",
+                    "after"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    },
+                    "path_class": {
+                      "$ref": "#/$defs/claimableOutputPathClass"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "git-object"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "const": "add"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "const": "symlink"
+                    },
+                    "after": {
+                      "$ref": "#/$defs/symlinkBlobIdentity"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "path_class",
+                    "storage",
+                    "operation",
+                    "file_type",
+                    "after"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    },
+                    "path_class": {
+                      "$ref": "#/$defs/claimableOutputPathClass"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "raw-payload"
+                    },
+                    "payload_bytes": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+                    },
+                    "payload_digest": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "const": "add"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "const": "regular"
+                    },
+                    "after": {
+                      "$ref": "#/$defs/regularBlobIdentity"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "path_class",
+                    "storage",
+                    "payload_bytes",
+                    "payload_digest",
+                    "operation",
+                    "file_type",
+                    "after"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    },
+                    "path_class": {
+                      "$ref": "#/$defs/claimableOutputPathClass"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "raw-payload"
+                    },
+                    "payload_bytes": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+                    },
+                    "payload_digest": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "const": "add"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "const": "symlink"
+                    },
+                    "after": {
+                      "$ref": "#/$defs/symlinkBlobIdentity"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "path_class",
+                    "storage",
+                    "payload_bytes",
+                    "payload_digest",
+                    "operation",
+                    "file_type",
+                    "after"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    },
+                    "path_class": {
+                      "$ref": "#/$defs/claimableOutputPathClass"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "git-object"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "const": "modify"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "const": "regular"
+                    },
+                    "before": {
+                      "$ref": "#/$defs/blobIdentity"
+                    },
+                    "after": {
+                      "$ref": "#/$defs/regularBlobIdentity"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "path_class",
+                    "storage",
+                    "operation",
+                    "file_type",
+                    "before",
+                    "after"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    },
+                    "path_class": {
+                      "$ref": "#/$defs/claimableOutputPathClass"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "git-object"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "const": "modify"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "const": "symlink"
+                    },
+                    "before": {
+                      "$ref": "#/$defs/blobIdentity"
+                    },
+                    "after": {
+                      "$ref": "#/$defs/symlinkBlobIdentity"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "path_class",
+                    "storage",
+                    "operation",
+                    "file_type",
+                    "before",
+                    "after"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    },
+                    "path_class": {
+                      "$ref": "#/$defs/claimableOutputPathClass"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "raw-payload"
+                    },
+                    "payload_bytes": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+                    },
+                    "payload_digest": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "const": "modify"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "const": "regular"
+                    },
+                    "before": {
+                      "$ref": "#/$defs/blobIdentity"
+                    },
+                    "after": {
+                      "$ref": "#/$defs/regularBlobIdentity"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "path_class",
+                    "storage",
+                    "payload_bytes",
+                    "payload_digest",
+                    "operation",
+                    "file_type",
+                    "before",
+                    "after"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    },
+                    "path_class": {
+                      "$ref": "#/$defs/claimableOutputPathClass"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "raw-payload"
+                    },
+                    "payload_bytes": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+                    },
+                    "payload_digest": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "const": "modify"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "const": "symlink"
+                    },
+                    "before": {
+                      "$ref": "#/$defs/blobIdentity"
+                    },
+                    "after": {
+                      "$ref": "#/$defs/symlinkBlobIdentity"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "path_class",
+                    "storage",
+                    "payload_bytes",
+                    "payload_digest",
+                    "operation",
+                    "file_type",
+                    "before",
+                    "after"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    },
+                    "path_class": {
+                      "$ref": "#/$defs/claimableOutputPathClass"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "git-object"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "const": "rename"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "const": "regular"
+                    },
+                    "before": {
+                      "$ref": "#/$defs/blobIdentity"
+                    },
+                    "after": {
+                      "$ref": "#/$defs/regularBlobIdentity"
+                    },
+                    "previous_path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "path_class",
+                    "storage",
+                    "operation",
+                    "file_type",
+                    "before",
+                    "after",
+                    "previous_path"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    },
+                    "path_class": {
+                      "$ref": "#/$defs/claimableOutputPathClass"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "git-object"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "const": "rename"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "const": "symlink"
+                    },
+                    "before": {
+                      "$ref": "#/$defs/blobIdentity"
+                    },
+                    "after": {
+                      "$ref": "#/$defs/symlinkBlobIdentity"
+                    },
+                    "previous_path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "path_class",
+                    "storage",
+                    "operation",
+                    "file_type",
+                    "before",
+                    "after",
+                    "previous_path"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    },
+                    "path_class": {
+                      "$ref": "#/$defs/claimableOutputPathClass"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "raw-payload"
+                    },
+                    "payload_bytes": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+                    },
+                    "payload_digest": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "const": "rename"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "const": "regular"
+                    },
+                    "before": {
+                      "$ref": "#/$defs/blobIdentity"
+                    },
+                    "after": {
+                      "$ref": "#/$defs/regularBlobIdentity"
+                    },
+                    "previous_path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "path_class",
+                    "storage",
+                    "payload_bytes",
+                    "payload_digest",
+                    "operation",
+                    "file_type",
+                    "before",
+                    "after",
+                    "previous_path"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    },
+                    "path_class": {
+                      "$ref": "#/$defs/claimableOutputPathClass"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "raw-payload"
+                    },
+                    "payload_bytes": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+                    },
+                    "payload_digest": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "const": "rename"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "const": "symlink"
+                    },
+                    "before": {
+                      "$ref": "#/$defs/blobIdentity"
+                    },
+                    "after": {
+                      "$ref": "#/$defs/symlinkBlobIdentity"
+                    },
+                    "previous_path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "path_class",
+                    "storage",
+                    "payload_bytes",
+                    "payload_digest",
+                    "operation",
+                    "file_type",
+                    "before",
+                    "after",
+                    "previous_path"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    },
+                    "path_class": {
+                      "$ref": "#/$defs/claimableOutputPathClass"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "git-object"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "const": "delete"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "const": "regular"
+                    },
+                    "before": {
+                      "$ref": "#/$defs/regularBlobIdentity"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "path_class",
+                    "storage",
+                    "operation",
+                    "file_type",
+                    "before"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                    },
+                    "path_class": {
+                      "$ref": "#/$defs/claimableOutputPathClass"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "git-object"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "const": "delete"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "const": "symlink"
+                    },
+                    "before": {
+                      "$ref": "#/$defs/symlinkBlobIdentity"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "path_class",
+                    "storage",
+                    "operation",
+                    "file_type",
+                    "before"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

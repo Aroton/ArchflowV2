@@ -1,0 +1,13 @@
+{
+  "context_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "gate_id": "gate-legacy-1", "kind": "artifact-approval", "outcome": "superseded",
+  "phase_instance": "phase-impl-2", "schema_version": "1",
+  "subject_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+  "supplemental": [],
+  "supersession": {
+    "accepted_triage_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+    "old_subject_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+    "superseded_gate_id": "gate-legacy-1"
+  },
+  "task_id": "task-1"
+}

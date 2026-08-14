@@ -1,0 +1,1 @@
+{"schema_version":"1","kind":"artifact","mode":"friendly","criteria":[{"id":"coverage","text":"Check coverage.","blocking":true}]}

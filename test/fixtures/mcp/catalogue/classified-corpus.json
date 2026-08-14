@@ -1,0 +1,417 @@
+[
+  {
+    "label": "portable-valid-state-input",
+    "tool": "archflow_state",
+    "member": "input",
+    "classification": "portable-structure",
+    "materialization": "valid-state-input",
+    "portable": true,
+    "runtime": true
+  },
+  {
+    "label": "portable-invalid-state-extra-field",
+    "tool": "archflow_state",
+    "member": "input",
+    "classification": "portable-structure",
+    "materialization": "invalid-state-extra",
+    "portable": false,
+    "runtime": false
+  },
+  {
+    "label": "portable-valid-state-success",
+    "tool": "archflow_state",
+    "member": "output",
+    "classification": "portable-structure",
+    "materialization": "valid-state-success",
+    "call_fixture": "archflow_state",
+    "portable": true,
+    "runtime": true
+  },
+  {
+    "label": "portable-valid-counter-review-success",
+    "tool": "archflow_counter_review",
+    "member": "output",
+    "classification": "portable-structure",
+    "materialization": "valid-counter-success",
+    "call_fixture": "archflow_counter_review",
+    "portable": true,
+    "runtime": true
+  },
+  {
+    "label": "portable-valid-gate-success",
+    "tool": "archflow_gate",
+    "member": "output",
+    "classification": "portable-structure",
+    "materialization": "valid-gate-success",
+    "call_fixture": "archflow_gate",
+    "portable": true,
+    "runtime": true
+  },
+  {
+    "label": "portable-valid-waiver-success",
+    "tool": "archflow_waiver",
+    "member": "output",
+    "classification": "portable-structure",
+    "materialization": "valid-waiver-success",
+    "call_fixture": "archflow_waiver",
+    "portable": true,
+    "runtime": true
+  },
+  {
+    "label": "portable-valid-project-failure",
+    "tool": "archflow_state",
+    "member": "output",
+    "classification": "portable-structure",
+    "materialization": "valid-failure",
+    "portable": true,
+    "runtime": true
+  },
+  {
+    "label": "runtime-only-input-path-byte-limit",
+    "tool": "archflow_counter_review",
+    "member": "input",
+    "classification": "runtime-semantic",
+    "semantic_category": "path-utf8-input",
+    "materialization": "path-utf8-input",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-input-path-nfc",
+    "tool": "archflow_counter_review",
+    "member": "input",
+    "classification": "runtime-semantic",
+    "semantic_category": "path-nfc-input",
+    "materialization": "path-nfc-input",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-success-path-byte-limit",
+    "tool": "archflow_state",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "path-utf8-output",
+    "materialization": "path-utf8-output",
+    "call_fixture": "archflow_state",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-project-error-path-byte-limit",
+    "tool": "archflow_state",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "project-error-path-utf8",
+    "materialization": "project-error-path-utf8",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-document-declared-input-order",
+    "tool": "archflow_state",
+    "member": "input",
+    "classification": "runtime-semantic",
+    "semantic_category": "document-declared-input-order",
+    "materialization": "document-declared-input-order",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-waiver-origin-task-mismatch",
+    "tool": "archflow_waiver",
+    "member": "input",
+    "classification": "runtime-semantic",
+    "semantic_category": "mcp-waiver-origin-task",
+    "materialization": "waiver-origin-task",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-constitution-rule-order",
+    "tool": "archflow_gate",
+    "member": "input",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-constitution-rule-order",
+    "materialization": "constitution-rule-order",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-constitution-eligible-waiver-axis",
+    "tool": "archflow_gate",
+    "member": "input",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-constitution-eligible-axis",
+    "materialization": "constitution-eligible-axis",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-constitution-nonempty-rule-set",
+    "tool": "archflow_gate",
+    "member": "input",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-constitution-nonempty",
+    "materialization": "constitution-nonempty",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-constitution-pass-consistency",
+    "tool": "archflow_gate",
+    "member": "input",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-constitution-pass-consistency",
+    "materialization": "constitution-pass-consistency",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-attempts-exhausted-relation",
+    "tool": "archflow_gate",
+    "member": "input",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-attempts-exhausted",
+    "materialization": "attempts-exhausted",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-material-drift-claim-order",
+    "tool": "archflow_gate",
+    "member": "input",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-material-drift-order",
+    "materialization": "material-drift-order",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-commit-artifact-digest-order",
+    "tool": "archflow_gate",
+    "member": "input",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-commit-artifact-order",
+    "materialization": "commit-artifact-order",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-commit-parent-digest-order",
+    "tool": "archflow_gate",
+    "member": "input",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-commit-parent-order",
+    "materialization": "commit-parent-order",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-constitution-waiver-rule-eligibility",
+    "tool": "archflow_gate",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-constitution-waiver-rule-eligibility",
+    "materialization": "constitution-waiver-rule-eligibility",
+    "call_fixture": "archflow_gate",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-constitution-waiver-axis-eligibility",
+    "tool": "archflow_gate",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-constitution-waiver-axis-eligibility",
+    "materialization": "constitution-waiver-axis-eligibility",
+    "call_fixture": "archflow_gate",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-restore-adoption-authority",
+    "tool": "archflow_gate",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-restore-adoption-authority",
+    "materialization": "restore-adoption-authority",
+    "call_fixture": "archflow_gate",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-project-error-path-order",
+    "tool": "archflow_state",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "project-error-sorted-unique",
+    "materialization": "project-error-order",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-project-failure-tool-correlation",
+    "tool": "archflow_state",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "failure-tool-correlation",
+    "materialization": "failure-tool-correlation",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-state-status-correlation",
+    "tool": "archflow_state",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "state-success-status-correlation",
+    "materialization": "state-status-correlation",
+    "call_fixture": "archflow_state",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-gate-result-kind-correlation",
+    "tool": "archflow_gate",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-success-kind-correlation",
+    "materialization": "gate-kind-correlation",
+    "call_fixture": "archflow_gate",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-gate-decision-kind-correlation",
+    "tool": "archflow_gate",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-success-decision-kind-correlation",
+    "materialization": "gate-decision-kind-correlation",
+    "call_fixture": "archflow_gate",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-gate-task-correlation",
+    "tool": "archflow_gate",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-success-task-correlation",
+    "materialization": "gate-task-correlation",
+    "call_fixture": "archflow_gate",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-gate-phase-correlation",
+    "tool": "archflow_gate",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-success-phase-correlation",
+    "materialization": "gate-phase-correlation",
+    "call_fixture": "archflow_gate",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-gate-subject-correlation",
+    "tool": "archflow_gate",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-success-subject-correlation",
+    "materialization": "gate-subject-correlation",
+    "call_fixture": "archflow_gate",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-gate-notes-correlation",
+    "tool": "archflow_gate",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "gate-success-notes-correlation",
+    "materialization": "gate-notes-correlation",
+    "call_fixture": "archflow_gate",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-waiver-origin-correlation",
+    "tool": "archflow_waiver",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "waiver-success-origin-correlation",
+    "materialization": "waiver-origin-correlation",
+    "call_fixture": "archflow_waiver",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-waiver-task-correlation",
+    "tool": "archflow_waiver",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "waiver-success-task-correlation",
+    "materialization": "waiver-task-correlation",
+    "call_fixture": "archflow_waiver",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-waiver-rule-id-correlation",
+    "tool": "archflow_waiver",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "waiver-success-rule-id-correlation",
+    "materialization": "waiver-rule-id-correlation",
+    "call_fixture": "archflow_waiver",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-waiver-rule-version-correlation",
+    "tool": "archflow_waiver",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "waiver-success-rule-version-correlation",
+    "materialization": "waiver-rule-version-correlation",
+    "call_fixture": "archflow_waiver",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-waiver-subject-correlation",
+    "tool": "archflow_waiver",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "waiver-success-subject-correlation",
+    "materialization": "waiver-subject-correlation",
+    "call_fixture": "archflow_waiver",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-waiver-current-evidence-correlation",
+    "tool": "archflow_waiver",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "waiver-success-evidence-correlation",
+    "materialization": "waiver-evidence-correlation",
+    "call_fixture": "archflow_waiver",
+    "portable": true,
+    "runtime": false
+  },
+  {
+    "label": "runtime-only-waiver-scope-correlation",
+    "tool": "archflow_waiver",
+    "member": "output",
+    "classification": "runtime-semantic",
+    "semantic_category": "waiver-success-scope-correlation",
+    "materialization": "waiver-scope-correlation",
+    "call_fixture": "archflow_waiver",
+    "portable": true,
+    "runtime": false
+  }
+]

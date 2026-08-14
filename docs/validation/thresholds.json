@@ -1,0 +1,21 @@
+{
+  "approval": {
+    "approved_at": "2026-08-04",
+    "decision": "approved",
+    "provenance": "explicit-user-approval"
+  },
+  "benchmark_result_digest": "e39457d0ffb34e0727dd085288dc968cda9182fc9bd508d5d5a2a323745f257f",
+  "observed_metrics": {
+    "approval_detection_rate": 0.6666666666666666,
+    "defects_found_after_pass": 2,
+    "false_blocker_rate": 0,
+    "triage_completeness": 12
+  },
+  "schema_version": "1",
+  "thresholds": {
+    "maximum_defects_found_after_pass": 2,
+    "maximum_false_blocker_rate": 0,
+    "minimum_approval_detection_rate": 0.6666666666666666,
+    "minimum_triage_completeness": 12
+  }
+}

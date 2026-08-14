@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:gate-decision-record",
+  "$defs": {
+    "provenance": {
+      "anyOf": [
+        {
+          "$ref": "urn:archflow:schema:v1:gate-decision#/$defs/connected"
+        },
+        {
+          "$ref": "urn:archflow:schema:v1:gate-decision#/$defs/local"
+        }
+      ]
+    },
+    "decided": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "artifact-approval",
+            "design-approval",
+            "constitution-review",
+            "material-drift",
+            "attempts-exhausted",
+            "constitution-edit",
+            "commit-authorization",
+            "restore-collision",
+            "migration-audit"
+          ]
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "outcome": {
+          "type": "string",
+          "const": "decided"
+        },
+        "envelope": {
+          "$ref": "urn:archflow:schema:v1:gate-decision"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "kind",
+        "subject_digest",
+        "context_digest",
+        "outcome",
+        "envelope"
+      ],
+      "additionalProperties": false
+    },
+    "waiverDecided": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "artifact-approval",
+            "design-approval",
+            "constitution-review",
+            "material-drift",
+            "attempts-exhausted",
+            "constitution-edit",
+            "commit-authorization",
+            "restore-collision",
+            "migration-audit"
+          ]
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "outcome": {
+          "type": "string",
+          "const": "waiver-decided"
+        },
+        "granted": {
+          "type": "boolean"
+        },
+        "scope": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/waiverScope"
+        },
+        "origin": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/origin"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "human_provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "kind",
+        "subject_digest",
+        "context_digest",
+        "outcome",
+        "granted",
+        "scope",
+        "origin",
+        "notes",
+        "human_provenance"
+      ],
+      "additionalProperties": false
+    },
+    "cancelled": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "artifact-approval",
+            "design-approval",
+            "constitution-review",
+            "material-drift",
+            "attempts-exhausted",
+            "constitution-edit",
+            "commit-authorization",
+            "restore-collision",
+            "migration-audit"
+          ]
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "outcome": {
+          "type": "string",
+          "const": "cancelled"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "human_provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "kind",
+        "subject_digest",
+        "context_digest",
+        "outcome",
+        "reason",
+        "human_provenance"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/decided"
+    },
+    {
+      "$ref": "#/$defs/waiverDecided"
+    },
+    {
+      "$ref": "#/$defs/cancelled"
+    }
+  ]
+}

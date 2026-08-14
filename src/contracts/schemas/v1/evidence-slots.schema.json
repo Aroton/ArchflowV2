@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:evidence-slots",
+  "$defs": {
+    "counter": {
+      "type": "object",
+      "properties": {
+        "evidence_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "producer_family": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "codex"
+          ]
+        },
+        "reviewer_family": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "codex"
+          ]
+        },
+        "role": {
+          "type": "string",
+          "const": "counter-review"
+        },
+        "assurance": {
+          "type": "string",
+          "enum": [
+            "server-attested",
+            "degraded"
+          ]
+        },
+        "independence": {
+          "type": "string",
+          "const": "opposite-family"
+        }
+      },
+      "required": [
+        "evidence_digest",
+        "producer_family",
+        "reviewer_family",
+        "role",
+        "assurance",
+        "independence"
+      ],
+      "additionalProperties": false
+    },
+    "counterOnly": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/counter"
+        }
+      ],
+      "minItems": 1,
+      "maxItems": 1
+    }
+  },
+  "$ref": "#/$defs/counterOnly"
+}

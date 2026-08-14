@@ -1,0 +1,18 @@
+{
+  "schema_version": "1",
+  "artifact_kind": "task-initialization",
+  "task_id": "demo",
+  "repository_identity_digest": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809",
+  "code_baseline_commit": "0f1e2d3c4b5a69788796a5b4c3d2e1f001234567",
+  "policy_base_commit": "89abcdef0123456789abcdef0123456789abcdef",
+  "constitution_digest": "2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a",
+  "workflow_digest": "3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b",
+  "config_digest": "4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c",
+  "canonical_paths": {
+    "task_root": ".archflow/tasks/demo",
+    "config": ".archflow/tasks/demo/config.yaml",
+    "state": ".archflow/tasks/demo/state.json",
+    "workflow": ".archflow/workflow.yaml",
+    "constitution_root": ".archflow/constitution"
+  }
+}

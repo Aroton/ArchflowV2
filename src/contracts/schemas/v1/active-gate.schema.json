@@ -1,0 +1,936 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:active-gate",
+  "$defs": {
+    "payloadRequiredFields": {
+      "const": [
+        "payload",
+        "human_provenance"
+      ]
+    },
+    "waiverRequiredFields": {
+      "const": [
+        "granted",
+        "scope",
+        "origin",
+        "notes",
+        "human_provenance"
+      ]
+    },
+    "cancellationFields": {
+      "const": [
+        "cancelled",
+        "reason",
+        "human_provenance"
+      ]
+    },
+    "decisionTemplate": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "artifact-approval",
+            "design-approval",
+            "constitution-review",
+            "material-drift",
+            "attempts-exhausted",
+            "constitution-edit",
+            "commit-authorization",
+            "restore-collision",
+            "migration-audit"
+          ]
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "required_fields": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/payloadRequiredFields"
+            },
+            {
+              "$ref": "#/$defs/waiverRequiredFields"
+            }
+          ]
+        },
+        "cancellation_fields": {
+          "$ref": "#/$defs/cancellationFields"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "kind",
+        "subject_digest",
+        "context_digest",
+        "required_fields",
+        "cancellation_fields"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "current_evidence": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "const": "awaiting-human"
+        },
+        "decision_template": {
+          "$ref": "#/$defs/decisionTemplate"
+        },
+        "kind": {
+          "type": "string",
+          "const": "artifact-approval"
+        },
+        "context": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/artifactApprovalContext"
+        },
+        "allowed_decisions": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/artifactApprovalDecisions"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "intent_id",
+        "request_digest",
+        "task_id",
+        "phase_instance",
+        "summary",
+        "subject_digest",
+        "context_digest",
+        "current_evidence",
+        "opened_at_revision",
+        "status",
+        "decision_template",
+        "kind",
+        "context",
+        "allowed_decisions"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "current_evidence": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "const": "awaiting-human"
+        },
+        "decision_template": {
+          "$ref": "#/$defs/decisionTemplate"
+        },
+        "kind": {
+          "type": "string",
+          "const": "design-approval"
+        },
+        "context": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/designApprovalContext"
+        },
+        "allowed_decisions": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/designApprovalDecisions"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "intent_id",
+        "request_digest",
+        "task_id",
+        "phase_instance",
+        "summary",
+        "subject_digest",
+        "context_digest",
+        "current_evidence",
+        "opened_at_revision",
+        "status",
+        "decision_template",
+        "kind",
+        "context",
+        "allowed_decisions"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "current_evidence": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "const": "awaiting-human"
+        },
+        "decision_template": {
+          "$ref": "#/$defs/decisionTemplate"
+        },
+        "kind": {
+          "type": "string",
+          "const": "constitution-review"
+        },
+        "context": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/constitutionReviewContext"
+        },
+        "allowed_decisions": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/constitutionReviewDecisions"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "intent_id",
+        "request_digest",
+        "task_id",
+        "phase_instance",
+        "summary",
+        "subject_digest",
+        "context_digest",
+        "current_evidence",
+        "opened_at_revision",
+        "status",
+        "decision_template",
+        "kind",
+        "context",
+        "allowed_decisions"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "current_evidence": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "const": "awaiting-human"
+        },
+        "decision_template": {
+          "$ref": "#/$defs/decisionTemplate"
+        },
+        "kind": {
+          "type": "string",
+          "const": "material-drift"
+        },
+        "context": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/materialDriftContext"
+        },
+        "allowed_decisions": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/materialDriftDecisions"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "intent_id",
+        "request_digest",
+        "task_id",
+        "phase_instance",
+        "summary",
+        "subject_digest",
+        "context_digest",
+        "current_evidence",
+        "opened_at_revision",
+        "status",
+        "decision_template",
+        "kind",
+        "context",
+        "allowed_decisions"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "current_evidence": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "const": "awaiting-human"
+        },
+        "decision_template": {
+          "$ref": "#/$defs/decisionTemplate"
+        },
+        "kind": {
+          "type": "string",
+          "const": "attempts-exhausted"
+        },
+        "context": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/attemptsExhaustedContext"
+        },
+        "allowed_decisions": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/attemptsExhaustedDecisions"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "intent_id",
+        "request_digest",
+        "task_id",
+        "phase_instance",
+        "summary",
+        "subject_digest",
+        "context_digest",
+        "current_evidence",
+        "opened_at_revision",
+        "status",
+        "decision_template",
+        "kind",
+        "context",
+        "allowed_decisions"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "current_evidence": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "const": "awaiting-human"
+        },
+        "decision_template": {
+          "$ref": "#/$defs/decisionTemplate"
+        },
+        "kind": {
+          "type": "string",
+          "const": "constitution-edit"
+        },
+        "context": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/constitutionEditContext"
+        },
+        "allowed_decisions": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/constitutionEditDecisions"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "intent_id",
+        "request_digest",
+        "task_id",
+        "phase_instance",
+        "summary",
+        "subject_digest",
+        "context_digest",
+        "current_evidence",
+        "opened_at_revision",
+        "status",
+        "decision_template",
+        "kind",
+        "context",
+        "allowed_decisions"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "current_evidence": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "const": "awaiting-human"
+        },
+        "decision_template": {
+          "$ref": "#/$defs/decisionTemplate"
+        },
+        "kind": {
+          "type": "string",
+          "const": "commit-authorization"
+        },
+        "context": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/commitAuthorizationContext"
+        },
+        "allowed_decisions": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/commitAuthorizationDecisions"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "intent_id",
+        "request_digest",
+        "task_id",
+        "phase_instance",
+        "summary",
+        "subject_digest",
+        "context_digest",
+        "current_evidence",
+        "opened_at_revision",
+        "status",
+        "decision_template",
+        "kind",
+        "context",
+        "allowed_decisions"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "current_evidence": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "const": "awaiting-human"
+        },
+        "decision_template": {
+          "$ref": "#/$defs/decisionTemplate"
+        },
+        "kind": {
+          "type": "string",
+          "const": "restore-collision"
+        },
+        "context": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/restoreCollisionContext"
+        },
+        "allowed_decisions": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/restoreCollisionDecisions"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "intent_id",
+        "request_digest",
+        "task_id",
+        "phase_instance",
+        "summary",
+        "subject_digest",
+        "context_digest",
+        "current_evidence",
+        "opened_at_revision",
+        "status",
+        "decision_template",
+        "kind",
+        "context",
+        "allowed_decisions"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "current_evidence": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "const": "awaiting-human"
+        },
+        "decision_template": {
+          "$ref": "#/$defs/decisionTemplate"
+        },
+        "kind": {
+          "type": "string",
+          "const": "migration-audit"
+        },
+        "context": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/migrationAuditContext"
+        },
+        "allowed_decisions": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/migrationAuditDecisions"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "intent_id",
+        "request_digest",
+        "task_id",
+        "phase_instance",
+        "summary",
+        "subject_digest",
+        "context_digest",
+        "current_evidence",
+        "opened_at_revision",
+        "status",
+        "decision_template",
+        "kind",
+        "context",
+        "allowed_decisions"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "current_evidence": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/currentEvidence"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "const": "awaiting-human"
+        },
+        "decision_template": {
+          "$ref": "#/$defs/decisionTemplate"
+        },
+        "kind": {
+          "type": "string",
+          "const": "constitution-review"
+        },
+        "context": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/waiverContext"
+        },
+        "allowed_decisions": {
+          "$ref": "urn:archflow:schema:v1:gate-request#/$defs/waiverDecisions"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "intent_id",
+        "request_digest",
+        "task_id",
+        "phase_instance",
+        "summary",
+        "subject_digest",
+        "context_digest",
+        "current_evidence",
+        "opened_at_revision",
+        "status",
+        "decision_template",
+        "kind",
+        "context",
+        "allowed_decisions"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

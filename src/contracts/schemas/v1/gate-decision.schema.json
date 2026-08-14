@@ -1,0 +1,588 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:gate-decision",
+  "$defs": {
+    "connected": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "actor_class": {
+          "type": "string",
+          "enum": [
+            "human",
+            "archforge"
+          ]
+        },
+        "assurance": {
+          "type": "string",
+          "const": "declared-local-trace"
+        },
+        "channel": {
+          "type": "string",
+          "const": "connected-host"
+        },
+        "decision_event_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+        },
+        "connection_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+        },
+        "request_id_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}(?:Z))$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "actor_class",
+        "assurance",
+        "channel",
+        "decision_event_id",
+        "connection_id",
+        "request_id_digest",
+        "recorded_at"
+      ],
+      "additionalProperties": false
+    },
+    "local": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "actor_class": {
+          "type": "string",
+          "enum": [
+            "human",
+            "archforge"
+          ]
+        },
+        "assurance": {
+          "type": "string",
+          "const": "declared-local-trace"
+        },
+        "channel": {
+          "type": "string",
+          "const": "archflow-local"
+        },
+        "decision_event_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+        },
+        "helper_invocation_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}(?:Z))$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "actor_class",
+        "assurance",
+        "channel",
+        "decision_event_id",
+        "helper_invocation_id",
+        "recorded_at"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "context_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "human_provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/connected"
+            },
+            {
+              "$ref": "#/$defs/local"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "const": "artifact-approval"
+        },
+        "payload": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/artifactApprovalDecision"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "subject_digest",
+        "context_digest",
+        "human_provenance",
+        "kind",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "context_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "human_provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/connected"
+            },
+            {
+              "$ref": "#/$defs/local"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "const": "design-approval"
+        },
+        "payload": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/designApprovalDecision"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "subject_digest",
+        "context_digest",
+        "human_provenance",
+        "kind",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "context_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "human_provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/connected"
+            },
+            {
+              "$ref": "#/$defs/local"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "const": "constitution-review"
+        },
+        "payload": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/constitutionReviewDecision"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "subject_digest",
+        "context_digest",
+        "human_provenance",
+        "kind",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "context_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "human_provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/connected"
+            },
+            {
+              "$ref": "#/$defs/local"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "const": "material-drift"
+        },
+        "payload": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/materialDriftDecision"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "subject_digest",
+        "context_digest",
+        "human_provenance",
+        "kind",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "context_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "human_provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/connected"
+            },
+            {
+              "$ref": "#/$defs/local"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "const": "attempts-exhausted"
+        },
+        "payload": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/attemptsExhaustedDecision"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "subject_digest",
+        "context_digest",
+        "human_provenance",
+        "kind",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "context_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "human_provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/connected"
+            },
+            {
+              "$ref": "#/$defs/local"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "const": "constitution-edit"
+        },
+        "payload": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/constitutionEditDecision"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "subject_digest",
+        "context_digest",
+        "human_provenance",
+        "kind",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "context_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "human_provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/connected"
+            },
+            {
+              "$ref": "#/$defs/local"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "const": "commit-authorization"
+        },
+        "payload": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/commitAuthorizationDecision"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "subject_digest",
+        "context_digest",
+        "human_provenance",
+        "kind",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "context_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "human_provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/connected"
+            },
+            {
+              "$ref": "#/$defs/local"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "const": "restore-collision"
+        },
+        "payload": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/restoreCollisionDecision"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "subject_digest",
+        "context_digest",
+        "human_provenance",
+        "kind",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "context_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "human_provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/connected"
+            },
+            {
+              "$ref": "#/$defs/local"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "const": "migration-audit"
+        },
+        "payload": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/migrationAuditDecision"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "task_id",
+        "phase_instance",
+        "subject_digest",
+        "context_digest",
+        "human_provenance",
+        "kind",
+        "payload"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

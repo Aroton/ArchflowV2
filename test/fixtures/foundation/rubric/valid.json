@@ -1,0 +1,1 @@
+{"schema_version":"1","kind":"artifact","mode":"adversarial","criteria":[{"id":"requirement-coverage","text":"Every approved requirement is addressed or explicitly out of scope.","blocking":true},{"id":"clear-language","text":"The artifact is understandable to its intended reader.","blocking":false}]}

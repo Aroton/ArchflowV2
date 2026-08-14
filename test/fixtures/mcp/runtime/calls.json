@@ -1,0 +1,52 @@
+{
+  "list": {
+    "jsonrpc": "2.0",
+    "id": "list-1",
+    "method": "tools/list",
+    "params": {}
+  },
+  "unknown": {
+    "jsonrpc": "2.0",
+    "id": "call-unknown",
+    "method": "tools/call",
+    "params": {
+      "name": "unknown_tool",
+      "arguments": {}
+    }
+  },
+  "missing_arguments": {
+    "jsonrpc": "2.0",
+    "id": "call-missing",
+    "method": "tools/call",
+    "params": {
+      "name": "archflow_state"
+    }
+  },
+  "non_object_arguments": {
+    "jsonrpc": "2.0",
+    "id": "call-non-object",
+    "method": "tools/call",
+    "params": {
+      "name": "archflow_state",
+      "arguments": "not-an-object"
+    }
+  },
+  "valid_disabled": {
+    "jsonrpc": "2.0",
+    "id": "call-disabled",
+    "method": "tools/call",
+    "params": {
+      "name": "archflow_state",
+      "arguments": {
+        "schema_version": "1",
+        "task_id": "task-1",
+        "intent_id": "intent-1",
+        "expected_revision": 2,
+        "input_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "phase_instance": "phase-impl-2",
+        "step": "produce",
+        "status": "succeeded"
+      }
+    }
+  }
+}

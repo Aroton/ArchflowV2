@@ -1,0 +1,1 @@
+{"schema_version":"1","tool":"archflow_state","task_id":"task-1","intent_id":"intent-1","input_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","request_digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","result_id":"result-1","resulting_revision":3,"success":{"path":"phases/2/result.json","revision":3,"status":"succeeded"}}

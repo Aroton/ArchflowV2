@@ -1,0 +1,7 @@
+schema_version: "1"
+roles:
+  counter-reviewer: {model: gpt-example, effort: high}
+  adjudicator: {model: claude-example, effort: high}
+overrides:
+  design:
+    counter-reviewer: {model: gpt-design-example, effort: xhigh}

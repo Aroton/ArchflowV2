@@ -1,0 +1,562 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:task-state",
+  "$defs": {
+    "stepStatus": {
+      "type": "string",
+      "enum": [
+        "running",
+        "succeeded",
+        "failed"
+      ]
+    },
+    "gateKind": {
+      "type": "string",
+      "enum": [
+        "artifact-approval",
+        "design-approval",
+        "constitution-review",
+        "material-drift",
+        "attempts-exhausted",
+        "constitution-edit",
+        "commit-authorization",
+        "restore-collision",
+        "migration-audit"
+      ]
+    },
+    "authoritativeResultRef": {
+      "type": "object",
+      "properties": {
+        "phase_instance": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+        },
+        "step": {
+          "type": "string",
+          "enum": [
+            "produce",
+            "counter_review",
+            "triage",
+            "adjudicate"
+          ]
+        },
+        "result_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "result_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+        },
+        "input_fingerprint": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        }
+      },
+      "required": [
+        "phase_instance",
+        "step",
+        "result_digest",
+        "result_id",
+        "input_fingerprint"
+      ],
+      "additionalProperties": false
+    },
+    "approvalRef": {
+      "type": "object",
+      "properties": {
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "gate_kind": {
+          "$ref": "#/$defs/gateKind"
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "decision_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "resolved_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "gate_id",
+        "gate_kind",
+        "subject_digest",
+        "decision_digest",
+        "resolved_at_revision"
+      ],
+      "additionalProperties": false
+    },
+    "waiverRef": {
+      "type": "object",
+      "properties": {
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "rule_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+        },
+        "rule_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "scope": {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "review-trigger",
+                "adjudication-failure"
+              ]
+            },
+            "boundary": {
+              "type": "string",
+              "enum": [
+                "subject",
+                "phase",
+                "task"
+              ]
+            }
+          },
+          "required": [
+            "operation",
+            "boundary"
+          ],
+          "additionalProperties": false
+        },
+        "granted": {
+          "type": "boolean"
+        },
+        "expires": {
+          "type": "string",
+          "const": "task-complete"
+        },
+        "granted_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "gate_id",
+        "rule_id",
+        "rule_version",
+        "subject_digest",
+        "scope",
+        "granted",
+        "expires",
+        "granted_at_revision"
+      ],
+      "additionalProperties": false
+    },
+    "openGateRef": {
+      "type": "object",
+      "properties": {
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "gate_kind": {
+          "$ref": "#/$defs/gateKind"
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "context_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "frozen_state_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "waiver_origin_gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "gate_id",
+        "gate_kind",
+        "subject_digest",
+        "context_digest",
+        "frozen_state_digest",
+        "opened_at_revision"
+      ],
+      "additionalProperties": false
+    },
+    "humanRevisionClassification": {
+      "type": "string",
+      "enum": [
+        "simple",
+        "significant"
+      ]
+    },
+    "humanRevisionOverride": {
+      "type": "object",
+      "properties": {
+        "agent_classification": {
+          "$ref": "#/$defs/humanRevisionClassification"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        }
+      },
+      "required": [
+        "agent_classification",
+        "rationale"
+      ],
+      "additionalProperties": false
+    },
+    "pendingHumanRevision": {
+      "type": "object",
+      "properties": {
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "gate_kind": {
+          "type": "string",
+          "enum": [
+            "artifact-approval",
+            "design-approval",
+            "constitution-review",
+            "material-drift",
+            "attempts-exhausted",
+            "commit-authorization",
+            "migration-audit"
+          ]
+        },
+        "predecessor_subject_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "predecessor_input_fingerprint": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "requested_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/authoritativeResultRef"
+          }
+        }
+      },
+      "required": [
+        "gate_id",
+        "gate_kind",
+        "predecessor_subject_digest",
+        "predecessor_input_fingerprint",
+        "requested_at_revision",
+        "attempt",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "humanRevisionRecord": {
+      "type": "object",
+      "properties": {
+        "phase_instance": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "gate_kind": {
+          "type": "string",
+          "enum": [
+            "artifact-approval",
+            "design-approval",
+            "constitution-review",
+            "material-drift",
+            "attempts-exhausted",
+            "commit-authorization",
+            "migration-audit"
+          ]
+        },
+        "predecessor_subject_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "predecessor_input_fingerprint": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "resulting_subject_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "resulting_result_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "classification": {
+          "$ref": "#/$defs/humanRevisionClassification"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "user_override": {
+          "$ref": "#/$defs/humanRevisionOverride"
+        },
+        "previous_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "resulting_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/authoritativeResultRef"
+          }
+        }
+      },
+      "required": [
+        "phase_instance",
+        "gate_id",
+        "gate_kind",
+        "predecessor_subject_digest",
+        "predecessor_input_fingerprint",
+        "resulting_subject_digest",
+        "resulting_result_digest",
+        "classification",
+        "rationale",
+        "previous_attempt",
+        "resulting_attempt",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "lastTransition": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "tool": {
+          "type": "string",
+          "enum": [
+            "archflow_state",
+            "archflow_counter_review",
+            "archflow_gate",
+            "archflow_waiver"
+          ]
+        },
+        "operation": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeCode"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "input_fingerprint": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "result_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+        },
+        "outcome": {
+          "$ref": "#/$defs/plainJson"
+        },
+        "outcome_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "prior_revision": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+        },
+        "resulting_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "schema_version",
+        "tool",
+        "operation",
+        "intent_id",
+        "request_digest",
+        "input_fingerprint",
+        "result_id",
+        "outcome",
+        "outcome_digest",
+        "prior_revision",
+        "resulting_revision"
+      ],
+      "additionalProperties": false
+    },
+    "plainJson": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/plainJson"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/plainJson"
+          }
+        }
+      ]
+    }
+  },
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "task_id": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+    },
+    "repository_identity_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "phase_instance": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+    },
+    "step": {
+      "type": "string",
+      "enum": [
+        "produce",
+        "counter_review",
+        "triage",
+        "adjudicate"
+      ]
+    },
+    "status": {
+      "$ref": "#/$defs/stepStatus"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "input_fingerprint": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "initialization_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "config_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "workflow_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "constitution_digest": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+    },
+    "policy_base_commit": {
+      "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+    },
+    "authoritative_results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/authoritativeResultRef"
+      }
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/approvalRef"
+      }
+    },
+    "waivers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/waiverRef"
+      }
+    },
+    "planned_final_phase": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "open_gate": {
+      "$ref": "#/$defs/openGateRef"
+    },
+    "pending_human_revision": {
+      "$ref": "#/$defs/pendingHumanRevision"
+    },
+    "human_revision_history": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/humanRevisionRecord"
+      }
+    },
+    "last_transition": {
+      "$ref": "#/$defs/lastTransition"
+    },
+    "terminal": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "abandoned"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "task_id",
+    "repository_identity_digest",
+    "revision",
+    "phase_instance",
+    "step",
+    "status",
+    "attempt",
+    "input_fingerprint",
+    "initialization_digest",
+    "config_digest",
+    "workflow_digest",
+    "constitution_digest",
+    "policy_base_commit",
+    "authoritative_results",
+    "approvals",
+    "waivers"
+  ],
+  "additionalProperties": false
+}

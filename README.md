@@ -1,12 +1,16 @@
 # ArchFlow
 
-A lightweight, human-centered development workflow for Claude Code and Codex. Six portable Agent Skills turn vague ideas into structured implementations with human review at every stage.
+A lightweight, human-centered development workflow for Claude Code and Codex. Nine portable Agent Skills turn vague ideas into structured implementations with human review at every stage.
 
 ## What It Does
 
 ArchFlow guides you through a structured development process:
 
 ```
+/archflow-init          Initialize repository assets and MCP registration
+       |
+/archflow-constitution  Explain or configure repository policy (optional)
+       |
 /archflow-explore       Understand an existing codebase
        |
 /archflow-prd my-feature    Define what you're building (PRD)
@@ -18,7 +22,17 @@ ArchFlow guides you through a structured development process:
 /archflow-phase-design my-feature 2   ...until done
 ```
 
-Every step produces a markdown document you review and approve before moving on. Nothing happens without your sign-off. Before each document reaches you, sub-agent reviewers have already critiqued and improved it — and at every gate you get a ready-to-paste prompt to have the *other* client (Claude Code ↔ Codex) counter-review the work.
+An in-flight legacy task takes an explicit side path into a new task, then rejoins the ordinary PRD and design flow:
+
+```
+/archflow-upgrade .archflow/tasks/legacy-task new-task
+       |
+/archflow-prd new-task
+       |
+/archflow-design new-task
+```
+
+The phase skills marshal the MCP-backed workflow and stop at durable human approval gates. Before each document advances, self-review, independent counter-review, triage, and adjudication evidence must reach a fixed point. Every gate also offers an optional ready-to-run prompt for the configured opposite producer family.
 
 ## Install
 
@@ -28,16 +42,60 @@ cd ArchflowV2
 ./install.sh
 ```
 
-This installs both integrations:
+This verifies the tracked offline payload, installs the server and local-helper bundle under
+`${ARCHFLOW_HOME:-$HOME/.archflow}/bundle/`, creates `archflow-mcp` and `archflow-local`
+launchers under `${ARCHFLOW_BIN:-$HOME/.local/bin}/`, and installs both skill integrations:
 
 - Claude Code skills in `~/.claude/skills/`
 - Codex skills in `~/.agents/skills/`
 
-Install just one with `./install.sh --claude` or `./install.sh --codex`. Restart Codex after installing if the skills are not listed yet.
+The launcher directory must already be on `PATH`; otherwise the installer prints the exact
+`export PATH=...` line and stops. Install just one skill integration with
+`./install.sh --claude` or `./install.sh --codex`. Restart Codex after installing if the skills
+are not listed yet.
+
+From the repository you want to initialize, run `/archflow-init` in Claude Code or
+`$archflow-init` in Codex. Initialization scaffolds the repository-owned ArchFlow assets and
+project MCP registrations, then reports the host approval/trust steps that still require you.
+It also creates `.archflow/.gitignore` with the single `/runtime/` rule and diagnoses whether that
+workspace is ignored and free of tracked files. It never edits the project root `.gitignore`.
+Initialization does not create a task, commit changes, or claim that host approval has completed.
+
+Use `/archflow-constitution` (or `$archflow-constitution` in Codex) to understand or configure the repository-wide rules in `.archflow/constitution/`. Configure policy on the repository's policy/base branch before starting affected tasks; existing tasks remain bound to the constitution at their pinned policy-base commit.
+
+> **Self-hosting note:** Phase 19 ships and proves the legacy upgrade path, while this repository deliberately finishes its own `mcp-integration` task under the legacy system. For any in-flight legacy task, either finish it with the legacy tooling or run `archflow-upgrade` into a distinct new task. ArchFlow never performs a silent in-place conversion.
 
 ## Usage
 
-### 1. Explore (optional)
+### 1. Initialize
+
+From the repository you want ArchFlow to manage:
+
+```
+/archflow-init
+```
+
+In Codex, run `$archflow-init`. Review and commit the repository assets before creating a task; initialization itself creates no task and makes no commit.
+
+### 2. Configure Constitution Rules (optional)
+
+```
+/archflow-constitution
+```
+
+Explains the constitution, inspects the current numbered rule files, and helps add, revise, or deprecate repository policy. It edits Markdown configuration only: there is no constitution CLI or automatic commit. In Codex, run `$archflow-constitution`.
+
+### 3. Upgrade an In-Flight Legacy Task
+
+Choose this path instead of silently converting an existing task:
+
+```
+/archflow-upgrade .archflow/tasks/legacy-task new-task
+```
+
+In Codex, run `$archflow-upgrade .archflow/tasks/legacy-task new-task`. The source and destination must be in the same repository, and the destination must be a distinct task. The skill stages the selected legacy bytes without modifying the source, initializes the new task, reruns the canonical PRD and design approval pipelines, opens the migration audit, and resumes at the phase derived from imported implementation logs. Use its explicit exclusion list when you intend to redo the last implemented phase. Legacy documents and reviews remain historical material, never approval evidence.
+
+### 4. Explore (optional)
 
 Map an existing codebase before starting work:
 
@@ -50,98 +108,101 @@ In Codex, replace the leading `/` with `$`; for example, `$archflow-explore`.
 
 Produces `.archflow/context/` reference docs that all other skills use.
 
-Context is per-repo. When the session is a multi-root workspace — a primary director plus additional repos added as extra folders — each repo can carry its own `.archflow/context/` (run explore against each). The task's `.archflow/tasks/` tree lives in one repo, but every skill reads context documents from all workspace repos.
-
-### 2. Define Requirements
+### 5. Define Requirements
 
 ```
 /archflow-prd my-feature
 ```
 
-Interactive conversation to gather requirements, followed by automated research. Produces a PRD at `.archflow/tasks/my-feature/prd.md`. Review it, request changes, or approve.
+Creates or revises `.archflow/tasks/my-feature/prd.md`, then drives its review evidence and explicit artifact-approval gate.
 
-The PRD records an **operating envelope** — realistic scale, criticality, and threat model. Everything downstream is designed and reviewed against it, so the architecture solves the problem you actually have instead of one a thousand times larger.
-
-### 3. Design Architecture
+### 6. Design Architecture
 
 ```
 /archflow-design my-feature
 ```
 
-Explores the codebase, discusses key decisions with you, then designs the technical architecture with a phased implementation plan. Produces `.archflow/tasks/my-feature/architecture.md`.
+Creates or revises the technical design and phase plan at `.archflow/tasks/my-feature/design.md`, then drives its review evidence and explicit artifact-approval gate. Finite plans use consecutive exact `### Phase N: Name` headings starting at 1. An intentionally open-ended plan instead uses `<!-- archflow:phase-plan:open-ended -->` with no phase headings; malformed or ambiguous plans cannot be approved.
 
-This is where phases get right-sized, and that sizing is the contract for everything after it.
-
-### 4. Design Each Phase
+### 7. Design Each Phase
 
 ```
 /archflow-phase-design my-feature 1
 ```
 
-Explores the codebase, drafts the phase design, runs a sub-agent review loop on it, then presents it with a ready-to-paste counter-review prompt for the other client. Findings land in `.archflow/tasks/my-feature/reviews/` and get triaged into the design. You approve when it's right.
+Creates or revises `.archflow/tasks/my-feature/phases/1/design.md` and drives review, triage, adjudication, and any required human gate. It reports `DESIGNED` only when durable state proves the fixed point is closed.
 
-Phase design works inside the boundary the architecture set — it doesn't re-cut it. Phases are sized so each fits one implementation session, orchestrated through sub-agents, without context compaction; a phase that turns out not to fit even when fully delegated is a rare, user-approved amendment to the architecture rather than a routine split.
+Phases are sized to the implementation budget: each must fit one implementation session — orchestrated through sub-agents — without context compaction. If a design reveals more work than fits, the phase gets split and the technical design is updated.
 
-### 5. Implement Each Phase
+### 8. Implement Each Phase
 
 ```
 /archflow-phase-impl my-feature 1
 ```
 
-Run this in a **fresh session** so the whole phase gets a clean context. It reads only the approved design and its inputs, then: **implement** (sub-agent delegation by default) -> **verify** (agent runs the checks, you review the evidence) -> **counter-review** (optional cross-client review of the diff) -> **log** (capture learnings) -> **commit**.
+Run this in a **fresh session** so the whole phase gets a clean context. It implements the approved phase, verifies the result, and records `.archflow/tasks/my-feature/phases/1/impl-notes.md`. It stages or commits nothing until an explicit commit-authorization decision is bound to the current diff.
 
-Later phases read the up-to-date architecture doc and the latest log so they don't repeat mistakes and build on established patterns.
+Later phases read the up-to-date `design.md` and prior `impl-notes.md` so they build on current decisions and interfaces.
 
-### 6. Check Status
+### 9. Check Status
 
 ```
 /archflow-status
 /archflow-status my-feature
 ```
 
-See where things stand and what to do next.
+See reconciled durable state and exactly one next action for each task.
 
 ## File Structure
 
-All planning artifacts live in `.archflow/` within your project:
+ArchFlow keeps tracked workflow authority and ignored local runtime data together under `.archflow/`:
 
 ```
 .archflow/
-  context/                          # Shared codebase references
-    architecture.md
-    patterns.md
-    dependencies.md
+  .gitignore                         # Contains only: /runtime/
+  config.yaml                       # Repository task-config template
+  workflow.yaml                     # Canonical phase graph
+  constitution/                     # Repository-owned policy rules
   tasks/
     my-feature/                     # One directory per task
+      config.yaml                   # Versioned task configuration
+      state.json                    # Durable workflow authority
       prd.md                        # Product requirements
-      architecture.md               # Technical design + phase plan
-      reviews/                      # Cross-client counter-reviews + triage
-        prd-counter-review.md
-        phase-1-design-counter-review.md
-        phase-1-impl-counter-review.md
+      design.md                     # Technical design + phase plan
       phases/
-        phase-1-setup.md            # Phase design doc
-        phase-1-setup-log.md        # Implementation learnings
-        phase-2-core.md
-        phase-2-core-log.md
+        1/
+          design.md                 # Phase design
+          impl-notes.md             # Implementation notes
+        2/
+          design.md
+          impl-notes.md
+      authority/
+        initialization.json         # Adopted initialization authority
+        results/<digest>.json       # Current immutable result manifests
+        decisions/<gate-id>/        # State-referenced requests and decisions
+  runtime/                          # Entire ignored, reconstructible workspace
+    tasks/my-feature/
+      transient/                    # Staged requests, receipts, transaction lock
+      cache/                        # Payloads, rendered reviews/gates, verification, imports
+      diagnostics/attempts/         # Current-phase failed dispatch evidence
 ```
 
-Planning docs are tracked in git during development to preserve progress across sessions. Remove `.archflow/` before creating a PR.
+Durable documents and authority are tracked on the working branch during development to preserve
+the last checked-in workflow boundary across sessions and fresh clones. The ignored `runtime/` tree is
+only a cache and may be regenerated or cleaned with `archflow-local clean --task <id>`. Remove
+`.archflow/` before creating the final product PR, as before.
 
 ## Key Design Decisions
 
 - **Human-in-the-loop**: You review and approve at every stage — the agent does the labor (including running verification), you exercise the judgment
-- **Reviewed before you see it**: Every document (PRD, architecture, phase design) goes through a sub-agent review before reaching your gate — fresh-context critics find gaps, the author triages and revises
-- **Rubrics with review-time budgets**: Each artifact states what good looks like — a PRD reads in 5–10 minutes; an architecture in under 10, carried by mermaid diagrams and concrete data-model/API contracts — and writers draft to that bar before reviewers ever see it
-- **Review has a materiality bar**: Reviewers report only what changes what gets built, at two severities (blocker, major). Wording, naming, and polish are never findings, "nothing material" is a valid result, and a second round happens only when revisions actually changed the document's shape — so review converges instead of looping
-- **Built for your actual scale**: The PRD fixes an operating envelope — scale, criticality, threat model — and every design and reviewer is held to it. Over-engineering counts as a defect, weighted the same as a gap
-- **Cross-client counter-review**: Every gate emits a ready-to-paste prompt so the other client (Claude Code ↔ Codex) can review the document or diff with a different model; findings land in `reviews/` and get triaged explicitly
-- **Sized to the context budget, once**: A phase must finish — implementation plus verification — inside one session's context window without compaction. Implementation delegates chunks to sub-agents by default, which keeps the orchestrator's window lean (a delegated chunk costs it a few thousand tokens instead of tens of thousands). Sizing is decided in the architecture and holds from there; later re-splitting is an exception, not a step
-- **Inter-phase learning**: Each phase writes a log of decisions, patterns, gotchas, and interfaces. The architecture doc absorbs deviations so later phases read current truth, not a log pile; durable conventions get promoted to the project's CLAUDE.md.
-- **Plan stays accurate**: After each phase, the architecture doc and PRD are updated to reflect what actually happened, not just what was planned.
+- **Durable review fixed point**: Every document records self-review plus a configured opposite-producer-family counter-review, then durable triage and adjudication resolve the findings before the workflow can advance
+- **Optional gate review**: Every human gate offers a ready-to-run prompt for an additional opposite-producer-family review; the human decides whether to run it, and any resulting findings are durably triaged before the gate resolves
+- **Sized to the context budget**: A phase must finish — implementation plus verification — inside one session's context window without compaction. Implementation delegates chunks to sub-agents by default, which keeps the orchestrator's window lean (a delegated chunk costs it a few thousand tokens instead of tens of thousands)
+- **Inter-phase learning**: Each phase writes `impl-notes.md` with decisions, patterns, gotchas, and interfaces. The technical design absorbs deviations so later phases read current truth; durable conventions get promoted to the project's CLAUDE.md.
+- **Plan stays accurate**: After each phase, `design.md` and `prd.md` are updated to reflect what actually happened, not just what was planned.
 - **Resumable**: If you lose context mid-phase, re-run the skill and it picks up where you left off.
 - **Task isolation**: Each task is independent. Deleting one has zero impact on others.
 
 ## Detailed Process Documentation
 
-See [docs/archflow-process.md](docs/archflow-process.md) for detailed flowcharts, state machines, and the full sub-agent architecture.
+See [docs/OVERVIEW.md](docs/OVERVIEW.md) for the maintained documentation set — the whole-system map, the workflow lifecycle and gates (`docs/workflow/`), and per-subsystem pages for the MCP server, CLI, review pipeline, contracts, and durable state.

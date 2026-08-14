@@ -1,0 +1,983 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:gate-contract",
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "\\S"
+    },
+    "safeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "rule": {
+      "type": "object",
+      "properties": {
+        "rule_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+        },
+        "rule_version": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "rule_id",
+        "rule_version"
+      ],
+      "additionalProperties": false
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rule"
+      }
+    },
+    "waiverScope": {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "review-trigger",
+            "adjudication-failure"
+          ]
+        },
+        "boundary": {
+          "type": "string",
+          "enum": [
+            "subject",
+            "phase",
+            "task"
+          ]
+        }
+      },
+      "required": [
+        "operation",
+        "boundary"
+      ],
+      "additionalProperties": false
+    },
+    "eligibleWaiver": {
+      "type": "object",
+      "properties": {
+        "rule": {
+          "$ref": "#/$defs/rule"
+        },
+        "scope": {
+          "$ref": "#/$defs/waiverScope"
+        }
+      },
+      "required": [
+        "rule",
+        "scope"
+      ],
+      "additionalProperties": false
+    },
+    "eligibleWaivers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/eligibleWaiver"
+      }
+    },
+    "authorityLink": {
+      "type": "object",
+      "properties": {
+        "link_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "purpose": {
+          "type": "string",
+          "const": "restore-adoption"
+        },
+        "proposed_generation_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "changed_input_fingerprint": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "link_digest",
+        "purpose",
+        "proposed_generation_digest",
+        "changed_input_fingerprint"
+      ],
+      "additionalProperties": false
+    },
+    "artifactApprovalContext": {
+      "type": "object",
+      "properties": {
+        "artifact_kind": {
+          "type": "string",
+          "enum": [
+            "prd",
+            "design",
+            "phase-design",
+            "phase-implementation"
+          ]
+        }
+      },
+      "required": [
+        "artifact_kind"
+      ],
+      "additionalProperties": false
+    },
+    "designApprovalContext": {
+      "type": "object",
+      "properties": {
+        "artifact_kind": {
+          "type": "string",
+          "enum": [
+            "design",
+            "phase-design"
+          ]
+        },
+        "constitution": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        "policy_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule_id": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+              },
+              "rule_version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "compliance": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail",
+                  "uncertain"
+                ]
+              },
+              "rationale": {
+                "$ref": "#/$defs/text"
+              },
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "not-matched",
+                  "matched",
+                  "uncertain"
+                ]
+              },
+              "trigger_evidence": {
+                "$ref": "#/$defs/text"
+              }
+            },
+            "required": [
+              "rule_id",
+              "rule_version",
+              "compliance",
+              "rationale",
+              "trigger",
+              "trigger_evidence"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "eligible_waivers": {
+          "$ref": "#/$defs/eligibleWaivers"
+        },
+        "target_ref": {
+          "$ref": "#/$defs/text"
+        },
+        "baseline_commit": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
+        "commit_message": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "artifact_kind",
+        "constitution",
+        "policy_findings",
+        "eligible_waivers",
+        "target_ref",
+        "baseline_commit",
+        "commit_message"
+      ],
+      "additionalProperties": false
+    },
+    "constitutionReviewContext": {
+      "type": "object",
+      "properties": {
+        "constitution": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "uncertain"
+          ]
+        },
+        "failed_rules": {
+          "$ref": "#/$defs/rules"
+        },
+        "uncertain_rules": {
+          "$ref": "#/$defs/rules"
+        },
+        "matched_trigger_rules": {
+          "$ref": "#/$defs/rules"
+        },
+        "uncertain_trigger_rules": {
+          "$ref": "#/$defs/rules"
+        },
+        "eligible_waivers": {
+          "$ref": "#/$defs/eligibleWaivers"
+        }
+      },
+      "required": [
+        "constitution",
+        "failed_rules",
+        "uncertain_rules",
+        "matched_trigger_rules",
+        "uncertain_trigger_rules",
+        "eligible_waivers"
+      ],
+      "additionalProperties": false
+    },
+    "materialDriftContext": {
+      "type": "object",
+      "properties": {
+        "affected_upstream": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "prd",
+                "architecture",
+                "phase-design",
+                "implementation-result",
+                "review",
+                "adjudication",
+                "constitution",
+                "workflow",
+                "import"
+              ]
+            },
+            "digest": {
+              "$ref": "#/$defs/digest"
+            }
+          },
+          "required": [
+            "kind",
+            "digest"
+          ],
+          "additionalProperties": false
+        },
+        "drift": {
+          "type": "string",
+          "const": "material"
+        },
+        "affected_claim_ids": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+          }
+        }
+      },
+      "required": [
+        "affected_upstream",
+        "drift",
+        "affected_claim_ids"
+      ],
+      "additionalProperties": false
+    },
+    "attemptsExhaustedContext": {
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "string",
+          "enum": [
+            "produce",
+            "counter_review",
+            "triage",
+            "adjudicate"
+          ]
+        },
+        "attempts": {
+          "$ref": "#/$defs/safeInteger"
+        },
+        "maximum_attempts": {
+          "$ref": "#/$defs/safeInteger"
+        }
+      },
+      "required": [
+        "step",
+        "attempts",
+        "maximum_attempts"
+      ],
+      "additionalProperties": false
+    },
+    "constitutionEditContext": {
+      "type": "object",
+      "properties": {
+        "pinned_constitution_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "current_constitution_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "changed_path_class": {
+          "type": "string",
+          "const": "task-branch-constitution"
+        }
+      },
+      "required": [
+        "pinned_constitution_digest",
+        "current_constitution_digest",
+        "changed_path_class"
+      ],
+      "additionalProperties": false
+    },
+    "commitAuthorizationContext": {
+      "type": "object",
+      "properties": {
+        "target_ref": {
+          "$ref": "#/$defs/text"
+        },
+        "diff_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "current_artifact_digests": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/digest"
+          }
+        },
+        "parent_document_digests": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/digest"
+          }
+        }
+      },
+      "required": [
+        "target_ref",
+        "diff_digest",
+        "current_artifact_digests",
+        "parent_document_digests"
+      ],
+      "additionalProperties": false
+    },
+    "restoreCollisionContext": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskPathClaim"
+        },
+        "recorded_generation_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "current_generation_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "adoption_candidate": {
+          "$ref": "#/$defs/authorityLink"
+        }
+      },
+      "required": [
+        "path",
+        "recorded_generation_digest",
+        "current_generation_digest"
+      ],
+      "additionalProperties": false
+    },
+    "migrationAuditContext": {
+      "type": "object",
+      "properties": {
+        "source_identity_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "destination_identity_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "import_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "code_baseline_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "policy_baseline_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "resume_phase": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+        },
+        "planned_final_phase": {
+          "$ref": "#/$defs/safeInteger"
+        },
+        "imported_documents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+              },
+              "content_digest": {
+                "$ref": "#/$defs/digest"
+              }
+            },
+            "required": [
+              "path",
+              "content_digest"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "target_ref": {
+          "$ref": "#/$defs/text"
+        },
+        "baseline_commit": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+        },
+        "commit_message": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "source_identity_digest",
+        "destination_identity_digest",
+        "import_digest",
+        "code_baseline_digest",
+        "policy_baseline_digest"
+      ],
+      "additionalProperties": false
+    },
+    "artifactApprovalDecision": {
+      "type": "object",
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": [
+            "approve",
+            "revise",
+            "reject"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "decision",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "designApprovalDecision": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "enum": [
+                "approve",
+                "revise",
+                "reject"
+              ]
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "decision",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "const": "waiver-requested"
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            },
+            "rule": {
+              "$ref": "#/$defs/rule"
+            },
+            "operation": {
+              "type": "string",
+              "enum": [
+                "review-trigger",
+                "adjudication-failure"
+              ]
+            },
+            "rationale": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "decision",
+            "reason",
+            "rule",
+            "operation",
+            "rationale"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "constitutionReviewDecision": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "enum": [
+                "approve",
+                "revise",
+                "reject"
+              ]
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "decision",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "const": "waiver-requested"
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            },
+            "rule": {
+              "$ref": "#/$defs/rule"
+            },
+            "operation": {
+              "type": "string",
+              "enum": [
+                "review-trigger",
+                "adjudication-failure"
+              ]
+            },
+            "rationale": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "decision",
+            "reason",
+            "rule",
+            "operation",
+            "rationale"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "materialDriftDecision": {
+      "type": "object",
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": [
+            "amend-upstream",
+            "revise-current",
+            "reject"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "decision",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "attemptsExhaustedDecision": {
+      "type": "object",
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": [
+            "retry-once",
+            "revise",
+            "abort"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "decision",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "constitutionEditDecision": {
+      "type": "object",
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": [
+            "revert-edit",
+            "start-base-amendment",
+            "abort"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "decision",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "commitAuthorizationDecision": {
+      "type": "object",
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": [
+            "authorize-commit",
+            "revise",
+            "abort"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "decision",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "restoreCollisionDecision": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "enum": [
+                "discard-and-restore",
+                "abort"
+              ]
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "decision",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "const": "adopt-as-new-generation"
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            },
+            "adoption_authority": {
+              "$ref": "#/$defs/authorityLink"
+            },
+            "rationale": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "decision",
+            "reason",
+            "adoption_authority",
+            "rationale"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "migrationAuditDecision": {
+      "type": "object",
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": [
+            "accept-import-audit",
+            "revise",
+            "abort"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "decision",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "artifactApproval": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "artifact-approval"
+        },
+        "context": {
+          "$ref": "#/$defs/artifactApprovalContext"
+        },
+        "payload": {
+          "$ref": "#/$defs/artifactApprovalDecision"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "designApproval": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "design-approval"
+        },
+        "context": {
+          "$ref": "#/$defs/designApprovalContext"
+        },
+        "payload": {
+          "$ref": "#/$defs/designApprovalDecision"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "constitutionReview": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "constitution-review"
+        },
+        "context": {
+          "$ref": "#/$defs/constitutionReviewContext"
+        },
+        "payload": {
+          "$ref": "#/$defs/constitutionReviewDecision"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "materialDrift": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "material-drift"
+        },
+        "context": {
+          "$ref": "#/$defs/materialDriftContext"
+        },
+        "payload": {
+          "$ref": "#/$defs/materialDriftDecision"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "attemptsExhausted": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "attempts-exhausted"
+        },
+        "context": {
+          "$ref": "#/$defs/attemptsExhaustedContext"
+        },
+        "payload": {
+          "$ref": "#/$defs/attemptsExhaustedDecision"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "constitutionEdit": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "constitution-edit"
+        },
+        "context": {
+          "$ref": "#/$defs/constitutionEditContext"
+        },
+        "payload": {
+          "$ref": "#/$defs/constitutionEditDecision"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "commitAuthorization": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "commit-authorization"
+        },
+        "context": {
+          "$ref": "#/$defs/commitAuthorizationContext"
+        },
+        "payload": {
+          "$ref": "#/$defs/commitAuthorizationDecision"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "restoreCollision": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "restore-collision"
+        },
+        "context": {
+          "$ref": "#/$defs/restoreCollisionContext"
+        },
+        "payload": {
+          "$ref": "#/$defs/restoreCollisionDecision"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "migrationAudit": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "migration-audit"
+        },
+        "context": {
+          "$ref": "#/$defs/migrationAuditContext"
+        },
+        "payload": {
+          "$ref": "#/$defs/migrationAuditDecision"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "payload"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/artifactApproval"
+    },
+    {
+      "$ref": "#/$defs/designApproval"
+    },
+    {
+      "$ref": "#/$defs/constitutionReview"
+    },
+    {
+      "$ref": "#/$defs/materialDrift"
+    },
+    {
+      "$ref": "#/$defs/attemptsExhausted"
+    },
+    {
+      "$ref": "#/$defs/constitutionEdit"
+    },
+    {
+      "$ref": "#/$defs/commitAuthorization"
+    },
+    {
+      "$ref": "#/$defs/restoreCollision"
+    },
+    {
+      "$ref": "#/$defs/migrationAudit"
+    }
+  ]
+}

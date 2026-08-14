@@ -1,0 +1,406 @@
+import { z } from "zod";
+
+import type { GitOid } from "./canonical.js";
+import { gitOidV1Schema } from "./canonical.js";
+import type { PathSafeId, SafeCode, SafeId, SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
+import { pathSafeIdV1Schema, safeCodeV1Schema, safeIdV1Schema, safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
+import type { GateKind, WaiverScope } from "./gates.js";
+import { GATE_KINDS } from "./gates.js";
+import type { PlainJsonValue } from "./plain-json.js";
+import type { PhaseInstanceId } from "./phase-instance.js";
+import { phaseInstanceIdV1Schema } from "./phase-instance.js";
+import { isSortedUniqueBy, tupleKey } from "./validators.js";
+import type { PipelineStep } from "./vocabulary.js";
+import { PIPELINE_STEPS } from "./vocabulary.js";
+import type { ToolName } from "./tool-names.js";
+import { TOOL_NAMES } from "./tool-names.js";
+
+/**
+ * `state.json` — the durable state of truth for one task.
+ *
+ * `taskStateV1Schema` below is a Zod *mirror* of `task-state.schema.json`, written so Zod can become
+ * the single shape authority; the JSON Schema stays the runtime-authoritative validator, and nothing
+ * in production parses state through this mirror yet. The mirror is a mirror and never a second
+ * model: `test/contracts/durable-state-agreement.test.ts` proves the two authorities accept and
+ * reject the same values, and `validateDurableSemantics` remains the sole authority for everything
+ * neither shape language expresses.
+ *
+ * Every type below is a `type` alias rather than an `interface` (D1): `CanonicalDocument<T extends
+ * PlainJsonValue>` grants the implicit index signature it needs only to aliases, and it checks the
+ * whole reachable graph, so an `interface` anywhere below the root fails the constraint at the root.
+ */
+
+export const STEP_STATUSES = ["running", "succeeded", "failed"] as const;
+export type StepStatus = (typeof STEP_STATUSES)[number];
+
+export const TERMINAL_STATES = ["complete", "abandoned"] as const;
+export type TerminalState = (typeof TERMINAL_STATES)[number];
+
+/**
+ * D21 — the four cross-shape reference shapes live here, with `task-state`, and
+ * `task-state.schema.json` owns each `$def`. They were briefly moved into `durable-primitives`
+ * when a *mirrored* `ManualCheckpointV1` also consumed them and needed a pinned Zod name to
+ * compose. The Phase 8 split removed that second consumer, so each is now consumed by exactly one
+ * unmirrored root. Phase 8 reaches them by `$ref` and authors its own mirrors then.
+ * The reason is recorded so they are not moved back on the strength of the retired rationale.
+ *
+ * Every digest field here is a *reference*, not authority: a digest-shaped string never establishes
+ * that its target exists. `result_digest` names a result manifest, `gate_id` names a decision
+ * record, and `validateDurableSemantics` resolves none of them — its subject has no slot that could
+ * carry the target. Each pointer's resolution belongs to the phase that materializes it.
+ */
+export type AuthoritativeResultRef = {
+  readonly phase_instance: PhaseInstanceId;
+  readonly step: PipelineStep;
+  readonly result_digest: Sha256Digest;
+  readonly result_id: SafeId;
+  readonly input_fingerprint: Sha256Digest;
+};
+
+export type ApprovalRef = {
+  readonly gate_id: PathSafeId;
+  readonly gate_kind: GateKind;
+  readonly subject_digest: Sha256Digest;
+  readonly decision_digest: Sha256Digest;
+  /** `>= 1`. `SafeInteger` admits `0` and there is no revision `0`, so the schema pins its own minimum (D8). */
+  readonly resolved_at_revision: SafeInteger;
+};
+
+export type OpenGateRef = {
+  readonly gate_id: PathSafeId;
+  readonly gate_kind: GateKind;
+  readonly subject_digest: Sha256Digest;
+  readonly context_digest: Sha256Digest;
+  /** Domain-separated digest of this open revision excluding `open_gate`. */
+  readonly frozen_state_digest: Sha256Digest;
+  /** Present only for a waiver gate and names the gate whose decision requested the waiver. */
+  readonly waiver_origin_gate_id?: PathSafeId;
+  /** `>= 1` (D8). */
+  readonly opened_at_revision: SafeInteger;
+};
+
+export const HUMAN_REVISION_CLASSIFICATIONS = ["simple", "significant"] as const;
+export type HumanRevisionClassification = (typeof HUMAN_REVISION_CLASSIFICATIONS)[number];
+export const HUMAN_REVISION_GATE_KINDS = [
+  "artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted",
+  "commit-authorization", "migration-audit",
+] as const satisfies readonly GateKind[];
+
+/**
+ * A human gate has requested changed bytes, but the producer has not recorded those bytes yet.
+ * The evidence snapshot is captured at the gate boundary so the later classification cannot
+ * silently preserve or archive a different review cycle.
+ */
+export type PendingHumanRevision = {
+  readonly gate_id: PathSafeId;
+  readonly gate_kind: GateKind;
+  readonly predecessor_subject_digest: Sha256Digest;
+  readonly predecessor_input_fingerprint: Sha256Digest;
+  readonly requested_at_revision: SafeInteger;
+  readonly attempt: SafeInteger;
+  readonly evidence: readonly AuthoritativeResultRef[];
+};
+
+/** Records the user's explicit override of the producer's initial complexity judgment. */
+export type HumanRevisionOverride = {
+  readonly agent_classification: HumanRevisionClassification;
+  readonly rationale: string;
+};
+
+/** Durable history for a completed human-requested revision. */
+export type HumanRevisionRecord = {
+  readonly phase_instance: PhaseInstanceId;
+  readonly gate_id: PathSafeId;
+  readonly gate_kind: GateKind;
+  readonly predecessor_subject_digest: Sha256Digest;
+  readonly predecessor_input_fingerprint: Sha256Digest;
+  readonly resulting_subject_digest: Sha256Digest;
+  readonly resulting_result_digest: Sha256Digest;
+  readonly classification: HumanRevisionClassification;
+  readonly rationale: string;
+  readonly user_override?: HumanRevisionOverride;
+  readonly previous_attempt: SafeInteger;
+  readonly resulting_attempt: SafeInteger;
+  /** Preserved for a simple revision and archived out of the current set for a significant one. */
+  readonly evidence: readonly AuthoritativeResultRef[];
+};
+
+/**
+ * `expires` is the const `"task-complete"` — the narrowest representation of the only expiry this
+ * project has. That is a *format* decision. Phase 12 records waiver scope; Phase 14 owns expiry
+ * policy enforcement.
+ */
+export type WaiverRef = {
+  readonly gate_id: PathSafeId;
+  readonly rule_id: SafeId;
+  /** `>= 1` (D8). */
+  readonly rule_version: SafeInteger;
+  readonly subject_digest: Sha256Digest;
+  readonly scope: WaiverScope;
+  readonly granted: boolean;
+  readonly expires: "task-complete";
+  /** `>= 1` (D8). */
+  readonly granted_at_revision: SafeInteger;
+};
+
+/**
+ * A self-contained record of the most recently committed mutation. Unlike the retired receipt
+ * pointer, this remains exactly replayable after transaction recovery files are removed.
+ */
+export type LastTransition = {
+  readonly schema_version: "1";
+  readonly tool: ToolName;
+  readonly operation: SafeCode;
+  readonly intent_id: PathSafeId;
+  readonly request_digest: Sha256Digest;
+  readonly input_fingerprint: Sha256Digest;
+  readonly result_id: SafeId;
+  readonly outcome: PlainJsonValue;
+  readonly outcome_digest: Sha256Digest;
+  /** `>= 0`; initialization may commit from the synthetic predecessor revision 0. */
+  readonly prior_revision: SafeInteger;
+  /** `>= 1`. */
+  readonly resulting_revision: SafeInteger;
+};
+
+/**
+ * The five pinned-input fields `repository_identity_digest`, `config_digest`, `workflow_digest`,
+ * `constitution_digest`, and `policy_base_commit` also live in whichever initialization document
+ * `initialization_digest` names. **The duplication is deliberate**: `archflow-status` reads
+ * `state.json` alone, without loading the initialization document (REQ-14, REQ-21). What keeps the
+ * two from disagreeing is not deduplication but comparison — `validateDurableSemantics` compares
+ * every one of them, one field at a time.
+ *
+ * **There is deliberately no recorded blocking reason (D13).** REQ-14's blocking reason is a
+ * *function* of `open_gate`, `terminal`, and attempt exhaustion; recording it would create a second
+ * source of truth that can disagree with the first. A receipt not yet referenced by state is
+ * deliberately invisible to state-only status until Phase 17 adds reconciliation-aware status.
+ */
+export type TaskStateV1 = {
+  readonly schema_version: "1";
+  readonly task_id: TaskSlug;
+  readonly repository_identity_digest: Sha256Digest;
+  /** `>= 1` (D8), strictly monotonic — the monotonicity is Phase 9's. */
+  readonly revision: SafeInteger;
+  readonly phase_instance: PhaseInstanceId;
+  readonly step: PipelineStep;
+  readonly status: StepStatus;
+  /** `>= 1` (D8). */
+  readonly attempt: SafeInteger;
+  /**
+   * D13 — the **in-flight** step's declared-input fingerprint, not a completed one's. Without it
+   * the in-flight fingerprint is unrepresentable and Phase 9 cannot raise
+   * `INPUT_FINGERPRINT_MISMATCH` *before* a transition. The per-result fingerprints are in
+   * `authoritative_results[*].input_fingerprint`.
+   */
+  readonly input_fingerprint: Sha256Digest;
+  /** The adopted task-initialization or legacy-import-initialization document. */
+  readonly initialization_digest: Sha256Digest;
+  readonly config_digest: Sha256Digest;
+  readonly workflow_digest: Sha256Digest;
+  readonly constitution_digest: Sha256Digest;
+  readonly policy_base_commit: GitOid;
+  /** SET — sorted by the tuple `(phase_instance, step)`, duplicates rejected. */
+  readonly authoritative_results: readonly AuthoritativeResultRef[];
+  /** SET — sorted by `gate_id`, duplicates rejected. */
+  readonly approvals: readonly ApprovalRef[];
+  /** SET — sorted by `gate_id`, duplicates rejected. */
+  readonly waivers: readonly WaiverRef[];
+  /**
+   * Human-approved final implementation phase from the current approved design's consecutive exact
+   * `### Phase N: Name` headings. Absence requires its explicit open-ended marker; design approval is
+   * the only normal-mode writer.
+   */
+  readonly planned_final_phase?: SafeInteger;
+  /**
+   * At most one, and a single optional object rather than an array: a nested or concurrent gate is
+   * *unrepresentable* rather than merely rejected. Phase 12 owns the one-active-gate lifecycle —
+   * when this may be set, cleared, or superseded. Phase 7 owns only the shape.
+   */
+  readonly open_gate?: OpenGateRef;
+  readonly pending_human_revision?: PendingHumanRevision;
+  readonly human_revision_history?: readonly HumanRevisionRecord[];
+  readonly last_transition?: LastTransition;
+  readonly terminal?: TerminalState;
+};
+
+const sha256Digest = sha256DigestV1Schema as unknown as z.ZodType<Sha256Digest>;
+
+/** Emitted as the `stepStatus` `$def`; the root reaches it by `$ref`. */
+export const stepStatusV1Schema = z.enum(STEP_STATUSES);
+
+/**
+ * Emitted as the `gateKind` `$def` — declared once and shared by `approvalRef` and `openGateRef`,
+ * exactly as the schema `$ref`s it from both, rather than two structurally equal enums.
+ */
+export const gateKindV1Schema = z.enum(GATE_KINDS);
+
+/**
+ * `>= 1` (D8) — mirrors every inline `{ "type": "integer", "minimum": 1, "maximum": 9007199254740991 }`
+ * in `task-state.schema.json`, which pins its own minimum rather than `$ref`ing `safeInteger`
+ * because `SafeInteger` admits `0` and there is no revision, attempt, phase, or rule version `0`.
+ */
+const positiveSafeInteger = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+
+/**
+ * Mirrors of the `$defs` this schema owns (D21), exported for schema generation only. Nothing else
+ * outside this module composes them: every other root reaches the shapes by `$ref` and authors its
+ * own mirror.
+ */
+export const authoritativeResultRefV1Schema = z.object({
+  phase_instance: phaseInstanceIdV1Schema,
+  step: z.enum(PIPELINE_STEPS),
+  result_digest: sha256Digest,
+  result_id: safeIdV1Schema,
+  input_fingerprint: sha256Digest,
+}).strict();
+
+export const approvalRefV1Schema = z.object({
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: gateKindV1Schema,
+  subject_digest: sha256Digest,
+  decision_digest: sha256Digest,
+  resolved_at_revision: positiveSafeInteger,
+}).strict();
+
+export const waiverRefV1Schema = z.object({
+  gate_id: pathSafeIdV1Schema,
+  rule_id: safeIdV1Schema,
+  rule_version: positiveSafeInteger,
+  subject_digest: sha256Digest,
+  scope: z.object({
+    operation: z.enum(["review-trigger", "adjudication-failure"]),
+    boundary: z.enum(["subject", "phase", "task"]),
+  }).strict(),
+  granted: z.boolean(),
+  expires: z.literal("task-complete"),
+  granted_at_revision: positiveSafeInteger,
+}).strict();
+
+export const openGateRefV1Schema = z.object({
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: gateKindV1Schema,
+  subject_digest: sha256Digest,
+  context_digest: sha256Digest,
+  frozen_state_digest: sha256Digest,
+  waiver_origin_gate_id: pathSafeIdV1Schema.optional(),
+  opened_at_revision: positiveSafeInteger,
+}).strict();
+
+export const humanRevisionClassificationV1Schema = z.enum(HUMAN_REVISION_CLASSIFICATIONS);
+
+export const humanRevisionOverrideV1Schema = z.object({
+  agent_classification: humanRevisionClassificationV1Schema,
+  rationale: z.string().min(1).max(4096).regex(/\S/u),
+}).strict();
+
+const humanRevisionEvidenceV1Schema = z.array(authoritativeResultRefV1Schema)
+  .refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "human revision evidence must be sorted by (phase_instance, step) with no duplicates")
+  .refine((items) => items.every((reference) =>
+    reference.step === "counter_review" || reference.step === "adjudicate" || reference.step === "triage"),
+  "human revision evidence must contain review, constitution, or triage results");
+
+export const pendingHumanRevisionV1Schema = z.object({
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: z.enum(HUMAN_REVISION_GATE_KINDS),
+  predecessor_subject_digest: sha256Digest,
+  predecessor_input_fingerprint: sha256Digest,
+  requested_at_revision: positiveSafeInteger,
+  attempt: positiveSafeInteger,
+  evidence: humanRevisionEvidenceV1Schema,
+}).strict() as unknown as z.ZodType<PendingHumanRevision>;
+
+export const humanRevisionRecordV1Schema = z.object({
+  phase_instance: phaseInstanceIdV1Schema,
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: z.enum(HUMAN_REVISION_GATE_KINDS),
+  predecessor_subject_digest: sha256Digest,
+  predecessor_input_fingerprint: sha256Digest,
+  resulting_subject_digest: sha256Digest,
+  resulting_result_digest: sha256Digest,
+  classification: humanRevisionClassificationV1Schema,
+  rationale: z.string().min(1).max(4096).regex(/\S/u),
+  user_override: humanRevisionOverrideV1Schema.optional(),
+  previous_attempt: positiveSafeInteger,
+  resulting_attempt: positiveSafeInteger,
+  evidence: humanRevisionEvidenceV1Schema,
+}).strict().superRefine((record, context) => {
+  if (record.user_override?.agent_classification === record.classification) {
+    context.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
+  }
+  if (record.classification === "simple" && record.previous_attempt !== record.resulting_attempt) {
+    context.addIssue({ code: "custom", path: ["resulting_attempt"], message: "a simple revision preserves its attempt" });
+  }
+  if (record.classification === "significant" && record.resulting_attempt !== 1) {
+    context.addIssue({ code: "custom", path: ["resulting_attempt"], message: "a significant revision resets to attempt 1" });
+  }
+  if (record.predecessor_subject_digest === record.resulting_subject_digest) {
+    context.addIssue({ code: "custom", path: ["resulting_subject_digest"], message: "a human revision must change the subject" });
+  }
+  if (record.evidence.some((reference) => reference.phase_instance !== record.phase_instance)) {
+    context.addIssue({ code: "custom", path: ["evidence"], message: "human revision evidence must belong to its phase" });
+  }
+}) as unknown as z.ZodType<HumanRevisionRecord>;
+
+/** Recursive JSON value used by `lastTransitionV1Schema`; overridden during JSON Schema emission. */
+export const lastTransitionOutcomeV1Schema = z.json();
+
+export const lastTransitionV1Schema = z.object({
+  schema_version: z.literal("1"),
+  tool: z.enum(TOOL_NAMES),
+  operation: safeCodeV1Schema,
+  intent_id: pathSafeIdV1Schema,
+  request_digest: sha256Digest,
+  input_fingerprint: sha256Digest,
+  result_id: safeIdV1Schema,
+  outcome: lastTransitionOutcomeV1Schema,
+  outcome_digest: sha256Digest,
+  prior_revision: safeIntegerV1Schema,
+  resulting_revision: positiveSafeInteger,
+}).strict() as unknown as z.ZodType<LastTransition>;
+
+/**
+ * The authority. Each of the three set fields calls `isSortedUniqueBy` with `tupleKey` over its
+ * pinned property list — the shared exported ordering predicates — so each ordering rule is
+ * literally one predicate across every shape. `.strict()` matches `additionalProperties: false`; absence is
+ * `.optional()` plus omission from `required`, never `null`.
+ */
+export const taskStateV1Schema = z.object({
+  schema_version: z.literal("1"),
+  task_id: taskSlugV1Schema,
+  repository_identity_digest: sha256Digest,
+  revision: positiveSafeInteger,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: z.enum(PIPELINE_STEPS),
+  status: stepStatusV1Schema,
+  attempt: positiveSafeInteger,
+  input_fingerprint: sha256Digest,
+  initialization_digest: sha256Digest,
+  config_digest: sha256Digest,
+  workflow_digest: sha256Digest,
+  constitution_digest: sha256Digest,
+  policy_base_commit: gitOidV1Schema,
+  authoritative_results: z.array(authoritativeResultRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "authoritative_results must be sorted by (phase_instance, step) with no duplicates"),
+  approvals: z.array(approvalRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "approvals must be sorted by gate_id with no duplicates"),
+  waivers: z.array(waiverRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "waivers must be sorted by gate_id with no duplicates"),
+  planned_final_phase: positiveSafeInteger.optional(),
+  open_gate: openGateRefV1Schema.optional(),
+  pending_human_revision: pendingHumanRevisionV1Schema.optional(),
+  human_revision_history: z.array(humanRevisionRecordV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates")
+    .optional(),
+  last_transition: lastTransitionV1Schema.optional(),
+  terminal: z.enum(TERMINAL_STATES).optional(),
+}).strict().superRefine((state, context) => {
+  const pending = state.pending_human_revision;
+  if (pending === undefined) return;
+  if (state.open_gate !== undefined || state.terminal !== undefined || state.step !== "produce" ||
+      state.status === "succeeded" || state.attempt !== pending.attempt ||
+      pending.requested_at_revision > state.revision ||
+      pending.evidence.some((reference) => reference.phase_instance !== state.phase_instance)) {
+    context.addIssue({ code: "custom", path: ["pending_human_revision"], message: "pending human revision does not match its active produce state" });
+  }
+}) as unknown as z.ZodType<TaskStateV1>;

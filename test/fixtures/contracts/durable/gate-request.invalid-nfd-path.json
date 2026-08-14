@@ -1,0 +1,37 @@
+{
+  "schema_version": "1",
+  "gate_id": "gate-restore-1",
+  "intent_id": "intent-1",
+  "request_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "task_id": "task-1",
+  "phase_instance": "phase-impl-2",
+  "summary": "Restore collision whose path claim is not Unicode NFC",
+  "subject_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "context_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "current_evidence": {
+    "set_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+    "slots": [
+      {
+        "role": "counter-review",
+        "evidence_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+        "assurance": "server-attested",
+        "producer_family": "claude",
+        "reviewer_family": "codex",
+        "independence": "opposite-family"
+      }
+    ]
+  },
+  "kind": "restore-collision",
+  "context": {
+    "path": "docs/re\u0301sume\u0301.md",
+    "recorded_generation_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "current_generation_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "allowed_decisions": [
+    "discard-and-restore",
+    "adopt-as-new-generation",
+    "abort",
+    "cancel"
+  ],
+  "opened_at_revision": 4
+}
