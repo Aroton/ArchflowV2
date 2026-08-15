@@ -1,0 +1,109 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 46,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 297145
+  },
+  "artifact_digest": "301e488547f8b1dee7854acaaf105e7d5100bd7decb3386c8066cc82229ddcf9",
+  "input_fingerprint": "3baa571cff52e0d4b1de357e23f61e0419a92dfec065850ba1c8722fd33f7d4e",
+  "outputs": [],
+  "phase_instance": "phase-design-1",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-b23304bc769535d1d496673ada34dddb",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.233",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "6b1efad4fb35d19d029f495eaee0031bd6c624806f7af2a9e6b8e6e90a35984b",
+      "input_fingerprint": "3baa571cff52e0d4b1de357e23f61e0419a92dfec065850ba1c8722fd33f7d4e",
+      "invocation_id": "adjudication-invocation-af8aa21c793f98b0726aa049c9bca9b1",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "828ab427a7072038ea7cc8c757ef68b1c543ac2c03219faee2d2b8815e616481",
+      "phase_instance": "phase-design-1",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-b23304bc769535d1d496673ada34dddb",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "No implementation is authorized ahead of approval of this design: Section 1 states the phase changes no production behavior, and Sections 1/3 forbid changes to src/**, generated schemas, the advertised four-tool surface, the 14-command CLI, registrations, timeouts, durable contracts, skills, release payloads, and dispatch. The verified repository state matches the constraining facts the design cites (four tools in src/contracts/tool-names.ts:1-6; CLAUDE_MCP_TIMEOUT_MS=3_600_000 and CODEX_TOOL_TIMEOUT_SEC=3_600 in src/init/registration.ts:9-10; the <130_000 fence and 105,478-byte note in test/contracts/mcp-advertised-schema.test.ts:357-358; five real-host files matching docs/TESTING.md:59), so the design does not depart from the architecture it inherits. Material deviation is handled rather than absorbed: Chunk E requires the writable task design to be updated in the same production result, with the deviation recorded explicitly before review, and Section 9 requires a no-go return to task design if transport, platform, or the constitution revision fails. Section 8's scope allowlist mechanically confines the phase's diff to task state, the named test/fixture files, the phase-1 validation docs, TESTING.md, and DEPENDENCIES.md.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The artifact is a phase design that authorizes implementation work (Section 3 deliverables, Section 5 chunks A-E) and asserts conformance to task design Sections 3.5, 5.1, 5.2, 5.7 and Section 10 Phase 1 scope."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "The artifact keeps every authority explicit and subject-bound. Section 1 requires the phase to finish only with a 'separately human-approved and committed constitution revision'; Chunk E stops after presenting the proposal and hands it to $archflow-constitution, stating that only that workflow may edit, approve, and commit the rule, and requires the approved bytes and commit to be recorded rather than the earlier proposal digest being silently substituted. Section 6 states plainly that the proposal and phase-design approval are not constitution approval. The proposed version-2 text itself preserves explicit authority: phase-design bytes always require explicit human approval; authority derives from exact approved artifacts and pinned policy; the coordinator stops for new scope, judgment, unsafe effects, uncertainty, failure, pause/cancel, and every next top-level kickoff; and missing, changed, deprecated, or mismatched bindings fail closed, with silence and agent prose never supplying authority. This task remains pinned to version 1 (Section 4 'policy', Section 7 criterion 5), which the checkout confirms is the active version. The derived decisions.phase_2_may_begin boolean is an acceptance-precondition observation computed from the recorded criteria, not a substitute for human approval or kickoff; Section 9 still requires Phase 2 to verify evidence and does not treat that flag as authority to advance.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "Chunk E drafts a version-2 'explicit-human-authority' rule granting stage-scoped delegation, and Section 4's 'policy' evidence group plus Section 7 criterion 5 govern how that authority is recorded; the pinned constitution at .archflow/constitution/00-process.md is version 1."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Non-success is preserved as a visible state with a safe next action throughout. A failed transport result is recorded as a go/no-go stop that updates the parent task design and does not authorize Phase 2 (Section 1, Chunk B). Unproven platforms are recorded as 'unsupported' with concrete missing or failed proofs, evidence from one OS never establishes another, and absent a separately executed macOS run macOS must be recorded unsupported (Sections 1, 4 'platforms', Chunk D). Section 3 forbids creating an empty or implied-success evidence file, and optional per-host extracts may exist only after the corresponding run occurred. Section 7 criterion 7 states a skip is recorded only as unsupported evidence, never as success, and Section 6 repeats that skipped tests are not passes. The decisions memo is required to explain failures and unsupported cases as plainly as successes, and a catalogue intent miss forces a fixture revision and complete rerun rather than a waived average (Chunk A).",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The phase is an evidence phase whose outcomes include failure states: Section 1 and Chunk B define transport no-go, Chunk D defines unsupported platforms, and Section 7 criterion 7 governs skips."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Task isolation is explicit: cross-task reads and writes are barred, the fixture server is prohibited from reading .archflow/tasks/**, the Section 8 scope allowlist confines changes to .archflow/tasks/api-refactor/** plus the named test, fixture, and doc paths, and Chunk D requires denial of home, CODEX_HOME, Claude config, Keychain, and reusable credential material to model tools. Evidence identifies exactly the bytes it governs: every record binds the source commit, dirty-path list, and a recursively derived execution-input manifest with per-file byte counts and SHA-256 plus one aggregate digest, and the catalogue result binds the fixture digest and a pinned byte-count formula. Mismatched or partial evidence fails closed for advancement: evidence-reuse mode recomputes all current digests and the catalogue byte count, Phase 2 must run that mode before consuming any output, and a mismatch forces rerun or stops the dependent design from treating the record as current (Sections 4, 6, 9). The narrower ordinary mode, which validates schema, internal aggregate consistency, decision derivation, and forbidden-field absence without comparing to the live worktree, does not weaken this because it never authorizes advancement on its own. Secret and cross-domain leakage is controlled by an allowlist of observation fields rather than post-hoc redaction, with owner-only raw material kept outside the repository and deleted after sanitized extraction.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "Section 3 states 'No other task's .archflow/tasks/** files may be read or changed'; Chunk A forbids the fixture server from reading .archflow/tasks/**; Section 4 defines digest bindings and staleness handling for the evidence record."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "616793e17e8af607bf9d8c7b49656a9bbd0299066c48d3663bf0d6fa3457b7f6",
+      "step": "adjudicate",
+      "subject_digest": "aa792c5e263e04e6c683e3febcfdd944eee48f8542a2887343710ef3387337c4",
+      "task_id": "api-refactor",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "api-refactor"
+}

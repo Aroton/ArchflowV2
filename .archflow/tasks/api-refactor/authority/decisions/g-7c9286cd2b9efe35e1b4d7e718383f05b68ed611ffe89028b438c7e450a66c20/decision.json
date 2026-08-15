@@ -1,0 +1,32 @@
+{
+  "context_digest": "085d02596b29693dd6092e0426c2cde4c82387f5b7468bcc5065de9ab3dc1bd8",
+  "envelope": {
+    "context_digest": "085d02596b29693dd6092e0426c2cde4c82387f5b7468bcc5065de9ab3dc1bd8",
+    "gate_id": "g-7c9286cd2b9efe35e1b4d7e718383f05b68ed611ffe89028b438c7e450a66c20",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "archflow-local",
+      "decision_event_id": "36218a77-0b7e-48b1-8cbf-ae5c59971095",
+      "helper_invocation_id": "31d35bb2-246b-41ec-b59c-be1bf511c985",
+      "recorded_at": "2026-08-15T04:42:47.640Z",
+      "schema_version": "1"
+    },
+    "kind": "design-approval",
+    "payload": {
+      "decision": "approve",
+      "reason": "Approve the reviewed Phase 1 design and authorize its task-local milestone commit."
+    },
+    "phase_instance": "phase-design-1",
+    "schema_version": "1",
+    "subject_digest": "aa792c5e263e04e6c683e3febcfdd944eee48f8542a2887343710ef3387337c4",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-7c9286cd2b9efe35e1b4d7e718383f05b68ed611ffe89028b438c7e450a66c20",
+  "kind": "design-approval",
+  "outcome": "decided",
+  "phase_instance": "phase-design-1",
+  "schema_version": "1",
+  "subject_digest": "aa792c5e263e04e6c683e3febcfdd944eee48f8542a2887343710ef3387337c4",
+  "task_id": "api-refactor"
+}
