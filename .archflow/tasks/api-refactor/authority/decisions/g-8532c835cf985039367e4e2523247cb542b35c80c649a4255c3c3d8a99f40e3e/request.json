@@ -1,0 +1,116 @@
+{
+  "allowed_decisions": [
+    "approve",
+    "revise",
+    "reject",
+    "waiver-requested",
+    "cancel"
+  ],
+  "context": {
+    "artifact_kind": "design",
+    "baseline_commit": "807b01de659bdde298a27e908050b062994545b8",
+    "commit_message": "ArchFlow: Approve api-refactor design",
+    "constitution": "pass",
+    "eligible_waivers": [
+      {
+        "rule": {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      },
+      {
+        "rule": {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        },
+        "scope": {
+          "boundary": "subject",
+          "operation": "review-trigger"
+        }
+      }
+    ],
+    "policy_findings": [
+      {
+        "compliance": "pass",
+        "rationale": "The artifact is a technical design that authorizes no implementation itself. Each phase is gated on its predecessor's evidence, removals (Phase 10) land only after their replacements are proven, and R1 authority is explicitly not self-granted: Phase 1 \"cannot approve that revision itself and stops pending $archflow-constitution\". Truthfulness of governing documents as work proceeds is preserved structurally — Section 5.9 requires parent-document synchronization inside the same phase commit \"because deviations must land with the work they describe\", Section 5.8 folds the co-produced parent documents and implementation log into one combined review subject digest so any code or document byte change stales the whole evidence set, and Section 5.4 keeps significant-revision attempt resets on the existing schema-enforced revision-history rules. Repository spot-checks (src/review/fixed-point.ts DEFAULT_MAX_ATTEMPTS = 3, the allow_claude_dispatch conditional in src/dispatch/cli.ts hard-coded true at src/mcp/handlers/counter-review.ts) confirm the design describes current code accurately rather than presuming unbuilt behavior. Nothing in the artifact begins implementation ahead of an approved phase design or departs materially from approved architecture without re-review.",
+        "rule_id": "approved-design-before-code",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "Section 10 sequences ten implementation phases, and Phase 1 explicitly scopes out \"any production code change; any behavior swap\"; Section 5.9 and Phase 1 verification defer the delegation-policy rule to the separate $archflow-constitution workflow, stating this task \"remains on human commit gates because its policy base predates the change\"."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Human authority is explicit and subject-bound throughout. Every top-level step requires a fresh archflow_start; active_step is set only by that entry and cleared at the durable stop, with negative tests asserting completion yields `ready` and no internal path invokes start (Sections 4.7, 8, Phase 5/6/7 evidence). Artifact approval binds to the exact bytes through the archived gate request rather than anything the client echoes (5.10), so agent prose cannot supply it. Decision bindings are re-derived from durable authority, refuse stale/re-rendered presentations and changed fence generations, and replay recorded outcomes idempotently (4.3); task and maintenance domains cannot authenticate one another. Waiver request and grant remain two distinct human decisions (3.6). The one place authority is delegated — coordinator-created phase commits (5.9) — is not inferred: it requires a separately approved repository constitution rule reached only via $archflow-constitution, an exact pinned {rule_id, version, rule_digest} match against the task's immutable policy base, plus the human's own phase-impl kickoff, with negative tests pinning that task-local approval, rule mismatch, deprecation, or a successor boundary never supplies it, and with commit-phase remaining human_required for this task (verified present in src/state/next-action.ts). Legacy gate resolution (Section 7) is narrowly confined to the effect the archived gate already enumerated and cannot infer kickoff authority from old state.",
+        "rule_id": "explicit-human-authority",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "The design defines the entire approval, kickoff, waiver, and commit-authority model: archflow_decide bindings (4.3), ActiveStepRef kickoff authority (4.7), delegated commit authority (5.9), and the R1 mapping in Section 6."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Non-success states stay visible with a safe next action. The WorkflowView vocabulary (4.2) carries explicit `escalated`, `paused`, `canceled`, and `blocked` states, and `blocked` always carries human-readable recovery direction rather than silently degrading; restart and upgrade needs surface as blocked rather than being hidden. Unavailable capability fails closed and says so: an unproven containment platform or missing proven provider path refuses all model-backed dispatch with an honest explanation and there is \"no unrestricted or flag-only reviewer fallback\" (3.5, 5.7); Windows is stated unsupported rather than quietly weakened. Ambiguous orphan recovery escalates to a doctor decision \"by design rather than by accident\" (Section 8). Adversarial containment tests are skipped-with-reason on platforms lacking the primitive, mirroring the runtime behavior instead of masking it. Section 8 also commits to fixing rather than concealing documentation inaccuracies found during exploration (stale tool-count comments, schema counts, the reconcile mislabel), and Section 9 preserves docs/validation/client-interface-audit.md as annotated point-in-time evidence rather than rewriting its claims.",
+        "rule_id": "honest-human-centered-outcomes",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "Section 3.5 states the honest containment boundary (\"does not defend against a hostile local admin\"), 5.4 routes an exhausted remediation budget to an attempts-exhausted escalation, 5.12 says cancel marks the step canceled \"without inventing completion\", and 5.1 makes Phase 1 a go/no-go that stops the refactor on failure."
+      },
+      {
+        "compliance": "pass",
+        "rationale": "Isolation and exact-subject binding are enforced at every new seam. Producer output admission validates declared paths against the kickoff envelope and refuses document entries naming state, config, runtime, evidence, decision, workflow, or another task path; reviewers get the coordinator-installed bytes and the current task's document bundle only, with the read-only view continuing to omit .archflow/tasks (4.6, 5.8). Evidence cannot be reused across bytes: the subject digest spans both code after-images and synchronized documents, so any byte change invalidates the whole evidence set, and the existing one-hop editorial rule in src/review/fixed-point.ts remains the sole path to reuse (Section 8). Stale or mismatched authority fails closed rather than advancing: worker results are refused unless their launch generation is still held (4.4), bindings whose presentation, state, or observed context changed are refused with a fresh view, maintenance proposals live at repository scope so a malformed task cannot poison them, and unknown durable schema versions or unresolvable reconciliation findings route to `blocked` with nothing partially adopted (Section 7). Cross-domain binding refusal and changed-observation invalidation are named Phase 9 evidence.",
+        "rule_id": "task-and-evidence-isolation",
+        "rule_version": 1,
+        "trigger": "matched",
+        "trigger_evidence": "Section 4.6 rejects \"any path outside the kickoff envelope (especially other tasks and server-owned .archflow state)\"; 4.3 defines domain-separated task and repository-maintenance bindings that \"cannot authenticate one another\"; 5.8 defines a combined review subject digest over implementation output and the co-produced document bundle."
+      }
+    ],
+    "target_ref": "refs/heads/feature/api-refactor"
+  },
+  "context_digest": "7dbc8ced6d9d4632c0bc3416f087b9bc4bc7b67222088e5a38ec9bc32d5bf338",
+  "current_evidence": {
+    "set_digest": "361f14cd798c6cbf8662b389af00a2d25f8625f90ffd75b26a0474f024058889",
+    "slots": [
+      {
+        "assurance": "server-attested",
+        "evidence_digest": "1fc1179309eb0f820da5e6eb7c81547dba79f1af878f867f91732207ab56398d",
+        "independence": "opposite-family",
+        "producer_family": "codex",
+        "reviewer_family": "claude",
+        "role": "counter-review"
+      }
+    ]
+  },
+  "gate_id": "g-8532c835cf985039367e4e2523247cb542b35c80c649a4255c3c3d8a99f40e3e",
+  "intent_id": "gate-20260814T225640-8ef9",
+  "kind": "design-approval",
+  "opened_at_revision": 36,
+  "phase_instance": "design",
+  "request_digest": "34efa17f2c61ddd8504a75419c87653fd9e0d937d0828dafa2fff4e78fc7dc8c",
+  "schema_version": "1",
+  "subject_digest": "d095d6dbfcf25d42a0af1dafdc16a9625cb5d38d2de791c3808b652180720a36",
+  "summary": "Approve the api-refactor technical design and its ten-phase implementation plan. The design replaces the protocol-heavy four-tool workflow with seven semantic MCP tools and an in-server coordinator, while preserving a fresh human kickoff for every top-level step and exact-byte approval at human boundaries. It keeps the existing durable state/review/commit kernel, adds a repository-wide held/released generation fence shared by both interim CLI and semantic paths, uses coordinator-only worktree and Git mutation, and defines crash-safe producer output as validated document sets or complete implementation after-images. Model-backed workers run behind fail-closed OS containment, provider-only networking, and a Phase 1-proven credential broker or ephemeral channel; unsupported adapters or platforms do not fall back to unrestricted execution. Implementation review binds source output together with the exact synchronized parent documents and implementation log, and maintenance decisions use separate repository-scoped authority that works without task state. Legacy tasks reconcile through explicit restart or a narrow exact-gate completion path without inventing kickoff authority. The plan has ten consecutive phases: real-host transport/containment spikes plus a separately approved constitution proposal; semantic contracts; repository fence/coordinator kernel; sandboxed dispatch; autonomous phase design; nonblocking decisions; autonomous phase implementation; semantic PRD/design facade; doctor and upgrade; then skill/CLI/tool retirement and documentation. The independent opposite-client remediation review passed with no findings, and the constitution review found the design aligned with all four active rules. Approval authorizes the exact task-local design milestone commit; it does not start implementation or approve any implementation phase design.",
+  "task_id": "api-refactor"
+}
