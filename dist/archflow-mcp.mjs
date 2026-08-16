@@ -36663,7 +36663,7 @@ var PROJECT_ERROR_DEFINITIONS = Object.freeze({
   PINNED_CONFIG_MISMATCH: defineError("policy", false, PROJECT_PARAMETER_SCHEMAS.PINNED_CONFIG_MISMATCH, "restore-pinned-config", "project"),
   STALE_SKILLS: defineError("policy", false, PROJECT_PARAMETER_SCHEMAS.STALE_SKILLS, "refresh-skills", "project"),
   STATE_MISSING: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.STATE_MISSING, "initialize-state", "project"),
-  STATE_INVALID: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.STATE_INVALID, "repair-state", "project"),
+  STATE_INVALID: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.STATE_INVALID, "inspect-current-state", "project"),
   TRANSITION_INVALID: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.TRANSITION_INVALID, "select-valid-transition", "project"),
   INPUT_FINGERPRINT_MISMATCH: defineError("state", false, PROJECT_PARAMETER_SCHEMAS.INPUT_FINGERPRINT_MISMATCH, "create-fresh-intent", "project"),
   STATE_CONFLICT: defineError("state", true, PROJECT_PARAMETER_SCHEMAS.STATE_CONFLICT, "reread-and-retry-intent", "project"),
@@ -53271,7 +53271,7 @@ var project_error_schema_default = {
         },
         next_action: {
           type: "string",
-          const: "repair-state"
+          const: "inspect-current-state"
         }
       },
       required: [
@@ -59230,14 +59230,16 @@ function documentProjectionDescriptors(artifact) {
     ...artifact.additional_documents ?? []
   ]);
 }
+function produceOwnedTaskDocumentPaths(artifact) {
+  if (artifact.artifact_kind === "document") {
+    return Object.freeze(documentProjectionDescriptors(artifact).map((entry) => entry.document_path));
+  }
+  const prefix = `.archflow/tasks/${artifact.task_id}/`;
+  return Object.freeze([...new Set(artifact.outputs.map((entry) => String(entry.path)).filter((path2) => path2.startsWith(prefix)).map((path2) => parseTaskPathClaim(path2.slice(prefix.length))))].sort((left, right) => left.localeCompare(right)));
+}
 function produceUpstreamBindingsForSubject(state, artifact) {
   const bindings = expectedProduceUpstreamBindings(state);
-  if (artifact.artifact_kind === "implementation-output") {
-    const prefix = `.archflow/tasks/${state.task_id}/`;
-    const coProduced = new Set(artifact.outputs.map((entry) => String(entry.path)).filter((path2) => path2.startsWith(prefix)).map((path2) => path2.slice(prefix.length)));
-    return Object.freeze(bindings.filter((binding) => !coProduced.has(binding.path)));
-  }
-  const owned = new Set(documentProjectionDescriptors(artifact).map((entry) => entry.document_path));
+  const owned = new Set(produceOwnedTaskDocumentPaths(artifact));
   return Object.freeze(bindings.filter((binding) => !owned.has(binding.path)));
 }
 async function readProduceProjection(runner, authority, subject, artifactPath) {
@@ -59262,7 +59264,7 @@ async function readProduceProjection(runner, authority, subject, artifactPath) {
   }
   return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ path: artifactPath, bytes, digest: digest10 }) });
 }
-async function readProduceProjectionSet(runner, authority, subject, selectedPath) {
+async function readProduceProjectionSet(runner, authority, subject, selectedPath, excludedPaths = []) {
   let paths;
   if ("imported_projection" in subject) {
     paths = [selectedPath];
@@ -59274,7 +59276,8 @@ async function readProduceProjectionSet(runner, authority, subject, selectedPath
       ...subject.artifact.parent_documents.filter((parent) => outputPaths.has(`${prefix}${parent.document_path}`)).map((parent) => parent.document_path)
     ])]);
   } else {
-    paths = documentProjectionDescriptors(subject.artifact).map((entry) => entry.document_path);
+    const excluded = new Set(excludedPaths);
+    paths = documentProjectionDescriptors(subject.artifact).map((entry) => entry.document_path).filter((path2) => path2 === selectedPath || !excluded.has(path2));
   }
   const projections = [];
   for (const path2 of paths) {
@@ -63795,6 +63798,7 @@ async function resolveRepositoryViewCommit(runner, artifact) {
 async function deriveApprovedUpstreams(services, toolName, durable, subject) {
   const derived = [];
   const seenOwners = /* @__PURE__ */ new Set();
+  const coProducedPaths = produceOwnedTaskDocumentPaths(subject.artifact);
   for (const binding of produceUpstreamBindingsForSubject(durable, subject.artifact)) {
     const upstream = await loadProduceUpstreamSubject(services.dependencies, services.authority, durable, binding);
     if (!upstream.ok) return upstream;
@@ -63803,7 +63807,8 @@ async function deriveApprovedUpstreams(services, toolName, durable, subject) {
       services.runner,
       services.authority,
       upstream.value,
-      binding.path
+      binding.path,
+      coProducedPaths
     );
     if (!upstreamProjections.ok) return upstreamProjections;
     let text4;

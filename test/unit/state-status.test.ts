@@ -302,7 +302,7 @@ describe("computeTaskStatus", () => {
           error: {
             code: "STATE_INVALID",
             diagnostic: { parameters: { issue_code: "gate-approval-request-invalid" } },
-            next_action: "repair-state",
+            next_action: "inspect-current-state",
           },
         }],
       },

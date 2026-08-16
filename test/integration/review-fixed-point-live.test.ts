@@ -31,6 +31,7 @@ import { ensurePayloadParent, ensureResultDirectory } from "../../src/state/layo
 import { installSnapshot } from "../../src/state/snapshots.js";
 import { readTaskConfig } from "../../src/state/read.js";
 import { loadCurrentReviewSet, loadRetainedEvidence } from "../../src/state/evidence-results.js";
+import { computeTaskStatus } from "../../src/state/status.js";
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
@@ -62,7 +63,7 @@ const rubric = {
   criteria: [{ id: "correctness", text: "Check the implementation.", blocking: true }],
 } as const;
 
-async function fixture() {
+async function fixture(options: Readonly<{ activeConstitution?: boolean }> = {}) {
   const root = realpathSync(await mkdtemp(join(tmpdir(), "archflow-live-fixed-point-")));
   roots.push(root);
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env: environment });
@@ -72,10 +73,9 @@ async function fixture() {
   cpSync(join(process.cwd(), "assets", "constitution"), join(root, ".archflow", "constitution"), { recursive: true });
   rmSync(join(root, ".archflow", "constitution"), { recursive: true, force: true });
   mkdirSync(join(root, ".archflow", "constitution"), { recursive: true });
-  // Deliberately no active rules: these regressions target the state/evidence pipeline, so the
-  // merged counter-review must report the constitution review as not-run instead of launching
-  // the second, adjudicating dispatch.
-  writeFileSync(join(root, ".archflow", "constitution", "00-review.md"), `---\nid: review-implementation\nversion: 1\nstatus: deprecated\n---\nReview the retained implementation subject.\n`);
+  // Most regressions need only the rubric review. The compound-owner regression opts into the
+  // constitution path because approved upstream material is assembled for that second dispatch.
+  writeFileSync(join(root, ".archflow", "constitution", "00-review.md"), `---\nid: review-implementation\nversion: 1\nstatus: ${options.activeConstitution === true ? "active" : "deprecated"}\n---\nReview the retained implementation subject.\n`);
   writeFileSync(join(root, ".archflow", "tasks", task, "config.yaml"), configYaml);
   writeFileSync(join(root, "tracked.txt"), "root\n");
   execFileSync("git", ["add", ".archflow/workflow.yaml", ".archflow/constitution", "tracked.txt"], { cwd: root, env: environment });
@@ -399,17 +399,30 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
     });
   });
 
-  it("closes the real handler pipeline on the retained produce artifact digest", async () => {
-    const h = await fixture();
+  it("reviews a phase implementation that co-produces its compound owner's phase design", async () => {
+    const h = await fixture({ activeConstitution: true });
     const documentPath = parseTaskPathClaim("phases/17/impl-notes.md");
+    const phaseDesignPath = parseTaskPathClaim("phases/17/design.md");
+    const designPath = parseTaskPathClaim("design.md");
+    const prdPath = parseTaskPathClaim("prd.md");
     mkdirSync(join(h.root, ".archflow", "tasks", task, "phases", "17"), { recursive: true });
     mkdirSync(join(h.root, ".archflow", "tasks", task, "reviews"), { recursive: true });
     await writeFile(join(h.root, ".archflow", "tasks", task, documentPath), "implemented change\n");
+    await writeFile(join(h.root, ".archflow", "tasks", task, prdPath), "approved requirements\n");
+    await writeFile(join(h.root, ".archflow", "tasks", task, designPath), "approved task design\n");
+    await writeFile(join(h.root, ".archflow", "tasks", task, phaseDesignPath), "approved phase design\n");
 
     const initial = h.services.state!.value;
     const upstreamSpecs = [
-      { phase_instance: encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(17) }), path: parseTaskPathClaim("phases/17/design.md"), artifact_kind: "phase-design" as const },
-      { phase_instance: encodePhaseInstance({ kind: "design" }), path: parseTaskPathClaim("design.md"), artifact_kind: "design" as const },
+      {
+        phase_instance: encodePhaseInstance({ kind: "design" }), path: designPath,
+        artifact_kind: "design" as const, additional_paths: [prdPath],
+      },
+      {
+        phase_instance: encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(17) }),
+        path: phaseDesignPath, artifact_kind: "phase-design" as const,
+        additional_paths: [designPath, prdPath],
+      },
     ];
     const upstreamReferences = [];
     let retainedBytes = parseSafeInteger(0);
@@ -420,11 +433,9 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
       }),
     };
     for (const [index, spec] of upstreamSpecs.entries()) {
-      const absolute = join(h.services.authority.task_root, spec.path);
-      mkdirSync(join(absolute, ".."), { recursive: true });
-      await writeFile(absolute, `approved ${spec.artifact_kind} upstream\n`);
       const artifact = await buildDocumentArtifact(h.services.runner, h.services.authority, {
         phase_instance: spec.phase_instance, step: "produce", document_path: spec.path,
+        additional_document_paths: spec.additional_paths,
         declared_inputs: [], input_fingerprint: initial.input_fingerprint,
       });
       if (!artifact.ok) throw new Error(artifact.error.code);
@@ -433,7 +444,7 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
         artifact: artifact.value,
         result_id: parseSafeId(`upstream-result-${index}`),
         retained_task_bytes: retainedBytes,
-        measured_at_revision: parseSafeInteger(4),
+        measured_at_revision: parseSafeInteger(2 + index),
         scanner,
       });
       if (!prepared.ok) throw new Error(prepared.error.code);
@@ -493,20 +504,58 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
       authoritative_results: approvalState.authoritative_results,
     };
     await writeFile(h.services.authority.state.absolute, canonicalDocument(produceRunning).bytes);
-    const placeholder = await buildDocumentArtifact(h.services.runner, h.services.authority, {
-      phase_instance: phase, step: "produce", document_path: documentPath,
-      declared_inputs: [], input_fingerprint: initial.input_fingerprint,
+    // This is the human-requested "amend the design, not the code" shape. The retained phase
+    // design above still owns the unchanged design.md sibling, while the implementation output
+    // now owns the amended phase-design bytes.
+    await writeFile(join(h.root, ".archflow", "tasks", task, phaseDesignPath), "amended phase design\n");
+    await writeFile(join(h.root, "tracked.txt"), "implemented behavior\n");
+    // The reviewer fixture lives in the disposable repository root. Materialize its paths before
+    // building the implementation manifest so the manifest's undeclared-change report and the
+    // handler's live verification observe the same Git working set.
+    const bin = join(h.root, "bin");
+    const sourceHome = join(h.root, "source-home");
+    mkdirSync(join(sourceHome, ".codex"), { recursive: true });
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(sourceHome, ".codex", "auth.json"), "{}\n");
+    writeFileSync(join(bin, "codex"), "");
+    const buildServices = await createProductionServices({
+      working_directory: h.root, task_id: task, operation: parseSafeCode("compound-implementation-build"),
     });
-    if (!placeholder.ok) throw new Error(placeholder.error.code);
+    if (!buildServices.ok) throw new Error(buildServices.error.code);
+    const outputPaths = [
+      parseRepositoryPathClaim("tracked.txt"),
+      parseRepositoryPathClaim(`.archflow/tasks/${task}/${phaseDesignPath}`),
+    ];
+    const placeholder = await buildImplementationOutput(
+      buildServices.value.dependencies,
+      buildServices.value.authority,
+      buildServices.value.state!,
+      {
+        phase_instance: phase,
+        step: "produce",
+        base_commit: initial.policy_base_commit,
+        outputs: outputPaths,
+        restore_targets: outputPaths,
+        parent_documents: [
+          { document_path: phaseDesignPath, role: "phase-design" },
+          { document_path: designPath, role: "design" },
+          { document_path: prdPath, role: "prd" },
+          { document_path: documentPath, role: "impl-notes" },
+        ],
+        declared_inputs: [],
+        input_fingerprint: initial.input_fingerprint,
+      },
+    );
+    if (!placeholder.ok) throw new Error(JSON.stringify(placeholder));
     const produceTemplate = parseToolCall("archflow_state", {
       schema_version: "1", task_id: task, intent_id: "pipeline-produce", expected_revision: 4,
       phase_instance: phase, step: "produce", status: "succeeded",
       input_fingerprint: initial.input_fingerprint, artifact: placeholder.value,
     });
-    const produceSubject = await h.services.dependencies.resolve_input_fingerprint({
-      runner: h.services.runner, authority: h.services.authority,
+    const produceSubject = await buildServices.value.dependencies.resolve_input_fingerprint({
+      runner: buildServices.value.runner, authority: buildServices.value.authority,
       state: canonicalDocument(produceRunning), call: produceTemplate,
-      live_config: h.liveConfig, context: h.services.authority.context,
+      live_config: h.liveConfig, context: buildServices.value.authority.context,
     });
     if (!produceSubject.ok) throw new Error(produceSubject.error.code);
     const produceFingerprint = computeInputFingerprint(produceSubject.value);
@@ -518,11 +567,6 @@ describe("live fixed-point regressions", { timeout: 20_000 }, () => {
       phase_instance: phase, declared_inputs: [],
     });
 
-    const bin = join(h.root, "bin");
-    const sourceHome = join(h.root, "source-home");
-    mkdirSync(join(sourceHome, ".codex"), { recursive: true });
-    mkdirSync(bin, { recursive: true });
-    writeFileSync(join(sourceHome, ".codex", "auth.json"), "{}\n");
     const executable = join(bin, "codex");
     writeFileSync(executable, `#!/usr/bin/env node
 import { writeFile } from "node:fs/promises";
@@ -569,6 +613,22 @@ else {
     try {
       await invoke("archflow_state", { ...produceTemplate.input, input_fingerprint: produceFingerprint, artifact: produceArtifact }, "produce");
       const produceDigest = canonicalJsonDigest(produceArtifact);
+      const producedServices = await createProductionServices({
+        working_directory: h.root, task_id: task, operation: parseSafeCode("compound-implementation-status"),
+      });
+      if (!producedServices.ok) throw new Error(producedServices.error.code);
+      const producedStatus = await computeTaskStatus(
+        producedServices.value.dependencies,
+        producedServices.value.authority,
+      );
+      expect(producedStatus).toMatchObject({
+        ok: true,
+        value: {
+          blocking_reasons: [],
+          reconciliation: { classification: "consistent", findings: [] },
+          next_action: { code: "run-step", step: "counter_review" },
+        },
+      });
       await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "counter-running", expected_revision: 5,
         phase_instance: phase, step: "counter_review", status: "running", input_fingerprint: nonProduceFingerprint }, "counter-running");
       await invoke("archflow_counter_review", { schema_version: "1", task_id: task, intent_id: "counter-succeeded", expected_revision: 6,
@@ -594,20 +654,17 @@ else {
       const constitution = await resolvePinnedConstitution(finalServices.value.runner,
         finalServices.value.state!.value.policy_base_commit, finalServices.value.authority.context);
       if (!retained.ok || !constitution.ok) throw new Error("final retained authority unavailable");
-      const approvedUpstreamDigests = [];
-      for (const reference of upstreamReferences) {
-        const loaded = await finalServices.value.dependencies.load_retained_result!(reference);
-        if (!loaded.ok) throw new Error(loaded.error.code);
-        approvedUpstreamDigests.push(loaded.value.prepared.manifest.value.artifact_digest);
-      }
-      approvedUpstreamDigests.sort();
-      // With no active rules the merged review carried no constitution evidence, and the
-      // completed triage alone closes the loop: no separate adjudication position exists.
+      // The implementation co-produces the phase-design binding. The surviving design.md
+      // binding resolves to that same newer compound phase-design owner, so adjudication has one
+      // approved upstream digest and authenticates only its unchanged sibling projections.
+      const compoundOwner = await finalServices.value.dependencies.load_retained_result!(upstreamReferences[1]!);
+      if (!compoundOwner.ok) throw new Error(compoundOwner.error.code);
+      const approvedUpstreamDigests = [compoundOwner.value.prepared.manifest.value.artifact_digest];
       expect(assessCurrentEvidence(finalServices.value.state!.value, retained.value, {
         subject_digest: produceDigest, input_fingerprint: nonProduceFingerprint, constitution: constitution.value,
         approved_upstream_digests: approvedUpstreamDigests,
         authenticated_gate_approvals: [],
-      })).toMatchObject({ next: "advance", current: ["counter_review", "triage"] });
+      })).toMatchObject({ next: "advance", current: ["counter_review", "triage", "adjudicate"] });
     } finally {
       if (saved.PATH === undefined) delete process.env.PATH; else process.env.PATH = saved.PATH;
       if (saved.HOME === undefined) delete process.env.HOME; else process.env.HOME = saved.HOME;

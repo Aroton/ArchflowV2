@@ -12,7 +12,7 @@ import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } fro
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { createGitRunner } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
-import { expectedProduceUpstreamBindings, loadProduceUpstreamSubject, produceProjectionSetDigest, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet, renderProduceReviewMaterial, resolveProduceUpstreamBinding, type CurrentProduceSubject } from "../../src/state/produce-subject.js";
+import { expectedProduceUpstreamBindings, loadProduceUpstreamSubject, produceOwnedTaskDocumentPaths, produceProjectionSetDigest, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet, renderProduceReviewMaterial, resolveProduceUpstreamBinding, type CurrentProduceSubject } from "../../src/state/produce-subject.js";
 import type { TransactionAuthority } from "../../src/state/authority.js";
 import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
 
@@ -209,6 +209,107 @@ describe("retained produce review material", () => {
     });
 
     expect(loaded).toMatchObject({ ok: true, value: { artifact_digest: newDigest, artifact: { phase_instance: "phase-design-2" } } });
+  });
+
+  it("does not reintroduce a co-produced phase design through a sibling binding's compound owner", async () => {
+    const repository = createTempRepository({ label: "co-produced-upstream-owner" });
+    const taskId = parseTaskSlug("demo");
+    const phasePath = parseTaskPathClaim("phases/2/design.md");
+    const designPath = parseTaskPathClaim("design.md");
+    const prdPath = parseTaskPathClaim("prd.md");
+    const approvedPhaseBytes = new TextEncoder().encode("# Approved Phase 2\n");
+    const amendedPhaseBytes = new TextEncoder().encode("# Amended Phase 2\n");
+    const designBytes = new TextEncoder().encode("# Architecture\n");
+    const prdBytes = new TextEncoder().encode("# Requirements\n");
+    repository.write(`.archflow/tasks/${taskId}/${phasePath}`, Buffer.from(amendedPhaseBytes));
+    repository.write(`.archflow/tasks/${taskId}/${designPath}`, Buffer.from(designBytes));
+    repository.write(`.archflow/tasks/${taskId}/${prdPath}`, Buffer.from(prdBytes));
+    repository.commitAll("amended implementation subject");
+    const context = {
+      task_id: taskId,
+      phase_instance: encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(2) }),
+      operation: parseSafeCode("co-produced-upstream-owner"),
+      attempt: parseSafeInteger(1),
+    } as const;
+    const discovered = await discoverWorktree(createGitRunner({ cwd: repository.path }), context);
+    if (!discovered.ok) throw discovered.error;
+    const authority = { task_id: taskId, context } as unknown as TransactionAuthority;
+    const compound: DocumentArtifactV1 = {
+      schema_version: "1", artifact_kind: "document", task_id: taskId,
+      phase_instance: encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(2) }),
+      step: "produce", document_path: phasePath, path_class: "document",
+      byte_count: parseSafeInteger(approvedPhaseBytes.byteLength), content_digest: sha256Bytes(approvedPhaseBytes),
+      declared_inputs: [], input_fingerprint: parseSha256Digest("1".repeat(64)),
+      snapshot_digest: parseSha256Digest("2".repeat(64)),
+      projection_target: `.archflow/tasks/${taskId}/${phasePath}` as never,
+      additional_documents: [{
+        document_path: designPath, byte_count: parseSafeInteger(designBytes.byteLength),
+        content_digest: sha256Bytes(designBytes), projection_target: `.archflow/tasks/${taskId}/${designPath}` as never,
+      }, {
+        document_path: prdPath, byte_count: parseSafeInteger(prdBytes.byteLength),
+        content_digest: sha256Bytes(prdBytes), projection_target: `.archflow/tasks/${taskId}/${prdPath}` as never,
+      }],
+    };
+    const compoundDigest = canonicalJsonDigest(compound);
+    const compoundRef = {
+      phase_instance: "phase-design-2", step: "produce", result_id: "compound",
+      result_digest: "3".repeat(64), input_fingerprint: "1".repeat(64),
+    } as TaskStateV1["authoritative_results"][number];
+    const fixture = JSON.parse(readFileSync(
+      new URL("../fixtures/contracts/durable/implementation-output.valid.json", import.meta.url),
+      "utf8",
+    )) as ImplementationOutputV1;
+    const implementation = {
+      ...fixture,
+      task_id: taskId,
+      phase_instance: context.phase_instance,
+      outputs: [{
+        ...fixture.outputs[0]!,
+        path: parseRepositoryPathClaim(`.archflow/tasks/${taskId}/${phasePath}`),
+      }],
+    } as ImplementationOutputV1;
+    const state = {
+      task_id: taskId, phase_instance: context.phase_instance,
+      authoritative_results: [compoundRef],
+      approvals: [{ gate_kind: "design-approval", subject_digest: compoundDigest }],
+    } as unknown as TaskStateV1;
+    const loaded = await loadProduceUpstreamSubject({
+      runner: discovered.value,
+      load_retained_result: async () => ({
+        schema_version: "1", ok: true,
+        value: { prepared: { manifest: { value: {
+          source_artifact: compound, artifact_digest: compoundDigest,
+          accounting: { measured_at_revision: 9 }, projections: [], outputs: [],
+        } } } } as never,
+      }),
+    }, authority, state, {
+      phase_instance: encodePhaseInstance({ kind: "design" }),
+      path: designPath,
+      artifact_kind: "design",
+    });
+    if (!loaded.ok) throw loaded.error;
+
+    expect(produceUpstreamBindingsForSubject(state, implementation)).toEqual([
+      { phase_instance: "design", path: designPath, artifact_kind: "design" },
+    ]);
+    expect(await readProduceProjectionSet(discovered.value, authority, loaded.value, designPath))
+      .toMatchObject({
+        ok: false,
+        error: { diagnostic: { parameters: { issue_code: "produce-projection-not-current" } } },
+      });
+    expect(await readProduceProjectionSet(
+      discovered.value,
+      authority,
+      loaded.value,
+      designPath,
+      produceOwnedTaskDocumentPaths(implementation),
+    )).toMatchObject({
+      ok: true,
+      value: [
+        { path: designPath, digest: sha256Bytes(designBytes) },
+        { path: prdPath, digest: sha256Bytes(prdBytes) },
+      ],
+    });
   });
 
   it("sends compact authenticated implementation metadata while source bytes stay in the workspace", () => {

@@ -4006,7 +4006,7 @@
       ]
     },
     "src/contracts/errors.ts": {
-      "bytes": 24419,
+      "bytes": 24428,
       "format": "esm",
       "imports": [
         {
@@ -4445,7 +4445,7 @@
       }
     },
     "src/contracts/schemas/v1/project-error.schema.json": {
-      "bytes": 87914,
+      "bytes": 87923,
       "format": "esm",
       "imports": [],
       "with": {
@@ -5737,7 +5737,7 @@
       "imports": []
     },
     "src/mcp/handlers/counter-review.ts": {
-      "bytes": 19657,
+      "bytes": 19782,
       "format": "esm",
       "imports": [
         {
@@ -7896,7 +7896,7 @@
       ]
     },
     "src/state/produce-subject.ts": {
-      "bytes": 16050,
+      "bytes": 16749,
       "format": "esm",
       "imports": [
         {
@@ -8748,7 +8748,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1666908,
+      "bytes": 1667013,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -9756,7 +9756,7 @@
           "bytesInOutput": 32193
         },
         "src/contracts/errors.ts": {
-          "bytesInOutput": 16039
+          "bytesInOutput": 16048
         },
         "src/contracts/evidence.ts": {
           "bytesInOutput": 2125
@@ -9951,7 +9951,7 @@
           "bytesInOutput": 4683
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 7406
+          "bytesInOutput": 7502
         },
         "src/state/production.ts": {
           "bytesInOutput": 12734
@@ -9995,7 +9995,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2532760,
+      "bytes": 2533103,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -10996,7 +10996,7 @@
           "bytesInOutput": 32208
         },
         "src/contracts/errors.ts": {
-          "bytesInOutput": 17560
+          "bytesInOutput": 17569
         },
         "src/contracts/evidence.ts": {
           "bytesInOutput": 2125
@@ -11071,7 +11071,7 @@
           "bytesInOutput": 1499
         },
         "src/contracts/schemas/v1/project-error.schema.json": {
-          "bytesInOutput": 83752
+          "bytesInOutput": 83761
         },
         "src/contracts/schemas/v1/review.schema.json": {
           "bytesInOutput": 3210
@@ -11143,7 +11143,7 @@
           "bytesInOutput": 2638
         },
         "src/mcp/handlers/counter-review.ts": {
-          "bytesInOutput": 14226
+          "bytesInOutput": 14324
         },
         "src/mcp/handlers/errors.ts": {
           "bytesInOutput": 908
@@ -11278,7 +11278,7 @@
           "bytesInOutput": 3015
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 11248
+          "bytesInOutput": 11475
         },
         "src/state/production.ts": {
           "bytesInOutput": 12726

@@ -38,6 +38,7 @@ import { loadAuthenticatedGateApproval } from "../../state/gates.js";
 import {
   loadCurrentProduceSubject,
   loadProduceUpstreamSubject,
+  produceOwnedTaskDocumentPaths,
   produceProjectionSetDigest,
   produceUpstreamBindingsForSubject,
   readProduceProjection,
@@ -124,12 +125,13 @@ async function deriveApprovedUpstreams(
 ): Promise<ProjectResult<readonly AdjudicationUpstreamInput[]>> {
   const derived: AdjudicationUpstreamInput[] = [];
   const seenOwners = new Set<string>();
+  const coProducedPaths = produceOwnedTaskDocumentPaths(subject.artifact);
   for (const binding of produceUpstreamBindingsForSubject(durable, subject.artifact)) {
     const upstream = await loadProduceUpstreamSubject(services.dependencies, services.authority, durable, binding);
     if (!upstream.ok) return upstream;
     if (seenOwners.has(upstream.value.artifact_digest)) continue;
     const upstreamProjections = await readProduceProjectionSet(
-      services.runner, services.authority, upstream.value, binding.path,
+      services.runner, services.authority, upstream.value, binding.path, coProducedPaths,
     );
     if (!upstreamProjections.ok) return upstreamProjections;
     let text: string;

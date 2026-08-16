@@ -202,21 +202,29 @@ export function documentProjectionDescriptors(
   ]);
 }
 
+/** Task-document paths whose current bytes are owned by one produce subject. */
+export function produceOwnedTaskDocumentPaths(
+  artifact: ProduceArtifact,
+): readonly TaskPathClaim[] {
+  if (artifact.artifact_kind === "document") {
+    return Object.freeze(documentProjectionDescriptors(artifact)
+      .map((entry) => entry.document_path));
+  }
+  const prefix = `.archflow/tasks/${artifact.task_id}/`;
+  return Object.freeze([...new Set(artifact.outputs
+    .map((entry) => String(entry.path))
+    .filter((path) => path.startsWith(prefix))
+    .map((path) => parseTaskPathClaim(path.slice(prefix.length))))]
+    .sort((left, right) => left.localeCompare(right)));
+}
+
 /** Canonical upstream bindings exclude parent documents co-produced by the current subject. */
 export function produceUpstreamBindingsForSubject(
   state: TaskStateV1,
   artifact: ProduceArtifact,
 ): readonly ProduceUpstreamBinding[] {
   const bindings = expectedProduceUpstreamBindings(state);
-  if (artifact.artifact_kind === "implementation-output") {
-    const prefix = `.archflow/tasks/${state.task_id}/`;
-    const coProduced = new Set(artifact.outputs
-      .map((entry) => String(entry.path))
-      .filter((path) => path.startsWith(prefix))
-      .map((path) => path.slice(prefix.length)));
-    return Object.freeze(bindings.filter((binding) => !coProduced.has(binding.path)));
-  }
-  const owned = new Set(documentProjectionDescriptors(artifact).map((entry) => entry.document_path));
+  const owned = new Set(produceOwnedTaskDocumentPaths(artifact));
   return Object.freeze(bindings.filter((binding) => !owned.has(binding.path)));
 }
 
@@ -261,12 +269,19 @@ export async function readProduceProjection(
   return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ path: artifactPath, bytes, digest }) });
 }
 
-/** Re-hashes every retained document projection (or the selected implementation log). */
+/**
+ * Re-hashes every applicable retained document projection (or the selected implementation log).
+ *
+ * A compound upstream owner may also retain a path that the current subject co-produces. Callers
+ * pass those paths in `excludedPaths` so a surviving sibling binding cannot pull superseded bytes
+ * back into upstream authentication. The selected path remains mandatory.
+ */
 export async function readProduceProjectionSet(
   runner: RootBoundGitRunner,
   authority: TransactionAuthority,
   subject: ProduceUpstreamSubject,
   selectedPath: TaskPathClaim,
+  excludedPaths: readonly TaskPathClaim[] = [],
 ): Promise<ProjectResult<readonly ProduceProjection[]>> {
   let paths: readonly TaskPathClaim[];
   if ("imported_projection" in subject) {
@@ -281,7 +296,10 @@ export async function readProduceProjectionSet(
         .map((parent) => parent.document_path),
     ])]);
   } else {
-    paths = documentProjectionDescriptors(subject.artifact).map((entry) => entry.document_path);
+    const excluded = new Set(excludedPaths);
+    paths = documentProjectionDescriptors(subject.artifact)
+      .map((entry) => entry.document_path)
+      .filter((path) => path === selectedPath || !excluded.has(path));
   }
   const projections: ProduceProjection[] = [];
   for (const path of paths) {
