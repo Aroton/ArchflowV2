@@ -1,0 +1,142 @@
+{
+  "accounting": {
+    "counted_entries": [
+      {
+        "path": ".archflow/tasks/api-refactor/design.md",
+        "storage": "raw-payload",
+        "stored_bytes": 98345
+      },
+      {
+        "path": ".archflow/tasks/api-refactor/phases/1/design.md",
+        "storage": "raw-payload",
+        "stored_bytes": 73650
+      },
+      {
+        "path": ".archflow/tasks/api-refactor/prd.md",
+        "storage": "raw-payload",
+        "stored_bytes": 42375
+      }
+    ],
+    "measured_at_revision": 77,
+    "result_byte_cap": 26214400,
+    "result_bytes": 214370,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 502542
+  },
+  "artifact_digest": "5e218ea4ed5d6da531cf5940ff9be6c9cce30a12176660032ac5e1727347fc38",
+  "input_fingerprint": "2d68bdbfd9318c56aca244b587528349227908473d5cd7d5b503511eea4234a1",
+  "outputs": [
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "d1be855745430b2ef7993215643d108d98542d59",
+        "size_bytes": 98345
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": ".archflow/tasks/api-refactor/design.md",
+      "path_class": "document",
+      "payload_bytes": 98345,
+      "payload_digest": "8ec14f11c393585b5dd4e918c7856f20022c01324e83f7376516f1919de1c740",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "7f0d08bb5f71f64395e2a8a8701496b85555208e",
+        "size_bytes": 73650
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": ".archflow/tasks/api-refactor/phases/1/design.md",
+      "path_class": "document",
+      "payload_bytes": 73650,
+      "payload_digest": "6d85b6e3862b8cb42f0c14c29c59aaa3a14a49881a23f8fa154270b1f2eadc9b",
+      "storage": "raw-payload"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "a8228ee5a632da50da0d7642e02197429a62d0b5",
+        "size_bytes": 42375
+      },
+      "file_type": "regular",
+      "operation": "add",
+      "path": ".archflow/tasks/api-refactor/prd.md",
+      "path_class": "document",
+      "payload_bytes": 42375,
+      "payload_digest": "66f10ea9e0441754cd0058001aa0bf2f7802b477ca645a5f13fb7cc19b40f323",
+      "storage": "raw-payload"
+    }
+  ],
+  "phase_instance": "phase-design-1",
+  "projections": [
+    {
+      "content_digest": "8ec14f11c393585b5dd4e918c7856f20022c01324e83f7376516f1919de1c740",
+      "path": ".archflow/tasks/api-refactor/design.md"
+    },
+    {
+      "content_digest": "6d85b6e3862b8cb42f0c14c29c59aaa3a14a49881a23f8fa154270b1f2eadc9b",
+      "path": ".archflow/tasks/api-refactor/phases/1/design.md"
+    },
+    {
+      "content_digest": "66f10ea9e0441754cd0058001aa0bf2f7802b477ca645a5f13fb7cc19b40f323",
+      "path": ".archflow/tasks/api-refactor/prd.md"
+    }
+  ],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "state-result-a8e5e161a90184ab7ab21136b9f5d055",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [
+      ".archflow/tasks/api-refactor/design.md",
+      ".archflow/tasks/api-refactor/phases/1/design.md",
+      ".archflow/tasks/api-refactor/prd.md"
+    ],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "61e075a5192186349bcf936b1111840419c14401cc574d8217ff4544da018f97",
+  "source_artifact": {
+    "additional_documents": [
+      {
+        "byte_count": 98345,
+        "content_digest": "8ec14f11c393585b5dd4e918c7856f20022c01324e83f7376516f1919de1c740",
+        "document_path": "design.md",
+        "projection_target": ".archflow/tasks/api-refactor/design.md"
+      },
+      {
+        "byte_count": 42375,
+        "content_digest": "66f10ea9e0441754cd0058001aa0bf2f7802b477ca645a5f13fb7cc19b40f323",
+        "document_path": "prd.md",
+        "projection_target": ".archflow/tasks/api-refactor/prd.md"
+      }
+    ],
+    "artifact_kind": "document",
+    "byte_count": 73650,
+    "content_digest": "6d85b6e3862b8cb42f0c14c29c59aaa3a14a49881a23f8fa154270b1f2eadc9b",
+    "declared_inputs": [
+      {
+        "digest": "8ec14f11c393585b5dd4e918c7856f20022c01324e83f7376516f1919de1c740",
+        "input_id": "design"
+      },
+      {
+        "digest": "66f10ea9e0441754cd0058001aa0bf2f7802b477ca645a5f13fb7cc19b40f323",
+        "input_id": "prd"
+      }
+    ],
+    "document_path": "phases/1/design.md",
+    "input_fingerprint": "2d68bdbfd9318c56aca244b587528349227908473d5cd7d5b503511eea4234a1",
+    "path_class": "document",
+    "phase_instance": "phase-design-1",
+    "projection_target": ".archflow/tasks/api-refactor/phases/1/design.md",
+    "schema_version": "1",
+    "snapshot_digest": "61e075a5192186349bcf936b1111840419c14401cc574d8217ff4544da018f97",
+    "step": "produce",
+    "task_id": "api-refactor"
+  },
+  "step": "produce",
+  "task_id": "api-refactor"
+}

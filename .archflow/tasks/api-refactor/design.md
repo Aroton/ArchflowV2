@@ -1,1089 +1,1549 @@
-# Technical Design: Semantic API and Human-Stepped Autonomous Phase Execution
+# Technical Design: Client-Orchestrated Semantic Workflow API
 
 ## 1. Summary
 
-ArchFlow's public surface today is its own internals. Four low-level MCP tools
-(`archflow_state`, `archflow_counter_review`, `archflow_gate`, `archflow_waiver` —
-`src/contracts/tool-names.ts`) expose the durable state machine transition by transition, a
-14-command CLI (`src/local/commands.ts`) composes and stages the requests those tools consume, and
-the connected AI client acts as the workflow coordinator: it reads status, builds each request,
-invokes each transition, polls, and resolves blocking human gates through a separate
-CLI-writes-a-file side channel. The skills that drive this carry protocol vocabulary — staged
-references, digests, revisions, gate mechanics — instead of user intent.
+ArchFlow will keep Claude Code or Codex as the producer and workflow orchestrator and replace the
+current mechanical workflow protocol with two bounded task-lifecycle tools:
 
-This design replaces that surface with seven semantic MCP tools and moves the coordinator into the
-MCP server process. A human still explicitly starts every top-level step — PRD, task design, each
-phase design, each phase implementation — and still approves every artifact's exact bytes. But
-inside one human-started phase-design or phase-implementation step, a durably fenced in-process
-coordinator owns the routine loop: dispatch a supervised producer, run the existing opposite-family
-counter-review, triage, remediate within a bounded budget, verify, synchronize parent documents,
-and (for phase implementation, once the delegation policy is explicitly approved) create the exact
-scoped commit. The coordinator stops durably at exactly the boundaries the workflow already
-reserves for humans: exact-byte artifact approval, new authority, unresolved judgment, and the next
-top-level kickoff.
+- `archflow_status` reads durable truth and returns one compact `WorkflowViewV1`.
+- `archflow_apply` applies exactly one server-offered semantic action and returns the freshly
+  recomputed `WorkflowViewV1`.
 
-The existing durable kernel is kept, not replaced. `createProductionServices`
-(`src/state/production.ts`), the transaction kernel (`src/state/transaction.ts`), the transition
-planner (`src/state/transitions.ts`), the request-composition library (`src/local/build-request.ts`,
-`src/local/call-envelope.ts`), review dispatch (`src/review/counter-review.ts`,
-`src/dispatch/coordinator.ts`), and the gate archive machinery (`src/state/gates.ts`) become
-internal services the coordinator calls directly — no CLI round-trips, no MCP self-calls, no staged
-request files between the coordinator and itself. The fine-grained state transitions the old tools
-exposed are retained as crash-safe internal checkpoints (PRD R5 permits exactly this).
+The two-tool surface is not a one-call workflow runner. A phase contains several `archflow_apply`
+calls with client work between them. An offered action can enter a client write window, snapshot
+client-produced work, run the bounded server-owned counter-review, record client-authored triage,
+open or resolve one human decision, observe an authorized client-created commit, or perform one
+judgment-free hand-off. The handler returns after that action. It never dispatches a producer,
+triages findings, edits implementation code, runs verification, commits, or loops to a later
+action.
 
-Four structural gaps get closed: a durable repository/worktree fence with a monotonic generation
-serializes writers across tasks and sessions (today only a 250 ms task-scoped lock exists,
-`src/state/lock.ts`); OS-level sandboxing (bubblewrap / seatbelt) replaces best-effort CLI-flag
-containment for dispatched workers; escalations and approvals become nonblocking durable
-presentations resolved through one `archflow_decide` path (retiring the 500 ms `gate.decision`
-file poll, `src/state/gate-wait.ts`); and the CLI shrinks to bootstrap and read-only diagnosis,
-removing the long-lived-server-versus-freshly-loaded-CLI version-skew channel.
+The existing durable kernel remains authoritative. `computeTaskStatus` and `deriveNextAction`
+remain the read model; the artifact builders, transition planner, transaction/replay machinery,
+counter-review dispatcher, fixed-point policy, gate archives, waiver validation, commit proof, and
+reconciliation remain the write and evidence model. The refactor moves the valuable judgment-only
+composition in `archflow-local build-request` behind the loaded MCP server, removes public request
+envelopes and staged references from the normal path, and projects every result into the same
+semantic view.
 
-The replacement is direct: the four old tools are retired from advertisement at the end, existing
-durable tasks reconcile into equivalent semantic positions or fail closed to an upgrade path, and
-no compatibility facade is built.
+Human decisions become nonblocking. When status says an ordinary gate is required, the skill
+supplies its human-readable summary in one apply action; the server opens and archives the gate and
+returns the conversational presentation. The skill asks the human, then sends the server-issued
+choice and reason in a later apply call. A requested waiver is the narrow exception: its follow-up
+gate uses the existing server-derived summary and opens through a no-submission action. No MCP
+request waits for `gate.decision`, and no local command writes workflow authority.
 
-## 2. Current architecture (verified)
+Explicit backward reopening also remains a first-class workflow path. A core skill identifies
+itself, its requested phase, and explicit `reopen` intent in the read-only status call. If that planning boundary is strictly
+earlier than the current active phase and no gate or repair blocks it, status returns one `reopen`
+offer describing the invalidation impact. Apply records the human's exact request through the
+canonical planning-restart transaction, preserves existing Git/worktree bytes, archives target-and-downstream result
+authority, and returns the reopened produce window. It does not edit the plan or replay successor
+work; the client performs fresh production and the normal review/approval loop.
 
-### 2.1 Public MCP surface
+This design explicitly discards the previous in-server coordinator, autonomous phase runner,
+write-capable producer dispatch, repository fence, provider proxy, credential broker, OS producer
+sandbox, background control plane, and delegation-policy revision. Those components solved the
+superseded premise that MCP should perform the phase. They are neither retained nor replaced here.
 
-- Exactly four tools (`TOOL_NAMES`, `src/contracts/tool-names.ts`), advertised via
-  `ADVERTISED_TOOL_CATALOGUE` (`src/mcp/tools.ts`), which flattens each tool's two-branch input
-  union (full payload | staged reference) into a plain object root (`mergedInputFragment`) because
-  at least one host drops root-level combinators. The serialized catalogue measures 105,478 bytes
-  with a <130,000-byte regression fence (`test/contracts/mcp-advertised-schema.test.ts`).
-- Tool boundary: `createToolBoundary` (`src/mcp/server.ts`) — schema_version check, staged-reference
-  rehydration (`rehydrateStagedToolCall`, `src/state/staged-requests.ts`), strict Zod parsing
-  (`parseToolCall`, `src/contracts/mcp-tools.ts`), result re-validation and WeakSet branding.
-- Handlers under `src/mcp/handlers/`: `handleState` (initialization + run-step + advance),
-  `handleCounterReview` (server-dispatched opposite-family review, plus constitution review when
-  active rules exist), `handleGate`, `handleWaiver`. All open a per-call session via
-  `openHandlerSession` (`src/mcp/handlers/session.ts`), which derives `producer_family` from the
-  connected host (`deriveHostIdentity`, `src/contracts/hosts.ts`) — the producer is the interactive
-  client itself and is never dispatched.
+## 2. Current architecture and reusable seams
 
-### 2.2 Client-side orchestration
+### 2.1 Current public choreography
 
-- `archflow-local` (`src/local/main.ts`) exposes 14 commands (`LOCAL_COMMANDS`,
-  `src/local/commands.ts`): `validate, hash, render, snapshot, restore, clean, decide, status,
-  reconcile, init, envelope, build-request, manual-status, upgrade`.
-- `runBuildRequest` (`src/local/build-request.ts`) composes the seven request kinds
-  (`BUILD_REQUEST_KINDS`), deriving every mechanical field from the same durable authorities the
-  server checks, and stages all kinds except `initialize` to
-  `.archflow/runtime/tasks/<task>/transient/intents/<intent-id>.request.json`
-  (`writeStagedRequest`, `src/state/staged-requests.ts`). `computeCallEnvelope`
-  (`src/local/call-envelope.ts`) authenticates authored requests and precomputes gate bindings.
-- The client loop is: `archflow-local status` (`computeTaskStatus`, `src/state/status.ts`;
-  `deriveNextAction`, `src/state/next-action.ts`) → `build-request` → MCP call → repeat. The audit
-  (`docs/validation/client-interface-audit.md`) measures roughly 22–23 machine interactions for a
-  routine no-rework document phase.
+The current catalogue is exactly four tools in `src/contracts/tool-names.ts`:
 
-### 2.3 Human gates: a blocking call plus a file side channel
+| Tool | Public responsibility today |
+|---|---|
+| `archflow_state` | Caller supplies phase, pipeline step, running/succeeded/failed transition, revision/fingerprint/intent fields, and any artifact. |
+| `archflow_counter_review` | Caller enters review separately, then requests the server-owned review with a mechanically bound request. |
+| `archflow_gate` | Caller composes a full gate request; the call opens the gate and blocks while polling a local decision file. |
+| `archflow_waiver` | Caller reconstructs a fully bound waiver origin which the server immediately re-authenticates. |
 
-`runDurableGate` (`src/state/gates.ts`) opens a durable gate archive, then polls the runtime file
-`cache/gates/gate.decision` every 500 ms (`waitForGateInterface`, `GATE_POLL_INTERVAL_MS`,
-`src/state/gate-wait.ts`) while the MCP call blocks. The human's decision arrives through
-`archflow-local decide`, which writes that file (`writeGateDecisionChoice`,
-`src/state/gate-decision-interface.ts`). Resolution archives request and decision immutably under
-`authority/decisions/<gate-id>/` and later authority checks re-authenticate from those bytes
-(`loadAuthenticatedGateApproval`, `src/state/gate-approvals.ts`).
+The normal skill does not author those requests directly. It runs:
 
-### 2.4 Dispatch and containment
+`status -> build-request/envelope -> staged request -> MCP tool -> status`
 
-- Only reviewers are dispatched: `createDispatchCoordinator` (`src/dispatch/coordinator.ts`) →
-  `runDispatchChild` (`src/dispatch/process.ts`; 15-minute `DISPATCH_TIMEOUT_MS`, 8 MiB output
-  caps, process-group termination) against a pinned `git archive` repository view with
-  `.archflow/tasks` removed (`materializeRepositoryView`, `src/dispatch/workspace.ts`).
-- Containment is best-effort, delegated to the child CLI's own flags: Claude gets
-  `--safe-mode --tools "Read,Grep,Glob"` (no filesystem sandbox); Codex gets its own `-s read-only`
-  sandbox plus a `--disable` feature list (`src/dispatch/cli.ts`). There is no bubblewrap,
-  seatbelt, seccomp, or namespace use anywhere in `src/`. `docs/mcp/DISPATCH.md` states plainly
-  that nothing filesystem-level prevents reads outside the view. Credentials are deliberately
-  shared (real `HOME`) so provider auth works (`src/dispatch/workspace.ts`).
-- Routing: `resolveDispatchRoute` (`src/dispatch/routing.ts`) resolves `{model, effort}` per role
-  from task config and enforces the opposite-family constraint (`FAMILY_MISMATCH`).
-  `selectCliAdapter` (`src/dispatch/cli.ts`) gates claude-family dispatch behind an
-  `allow_claude_dispatch` option that the only production caller hard-codes to `true`
-  (`src/mcp/handlers/counter-review.ts`) — a dead conditional.
+`archflow-local status` computes reconciled task status and one `NextAction`.
+`archflow-local build-request` translates that action plus caller judgment into the exact tool
+payload, `call-envelope` resolves the input fingerprint and request digest, and a staged request
+file lets the model pass only a reference. Gate resolution is a separate `archflow-local decide`
+write while the MCP gate call waits.
 
-### 2.5 Confirmed gaps this design closes
+The helper is correct and valuable under the current API, but the process boundary is wrong. The
+loaded MCP server and a newly invoked CLI can come from different installed builds, and the skill
+still has to choose helper kinds, MCP tools, and transition ordering. A request digest protects
+bytes, not shared interpretation across two loaded versions.
 
-1. **No repository fence.** The only lock is task-scoped with a 250 ms acquisition deadline
-   (`TASK_LOCK_POLICY`, `src/state/lock.ts`). Nothing serializes two tasks or two host sessions
-   writing one worktree, and no fencing generation or durable active-step record exists in
-   `src/state/`.
-2. **No OS sandbox.** See 2.4; write-capable dispatch does not exist, and read-only dispatch
-   containment is asymmetric between families.
-3. **Gate polling side channel.** A blocking MCP call plus a CLI-written decision file (2.3) —
-   exactly the inversion PRD R7 forbids.
-4. **Version skew.** The MCP server is resident per session while every `archflow-local`
-   invocation loads the currently installed bundle; after `./install.sh` the two interpret
-   contracts with different code and nothing mechanical detects it (byte digests still match).
-5. **Protocol-heavy skills.** The four workflow skills (`skills/archflow-prd`,
-   `-design`, `-phase-design`, `-phase-impl`) are 15–19 KB each and teach build-request kinds,
-   staged references, digest echoes, and gate/waiver mechanics; contract tests pin that this
-   protocol text is present (`test/contracts/skill-contract-canonical.test.ts`).
+### 2.2 Reusable authority and service seams
 
-## 3. Target architecture
+The following existing components remain authoritative and should be changed only where the new
+transport needs a narrow service seam:
 
-### 3.1 Boundaries
+- `src/state/status.ts` and `src/state/next-action.ts`: reconciled status, role-based resources,
+  active policy, evidence assessment, human presentation, and exactly one legal next action.
+- `src/state/production.ts`, `document-artifact.ts`, `implementation-manifest.ts`,
+  `phase-documents.ts`, and `produce-subject.ts`: exact document/implementation subject building.
+- `src/state/transitions.ts`, `transaction.ts`, `request.ts`, receipts, replay, reconciliation,
+  projection, snapshots, and secret scanning: durable legality and atomicity.
+- `src/review/`: pinned context, opposite-family review, fixed-point materiality, evidence
+  freshness, and constitution review.
+- `src/state/gates.ts`, `gate-approvals.ts`, waiver and adjudication services: exact human
+  authority and re-authentication.
+- root-bound Git observation and commit proof: exact design milestones and implementation commit
+  scope.
+- `src/local/build-request.ts` and `call-envelope.ts`: the existing derivation rules. Their pure
+  parts move to a transport-neutral internal module; the CLI wrapper remains only during cutover.
 
-Four planes, one process for authority:
+Most of the semantic facade needs no durable shape change. Backward reopening is the one focused
+exception in this branch: Phase 1 adds the optional `restart_history` authority, strict planning
+phase ordering, and bounded restart transition described below. Old state without that optional
+field remains valid and needs no migration. This is workflow audit history, not coordinator state.
 
-- **Public control plane** — seven semantic MCP tools (3.2). The only workflow transport after
-  bootstrap. Returns the common workflow view (R3), never internal mechanics.
-- **Coordinator** — lives inside the MCP server process. Owns all authoritative task/worktree/Git
-  mutation while holding the repository fence. Calls the existing pure services directly:
-  `createProductionServices`, the request-composition library (`runBuildRequest` /
-  `computeCallEnvelope` internals), the transaction kernel (`runStateTransaction`),
-  `runCounterReview`, and the dispatch coordinator. No CLI or MCP self-round-trips; the
-  staged-request file handoff disappears from the coordinator's own path because it can call
-  `identifyTransactionRequest` (`src/state/request.ts`) in-process.
-- **Worker plane** — dispatched producers, reviewers, and adjudicators inside OS-enforced
-  capability profiles (3.5), exchanging sealed envelopes on stdin/stdout as today.
-- **Durable kernel** — `.archflow/` canonical records remain the restart and recovery authority;
-  the coordinator's fine-grained transitions are its crash-safe checkpoints.
+### 2.3 Superseded design
 
-### 3.2 The seven semantic tools
+The prior design treated the interface audit's autonomy recommendation as a requirement. It moved
+the coordinator into the MCP process, added seven tools around a long-running phase job, planned
+server-owned producers, and made fencing/containment/delegated commit authority prerequisites.
+The user's correction rejects that ownership model. The prior task design and Phase 1 spike have no
+implementation to migrate; their Git history remains the audit trail.
 
-| Tool | Purpose | Mutates |
-|---|---|---|
-| `archflow_start` | Human kickoff of one named top-level step (`prd`, `design`, `phase-design N`, `phase-impl N`), including task creation for `prd`. In the portable attached mode, returns once at the first actionable `awaiting-approval`, `escalated`, `blocked`, or `ready` boundary; `running` is optional progress/status observation. | yes |
-| `archflow_submit` | Pre-design authored-content exchange: PRD/task-design drafts, triage responses, significant reopen, terminal failure, as nested semantic variants below a plain object root (R4). | yes |
-| `archflow_decide` | The single decision path for artifact approvals, escalations, waivers, and maintenance proposals, using a server-issued opaque choice binding with stale/replay protection. When a decision restores execution authority, it uses the same Phase 1-selected attached/detached transport as `archflow_start` and delivers the next actionable boundary. | yes |
-| `archflow_control` | `pause` / `cancel` with safe-boundary semantics (R8). | yes |
-| `archflow_status` | Optional observation; returns the common workflow view; never advances anything. | no |
-| `archflow_doctor` | Compact diagnostic intent (R11): observation-only over task state, worktree, and Git; may append bounded maintenance proposals/receipts. | proposals only |
-| `archflow_upgrade` | Legacy migration preview (R12); creation happens only through an approved maintenance decision via `archflow_decide`. | preview only |
+Reusable ideas from that design are limited to compact purpose descriptions, plain-object input
+roots, final-catalogue measurement, first-call selection in both clients, and preserving the
+durable kernel during cutover.
 
-Every tool keeps a plain object input root (per the repository's advertised-schema rule and the
-regression fence in `test/contracts/mcp-advertised-schema.test.ts`); variant unions exist only
-below the root. Each carries a purpose-level description so hosts select the right tool first call.
-The four old tools are retired from advertisement at the end (dependency gate 10); their handler
-logic is absorbed as internal coordinator services.
+## 3. Target ownership and control flow
 
-### 3.3 Control flow of a phase step
+### 3.1 Boundary diagram
 
 ```mermaid
 sequenceDiagram
-    participant H as Human (via client)
-    participant T as Semantic tools
-    participant C as Coordinator (in server)
-    participant W as Sandboxed workers
-    H->>T: archflow_start(phase-design N), call stays attached
-    T->>C: acquire fence, record kickoff checkpoint
-    Note over H,T: optional non-authoritative progress may show running
-    loop until fixed point or budget exhausted
-        C->>W: dispatch producer (capability profile)
-        W-->>C: artifact output
-        C->>C: record produce checkpoint (existing transition)
-        C->>W: dispatch opposite-family review (+ constitution)
-        W-->>C: review evidence
-        C->>C: triage, remediation, checkpoints
+    actor H as Human
+    participant C as Claude Code / Codex
+    participant S as ArchFlow skill
+    participant M as Semantic MCP API
+    participant K as Durable kernel
+    participant R as Opposite-family reviewer
+
+    H->>C: Invoke one skill
+    C->>S: Follow workflow instructions
+    S->>M: status(task, invocation)
+    M->>K: Reconcile and derive next action
+    K-->>M: Durable position + offer
+    M-->>S: WorkflowView
+    S->>M: apply(begin-work offer)
+    M->>K: Record write window
+    M-->>S: WorkflowView: client work required
+    S->>C: Explore, author, implement, or verify
+    C-->>S: Work completed in offered resources
+    S->>M: apply(submit-work offer + client facts)
+    M->>K: Snapshot and record exact result
+    M-->>S: WorkflowView: review required
+    S->>M: apply(review offer)
+    M->>R: Dispatch bounded independent review
+    R-->>M: Findings + constitution result
+    M->>K: Record evidence
+    M-->>S: WorkflowView: triage or gate summary required
+    S->>C: Triage findings or author gate summary
+    S->>M: apply(triage offer + dispositions)
+    M->>K: Record client judgment
+    M-->>S: WorkflowView: revision re-entry or gate summary required
+    opt Accepted findings require revision
+        S->>M: apply(revise offer)
+        M->>K: Record production write-window re-entry
+        M-->>S: WorkflowView: client work required
+        S->>C: Revise and resubmit
     end
-    C->>C: open durable approval presentation (nonblocking)
-    C-->>T: first durable human/terminal boundary
-    T-->>H: final view: awaiting-approval (choices + bindings)
-    H->>T: archflow_decide(binding: approve), call stays attached if work resumes
-    T->>C: re-authenticate presentation, apply, milestone commit
-    C-->>T: ready boundary
-    T-->>H: view: ready (names phase-impl N, does not start it)
+    S->>M: apply(gate-open offer + summary)
+    M->>K: Open and archive exact gate
+    M-->>S: WorkflowView: human presentation
+    S->>C: Discuss gate
+    C->>H: Ask exact human question
+    H-->>C: Explicit choice
+    S->>M: apply(decision offer + choice/reason)
+    M->>K: Re-authenticate and record decision
+    M-->>S: WorkflowView: client Git action or next skill
 ```
 
-The same shape serves phase implementation, with verification and the scoped phase commit inside
-the loop and the durable stop before the next phase kickoff. Pre-design (PRD/task design) differs
-only in who produces: the human's own client session authors drafts conversationally through
-`archflow_submit`; the coordinator still owns capture, counter-review, triage transitions, and
-nonblocking presentations.
+The skill and client may delegate their own bounded sub-work, but the MCP server does not launch a
+producer. The only model dispatch shown is the existing independent review boundary.
 
-### 3.4 Fence and ownership
+### 3.2 One offered action per mutation
+
+`archflow_apply` is constrained by a server-issued offer from the immediately preceding status or
+apply result. The offer identifies one semantic action and the exact durable position it applies
+to. The client cannot ask apply to choose an action, loop, or "finish the phase."
+
+The server may combine internal transitions only when no omitted actor owns intervening judgment:
+
+- a review action may record counter-review running, dispatch rubric and constitution review, and
+  record terminal review evidence;
+- a review with no findings may record the empty fixed-point triage and return the mandatory
+  gate-opening action, but it cannot author the gate summary;
+- a triage action with no accepted material findings may return the required gate-opening action;
+- a decision requesting a waiver may return the separately required no-submission `open-waiver`
+  action; that action derives the existing server-authored summary and all waiver bindings, opens
+  one gate, and returns before the later human choice;
+- a decision action may exclusively archive the submitted choice and immediately settle that same
+  choice as fixed named substeps because no actor boundary separates them; interruption after the
+  archive returns a no-submission settlement continuation and never repeats the human question;
+- accepted triage or a human request for changes returns a separate no-submission `revise` action;
+  applying it records only the server-derived production write-window re-entry and returns before
+  the client edits or resubmits;
+- an explicit `intent: "reopen"` invocation of an earlier PRD, design, or numbered phase-design
+  skill may return one `reopen` action whose apply call records the exact human request and performs
+  only the bounded planning restart (plus the exact-once ask-history append for PRD);
+- a completed, already-authorized Git observation may perform the one legal hand-off.
+
+The server must stop before production, triage judgment, remediation, verification, Git, a human
+choice, or successor-skill work.
+
+### 3.3 Top-level skill kickoff
+
+PRD, design, every numbered phase design, and every numbered phase implementation remain separate
+human invocations. Completing a predecessor leaves its durable approval and commit proof in place
+and returns `ready` with the exact next skill. The successor skill's first apply call consumes the
+offered start/handoff action and opens its produce write window. This binds mechanical phase
+advance to the fresh user-invoked skill without adding a new durable phase state.
+
+Core producing skills identify their invocation and `resume` or `reopen` intent in
+`archflow_status`; `$archflow-status` omits that field and receives no mutation offer. If a skill is
+rerun at its current phase, status returns the current action instead of creating another kickoff.
+If a `resume` invocation names the exact server-derived successor, status returns the normal
+hand-off offer. Only a `reopen` invocation naming a strictly earlier planning boundary returns the
+bounded reopen offer below. A normal `resume` aimed backward, forward target, earlier phase
+implementation, terminal task, open gate, or inconsistent authority gets no reopen offer and the
+view names the current safe action without a mutation offer for the mismatched invocation.
+
+### 3.4 Backward reopening
+
+Reopening is intentionally heavier than correcting a returned parent document during the current
+phase. It invalidates workflow authority from the chosen planning boundary onward while leaving the
+worktree and Git history untouched. Old decision archives remain audit history but cannot authorize
+new subjects after the referenced results are superseded. This is enforced even for identical
+bytes: every approval consumer ignores approvals resolved at or before the latest restart whose
+target affects the phase the authenticated approval itself authorizes, not the later phase consuming
+it. A prior Git commit may be re-observed only after fresh
+eligible approval rebinds the exact current subject.
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Unheld
-    Unheld --> Execution: archflow_start acquires generation G+1
-    Execution --> Unheld: step stops durably, lease released
-    Execution --> Stale: process dies / lease expires
-    Stale --> Unheld: holder proven exited + worktree reconciled
-    Stale --> Blocked: orphan may still run / edits unattributable
-    Blocked --> Unheld: human-approved recovery (doctor decision)
-    Unheld --> Maintenance: doctor repair approved
-    Maintenance --> Unheld: repair applied, receipt written
+flowchart TD
+    A["Human explicitly asks to reopen an earlier PRD, design, or phase design"] --> B(["archflow_status: invocation plus intent reopen"])
+    B --> C{"Strictly earlier planning boundary; active task; no open gate; authority consistent"}
+    C -- "No" --> D["Return the current safe action; no reopen offer"]
+    C -- "Yes" --> E["Explain target-and-downstream invalidation and preserved Git/worktree"]
+    E --> F(["archflow_apply: same invocation, offer, and exact reopening request"])
+    F --> G["For PRD append request once; archive superseded authority; reset attempt 1"]
+    G --> H["Return the authenticated target produce window and resources"]
+    H --> I["Client updates the PRD/design and performs fresh review and approval"]
 ```
 
-One durable fence at repository scope, outside any task (4.4). Write-capable execution requires
-holding it; a second writer receives a semantic `blocked` busy view. Worker launches and results
-are bound to the current generation; stale-generation results are refused before admission.
-Maintenance repairs use the same fence with explicit precedence: maintenance acquisition refuses
-while an execution lease is fresh, and execution acquisition refuses while maintenance holds, so
-repairs can never race an active writer (R9).
+For a PRD reopen, the public submission is
+`{kind: "reopening-request", request: <exact human wording>}`. The server preserves those bytes
+verbatim inside generated `Reopening and corrections` framing and installs that append exactly once
+before deriving the PRD restart fingerprint. Stable operation/restart identity and recoverable
+write ordering make interruption before or after the append safe to retry. Existing ask, Git,
+index, and worktree bytes are never rewritten; the ask entry is the sole intentional addition.
+Reopening task design clears the obsolete planned final phase; reopening a numbered phase design
+retains it. Reopening a phase implementation is never offered—change its approved phase design or
+plan a new phase. A request aimed at the current boundary uses ordinary re-entry rather than a
+restart-history record; at the current PRD boundary, the skill preserves the exact correction in
+ask history before recording new production.
 
-A deliberate simplification makes orphan recovery tractable: **workers never write the worktree.**
-Producers write a manifest plus complete after-image payloads into an attempt-scoped output
-directory inside the dispatch workspace (4.6); the coordinator alone validates the declared paths,
-derives every operation and durable fact, and applies the resulting plan through the existing snapshot/projection machinery
-(`src/state/snapshots.ts`) under the fence and the transaction kernel. An orphaned producer can
-therefore corrupt at most its own output directory — never the shared worktree — so "ambiguous
-partial edits" collapses to: coordinator crashed mid-projection, which the existing reconciliation
-findings already classify (`reconcileCurrentAuthority`, `src/state/reconciliation.ts`).
+An open material-drift gate remains higher priority than direct reopen. If its explicit human
+decision is `amend-upstream`, the gate resolver authenticates the affected document digest, derives
+the corresponding earlier planning target, archives the decision, and invokes this same restart
+planner with the gate ID as restart identity. It removes the open gate only inside that authorized
+resolution transaction. Every other direct reopen request is refused while a gate is open.
 
-### 3.5 Worker containment
+### 3.5 Happy-path skill journeys
 
-Dispatcher-controlled capability profiles enforced by the OS, not prompts (R10):
+The diagrams below show the target steady state after cutover, not the current low-level helper
+choreography. Each rounded MCP node is a separate call that returns before the next client or human
+step. Rectangles are work performed by Claude Code or Codex; diamonds are explicit human choices.
+An arrow back to client work is a new turn through status/apply, never an in-server workflow loop.
+Unless a diagram is the read-only status skill or the explicit reopen flow above, its status/apply
+calls carry that producing skill's same `intent: "resume"` invocation.
 
-- **Linux**: bubblewrap (`bwrap`) — read-only bind of the repository view, writable bind of the
-  task-scoped output directory only, `.git` (where present in a view) read-only, unshared network
-  and PID namespaces, no new privileges, and private temporary filesystems.
-- **macOS**: `sandbox-exec` with a generated seatbelt profile — deny default, read-only view,
-  writable output dir, network restricted to the loopback proxy port.
-- **Provider access**: every model-backed role — producer, counter-reviewer, and adjudicator — uses
-  `provider-proxy-only`; none is offline. The coordinator runs a per-dispatch allowlisting forward
-  proxy (CONNECT-only, exact adapter-owned provider hosts on port 443). On macOS the child reaches
-  one loopback port allowed by seatbelt. On Linux the proxy listens on a private Unix socket and a
-  separately built, manifest-verified ArchFlow Node helper inside the namespace bridges one fixed
-  loopback port to that socket, supervises the CLI, and exits fail-closed with it. Credentials do
-  not stay shared: the coordinator reads provider authority outside the sandbox and supplies only
-  a Phase 1-proven adapter channel (for example an inherited ephemeral token/descriptor or a
-  host-side auth broker) that is not a filesystem path addressable by model tools. No real `HOME`,
-  `CODEX_HOME`, Keychain hierarchy, or reusable credential file is mounted. Token refresh remains
-  coordinator/broker-owned; an adapter that cannot authenticate this way is unsupported and fails
-  closed. Together with the proxy this permits first-party transport without exposing arbitrary
-  host credentials or network access.
-- **Fail closed**: Phase 1 must prove the proxy, helper/profile, authentication refresh, packaging,
-  lifecycle, and denial canaries on every advertised platform before Phase 4 treats it as supported.
-  If the required primitive or proven provider path is unavailable (including Windows), all
-  model-backed dispatch refuses with an honest explanation. Current CLI restrictions remain only
-  as defense in depth; there is no unrestricted or flag-only reviewer fallback.
-- **Denial evidence**: sandbox denials (nonzero exit + captured stderr, proxy rejection records)
-  are written as structured attempt records extending the existing failure-only telemetry
-  (`writeAttemptRecord` pattern in `src/dispatch/coordinator.ts`), so the coordinator can prove a
-  request was already authorized or open the smallest escalation.
+#### `$archflow-init`
 
-Honest boundary (LIMITATIONS territory): this contains ArchFlow-dispatched workers. It does not
-defend against a hostile local admin or an arbitrary malicious same-user process, and the PRD's
-non-goals say so explicitly.
+Initialization remains a local bootstrap because it creates the MCP registrations needed before a
+semantic server call is possible. It creates no task, approval, or commit.
 
-### 3.6 Decisions and escalations
+```mermaid
+flowchart TD
+    A["Human invokes archflow-init"] --> B["Client runs the local bootstrap"]
+    B --> C["Scaffold repository policy, runtime ignore, and host registrations"]
+    C --> D["Diagnose ignored, tracked, or diverged setup files"]
+    D --> E["Client explains generated files and host trust prompts"]
+    E --> F{"Human reviews host trust and repository setup"}
+    F --> G["Human commits the approved scaffold"]
+    G --> H["Repository is ready for policy, exploration, or task work"]
+```
 
-Opening a human boundary reuses the durable gate archive (`openDurableGate`, `src/state/gates.ts`)
-minus the blocking wait: the coordinator archives the request, renders a conversational
-presentation, durably records it, and returns (or updates) an `awaiting-approval` / `escalated`
-view immediately. `runDurableGate`'s 500 ms poll and the `archflow-local decide` side channel are
-retired. The client resolves through `archflow_decide` with the server-issued binding; the
-coordinator re-authenticates the exact archived presentation and current observations, applies the
-effect through the existing resolution path (`resolveDurableGate` internals), and automatically
-resumes the current step. Completion still stops at the next top-level boundary. A waiver request
-and its grant/denial remain two distinct decisions, as today (`src/mcp/handlers/waiver.ts`
-semantics preserved internally).
+#### `$archflow-constitution`
 
-## 4. Key interfaces and data shapes
+Constitution maintenance stays a purpose-specific repository-policy workflow rather than a task
+`archflow_apply` action. Phase 4 may expose a narrow validation adapter if cutover needs one, but it
+must not turn policy editing into a general workflow runner.
 
-Sketch-level only; exact Zod schemas and generated JSON Schemas are Phase 2 work. All persisted
-shapes are `type` aliases (repository convention), carry `schema_version: "1"`, and are canonical
-JSON (`canonicalJsonBytes`, `src/contracts/canonical.ts`).
+```mermaid
+flowchart TD
+    A["Human asks to explain or change policy"] --> B["Client reads the README and every numbered rule"]
+    B --> C["Draft the smallest durable rule change"]
+    C --> D["Validate IDs, versions, status, triggers, enforcement, and prose"]
+    D --> E["Show the exact diff and its practical review effect"]
+    E --> F{"Human approves this policy change"}
+    F --> G["Commit only when separately authorized"]
+    G --> H["Future tasks pin the approved policy-base commit"]
+```
 
-### 4.1 Tool inputs (plain object roots)
+Existing tasks keep their already pinned policy base; editing the worktree never silently repins
+them.
+
+#### `$archflow-explore`
+
+Exploration remains client-owned documentation work and does not use the task-lifecycle MCP API.
+
+```mermaid
+flowchart TD
+    A["Human invokes archflow-explore"] --> B["Client checks initialization, maintained pages, and stamps"]
+    B --> C["Propose the fresh or incremental page set"]
+    C --> D{"Human confirms the planned writes or overwrites"}
+    D --> E["Client delegates bounded code exploration per page"]
+    E --> F["Client synthesizes OVERVIEW and project-guidance updates"]
+    F --> G["Present the completed documentation set"]
+    G --> H{"Human approves the exact documentation changes"}
+    H --> I["Client commits the approved documentation scope"]
+    I --> J["Report refresh instructions and archflow-prd as the task entry"]
+```
+
+#### `$archflow-prd <task>`
+
+```mermaid
+flowchart TD
+    A["Human invokes archflow-prd with the request"] --> B(["archflow_status"])
+    B --> C(["archflow_apply: initialize task or begin work"])
+    C --> D["Client preserves the ask, clarifies, researches, and drafts the PRD"]
+    D --> E(["archflow_apply: submit work"])
+    E --> F(["archflow_apply: run independent review"])
+    F --> G{"Review findings"}
+    G -- "Yes" --> H["Client authors finding dispositions"]
+    H --> I(["archflow_apply: record triage"])
+    I --> J{"Accepted revision required"}
+    J -- "Yes" --> K(["archflow_apply: enter revision write window"])
+    K --> L["Client revises the PRD"]
+    L --> E
+    J -- "No" --> M["Client authors the approval summary"]
+    G -- "No" --> M
+    M --> N(["archflow_apply: open artifact approval"])
+    N --> O{"Human chooses and gives a reason"}
+    O --> P(["archflow_apply: record the explicit decision"])
+    P --> Q{"Decision outcome"}
+    Q -- "Request changes" --> R(["archflow_apply: enter requested revision write window"])
+    R --> D
+    Q -- "Approve" --> S["Report archflow-design as the next skill"]
+```
+
+The PRD boundary has no Git milestone. The later `$archflow-design` invocation consumes the
+offered hand-off; PRD completion does not start design work itself.
+
+#### `$archflow-design <task>`
+
+```mermaid
+flowchart TD
+    A["Human invokes archflow-design"] --> B(["archflow_status"])
+    B --> C(["archflow_apply: consume hand-off and begin work"])
+    C --> D["Client reads the PRD and authors architecture plus phase plan"]
+    D --> E["Client updates the PRD if architecture corrected it"]
+    E --> F(["archflow_apply: submit the compound document result"])
+    F --> G(["archflow_apply: run independent review"])
+    G --> H{"Review findings"}
+    H -- "Yes" --> I["Client authors finding dispositions"]
+    I --> J(["archflow_apply: record triage"])
+    J --> K{"Accepted revision required"}
+    K -- "Yes" --> L(["archflow_apply: enter revision write window"])
+    L --> M["Client revises the design and any affected PRD text"]
+    M --> F
+    K -- "No" --> N["Client authors the design-approval summary"]
+    H -- "No" --> N
+    N --> O(["archflow_apply: open design approval"])
+    O --> P{"Human chooses and gives a reason"}
+    P --> Q(["archflow_apply: record the explicit decision"])
+    Q --> R{"Decision outcome"}
+    R -- "Request changes" --> S(["archflow_apply: enter requested revision write window"])
+    S --> D
+    R -- "Approve" --> T["Client creates the already-authorized task-local commit"]
+    T --> U(["archflow_status: observe commit proof"])
+    U --> V["Report archflow-phase-design 1 as the next skill"]
+```
+
+The approval is the commit authority, so there is no second commit prompt at this design
+milestone. The next invocation consumes the hand-off and starts Phase 1 design.
+
+#### `$archflow-phase-design <task> N`
+
+```mermaid
+flowchart TD
+    A["Human invokes archflow-phase-design N"] --> B(["archflow_status"])
+    B --> C(["archflow_apply: consume hand-off and begin work"])
+    C --> D["Client reads parent plans and prior implementation notes"]
+    D --> E["Client designs chunks, interfaces, and executable verification; writes no code"]
+    E --> F["Client updates parent plans when the phase changes them"]
+    F --> G(["archflow_apply: submit the compound document result"])
+    G --> H(["archflow_apply: run independent review"])
+    H --> I{"Review findings"}
+    I -- "Yes" --> J["Client authors finding dispositions"]
+    J --> K(["archflow_apply: record triage"])
+    K --> L{"Accepted revision required"}
+    L -- "Yes" --> M(["archflow_apply: enter revision write window"])
+    M --> N["Client revises the phase design and affected parents"]
+    N --> G
+    L -- "No" --> O["Client authors the design-approval summary"]
+    I -- "No" --> O
+    O --> P(["archflow_apply: open design approval"])
+    P --> Q{"Human chooses and gives a reason"}
+    Q --> R(["archflow_apply: record the explicit decision"])
+    R --> S{"Decision outcome"}
+    S -- "Request changes" --> T(["archflow_apply: enter requested revision write window"])
+    T --> E
+    S -- "Approve" --> U["Client creates the already-authorized task-local commit"]
+    U --> V(["archflow_status: observe commit proof"])
+    V --> W["Report archflow-phase-impl N as the next skill"]
+```
+
+Only the durable approval and observed milestone commit make implementation ready. The later phase
+implementation invocation consumes the hand-off.
+
+#### `$archflow-phase-impl <task> N`
+
+```mermaid
+flowchart TD
+    A["Human invokes archflow-phase-impl N"] --> B(["archflow_status"])
+    B --> C(["archflow_apply: consume hand-off and begin work"])
+    C --> D["Client implements the approved scope and updates parent docs plus impl notes"]
+    D --> E["Client runs every verification step and saves the raw transcript"]
+    E --> F(["archflow_apply: submit implementation facts"])
+    F --> G(["archflow_apply: run independent review"])
+    G --> H{"Review findings"}
+    H -- "Yes" --> I["Client authors finding dispositions"]
+    I --> J(["archflow_apply: record triage"])
+    J --> K{"Accepted revision required"}
+    K -- "Yes" --> L(["archflow_apply: enter revision write window"])
+    L --> M["Client fixes, reverifies, and updates implementation facts"]
+    M --> F
+    K -- "No" --> N["Client authors the commit-authorization summary"]
+    H -- "No" --> N
+    N --> O(["archflow_apply: open commit authorization"])
+    O --> P{"Human chooses and gives a reason"}
+    P --> Q(["archflow_apply: record the explicit decision"])
+    Q --> R{"Decision outcome"}
+    R -- "Request changes" --> S(["archflow_apply: enter requested revision write window"])
+    S --> D
+    R -- "Authorize" --> T["Client stages only declared outputs and shows the staged diff plus message"]
+    T --> U{"Human confirms this Git commit"}
+    U --> V["Client commits"]
+    V --> W(["archflow_status: observe commit proof"])
+    W --> X{"Final planned phase"}
+    X -- "No" --> Y["Report archflow-phase-design N+1 as the next skill"]
+    X -- "Yes" --> Z(["archflow_apply: finish task"])
+    Z --> AA["Task complete; report no next skill"]
+```
+
+The two human diamonds are intentionally separate: durable authorization binds the reviewed diff,
+then the second confirmation binds the exact staged Git commit.
+
+#### `$archflow-status [task]`
+
+```mermaid
+flowchart TD
+    A["Human invokes archflow-status"] --> B(["archflow_status: authenticated read"])
+    B --> C["Server reconciles durable authority and derives one next action"]
+    C --> D["Client explains position, blockers, and exactly one action"]
+    D --> E{"Open human gate"}
+    E -- "No" --> F["Report the exact next skill or terminal state"]
+    E -- "Yes" --> G["Explain the presentation and choices without resolving it"]
+```
+
+This skill never calls `archflow_apply`, edits, repairs, commits, advances, or records a human
+decision. Read-only degraded status remains a local fallback when MCP is unavailable.
+
+#### `$archflow-upgrade <legacy-source> <task>`
+
+Legacy adoption keeps a narrow purpose-specific preview/stage/adopt adapter; it is not encoded as
+an arbitrary task `archflow_apply` action. After atomic adoption, the ordinary semantic review and
+decision shapes take over.
+
+```mermaid
+flowchart TD
+    A["Human invokes archflow-upgrade"] --> B["Client requests a bounded legacy import preview"]
+    B --> C["Explain mapping, omissions, policy or secret blockers, and resume point"]
+    C --> D{"Human approves the exact preview"}
+    D --> E["Purpose-specific adapter stages ignored import bytes"]
+    E --> F["Purpose-specific adapter atomically adopts the canonical task"]
+    F --> G(["archflow_status"])
+    G --> H(["archflow_apply: submit imported or revised design"])
+    H --> I(["archflow_apply: run independent migration review"])
+    I --> J{"Review findings"}
+    J -- "Yes" --> K["Client authors finding dispositions"]
+    K --> L(["archflow_apply: record triage"])
+    L --> M{"Accepted revision required"}
+    M -- "Yes" --> N(["archflow_apply: enter revision write window"])
+    N --> O["Client revises the imported documents"]
+    O --> H
+    M -- "No" --> P["Client authors the migration-audit summary"]
+    J -- "No" --> P
+    P --> Q(["archflow_apply: open migration audit"])
+    Q --> R{"Human chooses and gives a reason"}
+    R --> S(["archflow_apply: record the explicit decision"])
+    S --> T{"Decision outcome"}
+    T -- "Revise" --> U(["archflow_apply: enter requested revision write window"])
+    U --> O
+    T -- "Accept" --> V["Client shows the exact task-local import commit"]
+    V --> W{"Human confirms the commit"}
+    W --> X["Client commits; never pushes automatically"]
+    X --> Y(["archflow_status: observe commit proof"])
+    Y --> Z["Report the exact phase-design or phase-impl resume skill"]
+```
+
+The newly invoked resume skill consumes the offered hand-off. Preview approval, migration-audit
+acceptance, and commit confirmation remain distinct human decisions.
+
+## 4. Public contracts
+
+### 4.1 `WorkflowViewV1`
+
+The exact contract will be a graph of `type` aliases, not interfaces, so any shape later retained
+from a canonical root remains plain-JSON compatible and closed to declaration merging.
 
 ```ts
-type StartInput = {
-  schema_version: "1";
-  task_id: string;
-  step: "prd" | "design" | "phase-design" | "phase-impl";
-  phase?: number;            // required for phase-* steps
-  ask?: string;              // prd only: creates the task from this ask
+type WorkflowConditionV1 =
+  | "awaiting-client"
+  | "awaiting-human"
+  | "ready"
+  | "blocked"
+  | "complete";
+
+type WorkflowResourceV1 = {
+  role: string;
+  path: string;
+  access: "read" | "write" | "read-write";
 };
 
-type SubmitInput = {
-  schema_version: "1";
-  task_id: string;
-  submission:                // union below the root (R4)
-    | { kind: "draft"; content: string }                     // PRD or task-design bytes
-    | { kind: "triage-response"; responses: TriageResponse[] }
-    | { kind: "reopen"; revised_content: string; significance: "editorial" | "significant" }
-    | { kind: "terminal-failure"; reason: string };
-};
-
-type DecideInput = {
-  schema_version: "1";
-  subject:
-    | { kind: "task"; task_id: string }
-    | { kind: "repository-maintenance"; proposal_id: string };
-  binding: string;           // server-issued opaque choice binding
-  reason: string;            // human reason, always required
-  rationale?: string;        // only genuinely choice-specific detail (e.g. waiver scope)
-};
-
-type ControlInput = {
-  schema_version: "1";
-  task_id: string;
-  action: "pause" | "cancel";
-  confirm_discard?: boolean; // cancel only: proportional confirmation for destructive cleanup
-};
-
-type StatusInput  = { schema_version: "1"; task_id?: string };
-type DoctorInput  = { schema_version: "1"; task_id?: string };
-type UpgradeInput = { schema_version: "1"; legacy_source: string; task_id: string };
-```
-
-### 4.2 Common workflow view (the only ordinary response shape)
-
-```ts
-type WorkflowView = {
-  schema_version: "1";
-  subject:
-    | { kind: "task"; task_id: string }
-    | { kind: "repository" };            // task-free doctor/maintenance view
-  state: "ready" | "running" | "awaiting-approval" | "escalated"
-       | "paused" | "canceled" | "blocked" | "complete";
-  headline: string;                       // one plain-language sentence of position
-  presentation?: {                        // awaiting-approval | escalated | blocked only
-    message: string;                      // conversational: what, why, evidence, consequences
-    choices: Array<{ binding: string; label: string; consequence: string }>;
-  };
-  next_step?: { step: "prd" | "design" | "phase-design" | "phase-impl"; phase?: number };
-                                          // ready only: names, never starts
-};
-```
-
-Deliberately absent: revisions, fingerprints, digests, staged references, gate IDs, paths, receipt
-or rubric identifiers, attempt counters. A contract test asserts these fields are unreachable from
-the view schema. Restart/upgrade needs surface as `blocked` with recovery direction, not as extra
-states (R3).
-
-### 4.3 Decision binding
-
-For task workflow decisions, the binding is derivable from durable authority, never a second store:
-`binding = "d-" + sha256(domain-tag ‖ gate_id ‖ choice_id ‖ presentation_digest)[0:32]`, built on
-the existing `computeGateId` / domain-tagged digest helpers (`src/contracts/fingerprints.ts`).
-Resolution re-derives the binding from the archived gate request under
-`authority/decisions/<gate-id>/`; a binding that no longer matches the current open presentation
-(state advanced, presentation re-rendered after a significant revision, fence generation changed)
-is refused with a fresh view; a binding for an already-resolved decision replays the recorded
-outcome idempotently, matching the kernel's existing `last_transition` replay semantics
-(`src/state/transaction.ts`).
-
-Repository maintenance uses a separate domain and archive because task state may be absent or
-malformed: `binding = "m-" + sha256(maintenance-domain ‖ proposal_id ‖ choice_id ‖
-presentation_digest ‖ observed_context_digest)[0:32]`. The repository-scoped proposal archive
-contains the human presentation, choices, exact observed build/worktree/fence/config bytes, and
-their digest; resolution writes an immutable decision then receipt beside that proposal. A
-`repository-maintenance` decision requires no task lookup, re-derives the binding solely from this
-archive, refuses any changed observation or replay mismatch, and acquires the maintenance fence
-before effect. Task and maintenance domains cannot authenticate one another.
-
-### 4.4 Fence record
-
-`.archflow/runtime/repository/fence/<generation>.json` — repository scope, outside any task, on the
-ignored runtime side of the layout (`src/repository/paths.ts` gains a repository-scoped path
-class). Written with the existing exclusive-create primitive (`createExclusive`,
-`src/state/atomic.ts`): creating generation N+1 succeeds for exactly one contender, which is the
-atomic acquisition.
-
-```ts
-type RepositoryFenceV1 = {
-  schema_version: "1";
-  generation: number;                    // strictly monotonic
-  status: "held" | "released";
-  acquisition_id: string;                // random holder capability, never worker-visible
-  mode: "execution" | "maintenance";
-  holder: {
-    pid: number;
-    process_start: string;               // process start marker (e.g. /proc stat start time),
-                                         // distinguishes pid reuse
-    build_id: string;                    // dist/manifest.json digest of the loaded bundle
-  };
-  task_id?: string;                      // execution: the active task and step
-  step?: { step: string; phase?: number };
-  acquired_at: string;
-  lease: { heartbeat_at: string; ttl_ms: number };  // heartbeat rewritten in place (replace class)
-  released_at?: string;
-  release_reason?: "human-boundary" | "ready" | "paused" | "restart-required" | "canceled";
-};
-```
-
-The highest generation is the durable high-water mark. It owns the repository only when
-`status:"held"` and its holder is live (pid + start marker) with a fresh lease; a released record is
-never valid ownership even while the long-lived server remains alive. At a safe boundary the exact
-holder, authenticated by `acquisition_id`, atomically replaces that generation with
-`status:"released"`; the file is never deleted or renumbered. One holder-local lease controller
-serializes every heartbeat and release. Release first marks the controller closing, stops and joins
-the heartbeat loop, then compare-and-swap replaces the exact current `{generation,
-acquisition_id,status:"held",record_digest}` with `released`; a queued or stale heartbeat fails the
-same CAS and cannot write afterward. A contender reads the highest record
-and exclusively creates generation N+1 only after observing release, or after proving an abandoned
-holder exited/was terminated and reconciling the worktree. Competing reclaimers race on the same
-exclusive create, so one wins. A live-but-stale or otherwise ambiguous holder fails closed to a
-doctor escalation. Resume/decision acquires a new generation while `active_step` retains the
-original kickoff authority. Every worker result carries its launch generation and is admitted only
-while that exact generation remains held; release instantly makes late results stale.
-
-### 4.5 Capability profile
-
-```ts
-type WorkerCapabilityProfile = {
-  role: "producer" | "counter-reviewer" | "adjudicator";
-  model_backed: true;
-  write_capable: boolean;
-  filesystem: { view_root: string; writable_output_dir: string | null; git_readonly: true };
-  network: "provider-proxy-only";
-  provider: {
-    adapter: "claude-cli" | "codex-cli";
-    exact_hosts: string[];                         // measured, adapter-owned allowlist
-    port: 443;
-  };
-  generation: number;                             // fence binding
-};
-```
-
-Derived by the dispatcher from the approved envelope and routes config; workers cannot alter it.
-
-### 4.6 Producer output contract
-
-Producer dispatch adds an adapter invocation mode, `producer-output`. The outer OS sandbox exposes
-the repository view read-only and exactly one fixed writable child path,
-`.archflow-output/`. Claude keeps safe mode and no shell but gains `Read,Grep,Glob,Write,Edit`;
-Codex uses its native workspace-write editor while shell, unified execution, multi-agent, browser,
-apps, and plugins remain disabled. These client flags are an inner layer; only the OS sandbox is
-trusted to limit writes to the output bind.
-
-The directory has one closed, adapter-neutral format:
-
-```text
-.archflow-output/
-  manifest.json
-  payloads/<opaque-id>.bin
-```
-
-The manifest declares `result_kind: "document-set" | "implementation-images"` and the complete
-changed-path set. Each entry is an absent path or a complete regular-file/symlink after-image
-payload and mode (`100644`, `100755`, or `120000`); renames are a delete plus an add. Producers
-never author patches, Git operations, path classes, digests, snapshots, durable records, or
-projection instructions.
-
-`document-set` is the bounded channel for PRDs, task/phase designs, synchronized parent documents,
-and implementation logs. Its envelope names the exact current-task document slots that invocation
-may return; document entries must be regular UTF-8 files, cannot delete required artifacts, and
-cannot name state, config, runtime, evidence, decision, workflow, or another task path. The
-coordinator validates required document structure (including phase-plan authority), derives the
-artifact and parent-document bindings, installs the admitted bytes as an immutable result, and
-writes only those slots through the same receipt-backed task transaction. Review binds to the
-coordinator-installed artifact bytes, never to worker files. `implementation-images` additionally
-admits authorized repository-source after-images and derives `ImplementationOutputV1` plus the
-projection plan; its envelope may include exact current-task parent-document and impl-log slots so
-reality synchronization lands in the same result.
-
-After the whole process group exits successfully, the coordinator walks with `lstat`, opens with
-no-follow semantics, and rejects extra nodes, symlinks/hardlinks/devices in the output area,
-duplicate or ancestor/descendant paths, missing/reused payloads, unsafe symlink targets, no-ops,
-and any path outside the kickoff envelope (especially other tasks and server-owned `.archflow`
-state). It materializes the JSON once before repeated inspection, rechecks generation, process,
-build, base commit, and envelope identity, and derives add/modify/delete plus full projection
-sources from the pinned base tree and accepted bytes. Limits are 1 MiB manifest, 4,096 entries,
-25 MiB aggregate payload, 25 MiB per payload, the existing 8 MiB process-output channels and
-15-minute worker timeout, plus the existing retained-result/task caps. Within that total,
-`document-set` bytes and canonical document entries co-produced by `implementation-images` are
-limited to 512 KiB aggregate. Before admission, the coordinator renders the complete proposed
-review envelope — implementation metadata, pinned context, and exact document contents — and
-requires it to satisfy the existing 1 MiB `MAX_REVIEW_ENVELOPE_BYTES` limit. An oversized result
-is rejected before any worktree/state effect and routes to bounded remediation or escalation;
-exact bytes are never truncated. Repository-source after-images retain the 25 MiB limit because
-reviewers inspect those bytes through the pinned repository view rather than envelope embedding.
-
-The image-based builder feeds the existing `ImplementationOutputV1`, secret scanning, collision
-checks, retained payloads, and `prepareProjectionPlan`; a dirty declared path yields zero writes.
-For both result kinds, transaction order is: install immutable result bytes, create the exact-intent
-receipt referencing them, project the authorized document/source after-images, atomically replace
-state, then clean the receipt and disposable output. A crash after any partial projection therefore
-replays the same retained intent, while an unadmitted or malformed attempt has no worktree effect.
-
-### 4.7 Checkpoint mapping and active step
-
-The coordinator's checkpoints ARE the existing durable transitions: `produce` / `counter_review` /
-`triage` step records with `running|succeeded|failed` status, planned by `planStateTransition`
-(`src/state/transitions.ts`) and committed by `runStateTransaction` — unchanged shapes, unchanged
-replay/receipt recovery. One addition: `TaskStateV1` (`src/contracts/durable-state.ts`) gains an
-optional `active_step` field recording the human kickoff:
-
-```ts
-type ActiveStepRef = {
-  step: "prd" | "design" | "phase-design" | "phase-impl";
+type WorkflowPositionV1 = {
+  kind: "prd" | "design" | "phase-design" | "phase-impl";
   phase?: number;
-  kickoff_decision?: string;   // digest binding to the recorded start authority
-  envelope_digest: string;     // digest of the derived delegation envelope (R1)
-  status: "running" | "awaiting-decision" | "paused" | "restart-required";
+};
+
+type WorkflowInvocationV1 =
+  | { skill: "archflow-prd"; intent: "resume" | "reopen" }
+  | { skill: "archflow-design"; intent: "resume" | "reopen" }
+  | {
+      skill: "archflow-phase-design";
+      phase: number;
+      intent: "resume" | "reopen";
+    }
+  | { skill: "archflow-phase-impl"; phase: number; intent: "resume" };
+
+type WorkflowReopenImpactV1 = {
+  target: WorkflowPositionV1;
+  affected_positions: readonly WorkflowPositionV1[];
+  authority_effects: readonly (
+    | "supersede-results"
+    | "clear-active-waivers"
+    | "clear-pending-human-revision"
+    | "clear-planned-final-phase"
+  )[];
+  planned_final_phase: "clear" | "retain";
+  preserves_existing_git_index_and_worktree_bytes: true;
+  appends_prd_ask_history: boolean;
+  requires_fresh_review_and_approval: true;
+};
+
+type SemanticNextActionV1 = {
+  kind:
+    | "initialize-task"
+    | "begin-work"
+    | "submit-work"
+    | "review"
+    | "triage"
+    | "revise"
+    | "reopen"
+    | "open-waiver"
+    | "decide"
+    | "commit"
+    | "start-next-skill"
+    | "finish-task"
+    | "inspect"
+    | "none";
+  instruction: string;
+  offer?: string;
+  expected_submission?:
+    | "none"
+    | "task-ask"
+    | "work-result"
+    | "triage"
+    | "gate-summary"
+    | "reopening-request"
+    | "decision";
+  skill?: string;
+  skill_args?: readonly string[];
+  commit?: {
+    path: string;
+    message: string;
+    target_ref: string;
+    baseline: string;
+    requires_human_confirmation: boolean;
+  };
+  reopen?: WorkflowReopenImpactV1;
+};
+
+type WorkflowViewV1 = {
+  schema_version: "1";
+  task_id: string;
+  condition: WorkflowConditionV1;
+  headline: string;
+  detail: string;
+  position?: WorkflowPositionV1;
+  resources: readonly WorkflowResourceV1[];
+  next_action: SemanticNextActionV1;
+  findings?: readonly PublicFindingV1[];
+  review_context?: {
+    rubric: RubricV1;
+    active_rules: readonly PublicConstitutionRuleV1[];
+  };
+  presentation?: HumanPresentationV1;
 };
 ```
 
-Set at `archflow_start`, `active_step` survives every resumable approval, escalation, pause, and
-restart-required boundary with the applicable status; those are durable observer stops, not the
-end of kickoff authority. It is cleared only when the human-started top-level step reaches a
-terminal `ready`/`complete` boundary or is explicitly canceled. A decision that restores authority
-therefore resumes only when its archived binding and the retained kickoff/envelope still match.
-Because the record lives in `state.json`, it flows through the same transaction kernel, receipts,
-and crash arbitration as everything else, and a compatible restart reconstructs "which step the
-human started and whether it is still authorized" solely from canonical records (R2). Absence of
-`active_step` in an existing task's state is the reconciler's signal for legacy positions (Section 7).
+The public finding contains the stable finding ID, severity, blocking flag, summary, reviewer
+evidence, suggested resolution, and any current disposition/rationale needed for remediation. The
+human presentation reuses the existing title, summary, details, question, and labeled
+option/consequence model, but each option contains an opaque choice token rather than gate IDs or
+digests.
 
-## 5. Resolved design decisions
+`review_context` is returned only when the producing skill needs the canonical same-side review
+rubric or pinned active rules. It intentionally omits rubric digests, routing, reviewer identity,
+and evidence ordering. Resources reuse the current status roles and paths because a client
+producer must know where to work.
 
-Each subsection resolves one bullet of the PRD's "Design must resolve" list.
+Server-internal companions include `SemanticActionOfferV1`, `SemanticOperationKeyV1`, and the
+closed named-substep vocabulary for each action family. They are canonical type aliases used for
+derivation/tests, never fields in `WorkflowViewV1` and never new durable records.
 
-### 5.1 Attached vs. background execution for calls that start or resume work
+`PublicFindingV1` retains the reviewer's evidence and suggested resolution in addition to its ID,
+severity, blocking flag, and summary. The current `TaskStatusV1.evidence.findings` projection omits
+those two fields, so the semantic read path must load them from the same authenticated retained
+review snapshot rather than fabricate or discard them.
 
-**Decision (evidence-gated):** the portable baseline is attached-until-boundary for every call that
-starts or resumes coordinator execution. `archflow_start`, and `archflow_decide` when its choice
-restores authority, keep their request open while the coordinator works and return their final
-`WorkflowView` as soon as the step reaches `awaiting-approval`, `escalated`, `blocked`, or `ready`.
-Progress notifications are optional UX only. Disconnect detaches that observer; it is not workflow
-cancellation. A reissued identical start reattaches to the active/recovered step; an idempotent
-decision replay reattaches to the execution authorized by that already-recorded choice.
+The view never exposes:
 
-**Criteria:** in both Claude Code and Codex — maximum tolerated single tool-call duration versus
-the realistic step ceiling (a phase-impl step includes several worker dispatches, each capped at
-15 minutes by `DISPATCH_TIMEOUT_MS`, `src/dispatch/process.ts`, so multi-hour steps are expected;
-ArchFlow's own registrations currently pin one-hour call timeouts — `CLAUDE_MCP_TIMEOUT_MS =
-3_600_000`, `CODEX_TOOL_TIMEOUT_SEC = 3_600`, `src/init/registration.ts`); stdio EOF behavior when
-the host closes the pipe mid-call; whether a concurrent `archflow_control` call is deliverable
-while a call is outstanding; reconnect behavior after host restart; MCP progress-notification
-support in both hosts.
+- phase-instance/step/status transition triples;
+- durable revision or input fingerprint;
+- intent or request/evidence/subject digests;
+- staged request or archive paths;
+- gate IDs, gate context, waiver origin, or approval references;
+- reviewer routing identities or internal request templates.
 
-Phase 1 may select immediate-return/background execution only if both real hosts prove a standard
-completion channel that automatically surfaces the later actionable view after either a start or
-decision call returns. Status and replayed calls are optional observation/reattachment, not a
-completion-polling fallback. If both hosts cannot sustain attached-until-boundary and cannot
-surface a detached completion without polling, Phase 1 stops as a go/no-go failure and the design
-or operating envelope must be revised.
+Project errors use a compact public summary and include a fresh `WorkflowViewV1` whenever durable
+status remains readable. That lets a stale action fail with the actual safe next action.
 
-### 5.2 Whole-catalogue budget and first-call selection
+### 4.2 `archflow_status`
 
-The numeric budget is measured, not guessed (dependency gate 2). Phase 1 advertises a prototype
-seven-tool catalogue in both hosts, measures serialized size and first-call tool selection against
-representative user intents without protocol instructions, and pins the resulting number in the
-successor of `test/contracts/mcp-advertised-schema.test.ts`. Working hypothesis: purpose-level
-descriptions with small semantic schemas should land far below the current 105,478 bytes; the
-regression fence is set from the measurement, not from today's <130,000 fence.
+Input:
 
-### 5.3 Workflow-view and decision-binding schemas
+```ts
+type ArchFlowStatusInputV1 = {
+  schema_version: "1";
+  task_id: string;
+  invocation?: WorkflowInvocationV1;
+};
+```
 
-Resolved in 4.2 and 4.3. The exact vocabulary is the PRD R3 eight-state list, `awaiting-approval`
-is an expected boundary distinct from `escalated`, and the view schema's forbidden-field test is
-part of the Phase 2 contract suite.
+The tool is mechanically read-only. It creates production services, computes one authenticated
+`SemanticStatusSnapshotV1`, projects that snapshot into `WorkflowViewV1`, derives the current action
+offer for the supplied invocation, and returns. The snapshot contains the existing full
+`TaskStatusV1` plus the authority's repository identity digest, full current review findings, any
+authenticated pending-waiver origin, any authenticated post-decision/pre-reentry revision
+checkpoint, any exact archived-but-unsettled decision beside its still-open gate, and the
+planning-restart facts needed to validate and explain a reopen. These
+enrichment facts come from the same canonical state, immutable gate archives, and retained-evidence snapshot;
+the implementation must not join legacy status to unrelated later reads. It never repairs,
+advances, opens a gate, restarts, or creates a task.
 
-### 5.4 Remediation budget
+Core producing skills always send their invocation. An omitted invocation, as used by
+`$archflow-status`, returns the same reconciled view but no mutation offer. `intent: "resume"`
+derives only the current or exact successor action; it can never cause a backward reset.
+`intent: "reopen"` derives a reopen only for its own strictly earlier planning position and never
+for `phase-impl`. The invocation is context, not authority: the server derives current position,
+target legality, and concrete impact. Open gates, reconciliation/repair, and terminal state take
+precedence over it and are presented without a mutation offer when the invoked skill is not their
+current owner.
 
-Source: task config (`config.yaml`) gains `remediation.max_attempts_per_step`, default **3**,
-mirroring the existing evidence machinery's `DEFAULT_MAX_ATTEMPTS = 3`
-(`src/review/fixed-point.ts`). Counting: the existing durable `attempt` field in `TaskStateV1`
-already counts per pipeline step per phase instance; no new counter is invented. Reset: a
-significant human revision resets attempt to 1 (already enforced by the state schema's
-revision-history rules in `src/contracts/durable-state.ts`); editorial revisions do not. Exceeded:
-the coordinator opens an `attempts-exhausted` presentation (the gate kind already exists in
-`src/contracts/gates.ts`) as a nonblocking escalation with the convergence history summarized
-conversationally.
+For an initialized repository with no task, an `archflow-prd` resume invocation returns an
+`initialize-task` offer. For an uninitialized repository or unreadable authority, status returns
+`blocked` with the existing safe bootstrap/repair direction. Local manual status remains only the
+degraded fallback when MCP is unavailable.
 
-### 5.5 Safe boundaries for pause, cancel, build update, worker permission
+### 4.3 `archflow_apply`
 
-- **Pause** takes effect at the next durable checkpoint boundary: the current worker dispatch (if
-  any) is allowed to finish or is terminated via the existing SIGTERM→SIGKILL path
-  (`src/dispatch/process.ts`), its result is recorded or discarded atomically, `active_step.status`
-  becomes `paused`, and the fence lease is released. Resume = `archflow_start` of the same step.
-- **Cancel** stops the same way but marks the step canceled without inventing completion: no
-  checkpoint is rolled back, retained evidence and authority records are kept, and the view
-  explains what was and wasn't finished. See 5.12 for cleanup.
-- **Build update** (R8): the coordinator compares the loaded `build_id` against the installed
-  bundle digest before each new worker dispatch and at each checkpoint. On mismatch it finishes or
-  safely terminates only the current bounded worker operation, checkpoints, dispatches nothing
-  new, releases the fence, and returns a `blocked` restart-required view. A compatible restarted
-  server acquires a new generation and resumes from checkpoints. Durable contract incompatibility
-  (schema_version it cannot parse) routes to upgrade/migration diagnosis instead.
-- **Worker permission requests**: a sandbox denial produces structured evidence (3.5); the
-  coordinator first checks whether the attempted effect is already inside the approved envelope
-  (then re-dispatches with a corrected profile or performs the effect itself, e.g. a Git read) and
-  otherwise opens the smallest escalation describing exactly the denied effect.
+Input root:
 
-### 5.6 Repository/maintenance fence format, acquisition, generation, liveness, recovery
+```ts
+type ArchFlowApplyInputV1 = {
+  schema_version: "1";
+  task_id: string;
+  invocation: WorkflowInvocationV1;
+  action: {
+    offer: string;
+    submission?: ApplySubmissionV1;
+  };
+};
+```
 
-Resolved in 4.4 and 3.4. Acquisition atomicity comes from `createExclusive`'s link()-based
-exclusive create (`src/state/atomic.ts`); liveness from pid + process-start marker + lease
-heartbeat; recovery is fail-closed when the orphan cannot be proven exited. The existing
-task-scoped lock (`src/state/lock.ts`) is retained beneath the fence for intra-task transaction
-serialization — the fence serializes writers across tasks/sessions, the task lock serializes
-transactions within one task; keeping both avoids rewriting the kernel.
+`ApplySubmissionV1` is a nested discriminated union below the plain object root:
 
-### 5.7 Worker containment mechanism, platforms, provider access, fail-closed
+```ts
+type ApplySubmissionV1 =
+  | { kind: "task-ask"; text: string }
+  | { kind: "reopening-request"; request: string }
+  | {
+      kind: "work-result";
+      outcome: "succeeded";
+      implementation?: {
+        base_commit: string;
+        outputs: readonly string[];
+        restore_targets: readonly string[];
+        declared_inputs: readonly { input_id: string; path: string }[];
+      };
+      human_revision?: HumanRevisionDeclarationV1;
+    }
+  | { kind: "work-result"; outcome: "failed"; reason: string }
+  | { kind: "triage"; dispositions: readonly TriageDispositionV1[] }
+  | { kind: "gate-summary"; summary: string }
+  | {
+      kind: "decision";
+      choice: string;
+      reason: string;
+      option_rationale?: string;
+    };
+```
 
-Resolved in 3.5. Linux (bubblewrap plus the packaged bridge) and macOS (sandbox-exec/seatbelt) are
-supported only after Phase 1 real-host evidence proves their complete provider and denial paths;
-Windows is unsupported. An advertised platform fails closed for every model-backed role when its
-proven boundary is unavailable.
-Provider access is distinguished mechanically: the proxy allowlist is infrastructure configured by
-the dispatcher from routing config, not something the worker can extend; everything else is denied
-in-namespace before effect. The dead `allow_claude_dispatch` conditional in
-`src/dispatch/cli.ts` / `src/mcp/handlers/counter-review.ts` is removed in passing when the
-dispatcher is reworked (Phase 4).
+Apply reuses the exact invocation supplied to status. The opaque offer binds that invocation, and
+the server recomputes both together; the client cannot convert a resume offer into a reopen or
+change the target by editing the submission. `reopening-request.request` must contain non-whitespace
+human text and is capped at the existing 4,096-character human-reason limit, but its accepted bytes are never trimmed,
+normalized, or reflowed. Internally those exact bytes become the durable restart reason. For a PRD
+target, the same stable operation installs one generated ask-history entry exactly once before the
+restart fingerprint is derived. A target field is intentionally absent from the submission.
 
-### 5.8 Producer routing and authentication; review independence
+For task initialization, semantic staging writes the UTF-8 encoding of `task-ask.text` exactly—no
+trim, normalization, or added newline—to the canonical `ask.md` slot before recording revision
+zero. The current `TaskInitializationV1` request remains
+unchanged; the staged ask is a recoverable input which the first PRD result later pins as its
+declared `user-ask`. Exact replay accepts an existing byte-identical ask, while different bytes
+fail closed. If initialization fails after staging, status still reports an uninitialized task and
+the same ask submission can safely retry; research never begins in that window.
 
-The coordinator dispatches producers as supervised workers (today the producer is never
-dispatched — `src/mcp/handlers/session.ts` binds `producer_family` to the connected host).
-Producer `{model, effort}` comes from the existing routes config: `config.roles.producer` with
-per-phase-kind overrides, resolved by `resolveDispatchRoute` (`src/dispatch/routing.ts`;
-`ROUTING_ROLES` in `src/contracts/config.ts` already includes `producer`). Family is inferred from
-the model prefix as today, and the existing `FAMILY_MISMATCH` constraint keeps counter-reviewer
-and adjudicator in the opposite family from the producer — independence is preserved by the same
-code path that enforces it now. Authentication changes from today's real-`HOME` passthrough to the
-Phase 1-proven ephemeral credential/broker channel in 3.5; no provider credential hierarchy is
-worker-visible. Pre-design remains interactively authored: for PRD and task design the human's client is
-the producer via `archflow_submit`, and producer-family recording keeps using host identity there.
+Document completion needs no artifact body or path: the server snapshots the exact writable
+resource slots named by the offer. Phase implementation includes only facts the client genuinely
+owns. `base_commit`, declared output/restore paths, and declared input IDs describe the work the
+client performed; the server derives canonical parent-document slots, verification transcript
+location, after-images, digests, scope classification, secret scan, and all durable bindings.
 
-Implementation review material is extended at the internal `renderProduceReviewMaterial` /
-pinned-context seam. Alongside `ImplementationOutputV1`, the coordinator supplies a canonical
-document bundle containing the exact installed bytes for every co-produced current-task parent
-document and implementation log, each bound to its retained-result entry and digest. These bytes
-are review input even though the read-only repository view continues to omit `.archflow/tasks`;
-reviewers receive no access to other task files or server authority records. The review subject
-digest covers both implementation output and this document bundle, so changing any code after-image
-or synchronized document byte invalidates the entire review/evidence set. Counter-review and
-remediation therefore assess code, truthful governing documents, and the implementation log as
-one exact subject before commit. The coordinator preflights this fully rendered material against
-the existing 1 MiB envelope cap before admitting the producer result, so every valid admitted
-document set is reviewable without truncation.
+No submission is supplied for deterministic offered actions such as begin-work, revision re-entry,
+independent review, pending-waiver opening, phase handoff, or final task completion. `revise`
+records only the server-derived produce-running transition after accepted triage or an
+authenticated close-only human revision decision, then returns `submit-work` with the writable
+resources; the client must not edit before that apply result. Accepted triage takes the ordinary
+attempt-incrementing re-entry. A revision-decision checkpoint binds the archived gate request and
+decision, derives the re-entry fingerprint, preserves the attempt for a human revision (or
+increments it for `retry-once`), and creates `pending_human_revision` only as part of the resulting
+produce/running state. Ordinary gate opening
+requires `gate-summary`: the exact human-readable summary authored by the skill for that decision.
+The server derives the gate kind, subject, evidence, context, and choices. Pending-waiver opening
+instead derives the existing `Waiver request for <rule_id>` summary and every other gate field from
+authenticated authority. `decide` normally requires the human decision submission; once an exact
+decision archive exists beside its still-open gate, the settlement continuation requires and
+permits no submission. A missing, extra, or wrong submission kind is rejected against the
+recomputed offer.
 
-### 5.9 Coordinator-authorized commit scope, refs, messages, parent documents
+### 4.4 Action offers
 
-The coordinator executes the Git effects that today's next actions hand to the client, using the
-same derived bindings and the same proofs:
+An action offer is an opaque `af1_<sha256>` token derived from a canonical
+`SemanticActionOfferV1`; the offer digest is domain-separated from all durable document kinds. The
+internal shape is not encoded into the public token and binds at least:
 
-- **Milestone commits** (PRD, design, phase-design approvals): scope is exactly
-  `.archflow/tasks/<task>/`; message, target ref, and baseline come from the authenticated
-  approval context exactly as `computeTaskStatus` derives them today for the `commit-artifacts`
-  action (`src/state/next-action.ts`, `src/state/status.ts`). Observation reuses
-  `designArtifactCommittedAtCurrentTarget` (`src/state/implementation-manifest.ts`): direct child
-  of baseline, exact message, diff-tree confined to the task root, state and decision archive
-  included.
-- **Phase-implementation commits**: scope is the exact retained after-image path set of the
-  approved implementation output plus the task root (impl-notes, synchronized parent docs — all
-  under `.archflow/tasks/<task>/`); proof via `implementationOutputCommittedAtCurrentTarget`.
-  Parent-document synchronization is included in the same commit because deviations must land with
-  the work they describe (CLAUDE.md hard rule).
-- Commit creation requires: configured verification succeeded, review evidence current, parent
-  docs synchronized, implementation log written, diff proven in-scope, fence held at the launch
-  generation, and either the existing exact-subject human commit-authorization decision or a
-  task-pinned repository constitution rule that explicitly grants stage-scoped delegation under
-  R1. Scope uncertainty (unrelated dirt, conflicts — detected by
-  `classifyMutationReadiness`, `src/repository/history.ts`, and status partitioning) escalates
-  before staging.
+- task and repository identity;
+- durable revision and input fingerprint;
+- current phase and server-derived next-action code;
+- the exact workflow invocation, including `resume` versus `reopen`, plus the server-derived reopen
+  target and impact when applicable;
+- subject/evidence/gate/commit identity when applicable;
+- the archived gate-decision identity when `revise` consumes a close-only human-revision
+  checkpoint;
+- expected submission kind.
 
-The R1 authority is not a task artifact. Phase 1 drafts a repository constitution proposal with a
-stable rule ID/version and exact stage-scoped semantics, then stops for the separate
-`$archflow-constitution` workflow to review, approve, and commit it at repository scope. A task
-branch cannot amend the constitution it pinned, so this `api-refactor` task continues to use the
-existing human commit gates even after that repository change. The new coordinator enables
-automated checkpoints/commit only for a later task whose immutable policy-base commit contains the
-approved active rule and whose pinned `{rule_id, version, rule_digest}` exactly matches the
-implementation's supported binding. Missing, changed, deprecated, or mismatched policy keeps the
-legacy human authority path; task-local approvals and configuration can never turn the capability on.
+On apply the server recomputes the one currently legal offer and compares the digest. A caller
+cannot create a different legal action by editing the token. The token is an interface binding, not
+authority on its own; exact durable state, artifacts, evidence, approvals, and Git observations
+remain the authority.
 
-### 5.10 Pre-design exact-byte artifact exchange
+Each action derives a private `SemanticOperationKeyV1` from a domain label, the accepted starting
+offer digest, authenticated repository/task identity, invocation, semantic action family,
+phase/attempt/subject identity, and canonical submission digest. The key therefore binds the offer
+but is not the volatile offer alone. Its domain-separated canonical digest is carried in every
+substep's distinct internal intent ID:
 
-`archflow_submit` carries the authored document bytes; the coordinator captures them
-deterministically through the existing produce path (`prepareDocumentResult` flow in
-`src/mcp/handlers/state.ts` internals become a service), so the digested, reviewed, and approved
-bytes are identical to the submitted bytes. The approval presentation quotes position and summary
-conversationally and the approval binds — via the archived gate request, not via anything the
-client echoes — to the exact artifact digest, as gate context binding works today. The client
-never handles digests; exactness is server-enforced. Reopen after approval requires the
-significant/editorial declaration in the submission variant, mapping to the existing
-`pending_human_revision` machinery (`src/contracts/durable-state.ts`).
+`afop-<64-hex operation digest>-<closed substep code>`
 
-### 5.11 Maintenance proposal/receipt storage and cleanup
+Substep codes use the lowercase safe-code alphabet and are capped at 58 characters, so the full
+format fits the 128-character `PathSafeId`. For the current compound action, review, it lets
+authenticated `last_transition.intent_id` retain operation correlation after normal cleanup
+deletes transient receipts. Single-step actions continue through their existing transaction or
+immutable gate-archive replay authority. Each action family has a fixed named substep plan—usually
+one substep; review uses `review-enter`, `review-run`, and the conditional `review-empty-triage`;
+Phase 2 decision uses `decision-archive` and `decision-settle`.
+Receipts remain the existing crash buffer only while one substep is being installed; no design rule
+depends on an earlier substep receipt surviving commit cleanup.
 
-`.archflow/runtime/repository/maintenance/<proposal-id>.{proposal,receipt}.json` — repository
-scope, canonical JSON, written with `createExclusive`, deliberately outside any task so a malformed
-task cannot poison them (R11). Bounded: one open proposal at a time per repository; resolved
-proposals retain an immutable decision and receipt; receipts are pruned by count (small fixed
-retention) during later maintenance acquisitions. Each proposal includes its repository-scoped
-human presentation, choices, and exact observed-context digest. Proposals are appended only by
-`archflow_doctor` and the doctor CLI fallback (bootstrap repairs only). `archflow_decide` resolves
-them through `subject:{kind:"repository-maintenance",proposal_id}` without loading task state,
-re-authenticates the maintenance-domain binding and current bytes/build/fence/config observations,
-then applies only under a newly acquired maintenance fence. Denial/cancel records the decision and
-performs no repair; an already resolved binding replays the receipt, while a changed observation
-returns a fresh proposal rather than reusing authority.
+For reopen, that deterministic identity is also the restart ID. Exact retry authenticates the
+matching restart-history record, target, request bytes, landing position, and ask-history append
+when applicable; a changed request or invocation is a conflicting operation, never a second
+restart. The PRD ask append uses the same identity and recoverable receipt/atomic-replace machinery,
+so a crash on either side of that append converges without duplicating it.
 
-### 5.12 Cancellation cleanup semantics
+On the first call, apply validates the current offer and derives the operation digest. At a compound
+continuation, it accepts an embedded digest only after recomposing and authenticating the preceding
+substep's tool, operation, request digest, input fingerprint, outcome, and exact legal successor
+state against `last_transition`. An exact retry derives a candidate digest from its old starting
+offer/submission and must match that authenticated digest. A fresh mid-action call must match the
+new current offer, then carries the authenticated existing digest to the first unfinished substep.
+Review accepts no client submission. Decision accepts one submission only for
+`decision-archive`; after the immutable record exists, fresh continuation accepts none and
+recomposes the operation from the gate request/frozen predecessor, invocation, and archived
+choice/reason. A changed single-step or starting decision submission derives a different digest and
+conflicts with the recorded transition or gate archive. Once another actor
+completes a later semantic action, an older token is simply stale and returns the fresh safe view.
+There is no semantic operation record, offer archive, or receipt-retention exception.
 
-Cancel never destroys durable authority. Kept unconditionally: canonical state, receipts, evidence,
-decision archives, retained results, committed work. Cleaned automatically: dispatch workspaces
-(already disposed in `finally` — `src/dispatch/coordinator.ts`) and ordinary workspace cache per
-the existing retention rules (`src/state/workspace-cleanup.ts`). Discarded only with
-`confirm_discard: true` (proportional explicit confirmation, R8): unapplied producer output for the
-canceled step. Because workers never write the worktree (3.4), cancel never needs to revert
-worktree files; a coordinator crash mid-projection is handled by reconciliation, not by cancel.
-Anything beyond this (deleting a task) remains a later administrative action.
+### 4.5 Semantic mapping over the current state machine
 
-### 5.13 Direct replacement
-
-No compatibility facade. No current-user requirement for one was demonstrated during design; the
-PRD's assumptions favor direct replacement, and the reconciler (Section 7) preserves otherwise
-compatible canonical authority, which is the actual obligation. The old tools' logic survives as
-internal services; only their advertisement and the mutating CLI surface are removed, at the end,
-after semantic replacements are proven (dependency gate 10).
-
-## 6. Requirement mapping
-
-| Requirement | Design element | Phases |
+| Durable position / next action | Public view | Apply effect |
 |---|---|---|
-| R1 bounded delegation policy | Phase 1 repository-constitution proposal approved only through `$archflow-constitution`; later enablement requires an exact task-pinned rule binding, while this task retains human commit gates; envelope digest recorded in `active_step` (4.7, 5.9) | 1, 7 |
-| R2 one transport, one gateway, four identities | In-server coordinator (3.1); fence record holds build/process identities (4.4); contract version in schemas; doctor surfaces all four (5.5, R11) | 3, 9 |
-| R3 common workflow view | `WorkflowView` (4.2), forbidden-field contract tests (9) | 2, 5–8 |
-| R4 semantic pre-design | `archflow_start`/`archflow_submit` variants (4.1), exact-byte exchange (5.10) | 8 |
-| R5 human-stepped autonomous steps | Kickoff-only starts; coordinator-owned loops (3.3); checkpoints = existing transitions (4.7) | 5, 7 |
-| R6 review/verification/commit integrity | Existing kernel and commit proofs remain; implementation review material includes exact co-produced document bytes under one evidence-invalidating subject digest (5.8–5.9) | 3–7 |
-| R7 nonblocking escalation, one decision path | Durable presentations over the gate archive; `archflow_decide` + binding (3.6, 4.3); auto-resume | 6 |
-| R8 pause/cancel/update/interruption | Safe boundaries (5.5), cancel semantics (5.12), build-skew stop (5.5), idempotent attached observation (5.1) | 3, 6, 8 |
-| R9 repository fence and worker ownership | Fence record + generations + reclamation (4.4, 3.4); workers-never-write-worktree (3.4) | 3, 4 |
-| R10 mechanical worker capabilities | Capability profiles + bwrap/seatbelt + proxy + validated producer after-images + fail-closed denial evidence (3.5, 4.5, 4.6) | 4, 7 |
-| R11 diagnosis and safe maintenance | `archflow_doctor` tool + skill; repository-scoped task-free presentation/decision authority and bounded proposals (4.3, 5.11); doctor CLI fallback | 9 |
-| R12 semantic legacy upgrade | `archflow_upgrade` preview + maintenance-decision creation; thin skill | 9 |
-| R13 CLI end state | Installed surface = init/registration, version/launch diagnosis, read-only task diagnosis, approved bootstrap repair; composition logic stays internal library | 10 |
-| R14 skill end state | Nine thin skills + `archflow-doctor` (ten); protocol-vocabulary ban inverted in contract tests | 10 |
-| R15 docs and validation evidence | All 14 maintained pages updated in-change; audit annotated, not rewritten | every phase, finalized in 10 |
+| Task missing, repository ready | `ready / initialize-task` | Recoverably stage exact ask bytes, initialize PRD produce-running, return writable ask/artifact resources. |
+| Explicit `reopen` invocation names a strictly earlier PRD/design/phase-design and no higher-priority blocker exists | `awaiting-client / reopen` expecting `reopening-request` plus concrete impact | Bind the exact request to the offered target; for PRD append it once to ask history; archive target-and-downstream result authority, clear waivers/pending revision, reset attempt 1, and return the target produce window. |
+| Produce not running or retry/re-entry required | `ready / begin-work` | Record only produce-running, then return `awaiting-client / submit-work`. |
+| Produce running | `awaiting-client / submit-work` | Snapshot client work and record produce success/failure. |
+| Review required, running, or durably finding-free before empty triage | `awaiting-client / review` expecting `none` | Execute only the unfinished fixed named review substeps, dispatch existing independent reviews at most once, and record terminal/empty-triage evidence; return findings or the next ordinary gate-opening action. |
+| Findings need judgment | `awaiting-client / triage` | Record exact dispositions; return the separate `revise` action, exhausted gate, constitution gate, or artifact approval. |
+| Accepted triage requires production re-entry | `ready / revise` expecting `none` | Record only the ordinary attempt-incrementing produce-running re-entry, then return `awaiting-client / submit-work` with writable resources. |
+| An authenticated close-only gate decision requires re-entry | `ready / revise` expecting `none`; no writable resources yet | Revalidate its immutable request/decision checkpoint, derive the fingerprint, enter produce-running, create `pending_human_revision` only for a human revision, then return writable resources. |
+| Ordinary gate needs opening | `awaiting-client / decide` expecting `gate-summary` | Bind the submitted human-readable summary to server-derived gate authority, open/archive it, and return the presentation without waiting. |
+| Open gate, no decision archive | `awaiting-human / decide` expecting `decision` | Re-authenticate choice and reason, exclusively archive that decision, settle it in the next fixed substep, and return without any second human action. |
+| Open gate, exact decision archive already exists | `ready / decide` expecting `none`; no presentation | Continue only `decision-settle`; close/apply the already-recorded choice once, never reprompt, and return its bounded next action. |
+| Open gate, invalid or conflicting decision archive | `blocked / inspect` | Do not present choices or mutate until the authority conflict is repaired. |
+| Authenticated `waiver-requested` decision, waiver gate not yet open | `awaiting-client / open-waiver` expecting `none` | Derive the existing waiver summary, rationale, rule, scope, subject, evidence, and origin from archived/current authority, open exactly one waiver gate, and return its presentation. |
+| Authorized client commit required | `awaiting-client / commit` | Return exact Git instructions and no apply offer. The client commits, then calls read-only status; status performs existing commit observation and returns the now-legal handoff/completion offer. |
+| Approved predecessor can advance | `ready / start-next-skill` | Only the newly invoked successor skill applies the phase handoff and opens its work window. |
+| Final implementation commit is observed | `ready / finish-task` | The current phase-implementation skill records terminal task completion. |
+| Repair/reconciliation ambiguity | `blocked / inspect` | No apply offer unless an existing bounded semantic repair is defined; report the current safe owner/action. |
+| Final phase committed | `complete / none` | No mutation. |
 
-Dependency gates 1–10 map one-to-one onto Phases 1–10 (Section 10); each phase names its gate.
+The exact internal transition sequence remains the legal state machine. The focused planning
+restart extension adds only the backward edge and audit record described above; the facade changes
+how all other transitions are grouped and derived, not what evidence or approvals authorize them.
 
-## 7. Migration and compatibility
+### 4.6 Catalogue and schema projection
 
-**Reconciler.** A read-only classifier maps existing durable tasks onto semantic positions. Inputs
-it already has: `computeTaskStatus`'s reconciled truth, `deriveNextAction`, and the checkpoint
-vocabulary (phase instance + step + status + open gate). Mapping:
+Both tools have purpose-level descriptions. Their advertised input roots are plain objects with no
+root `oneOf`, `allOf`, or `$ref`; invocation and `action.submission` variants remain nested below
+those roots. The result schema is the compact public view and public error summary, not the durable
+artifact/gate/error corpus.
 
-- terminal `complete`/`abandoned` → `complete` / `canceled`;
-- an open gate (`open_gate` in `TaskStateV1`) whose kind is an artifact/design approval → the same
-  gate re-rendered as a nonblocking `awaiting-approval` presentation with fresh bindings — the
-  archived request under `authority/decisions/<gate-id>/` is already the exact subject authority;
-  other gate kinds → `escalated`;
-- mid-pipeline checkpoints (produce/counter_review/triage in any legal status) → `ready` naming the
-  step that contains them; the human's next `archflow_start` of that step resumes from the
-  checkpoint rather than restarting it (kernel replay semantics make reissue idempotent);
-- inconsistent authority (reconciliation blocking findings, unparseable state, unknown
-  schema_version) → `blocked` with direction to `archflow_doctor` / `archflow_upgrade` — fail
-  closed, nothing partially adopted (R8).
+The current custom `$defs` reachability projection may be reused initially. After the compact
+contracts are measured, delete projection machinery only if the simpler schema makes it
+unnecessary; do not rewrite it speculatively. Catalogue size and first-call selection are measured
+against final production descriptors in Phase 4, not against a test-only future catalogue.
 
-**Open-gate special case.** Any `gate.decision` interface file left behind by the old CLI path is
-ignored as authority and removed as disposable runtime (the interface was always reconstructible;
-only the archive binds). A pending old-style blocked `archflow_gate` call cannot survive the server
-upgrade anyway (the call dies with the old process); the durable gate remains open and reconciles
-as above. Because a legacy gate predates `active_step`, `archflow_decide` resolves it through a
-narrow legacy-completion path authenticated solely by the archived gate request, exact subject,
-current checkpoint, policy base, and fresh decision. Under a newly acquired fence it applies only
-the effect already enumerated by that gate (including an exact milestone commit if the archived
-gate authorized it), records the resolution idempotently, and stops at `ready`/`complete`. It cannot
-dispatch a producer, create new review evidence, or cross another top-level boundary. If more work
-remains, a fresh `archflow_start` supplies `active_step` and a new envelope. Mid-pipeline legacy
-checkpoints likewise create `active_step` only from that explicit start; checkpoint replay avoids
-duplicating completed effects. No kickoff authority is inferred from old state.
+## 5. Internal implementation
 
-**Retirement sequencing.** Old tools and mutating CLI commands remain functional until their
-semantic replacements are proven (dependency gates 5–9), then are removed together in Phase 10:
-tool names out of the catalogue, handlers demoted to internal services, CLI command table cut to
-the R13 set, skills replaced, tests inverted. Mid-sequence, both surfaces exist but the fence makes
-dual mutation safe: once Phase 3 lands, old-tool handlers and every installed CLI command that
-writes task, runtime, worktree, Git, decision, result, cleanup, initialization, or upgrade state
-acquire the same execution/maintenance fence through one internal wrapper. Read-only commands do
-not acquire it. At a legacy human gate the server durably records the presentation and releases
-its execution fence before waiting, so `archflow-local decide` can acquire a short execution lease,
-write the disposable choice, and release; the server then reacquires a new generation before
-authenticating and applying it. Busy/stale observations fail closed rather than bypassing the fence.
+### 5.1 One read model
 
-**What fails closed.** Unknown durable schema versions; tasks with unresolvable reconciliation
-findings; legacy upgrade staging (`stageLegacyUpgrade`, `src/init/legacy-upgrade.ts`) is replaced
-by the preview/approve flow, and a denied or canceled migration leaves no partially canonical task
-(R12).
+`computeTaskStatus` remains the base durable read model. Add one server-internal
+`computeSemanticStatusSnapshot` adapter that obtains the base status, authenticated repository
+identity, full retained finding fields, pending-waiver facts, authenticated post-decision revision
+facts, and planning-restart eligibility from one consistent read. Add pure
+`projectWorkflowView(snapshot, invocation)` and
+`buildSemanticOffer(snapshot, invocation)` functions. Semantic status and every successful or
+recoverable apply call invoke the same functions. Tests compare an apply response byte-for-byte
+with a fresh semantic-status projection for the same invocation to prevent response drift.
 
-## 8. Risks and mitigations
+Implement the consistent read by extracting the smallest private detailed-status assembly seam
+from `computeTaskStatus` (or an equivalent internal return used by both callers), so state and
+retained evidence are loaded once. Keep the serialized legacy `TaskStatusV1` output unchanged; do
+not compute legacy status and then reopen mutable files to enrich it.
 
-- **Vague or premature policy weakening human authority** (PRD risk 1): the policy is a distinct
-  repository constitution proposal approved only through `$archflow-constitution`; no task can
-  amend its pinned rules. The coordinator requires an exact active rule binding from a task's
-  immutable policy base or keeps today's commit-authorization gates (`commit-phase` remains
-  `human_required: true`, `src/state/next-action.ts`). Negative tests pin that task-local approval,
-  rule mismatch/deprecation, or a successor boundary never supplies that authority.
-- **Host lifetime or background delivery is unreliable** (PRD risk 2): Phase 1 proves both hosts
-  against the attached-until-boundary baseline; detached execution is selected only with positive
-  automatic-completion evidence, and failure of both branches stops the refactor for redesign (5.1).
-- **Fence/ownership bugs have larger blast radius** (PRD risk 3): the fence reuses the proven
-  exclusive-create primitive; workers never write the worktree (3.4), shrinking what ownership
-  bugs can corrupt; crash tests around acquisition, heartbeat, and reclamation are required
-  evidence (Phase 3).
-- **Containment or provider access not enforceable on every platform** (PRD risk 4): Phase 1 is a
-  platform go/no-go gate for the proxy, Linux helper, macOS profile, authentication, packaging, and
-  lifecycle; any unproven model-backed dispatch fails closed with an honest explanation (3.5).
-- **Orphan writers need humans more than expected** (PRD risk 5): mitigated structurally (workers
-  can't touch the worktree) and by pid+start-marker liveness proof; the residual ambiguous case
-  fails closed to a doctor escalation by design rather than by accident.
-- **Stale evidence / design drift during autonomous remediation** (PRD risk 6): unchanged
-  enforcement — the one-hop editorial rule and significant-revision invalidation live in
-  `src/review/fixed-point.ts` and remain the coordinator's only path to evidence reuse.
-- **Diagnostics as a second authority store** (PRD risk 7): proposals are bounded, repository-
-  scoped, re-authenticated, fenced, and replay-safe (5.11); doctor is otherwise observation-only.
-- **Incomplete transition preserves skew/dual authority** (PRD risks 8, 11): phases are sequenced
-  so the fence lands before autonomy (3 before 5/7) and removal lands only after proofs (10);
-  the fence-gates-both-surfaces property (Section 7) covers the interim.
-- **Catalogue bloat returns** (PRD risk 9): the semantic catalogue is measured and fenced in
-  Phase 1/2; internal schemas must be unreachable from advertised tool schemas (contract test).
-- **Unbounded or gate-happy remediation** (PRD risk 10): explicit budget with existing attempt
-  machinery (5.4); attempts-exhausted is an escalation, not a loop.
-- **Coordinator crosses a completed-step boundary** (PRD risk 12): `active_step` is cleared at the
-  durable stop and `archflow_start` is the only entry that sets it; negative tests assert that
-  completing any step yields `ready` and that no internal path invokes start.
-- **Doc/code mismatches found during exploration** get fixed in passing: the stale "all five
-  tools" comments in `src/mcp/tools.ts`, the stale 35/34 schema counts in
-  `docs/contracts/CONTRACTS.md` (32 committed, 31 generated + 1 hand-written per
-  `src/contracts/internal/schema-generation.ts`), the "reconcile is mutating" mislabel in
-  `docs/cli/COMMANDS.md`, and the dead `allow_claude_dispatch` gate (5.7).
+The adapter is not a second state machine. Except for explicit backward invocation, the legacy
+waiver interval below, an archived-but-unsettled decision, the authenticated post-decision revision
+interval, and the narrow finding-free review continuation, it projects the base
+`next_action`. A reopen projection first honors open gate, terminal, and reconciliation/repair
+blockers; then validates the invocation target with the canonical total phase ordering and derives
+the affected authority from the same state snapshot. `resume` never enters this branch. After
+`review-run` has durably produced no findings but `review-empty-triage` has not committed,
+the snapshot keeps the public action as no-submission `review` and marks that fixed substep as the
+first unfinished operation step; it must not expose a meaningless client triage judgment or
+redispatch review. The adapter uses the transaction authority's repository identity rather than an
+input fingerprint, and it preserves `evidence` plus `suggested_resolution` from the authenticated
+review artifact. Cross-repository fixtures with otherwise identical task bytes must produce
+different offer tokens.
 
-## 9. Verification strategy
+For a valid checkpoint produced by the old surface, the same authenticated finding-free state may
+have no semantic intent prefix. Treat the current offer as a new one-substep review-settlement
+operation whose only substep is `review-empty-triage`; do not redispatch the already retained
+review. A semantic-looking prefix that fails full `last_transition` recomposition is not legacy—it
+returns `blocked / inspect`.
 
-Existing layers and gates stay authoritative: unit / contracts / integration / crash / real-host
-under `test/`, and the `npm run check` chain (typecheck, generated-schema drift via
-`check:schemas`, full vitest, contracts, bundle smoke, notices, SDK-boundary, release integrity —
-`package.json`). Real-host suites remain opt-in (`ARCHFLOW_REAL_HOSTS=1`,
-`test/helpers/real-host.ts`); Phase 1 defines the exact required runs and their durable evidence.
+When `open_gate` exists, the same snapshot loads its immutable request and decision-archive slot
+before projecting the presentation. A missing archive is the normal `awaiting-human / decide`
+state. One exact semantic archive suppresses that presentation and projects `ready / decide` with
+no submission and only `decision-settle` unfinished; the operation digest is recovered from the
+archive's semantic event binding and the recomputed starting offer. One exact pre-facade archive
+starts a new one-substep settlement over the already-authenticated human choice. Invalid,
+mismatched, or conflicting archives yield `blocked / inspect`, never another prompt. This is
+archive authority, not a new coordinator record.
 
-**New coverage by PRD verification bullet (abridged to the load-bearing items):**
+The revision interval adds no state field. It is recognized only when the Phase 2 semantic
+decision service has archived an exact re-entry decision, removed that gate without entering
+production, left the state at the request phase's triage/succeeded position with no
+`pending_human_revision`, incremented revision once, and installed the current
+`archflow_gate / semantic-revision-requested` last transition. The snapshot reloads and validates
+the request and decision archives, deterministic decision-substep identity, frozen predecessor,
+subject, evidence, phase/attempt context, re-entry choice, and transition digests. Missing, forged,
+stale, wrong-phase, non-reentry, or superseded facts return `blocked / inspect`; a valid checkpoint
+projects `ready / revise` with no writable resources.
 
-- Semantic contract tests: input schemas (plain object roots, purpose descriptions, no root
-  combinators), `WorkflowView` exact vocabulary, forbidden-field unreachability, decision-binding
-  stale/replay rejection. Successor of `test/contracts/mcp-advertised-schema.test.ts` pins the
-  measured catalogue budget.
-- Journey integration tests: semantic PRD/design journey with exact approvals and scoped commit
-  observation; multi-phase journey proving every boundary needs a fresh kickoff; one autonomous
-  phase-design and one autonomous phase-implementation invocation without client scheduling; each
-  escalation category with immediate presentation, one decision, auto-resume.
-- Fence and crash tests: two tasks / two sessions competing for the fence; orphan
-  termination/recovery; stale-generation result rejection; crash/fault around acquisition,
-  checkpoints, worker admission, decisions, commit creation/observation — extending the existing
-  `test/crash/` layer.
-- Adversarial containment tests: workers attempting out-of-scope/cross-task reads, Git mutation,
-  arbitrary network, privilege escalation, destructive ops, and result publication after
-  cancellation/fence loss — all denied before effect (skipped-with-reason on platforms without the
-  primitive, mirroring the fail-closed runtime behavior).
-- Credential-boundary tests: no host home/provider credential path is mounted; model tools cannot
-  read or mutate provider authority; the proven ephemeral/broker channel completes auth and refresh,
-  while broker loss or an adapter without that channel fails before dispatch.
-- Producer-output tests: both adapters can author the fixed manifest/payload format without shell;
-  admission rejects unsafe node/path/size/type cases; document-set results can update only exact
-  authorized task artifact/parent/log slots and bind review to installed bytes; implementation
-  add/modify/delete/symlink images become derived retained results and projection plans; kill
-  points before and after the receipt prove deterministic replay or zero writes after partial
-  projection.
-- Preservation suite: the durable-kernel tests (crash/, state-*, repository-*, dispatch-*,
-  review-*, canonical/digest corpora) survive as internal-invariant coverage, unchanged.
+`NextAction` may retain its internal request templates during migration. They are not reachable
+from `WorkflowViewV1`. Once all semantic composers cover every emitted action, the templates and
+their skill-facing guidance can be retired.
 
-**Inverted or replaced tests** (each removal paired with replacement coverage, and choreography
-tests removed only after the Phase 1 policy approval, per the PRD):
+### 5.2 Transport-neutral composition
 
-| Existing test | Fate |
+Split `src/local/build-request.ts` into:
+
+- internal, transport-neutral composition services that accept authenticated production services,
+  the current state/status, and only semantic submission facts;
+- the existing CLI adapter, retained temporarily for old skills;
+- the new semantic apply dispatcher, which consumes the offer and invokes exactly one service.
+
+The internal services reuse `buildDocumentArtifact`, `buildImplementationOutput`, triage binding,
+counter-review request derivation, gate-context derivation, and advance derivation. They produce the
+same resolved internal request or invoke the same bounded handler service. They do not shell out,
+self-call MCP, or stage a request between functions in the loaded server.
+
+Add the focused planning-restart kernel absent from this branch: canonical phase comparison and
+strict earlier-planning validation; an optional sorted/unique `restart_history` record; a planner
+that supersedes target-and-downstream authoritative results, clears active waivers and pending
+human revision, preserves prior approvals/history/fixed pins, resets the target to produce-running
+attempt 1, and clears `planned_final_phase` only for PRD/design targets; connected-human provenance;
+and replay validation against the stable semantic restart ID. The generic transaction preservation
+guard may permit waiver/pending-revision removal only for an authenticated restart plan and must
+remain strict otherwise. Cleanup keeps archived result/decision authority referenced by restart
+history. Old state with no history remains valid.
+
+Add one shared restart-generation predicate for approval authority. First derive the
+`authority_phase` the approval binds: the authenticated gate request phase must agree with the
+current/upstream subject artifact's producer `phase_instance`; imported projections use their
+canonical binding, while migration-audit authority uses its authenticated migration gate request
+phase. Never substitute the current consuming phase. For that authority phase, find the greatest
+`restarted_at_revision` among restart records whose target is at or before that phase in canonical
+workflow order. An approval is eligible for that phase only when `resolved_at_revision` is greater
+than that cutoff. Apply it everywhere approval is authority: current next action, approved-upstream
+loading, evidence/adjudication, gate and transition validation, migration-audit/resume, commit
+observation, and phase advancement. Archives and diagnostic history may still display older
+approvals. This closes deterministic identical-byte reuse without changing artifact or fingerprint
+digests.
+
+Extend the existing retained-result accounting graph to the deduplicated union of active
+`authoritative_results`, current `pending_human_revision.evidence`,
+`human_revision_history[].evidence`,
+`restart_history[].superseded_results`, and evidence nested in each cleared pending human revision.
+Snapshot creation, result installation/replay, status/workspace accounting, and the task byte cap
+all use this same graph. A result digest shared across any histories counts once; moving it to
+restart history never frees quota while cleanup keeps its bytes live.
+
+The reopen composer accepts only the authenticated invocation, offer, and exact
+`reopening-request`; it derives the target and invalidation set. For PRD it uses one stable
+operation/restart identity to install a server-framed ask-history append through recoverable
+exclusive/atomic replacement, verifies an existing retry append byte-for-byte, then derives the
+target fingerprint and lands the restart. A crash before state replacement leaves a resumable
+append; a crash after it authenticates the restart-history record and does not append again. Any
+unexpected ask bytes fail closed. Design/phase-design reopen has no document side effect before the
+state transition.
+
+Semantic initialization adds one explicit recoverable staging step around the existing
+`stageTaskInitialization`: write the exact ask bytes to canonical `ask.md` with exclusive-create
+semantics, accepting only a byte-identical existing file on retry, then compose the unchanged
+`TaskInitializationV1` revision-zero request. If the later state transaction fails, the staged ask
+remains resumable and no PRD review treats it as pinned until the first produced PRD declares it as
+`user-ask`. This preserves exact ask capture without widening the durable initialization contract.
+
+The envelope/request-digest code remains internal because receipts and handler identity still need
+it. The public caller no longer computes or transcribes any of those fields.
+
+### 5.3 Bounded apply dispatcher
+
+The apply handler performs this fixed sequence:
+
+1. materialize and validate the caller-owned input once;
+2. create production services and compute full current status;
+3. bind the supplied invocation, then validate either the current offer or an old offer whose derived operation digest matches the
+   fully authenticated semantic `last_transition` before rejecting it as stale;
+4. derive or carry forward the stable operation digest and validate the expected submission;
+5. execute only the first unfinished substep in that action family's fixed plan, settle its existing
+   receipt/transaction, and explicitly continue only when the next named substep has no intervening
+   actor boundary;
+6. recompute/re-authenticate status between substeps and once more for the returned
+   `WorkflowViewV1`.
+
+The plan is explicit code per action family, not a registry or workflow interpreter. Most actions
+have one state-transition substep. `revise` is exactly `revise-enter`: after accepted triage it
+composes the ordinary attempt-incrementing produce re-entry; after an authenticated
+`semantic-revision-requested` checkpoint it reloads the immutable gate archives, derives the gate
+re-entry fingerprint, preserves the attempt for a human revision (or increments it for
+`retry-once`), and creates `pending_human_revision` only while entering produce/running. Exact replay
+authenticates that transition and returns `submit-work`; it never repeats re-entry. Review is pinned
+to `review-enter`, `review-run`, and, only for a finding-free
+result, `review-empty-triage`; each name has its own deterministic internal intent. `review-enter`
+composes the existing counter-review/running state transition, `review-run` invokes the existing
+counter-review handler/service, and `review-empty-triage` composes the zero-disposition triage result
+only after authenticated review evidence proves there are no findings.
+Interruption after any one of them leaves durable state from which either the old exact call or a
+fresh status offer selects the same next substep: the current substep may use its recovery receipt,
+while every completed substep is correlated by authenticated `last_transition`. The
+dispatcher has no `while` over workflow actions, recursive apply, dynamic substep discovery,
+queued continuation, or execution past the next client/human boundary.
+
+Decision is the other fixed compound plan once Phase 2 enables it. `decision-archive` accepts the
+one human submission and exclusively writes its immutable record; `decision-settle` accepts no
+submission and alone changes state. With no actor boundary the normal apply continues directly,
+but a crash between writes makes fresh status offer only the settlement continuation. It never
+renders the gate for a second decision. A revision choice settles at the closed
+`semantic-revision-requested` checkpoint and returns; `revise-enter` remains a later offered
+action.
+
+Reopen is one bounded semantic action. Its durable state effect is one planning-restart transition;
+the PRD variant has the recoverable ask-append precondition described in 5.2. Neither variant edits
+the reopened artifact, performs review, resolves a gate, or advances a successor. Exact retry may
+recognize either its authenticated `last_transition` or restart-history record because normal
+cleanup can remove the transient receipt.
+
+### 5.4 Independent review
+
+The review action reuses `handleCounterReview`/`runCounterReview`. Producer family still comes from
+the MCP initialize handshake. The server derives the canonical subject, artifact path, rubric,
+pinned repository view, reviewer family, and constitution rules. The client supplies none of them.
+
+Move the existing process-wide dispatch FIFO boundary outward so it encloses the `review-run`
+pre-dispatch replay recheck, rubric/constitution dispatches, and durable commit as one serialized
+operation; the inner dispatches then run directly and must not acquire the FIFO again. This prevents
+concurrent old/fresh calls from both dispatching without a new keyed registry. It does not claim
+external exactly-once execution if the server process dies before any result is durably recorded;
+R9 only replays an effect once durable authority exists.
+
+If findings exist, apply returns them for client triage. If none exist, the same bounded action may
+record the no-judgment triage result but must return the gate-opening action for the skill-authored
+summary. Any constitution trigger, material drift, or attempt exhaustion follows the same summary
+boundary before its presentation opens. The server never authors a disposition, revision, or gate
+summary.
+
+### 5.5 Nonblocking gates and waivers
+
+`openDurableGate` already provides a bounded gate-opening seam. Current decision application is
+not yet a comparable semantic service: `resolveDurableGate` consumes an already written
+`gate.decision` projection, while `runDurableGate` owns the blocking wait and approval resolution;
+neither accepts a decision payload from an MCP handler. Phase 2 must extract one bounded
+decision-application service that accepts the authenticated server-issued choice and human reason,
+selects and validates the live template, records appropriate human provenance, archives the
+decision, and closes the gate under the existing transaction/lock rules. It is a fixed compound
+operation: `decision-archive` exclusively creates the immutable record, then `decision-settle`
+changes state. The archive's existing connected-host `decision_event_id` deterministically binds
+the semantic operation digest; connection ID and request-ID digest retain the real host trace, so
+no archive shape or coordinator record is added. If create-exclusive finds an archive, the service
+loads and authenticates its event, choice/reason, and gate bindings and reuses its original
+provenance/timestamp bytes; it never regenerates, replaces, or asks for a second record.
+
+The normal call continues directly because no actor boundary lies between those substeps. A crash
+after archive creation but before state replacement leaves the matching `open_gate` in state. Fresh
+status must detect and fully validate that archive before rendering the presentation, recover the
+original operation from the archived request/frozen predecessor, invocation, choice/reason, and
+event binding, and return no-submission `decide` with only `decision-settle` unfinished. An old
+exact call reaches the same substep. A valid pre-facade archive without the event binding starts a
+new one-substep settlement over the already-authenticated decision. Invalid, changed, or
+conflicting archives return `blocked / inspect`; no recovery path asks the human to decide again.
+
+For any choice the existing `enactsReentry` predicate recognizes, the semantic service deliberately
+splits closure from production re-entry. Its `decision-settle` substep removes only the matching
+`open_gate`, preserves the triage-succeeded phase,
+attempt, fingerprint, results, and approvals, leaves `pending_human_revision` absent, increments
+revision, and writes `archflow_gate / semantic-revision-requested` in `last_transition`. It then
+uses the recovered deterministic `afop-...-decision-settle` intent, binds the direct semantic decision request
+digest, and records an outcome that exactly matches the immutable decision archive; the archived
+gate request retains its separate open-request digest. Fresh status recomposes the decision
+operation from the live-gate offer derived from that archived request and frozen predecessor, the
+supplied invocation, and archived choice/reason. It then returns the no-submission `revise` action.
+`revise-enter` is the only writer that derives the next
+fingerprint and enters produce/running; it creates the existing pending-human-revision marker for
+the human-revision choices and increments the attempt without that marker for `retry-once`.
+After settlement, decision retry or fresh status authenticates the archive/transition and returns
+the same `revise` offer. The installed legacy `archflow_gate` path continues its current atomic
+decision-plus-reentry behavior until its skills migrate, so no old caller is stranded at the new
+checkpoint. Extract the existing fingerprint/re-entry planning from `planGateAuthorizedReentry`
+behind one authenticated internal seam that accepts either the still-open legacy predecessor or
+the exact close-only semantic checkpoint; do not duplicate its attempt, evidence, or
+`pending_human_revision` rules.
+
+For ordinary gates, the new flow submits `gate-summary` to `openDurableGate`, archives the request,
+builds the existing conversational presentation, and returns. A later decision submission uses the
+new Phase 2 service to resolve that exact archive after re-observation and re-authentication. Phase
+1 defines and projects the starting/continuation submission shapes and validates synthetic
+archive-before-state plus close-only revision checkpoints, but does not claim to execute direct
+decisions or to have parity for the split legacy gate operation.
+
+The existing material-drift `amend-upstream` choice is the one gate-resolution path that enacts a
+planning restart. Phase 1 wires its legacy resolver to the same restart planner: derive the target
+from the authenticated affected-upstream artifact digest by enumerating the current phase's
+canonical upstream bindings and loading each through `loadProduceUpstreamSubject`; this covers both
+retained document results and legacy-import projections. Deduplicate bindings that resolve to the
+same authenticated subject, require one unique subject matching the sealed digest, and derive the
+planning target from that subject's document artifact `phase_instance` (the imported projection's
+synthesized artifact already carries its canonical binding phase). Then remove the exact open gate only as
+part of its authorized resolution, use the gate ID as restart identity, archive the decision, and
+verify the landing state/history on replay. Zero, duplicate, changed, or unauthenticated matches
+fail closed. Phase 2's extracted decision service preserves that behavior; it does not turn an
+arbitrary open gate into a reopen offer.
+
+The disposable interface file may continue to be projected for recovery/audit compatibility, but
+it is not required to resolve authority and normal skills never write it. Once no supported path
+waits on it, remove `gate-wait.ts` and the normal local `decide` command. A corrupted or missing
+projection cannot strand the durable gate.
+
+Waiver-requested remains a non-approval decision. It returns the separate no-submission
+`open-waiver` action. That later apply derives and opens the exact waiver gate from archived
+authority, uses the current handler's server-derived `Waiver request for <rule_id>` summary, and
+returns a second presentation. The human's later grant/deny choice is another decision submission.
+No client supplies a second summary or reconstructs waiver origin fields.
+
+Current gate closure removes `open_gate` and leaves no normal next-action code for the interval
+between a `waiver-requested` decision and opening its waiver gate. The semantic snapshot adapter
+recognizes that interval from the current `last_transition`, loads and validates the referenced
+archived gate request and decision, verifies the rule, scope, current subject, and evidence
+bindings, and produces an internal authenticated pending-waiver origin. The new waiver context
+derives its rationale from that authenticated decision payload; the rule, scope, subject, evidence,
+origin, and summary are all server-derived. That fact takes precedence over the base next action and
+yields the `open-waiver` action above. Missing, stale, mismatched, or
+already superseded archives return `blocked / inspect`; they never reopen the original constitution
+gate or ask the client to reconstruct the origin. Once the waiver gate opens or resolves, ordinary
+open-gate and waiver state again determine the view.
+
+Recognition is deliberately narrow: there is no `open_gate`; `last_transition` is an
+`archflow_gate` result for the current state revision whose authenticated decision is
+`waiver-requested`; its request belongs to the current task/phase and current subject/evidence; and
+no later waiver result supersedes it. The archived decision digest supplies the internal origin.
+
+### 5.6 Client work, verification, and Git
+
+Documents are written only in resource slots returned by the view. The server snapshots those
+slots on submit. Phase-design production may update the returned PRD and task-design parents in the
+same result, preserving current compound-subject behavior.
+
+A parent edit inside the current phase is not a backward restart: it is included in that phase's
+compound produced subject and fresh evidence. If the change invalidates already approved or
+implemented work, the client must stop and invoke the affected earlier planning skill with explicit
+`reopen` intent. The server then invalidates downstream authority before any replacement bytes are
+authored. A PRD correction is always preserved in ask history, whether it uses same-phase re-entry
+or the server-owned append in a backward restart.
+
+For implementation, Claude Code or Codex edits the worktree, updates parents and implementation
+notes, writes the canonical verification transcript, and supplies the small implementation
+declaration. Existing snapshot, projection, secret, path-classification, diff, transcript, and
+subject builders validate exact bytes. The server does not run a test or edit source.
+
+Design and implementation commit rules remain unchanged. Existing design status already supplies
+the authenticated commit facts and the semantic view returns them. Current phase-implementation
+status does not expose an equivalent complete fact set, so Phase 1 maps that position to an honest
+generic client-commit instruction with no fabricated `commit` object. Before Phase 3 cuts the
+implementation skill over, it extends the authenticated read model to return the exact authorized
+path, target ref, baseline, message, and confirmation requirement.
+
+The client stages only the authorized scope, inspects it, and for implementation obtains the
+separate explicit commit confirmation. After the client commits, read-only `archflow_status`
+reuses the current Git proof and returns either the successor handoff offer or the final-completion
+offer. This observation is required only after an external Git change, not after an MCP mutation.
+MCP never runs `git add` or `git commit` in this design.
+
+After restart, an existing identical Git commit is history, not approval. Status may re-observe it
+as byte/target evidence only after a post-restart eligible approval authorizes the current exact
+subject; old approval or commit-observed facts alone cannot skip the fresh gate or advance.
+
+### 5.7 No new coordinator state
+
+The optional `restart_history` audit field is the sole focused durable extension and is not a job
+or coordinator record. Do not add `active_step`, heartbeats, fencing generations, background jobs, worker manifests,
+producer output channels, event delivery, pause tokens, or server session memory. The current task
+state, authenticated `last_transition`, and within-transaction recovery receipts already identify
+the next durable action. A client pause is simply stopping at the current boundary and later
+calling status.
+
+Cross-task interactive worktree concurrency remains an honest existing limitation. A server fence
+could not contain edits made directly by independent host sessions anyway, so it is outside this
+API refactor.
+
+## 6. Compatibility, replay, and cutover
+
+### 6.1 Existing durable tasks
+
+Every valid existing checkpoint is projected through the mapping in Section 4.5. The state schema
+adds only optional `restart_history`; absence means no restart has occurred, so old tasks need no
+migration file or compatibility state. The planning restart is a backward edge to an existing
+produce-running position, not a new phase or pipeline status. Tests seed every next-action class and
+restart-history presence/absence and require one semantic view for the supplied invocation.
+
+Open legacy gates remain resolvable from their durable archives through the new decision action.
+The old disposable presentation is treated as a reconstructible projection, never required input.
+Existing receipts continue to replay their original low-level requests; new semantic calls add
+stable operation-key and named-substep intent correlation through the existing
+`last_transition.intent_id` field without rewriting history or retaining transient receipts.
+Restart history authenticates exact reopen replay after receipt cleanup; retained old approvals
+remain audit history only and cannot authorize newly produced subject bytes. PRD reopen recovery
+also verifies the operation-bound ask append before accepting or continuing the state transition.
+The revision cutoff is derivable entirely from optional restart history, and retained-byte
+accounting adds its archived result references to the existing deduplicated graph; neither needs a
+migration projection.
+
+### 6.2 Transition period
+
+Phases 1-3 keep the old four tools and CLI composers available so this task can continue under the
+current approved workflow while replacements are tested. New semantic handlers call the same
+internal services; they do not create a second state machine. Skills switch only after their full
+journeys pass.
+
+The final cutover removes the old four tools from advertisement and removes
+`build-request`/`envelope`/normal `decide` from supported skill instructions. Purpose-specific
+constitution and legacy-upgrade operations receive narrow semantic adapters before low-level tool
+retirement; they are not folded into task `archflow_apply`. Bootstrap, installation/registration,
+read-only degraded status, and bounded exceptional repair may remain local.
+
+### 6.3 Loaded-build coherence
+
+All normal request derivation and mutation now run inside the same loaded MCP build. A fresh CLI no
+longer constructs authority for an older server. If a client invokes an unsupported semantic schema
+version, the server returns a compact blocked result and restart/reinstall direction; it does not
+ask another executable to mutate around the mismatch.
+
+## 7. Requirement mapping
+
+| PRD requirement | Design response |
 |---|---|
-| `test/integration/status-request-roundtrip.test.ts` | Replaced by the semantic journey suites (the status→build-request→call loop it pins ceases to exist) |
-| `test/unit/request-templates.test.ts` | Retired with the public NextAction↔build-request mapping; composition logic keeps unit coverage as internal services |
-| `test/contracts/skill-contract-canonical.test.ts` (+ `skill-contract-server-outage`, `skill-contract-upgrade`) | Inverted: asserts protocol vocabulary is ABSENT from skill text and that no local workflow command is taught after init |
-| `test/contracts/mcp-advertised-schema.test.ts` | Replaced by the seven-tool catalogue test with the measured budget; plain-object-root fence retained |
-| `test/unit/state-gate-wait.test.ts` | Retired with the poll; replaced by nonblocking presentation + decide/auto-resume tests |
-| `test/integration/local-cli-*.test.ts`, `staged-request-handoff.test.ts`, `test/unit/local-commands.test.ts` | Cut down to the R13 command surface; staged-handoff coverage retires with the public staging path |
-| `test/real-host/terminal-journey.test.ts` | Rewritten against the semantic surface (install, init, semantic journey slice, doctor fallback) |
+| R1 Client-owned work | Skills and host clients remain producer/orchestrator; only independent review is dispatched. |
+| R2 Semantic granularity | One server-offered action per `archflow_apply`; compound actions use fixed named substeps, never a dispatcher loop over later actions. |
+| R3 Common view | `WorkflowViewV1` is returned by status and every mutation. |
+| R4 Skill lifecycle | Status/apply sequence preserves visible work, review, triage, a separate durable revision re-entry, decision, Git, handoff, and explicit backward-reopen boundaries; only strictly earlier planning positions can restart, and prior approval generation cannot authorize the new cycle. |
+| R5 Server-derived integrity | Opaque offers plus in-server composers hide all mechanical fields, bind the exact invocation, and derive reopen target/impact rather than accepting them from the submission. |
+| R6 Review integrity | Existing opposite-family/constitution review and fixed-point policy are reused unchanged. |
+| R7 Human decisions | Skill submits ordinary gate summaries, waiver opening derives its existing summary with no submission, durable open returns immediately, and a later apply records one explicit choice through fixed archive/settle substeps; an interrupted archive settles without re-prompting, and a revision choice stops at a close-only checkpoint before `revise` opens production. |
+| R8 Git/handoffs | Client performs authorized Git; read-only status observes proof and apply executes only the resulting legal handoff/completion. |
+| R9 Resumption | Stable operation keys resume compound review through durable `last_transition`; an immutable decision archive recovers the pre-state settlement interval, and gate archives plus the current transition reconstruct pending waiver and revision-decision intervals; restart identity/history and the verified PRD ask append make reopen exact-replay safe; archived result bytes remain in shared quota accounting. No background coordinator state. |
+| R10 Authority/CLI | MCP composes its own calls; old normal helpers retire after parity. |
+| R11 Skills/special flows | Core skills orchestrate two-tool loop; special workflows get narrow adapters, not a universal runner. |
+| R12 Docs/verification | Phase-local maintained docs, semantic journeys, negative ownership tests, final host proof. |
 
-**Real-host evidence (Phase 1 defines; recorded under `docs/validation/` as point-in-time
-evidence):** call-lifetime/EOF/reconnect/concurrent-control spikes in both hosts;
-whole-catalogue advertisement size and first-call selection runs; later phases add fenced
-two-session competition and one full autonomous step per host. The review benchmark
-(`test/real-host/review-benchmark.test.ts`) and its evidence files are untouched.
+## 8. Verification strategy
+
+### 8.1 Contract and unit coverage
+
+- Generate and validate the semantic contract graph; use type aliases for every reachable
+  canonical/public JSON shape.
+- Assert plain object input roots, nested-only unions, purpose descriptions, compact public result
+  graph, and absence of low-level fields.
+- Table-test every current `NextAction` class to one `WorkflowViewV1` action and expected
+  submission kind, plus archived-but-unsettled decision, authenticated pending-waiver, and
+  post-decision revision intervals not represented by the legacy `NextActionCode` union.
+- Table-test invocation routing: generic status has no offer; current/successor `resume` works;
+  backward `resume` never resets; strictly earlier PRD/design/phase-design `reopen` returns the
+  exact impact; same/current, forward, phase-impl, terminal, open-gate, and repair cases refuse it.
+- Compare internal semantic composition with current build-request composition for initialization,
+  produce entry/result, review, triage, the separate no-submission revision re-entry after accepted
+  triage, ordinary gate-opening summaries, no-submission waiver opening, successor handoff, and
+  final completion. The human-requested split is intentionally not legacy parity: Phase 1 tests its
+  canonical checkpoint/consumer seam, and Phase 2 proves decision creation plus re-entry against
+  the extracted service while leaving the old combined gate path green.
+  Separately prove status changes from commit instructions to handoff/completion after client Git.
+- Prove exact action replay, changed-submission conflict, stale-offer recovery, and concurrent
+  revision refusal. For every compound action, interrupt between each fixed named substep and prove
+  that the old exact call and a fresh mid-action offer converge on one unfinished substep with at
+  most one dispatch/transition; specifically, the post-review/pre-empty-triage snapshot remains a
+  no-submission review continuation and never redispatches review, while an open gate plus exact
+  decision archive becomes a no-submission settlement and never redisplays the presentation. Run
+  those checks after ordinary
+  workspace cleanup has removed prior-substep receipts, and reject a forged operation-prefix or old
+  offer that does not match the authenticated `last_transition` request identity.
+- Prove otherwise identical snapshots under different authenticated repository identities produce
+  different offers, and triage views retain finding evidence plus suggested resolution.
+- Prove apply executes one action and contains no loop or producer/verification/Git dispatch.
+
+### 8.2 Integration and crash coverage
+
+- PRD, task-design, and phase-design journeys through revisions (including the explicit
+  no-submission `revise` apply before any edit), opposite-family review,
+  constitution results, nonblocking exact approval, task-local milestone commit observation, and
+  successor readiness.
+- Phase-implementation journey through client-written code/docs/transcript, implementation subject
+  construction, review/remediation, commit authorization, explicit confirmation, commit proof, and
+  successor readiness or terminal completion.
+- No-findings review that skips empty client triage, returns a gate-summary action, and reaches the
+  human presentation only after the skill submits that summary.
+- Material and editorial remediation preserving the current invalidation rules; accepted material
+  triage and human-requested changes each stop at `revise`, whose separate apply records only
+  produce-running before client edits resume.
+- Lost response after a revision decision, fresh semantic status, and exact decision retry all
+  converge across both crash cuts: archive created while `open_gate` remains projects
+  no-submission `decision-settle`, and the resulting `semantic-revision-requested` transition
+  projects one `revise` offer. Missing, changed, forged, stale, wrong-phase, non-reentry, or
+  superseded bindings fail to inspect; no cut repeats human judgment, and exact `revise` replay
+  enters production once and creates `pending_human_revision` only there.
+- Human significant revision, waiver, attempts-exhausted, material-drift, cancellation, and stale
+  decision cases.
+- Interruption immediately after `waiver-requested` resumes at the no-submission `open-waiver`
+  action without client-authored summary or origin fields; malformed or stale origin archives fail
+  to inspect.
+- Crash/retry before and after every named substep, internal transaction, and gate archive write,
+  with no duplicate review dispatch, decision, projection, or commit proof.
+- Seeded existing checkpoints, open gates, and valid pre-facade archive-before-state decision
+  recovery mapped without durable migration or a repeated human prompt.
+- Reopen from active phase design and phase implementation to each legal earlier planning target;
+  prove exact impact, target-and-downstream supersession, attempt reset, PRD/design final-plan
+  clearing, phase-design final-plan retention, waiver/pending-revision clearing, and fresh review.
+- PRD reopen crash cuts before/after ask replacement and state replacement; exact retry produces one
+  verbatim framed entry and one restart record, while changed bytes conflict. Assert Git history,
+  index, source files, and all pre-existing worktree bytes are preserved.
+- PRD byte cases cover leading/trailing whitespace, Unicode, embedded headings/newlines, repeated
+  identical corrections in distinct later reopen operations, and preservation of every original
+  ask/clarification/reopen byte.
+- Restart with active waivers proves the narrow restart exception clears them while generic
+  transaction preservation still rejects unauthorized waiver changes; old approvals never
+  authorize a new result.
+- Reproduce byte-identical PRD/design/phase-design subjects after restart and prove pre-cutoff
+  artifact, design, migration-audit, commit, upstream, and advancement approvals are ineligible;
+  fresh post-restart approvals work, and existing Git proof is considered only after that gate.
+  Boundary cases prove reopening phase design retains earlier PRD/design authority, reopening
+  design retains PRD authority but invalidates design/migration/later authority, and reopening PRD
+  invalidates every downstream approval generation.
+- Count the deduplicated union of active, human-revision, restart-superseded, and cleared-pending
+  evidence in snapshot/status/task-cap accounting. Cover one and repeated restarts, shared result
+  references, exact replay exclusion, and task-cap rejection that archived payloads cannot evade.
+- Material-drift `amend-upstream` derives its planning target from authenticated artifact evidence,
+  uses the gate ID for one restart/history record, archives the decision, and replays exactly; no
+  other open gate permits direct reopen. Cover both a retained upstream document result and an
+  authenticated legacy-import projection, a compound phase-design result that updated a parent,
+  plus missing/changed/conflicting-phase refusal.
+- A pre-facade finding-free review checkpoint starts only the one-substep
+  `review-empty-triage` settlement, while a forged semantic-looking transition fails to inspect.
+
+### 8.3 Negative ownership coverage
+
+Tests instrument the semantic server boundary and fail if a task-lifecycle handler:
+
+- launches a producer model or writes a producer output manifest;
+- edits a document or implementation file except durable workflow projections already owned by
+  the kernel and the operation-bound PRD ask-history append;
+- runs a verification command;
+- stages or commits Git;
+- applies more than the offered action;
+- enters production from a triage or decision action, or lets `revise` do anything beyond the one
+  authenticated produce-running re-entry;
+- renders a human gate presentation when an exact matching decision archive is already unsettled,
+  or lets `decision-settle` solicit/replace judgment;
+- advances into successor work before its skill kickoff;
+- authors a triage disposition or human choice.
+
+### 8.4 Skills, catalogue, and maintained docs
+
+Skill contract tests require the core skills to retain exploration, production, verification,
+triage, remediation, human conversation, and Git responsibilities. They forbid normal
+`archflow-local`, staged references, request envelopes, caller-authored revisions/digests, and
+low-level transition triples.
+
+After final descriptors stabilize, record the exact serialized catalogue byte count and run a
+representative first-tool selection corpus plus a document/implementation slice in authenticated
+Claude Code and Codex. No long-call/background/containment matrix is needed; only the existing
+bounded review dispatch requires an extended timeout.
+
+Each implementation phase updates the maintained caps-named pages whose current behavior changed.
+The final phase cross-checks the whole set and marks the autonomous recommendation in
+`docs/validation/client-interface-audit.md` as superseded without rewriting its historical
+measurements.
+
+## 9. Risks and mitigations
+
+- **`archflow_apply` becomes an omnibus runner.** The offer names one action, the dispatcher has no
+  loop, and negative tests instrument producer, verification, Git, and successor boundaries.
+- **Revision begins outside durable production authority.** Accepted triage and request-changes
+  decisions stop at a separate no-submission `revise` offer; only its one-step apply opens the
+  write window. Request-changes resumption is authenticated by the immutable gate archives plus a
+  close-only current transition, and journey tests forbid edits or resubmission before the revise
+  result.
+- **The view is too small for real client work.** Preserve role resources, findings, canonical
+  same-side review policy, active rules, human presentation, available authenticated commit facts,
+  and next skill; extend implementation status before its cutover and test every skill against the
+  projection.
+- **Opaque offers recreate staged references.** Offers are returned directly, contain no caller-
+  authored payload, require no CLI/file handoff, and name a semantic action the view explains.
+  Their only role is staleness/replay binding.
+- **Semantic and low-level surfaces diverge.** Use one status read model and shared internal
+  composers/handlers; parity tests run during the bounded transition and old tools retire.
+- **Gate splitting weakens authority.** Reuse the existing archive, template binding, provenance,
+  lock, transaction, and resolution validation in the bounded decision-application service; remove
+  the blocking wait and disposable decision input only after semantic journeys pass. Revision
+  decisions preserve the frozen triage predecessor and create no writable state until the separately
+  authenticated re-entry. Archive-before-state is an explicit no-submission settlement interval,
+  so a crash never causes a second human prompt.
+- **Lost responses duplicate compound work.** Every named intent carries the stable operation
+  digest, so authenticated `last_transition` survives receipt cleanup and identifies the first
+  unfinished substep; an immutable decision archive supplies the same correlation before its state
+  transition exists. The current substep still uses the existing recovery receipt. Old and fresh
+  offers converge, forged bindings fail, and changed submissions conflict.
+- **Reopen silently destroys or duplicates history.** Reopen is explicit in invocation and offer,
+  returns its concrete impact before mutation, preserves all existing bytes, and uses one stable
+  restart identity for the optional PRD append and restart record. Crash, active-waiver, and stale
+  approval tests pin the narrow authority changes.
+- **Identical bytes revive old authority.** One phase-aware revision cutoff filters every approval
+  consumer, not just the public view; old archives remain visible but fresh post-restart approval is
+  required before commit observation or advancement.
+- **Archived restart payloads evade quota.** Cleanup liveness and retained-byte accounting consume
+  the same deduplicated result-reference graph, including nested cleared-revision evidence, and cap
+  tests cover repeated/shared histories.
+- **Implementation submissions become path-heavy protocol.** Accept only client-owned declaration
+  facts already needed by `buildImplementationOutput`; derive parents, transcript, bytes, digests,
+  and scope server-side.
+- **Special workflows bloat the core action tool.** Constitution and upgrade use narrow semantic
+  adapters during final cutover rather than new variants in task `archflow_apply`.
+- **Cutover strands an existing task.** The only state addition is optional restart history, every
+  current next action plus archived-but-unsettled decision, pending-waiver, close-only
+  revision-decision, and reopen cases has a projection test, and old tools remain until seeded and
+  live journeys pass.
+- **Scope regrows around autonomy concerns.** Background execution, producer dispatch, repository
+  fencing, provider credentials, worker sandboxing, and delegated commit policy are explicit
+  non-goals.
 
 ## 10. Implementation phase plan
 
-Phases align one-to-one with the PRD's dependency gates. Each is independently implementable and
-reviewable; "evidence" names what the phase must durably produce.
+### Phase 1: Semantic contracts and server-side composition
 
-### Phase 1: Real-host transport spikes and delegation policy
+**Goal:** establish the compact view, opaque one-action offer, and transport-neutral request
+composition without changing the installed workflow or advertising a partially working API.
 
-- **Goal:** the two evidence-gated decisions (transport binding, catalogue budget) and the
-  separately approved repository constitution rule for stage-scoped delegation (dependency gates 1–2).
-- **Scope in:** spike scripts against real Claude Code and Codex measuring start and decision-resume
-  call lifetime, stdio EOF, interruption/reconnect, concurrent second calls, automatic post-return boundary delivery,
-  and prototype seven-tool advertisement/selection; Linux/macOS containment feasibility covering
-  exact provider endpoints, forced proxy compliance, adapter-specific ephemeral credential or
-  host-side broker authentication, auth refresh/upstream-proxy behavior, denial of model-tool
-  access to credentials and the rest of home, a release-style Linux bridge helper, macOS broker
-  needs, denial canaries, supervision and cleanup; a repository constitution proposal with a stable rule ID/version and exact stage-scoped
-  envelope semantics per R1; the transport and platform go/no-go decisions.
-- **Scope out:** any production code change; any behavior swap.
-- **Key work:** spike harness under `test/real-host/` (opt-in, like existing suites); evidence
-  write-up under `docs/validation/`; constitution proposal handed to the separate
-  `$archflow-constitution` workflow; selection memo applying 5.1/5.2 criteria;
-  concrete supported-platform inventory and acceptance criteria. Attached-until-boundary is the
-  baseline; detached requires positive automatic-completion evidence, and an unproven containment
-  platform is removed from the supported envelope rather than weakened.
-- **Dependencies:** none.
-- **Verification evidence:** durable transport, catalogue, proxy, helper/profile, provider/auth,
-  ephemeral/broker credential, lifecycle, home/credential denial, and cleanup transcripts in
-  `docs/validation/`; a separately committed,
-  human-approved repository constitution revision. Phase 1 cannot approve that revision itself and
-  stops pending `$archflow-constitution`. This task remains on human commit gates because its
-  policy base predates the change; later phases may implement/test the capability, but runtime
-  enablement requires a later task's exact pinned rule binding.
+**Scope:**
 
-### Phase 2: Semantic contracts and common workflow view
+- define `WorkflowViewV1`, public finding/presentation/policy projections, semantic offers, apply
+  submissions, explicit invocation/reopen impact, compact public errors, and generated schemas;
+- add recoverable exact-ask staging for semantic initialization while leaving
+  `TaskInitializationV1` and the legacy initializer unchanged;
+- build the authenticated semantic status snapshot and pure snapshot-to-view/offer projection for
+  every current next action plus archived-but-unsettled decisions, the pending-waiver interval,
+  canonical close-only revision-decision checkpoints, and explicit reopen requests;
+- add the focused optional restart-history contract, strict planning-phase ordering, restart
+  planner/handler/replay path, narrow waiver-clearing transaction permission, cleanup references,
+  recoverable exact-once PRD ask-history append, and the existing material-drift
+  `amend-upstream` gate adapter over that planner;
+- add one restart-generation approval predicate across every authority consumer and include all
+  restart-history result/evidence references in shared deduplicated retained-byte accounting;
+- extract build-request/call-envelope derivation into internal services callable by the loaded
+  server while retaining the CLI adapter;
+- implement an internal apply dispatcher for initialization, produce entry/result, independent
+  review, triage, separate no-submission revision re-entry, reopening, ordinary gate opening,
+  no-submission waiver opening, successor handoff, and final completion behind a test seam; define
+  and project starting decision submissions plus no-submission settlement continuations, validate
+  synthetic archive-before-state and closed-revision checkpoints, but leave decision substep
+  execution/checkpoint creation to the Phase 2 service extraction;
+- bind stable semantic operation keys and distinct named-substep intents to existing
+  `last_transition`, action-specific gate archives, and within-substep replay machinery without
+  retaining receipts or adding a coordinator record;
+- add parity, mapping, schema, replay, and one-action-boundary tests;
+- update maintained contract/pattern/complexity, durable-state/lifecycle, and additive legacy
+  server/CLI documentation where Phase 1 behavior changes; do not present semantic tools as live.
 
-- **Goal:** the complete semantic contract surface as types, Zod schemas, and generated JSON
-  Schemas — no behavior swap (dependency gate 3).
-- **Scope in:** `WorkflowView`, seven tool input/output schemas (plain object roots, purpose
-  descriptions), task/repository decision-subject unions and domain-separated binding derivation,
-  `RepositoryFenceV1`, `WorkerCapabilityProfile`,
-  `ActiveStepRef`, remediation-budget config field; schema generation via the existing
-  `src/contracts/internal/schema-generation.ts` groups; forbidden-field and vocabulary contract
-  tests; catalogue-budget test seeded from Phase 1's measurement.
-- **Scope out:** advertising the new tools; any handler or coordinator behavior.
-- **Dependencies:** Phase 1 (budget number, transport-shaped output fields).
-- **Evidence:** `npm run check` green including `check:schemas` drift; new contract tests green.
+**Out of scope:** advertised new tools, skill changes, nonblocking gate behavior swap, removal of
+old tools/CLI commands, implementation workflow cutover, real-host evidence, any autonomous runtime
+or policy change.
 
-### Phase 3: Repository fence and coordinator kernel
+**Exit evidence:** all current next actions plus archived-but-unsettled decision, authenticated
+pending-waiver, close-only revision-decision, and explicit reopen cases project to one semantic
+action; decision settlement, waiver, and revise continuations accept no client submission;
+legal restarts invalidate only derived target-and-downstream authority, preserve existing bytes,
+exact-replay one PRD ask append/restart record, reject pre-restart approvals even for identical
+subjects, and retain archived payloads inside the task byte cap; every Phase 1-supported internal
+semantic composition matches the existing authenticated request/result, while the human-requested
+split is proven through canonical checkpoint/consumer fixtures rather than false legacy parity;
+direct decision execution and checkpoint creation are explicitly unavailable until Phase 2;
+implementation commit status
+contains no invented facts; crash/retry between named substeps and stale offers fail safely;
+generated schemas and the normal full check pass; no semantic tool or skill behavior is activated,
+and the only additive old-surface behavior is the bounded planning-restart adapter.
 
-- **Goal:** the durable fence and an in-server coordinator skeleton that drives existing services
-  through checkpoints (dependency gates 3–4).
-- **Scope in:** fence acquisition/heartbeat/atomic release/reacquisition/reclamation (4.4) with a repository-scoped path class
-  in `src/repository/paths.ts`; `active_step` in state; coordinator module that calls
-  `createProductionServices`, build-request composition internals, and `runStateTransaction`
-  in-process (no staged files, no self-round-trips); existing four tool handlers plus every
-  installed write-capable CLI command gated on the shared fence, including release/reacquire around
-  the legacy decision side channel; build-skew detection and the restart-required `blocked` stop (5.5).
-- **Scope out:** producer dispatch, sandboxing, new-tool advertisement, autonomy.
-- **Dependencies:** Phase 2.
-- **Evidence:** two-session/two-task fence competition tests; crash tests for
-  acquisition/heartbeat/atomic release/reacquisition/orphan reclamation; live server releases at a
-  human boundary without losing the monotonic high-water mark; forced heartbeat/release/reacquire
-  interleavings prove controller quiescence and CAS prevent release resurrection; late old-generation result refusal;
-  command-by-command assertion that every CLI filesystem effect either acquires the correct fence
-  mode or is read-only; legacy decide interleaving and busy refusal; skew-stop test; existing suites unaffected.
+### Phase 2: Client-driven document workflows and nonblocking decisions
 
-### Phase 4: Worker containment and supervised dispatch
+**Goal:** make PRD, task design, and phase design usable end to end through `archflow_status` and
+`archflow_apply`, with the client producing/triaging and human decisions returned immediately.
 
-- **Goal:** capability-profiled, OS-sandboxed dispatch, including producers (dependency gate part
-  of 6's prerequisites; R9 worker binding, R10).
-- **Scope in:** bubblewrap and seatbelt wrappers around `runDispatchChild`; the Phase 1-proven
-  per-dispatch allowlisting proxy and manifest-verified Linux bridge helper; generation binding on
-  launch and admission; the Phase 1-proven credential injection/broker with no home or
-  credential-file mount; adapter `producer-output` modes; the fixed manifest/payload parser and
-  validator from 4.6 for both document-set and implementation-image results; image-based
-  implementation-output preparation; structured denial evidence;
-  fail-closed platform behavior; removal of the dead `allow_claude_dispatch` conditional.
-- **Scope out:** the coordinator loops that consume producer output.
-- **Dependencies:** Phase 3 (generations to bind) and Phase 1's passing platform/provider decision.
-- **Evidence:** adversarial containment and malformed-output matrices; release/install/helper and
-  credential-broker lifecycle/loss tests; proof that model tools cannot read host/provider
-  credentials or arbitrary home; real-host producer, counter-reviewer, and adjudicator dispatch on every
-  advertised platform; both producer adapters emit equivalent validated after-image sets.
+**Scope:** advertise the two tools alongside the old surface; add MCP handlers over Phase 1
+services; extract the bounded decision-application service from the blocking gate wrapper and wire
+ordinary gate-summary/open, no-submission waiver-open, and decision/resolve actions; make every
+semantic decision use fixed archive/settle substeps with no-prompt recovery between their writes,
+and make every re-entry decision close only to the authenticated
+`semantic-revision-requested` checkpoint before the separate `revise` action; support task ask
+capture, compound document resources, independent review, triage plus explicit revision re-entry,
+significant
+revisions, constitution/waiver presentations, status-observed design milestones, and successor
+readiness; wire and advertise explicit PRD/design/phase-design reopening through the same two tools;
+migrate the three document skills after their normal and reopen journeys pass.
 
-### Phase 5: Autonomous phase-design step
+**Exit evidence:** representative PRD/design/phase-design journeys use no normal local helper or
+staged request, every response equals fresh status view, no-findings and remediation paths work,
+lost decision responses resume first at no-submission settlement or, after closure, at the same
+no-submission revise offer, human approval remains exact,
+client Git remains visible, successor work waits for its invocation,
+and each document skill can reopen its legal earlier boundary without a low-level restart request.
 
-- **Goal:** one complete coordinator-owned phase-design step: produce → review → triage →
-  remediate → `awaiting-approval` → approval → `ready`, with a fenced, resumable, restartable
-  coordinator (dependency gate 6).
-- **Scope in:** `archflow_start` for `phase-design N` (advertised alongside the old tools);
-  `archflow_status`; admitted document-set production and remediation of the exact phase-design
-  slot; the produce/review/triage loop over existing services; remediation budget enforcement;
-  durable stop that names phase-impl without starting it. Approval itself may still resolve through
-  the legacy gate path in this phase if Phase 6 hasn't landed, using the release/decide/reacquire
-  fencing protocol from Section 7; the durable gate archive is shared either way.
-- **Dependencies:** Phases 3–4.
-- **Evidence:** one real phase-design invocation without client scheduling in both hosts, whose
-  original attached call returns the first actionable boundary (or whose Phase 1-approved detached
-  channel automatically surfaces it); document output and remediation bind review to the installed
-  exact bytes; interruption/reissue idempotence; restart-from-checkpoint test; negative test that
-  approval does not start phase-impl.
+### Phase 3: Client-driven phase implementation
 
-### Phase 6: Nonblocking escalation and unified decisions
+**Goal:** move implementation production, verification evidence, review, commit authorization, and
+handoff to the same semantic boundary while all work remains in the client.
 
-- **Goal:** retire the blocking gate wait; one decision path with auto-resume (dependency gate 7).
-- **Scope in:** presentation rendering over the gate archive; `archflow_decide` with binding
-  re-authentication, stale/replay refusal, idempotent replay; automatic resume of the current
-  step under the Phase 1-selected boundary-delivery transport; `archflow_control` pause/cancel at
-  safe boundaries; retirement of `waitForGateInterface`
-  usage and the `gate.decision` write path in the server flow.
-- **Dependencies:** Phase 5 (a step to resume).
-- **Evidence:** per-category escalation tests (immediate presentation, one decision, auto-resume,
-  and the same decision call or approved detached channel delivers the next actionable boundary,
-  with no successor start); decision-call disconnect/replay reattachment; pause/resume and
-  cancel-without-false-completion tests; stale/replayed binding rejection; `state-gate-wait` tests replaced.
+**Scope:** semantic implementation declarations over existing output builder; client-authored
+verification transcript and implementation notes; retained post-change review subject; triage and
+fresh verification after remediation; extend authenticated status with the exact implementation
+commit facts before exposing the commit view; constitution/material-drift/commit presentations;
+commit-authorization request-changes through the same close-only decision checkpoint and separate
+`revise` re-entry; explicit commit confirmation; status observation of the client-created Git commit; phase-impl
+skill migration; terminal completion; regression coverage that an active phase implementation can
+still reopen an earlier planning skill while phase implementation itself is never a target.
 
-### Phase 7: Autonomous phase-implementation step
+**Exit evidence:** a complete implementation journey proves no code before design approval, exact
+review/evidence/parent-document bindings, fail-closed path/secret/scope cases, client-owned tests and
+Git, no producer dispatch, and no successor work started by MCP.
 
-- **Goal:** the coordinator-owned phase-impl step through verification, review/remediation, parent
-  document sync, implementation log, and the authorized scoped commit, stopping durably before the
-  next phase (dependency gate 8).
-- **Scope in:** write-capable producer dispatch into the step loop; coordinator admission of the
-  validated implementation-image set and derivation of `ImplementationOutputV1`/projection
-  sources, including exact authorized parent-document synchronization and impl-log slots;
-  canonical review material containing those installed document bytes with one combined subject
-  digest whose change invalidates all evidence;
-  receipt-before-first-projection transaction and crash replay; verification execution;
-  coordinator-executed staging/commit/observation per 5.9, enabled only under the Phase 1-approved
-  policy plus the kickoff; scope-uncertainty escalation; durable stop.
-- **Dependencies:** Phases 4–6 and the separately approved repository rule for feature validation;
-  this task still uses its existing exact-subject human commit authority.
-- **Evidence:** one phase-impl invocation without client scheduling ending in a proven scoped
-  commit with synchronized parent docs and implementation log; add/modify/delete/executable/symlink
-  projection and rollback; counter-review sees the exact co-produced document contents, and any
-  code or document byte change stales the same evidence set; rejection of unauthorized
-  task/state/evidence documents; document-budget and full-envelope overflow fail before admission
-  with no truncation or worktree effect; kill-point
-  replay before, during, and after projection; scope-dirty escalation test; negative test that
-  completion does not start the next phase-design.
+### Phase 4: Exceptional adapters, retirement, skills/docs, and final host proof
 
-### Phase 8: Semantic pre-design facade
+**Goal:** make the semantic boundary the only normal documented workflow and remove the obsolete
+mechanical public surface without expanding into a maintenance platform.
 
-- **Goal:** PRD and task design through `archflow_start`/`archflow_submit` with exact-byte
-  exchange (dependency gate 9, first half; R4).
-- **Scope in:** task creation from an ask; submission variants (draft, triage-response, reopen,
-  terminal-failure); coordinator-run capture, counter-review, triage transitions, and nonblocking
-  presentations; milestone commits observed under the fence; `ready` hand-off naming design /
-  phase-design 1.
-- **Dependencies:** Phases 3, 6.
-- **Evidence:** semantic PRD→design journey test through exact approvals and scoped commit
-  observation; exact-byte round-trip assertion; kickoff-required negative tests.
+**Scope:** migrate `$archflow-status`; add the narrow constitution and legacy-upgrade semantic
+adapters needed to retire their low-level dependencies; keep init/bootstrap and read-only degraded
+status local; remove the four low-level tools from advertisement and retire normal
+build-request/envelope/decide/staged-request paths when unused; invert skill contract tests; update
+all affected maintained docs; annotate historical validation; measure the final catalogue and run
+representative authenticated host selection/journey tests.
 
-### Phase 9: Diagnosis and legacy upgrade
-
-- **Goal:** `archflow_doctor` and `archflow_upgrade` tools, the doctor skill, and the read-only
-  CLI fallback — established before CLI mutation paths are removed (dependency gate 5, satisfied
-  here ahead of Phase 10's removals).
-- **Scope in:** doctor observation set (registration/launchability, loaded vs installed build,
-  durable compatibility, ownership/generation, locks/receipts, resumability, Git scope, dispatch
-  health — R11); repository-scoped presentations plus bounded proposals/decisions/receipts (5.11)
-  resolved without task state and applied under the maintenance fence via `archflow_decide`;
-  upgrade preview replacing `stageLegacyUpgrade`'s public path with
-  approve-to-create semantics; doctor CLI fallback (installation/registration inspection,
-  approved bootstrap repair only); reconciler classification surfaced through doctor for legacy
-  tasks (Section 7).
-- **Dependencies:** Phases 3, 6.
-- **Evidence:** no-task and malformed-task diagnosis + replay-safe approve/deny/cancel repair tests
-  independent of task state; task/maintenance binding cross-domain refusal; changed-observation
-  invalidation; upgrade preview/deny/approve/replay tests with no partial task; fallback tests with
-  the server absent.
-
-### Phase 10: Skills, CLI reduction, retirement, and documentation
-
-- **Goal:** the end state — thin skills, R13 CLI, old surfaces retired, docs and tests coherent
-  (dependency gates 9–10).
-- **Scope in:** rewrite the nine skills as thin semantic clients and add `archflow-doctor` (ten
-  total); cut `LOCAL_COMMANDS` to the R13 set, moving developer utilities to repository scripts
-  and keeping composition logic as internal libraries; remove the four old tools from
-  `TOOL_NAMES`/advertisement and demote handlers to internal services; invert the skill-contract
-  tests; replace the advertised-schema and terminal-journey tests; update all 14 maintained
-  `docs/` pages; annotate `docs/validation/client-interface-audit.md` with an explicit status note
-  preserving the original claims (R15).
-- **Dependencies:** everything prior; removals only after their replacements' evidence exists.
-- **Evidence:** full `npm run check`; inverted skill-contract tests green; real-host catalogue
-  budget and first-call selection confirmed on the final catalogue in both hosts; no installed
-  CLI command or advertised old tool remains as a workflow mutator; documentation cross-check
-  against the implemented boundary.
+**Exit evidence:** no normal skill or exceptional retained skill depends on an advertised low-level
+transition/gate/waiver tool; final catalogue/schema/host tests pass in Claude Code and Codex; full
+local/release checks pass; maintained docs and limitations describe client-owned orchestration and
+no autonomous runner.

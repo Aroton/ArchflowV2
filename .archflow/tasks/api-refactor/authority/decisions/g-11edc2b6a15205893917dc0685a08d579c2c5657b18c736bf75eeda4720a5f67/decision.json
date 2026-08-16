@@ -1,0 +1,32 @@
+{
+  "context_digest": "373605ef3604a7de08ec114ac2ec928d625eba293c4f2a2f2eeef3d72e2f6472",
+  "envelope": {
+    "context_digest": "373605ef3604a7de08ec114ac2ec928d625eba293c4f2a2f2eeef3d72e2f6472",
+    "gate_id": "g-11edc2b6a15205893917dc0685a08d579c2c5657b18c736bf75eeda4720a5f67",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "archflow-local",
+      "decision_event_id": "dd403bee-aafd-411d-ac19-5ae70f82788d",
+      "helper_invocation_id": "334efc0c-1d84-43cb-87c3-22d8f38e6fbf",
+      "recorded_at": "2026-08-16T21:05:46.413Z",
+      "schema_version": "1"
+    },
+    "kind": "design-approval",
+    "payload": {
+      "decision": "approve",
+      "reason": "looks good to me"
+    },
+    "phase_instance": "phase-design-1",
+    "schema_version": "1",
+    "subject_digest": "5e218ea4ed5d6da531cf5940ff9be6c9cce30a12176660032ac5e1727347fc38",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-11edc2b6a15205893917dc0685a08d579c2c5657b18c736bf75eeda4720a5f67",
+  "kind": "design-approval",
+  "outcome": "decided",
+  "phase_instance": "phase-design-1",
+  "schema_version": "1",
+  "subject_digest": "5e218ea4ed5d6da531cf5940ff9be6c9cce30a12176660032ac5e1727347fc38",
+  "task_id": "api-refactor"
+}

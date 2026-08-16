@@ -1,0 +1,109 @@
+{
+  "accounting": {
+    "counted_entries": [],
+    "measured_at_revision": 54,
+    "result_byte_cap": 26214400,
+    "result_bytes": 0,
+    "schema_version": "1",
+    "task_byte_cap": 262144000,
+    "task_bytes": 248161
+  },
+  "artifact_digest": "094b46a0883c8f19e02728d95c94ab301fcbb5abf1f0b12aa2a09f37ac51e14e",
+  "input_fingerprint": "3baa571cff52e0d4b1de357e23f61e0419a92dfec065850ba1c8722fd33f7d4e",
+  "outputs": [],
+  "phase_instance": "phase-design-1",
+  "projections": [],
+  "repository_identity_digest": "5861ad3efec19d13e60f4b7476aea41151d4411b8b3fdd178038bc951a4778dc",
+  "result_id": "adjudication-result-96fcf4b75f306dfc40c3caa59d710057",
+  "schema_version": "1",
+  "secret_scan": {
+    "detector_set_id": "secretlint:v1:c823338405d647fa5308ef65538fca46af9c31ca460a699cd9d7e64a88db9896",
+    "outcome": "clean",
+    "scanned_paths": [],
+    "schema_version": "1"
+  },
+  "snapshot_digest": "04fb2966b5c55579399c7a17c53947cc50c3500c36eedc3e5a4d402047ac1f67",
+  "source_artifact": {
+    "artifact_kind": "adjudication-evidence",
+    "evidence": {
+      "adapter": "claude-cli",
+      "approved_upstream_digests": [],
+      "assurance": "server-attested",
+      "cli_version": "2.1.233",
+      "constitution": "pass",
+      "drift": "aligned",
+      "drift_findings": [],
+      "effort": "medium",
+      "envelope_input_digest": "6b9b2ac5491ea55778b01f51b01e4fd7b2713e539f25396b3aabd04e4a5f4e38",
+      "input_fingerprint": "3baa571cff52e0d4b1de357e23f61e0419a92dfec065850ba1c8722fd33f7d4e",
+      "invocation_id": "adjudication-invocation-14c748f21f7d9afeccf6932b14807811",
+      "matched_rule_versions": [
+        {
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1
+        },
+        {
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1
+        }
+      ],
+      "model": "claude-opus-5",
+      "model_family": "claude",
+      "observed_output_digest": "4807090317c166a99aab32a89ffa468883f068a959d4977e445d87327ae6860e",
+      "phase_instance": "phase-design-1",
+      "pinned_constitution_digest": "9f811841d5c4c308be35db6e8ce1d49ac3616e2679718c64c96ea97444e0c3b7",
+      "result_id": "adjudication-result-96fcf4b75f306dfc40c3caa59d710057",
+      "rule_findings": [
+        {
+          "compliance": "pass",
+          "rationale": "No implementation is claimed to have started ahead of approval: §1 states the superseded prior Phase 1 spike \"is replaced in full. There are no implementation files from it to salvage\", and §10 explicitly withholds implementation authority from design approval alone. The plan remains truthful to its governing documents: its scope matches design.md §10 Phase 1 (contracts/view/offer, exact-ask staging leaving TaskInitializationV1 unchanged, pure projection, transport-neutral extraction with retained CLI adapter, internal dispatcher behind a test seam, private deterministic intents, parity/replay/boundary tests, maintained-doc updates) and its out-of-scope list matches design.md's (no advertised tools, skill changes, gate-wait swap, or old-surface removal). Repository constraints it pins are accurate against the checkout: src/contracts/tool-names.ts pins exactly the four advertised tools, src/state/gates.ts exports openDurableGate (line 151) and resolveDurableGate (line 743) separately from runDurableGate (line 847), src/state/next-action.ts exports a NextActionCode union, and src/local/build-request.ts plus src/init/task-initialization.ts exist as the named extraction seams. §7 forbids a second state machine and requires reuse of the existing composers, transition planner, and transaction kernel, so no material architectural departure requiring upstream re-review is introduced. §3 of design.md preserves the prior superseded design as historical audit trail rather than silently deviating from it.",
+          "rule_id": "approved-design-before-code",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "The subject is a phase design under review whose §5 enumerates implementation file scope and §6 work chunks, and §10 states \"Phase 2 may advertise the semantic tools and split live gates only after this phase's reviewed code is committed under the existing explicit implementation authority. Phase 1 approval alone does not authorize implementation\"."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Human authority is preserved and bound to the exact subject. Approval is never inferred: the projection routes every open or required gate to awaiting-human/decide, and the executor stops before human choice — §4.6 forbids any loop, and §7 requires instrumented negative tests rejecting \"triage judgment ... or successor work\" within one invocation. The offer token carries no authority of its own: §4.3 states the server \"recomputes current status, rebuilds the internal offer, and compares the token before composition\", and §7 adds that after token comparison \"every underlying durable authority is revalidated by existing services\", so a client-held token cannot substitute for a recorded human decision. Gate open/resolve run against the existing lower-level services (verified present at src/state/gates.ts:151 and :743) with §8 criterion 8 requiring that no \"human authority rule changes\". Commit authority stays human/client-owned: the authorized-commit projection returns \"no apply offer\" and instructs client Git followed by read-only status, so no server action manufactures commit authority. The bounded empty-triage/gate-open tail helper in §4.6 is admitted \"only if its tests prove there is no omitted client or human judgment\", which mechanically opens a presentation rather than supplying a choice.",
+          "rule_id": "explicit-human-authority",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "§4.2 projects \"any open or required human gate -> awaiting-human / decide plus presentation\", §4.4 requires that \"decide requires the server-issued choice token and human reason\", and §4.6/§7 govern gate composition and offer-token authority."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Non-success states stay visible with a safe next action. Failure and uncertainty are represented honestly: unmappable actions remain blocked/inspect with the concrete gap recorded for its owning phase and an explicit prohibition on a \"generic escape hatch\" (§6 Chunk C); the public condition vocabulary is pinned so that \"awaiting-client means the host client must act; it never means unseen server work continues\" (§4.1), preventing a pending state from reading as hidden progress. Failure paths fail closed rather than silently succeeding: differing ask bytes are \"a collision and no state transition runs\" (§4.4), a changed submission for a consumed offer conflicts, and §6 Chunk D requires that a post-commit projection failure be recoverable by retry and \"must not rerun the action\". Reporting is honest to users too: §5 and §7 forbid describing the new tools as available in SERVER.md, workflow, CLI, or skill docs, and success criterion 10 requires maintained pages to \"describe Phase 1 truth without presenting the future API as installed\". Attempt-exhaustion, material-drift, and evidence-unavailable positions are retained as gate/inspection cases in the Chunk B corpus rather than collapsed into success.",
+          "rule_id": "honest-human-centered-outcomes",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "§4.2 maps \"repair/reconciliation/inspection -> blocked / inspect with no mutation offer\", §4.3 requires that \"an unconsumed stale offer returns the fresh view with a compact stale-action error\", and §7 states \"No fake idempotence: ... a stale token is not called successful merely because state moved\"."
+        },
+        {
+          "compliance": "pass",
+          "rationale": "Task and subject binding is preserved rather than weakened. The offer digest binds task/repository identity, revision, input fingerprint, and the relevant subject/evidence/gate/commit identity, and is verified by recomputation against current status before composition, so an offer cannot authorize a different task or different subject bytes. Evidence integrity is unchanged: §7 requires that semantic actions \"call the existing composers, handlers, transition planner, and transaction kernel\" and that the view \"projects TaskStatusV1; it does not recompute durable truth independently\", so subject digests, evidence freshness, and fingerprints continue to be derived by existing services (src/state/request.ts, src/local/call-envelope.ts) rather than accepted from callers — §4.4 states the composer \"never accepts caller-authored mechanical fields\". Path authority is not widened: §7 keeps document slots and implementation parent/transcript paths server-derived and routes \"client-supplied output/input paths ... through existing path classification and task-isolation checks\". The exact-ask staging seam uses exclusive-create with byte-identical retry only, so it cannot overwrite another subject's bytes, and it leaves the ask unpinned until the first PRD result declares user-ask, consistent with the existing pinned-context handling of ask.md observed at src/review/pinned-context.ts:214-240 and src/state/phase-documents.ts:132. Stale evidence fails closed via the receipt-first replay and fresh-offer comparison in §4.3.",
+          "rule_id": "task-and-evidence-isolation",
+          "rule_version": 1,
+          "trigger": "matched",
+          "trigger_evidence": "§3 pins the constraint \"No other task's `.archflow/tasks/**` files may be read or changed\", and §4.3 binds the internal offer to \"task and repository identity; durable revision and input fingerprint; ... current subject, evidence, gate, commit, or successor identity when relevant\"."
+        }
+      ],
+      "schema_version": "1",
+      "source_evidence_set_digest": "24b055692f34c2273979cf0bba17b3fefede9721608cdd4e7f94f9b38fba7bef",
+      "step": "adjudicate",
+      "subject_digest": "5489b915cfa2af256c47c66779db1a9f5a490d4f5ed9073b0b88e82e8883a108",
+      "task_id": "api-refactor",
+      "uncertain_rule_versions": []
+    },
+    "schema_version": "1"
+  },
+  "step": "adjudicate",
+  "task_id": "api-refactor"
+}

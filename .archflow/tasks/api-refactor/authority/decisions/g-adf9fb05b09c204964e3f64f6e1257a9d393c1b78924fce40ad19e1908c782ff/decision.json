@@ -1,0 +1,32 @@
+{
+  "context_digest": "4e27572aabb3a7625b98df383252374366006cd4fbbe67066f051dd6e9bd5894",
+  "envelope": {
+    "context_digest": "4e27572aabb3a7625b98df383252374366006cd4fbbe67066f051dd6e9bd5894",
+    "gate_id": "g-adf9fb05b09c204964e3f64f6e1257a9d393c1b78924fce40ad19e1908c782ff",
+    "human_provenance": {
+      "actor_class": "human",
+      "assurance": "declared-local-trace",
+      "channel": "archflow-local",
+      "decision_event_id": "4e1376c1-d8a2-46ea-a965-e49fe84bfc35",
+      "helper_invocation_id": "d2537e31-3fb4-4a34-a9e2-b228ee281bda",
+      "recorded_at": "2026-08-16T15:58:04.668Z",
+      "schema_version": "1"
+    },
+    "kind": "attempts-exhausted",
+    "payload": {
+      "decision": "revise",
+      "reason": "request changes"
+    },
+    "phase_instance": "phase-design-1",
+    "schema_version": "1",
+    "subject_digest": "5489b915cfa2af256c47c66779db1a9f5a490d4f5ed9073b0b88e82e8883a108",
+    "task_id": "api-refactor"
+  },
+  "gate_id": "g-adf9fb05b09c204964e3f64f6e1257a9d393c1b78924fce40ad19e1908c782ff",
+  "kind": "attempts-exhausted",
+  "outcome": "decided",
+  "phase_instance": "phase-design-1",
+  "schema_version": "1",
+  "subject_digest": "5489b915cfa2af256c47c66779db1a9f5a490d4f5ed9073b0b88e82e8883a108",
+  "task_id": "api-refactor"
+}
