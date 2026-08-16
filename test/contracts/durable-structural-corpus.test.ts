@@ -264,6 +264,50 @@ const taskStateRevisionCollections: JsonObject = {
   human_revision_history: [revisionRecord("gate-a", "1"), revisionRecord("gate-b", "2")],
 };
 
+const restartResult = (phaseInstance: string, fill: string): JsonObject => ({
+  phase_instance: phaseInstance,
+  step: "produce",
+  result_digest: fill.repeat(64),
+  result_id: `${phaseInstance}:produce:1`,
+  input_fingerprint: "8".repeat(64),
+});
+const restartWaiver = (gateId: string, fill: string): JsonObject => ({
+  gate_id: gateId,
+  rule_id: `constitution:${gateId}`,
+  rule_version: 1,
+  subject_digest: fill.repeat(64),
+  scope: { operation: "review-trigger", boundary: "subject" },
+  granted: true,
+  expires: "task-complete",
+  granted_at_revision: 4,
+});
+const restartRecord = (restartId: string, fromPhase: string, targetPhase: string): JsonObject => ({
+  restart_id: restartId,
+  from_phase_instance: fromPhase,
+  to_phase_instance: targetPhase,
+  reason: "Planning authority required correction.",
+  restarted_at_revision: 4,
+  superseded_results: [restartResult("design", "a"), restartResult("phase-design-1", "b")],
+  cleared_waivers: [restartWaiver("gate-a", "c"), restartWaiver("gate-b", "d")],
+  provenance: {
+    schema_version: "1",
+    actor_class: "human",
+    assurance: "connected-request-trace",
+    channel: "connected-host",
+    connection_id: "connection-1",
+    invocation_id: "invocation-1",
+    request_id_digest: "f".repeat(64),
+    request_digest: "e".repeat(64),
+  },
+});
+const taskStateRestartCollections: JsonObject = {
+  ...taskStateWithoutOpenGate,
+  restart_history: [
+    restartRecord("restart-a", "phase-impl-1", "design"),
+    restartRecord("restart-b", "phase-impl-2", "phase-design-1"),
+  ],
+};
+
 const documentArtifactAdditionalDocuments: JsonObject = {
   ...documentArtifact.sample,
   additional_documents: [
@@ -295,6 +339,9 @@ const DECLARED_SETS: readonly { readonly shape: string; readonly path: string; r
   { shape: "task-state", path: "pending_human_revision.evidence", base: taskStateRevisionCollections },
   { shape: "task-state", path: "human_revision_history", base: taskStateRevisionCollections },
   { shape: "task-state", path: "human_revision_history.0.evidence", base: taskStateRevisionCollections },
+  { shape: "task-state", path: "restart_history", base: taskStateRestartCollections },
+  { shape: "task-state", path: "restart_history.0.superseded_results", base: taskStateRestartCollections },
+  { shape: "task-state", path: "restart_history.0.cleared_waivers", base: taskStateRestartCollections },
   { shape: "legacy-import-initialization", path: "mapping" },
   { shape: "legacy-import-initialization", path: "staged_payload_refs" },
   { shape: "document-artifact", path: "declared_inputs" },
@@ -390,9 +437,12 @@ describe("no array in this phase is exempt from set ordering", () => {
         "task-state/$defs/plainJson/anyOf/4",
         "task-state/$defs/humanRevisionRecord/properties/evidence",
         "task-state/$defs/pendingHumanRevision/properties/evidence",
+        "task-state/$defs/planningRestartRecord/properties/cleared_waivers",
+        "task-state/$defs/planningRestartRecord/properties/superseded_results",
         "task-state/properties/approvals",
         "task-state/properties/authoritative_results",
         "task-state/properties/human_revision_history",
+        "task-state/properties/restart_history",
         "task-state/properties/waivers",
       ].sort()
     );

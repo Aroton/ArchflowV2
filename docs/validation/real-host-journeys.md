@@ -9,8 +9,9 @@ The operator, not the agent, owns every human boundary:
 
 - Never let an agent choose, write, or infer a gate decision. At a gate, inspect the live request
   and templates, then explicitly choose the template yourself.
-- Never let an agent commit automatically. After durable commit authorization, inspect the exact
-  staged diff and proposed message, explicitly confirm the commit, and verify the resulting commit.
+- Never let an agent infer commit authorization. Inspect the preview's exact retained diff, paths,
+  and proposed message, then explicitly authorize or deny once. After authorization, the resulting
+  nonhuman local commit action runs without a second prompt; verify its exact commit proof.
 - Do not edit `state.json`, checkpoints, receipts, requests, decisions, or digests by hand. Use only
   the live skill, MCP tool, and `archflow-local` outputs.
 - Stop and record a blocked journey if a command, resolved configuration, or durable next action
@@ -198,7 +199,7 @@ Record the completed journeys in these files; they are evidence outputs, not inp
 Do not create an evidence file until its journey has actually run. Each record must include the
 UTC start/end times, scratch repository path, host and launcher versions, task id, producer family,
 commands run, observed `ok`/error results, every gate kind and ID, the operator's explicit decision,
-every commit-authorization and separate commit confirmation, final `archflow-local status` output,
+every commit-authorization and resulting nonhuman local commit action, final `archflow-local status` output,
 `git status --short`, `git log --oneline --decorate`, and any deviation or blocker. Link or quote
 only sanitized transcript excerpts; never copy credentials, auth output, environment values, or
 other secrets.
@@ -255,17 +256,19 @@ claude -p --no-session-persistence --permission-mode auto --output-format stream
 The initial prompt includes the complete brief because a non-interactive invocation cannot ask the
 operator for it later. Run a fresh non-persisted invocation with the exact skill and arguments returned by durable
 status (`/archflow-design val01-claude`, then phase-design and phase-impl for phases 1 and 2). At
-every gate, require the agent to show the live gate ID, request, decision templates, and
-optional counter-review prompt. Choose the decision yourself. At each commit-authorization, first
-authorize through the gate, then separately inspect the staged diff and explicitly confirm or deny
-the Git commit in a fresh invocation. Confirm afterwards that the temporary path is absent from
+every gate, require the agent to show the human-readable preview and its labeled choices, then
+choose the decision yourself. Record that the decision-bearing `archflow_gate` or `archflow_waiver`
+call returns in the same invocation without polling or a second terminal. At each
+commit-authorization, inspect the preview's exact message and file list and authorize or deny once;
+after approval the nonhuman `archflow-local commit` action must run without a second confirmation.
+Confirm afterwards that the temporary path is absent from
 Claude's remembered project state; if the client wrote one despite print mode, purge that exact
 path before continuing.
 
-### VAL-09 Claude timeout observation
+### VAL-09 Claude bounded-gate observation
 
-For one non-commit gate, do not write a decision when the blocking `archflow_gate` call starts.
-In a second terminal, record the start time:
+For one non-commit gate, record the start time immediately before submitting the already-chosen
+decision and the end time when the tool returns:
 
 ```bash
 cd "$CLAUDE_JOURNEY_REPO"
@@ -274,12 +277,11 @@ date +%s
 node -e 'const fs=require("node:fs"); const v=JSON.parse(fs.readFileSync(".mcp.json","utf8")); console.log(v.mcpServers.archflow.timeout)'
 ```
 
-Wait until Claude returns control because its configured MCP tool timeout fires. Record the end
-time with the same two `date` commands, calculate `end_epoch - start_epoch`, and record the observed
-duration plus resolved `timeout=3600000` milliseconds in the Claude evidence file. A timeout is not
-a decision: retry the same resumable gate call, then make the operator-selected decision normally.
-If the host does not hold the call for the resolved timeout, record VAL-09 as partial with the exact
-observed behavior.
+Record the end time with the same two `date` commands and calculate `end_epoch - start_epoch`.
+The call must archive the connected-host decision and return normally, comfortably before the
+configured `timeout=3600000` milliseconds, without creating or polling a decision from another
+terminal. Record the elapsed duration and final gate outcome. If it times out or asks for an
+out-of-band decision, mark VAL-09 failed and preserve the exact observed behavior.
 
 Finish by recording these read-only observations:
 
@@ -292,7 +294,7 @@ cat notes.txt
 ```
 
 The final status must be terminal only after both phase commits are individually authorized and
-confirmed. `notes.txt` must contain both ordered lines.
+committed through their nonhuman follow-up actions. `notes.txt` must contain both ordered lines.
 
 ## VAL-01: Codex producer, Claude reviewer
 
@@ -355,13 +357,14 @@ codex exec --ephemeral --skip-git-repo-check -s workspace-write -C "$CODEX_JOURN
 
 Use the same two-phase brief as the Claude journey. Run a fresh ephemeral invocation for each exact
 `$archflow-design`, `$archflow-phase-design`, and `$archflow-phase-impl` action returned by durable
-status until both phases are complete. Apply the same human-gate and separate commit rules:
-the agent presents; the operator decides; authorization precedes staging; explicit commit
-confirmation follows inspection.
+status until both phases are complete. Apply the same bounded human-gate and one-confirmation
+commit rules: the agent previews and presents; the operator decides once; that decision returns
+through one bounded MCP call; approval is followed by the nonhuman local commit action.
 
-### VAL-09 Codex timeout observation
+### VAL-09 Codex bounded-gate observation
 
-Leave one non-commit `archflow_gate` call pending without a decision. In another terminal record:
+For one non-commit gate, record these values immediately before submitting the already-chosen
+decision:
 
 ```bash
 cd "$CODEX_JOURNEY_REPO"
@@ -371,10 +374,10 @@ codex mcp get archflow --json | tee "$CODEX_JOURNEY_LOG/codex-mcp-timeout.json"
 node -e 'const v=require(process.env.CODEX_JOURNEY_LOG+"/codex-mcp-timeout.json"); console.log(v.startup_timeout_sec, v.tool_timeout_sec)'
 ```
 
-Wait for Codex to return control at its tool timeout, record the end timestamps, and calculate the
-elapsed seconds. Record the duration and the resolved `startup_timeout_sec=30` and
-`tool_timeout_sec=3600`. Retry the same resumable gate before making the operator-selected decision.
-If the observed hold does not match the resolved tool timeout, mark VAL-09 partial and preserve the
+Record the end timestamps when Codex returns and calculate the elapsed seconds. The decision-bearing
+call must return normally before `tool_timeout_sec=3600`, archive connected-host provenance, and
+require neither a pending-call poll nor a second terminal. Record the duration and the resolved
+timeouts. If it times out or asks for an out-of-band decision, mark VAL-09 failed and preserve the
 actual observation.
 
 Finish with:
@@ -432,10 +435,11 @@ two distinct phases. During one eligible non-commit gate, the operator must choo
 choose a live `granted: true` waiver template. Record both gate IDs and both archived outcomes.
 Do not describe the original gate as approved by the waiver request itself.
 
-For each implementation phase, require the distinct commit-authorization gate, choose
-`authorize-commit` only after reviewing its bound diff and artifact digests, then separately inspect
-the staged diff and explicitly confirm the commit. Never let Claude answer a decision or commit on
-the operator's behalf. Before recovery, verify that the manual authority is a unique closed chain:
+For each implementation phase, require the distinct commit-authorization gate and choose
+`authorize-commit` only after reviewing its preview-bound diff, artifact digests, message, and paths.
+That is the sole commit confirmation: record the resulting nonhuman local commit action and fail the
+journey if it asks again. Never let Claude answer the gate decision on the operator's behalf. Before
+recovery, verify that the manual authority is a unique closed chain:
 
 ```bash
 cd "$MANUAL_JOURNEY_REPO"

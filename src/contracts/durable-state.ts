@@ -4,11 +4,11 @@ import type { GitOid } from "./canonical.js";
 import { gitOidV1Schema } from "./canonical.js";
 import type { PathSafeId, SafeCode, SafeId, SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
 import { pathSafeIdV1Schema, safeCodeV1Schema, safeIdV1Schema, safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
-import type { GateKind, WaiverScope } from "./gates.js";
+import type { GateKind, HumanDecisionProvenance, WaiverScope } from "./gates.js";
 import { GATE_KINDS } from "./gates.js";
 import type { PlainJsonValue } from "./plain-json.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
-import { phaseInstanceIdV1Schema } from "./phase-instance.js";
+import { isEarlierPlanningPhase, phaseInstanceIdV1Schema } from "./phase-instance.js";
 import { isSortedUniqueBy, tupleKey } from "./validators.js";
 import type { PipelineStep } from "./vocabulary.js";
 import { PIPELINE_STEPS } from "./vocabulary.js";
@@ -125,6 +125,30 @@ export type HumanRevisionRecord = {
   readonly evidence: readonly AuthoritativeResultRef[];
 };
 
+/** A backward planning transition and the authority it removed from the active result set. */
+export type PlanningRestartRecord = {
+  readonly restart_id: PathSafeId;
+  readonly from_phase_instance: PhaseInstanceId;
+  readonly to_phase_instance: PhaseInstanceId;
+  readonly reason: string;
+  readonly restarted_at_revision: SafeInteger;
+  readonly superseded_results: readonly AuthoritativeResultRef[];
+  readonly cleared_waivers: readonly WaiverRef[];
+  readonly cleared_pending_human_revision?: PendingHumanRevision;
+  readonly provenance: HumanDecisionProvenance | PlanningRestartConnectedProvenance;
+};
+
+export type PlanningRestartConnectedProvenance = {
+  readonly schema_version: "1";
+  readonly actor_class: "human";
+  readonly assurance: "connected-request-trace";
+  readonly channel: "connected-host";
+  readonly connection_id: SafeId;
+  readonly invocation_id: SafeId;
+  readonly request_id_digest: Sha256Digest;
+  readonly request_digest: Sha256Digest;
+};
+
 /**
  * `expires` is the const `"task-complete"` — the narrowest representation of the only expiry this
  * project has. That is a *format* decision. Phase 12 records waiver scope; Phase 14 owns expiry
@@ -220,6 +244,8 @@ export type TaskStateV1 = {
   readonly open_gate?: OpenGateRef;
   readonly pending_human_revision?: PendingHumanRevision;
   readonly human_revision_history?: readonly HumanRevisionRecord[];
+  /** Immutable audit history for explicit restarts to an earlier planning stage. */
+  readonly restart_history?: readonly PlanningRestartRecord[];
   readonly last_transition?: LastTransition;
   readonly terminal?: TerminalState;
 };
@@ -342,6 +368,59 @@ export const humanRevisionRecordV1Schema = z.object({
   }
 }) as unknown as z.ZodType<HumanRevisionRecord>;
 
+// Keep task-state self-contained: the shared provenance union and each of its arms are registered
+// under gate-decision documents that are not part of every schema catalogue loading task-state.
+const provenanceBase = {
+  schema_version: z.literal("1"),
+  actor_class: z.enum(["human", "archforge"]),
+  assurance: z.literal("declared-local-trace"),
+  decision_event_id: safeIdV1Schema,
+  recorded_at: z.string().datetime({ offset: false, local: false, precision: 3 }),
+} as const;
+const planningRestartHumanProvenanceV1Schema = z.union([
+  z.object({
+    ...provenanceBase,
+    channel: z.literal("connected-host"),
+    connection_id: safeIdV1Schema,
+    request_id_digest: sha256Digest,
+  }).strict(),
+  z.object({
+    ...provenanceBase,
+    channel: z.literal("archflow-local"),
+    helper_invocation_id: safeIdV1Schema,
+  }).strict(),
+]) as z.ZodType<HumanDecisionProvenance>;
+
+export const planningRestartRecordV1Schema = z.object({
+  restart_id: pathSafeIdV1Schema,
+  from_phase_instance: phaseInstanceIdV1Schema,
+  to_phase_instance: phaseInstanceIdV1Schema,
+  reason: z.string().min(1).max(4096).regex(/\S/u),
+  restarted_at_revision: positiveSafeInteger,
+  superseded_results: z.array(authoritativeResultRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "superseded restart results must be sorted by (phase_instance, step) with no duplicates"),
+  cleared_waivers: z.array(waiverRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "cleared restart waivers must be sorted by gate_id with no duplicates"),
+  cleared_pending_human_revision: pendingHumanRevisionV1Schema.optional(),
+  provenance: z.union([
+    planningRestartHumanProvenanceV1Schema,
+    z.object({
+      schema_version: z.literal("1"),
+      actor_class: z.literal("human"),
+      assurance: z.literal("connected-request-trace"),
+      channel: z.literal("connected-host"),
+      connection_id: safeIdV1Schema,
+      invocation_id: safeIdV1Schema,
+      request_id_digest: sha256Digest,
+      request_digest: sha256Digest,
+    }).strict(),
+  ]),
+}).strict().superRefine((record, context) => {
+  if (!isEarlierPlanningPhase(record.to_phase_instance, record.from_phase_instance)) {
+    context.addIssue({ code: "custom", path: ["to_phase_instance"], message: "a planning restart target must be strictly earlier than its source" });
+  }
+}) as unknown as z.ZodType<PlanningRestartRecord>;
+
 /** Recursive JSON value used by `lastTransitionV1Schema`; overridden during JSON Schema emission. */
 export const lastTransitionOutcomeV1Schema = z.json();
 
@@ -392,9 +471,15 @@ export const taskStateV1Schema = z.object({
   human_revision_history: z.array(humanRevisionRecordV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates")
     .optional(),
+  restart_history: z.array(planningRestartRecordV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates")
+    .optional(),
   last_transition: lastTransitionV1Schema.optional(),
   terminal: z.enum(TERMINAL_STATES).optional(),
 }).strict().superRefine((state, context) => {
+  if (state.restart_history?.some((record) => record.restarted_at_revision > state.revision)) {
+    context.addIssue({ code: "custom", path: ["restart_history"], message: "restart history cannot name a future revision" });
+  }
   const pending = state.pending_human_revision;
   if (pending === undefined) return;
   if (state.open_gate !== undefined || state.terminal !== undefined || state.step !== "produce" ||

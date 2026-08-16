@@ -1,6 +1,6 @@
 import type { InvocationContext } from "../../contracts/contexts.js";
 import { createProjectError, type ProjectResult } from "../../contracts/errors.js";
-import { sha256Bytes } from "../../contracts/canonical.js";
+import { canonicalJsonDigest, sha256Bytes } from "../../contracts/canonical.js";
 import { parseSafeId, parseSafeInteger } from "../../contracts/evidence.js";
 import {
   createInternalResultExpectation,
@@ -23,6 +23,7 @@ import { identifyTransactionRequest } from "../../state/request.js";
 import { loadCurrentProduceSubject, type CurrentProduceSubject } from "../../state/produce-subject.js";
 import { designArtifactCommittedAtCurrentTarget, implementationOutputCommittedAtCurrentTarget } from "../../state/implementation-manifest.js";
 import { decodePhaseInstance } from "../../contracts/phase-instance.js";
+import type { PlanningRestartConnectedProvenance } from "../../contracts/durable-state.js";
 import {
   prepareResultInstallation,
   runStateTransaction,
@@ -42,6 +43,26 @@ const fail = <T>(error: ReturnType<typeof createProjectError>): ProjectResult<T>
 
 function stateResultId(intentId: string): ReturnType<typeof parseSafeId> {
   return parseSafeId(`state-result-${sha256Bytes(new TextEncoder().encode(intentId)).slice(0, 32)}`);
+}
+
+function restartProvenance(
+  context: InvocationContext,
+  requestDigest: ReturnType<typeof canonicalJsonDigest>,
+): PlanningRestartConnectedProvenance {
+  return Object.freeze({
+    schema_version: "1",
+    actor_class: "human",
+    assurance: "connected-request-trace",
+    channel: "connected-host",
+    connection_id: parseSafeId(context.connection.connection_id),
+    invocation_id: parseSafeId(context.invocation_id),
+    request_id_digest: canonicalJsonDigest({
+      schema_version: "1",
+      digest_kind: "transport-request-id",
+      request_id: context.transport_metadata.request_id,
+    }),
+    request_digest: requestDigest,
+  });
 }
 
 export async function handleState(
@@ -172,13 +193,15 @@ export async function handleState(
         const authenticatedGateApprovals: AuthenticatedGateApproval[] = [];
         const decodedCurrent = decodePhaseInstance(current.value.phase_instance);
         const crossesPhase = call.input.phase_instance !== current.value.phase_instance;
+        const planningRestartSignal = call.input.planning_restart !== undefined;
         const completionSignal =
+          !planningRestartSignal &&
           artifact === undefined &&
           decodedCurrent.kind === "phase-impl" &&
           current.value.step === "triage" &&
           current.value.status === "succeeded";
         const artifactPhaseExitSignal =
-          artifact === undefined && crossesPhase && decodedCurrent.kind !== "phase-impl";
+          !planningRestartSignal && artifact === undefined && crossesPhase && decodedCurrent.kind !== "phase-impl";
         let currentProduce: CurrentProduceSubject | undefined;
         if (completionSignal || artifactPhaseExitSignal) {
           const loadedProduce = await loadCurrentProduceSubject(services.dependencies, current.value);
@@ -239,7 +262,7 @@ export async function handleState(
               if (await implementationOutputCommittedAtCurrentTarget(
                 services.runner,
                 source,
-                authenticated.request.context.target_ref,
+                authenticated.request.context,
               )) {
                 commitObserved = true;
                 break;
@@ -249,6 +272,7 @@ export async function handleState(
         }
         const decodedTarget = decodePhaseInstance(call.input.phase_instance);
         const legacyJumpSignal =
+          !planningRestartSignal &&
           artifact === undefined &&
           current.value.phase_instance === "design" &&
           current.value.step === "triage" &&
@@ -325,6 +349,13 @@ export async function handleState(
           commit_observed: commitObserved,
           ...(legacyResumePhase === undefined ? {} : { legacy_resume_phase: legacyResumePhase }),
           ...(call.input.human_revision === undefined ? {} : { human_revision: call.input.human_revision }),
+          ...(call.input.planning_restart === undefined ? {} : {
+            planning_restart: {
+              restart_id: call.input.intent_id,
+              reason: call.input.planning_restart.reason,
+              provenance: restartProvenance(context, identified.request_digest),
+            },
+          }),
           ...(authenticatedGateApprovals.length === 0 ? {} : {
             authenticated_gate_approvals: authenticatedGateApprovals,
           }),

@@ -54,7 +54,7 @@ import { ensureDecisionDirectory, ensureIntentDirectory, ensureWorkspaceProjecti
 import { loadLegacyImportInitialization, loadLegacyImportResumePhase } from "./legacy-import-resume.js";
 import { TaskLockError } from "./lock.js";
 import { loadApprovedDesignFinalPhase } from "./planned-final-phase.js";
-import { planStateTransition } from "./transitions.js";
+import { planPlanningRestart, planStateTransition } from "./transitions.js";
 import { applyProjectionPlan, captureProjectionTarget, prepareProjectionPlan, projectionGenerationDigest, type ProjectionSource } from "./snapshots.js";
 import { cleanTaskWorkspace } from "./workspace-cleanup.js";
 
@@ -179,6 +179,7 @@ export async function openDurableGate(
         if (!validateDurableSemantics({ gate_request: requestRead, gate_decision: archived }).ok) return issue("STATE_INVALID", current.value, "gate-archive-binding-invalid");
         if (
           !enactsReentry(archived.value) &&
+          !enactsPlanningRestart(archived.value) &&
           input.input_fingerprint !== current.value.input_fingerprint
         ) {
           return fail(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
@@ -213,13 +214,17 @@ export async function openDurableGate(
         }
         if (archived.value.outcome === "cancelled" && requestRead.value.intent_id === input.intent_id && requestRead.value.request_digest === input.request_digest) return ok({ gate_id: gateId, state: current, request: requestRead, replay: archived });
         if (
-          enactsReentry(archived.value) &&
+          (enactsReentry(archived.value) || enactsPlanningRestart(archived.value)) &&
           requestRead.value.intent_id === input.intent_id &&
           requestRead.value.request_digest === input.request_digest
         ) {
-          const replay = await validateCompletedReentry(
-            dependencies, input.authority, current, requestRead.value, archived.value,
-          );
+          const replay = enactsPlanningRestart(archived.value)
+            ? await validateCompletedPlanningRestart(
+                dependencies, input.authority, current, requestRead.value, archived.value,
+              )
+            : await validateCompletedReentry(
+                dependencies, input.authority, current, requestRead.value, archived.value,
+              );
           if (!replay.ok) return replay;
           return ok({ gate_id: gateId, state: current, request: requestRead, replay: archived });
         }
@@ -448,6 +453,69 @@ function beginsHumanRevision(record: GateDecisionRecordV1): boolean {
     (record.kind === "migration-audit" && decision === "revise");
 }
 
+function enactsPlanningRestart(record: GateDecisionRecordV1): boolean {
+  return record.outcome === "decided" && record.kind === "material-drift" &&
+    record.envelope.payload.decision === "amend-upstream";
+}
+
+async function materialDriftRestartTarget(
+  dependencies: GateLifecycleDependencies,
+  current: TaskStateV1,
+  request: GateRequestV1,
+): Promise<ProjectResult<TaskStateV1["phase_instance"]>> {
+  if (request.kind !== "material-drift" || dependencies.load_retained_result === undefined) {
+    return issue("STATE_INVALID", current, "material-drift-restart-target-unavailable");
+  }
+  for (const reference of [...current.authoritative_results].reverse()) {
+    const retained = await dependencies.load_retained_result(reference);
+    if (!retained.ok) return retained;
+    const manifest = retained.value.prepared.manifest.value;
+    if (manifest.artifact_digest !== request.context.affected_upstream.digest) continue;
+    const artifact = manifest.source_artifact;
+    if (artifact.artifact_kind !== "document") break;
+    return ok(artifact.phase_instance);
+  }
+  return issue("STATE_INVALID", current, "material-drift-restart-target-unavailable");
+}
+
+async function planGateAuthorizedPlanningRestart(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  current: CanonicalDocument<TaskStateV1>,
+  request: GateRequestV1,
+  record: GateDecisionRecordV1,
+): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
+  if (record.outcome !== "decided" || record.kind !== "material-drift" ||
+      record.envelope.payload.decision !== "amend-upstream" ||
+      !exactOpenGateMatches(current.value, request)) {
+    return issue("STATE_INVALID", current.value, "gate-restart-predecessor-mismatch");
+  }
+  const target = await materialDriftRestartTarget(dependencies, current.value, request);
+  if (!target.ok) return target;
+  if (dependencies.resolve_gate_reentry_fingerprint === undefined) {
+    return issue("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");
+  }
+  const fingerprint = await dependencies.resolve_gate_reentry_fingerprint({
+    authority,
+    request,
+    current,
+    target_phase_instance: target.value,
+  });
+  if (!fingerprint.ok) return fingerprint;
+  const { open_gate: _open, last_transition: _transition, ...predecessor } = current.value;
+  const restart = planPlanningRestart({
+    current: predecessor as TaskStateV1,
+    target_phase_instance: target.value,
+    input_fingerprint: fingerprint.value,
+    restart_id: record.gate_id,
+    reason: record.envelope.payload.reason,
+    provenance: record.envelope.human_provenance,
+  });
+  return restart.ok
+    ? ok(canonicalDocument({ ...restart.value, revision: parseSafeInteger(current.value.revision + 1) }))
+    : restart;
+}
+
 function exactOpenGateMatches(state: TaskStateV1, request: GateRequestV1): boolean {
   const open = state.open_gate;
   if (
@@ -540,6 +608,9 @@ async function closedStateForRecord(
   record: GateDecisionRecordV1,
   digest: Sha256Digest,
 ): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
+  if (enactsPlanningRestart(record)) {
+    return planGateAuthorizedPlanningRestart(dependencies, authority, current, request, record);
+  }
   if (enactsReentry(record)) {
     return planGateAuthorizedReentry(dependencies, authority, current, request, record);
   }
@@ -630,6 +701,42 @@ async function validateCompletedReentry(
   return current.value.input_fingerprint === fingerprint.value
     ? ok(undefined)
     : issue("STATE_INVALID", current.value, "gate-reentry-replay-fingerprint-mismatch");
+}
+
+async function validateCompletedPlanningRestart(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  current: CanonicalDocument<TaskStateV1>,
+  request: GateRequestV1,
+  record: GateDecisionRecordV1,
+): Promise<ProjectResult<void>> {
+  if (!enactsPlanningRestart(record) || current.value.revision <= request.opened_at_revision) {
+    return issue("STATE_INVALID", current.value, "gate-restart-replay-state-mismatch");
+  }
+  const restart = current.value.restart_history?.find((entry) => entry.restart_id === record.gate_id);
+  if (restart === undefined || restart.from_phase_instance !== request.phase_instance) {
+    return issue("STATE_INVALID", current.value, "gate-restart-replay-state-mismatch");
+  }
+  if (current.value.revision > request.opened_at_revision + 1) return ok(undefined);
+  if (
+    current.value.phase_instance !== restart.to_phase_instance ||
+    current.value.step !== "produce" ||
+    current.value.status !== "running" ||
+    current.value.attempt !== 1
+  ) return issue("STATE_INVALID", current.value, "gate-restart-replay-state-mismatch");
+  if (dependencies.resolve_gate_reentry_fingerprint === undefined) {
+    return issue("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");
+  }
+  const fingerprint = await dependencies.resolve_gate_reentry_fingerprint({
+    authority,
+    request,
+    current,
+    target_phase_instance: restart.to_phase_instance,
+  });
+  if (!fingerprint.ok) return fingerprint;
+  return current.value.input_fingerprint === fingerprint.value
+    ? ok(undefined)
+    : issue("STATE_INVALID", current.value, "gate-restart-replay-fingerprint-mismatch");
 }
 
 function earnsReceipt(record: GateDecisionRecordV1): boolean {

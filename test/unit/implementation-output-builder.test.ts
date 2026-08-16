@@ -256,22 +256,33 @@ describe("implementation-output builder", () => {
       transcript_digest: sha256Bytes(new TextEncoder().encode("npm test\nall passed\n")),
       byte_count: 20,
     });
+    const approvalContext: GateContext<"commit-authorization"> = {
+      target_ref: "refs/heads/main",
+      baseline_commit: baseCommit,
+      commit_message: "authorized output",
+      paths: first.value.outputs.flatMap((output) => output.operation === "rename"
+        ? [output.path, output.previous_path]
+        : [output.path]).sort(),
+      diff_digest: first.value.diff_digest,
+      current_artifact_digests: [parseSha256Digest("6".repeat(64))],
+      parent_document_digests: first.value.parent_documents.map((document) => document.content_digest).sort(),
+    };
     await expect(verifyImplementationManifest(discovered.value, first.value, context)).resolves.toBeDefined();
     await expect(implementationOutputCommittedAtCurrentTarget(
-      discovered.value, first.value, "refs/heads/main",
+      discovered.value, first.value, approvalContext,
     )).resolves.toBe(false);
     execFileSync("git", ["add", "-A", "--", "added-link", "added.txt", "delete.txt", "modify.txt", "rename-new.txt", "rename-old.txt"], {
       cwd: root, env: gitEnv,
     });
     execFileSync("git", ["commit", "-qm", "authorized output"], { cwd: root, env: gitEnv });
-    const authorizedCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+    let authorizedCommit = execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: root, env: gitEnv, encoding: "utf8",
     }).trim();
     await expect(implementationOutputCommittedAtCurrentTarget(
-      discovered.value, first.value, "refs/heads/main",
+      discovered.value, first.value, approvalContext,
     )).resolves.toBe(true);
     await expect(implementationOutputCommittedAtCurrentTarget(
-      discovered.value, first.value, "refs/heads/wrong",
+      discovered.value, first.value, { ...approvalContext, target_ref: "refs/heads/wrong" },
     )).resolves.toBe(false);
 
     let movedTarget = false;
@@ -287,48 +298,58 @@ describe("implementation-output builder", () => {
       },
     }) as typeof discovered.value;
     await expect(implementationOutputCommittedAtCurrentTarget(
-      targetMismatchRunner, first.value, "refs/heads/main",
+      targetMismatchRunner, first.value, approvalContext,
     )).resolves.toBe(false);
     expect(movedTarget).toBe(true);
     execFileSync("git", ["update-ref", "refs/heads/main", authorizedCommit], { cwd: root, env: gitEnv });
 
-    execFileSync("git", ["switch", "--detach", "-q", authorizedCommit], { cwd: root, env: gitEnv });
-    await expect(implementationOutputCommittedAtCurrentTarget(
-      discovered.value, first.value, "HEAD",
-    )).resolves.toBe(true);
-    execFileSync("git", ["switch", "-q", "main"], { cwd: root, env: gitEnv });
-
-    writeFileSync(join(root, "modify.txt"), "wrong late entry\n");
-    execFileSync("git", ["add", "modify.txt"], { cwd: root, env: gitEnv });
-    execFileSync("git", ["commit", "-qm", "mixed tree one"], { cwd: root, env: gitEnv });
-    const mixedTreeOne = execFileSync("git", ["rev-parse", "HEAD"], {
-      cwd: root, env: gitEnv, encoding: "utf8",
-    }).trim();
-    writeFileSync(join(root, "added.txt"), "wrong early entry\n");
-    writeFileSync(join(root, "modify.txt"), "after\n");
-    execFileSync("git", ["add", "added.txt", "modify.txt"], { cwd: root, env: gitEnv });
-    execFileSync("git", ["commit", "-qm", "mixed tree two"], { cwd: root, env: gitEnv });
-    const mixedTreeTwo = execFileSync("git", ["rev-parse", "HEAD"], {
-      cwd: root, env: gitEnv, encoding: "utf8",
-    }).trim();
-    execFileSync("git", ["update-ref", "refs/heads/main", mixedTreeOne], { cwd: root, env: gitEnv });
     let movedDuringTreeProof = false;
     const movingHeadRunner = Object.freeze({
       ...discovered.value,
       runNulFields: async (spec: GitCommandSpec) => {
         const result = await discovered.value.runNulFields(spec);
         if (!movedDuringTreeProof && spec.argv[0] === "ls-tree" && spec.argv.at(-1) === "added.txt") {
-          execFileSync("git", ["update-ref", "refs/heads/main", mixedTreeTwo], { cwd: root, env: gitEnv });
+          execFileSync("git", ["update-ref", "refs/heads/main", baseCommit], { cwd: root, env: gitEnv });
           movedDuringTreeProof = true;
         }
         return result;
       },
     }) as typeof discovered.value;
     await expect(implementationOutputCommittedAtCurrentTarget(
-      movingHeadRunner, first.value, "refs/heads/main",
+      movingHeadRunner, first.value, approvalContext,
     )).resolves.toBe(false);
     expect(movedDuringTreeProof).toBe(true);
+    execFileSync("git", ["update-ref", "refs/heads/main", authorizedCommit], { cwd: root, env: gitEnv });
+
+    execFileSync("git", ["commit", "--amend", "-qm", "wrong message"], { cwd: root, env: gitEnv });
+    await expect(implementationOutputCommittedAtCurrentTarget(
+      discovered.value, first.value, approvalContext,
+    )).resolves.toBe(false);
+    execFileSync("git", ["commit", "--amend", "-qm", approvalContext.commit_message], { cwd: root, env: gitEnv });
+
+    execFileSync("git", ["add", "--", "scratch.txt"], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "--amend", "--no-edit", "-q"], { cwd: root, env: gitEnv });
+    await expect(implementationOutputCommittedAtCurrentTarget(
+      discovered.value, first.value, approvalContext,
+    )).resolves.toBe(false);
+    execFileSync("git", ["rm", "--cached", "-q", "--", "scratch.txt"], { cwd: root, env: gitEnv });
+    execFileSync("git", ["commit", "--amend", "--no-edit", "-q"], { cwd: root, env: gitEnv });
+    authorizedCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, env: gitEnv, encoding: "utf8" }).trim();
+    await expect(implementationOutputCommittedAtCurrentTarget(
+      discovered.value, first.value, approvalContext,
+    )).resolves.toBe(true);
+
+    execFileSync("git", ["commit", "--allow-empty", "-qm", "unauthorized successor"], { cwd: root, env: gitEnv });
+    await expect(implementationOutputCommittedAtCurrentTarget(
+      discovered.value, first.value, approvalContext,
+    )).resolves.toBe(false);
     execFileSync("git", ["reset", "--hard", "-q", authorizedCommit], { cwd: root, env: gitEnv });
+
+    execFileSync("git", ["switch", "--detach", "-q", authorizedCommit], { cwd: root, env: gitEnv });
+    await expect(implementationOutputCommittedAtCurrentTarget(
+      discovered.value, first.value, { ...approvalContext, target_ref: "HEAD" },
+    )).resolves.toBe(true);
+    execFileSync("git", ["switch", "-q", "main"], { cwd: root, env: gitEnv });
 
     retained = first.value.accounting.result_bytes;
     writeFileSync(join(root, "added.txt"), "second generation\n");

@@ -54,6 +54,8 @@ export type NextAction = Readonly<{
   gate_kind?: GateKind;
   /** Exact task-local milestone commit authorized by the approved design gate. */
   commit_path?: string;
+  /** Exact sorted repository paths authorized for an implementation commit. */
+  commit_paths?: readonly string[];
   commit_message?: string;
   commit_target_ref?: string;
   commit_baseline?: string;
@@ -88,6 +90,12 @@ export type NextActionInput = Readonly<{
   commit_observed?: boolean;
   design_commit?: Readonly<{
     path: string;
+    message: string;
+    target_ref: string;
+    baseline_commit: string;
+  }>;
+  implementation_commit?: Readonly<{
+    paths: readonly string[];
     message: string;
     target_ref: string;
     baseline_commit: string;
@@ -172,11 +180,20 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
     });
   }
   if (phase.kind === "phase-impl" && input.commit_observed !== true) {
+    if (input.implementation_commit === undefined) {
+      return action("inspect-state", "Inspect why the approved implementation commit authority is unavailable.", true, state);
+    }
     return action(
       "commit-phase",
-      "Stage the authorized phase outputs, show and confirm the commit, then commit them to the approved current target ref.",
-      true,
+      "Commit the exact phase outputs authorized by the human's commit decision.",
+      false,
       state,
+      {
+        commit_paths: input.implementation_commit.paths,
+        commit_message: input.implementation_commit.message,
+        commit_target_ref: input.implementation_commit.target_ref,
+        commit_baseline: input.implementation_commit.baseline_commit,
+      },
     );
   }
   if (

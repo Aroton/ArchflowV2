@@ -7,24 +7,27 @@ import { canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.
 import type { ImplementationOutputV1 } from "../../src/contracts/durable-implementation-output.js";
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
-import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
+import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { createGitRunner } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
-import { expectedProduceUpstreamBindings, loadProduceUpstreamSubject, produceProjectionSetDigest, produceUpstreamBindingsForSubject, readProduceProjection, renderProduceReviewMaterial, resolveProduceUpstreamBinding, type CurrentProduceSubject } from "../../src/state/produce-subject.js";
+import { expectedProduceUpstreamBindings, loadProduceUpstreamSubject, produceProjectionSetDigest, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet, renderProduceReviewMaterial, resolveProduceUpstreamBinding, type CurrentProduceSubject } from "../../src/state/produce-subject.js";
 import type { TransactionAuthority } from "../../src/state/authority.js";
 import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
 
 afterAll(cleanupTemporaryRepositories);
 
 describe("retained produce review material", () => {
-  it("authenticates implementation notes through the retained parent-document binding", async () => {
+  it("authenticates the implementation log and sends co-produced plan bytes in review material", async () => {
     const repository = createTempRepository({ label: "implementation-review-log" });
     const taskId = parseTaskSlug("demo");
     const artifactPath = parseTaskPathClaim("phases/1/impl-notes.md");
     const bytes = new TextEncoder().encode("Implementation notes\n");
+    const phaseDesignPath = parseTaskPathClaim("phases/1/design.md");
+    const phaseDesignBytes = new TextEncoder().encode("# Revised phase design\n");
     repository.write(`.archflow/tasks/${taskId}/${artifactPath}`, Buffer.from(bytes));
+    repository.write(`.archflow/tasks/${taskId}/${phaseDesignPath}`, Buffer.from(phaseDesignBytes));
     repository.write("src/index.ts", "export {};\n");
     repository.commitAll("fixture");
     const context = {
@@ -41,11 +44,14 @@ describe("retained produce review material", () => {
     )) as ImplementationOutputV1;
     const artifact = {
       ...fixture,
-      parent_documents: [{
-        document_path: artifactPath,
-        content_digest: sha256Bytes(bytes),
-        role: "impl-notes" as const,
+      outputs: [...fixture.outputs, {
+        ...fixture.outputs[0]!,
+        path: parseRepositoryPathClaim(`.archflow/tasks/${taskId}/${phaseDesignPath}`),
       }],
+      parent_documents: [
+        { document_path: artifactPath, content_digest: sha256Bytes(bytes), role: "impl-notes" as const },
+        { document_path: phaseDesignPath, content_digest: sha256Bytes(phaseDesignBytes), role: "phase-design" as const },
+      ],
     } as ImplementationOutputV1;
     const subject = {
       artifact_digest: canonicalJsonDigest(artifact),
@@ -60,6 +66,23 @@ describe("retained produce review material", () => {
 
     const current = await readProduceProjection(discovered.value, authority, subject, artifactPath);
     expect(current).toMatchObject({ ok: true, value: { digest: sha256Bytes(bytes) } });
+    const reviewSet = await readProduceProjectionSet(discovered.value, authority, subject, artifactPath);
+    expect(reviewSet).toMatchObject({
+      ok: true,
+      value: [
+        { path: artifactPath, digest: sha256Bytes(bytes) },
+        { path: phaseDesignPath, digest: sha256Bytes(phaseDesignBytes) },
+      ],
+    });
+    if (!reviewSet.ok) return;
+    expect(JSON.parse(renderProduceReviewMaterial(subject, reviewSet.value[0]!, reviewSet.value)))
+      .toMatchObject({
+        co_produced_documents: [{
+          path: phaseDesignPath,
+          content_digest: sha256Bytes(phaseDesignBytes),
+          content: new TextDecoder().decode(phaseDesignBytes),
+        }],
+      });
 
     writeFileSync(join(repository.path, ".archflow", "tasks", taskId, artifactPath), "changed notes\n");
     const stale = await readProduceProjection(discovered.value, authority, subject, artifactPath);
@@ -109,6 +132,32 @@ describe("retained produce review material", () => {
     expect(produceProjectionSetDigest(projections)).not.toBe(projections[0]!.digest);
     expect(produceUpstreamBindingsForSubject({ phase_instance: "phase-design-17" } as TaskStateV1, artifact))
       .toEqual([{ phase_instance: "prd", path: "prd.md", artifact_kind: "prd" }]);
+  });
+
+  it("treats implementation-declared governing-document edits as co-produced", () => {
+    const fixture = JSON.parse(readFileSync(
+      new URL("../fixtures/contracts/durable/implementation-output.valid.json", import.meta.url),
+      "utf8",
+    )) as ImplementationOutputV1;
+    const phaseDesignPath = parseRepositoryPathClaim(".archflow/tasks/demo/phases/2/design.md");
+    const artifact = {
+      ...fixture,
+      task_id: parseTaskSlug("demo"),
+      phase_instance: encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(2) }),
+      outputs: [{ ...fixture.outputs[0]!, path: phaseDesignPath }],
+    } as ImplementationOutputV1;
+    const current = {
+      task_id: parseTaskSlug("demo"),
+      phase_instance: artifact.phase_instance,
+    } as TaskStateV1;
+
+    expect(produceUpstreamBindingsForSubject(current, artifact)).toEqual([
+      { phase_instance: "design", path: "design.md", artifact_kind: "design" },
+    ]);
+    expect(produceUpstreamBindingsForSubject(current, { ...artifact, outputs: fixture.outputs })).toEqual([
+      { phase_instance: "phase-design-2", path: "phases/2/design.md", artifact_kind: "phase-design" },
+      { phase_instance: "design", path: "design.md", artifact_kind: "design" },
+    ]);
   });
 
   it("resolves a governing path to its newest approved compound owner", async () => {

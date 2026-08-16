@@ -4,7 +4,7 @@ import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parsePathSafeId, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePhaseInstanceId, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
-import { legalRunStepStatus, planStateTransition } from "../../src/state/transitions.js";
+import { legalRunStepStatus, planPlanningRestart, planStateTransition } from "../../src/state/transitions.js";
 
 const D = (value: string) => parseSha256Digest(value.repeat(64));
 const phase = (kind: "phase-design" | "phase-impl", number: number) => encodePhaseInstance({ kind, phase: parsePositiveSafePhaseNumber(number) });
@@ -487,6 +487,68 @@ describe("planStateTransition", () => {
       recomputed_input_fingerprint: D("9"),
     });
     expect(result.ok ? undefined : result.error.code).toBe("TRANSITION_INVALID");
+  });
+
+  it("restarts at an earlier planning stage while archiving superseded authority", () => {
+    const resultRefs = [
+      { phase_instance: parsePhaseInstanceId("prd"), step: "produce" as const, result_digest: D("1"), result_id: parseSafeId("prd-result"), input_fingerprint: D("2") },
+      { phase_instance: parsePhaseInstanceId("design"), step: "produce" as const, result_digest: D("3"), result_id: parseSafeId("design-result"), input_fingerprint: D("4") },
+      { phase_instance: phase("phase-design", 1), step: "produce" as const, result_digest: D("5"), result_id: parseSafeId("phase-design-result"), input_fingerprint: D("6") },
+    ];
+    const current = state({
+      phase_instance: phase("phase-impl", 1),
+      step: "counter_review",
+      status: "running",
+      planned_final_phase: parseSafeInteger(3),
+      authoritative_results: resultRefs,
+      waivers: [{
+        gate_id: parsePathSafeId("waiver-1"), rule_id: parseSafeId("rule-1"), rule_version: parseSafeInteger(1),
+        subject_digest: D("7"), scope: { operation: "review-trigger", boundary: "subject" },
+        granted: true, expires: "task-complete", granted_at_revision: parseSafeInteger(3),
+      }],
+    });
+    const restarted = planPlanningRestart({
+      current,
+      target_phase_instance: parsePhaseInstanceId("design"),
+      input_fingerprint: D("8"),
+      restart_id: parsePathSafeId("restart-1"),
+      reason: "Phase planning exposed incorrect requirements.",
+      provenance: {
+        schema_version: "1", actor_class: "human", assurance: "connected-request-trace", channel: "connected-host",
+        connection_id: parseSafeId("connection-1"), invocation_id: parseSafeId("invocation-1"), request_id_digest: D("9"), request_digest: D("a"),
+      },
+    });
+    expect(restarted.ok).toBe(true);
+    if (!restarted.ok) return;
+    expect(restarted.value).toMatchObject({
+      phase_instance: "design", step: "produce", status: "running", attempt: 1,
+      authoritative_results: [resultRefs[0]], waivers: [],
+    });
+    expect(restarted.value.planned_final_phase).toBeUndefined();
+    expect(restarted.value.restart_history?.at(-1)).toMatchObject({
+      from_phase_instance: "phase-impl-1", to_phase_instance: "design",
+      superseded_results: [resultRefs[1], resultRefs[2]],
+      cleared_waivers: current.waivers,
+    });
+  });
+
+  it("retains the approved final phase only when restarting at phase design", () => {
+    const current = state({
+      phase_instance: phase("phase-impl", 2),
+      planned_final_phase: parseSafeInteger(4),
+    });
+    const restarted = planPlanningRestart({
+      current,
+      target_phase_instance: phase("phase-design", 2),
+      input_fingerprint: D("8"),
+      restart_id: parsePathSafeId("restart-2"),
+      reason: "Implementation exposed a plan defect.",
+      provenance: {
+        schema_version: "1", actor_class: "human", assurance: "connected-request-trace", channel: "connected-host",
+        connection_id: parseSafeId("connection-1"), invocation_id: parseSafeId("invocation-2"), request_id_digest: D("9"), request_digest: D("a"),
+      },
+    });
+    expect(restarted.ok && restarted.value.planned_final_phase).toBe(4);
   });
 
   it("rejects initialization artifacts on mature state", () => {

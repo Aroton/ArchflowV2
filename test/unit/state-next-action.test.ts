@@ -78,6 +78,13 @@ const designCommit = Object.freeze({
   baseline_commit: "abcdef0123456789abcdef0123456789abcdef01",
 });
 
+const implementationCommit = Object.freeze({
+  paths: Object.freeze(["src/feature.ts"]),
+  message: "ArchFlow: Implement task-1 phase 1",
+  target_ref: "refs/heads/main",
+  baseline_commit: "abcdef0123456789abcdef0123456789abcdef01",
+});
+
 const reconciliationCases: readonly [ReconciliationFinding, string][] = [
   [{ kind: "receipt-only", request_digest: D("a"), receipt_digest: D("b"), next_action: "resume-exact-intent" }, "resume-exact-intent"],
   [{ kind: "projection-mismatch", path: "design.md" as never, recorded_digest: D("a"), next_action: "restore-or-record-new-transition" }, "restore-or-record-new-transition"],
@@ -107,7 +114,7 @@ describe("deriveNextAction", () => {
         authenticated_approvals: [{ gate_kind: "design-approval", subject_digest: D("a") }],
         design_commit: designCommit,
       })],
-      ["commit-phase", input({ assessment: assessment("advance"), authenticated_approvals: [{ gate_kind: "commit-authorization", subject_digest: D("a") }] })],
+      ["commit-phase", input({ assessment: assessment("advance"), authenticated_approvals: [{ gate_kind: "commit-authorization", subject_digest: D("a") }], implementation_commit: implementationCommit })],
       ["advance-phase", input({ assessment: assessment("advance"), authenticated_approvals: [{ gate_kind: "commit-authorization", subject_digest: D("a") }], commit_observed: true })],
       ["complete-task", input({ state: state({ planned_final_phase: parseSafeInteger(1) }), assessment: assessment("advance"), authenticated_approvals: [{ gate_kind: "commit-authorization", subject_digest: D("a") }], commit_observed: true })],
       ["task-complete", input({ state: state({ terminal: "complete" }) })],
@@ -312,7 +319,15 @@ describe("deriveNextAction", () => {
     expect(deriveNextAction(input({
       state: state({ phase_instance: implementation(2), planned_final_phase: parseSafeInteger(2) }),
       assessment: assessment("advance"), authenticated_approvals: approved,
-    }))).toMatchObject({ code: "commit-phase", human_required: true });
+      implementation_commit: { ...implementationCommit, message: "ArchFlow: Implement task-1 phase 2" },
+    }))).toMatchObject({
+      code: "commit-phase",
+      human_required: false,
+      commit_paths: ["src/feature.ts"],
+      commit_message: "ArchFlow: Implement task-1 phase 2",
+      commit_target_ref: "refs/heads/main",
+      commit_baseline: "abcdef0123456789abcdef0123456789abcdef01",
+    });
     expect(deriveNextAction(input({
       state: state({ phase_instance: implementation(2), planned_final_phase: parseSafeInteger(2) }),
       assessment: assessment("advance"), authenticated_approvals: approved, commit_observed: true,

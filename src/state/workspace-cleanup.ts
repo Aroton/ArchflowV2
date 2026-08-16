@@ -194,6 +194,10 @@ async function unreferencedAuthorityResults(
     ...state.authoritative_results.map((reference) => reference.result_digest),
     ...(state.human_revision_history ?? []).flatMap((revision) =>
       revision.evidence.map((reference) => reference.result_digest)),
+    ...(state.restart_history ?? []).flatMap((restart) => [
+      ...restart.superseded_results.map((reference) => reference.result_digest),
+      ...(restart.cleared_pending_human_revision?.evidence ?? []).map((reference) => reference.result_digest),
+    ]),
   ]);
   if (decisionProtectedResults.has("*")) return Object.freeze([]);
   let files: readonly FileEntry[];
@@ -231,6 +235,13 @@ async function unreferencedAuthorityDecisions(
     ...openGateIds,
     ...(state.pending_human_revision === undefined ? [] : [state.pending_human_revision.gate_id]),
     ...(state.human_revision_history ?? []).map((entry) => entry.gate_id),
+    ...(state.restart_history ?? []).flatMap((restart) => [
+      restart.restart_id,
+      ...restart.cleared_waivers.map((entry) => entry.gate_id),
+      ...(restart.cleared_pending_human_revision === undefined
+        ? []
+        : [restart.cleared_pending_human_revision.gate_id]),
+    ]),
     ...(state.last_transition !== undefined && known.has(state.last_transition.result_id)
       ? [state.last_transition.result_id]
       : []),

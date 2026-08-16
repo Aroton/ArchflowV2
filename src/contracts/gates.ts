@@ -66,7 +66,7 @@ export interface GateContractByKind {
   readonly "material-drift": { readonly context: { readonly affected_upstream: EvidenceIdentityRef; readonly drift: "material"; readonly affected_claim_ids: readonly string[] }; readonly decision: { readonly decision: "amend-upstream" | "revise-current" | "reject"; readonly reason: string } };
   readonly "attempts-exhausted": { readonly context: { readonly step: PipelineStep; readonly attempts: number; readonly maximum_attempts: number }; readonly decision: { readonly decision: "retry-once" | "revise" | "abort"; readonly reason: string } };
   readonly "constitution-edit": { readonly context: { readonly pinned_constitution_digest: Sha256Digest; readonly current_constitution_digest: Sha256Digest; readonly changed_path_class: "task-branch-constitution" }; readonly decision: { readonly decision: "revert-edit" | "start-base-amendment" | "abort"; readonly reason: string } };
-  readonly "commit-authorization": { readonly context: { readonly target_ref: string; readonly diff_digest: Sha256Digest; readonly current_artifact_digests: readonly Sha256Digest[]; readonly parent_document_digests: readonly Sha256Digest[] }; readonly decision: { readonly decision: "authorize-commit" | "revise" | "abort"; readonly reason: string } };
+  readonly "commit-authorization": { readonly context: { readonly target_ref: string; readonly baseline_commit: GitOid; readonly commit_message: string; readonly paths: readonly RepositoryPathClaim[]; readonly diff_digest: Sha256Digest; readonly current_artifact_digests: readonly Sha256Digest[]; readonly parent_document_digests: readonly Sha256Digest[] }; readonly decision: { readonly decision: "authorize-commit" | "revise" | "abort"; readonly reason: string } };
   readonly "restore-collision": { readonly context: { readonly path: TaskPathClaim; readonly recorded_generation_digest: Sha256Digest; readonly current_generation_digest: Sha256Digest; readonly adoption_candidate?: AuthorityLinkRef }; readonly decision: { readonly decision: "discard-and-restore" | "abort"; readonly reason: string } | { readonly decision: "adopt-as-new-generation"; readonly reason: string; readonly adoption_authority: AuthorityLinkRef; readonly rationale: string } };
   readonly "migration-audit": { readonly context: { readonly source_identity_digest: Sha256Digest; readonly destination_identity_digest: Sha256Digest; readonly import_digest: Sha256Digest; readonly code_baseline_digest: Sha256Digest; readonly policy_baseline_digest: Sha256Digest; readonly resume_phase?: PhaseInstanceId; readonly planned_final_phase?: number; readonly imported_documents?: readonly { readonly path: RepositoryPathClaim; readonly content_digest: Sha256Digest }[]; readonly target_ref?: string; readonly baseline_commit?: GitOid; readonly commit_message?: string }; readonly decision: { readonly decision: "accept-import-audit" | "revise" | "abort"; readonly reason: string } };
 }
@@ -156,7 +156,16 @@ const contexts = {
   "material-drift": z.object({ affected_upstream: z.object({ kind: z.enum(["prd", "architecture", "phase-design", "implementation-result", "review", "adjudication", "constitution", "workflow", "import"]), digest }).strict(), drift: z.literal("material"), affected_claim_ids: canonicalStrings.min(1) }).strict(),
   "attempts-exhausted": z.object({ step: z.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger }).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts"),
   "constitution-edit": z.object({ pinned_constitution_digest: digest, current_constitution_digest: digest, changed_path_class: z.literal("task-branch-constitution" satisfies PathClass) }).strict(),
-  "commit-authorization": z.object({ target_ref: boundedText, diff_digest: digest, current_artifact_digests: canonicalDigests.min(1), parent_document_digests: canonicalDigests.min(1) }).strict(),
+  "commit-authorization": z.object({
+    target_ref: boundedText,
+    baseline_commit: gitOidV1Schema,
+    commit_message: boundedText,
+    paths: z.array(repositoryPathClaimV1Schema).min(1)
+      .refine((items) => sortedUnique(items, (a, b) => a.localeCompare(b)), "paths must be sorted with no duplicates"),
+    diff_digest: digest,
+    current_artifact_digests: canonicalDigests.min(1),
+    parent_document_digests: canonicalDigests.min(1),
+  }).strict(),
   "restore-collision": z.object({ path: taskPathClaimV1Schema, recorded_generation_digest: digest, current_generation_digest: digest, adoption_candidate: authorityLink.optional() }).strict(),
   "migration-audit": z.object({
     source_identity_digest: digest,

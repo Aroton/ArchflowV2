@@ -9,7 +9,7 @@ import { canonicalDocument, canonicalJsonDigest, gitBlobOid, type CanonicalDocum
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { ResultManifestV1 } from "../../src/contracts/durable-result-manifest.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
-import { parseSafeCode, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parsePathSafeId, parseSafeCode, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
@@ -144,6 +144,7 @@ describe("task workspace cleanup", () => {
       [join(taskRoot, "authority", "results", `${liveDigest}.json`), "{}"],
       [join(taskRoot, "authority", "results", `${staleDigest}.json`), staleManifest.bytes],
       [join(taskRoot, "authority", "decisions", "live-gate", "request.json"), "{}"],
+      [join(taskRoot, "authority", "decisions", "restart-gate", "request.json"), "{}"],
       [join(taskRoot, "authority", "decisions", "stale-gate", "request.json"), "{}"],
     ] as const;
     for (const [path, contents] of files) {
@@ -169,6 +170,25 @@ describe("task workspace cleanup", () => {
       authoritative_results: [{ phase_instance: phase, step: "produce", result_digest: liveDigest, result_id: parseSafeId("live-result"), input_fingerprint: parseSha256Digest("1".repeat(64)) }],
       approvals: [{ gate_id: "live-gate" as never, gate_kind: "artifact-approval", subject_digest: parseSha256Digest("6".repeat(64)), decision_digest: parseSha256Digest("7".repeat(64)), resolved_at_revision: parseSafeInteger(7) }],
       waivers: [],
+      restart_history: [{
+        restart_id: parsePathSafeId("restart-gate"),
+        from_phase_instance: phase,
+        to_phase_instance: parsePhaseInstanceId("phase-design-2"),
+        reason: "Implementation exposed an upstream design flaw.",
+        restarted_at_revision: parseSafeInteger(8),
+        superseded_results: [],
+        cleared_waivers: [],
+        provenance: {
+          schema_version: "1",
+          actor_class: "human",
+          assurance: "connected-request-trace",
+          channel: "connected-host",
+          connection_id: parseSafeId("connection-1"),
+          invocation_id: parseSafeId("invocation-1"),
+          request_id_digest: parseSha256Digest("9".repeat(64)),
+          request_digest: parseSha256Digest("8".repeat(64)),
+        },
+      }],
     };
 
     const before = await inspectWorkspaceCleanup(dependencies, authority.value, state);
@@ -182,6 +202,7 @@ describe("task workspace cleanup", () => {
     expect(existsSync(join(taskRoot, "authority", "results", `${liveDigest}.json`))).toBe(true);
     expect(existsSync(join(taskRoot, "authority", "results", `${staleDigest}.json`))).toBe(false);
     expect(existsSync(join(taskRoot, "authority", "decisions", "live-gate", "request.json"))).toBe(true);
+    expect(existsSync(join(taskRoot, "authority", "decisions", "restart-gate", "request.json"))).toBe(true);
     expect(existsSync(join(taskRoot, "authority", "decisions", "stale-gate"))).toBe(false);
 
     const terminal = await cleanTerminalTaskWorkspace(dependencies, authority.value);
