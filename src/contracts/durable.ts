@@ -17,7 +17,7 @@ import type {
   WaiverGateContext,
 } from "./durable-gate.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "./errors.js";
-import { validateGateDecision, type GateContext, type GateKind } from "./gates.js";
+import { validateArchivedGateDecision, type GateContext, type GateKind } from "./gates.js";
 import type { Sha256Digest } from "./evidence.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
@@ -451,7 +451,9 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
       }
       if ("origin" in gateRequest.context) return fail(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPayloadInvalid));
       try {
-        validateGateDecision(gateRequest.kind, gateRequest.context as GateContext<GateKind>, envelope.payload);
+        // The request slot is by definition archive-read, so a context shape retired by a later
+        // schema change must still validate here; only writers are held to the current shape.
+        validateArchivedGateDecision(gateRequest.kind, gateRequest.context as GateContext<GateKind>, envelope.payload);
       } catch {
         return fail(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPayloadInvalid));
       }

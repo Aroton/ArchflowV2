@@ -23,6 +23,7 @@ import { identifyTransactionRequest } from "../../state/request.js";
 import { loadCurrentProduceSubject, type CurrentProduceSubject } from "../../state/produce-subject.js";
 import { designArtifactCommittedAtCurrentTarget, implementationOutputCommittedAtCurrentTarget } from "../../state/implementation-manifest.js";
 import { decodePhaseInstance } from "../../contracts/phase-instance.js";
+import { exactCommitAuthorizationContext } from "../../contracts/durable-gate.js";
 import type { PlanningRestartConnectedProvenance } from "../../contracts/durable-state.js";
 import {
   prepareResultInstallation,
@@ -259,10 +260,13 @@ export async function handleState(
           if (source.artifact_kind === "implementation-output") {
             for (const authenticated of authenticatedGateApprovals) {
               if (authenticated.request.kind !== "commit-authorization") continue;
+              // Pre-exact-commit archives bound no baseline, message or path set to compare.
+              const exact = exactCommitAuthorizationContext(authenticated.request.context);
+              if (exact === undefined) continue;
               if (await implementationOutputCommittedAtCurrentTarget(
                 services.runner,
                 source,
-                authenticated.request.context,
+                exact,
               )) {
                 commitObserved = true;
                 break;

@@ -182,6 +182,22 @@ const contexts = {
   }).strict(),
 } as const;
 
+/**
+ * A commit-authorization context as it may appear in the archive: the current shape, or the one
+ * written before `baseline_commit`, `commit_message` and `paths` became required. The retired arm
+ * is derived by omission from the current schema so the two cannot drift — every surviving field
+ * keeps its exact current constraints, and because the source is `.strict()` the retired arm
+ * rejects the three fields outright rather than making them optional. Read-only: new requests are
+ * still composed and validated against `contexts["commit-authorization"]`.
+ */
+export const archivedCommitAuthorizationContextSchema = z.union([
+  contexts["commit-authorization"],
+  contexts["commit-authorization"].omit({ baseline_commit: true, commit_message: true, paths: true }),
+]);
+
+/** `contexts`, with the one kind whose archived shape differs replaced by its tolerant twin. */
+const archivedContexts = { ...contexts, "commit-authorization": archivedCommitAuthorizationContextSchema } as const;
+
 const decisions = {
   "artifact-approval": decision(["approve", "revise", "reject"]),
   "design-approval": z.union([decision(["approve", "revise", "reject"]), z.object({ decision: z.literal("waiver-requested"), reason, rule, operation: z.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
@@ -298,8 +314,14 @@ export function parseGateContract(value: unknown): Readonly<{ [K in GateKind]: {
   return parsed;
 }
 
-export function validateGateDecision<K extends GateKind>(kind: K, context: GateContext<K>, payload: GateDecisionPayload<K>): GateDecisionPayload<K> {
-  parseGateContext(kind, context);
+function validateDecisionAgainst<K extends GateKind>(
+  contextSchemas: typeof contexts | typeof archivedContexts,
+  kind: K,
+  context: GateContext<K>,
+  payload: GateDecisionPayload<K>,
+): GateDecisionPayload<K> {
+  assertPlainJson(context, `${kind} gate context`);
+  contextSchemas[kind].parse(context);
   assertPlainJson(payload, `${kind} gate decision`);
   const parsed = decisions[kind].parse(payload) as GateDecisionPayload<K>;
   if ((kind === "constitution-review" || kind === "design-approval") && parsed.decision === "waiver-requested") {
@@ -313,6 +335,19 @@ export function validateGateDecision<K extends GateKind>(kind: K, context: GateC
     if (candidate === undefined || !isDeepStrictEqual(candidate, adoptionPayload.adoption_authority)) throw new TypeError("restore adoption authority must exactly match the context candidate");
   }
   return parsed;
+}
+
+export function validateGateDecision<K extends GateKind>(kind: K, context: GateContext<K>, payload: GateDecisionPayload<K>): GateDecisionPayload<K> {
+  return validateDecisionAgainst(contexts, kind, context, payload);
+}
+
+/**
+ * `validateGateDecision` for a request read out of the archive: identical except that a
+ * commit-authorization context predating `baseline_commit`/`commit_message`/`paths` is accepted.
+ * Live gate paths must keep using `validateGateDecision`.
+ */
+export function validateArchivedGateDecision<K extends GateKind>(kind: K, context: GateContext<K>, payload: GateDecisionPayload<K>): GateDecisionPayload<K> {
+  return validateDecisionAgainst(archivedContexts, kind, context, payload);
 }
 
 export function gateDecisionEffect(payload: GateDecisionPayload<GateKind>): GateEffect { return effects[payload.decision]; }

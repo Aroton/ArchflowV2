@@ -36359,6 +36359,11 @@ var contexts = {
     commit_message: boundedText.optional()
   }).strict()
 };
+var archivedCommitAuthorizationContextSchema = external_exports.union([
+  contexts["commit-authorization"],
+  contexts["commit-authorization"].omit({ baseline_commit: true, commit_message: true, paths: true })
+]);
+var archivedContexts = { ...contexts, "commit-authorization": archivedCommitAuthorizationContextSchema };
 var decisions = {
   "artifact-approval": decision(["approve", "revise", "reject"]),
   "design-approval": external_exports.union([decision(["approve", "revise", "reject"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, operation: external_exports.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
@@ -36473,8 +36478,9 @@ function parseGateDecisionEnvelope(value) {
   if (parsed.kind === "restore-collision" && parsed.payload.decision === "adopt-as-new-generation") return parsed;
   return parsed;
 }
-function validateGateDecision(kind, context2, payload) {
-  parseGateContext(kind, context2);
+function validateDecisionAgainst(contextSchemas, kind, context2, payload) {
+  assertPlainJson(context2, `${kind} gate context`);
+  contextSchemas[kind].parse(context2);
   assertPlainJson(payload, `${kind} gate decision`);
   const parsed = decisions[kind].parse(payload);
   if ((kind === "constitution-review" || kind === "design-approval") && parsed.decision === "waiver-requested") {
@@ -36487,6 +36493,12 @@ function validateGateDecision(kind, context2, payload) {
     if (candidate === void 0 || !isDeepStrictEqual(candidate, adoptionPayload.adoption_authority)) throw new TypeError("restore adoption authority must exactly match the context candidate");
   }
   return parsed;
+}
+function validateGateDecision(kind, context2, payload) {
+  return validateDecisionAgainst(contexts, kind, context2, payload);
+}
+function validateArchivedGateDecision(kind, context2, payload) {
+  return validateDecisionAgainst(archivedContexts, kind, context2, payload);
 }
 function gateDecisionEffect(payload) {
   return effects[payload.decision];
@@ -45656,7 +45668,7 @@ function validateDurableSemantics(subject) {
       }
       if ("origin" in gateRequest.context) return fail7(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPayloadInvalid));
       try {
-        validateGateDecision(gateRequest.kind, gateRequest.context, envelope.payload);
+        validateArchivedGateDecision(gateRequest.kind, gateRequest.context, envelope.payload);
       } catch {
         return fail7(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPayloadInvalid));
       }
@@ -58670,6 +58682,9 @@ import { constants as fsConstants5 } from "node:fs";
 import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
 
 // src/contracts/durable-gate.ts
+function exactCommitAuthorizationContext(context2) {
+  return "baseline_commit" in context2 && "commit_message" in context2 && "paths" in context2 ? context2 : void 0;
+}
 var digest9 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var pathSafeId2 = pathSafeIdV1Schema;
 var taskSlug4 = taskSlugV1Schema;
@@ -58777,6 +58792,9 @@ var armUnion = (arms) => external_exports.union(Object.values(arms));
 var gateRequestArms = gateArms({});
 var gateRequestV1Schema = armUnion(gateRequestArms);
 var legacyGateRequestV1Schema = armUnion(gateArms({ supersedes: legacySupersession }));
+var archivedCommitAuthorizationArm = (extra) => gateArm("commit-authorization", archivedCommitAuthorizationContextSchema, allowedDecisionTuples["commit-authorization"], extra);
+var archivedCommitAuthorizationRequestV1Schema = archivedCommitAuthorizationArm({});
+var archivedLegacyCommitAuthorizationRequestV1Schema = archivedCommitAuthorizationArm({ supersedes: legacySupersession });
 var PAYLOAD_REQUIRED_FIELDS = ["payload", "human_provenance"];
 var WAIVER_REQUIRED_FIELDS = ["granted", "scope", "origin", "notes", "human_provenance"];
 var CANCELLATION_FIELDS = ["cancelled", "reason", "human_provenance"];
@@ -58851,8 +58869,11 @@ function parseGateDecisionRecord(value) {
 }
 function parseArchivedGateRequest(value) {
   assertPlainJson(value, "archived gate request");
-  const current = gateRequestV1Schema.safeParse(value);
-  return current.success ? current.data : legacyGateRequestV1Schema.parse(value);
+  for (const candidate of [gateRequestV1Schema, archivedCommitAuthorizationRequestV1Schema, archivedLegacyCommitAuthorizationRequestV1Schema]) {
+    const parsed = candidate.safeParse(value);
+    if (parsed.success) return parsed.data;
+  }
+  return legacyGateRequestV1Schema.parse(value);
 }
 function parseArchivedGateDecisionRecord(value) {
   assertPlainJson(value, "archived gate decision record");
@@ -65139,10 +65160,12 @@ async function handleState(call, context2) {
           if (source.artifact_kind === "implementation-output") {
             for (const authenticated of authenticatedGateApprovals2) {
               if (authenticated.request.kind !== "commit-authorization") continue;
+              const exact = exactCommitAuthorizationContext(authenticated.request.context);
+              if (exact === void 0) continue;
               if (await implementationOutputCommittedAtCurrentTarget(
                 services.runner,
                 source,
-                authenticated.request.context
+                exact
               )) {
                 commitObserved = true;
                 break;

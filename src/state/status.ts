@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { canonicalJsonDigest, parseCanonicalDocument, type CanonicalDocument } from "../contracts/canonical.js";
 import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
 import { parseConfigYaml } from "../contracts/config.js";
-import { parseActiveGate, parseGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
+import { exactCommitAuthorizationContext, parseActiveGate, parseGateRequest, type ActiveGateV1, type GateRequestV1 } from "../contracts/durable-gate.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { AdjudicationEvidence } from "../contracts/adjudication.js";
 import type { ProjectError, ProjectResult } from "../contracts/errors.js";
@@ -792,17 +792,21 @@ export async function computeTaskStatus(
         authenticated.request.subject_digest !== produceSubject.artifact_digest ||
         authenticated.decision.envelope.payload.decision !== "authorize-commit"
       ) continue;
+      // An approval archived before commit authorization bound an exact baseline, message and
+      // path set cannot attest one now; it stays authentic authority, just not commit evidence.
+      const exact = exactCommitAuthorizationContext(authenticated.request.context);
+      if (exact === undefined) continue;
       implementationCommit = Object.freeze({
-        paths: authenticated.request.context.paths,
-        message: authenticated.request.context.commit_message,
-        target_ref: authenticated.request.context.target_ref,
-        baseline_commit: authenticated.request.context.baseline_commit,
+        paths: exact.paths,
+        message: exact.commit_message,
+        target_ref: exact.target_ref,
+        baseline_commit: exact.baseline_commit,
       });
       try {
         if (await implementationOutputCommittedAtCurrentTarget(
           dependencies.runner,
           produceSubject.artifact,
-          authenticated.request.context,
+          exact,
         )) {
           commitObserved = true;
           break;

@@ -420,6 +420,36 @@ describe("durable gate decisions", () => {
     const authenticated = await loadAuthenticatedGateApproval(dependencies, authority, approval);
     expect(authenticated.ok).toBe(true);
     if (!authenticated.ok) return;
+
+    // Commit authorization gained required `baseline_commit`, `commit_message` and `paths` fields
+    // after these approvals were archived. The human authority they carry is still real, so the
+    // four-key context must keep authenticating rather than wedging the task behind
+    // `gate-approval-request-invalid`. Unlike the decision archive, an approval's digests do not
+    // cover the request, so rewriting request.json needs no matching state.json surgery.
+    const archivedRequestPath = join(taskRoot, "authority", "decisions", approval.gate_id, "request.json");
+    const archivedRequest = JSON.parse(readFileSync(archivedRequestPath, "utf8")) as Record<string, unknown>;
+    const { baseline_commit: _baseline, commit_message: _message, paths: _paths, ...archivedContext } =
+      archivedRequest.context as Record<string, unknown>;
+    writeFileSync(archivedRequestPath, canonicalDocument({ ...archivedRequest, context: archivedContext } as never).bytes);
+    const archivedLoaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
+    expect(archivedLoaded).toMatchObject({
+      ok: true,
+      value: { request: { kind: "commit-authorization", context: { target_ref: "refs/heads/task" } } },
+    });
+    if (!archivedLoaded.ok) throw new Error("archived approval authentication failed");
+    expect("paths" in archivedLoaded.value.request.context).toBe(false);
+
+    // Still fail-closed: a request malformed in any other way is rejected, not tolerated.
+    const { diff_digest: _diff, ...withoutDiffDigest } = archivedContext;
+    writeFileSync(archivedRequestPath, canonicalDocument({
+      ...archivedRequest,
+      context: withoutDiffDigest,
+    } as never).bytes);
+    expect(await loadAuthenticatedGateApproval(dependencies, authority, approval)).toMatchObject({
+      ok: false,
+      error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: "gate-approval-request-invalid" } } },
+    });
+    writeFileSync(archivedRequestPath, canonicalDocument(archivedRequest as never).bytes);
     const completed = planStateTransition({
       current,
       target: { phase_instance: current.phase_instance, step: current.step, status: current.status, attempt: current.attempt, input_fingerprint: current.input_fingerprint },

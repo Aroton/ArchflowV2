@@ -5,6 +5,7 @@ import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type SafeInteger
 import {
   GATE_CONTRACTS,
   GATE_KINDS,
+  archivedCommitAuthorizationContextSchema,
   gateDecisionEnvelopeV1Schema,
   gateRuleVersionRefSchema,
   gateWaiverScopeSchema,
@@ -78,7 +79,34 @@ export type GateRequestV1 = {
   };
 }[GateKind];
 
-export type ArchivedGateRequestV1 = GateRequestV1 | (GateRequestV1 & {
+/**
+ * A commit-authorization request archived before `baseline_commit`, `commit_message` and `paths`
+ * became required. Read-only, like every shape in this family: the current writer type above is
+ * what a new request must satisfy.
+ */
+export type ArchivedCommitAuthorizationRequestV1 = GateRequestCommon & {
+  readonly kind: "commit-authorization";
+  readonly context: Omit<GateContext<"commit-authorization">, "baseline_commit" | "commit_message" | "paths">;
+  readonly allowed_decisions: readonly (GateDecisionPayload<"commit-authorization">["decision"] | "cancel")[];
+};
+
+type ArchivedGateRequestShapeV1 = GateRequestV1 | ArchivedCommitAuthorizationRequestV1;
+
+/**
+ * Narrows an archived commit-authorization context to the current shape, or `undefined` when it
+ * predates the exact-commit fields. A request archived without them never bound a baseline, a
+ * message or a path set, so nothing may claim it attests an exact commit — callers must skip it
+ * rather than compare against absent values.
+ */
+export function exactCommitAuthorizationContext(
+  context: GateContext<"commit-authorization"> | ArchivedCommitAuthorizationRequestV1["context"],
+): GateContext<"commit-authorization"> | undefined {
+  return "baseline_commit" in context && "commit_message" in context && "paths" in context
+    ? context
+    : undefined;
+}
+
+export type ArchivedGateRequestV1 = ArchivedGateRequestShapeV1 | (ArchivedGateRequestShapeV1 & {
   readonly supersedes: LegacyGateSupersessionRefV1;
 });
 
@@ -263,6 +291,17 @@ const gateRequestArms = gateArms({});
 export const gateRequestV1Schema = armUnion(gateRequestArms) as unknown as z.ZodType<GateRequestV1>;
 const legacyGateRequestV1Schema = armUnion(gateArms({ supersedes: legacySupersession }));
 
+/**
+ * The one arm whose *context* has an archived shape rather than an archived extra field: a
+ * commit-authorization request written before `baseline_commit`, `commit_message` and `paths`
+ * existed. It is deliberately absent from `gateRequestArms`, `activeGateV1Schema` and
+ * `gateRequestSchemaDefs` — the published schema must keep advertising only the writer shape.
+ */
+const archivedCommitAuthorizationArm = (extra: Record<string, z.ZodType>) =>
+  gateArm("commit-authorization", archivedCommitAuthorizationContextSchema, allowedDecisionTuples["commit-authorization"], extra);
+const archivedCommitAuthorizationRequestV1Schema = archivedCommitAuthorizationArm({});
+const archivedLegacyCommitAuthorizationRequestV1Schema = archivedCommitAuthorizationArm({ supersedes: legacySupersession });
+
 const PAYLOAD_REQUIRED_FIELDS = ["payload", "human_provenance"] as const;
 const WAIVER_REQUIRED_FIELDS = ["granted", "scope", "origin", "notes", "human_provenance"] as const;
 const CANCELLATION_FIELDS = ["cancelled", "reason", "human_provenance"] as const;
@@ -355,11 +394,21 @@ export function parseGateDecisionRecord(value: unknown): GateDecisionRecordV1 {
   return gateDecisionRecordV1Schema.parse(value);
 }
 
-/** Strictly reads either current V1 bytes or the retired, still-authoritative V1 archive shape. */
+/**
+ * Strictly reads current V1 bytes or either retired, still-authoritative V1 archive shape: a
+ * request carrying the retired `supersedes` reference, and a commit-authorization request whose
+ * context predates the required `baseline_commit`, `commit_message` and `paths` fields. Each
+ * candidate is a `.strict()` union, so a match is exact — nothing is stripped, defaulted or
+ * reordered and the value re-digests to its stored digest. The current shape is tried first, so a
+ * request written today still parses as a current one.
+ */
 export function parseArchivedGateRequest(value: unknown): ArchivedGateRequestV1 {
   assertPlainJson(value, "archived gate request");
-  const current = gateRequestV1Schema.safeParse(value);
-  return (current.success ? current.data : legacyGateRequestV1Schema.parse(value)) as ArchivedGateRequestV1;
+  for (const candidate of [gateRequestV1Schema, archivedCommitAuthorizationRequestV1Schema, archivedLegacyCommitAuthorizationRequestV1Schema]) {
+    const parsed = candidate.safeParse(value);
+    if (parsed.success) return parsed.data as ArchivedGateRequestV1;
+  }
+  return legacyGateRequestV1Schema.parse(value) as ArchivedGateRequestV1;
 }
 
 /** Strictly reads retired supplemental ledgers without filtering or changing their digest. */

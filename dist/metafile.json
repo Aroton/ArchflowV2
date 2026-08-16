@@ -3617,7 +3617,7 @@
       ]
     },
     "src/contracts/durable-gate.ts": {
-      "bytes": 20275,
+      "bytes": 23100,
       "format": "esm",
       "imports": [
         {
@@ -3970,7 +3970,7 @@
       ]
     },
     "src/contracts/durable.ts": {
-      "bytes": 45602,
+      "bytes": 45810,
       "format": "esm",
       "imports": [
         {
@@ -4089,7 +4089,7 @@
       ]
     },
     "src/contracts/gates.ts": {
-      "bytes": 26783,
+      "bytes": 28615,
       "format": "esm",
       "imports": [
         {
@@ -6054,7 +6054,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 17669,
+      "bytes": 17963,
       "format": "esm",
       "imports": [
         {
@@ -6121,6 +6121,11 @@
           "kind": "import-statement",
           "original": "../../contracts/phase-instance.js",
           "path": "src/contracts/phase-instance.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../contracts/durable-gate.js",
+          "path": "src/contracts/durable-gate.ts"
         },
         {
           "kind": "import-statement",
@@ -8361,7 +8366,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 59462,
+      "bytes": 59692,
       "format": "esm",
       "imports": [
         {
@@ -8743,7 +8748,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 1663125,
+      "bytes": 1664509,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -9724,7 +9729,7 @@
           "bytesInOutput": 1982
         },
         "src/contracts/durable-gate.ts": {
-          "bytesInOutput": 12351
+          "bytesInOutput": 13057
         },
         "src/contracts/durable-implementation-output.ts": {
           "bytesInOutput": 2484
@@ -9748,7 +9753,7 @@
           "bytesInOutput": 531
         },
         "src/contracts/durable.ts": {
-          "bytesInOutput": 32183
+          "bytesInOutput": 32191
         },
         "src/contracts/errors.ts": {
           "bytesInOutput": 16039
@@ -9760,7 +9765,7 @@
           "bytesInOutput": 7493
         },
         "src/contracts/gates.ts": {
-          "bytesInOutput": 16918
+          "bytesInOutput": 17586
         },
         "src/contracts/internal/trust-brands.ts": {
           "bytesInOutput": 1855
@@ -9976,7 +9981,7 @@
           "bytesInOutput": 1353
         },
         "src/state/status.ts": {
-          "bytesInOutput": 39439
+          "bytesInOutput": 39441
         },
         "src/state/transitions.ts": {
           "bytesInOutput": 982
@@ -9990,7 +9995,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 2527931,
+      "bytes": 2529427,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -10964,7 +10969,7 @@
           "bytesInOutput": 1845
         },
         "src/contracts/durable-gate.ts": {
-          "bytesInOutput": 12400
+          "bytesInOutput": 13106
         },
         "src/contracts/durable-implementation-output.ts": {
           "bytesInOutput": 2335
@@ -10988,7 +10993,7 @@
           "bytesInOutput": 531
         },
         "src/contracts/durable.ts": {
-          "bytesInOutput": 32198
+          "bytesInOutput": 32206
         },
         "src/contracts/errors.ts": {
           "bytesInOutput": 17560
@@ -11000,7 +11005,7 @@
           "bytesInOutput": 6997
         },
         "src/contracts/gates.ts": {
-          "bytesInOutput": 16918
+          "bytesInOutput": 17586
         },
         "src/contracts/hosts.ts": {
           "bytesInOutput": 602
@@ -11159,7 +11164,7 @@
           "bytesInOutput": 12288
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 14223
+          "bytesInOutput": 14337
         },
         "src/mcp/handlers/waiver.ts": {
           "bytesInOutput": 5226
